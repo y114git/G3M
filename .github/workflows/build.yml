@@ -255,6 +255,14 @@ jobs:
         shell: powershell
         run: |
           choco install innosetup -y
+      - name: Sanitize setup.iss (normalize spaces & encoding)
+        shell: powershell
+        run: |
+          $c = Get-Content setup.iss -Raw
+          $c = $c.Replace([char]0x00A0, ' ') # NBSP
+          $c = $c.Replace([char]0x2007, ' ') # FIGURE SPACE
+          $c = $c.Replace([char]0x202F, ' ') # NARROW NBSP
+          Set-Content setup.iss -Value $c -Encoding UTF8
       - name: Inject version into setup.iss
         shell: powershell
         run: |
