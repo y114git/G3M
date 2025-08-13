@@ -7620,8 +7620,21 @@ class DeltaHubApp(QWidget):
         self.launcher_icon_label.setPixmap(fallback_pixmap)
 
     def _get_background_music_path(self):
-        """Получает путь к файлу фоновой музыки"""
-        return os.path.join(os.path.dirname(__file__), "custom_background_music.mp3")
+        """Возвращает путь к пользовательской фоновой музыке рядом с exe.
+        Поддерживаем только custom-файлы: .wav (в приоритете) и .mp3.
+        """
+        base_dir = os.path.dirname(__file__)
+        candidates = [
+            os.path.join(base_dir, "custom_background_music.wav"),
+            os.path.join(base_dir, "custom_background_music.mp3"),
+        ]
+        for p in candidates:
+            try:
+                if p and os.path.exists(p):
+                    return p
+            except Exception:
+                pass
+        return ""
 
     def _get_startup_sound_path(self):
         """Получает путь к файлу звука заставки"""
@@ -7718,10 +7731,10 @@ class DeltaHubApp(QWidget):
                     QMessageBox.warning(self, tr("errors.error"), tr("errors.copy_startup_sound_failed"))
 
     def _start_background_music(self):
-        """Запускает фоновую музыку с надёжным кроссплатформенным fallback."""
+        """Запускает фоновую музыку с надёжным кроссплатформенным fallback (WAV на Windows)."""
         try:
-            custom_path = self._get_background_music_path()
-            if not os.path.exists(custom_path):
+            music_path = self._get_background_music_path()
+            if not music_path or not os.path.exists(music_path):
                 return
 
             # Остановить любой предыдущий fallback
@@ -7739,8 +7752,13 @@ class DeltaHubApp(QWidget):
                 self.bg_music_player.setAudioOutput(self.bg_audio_output)
                 # Зацикливание
                 self.bg_music_player.mediaStatusChanged.connect(self._handle_media_status_changed)
+                # Диагностика ошибок
+                try:
+                    self.bg_music_player.errorOccurred.connect(lambda err: sys.stderr.write(f"[BG QMediaPlayer] error={err} str={(self.bg_music_player.errorString() if self.bg_music_player else '')}\n"))
+                except Exception:
+                    pass
 
-            self.bg_music_player.setSource(QUrl.fromLocalFile(os.path.abspath(custom_path)))
+            self.bg_music_player.setSource(QUrl.fromLocalFile(os.path.abspath(music_path)))
             volume = self.local_config.get("launcher_volume", 100)
             self.bg_audio_output.setVolume(volume / 100.0)
             self.bg_music_player.play()
@@ -7748,17 +7766,23 @@ class DeltaHubApp(QWidget):
             # Fallback, если воспроизведение не стартовало
             def _fallback_play_bg(path: str):
                 try:
-                    import platform, subprocess, shlex
+                    import platform, subprocess, shlex, os
                     system = platform.system()
+                    ext = os.path.splitext(path)[1].lower()
                     if system == "Windows":
-                        try:
-                            import winsound
-                            winsound.PlaySound(path, winsound.SND_FILENAME | winsound.SND_ASYNC)
-                        except Exception:
+                        if ext == ".wav":
                             try:
-                                self.bg_fallback_proc = subprocess.Popen(["powershell", "-NoProfile", "-WindowStyle", "Hidden", f"(New-Object Media.SoundPlayer '{path}').PlayLooping()"])
+                                import winsound
+                                winsound.PlaySound(path, winsound.SND_FILENAME | winsound.SND_ASYNC)
+                                return
                             except Exception:
                                 pass
+                            try:
+                                self.bg_fallback_proc = subprocess.Popen(["powershell", "-NoProfile", "-WindowStyle", "Hidden", f"(New-Object Media.SoundPlayer '{path}').PlayLooping()"])
+                                return
+                            except Exception:
+                                pass
+                        # Для MP3 безопасного штатного fallback нет — оставляем только Qt
                         return
                     elif system == "Darwin":
                         loop_cmd = f"while true; do afplay {shlex.quote(path)}; done"
@@ -7780,9 +7804,9 @@ class DeltaHubApp(QWidget):
             def ensure_bg_playing():
                 try:
                     if not self.bg_music_player or self.bg_music_player.playbackState() != QMediaPlayer.PlaybackState.PlayingState:
-                        _fallback_play_bg(custom_path)
+                        _fallback_play_bg(music_path)
                 except Exception:
-                    _fallback_play_bg(custom_path)
+                    _fallback_play_bg(music_path)
 
             from PyQt6.QtCore import QTimer
             QTimer.singleShot(700, ensure_bg_playing)
