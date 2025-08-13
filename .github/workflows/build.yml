@@ -257,6 +257,14 @@ jobs:
         shell: powershell
         run: |
           choco install innosetup -y
+      - name: Check wizard small image exists
+        shell: powershell
+        run: |
+          if (-not (Test-Path "assets/icon_small.bmp")) {
+            Write-Error "assets/icon_small.bmp is missing. Commit it to the repo."; exit 1
+          }
+          Write-Host "Found assets/icon_small.bmp"
+          dir assets
       - name: Sanitize setup.iss (normalize spaces & encoding)
         shell: powershell
         run: |
