@@ -279,12 +279,20 @@ jobs:
         shell: powershell
         run: |
           $iscc = (Get-Command iscc -ErrorAction SilentlyContinue).Source
-          if (!$iscc) { $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" }
+          if (!$iscc) { $iscc = "C:\\Program Files (x86)\\Inno Setup 6\\ISCC.exe" }
           if (Test-Path $iscc) { & "$iscc" setup.iss } else { Write-Host "ISCC not found after install"; exit 1 }
+      - name: Collect installer to workspace root
+        shell: powershell
+        run: |
+          $ver = $env:RELEASE_VERSION
+          $exe = Get-ChildItem -Recurse -Filter "DELTAHUB_setup_v*.exe" | Select-Object -First 1
+          if (-not $exe) { Write-Error "Installer not found"; exit 1 }
+          Copy-Item $exe.FullName "DELTAHUB_setup_$ver.exe" -Force
+          Write-Host "Collected installer: DELTAHUB_setup_$ver.exe"
       - uses: actions/upload-artifact@v4
         with:
           name: DELTAHUB-windows-setup
-          path: "**/DELTAHUB_setup_v*.exe"
+          path: "DELTAHUB_setup_${{ env.RELEASE_VERSION }}.exe"
 
   release:
     name: Create GitHub Release and upload assets
