@@ -62,7 +62,7 @@ exe = EXE(
     name='DELTAHUB',
     icon='assets/icon.ico',
     console=False,
-    upx=True,
+    upx=False,
 )
 
 # На macOS формируем .app бандл из exe

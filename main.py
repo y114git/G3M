@@ -210,26 +210,37 @@ def get_launcher_volume():
     return 100
 
 def play_deltahub_sound():
-    """Воспроизводит звук заставки с надёжным кроссплатформенным fallback."""
+    """Воспроизводит звук заставки с надёжным кроссплатформенным fallback.
+
+    Важно: на Windows встроенные fallback'и (winsound/SoundPlayer) умеют играть только WAV.
+    Поэтому, если рядом есть WAV — используем его. MP3 оставляем для QMediaPlayer.
+    """
     global _player, _audio_output
 
     def _fallback_play(path: str):
         try:
-            import platform, subprocess
+            import platform, subprocess, os
             system = platform.system()
+            ext = os.path.splitext(path)[1].lower()
             if system == "Windows":
-                try:
-                    import winsound
-                    winsound.PlaySound(path, winsound.SND_FILENAME | winsound.SND_ASYNC)
-                    return
-                except Exception:
-                    pass
-                # Fallback через powershell
-                try:
-                    subprocess.Popen(["powershell", "-NoProfile", "-WindowStyle", "Hidden", "(New-Object Media.SoundPlayer '%s').Play()" % path])
-                    return
-                except Exception:
-                    pass
+                if ext == ".wav":
+                    try:
+                        import winsound
+                        winsound.PlaySound(path, winsound.SND_FILENAME | winsound.SND_ASYNC)
+                        return
+                    except Exception:
+                        pass
+                    # Fallback через powershell SoundPlayer (тоже WAV-only)
+                    try:
+                        subprocess.Popen([
+                            "powershell", "-NoProfile", "-WindowStyle", "Hidden",
+                            f"(New-Object Media.SoundPlayer '{path}').Play()"
+                        ])
+                        return
+                    except Exception:
+                        pass
+                # Для MP3 надёжного системного fallback без внешних зависимостей нет
+                # Оставляем попытку только через Qt (см. ниже)
             elif system == "Darwin":
                 subprocess.Popen(["afplay", path])
                 return
@@ -244,12 +255,26 @@ def play_deltahub_sound():
         except Exception:
             pass
 
+    sound_path: str = ""
     try:
-        # Пользовательский звук рядом с исполняемым (приоритет)
-        custom_sound_path = os.path.join(os.path.dirname(__file__), "custom_startup_sound.mp3")
-        sound_path = custom_sound_path if os.path.exists(custom_sound_path) else resource_path("assets/deltahub.mp3")
-        if not os.path.exists(sound_path):
+        # Предпочтительные варианты звука (в порядке приоритета)
+        base_dir = os.path.dirname(__file__)
+        custom_wav = os.path.join(base_dir, "custom_startup_sound.wav")
+        custom_mp3 = os.path.join(base_dir, "custom_startup_sound.mp3")
+        asset_wav = resource_path("assets/deltahub.wav")
+        asset_mp3 = resource_path("assets/deltahub.mp3")
+
+        sound_candidates = []
+        # На Windows лучше сначала WAV, затем MP3
+        if platform.system() == "Windows":
+            sound_candidates = [custom_wav, asset_wav, custom_mp3, asset_mp3]
+        else:
+            sound_candidates = [custom_mp3, asset_mp3, custom_wav, asset_wav]
+
+        found = next((p for p in sound_candidates if os.path.exists(p)), None)
+        if not found:
             return
+        sound_path = found
 
         _player = QMediaPlayer()
         _audio_output = QAudioOutput()
@@ -269,9 +294,23 @@ def play_deltahub_sound():
         def ensure_playing():
             try:
                 if not _player or _player.playbackState() != QMediaPlayer.PlaybackState.PlayingState:
-                    _fallback_play(sound_path)
+                    if sound_path:
+                        _fallback_play(sound_path)
             except Exception:
-                _fallback_play(sound_path)
+                if sound_path:
+                    _fallback_play(sound_path)
+
+        # Диагностика ошибок плеера (выводим в stderr в заморозке тоже)
+        def on_error(err):
+            try:
+                err_str = _player.errorString() if _player else ""
+                sys.stderr.write(f"[QMediaPlayer] error={err} str={err_str}\n")
+            except Exception:
+                pass
+        try:
+            _player.errorOccurred.connect(on_error)
+        except Exception:
+            pass
 
         _player.mediaStatusChanged.connect(cleanup_on_finish)
         _player.setSource(QUrl.fromLocalFile(os.path.abspath(sound_path)))
@@ -284,7 +323,8 @@ def play_deltahub_sound():
     except Exception:
         # Полный резервный вариант
         try:
-            _fallback_play(sound_path)
+            if sound_path:
+                _fallback_play(sound_path)
         except Exception:
             pass
 
