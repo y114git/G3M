@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Launcher version (2.0.0)"
+        description: "Launcher version (X.X.X)"
         required: true
         type: string
   push:
@@ -255,10 +255,17 @@ jobs:
         shell: powershell
         run: |
           choco install innosetup -y
+      - name: Inject version into setup.iss
+        shell: powershell
+        run: |
+          $ver = $env:RELEASE_VERSION.TrimStart('v')
+          (Get-Content setup.iss -Raw) -replace '(?m)^(#define\s+AppVersion\s+\").*?(\")$', "`$1$ver`$2" | Set-Content setup.iss -Encoding UTF8
+          Write-Host "AppVersion set to $ver in setup.iss"
       - name: Build installer (Inno Setup)
         shell: powershell
         run: |
-          $iscc = "C:\\Program Files (x86)\\Inno Setup 6\\ISCC.exe"
+          $iscc = (Get-Command iscc -ErrorAction SilentlyContinue).Source
+          if (!$iscc) { $iscc = "C:\\Program Files (x86)\\Inno Setup 6\\ISCC.exe" }
           if (Test-Path $iscc) { & "$iscc" setup.iss } else { Write-Host "ISCC not found after install"; exit 1 }
       - uses: actions/upload-artifact@v4
         with:

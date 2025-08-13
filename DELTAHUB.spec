@@ -4,7 +4,7 @@
 
 block_cipher = None
 
-import os
+import os, sys
 
 binaries_extra = []
 # Support multiple VC runtime DLLs via VCREDIST_DLLS (pathsep-separated),
@@ -64,3 +64,12 @@ exe = EXE(
     console=False,
     upx=True,
 )
+
+# На macOS формируем .app бандл из exe
+if sys.platform == 'darwin':
+    app = BUNDLE(
+        exe,
+        name='DELTAHUB.app',
+        icon='assets/icon.icns',
+        bundle_identifier='com.y114.deltahub'
+    )
