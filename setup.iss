@@ -31,11 +31,11 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"
 
 [Files]
 Source: "dist\\{#AppExeName}"; DestDir: "{app}"; Flags: ignoreversion
-Source: "{#AppIcon}";           DestDir: "{app}"
+Source: "{#AppIcon}"; DestDir: "{app}"
 
 [Icons]
 Name: "{autoprograms}\\{#AppName}"; Filename: "{app}\\{#AppExeName}"; IconFilename: "{app}\\icon.ico"
-Name: "{autodesktop}\\{#AppName}";  Filename: "{app}\\{#AppExeName}"; IconFilename: "{app}\\icon.ico"; Tasks: desktopicon
+Name: "{autodesktop}\\{#AppName}"; Filename: "{app}\\{#AppExeName}"; IconFilename: "{app}\\icon.ico"; Tasks: desktopicon
 
 [Run]
 Filename: "{app}\\{#AppExeName}"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait postinstall skipifsilent
@@ -43,24 +43,24 @@ Filename: "{app}\\{#AppExeName}"; Description: "{cm:LaunchProgram,{#AppName}}"; 
 [Code]
 function InitializeSetup(): Boolean;
 var
-  Win: TWindowsVersion;
+Win: TWindowsVersion;
 begin
-  GetWindowsVersionEx(Win);
-  { Major < 10  → Windows 7/8/8.1 }
-  if Win.Major < 10 then
-  begin
-    MsgBox('DELTAHUB поддерживает только Windows 10 и выше.'#13#10 +
-           'Установка будет прервана.', mbCriticalError, MB_OK);
-    Result := False;  { прерываем установку }
-    Exit;
-  end;
-  { Windows 10, но сборка ниже 1809 }
-  if Win.Build < 17763 then
-  begin
-    MsgBox('У вас устаревшая сборка Windows 10 (' + IntToStr(Win.Build) + ').'#13#10 +
-           'Минимально поддерживается версия 1809 (17763).', mbCriticalError, MB_OK);
-    Result := False;
-  end
-  else
-    Result := True;   { продолжаем }
+GetWindowsVersionEx(Win);
+{ Major < 10 -> Windows 7/8/8.1 }
+if Win.Major < 10 then
+begin
+MsgBox('DELTAHUB поддерживает только Windows 10 и выше.'#13#10 +
+'Установка будет прервана.', mbCriticalError, MB_OK);
+Result := False; { прерываем установку }
+Exit;
+end;
+{ Windows 10, но сборка ниже 1809 }
+if Win.Build < 17763 then
+begin
+MsgBox('У вас устаревшая сборка Windows 10 (' + IntToStr(Win.Build) + ').'#13#10 +
+'Минимально поддерживается версия 1809 (17763).', mbCriticalError, MB_OK);
+Result := False;
+end
+else
+Result := True; { продолжаем }
 end;
