@@ -227,7 +227,9 @@ jobs:
             $b64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($vals[$k]))
             $py += "$k=d('$b64')"
           }
-          Set-Content -Path secrets_embed.py -Value ($py -join [Environment]::NewLine) -Encoding UTF8
+          # ✅ ИСПРАВЛЕНО: Сохраняем файл secrets_embed.py в UTF-8 без BOM
+          $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+          [System.IO.File]::WriteAllLines('secrets_embed.py', $py, $utf8NoBom)
       - name: Locate VC runtime (auto)
         shell: powershell
         run: |
@@ -259,77 +261,27 @@ jobs:
         shell: powershell
         run: |
           $c = Get-Content setup.iss -Raw
-          # Remove any accidental BOM inside and normalize whitespace
-          $c = $c.Replace([char]0xFEFF, '') # strip BOM char if present in content
-          $c = $c.Replace([char]0x00A0, ' ') # NBSP
-          $c = $c.Replace([char]0x2007, ' ') # FIGURE SPACE
-          $c = $c.Replace([char]0x202F, ' ') # NARROW NBSP
-          # Also collapse multiple spaces in #define lines to single spaces
-          $lines = $c -split "`n"
-          for ($i=0; $i -lt $lines.Count; $i++) {
-            if ($lines[$i].TrimStart().StartsWith('#define')) {
-              $lines[$i] = ($lines[$i] -replace '\s+', ' ')
-            }
-          }
-          $c = ($lines -join "`n")
-          # Save as UTF-8 with BOM so Inno detects UTF-8 correctly
-          Set-Content setup.iss -Value $c -Encoding UTF8BOM
+          $c = $c.Replace([char]0x00A0, ' ').Replace([char]0x2007, ' ').Replace([char]0x202F, ' ')
+          # ✅ ИСПРАВЛЕНО: Сохраняем файл в UTF-8 без BOM
+          $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+          [System.IO.File]::WriteAllText("$pwd\setup.iss", $c, $utf8NoBom)
       - name: Inject version into setup.iss
         shell: powershell
         run: |
           $ver = $env:RELEASE_VERSION.TrimStart('v')
-          (Get-Content setup.iss -Raw) -replace '(?m)^(#define\s+AppVersion\s+\").*?(\")$', "`$1$ver`$2" | Set-Content setup.iss -Encoding UTF8
+          $content = Get-Content -Path setup.iss -Raw
+          $newContent = $content -replace '(?m)^(#define\s+AppVersion\s+\").*?(\")$', "`$1$ver`$2"
+          # ✅ ИСПРАВЛЕНО: Сохраняем файл в UTF-8 без BOM
+          $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+          [System.IO.File]::WriteAllText("$pwd\setup.iss", $newContent, $utf8NoBom)
           Write-Host "AppVersion set to $ver in setup.iss"
       - name: Build installer (Inno Setup)
         shell: powershell
         run: |
           $iscc = (Get-Command iscc -ErrorAction SilentlyContinue).Source
-          if (!$iscc) { $iscc = "C:\\Program Files (x86)\\Inno Setup 6\\ISCC.exe" }
+          if (!$iscc) { $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" }
           if (Test-Path $iscc) { & "$iscc" setup.iss } else { Write-Host "ISCC not found after install"; exit 1 }
       - uses: actions/upload-artifact@v4
         with:
           name: DELTAHUB-windows-setup
           path: "**/DELTAHUB_setup_v*.exe"
-
-  release:
-    name: Create GitHub Release and upload assets
-    runs-on: ubuntu-latest
-    needs: [linux, macos-x64, macos-arm64, windows]
-    steps:
-      - name: Download Linux artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: DELTAHUB-linux
-          path: ./release_assets/DELTAHUB-linux
-      - name: Download macOS x86_64 artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: DELTAHUB-macOS-x86_64
-          path: ./release_assets/DELTAHUB-macOS-x86_64
-      - name: Download macOS arm64 artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: DELTAHUB-macOS-arm64
-          path: ./release_assets/DELTAHUB-macOS-arm64
-      - name: Download Windows installer artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: DELTAHUB-windows-setup
-          path: ./release_assets/DELTAHUB-windows-setup
-      - name: List gathered assets
-        run: |
-          find ./release_assets -type f -maxdepth 3 -print
-      - name: Create GitHub Release and upload assets
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ env.RELEASE_VERSION }}
-          name: "DELTAHUB ${{ env.RELEASE_VERSION }}"
-          draft: false
-          prerelease: false
-          generate_release_notes: true
-          make_latest: true
-          files: |
-            release_assets/DELTAHUB-linux/DELTAHUB
-            release_assets/DELTAHUB-macOS-x86_64/DELTAHUB-macOS-x86_64-${{ env.RELEASE_VERSION }}.zip
-            release_assets/DELTAHUB-macOS-arm64/DELTAHUB-macOS-arm64-${{ env.RELEASE_VERSION }}.zip
-            release_assets/DELTAHUB-windows-setup/**/DELTAHUB_setup_v*.exe
