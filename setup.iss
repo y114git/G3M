@@ -1,3 +1,4 @@
+#pragma-codepage utf-8
 #define AppName        "DELTAHUB"
 #define AppVersion     "2.0.0"
 #define AppExeName     "DELTAHUB.exe"

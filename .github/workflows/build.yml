@@ -259,10 +259,21 @@ jobs:
         shell: powershell
         run: |
           $c = Get-Content setup.iss -Raw
+          # Remove any accidental BOM inside and normalize whitespace
+          $c = $c.Replace([char]0xFEFF, '') # strip BOM char if present in content
           $c = $c.Replace([char]0x00A0, ' ') # NBSP
           $c = $c.Replace([char]0x2007, ' ') # FIGURE SPACE
           $c = $c.Replace([char]0x202F, ' ') # NARROW NBSP
-          Set-Content setup.iss -Value $c -Encoding UTF8
+          # Also collapse multiple spaces in #define lines to single spaces
+          $lines = $c -split "`n"
+          for ($i=0; $i -lt $lines.Count; $i++) {
+            if ($lines[$i].TrimStart().StartsWith('#define')) {
+              $lines[$i] = ($lines[$i] -replace '\s+', ' ')
+            }
+          }
+          $c = ($lines -join "`n")
+          # Save as UTF-8 with BOM so Inno detects UTF-8 correctly
+          Set-Content setup.iss -Value $c -Encoding UTF8BOM
       - name: Inject version into setup.iss
         shell: powershell
         run: |
