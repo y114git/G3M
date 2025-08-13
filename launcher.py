@@ -2868,10 +2868,11 @@ class DeltaHubApp(QWidget):
         self.setWindowTitle("DELTAHUB")
         # --- Новая структура путей ---
         # self.config_dir: для JSON-конфигов в AppData
-        # self.mods_dir: для кэша модов рядом с EXE
+        # self.mods_dir: для кэша модов в профиле пользователя (записываемая папка)
         self.config_dir = get_app_support_path()
         self.launcher_dir = get_launcher_dir()
-        self.mods_dir = os.path.join(self.launcher_dir, "mods")
+        from helpers import get_user_mods_dir
+        self.mods_dir = get_user_mods_dir()
 
         # Создаем обе папки, если их нет
         os.makedirs(self.config_dir, exist_ok=True)

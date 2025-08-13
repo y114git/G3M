@@ -928,21 +928,44 @@ def get_legacy_ylauncher_path() -> str:
         return os.path.join(os.path.expanduser('~'), ".local/share/YLauncher")
 
 def get_launcher_dir() -> str: return os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else os.path.abspath(".")
+
+# User-writable data root for mods/logs/etc.
+def get_user_data_root() -> str:
+    system = platform.system()
+    if system == "Windows":
+        root = os.getenv('LOCALAPPDATA') or os.getenv('APPDATA') or os.path.expanduser('~')
+        return os.path.join(root, "DELTAHUB")
+    elif system == "Darwin":
+        return os.path.join(os.path.expanduser('~'), "Library", "Application Support", "DELTAHUB")
+    else:
+        return os.path.join(os.path.expanduser('~'), ".local", "share", "DELTAHUB")
+
+def get_user_mods_dir() -> str:
+    return os.path.join(get_user_data_root(), "mods")
+
 def sanitize_filename(name: str) -> str: return re.sub(r'[\\/*?:"<>|]', "", name).strip()
+
 def get_unique_mod_dir(mods_dir, mod_name):
-    sanitized_name = sanitize_filename(mod_name); base_dir = os.path.join(mods_dir, sanitized_name)
-    if not os.path.exists(base_dir): return sanitized_name
+    sanitized_name = sanitize_filename(mod_name)
+    base_dir = os.path.join(mods_dir, sanitized_name)
+    if not os.path.exists(base_dir):
+        return sanitized_name
     counter = 1
     while True:
-        unique_name = f"{sanitized_name}_{counter}"; unique_dir = os.path.join(mods_dir, unique_name)
-        if not os.path.exists(unique_dir): return unique_name
+        unique_name = f"{sanitized_name}_{counter}"
+        unique_dir = os.path.join(mods_dir, unique_name)
+        if not os.path.exists(unique_dir):
+            return unique_name
         counter += 1
 
-def is_game_running(): return any(proc.info['name'] in GAME_PROCESS_NAMES for proc in psutil.process_iter(['name']))
+
+def is_game_running():
+    return any(proc.info['name'] in GAME_PROCESS_NAMES for proc in psutil.process_iter(['name']))
+
 def get_default_save_path() -> str:
     system = platform.system()
     return {"Windows": os.path.join(os.environ.get("USERPROFILE", ""), "AppData", "Local", "DELTARUNE"), "Darwin": os.path.expanduser("~/Library/Application Support/com.tobyfox.deltarune")}.get(system, os.path.expanduser("~/.steam/steam/steamapps/compatdata/1690940/pfx/drive_c/users/steamuser/Local Settings/Application Data/DELTARUNE"))
-
+    
 def is_valid_save_path(path: str) -> bool: return bool(path and os.path.isdir(path) and os.listdir(path))
 
 def is_valid_game_path(path: str, skip_data_check: bool = False) -> bool:
