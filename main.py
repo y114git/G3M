@@ -210,17 +210,44 @@ def get_launcher_volume():
     return 100
 
 def play_deltahub_sound():
-    """Воспроизводит звук deltahub.mp3"""
+    """Воспроизводит звук заставки с надёжным кроссплатформенным fallback."""
     global _player, _audio_output
+
+    def _fallback_play(path: str):
+        try:
+            import platform, subprocess
+            system = platform.system()
+            if system == "Windows":
+                try:
+                    import winsound
+                    winsound.PlaySound(path, winsound.SND_FILENAME | winsound.SND_ASYNC)
+                    return
+                except Exception:
+                    pass
+                # Fallback через powershell
+                try:
+                    subprocess.Popen(["powershell", "-NoProfile", "-WindowStyle", "Hidden", "(New-Object Media.SoundPlayer '%s').Play()" % path])
+                    return
+                except Exception:
+                    pass
+            elif system == "Darwin":
+                subprocess.Popen(["afplay", path])
+                return
+            else:
+                # Linux: paplay/aplay/ffplay по доступности
+                for cmd in (["paplay", path], ["aplay", path], ["ffplay", "-nodisp", "-autoexit", path]):
+                    try:
+                        subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                        return
+                    except Exception:
+                        continue
+        except Exception:
+            pass
+
     try:
-        # Сначала проверяем пользовательский звук заставки
+        # Пользовательский звук рядом с исполняемым (приоритет)
         custom_sound_path = os.path.join(os.path.dirname(__file__), "custom_startup_sound.mp3")
-
-        if os.path.exists(custom_sound_path):
-            sound_path = custom_sound_path
-        else:
-            sound_path = resource_path("assets/deltahub.mp3")
-
+        sound_path = custom_sound_path if os.path.exists(custom_sound_path) else resource_path("assets/deltahub.mp3")
         if not os.path.exists(sound_path):
             return
 
@@ -230,23 +257,36 @@ def play_deltahub_sound():
         volume = get_launcher_volume()
         _audio_output.setVolume(volume / 100.0)
 
-        # --- ИСПРАВЛЕНИЕ НАЧАЛО ---
-        # Функция для очистки ресурсов после проигрывания
+        # Очистка после завершения
         def cleanup_on_finish(status):
-            if status == QMediaPlayer.MediaStatus.EndOfMedia:
-                sender_player = _player
-                if sender_player:
-                    sender_player.setSource(QUrl()) # Отвязываем плеер от файла
+            try:
+                if _player and status == QMediaPlayer.MediaStatus.EndOfMedia:
+                    _player.setSource(QUrl())
+            except Exception:
+                pass
 
-        # Подключаем функцию очистки к сигналу завершения
+        # Если backend не воспроизвёл — fallback по таймеру
+        def ensure_playing():
+            try:
+                if not _player or _player.playbackState() != QMediaPlayer.PlaybackState.PlayingState:
+                    _fallback_play(sound_path)
+            except Exception:
+                _fallback_play(sound_path)
+
         _player.mediaStatusChanged.connect(cleanup_on_finish)
-        # --- ИСПРАВЛЕНИЕ КОНЕЦ ---
-
         _player.setSource(QUrl.fromLocalFile(os.path.abspath(sound_path)))
         _player.play()
 
+        # Проверяем через 500 мс, начал ли играть
+        from PyQt6.QtCore import QTimer
+        QTimer.singleShot(500, ensure_playing)
+
     except Exception:
-        pass
+        # Полный резервный вариант
+        try:
+            _fallback_play(sound_path)
+        except Exception:
+            pass
 
 def stop_deltahub_sound():
     """Останавливает воспроизведение звука"""
@@ -273,7 +313,9 @@ def setup_app():
         "qt.multimedia.ffmpeg=false",
         "qt.multimedia=false"
     ])
-    os.environ["QT_MEDIA_BACKEND"] = os.environ.get("QT_MEDIA_BACKEND", "ffmpeg")
+    # Do not force ffmpeg backend in frozen app; let Qt choose platform default (WMF on Windows)
+    if not getattr(sys, 'frozen', False):
+        os.environ.setdefault("QT_MEDIA_BACKEND", "ffmpeg")
     app = QApplication(sys.argv)
     qt_translation_file = manager.get_qt_translation_name(language_code)
     if qt_translation_file:

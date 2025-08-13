@@ -6,7 +6,6 @@ from PyQt6 import sip
 from PyQt6.QtCore import Qt, QEvent, QEventLoop, QThread, QTimer, QUrl, pyqtSignal
 from PyQt6.QtGui import QBrush, QColor, QDesktopServices, QFont, QFontDatabase, QIcon, QImage, QMovie, QPainter, QPalette, QPixmap
 from PyQt6.QtWidgets import QApplication, QButtonGroup, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFrame, QHeaderView, QLabel, QLineEdit, QMessageBox, QProgressBar, QPushButton, QTableWidget, QTableWidgetItem, QTabWidget, QTextBrowser, QVBoxLayout, QWidget, QHBoxLayout, QSizePolicy, QInputDialog, QColorDialog, QListWidget, QLayoutItem, QScrollArea, QSlider
-from PyQt6.QtWidgets import QApplication, QButtonGroup, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFrame, QHeaderView, QLabel, QLineEdit, QMessageBox, QProgressBar, QPushButton, QTableWidget, QTableWidgetItem, QTabWidget, QTextBrowser, QVBoxLayout, QWidget, QHBoxLayout, QSizePolicy, QInputDialog, QColorDialog, QListWidget, QLayoutItem, QScrollArea, QSlider
 from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
 from localization import get_localization_manager, tr
 
@@ -218,6 +217,8 @@ class SlotFrame(QFrame):
         self.click_handler: Optional[Callable] = None
         self.double_click_handler: Optional[Callable] = None
 
+
+
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton and self.click_handler:
             self.click_handler()
@@ -227,6 +228,245 @@ class SlotFrame(QFrame):
         if event.button() == Qt.MouseButton.LeftButton and self.double_click_handler:
             self.double_click_handler()
         super().mouseDoubleClickEvent(event)
+
+
+class ScreenshotsCarousel(QWidget):
+    def __init__(self, urls: list[str], parent=None):
+        super().__init__(parent)
+        self.urls = [u for u in urls if isinstance(u, str) and u.startswith(('http://','https://'))][:10]
+        self.index = 0
+        self._images = [None] * len(self.urls)
+        self._init_ui()
+        if self.urls:
+            self._show_current()
+        else:
+            self._update_nav_state()
+
+    def _init_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0,0,0,0)
+        layout.setSpacing(8)
+
+        # Image area
+        self.image_label = QLabel()
+        from PyQt6.QtWidgets import QSizePolicy
+        # Fix the rendering area to avoid any initial zoom effect
+        fixed_w, fixed_h = 550, 220
+        self.setMaximumWidth(fixed_w)
+        self.image_label.setFixedSize(fixed_w, fixed_h)
+        self.image_label.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        self.image_label.setScaledContents(False)
+        self.image_label.setStyleSheet("background-color: black; border: 1px solid #444;")
+        self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        # Nav buttons
+        nav_layout = QHBoxLayout()
+        self.prev_btn = QPushButton("⮜")
+        self.next_btn = QPushButton("⮞")
+        for b in (self.prev_btn, self.next_btn):
+            b.setFixedSize(32, 28)
+        self.prev_btn.clicked.connect(self._prev)
+        self.next_btn.clicked.connect(self._next)
+
+        nav_layout.addStretch()
+        nav_layout.addWidget(self.prev_btn)
+        nav_layout.addSpacing(8)
+        nav_layout.addWidget(self.next_btn)
+        nav_layout.addStretch()
+
+        # Dots
+        self.dots_layout = QHBoxLayout()
+        self.dots_layout.setSpacing(4)
+        self._dot_labels = []
+
+        layout.addWidget(self.image_label)
+        layout.addLayout(nav_layout)
+        # center dots: stretches on both sides
+        dots_container = QHBoxLayout()
+        dots_container.addStretch()
+        dots_container.addLayout(self.dots_layout)
+        dots_container.addStretch()
+        layout.addLayout(dots_container)
+        
+        self._nav_container = nav_layout
+        self._root_layout = layout
+
+    def _ensure_dots(self):
+        # clear
+        while self.dots_layout.count():
+            item = self.dots_layout.takeAt(0)
+            if item is not None:
+                w = item.widget()
+                if w is not None:
+                    w.setParent(None)
+        self._dot_labels = []
+        for i in range(len(self.urls)):
+            lbl = QLabel('●' if i==self.index else '○')
+            lbl.setStyleSheet("color: white; font-size: 14px;")
+            self._dot_labels.append(lbl)
+            self.dots_layout.addWidget(lbl)
+        self.dots_layout.addStretch()
+
+    def _prev(self):
+        if not self.urls: return
+        self.index = (self.index - 1) % len(self.urls)
+        self._show_current()
+
+    def _next(self):
+        if not self.urls: return
+        self.index = (self.index + 1) % len(self.urls)
+        self._show_current()
+
+    def _update_nav_state(self):
+        count = len(self.urls)
+        enable_nav = count > 1
+        self.prev_btn.setEnabled(enable_nav)
+        self.next_btn.setEnabled(enable_nav)
+        # hide dots and nav when 0 or 1
+        for i in range(self.dots_layout.count()):
+            item = self.dots_layout.itemAt(i)
+            if item is not None:
+                w = item.widget()
+                if w is not None:
+                    w.setVisible(enable_nav)
+        self.prev_btn.setVisible(enable_nav)
+        self.next_btn.setVisible(enable_nav)
+
+    def _show_current(self):
+        self._ensure_dots()
+        self._update_nav_state()
+        if not self.urls:
+            self.image_label.setText(tr('ui.empty'))
+            return
+        url = self.urls[self.index]
+        img = self._images[self.index]
+        if img is None:
+            # lazy load via thread
+            if not hasattr(self, '_loading'):
+                self._loading = [False] * len(self.urls)
+                self._current_worker = None
+            if not self._loading[self.index]:
+                self._loading[self.index] = True
+                from PyQt6.QtCore import QThread, pyqtSignal
+                class _ImgLoader(QThread):
+                    loaded = pyqtSignal(int, object)
+                    failed = pyqtSignal(int)
+                    def __init__(self, idx, url):
+                        super().__init__()
+                        self.idx, self.url = idx, url
+                    def run(self):
+                        try:
+                            import requests
+                            r = requests.get(self.url, timeout=10)
+                            if not r.ok:
+                                self.failed.emit(self.idx); return
+                            q = QImage()
+                            if not q.loadFromData(r.content):
+                                self.failed.emit(self.idx); return
+                            self.loaded.emit(self.idx, q)
+                        except Exception:
+                            self.failed.emit(self.idx)
+                worker = _ImgLoader(self.index, url)
+                def on_loaded(i, qimg):
+                    if i < len(self._images):
+                        self._images[i] = qimg
+                        self._loading[i] = False
+                        if i == self.index:
+                            self._set_pixmap(qimg)
+                def on_failed(i):
+                    if i < len(self._loading):
+                        self._loading[i] = False
+                    if i == self.index:
+                        self.image_label.setText(tr('errors.file_not_available'))
+                worker.loaded.connect(on_loaded)
+                worker.failed.connect(on_failed)
+                # Keep reference so worker isn't GC'd
+                if not hasattr(self, '_workers'):
+                    self._workers = {}
+                self._workers[self.index] = worker
+                # do not clear current pixmap to avoid flicker
+                worker.start()
+            return
+        self._set_pixmap(img)
+        # Preload neighbors
+        self._preload_neighbor(self.index - 1)
+        self._preload_neighbor(self.index + 1)
+
+    def _preload_neighbor(self, idx: int):
+        if not self.urls:
+            return
+        if idx < 0 or idx >= len(self.urls):
+            return
+        if self._images[idx] is not None or (hasattr(self, '_loading') and idx < len(self._loading) and self._loading[idx]):
+            return
+        if not hasattr(self, '_loading'):
+            self._loading = [False] * len(self.urls)
+        self._loading[idx] = True
+        if not hasattr(self, '_workers'):
+            self._workers = {}
+        from PyQt6.QtCore import QThread, pyqtSignal
+        class _Preloader(QThread):
+            loaded = pyqtSignal(int, object)
+            failed = pyqtSignal(int)
+            def __init__(self, i, url):
+                super().__init__()
+                self.i, self.url = i, url
+            def run(self):
+                try:
+                    import requests
+                    r = requests.get(self.url, timeout=10)
+                    if not r.ok:
+                        self.failed.emit(self.i); return
+                    q = QImage()
+                    if not q.loadFromData(r.content):
+                        self.failed.emit(self.i); return
+                    self.loaded.emit(self.i, q)
+                except Exception:
+                    self.failed.emit(self.i)
+        w = _Preloader(idx, self.urls[idx])
+        def on_loaded(i, qimg):
+            if i < len(self._images):
+                self._images[i] = qimg
+            if hasattr(self, '_loading') and i < len(self._loading):
+                self._loading[i] = False
+            if hasattr(self, '_workers'):
+                self._workers.pop(i, None)
+        def on_failed(i):
+            if hasattr(self, '_loading') and i < len(self._loading):
+                self._loading[i] = False
+            if hasattr(self, '_workers'):
+                self._workers.pop(i, None)
+        w.loaded.connect(on_loaded)
+        w.failed.connect(on_failed)
+        self._workers[idx] = w
+        w.start()
+
+    # Note: fade-in animation removed intentionally for stability and to keep position while scrolling.
+
+    def _set_pixmap(self, qimg: QImage):
+        # letterbox fit into a fixed-height area; cap width to avoid horizontal growth
+        # Use fixed label dimensions to avoid any size-based scaling on first show
+        label_w = self.image_label.width() or 760
+        label_h = self.image_label.height() or 220
+        pm = QPixmap.fromImage(qimg)
+        scaled = pm.scaled(label_w, label_h, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+        # Create black canvas and draw centered
+        canvas = QPixmap(label_w, label_h)
+        canvas.fill(QColor('black'))
+        painter = QPainter(canvas)
+        x = (label_w - scaled.width())//2
+        y = (label_h - scaled.height())//2
+        painter.drawPixmap(x, y, scaled)
+        painter.end()
+        self.image_label.setPixmap(canvas)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        # redraw to fit new size
+        if self.urls and 0 <= self.index < len(self._images):
+            current = self._images[self.index]
+            if current is not None:
+                self._set_pixmap(current)
 
 
 class ModPlaqueWidget(QFrame):
@@ -2921,6 +3161,7 @@ class DeltaHubApp(QWidget):
 
         self.bg_music_player = None
         self.bg_audio_output = None
+        self.bg_fallback_proc = None
 
         is_demo_enabled = self.local_config.get("demo_mode_enabled", False)
         self.game_mode: GameMode = DemoGameMode() if is_demo_enabled else FullGameMode()
@@ -7477,20 +7718,75 @@ class DeltaHubApp(QWidget):
                     QMessageBox.warning(self, tr("errors.error"), tr("errors.copy_startup_sound_failed"))
 
     def _start_background_music(self):
-        """Запускает фоновую музыку"""
+        """Запускает фоновую музыку с надёжным кроссплатформенным fallback."""
         try:
             custom_path = self._get_background_music_path()
-            if os.path.exists(custom_path):
-                if self.bg_music_player is None or self.bg_audio_output is None:
-                    self.bg_music_player = QMediaPlayer(self)
-                    self.bg_audio_output = QAudioOutput(parent=self)
-                    self.bg_music_player.setAudioOutput(self.bg_audio_output)
-                    # Зацикливание
-                    self.bg_music_player.mediaStatusChanged.connect(self._handle_media_status_changed)
-                self.bg_music_player.setSource(QUrl.fromLocalFile(os.path.abspath(custom_path)))
-                volume = self.local_config.get("launcher_volume", 100)
-                self.bg_audio_output.setVolume(volume / 100.0)
-                self.bg_music_player.play()
+            if not os.path.exists(custom_path):
+                return
+
+            # Остановить любой предыдущий fallback
+            try:
+                if self.bg_fallback_proc and self.bg_fallback_proc.poll() is None:
+                    self.bg_fallback_proc.terminate()
+            except Exception:
+                pass
+            self.bg_fallback_proc = None
+
+            # Попытка через Qt плеер
+            if self.bg_music_player is None or self.bg_audio_output is None:
+                self.bg_music_player = QMediaPlayer(self)
+                self.bg_audio_output = QAudioOutput(parent=self)
+                self.bg_music_player.setAudioOutput(self.bg_audio_output)
+                # Зацикливание
+                self.bg_music_player.mediaStatusChanged.connect(self._handle_media_status_changed)
+
+            self.bg_music_player.setSource(QUrl.fromLocalFile(os.path.abspath(custom_path)))
+            volume = self.local_config.get("launcher_volume", 100)
+            self.bg_audio_output.setVolume(volume / 100.0)
+            self.bg_music_player.play()
+
+            # Fallback, если воспроизведение не стартовало
+            def _fallback_play_bg(path: str):
+                try:
+                    import platform, subprocess, shlex
+                    system = platform.system()
+                    if system == "Windows":
+                        try:
+                            import winsound
+                            winsound.PlaySound(path, winsound.SND_FILENAME | winsound.SND_ASYNC)
+                        except Exception:
+                            try:
+                                self.bg_fallback_proc = subprocess.Popen(["powershell", "-NoProfile", "-WindowStyle", "Hidden", f"(New-Object Media.SoundPlayer '{path}').PlayLooping()"])
+                            except Exception:
+                                pass
+                        return
+                    elif system == "Darwin":
+                        loop_cmd = f"while true; do afplay {shlex.quote(path)}; done"
+                        self.bg_fallback_proc = subprocess.Popen(["bash", "-lc", loop_cmd], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                        return
+                    else:
+                        # Linux: попытаться с ffplay бесконечным циклом, иначе оболочкой с paplay/aplay
+                        try:
+                            self.bg_fallback_proc = subprocess.Popen(["ffplay", "-nodisp", "-autoexit", "-loglevel", "quiet", "-stream_loop", "-1", path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                        except Exception:
+                            loop_cmd = f"while true; do (paplay {shlex.quote(path)} || aplay {shlex.quote(path)} || ffplay -nodisp -autoexit -loglevel quiet {shlex.quote(path)}); done"
+                            try:
+                                self.bg_fallback_proc = subprocess.Popen(["bash", "-lc", loop_cmd], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                            except Exception:
+                                pass
+                except Exception:
+                    pass
+
+            def ensure_bg_playing():
+                try:
+                    if not self.bg_music_player or self.bg_music_player.playbackState() != QMediaPlayer.PlaybackState.PlayingState:
+                        _fallback_play_bg(custom_path)
+                except Exception:
+                    _fallback_play_bg(custom_path)
+
+            from PyQt6.QtCore import QTimer
+            QTimer.singleShot(700, ensure_bg_playing)
+
         except Exception as e:
             print(f"Error starting background music: {e}")
 
@@ -7507,6 +7803,22 @@ class DeltaHubApp(QWidget):
                 self.bg_music_player.stop()
         except Exception as e:
             print(f"Error stopping background music: {e}")
+        # Остановка fallback процесса, если запущен
+        try:
+            if hasattr(self, 'bg_fallback_proc') and self.bg_fallback_proc:
+                if self.bg_fallback_proc.poll() is None:
+                    self.bg_fallback_proc.terminate()
+            # Windows winsound очистка
+            if platform.system() == "Windows":
+                try:
+                    import winsound
+                    winsound.PlaySound(None, winsound.SND_PURGE)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        finally:
+            self.bg_fallback_proc = None
 
     def _on_toggle_direct_launch_for_slot(self, slot_id):
         """Включает прямой запуск для указанного слота"""
@@ -8875,10 +9187,6 @@ class DeltaHubApp(QWidget):
             if not self.is_shortcut_launch:
                 self._handle_permission_error(e.filename or chapter_folder)
             return None
-
-
-
-
 
     def _cleanup_direct_launch_files(self):
         """Очищает файлы модов и восстанавливает оригинальные файлы."""
