@@ -16,8 +16,8 @@ WizardStyle=modern
 ; Показ папки установки всегда и не использовать каталог прошлых версий
 DisableDirPage=no
 UsePreviousAppDir=no
-; Картинка в правом верхнем углу мастера (если поддерживается)
-WizardSmallImageFile={#AppIcon}
+; Картинка в правом верхнем углу мастера (BMP 55x55)
+WizardSmallImageFile=assets\icon_small.bmp
 OutputBaseFilename={#AppName}_setup_v{#AppVersion}
 ArchitecturesAllowed=x64
 ArchitecturesInstallIn64BitMode=x64
