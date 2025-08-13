@@ -7,7 +7,7 @@ from PyQt6.QtGui import QImage
 from PyQt6.QtWidgets import QMessageBox
 from localization import tr
 
-LAUNCHER_VERSION = "1.9.9"
+LAUNCHER_VERSION = "2.0.0"
 
 APP_ID = "deltahub.y.114"
 from dotenv import load_dotenv
