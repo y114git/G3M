@@ -1,8 +1,7 @@
-#pragma-codepage utf-8
-#define AppName        "DELTAHUB"
-#define AppVersion     "2.0.0"
-#define AppExeName     "DELTAHUB.exe"
-#define AppIcon        "assets\\icon.ico"
+#define AppName        "DELTAHUB"
+#define AppVersion     "2.0.0"
+#define AppExeName     "DELTAHUB.exe"
+#define AppIcon        "assets\\icon.ico"
 
 [Setup]
 AppId={{C5B9F4E1-7278-4D2A-8B1E-14639535B57A}}
