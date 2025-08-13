@@ -285,3 +285,47 @@ jobs:
         with:
           name: DELTAHUB-windows-setup
           path: "**/DELTAHUB_setup_v*.exe"
+
+  release:
+    name: Create GitHub Release and upload assets
+    runs-on: ubuntu-latest
+    needs: [linux, macos-x64, macos-arm64, windows]
+    steps:
+      - name: Download Linux artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: DELTAHUB-linux
+          path: ./release_assets/DELTAHUB-linux
+      - name: Download macOS x86_64 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: DELTAHUB-macOS-x86_64
+          path: ./release_assets/DELTAHUB-macOS-x86_64
+      - name: Download macOS arm64 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: DELTAHUB-macOS-arm64
+          path: ./release_assets/DELTAHUB-macOS-arm64
+      - name: Download Windows installer artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: DELTAHUB-windows-setup
+          path: ./release_assets/DELTAHUB-windows-setup
+      - name: List gathered assets
+        run: |
+          find ./release_assets -type f -maxdepth 6 -print
+      - name: Create GitHub Release and upload assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_VERSION }}
+          name: "DELTAHUB ${{ env.RELEASE_VERSION }}"
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          make_latest: true
+          fail_on_unmatched_files: true
+          files: |
+            release_assets/DELTAHUB-linux/DELTAHUB
+            release_assets/DELTAHUB-macOS-x86_64/DELTAHUB-macOS-x86_64-${{ env.RELEASE_VERSION }}.zip
+            release_assets/DELTAHUB-macOS-arm64/DELTAHUB-macOS-arm64-${{ env.RELEASE_VERSION }}.zip
+            release_assets/DELTAHUB-windows-setup/**/DELTAHUB_setup_v*.exe

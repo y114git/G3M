@@ -4,7 +4,7 @@
 #define AppIcon        "assets\\icon.ico"
 
 [Setup]
-AppId={{C5B9F4E1-7278-4D2A-8B1E-14639535B57A}}
+AppId={{6A8E9F32-1B3A-4F2F-9C0A-6E28B9B8C5D1}}
 AppName={#AppName}
 AppVersion={#AppVersion}
 DefaultDirName={autopf}\{#AppName}
@@ -13,6 +13,11 @@ Compression=lzma
 SolidCompression=yes
 SetupIconFile={#AppIcon}
 WizardStyle=modern
+; Показ папки установки всегда и не использовать каталог прошлых версий
+DisableDirPage=no
+UsePreviousAppDir=no
+; Картинка в правом верхнем углу мастера (если поддерживается)
+WizardSmallImageFile={#AppIcon}
 OutputBaseFilename={#AppName}_setup_v{#AppVersion}
 ArchitecturesAllowed=x64
 ArchitecturesInstallIn64BitMode=x64
