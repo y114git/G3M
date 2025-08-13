@@ -7,7 +7,7 @@ import threading
 import time
 
 from PyQt6.QtCore import QLibraryInfo, Qt, QTranslator, QTimer, QUrl
-from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
+# QtMultimedia removed; using playsound3 for audio
 from PyQt6.QtGui import QPixmap
 from PyQt6.QtWidgets import QApplication, QMessageBox, QSplashScreen
 from localization import get_localization_manager
@@ -209,135 +209,44 @@ def get_launcher_volume():
         pass
     return 100
 
+
+
 def play_deltahub_sound():
-    """Воспроизводит звук заставки с надёжным кроссплатформенным fallback.
-
-    Важно: на Windows встроенные fallback'и (winsound/SoundPlayer) умеют играть только WAV.
-    Поэтому, если рядом есть WAV — используем его. MP3 оставляем для QMediaPlayer.
-    """
-    global _player, _audio_output
-
-    def _fallback_play(path: str):
-        try:
-            import platform, subprocess, os
-            system = platform.system()
-            ext = os.path.splitext(path)[1].lower()
-            if system == "Windows":
-                if ext == ".wav":
-                    try:
-                        import winsound
-                        winsound.PlaySound(path, winsound.SND_FILENAME | winsound.SND_ASYNC)
-                        return
-                    except Exception:
-                        pass
-                    # Fallback через powershell SoundPlayer (тоже WAV-only)
-                    try:
-                        subprocess.Popen([
-                            "powershell", "-NoProfile", "-WindowStyle", "Hidden",
-                            f"(New-Object Media.SoundPlayer '{path}').Play()"
-                        ])
-                        return
-                    except Exception:
-                        pass
-                # Для MP3 надёжного системного fallback без внешних зависимостей нет
-                # Оставляем попытку только через Qt (см. ниже)
-            elif system == "Darwin":
-                subprocess.Popen(["afplay", path])
-                return
-            else:
-                # Linux: paplay/aplay/ffplay по доступности
-                for cmd in (["paplay", path], ["aplay", path], ["ffplay", "-nodisp", "-autoexit", path]):
-                    try:
-                        subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                        return
-                    except Exception:
-                        continue
-        except Exception:
-            pass
+    """Воспроизводит звук заставки через playsound3 (только MP3)."""
+    global _sound_instance
 
     sound_path: str = ""
     try:
-        # Предпочтительные варианты звука (в порядке приоритета)
-        base_dir = os.path.dirname(__file__)
-        custom_wav = os.path.join(base_dir, "custom_startup_sound.wav")
-        custom_mp3 = os.path.join(base_dir, "custom_startup_sound.mp3")
-        asset_wav = resource_path("assets/deltahub.wav")
-        asset_mp3 = resource_path("assets/deltahub.mp3")
+        # Предпочтительные варианты звука (только MP3)
+        # 1) Кастомный звук из config_dir
+        config_mp3 = os.path.join(get_app_support_path(), "custom_startup_sound.mp3")
+        # 2) Встроенный ассет
+        asset_mp3 = resource_path("assets/deltahub.wav")
 
-        sound_candidates = []
-        # На Windows лучше сначала WAV, затем MP3
-        if platform.system() == "Windows":
-            sound_candidates = [custom_wav, asset_wav, custom_mp3, asset_mp3]
-        else:
-            sound_candidates = [custom_mp3, asset_mp3, custom_wav, asset_wav]
+        sound_candidates = [config_mp3, asset_mp3]
 
         found = next((p for p in sound_candidates if os.path.exists(p)), None)
         if not found:
             return
         sound_path = found
 
-        _player = QMediaPlayer()
-        _audio_output = QAudioOutput()
-        _player.setAudioOutput(_audio_output)
-        volume = get_launcher_volume()
-        _audio_output.setVolume(volume / 100.0)
-
-        # Очистка после завершения
-        def cleanup_on_finish(status):
-            try:
-                if _player and status == QMediaPlayer.MediaStatus.EndOfMedia:
-                    _player.setSource(QUrl())
-            except Exception:
-                pass
-
-        # Если backend не воспроизвёл — fallback по таймеру
-        def ensure_playing():
-            try:
-                if not _player or _player.playbackState() != QMediaPlayer.PlaybackState.PlayingState:
-                    if sound_path:
-                        _fallback_play(sound_path)
-            except Exception:
-                if sound_path:
-                    _fallback_play(sound_path)
-
-        # Диагностика ошибок плеера (выводим в stderr в заморозке тоже)
-        def on_error(err):
-            try:
-                err_str = _player.errorString() if _player else ""
-                sys.stderr.write(f"[QMediaPlayer] error={err} str={err_str}\n")
-            except Exception:
-                pass
-        try:
-            _player.errorOccurred.connect(on_error)
-        except Exception:
-            pass
-
-        _player.mediaStatusChanged.connect(cleanup_on_finish)
-        _player.setSource(QUrl.fromLocalFile(os.path.abspath(sound_path)))
-        _player.play()
-
-        # Проверяем через 500 мс, начал ли играть
-        from PyQt6.QtCore import QTimer
-        QTimer.singleShot(500, ensure_playing)
-
+        from playsound3 import playsound
+        # Неблокирующее воспроизведение возвращает объект с .is_alive()/.stop()
+        _sound_instance = playsound(sound_path, block=False)
     except Exception:
-        # Полный резервный вариант
-        try:
-            if sound_path:
-                _fallback_play(sound_path)
-        except Exception:
-            pass
+        # Если playsound3 не сработал — ничего не делаем
+        pass
 
 def stop_deltahub_sound():
-    """Останавливает воспроизведение звука"""
-    global _player
-    if _player and _player.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
-        _player.stop()
+    """Останавливает воспроизведение звука (playsound3)."""
     try:
         global _sound_instance
         if '_sound_instance' in globals() and _sound_instance:
-            if _sound_instance.is_alive():
-                _sound_instance.stop()
+            if hasattr(_sound_instance, 'is_alive') and _sound_instance.is_alive():
+                try:
+                    _sound_instance.stop()
+                except Exception:
+                    pass
             _sound_instance = None
     except Exception:
         pass

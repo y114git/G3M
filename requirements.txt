@@ -4,3 +4,4 @@ requests
 packaging
 rarfile
 python-dotenv
+playsound3

@@ -73,7 +73,7 @@ jobs:
           rm -f secrets_embed.py || true
       - uses: actions/upload-artifact@v4
         with:
-          name: DELTAHUB-linux
+          name: DELTAHUB-Linux
           path: dist/DELTAHUB
 
   macos-x64:
@@ -250,7 +250,7 @@ jobs:
           pyinstaller -y DELTAHUB.spec
       - uses: actions/upload-artifact@v4
         with:
-          name: DELTAHUB-windows
+          name: DELTAHUB-Windows
           path: dist/DELTAHUB.exe
       # Inno Setup packaging
       - name: Install Inno Setup
@@ -295,12 +295,12 @@ jobs:
           $ver = $env:RELEASE_VERSION
           $exe = Get-ChildItem -Recurse -Filter "DELTAHUB_setup_v*.exe" | Select-Object -First 1
           if (-not $exe) { Write-Error "Installer not found"; exit 1 }
-          Copy-Item $exe.FullName "DELTAHUB_setup_$ver.exe" -Force
-          Write-Host "Collected installer: DELTAHUB_setup_$ver.exe"
+          Copy-Item $exe.FullName "DELTAHUB-Windows-Setup-$ver.exe" -Force
+          Write-Host "Collected installer: DELTAHUB-Windows-Setup-$ver.exe"
       - uses: actions/upload-artifact@v4
         with:
-          name: DELTAHUB-windows-setup
-          path: "DELTAHUB_setup_${{ env.RELEASE_VERSION }}.exe"
+          name: DELTAHUB-Windows-Setup
+          path: "DELTAHUB-Windows-Setup-${{ env.RELEASE_VERSION }}.exe"
 
   release:
     name: Create GitHub Release and upload assets
@@ -310,8 +310,8 @@ jobs:
       - name: Download Linux artifact
         uses: actions/download-artifact@v4
         with:
-          name: DELTAHUB-linux
-          path: ./release_assets/DELTAHUB-linux
+          name: DELTAHUB-Linux
+          path: ./release_assets/DELTAHUB-Linux
       - name: Download macOS x86_64 artifact
         uses: actions/download-artifact@v4
         with:
@@ -325,8 +325,13 @@ jobs:
       - name: Download Windows installer artifact
         uses: actions/download-artifact@v4
         with:
-          name: DELTAHUB-windows-setup
-          path: ./release_assets/DELTAHUB-windows-setup
+          name: DELTAHUB-Windows-Setup
+          path: ./release_assets/DELTAHUB-Windows-Setup
+      - name: Download Windows binary artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: DELTAHUB-Windows
+          path: ./release_assets/DELTAHUB-Windows
       - name: List gathered assets
         run: |
           find ./release_assets -type f -maxdepth 6 -print
@@ -341,7 +346,8 @@ jobs:
           make_latest: true
           fail_on_unmatched_files: true
           files: |
-            release_assets/DELTAHUB-linux/DELTAHUB
+            release_assets/DELTAHUB-Linux/DELTAHUB
             release_assets/DELTAHUB-macOS-x86_64/DELTAHUB-macOS-x86_64-${{ env.RELEASE_VERSION }}.zip
             release_assets/DELTAHUB-macOS-arm64/DELTAHUB-macOS-arm64-${{ env.RELEASE_VERSION }}.zip
-            release_assets/DELTAHUB-windows-setup/**/DELTAHUB_setup_v*.exe
+            release_assets/DELTAHUB-Windows/DELTAHUB.exe
+            release_assets/DELTAHUB-Windows-Setup/DELTAHUB-Windows-Setup-${{ env.RELEASE_VERSION }}.exe

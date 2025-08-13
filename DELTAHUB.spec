@@ -30,7 +30,7 @@ a = Analysis(
         'packaging',
         'requests',
         'PyQt6',
-        'PyQt6.QtMultimedia',
+        'playsound3',
         'secrets_embed',
         'rarfile',
     ],

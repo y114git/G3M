@@ -6,7 +6,7 @@ from PyQt6 import sip
 from PyQt6.QtCore import Qt, QEvent, QEventLoop, QThread, QTimer, QUrl, pyqtSignal
 from PyQt6.QtGui import QBrush, QColor, QDesktopServices, QFont, QFontDatabase, QIcon, QImage, QMovie, QPainter, QPalette, QPixmap
 from PyQt6.QtWidgets import QApplication, QButtonGroup, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFrame, QHeaderView, QLabel, QLineEdit, QMessageBox, QProgressBar, QPushButton, QTableWidget, QTableWidgetItem, QTabWidget, QTextBrowser, QVBoxLayout, QWidget, QHBoxLayout, QSizePolicy, QInputDialog, QColorDialog, QListWidget, QLayoutItem, QScrollArea, QSlider
-from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
+# QtMultimedia removed; using playsound3 for audio
 from localization import get_localization_manager, tr
 
 # ============================================================================
@@ -3106,6 +3106,16 @@ class DeltaHubApp(QWidget):
         QTimer.singleShot(0, self._run_presence_tick)
 
         self.setWindowTitle("DELTAHUB")
+        
+        # Платформенно-зависимый флаг громкости
+        self._supports_volume = (platform.system() == "Windows")
+        
+        # Запомним базовый размер окна, чтобы уметь возвращать его после больших страниц (changelog/help)
+        try:
+            self._initial_size = self.size()
+        except Exception:
+            self._initial_size = None
+
         # --- Новая структура путей ---
         # self.config_dir: для JSON-конфигов в AppData
         # self.mods_dir: для кэша модов в профиле пользователя (записываемая папка)
@@ -3159,9 +3169,8 @@ class DeltaHubApp(QWidget):
         self.initialization_completed = False
         self.is_shown_to_user = False  # Флаг показа лаунчера пользователю
 
-        self.bg_music_player = None
-        self.bg_audio_output = None
-        self.bg_fallback_proc = None
+        self._bg_music_running = False
+        self._bg_music_thread = None
 
         is_demo_enabled = self.local_config.get("demo_mode_enabled", False)
         self.game_mode: GameMode = DemoGameMode() if is_demo_enabled else FullGameMode()
@@ -3895,21 +3904,7 @@ class DeltaHubApp(QWidget):
         settings_customization_layout.addSpacing(8)
 
         # Затем добавляем громкость, под чекбоксами
-        volume_controls_layout = QHBoxLayout()
-        volume_controls_layout.setSpacing(10)
-        volume_label = QLabel(tr("ui.volume_label"))
-        self.volume_slider = QSlider(Qt.Orientation.Horizontal)
-        self.volume_slider.setRange(0, 100)
-        self.volume_slider.setFixedWidth(150)
-        self.volume_slider.valueChanged.connect(self._on_volume_changed)
-
-        # Добавляем растяжки по бокам, чтобы сгруппировать элементы в центре
-        volume_controls_layout.addStretch(1)
-        volume_controls_layout.addWidget(volume_label)
-        volume_controls_layout.addWidget(self.volume_slider)
-        volume_controls_layout.addStretch(1)
-
-        settings_customization_layout.addLayout(volume_controls_layout)
+        # Удалено: управление громкостью
 
         self.custom_style_frame = QFrame()
         custom_style_layout = QVBoxLayout(self.custom_style_frame)
@@ -3963,6 +3958,9 @@ class DeltaHubApp(QWidget):
         changelog_layout = QVBoxLayout(self.changelog_widget)
         self.changelog_text_edit = QTextBrowser()
         self.changelog_text_edit.setOpenExternalLinks(True)
+        # Не позволять содержимому растягивать окно — ограничим максимальную высоту
+        self.changelog_text_edit.setMinimumHeight(0)
+        self.changelog_text_edit.setMaximumHeight(500)
         current_font = self.font()
         self.changelog_text_edit.setFont(current_font)
         doc = self.changelog_text_edit.document()
@@ -3985,6 +3983,9 @@ class DeltaHubApp(QWidget):
         help_layout = QVBoxLayout(self.help_widget)
         self.help_text_edit = QTextBrowser()
         self.help_text_edit.setOpenExternalLinks(True)
+        # Не позволять содержимому растягивать окно — ограничим максимальную высоту
+        self.help_text_edit.setMinimumHeight(0)
+        self.help_text_edit.setMaximumHeight(500)
         help_font = self.font()
         self.help_text_edit.setFont(help_font)
         help_doc = self.help_text_edit.document()
@@ -7335,6 +7336,26 @@ class DeltaHubApp(QWidget):
         page.setVisible(True)
         self.current_settings_page = page
 
+    def _lock_window_size(self):
+        """Фиксирует текущий размер окна, чтобы контент (changelog/help) не менял высоту/ширину."""
+        try:
+            sz = self.size()
+            self._locked_size = sz
+            self.setMinimumSize(sz)
+            self.setMaximumSize(sz)
+        except Exception:
+            pass
+
+    def _unlock_window_size(self):
+        """Снимает фиксацию размера окна, возвращая возможность обычного ресайза пользователем."""
+        try:
+            # Разрешаем стандартные пределы Qt
+            self.setMinimumSize(0, 0)
+            self.setMaximumSize(16777215, 16777215)
+            self._locked_size = None
+        except Exception:
+            pass
+
     def _go_back(self):
         """Возврат на предыдущую страницу из history‑стека."""
         if hasattr(self, 'settings_nav_stack') and self.settings_nav_stack:
@@ -7388,6 +7409,8 @@ class DeltaHubApp(QWidget):
                     self.is_changelog_view = False
 
         if self.is_settings_view:
+            # Фиксируем размер окна на время отображения страниц настроек/справки/чейнджлога
+            self._lock_window_size()
             self.settings_button.setText(tr("ui.back_button"))
             self.chapter_btn_widget.setVisible(False)
             self.tab_widget.setVisible(False)
@@ -7398,6 +7421,8 @@ class DeltaHubApp(QWidget):
             self._load_custom_style_settings()
             self._update_status(tr("status.launcher_settings"), UI_COLORS["status_info"])
         else:
+            # Снимаем фиксацию размера при выходе из настроек
+            self._unlock_window_size()
             self.settings_button.setText(tr("ui.settings_title"))
             self.apply_theme()
             self.settings_widget.setVisible(False)
@@ -7506,12 +7531,8 @@ class DeltaHubApp(QWidget):
         self._update_dynamic_elements()
 
     def _on_volume_changed(self, value):
-        """Обработчик изменения громкости."""
-        self.local_config["launcher_volume"] = value
-        self._write_local_config()
-        # Обновляем громкость фоновой музыки, если она играет
-        if self.bg_audio_output:
-            self.bg_audio_output.setVolume(value / 100.0)
+        """Регулировка громкости удалена."""
+        return
 
     def _update_dynamic_elements(self):
         """Обновляет элементы UI, которые используют кастомизируемые цвета"""
@@ -7581,8 +7602,6 @@ class DeltaHubApp(QWidget):
             placeholder = theme_defaults["colors"].get(key, "#000000")
             widget.setText(self.local_config.get(config_key, ""))
             widget.setPlaceholderText(placeholder)
-        volume = self.local_config.get("launcher_volume", 100)
-        self.volume_slider.setValue(volume)
         self.apply_theme()
 
     def _load_launcher_icon(self):
@@ -7620,31 +7639,25 @@ class DeltaHubApp(QWidget):
         self.launcher_icon_label.setPixmap(fallback_pixmap)
 
     def _get_background_music_path(self):
-        """Возвращает путь к пользовательской фоновой музыке рядом с exe.
-        Поддерживаем только custom-файлы: .wav (в приоритете) и .mp3.
+        """Возвращает путь к пользовательской фоновой музыке (только MP3) в папке конфигов.
         """
-        base_dir = os.path.dirname(__file__)
-        candidates = [
-            os.path.join(base_dir, "custom_background_music.wav"),
-            os.path.join(base_dir, "custom_background_music.mp3"),
-        ]
-        for p in candidates:
-            try:
-                if p and os.path.exists(p):
-                    return p
-            except Exception:
-                pass
-        return ""
+        # Сохраняем пользовательские файлы в конфиг‑папке, чтобы избежать проблем с правами
+        dest = os.path.join(self.config_dir, "custom_background_music.mp3")
+        if os.path.exists(dest):
+            return dest
+        # Фолбэк — встроенный MP3 ассет
+        asset_mp3 = resource_path("assets/deltahub.wav")
+        return dest if os.path.exists(dest) else (asset_mp3 if os.path.exists(asset_mp3) else "")
 
     def _get_startup_sound_path(self):
-        """Получает путь к файлу звука заставки"""
-        return os.path.join(os.path.dirname(__file__), "custom_startup_sound.mp3")
+        """Получает путь к файлу звука заставки (только MP3) в папке конфигов"""
+        return os.path.join(self.config_dir, "custom_startup_sound.mp3")
 
     def _get_background_music_button_text(self):
         """Возвращает текст для кнопки фоновой музыки"""
-        if os.path.exists(self._get_background_music_path()):
-            return tr("buttons.remove_background_music")
-        return tr("buttons.select_background_music")
+        # Кнопка должна отражать наличие ТОЛЬКО пользовательского файла в конфиг‑папке
+        custom_exists = os.path.exists(os.path.join(self.config_dir, "custom_background_music.mp3"))
+        return tr("buttons.remove_background_music") if custom_exists else tr("buttons.select_background_music")
 
     def _get_startup_sound_button_text(self):
         """Возвращает текст для кнопки звука заставки"""
@@ -7654,23 +7667,14 @@ class DeltaHubApp(QWidget):
 
     def _on_background_music_button_click(self):
         """Обработчик нажатия на кнопку фоновой музыки"""
-        custom_path = self._get_background_music_path()
+        # Работает только с пользовательским файлом в конфиг‑папке
+        custom_path = os.path.join(self.config_dir, "custom_background_music.mp3")
 
         if os.path.exists(custom_path):
             # Удаляем существующий файл
             try:
                 self._stop_background_music()
-                
-                # --- ИСПРАВЛЕНИЕ НАЧАЛО ---
-                # Явно отключаем плеер от файла перед удалением
-                if self.bg_music_player:
-                    self.bg_music_player.setSource(QUrl())
-                # --- ИСПРАВЛЕНИЕ КОНЕЦ ---
-
-                # Полностью очищаем объекты плеера для предотвращения ошибок
-                self.bg_music_player = None
-                self.bg_audio_output = None
-                
+                # Останавливаем воспроизведение и удаляем файл
                 os.remove(custom_path)
                 self.background_music_button.setText(self._get_background_music_button_text())
                 QMessageBox.information(self, tr("dialogs.success"), tr("dialogs.background_music_removed"))
@@ -7683,13 +7687,21 @@ class DeltaHubApp(QWidget):
                 self,
                 tr("dialogs.select_background_music"),
                 "",
-                "Audio Files (*.mp3 *.wav *.ogg *.m4a *.flac);;All Files (*)"
+                "MP3 Files (*.mp3)"
             )
 
             if file_path:
+                # Разрешаем только .mp3
+                if not file_path.lower().endswith('.mp3'):
+                    QMessageBox.warning(self, tr("errors.error"), "Можно выбрать только MP3 файл")
+                    return
                 try:
-                    # Копируем файл
-                    shutil.copy2(file_path, custom_path)
+                    # Останавливаем фоновую музыку перед заменой
+                    self._stop_background_music()
+                    # Копируем в папку конфигов (строго в config_dir, а не в ассеты)
+                    os.makedirs(self.config_dir, exist_ok=True)
+                    dest_path = os.path.join(self.config_dir, "custom_background_music.mp3")
+                    shutil.copy2(file_path, dest_path)
                     self.background_music_button.setText(self._get_background_music_button_text())
                     # Запускаем фоновую музыку
                     self._start_background_music()
@@ -7699,7 +7711,7 @@ class DeltaHubApp(QWidget):
                     QMessageBox.warning(self, tr("errors.error"), tr("errors.copy_background_music_failed"))
 
     def _on_startup_sound_button_click(self):
-        """Обработчик нажатия на кнопку звука заставки"""
+        """Обработчик нажатия на кнопку звука заставки (только MP3)"""
         custom_path = self._get_startup_sound_path()
 
         if os.path.exists(custom_path):
@@ -7712,17 +7724,20 @@ class DeltaHubApp(QWidget):
                 print(f"Error removing startup sound: {e}")
                 QMessageBox.warning(self, tr("errors.error"), tr("errors.remove_startup_sound_failed"))
         else:
-            # Выбираем новый файл
+            # Выбираем новый файл (только MP3)
             file_path, _ = QFileDialog.getOpenFileName(
                 self,
                 tr("dialogs.select_startup_sound"),
                 "",
-                "Audio Files (*.mp3 *.wav *.ogg *.m4a *.flac);;All Files (*)"
+                "MP3 Files (*.mp3)"
             )
 
             if file_path:
+                if not file_path.lower().endswith('.mp3'):
+                    QMessageBox.warning(self, tr("errors.error"), "Можно выбрать только MP3 файл")
+                    return
                 try:
-                    # Копируем файл
+                    os.makedirs(self.config_dir, exist_ok=True)
                     shutil.copy2(file_path, custom_path)
                     self.startup_sound_button.setText(self._get_startup_sound_button_text())
                     QMessageBox.information(self, tr("dialogs.success"), tr("dialogs.startup_sound_selected"))
@@ -7731,108 +7746,79 @@ class DeltaHubApp(QWidget):
                     QMessageBox.warning(self, tr("errors.error"), tr("errors.copy_startup_sound_failed"))
 
     def _start_background_music(self):
-        """Запускает фоновую музыку с надёжным кроссплатформенным fallback (WAV на Windows)."""
+        """Запускает фоновую музыку через playsound3 в отдельном потоке (зациклено) с возможностью мгновенной остановки."""
         try:
             music_path = self._get_background_music_path()
             if not music_path or not os.path.exists(music_path):
                 return
 
-            # Остановить любой предыдущий fallback
-            try:
-                if self.bg_fallback_proc and self.bg_fallback_proc.poll() is None:
-                    self.bg_fallback_proc.terminate()
-            except Exception:
-                pass
-            self.bg_fallback_proc = None
+            # Останавливаем предыдущий цикл, если есть
+            self._stop_background_music()
 
-            # Попытка через Qt плеер
-            if self.bg_music_player is None or self.bg_audio_output is None:
-                self.bg_music_player = QMediaPlayer(self)
-                self.bg_audio_output = QAudioOutput(parent=self)
-                self.bg_music_player.setAudioOutput(self.bg_audio_output)
-                # Зацикливание
-                self.bg_music_player.mediaStatusChanged.connect(self._handle_media_status_changed)
-                # Диагностика ошибок
-                try:
-                    self.bg_music_player.errorOccurred.connect(lambda err: sys.stderr.write(f"[BG QMediaPlayer] error={err} str={(self.bg_music_player.errorString() if self.bg_music_player else '')}\n"))
-                except Exception:
-                    pass
+            import threading
+            from playsound3 import playsound
 
-            self.bg_music_player.setSource(QUrl.fromLocalFile(os.path.abspath(music_path)))
-            volume = self.local_config.get("launcher_volume", 100)
-            self.bg_audio_output.setVolume(volume / 100.0)
-            self.bg_music_player.play()
+            self._bg_music_running = True
+            self._bg_music_instance = None
 
-            # Fallback, если воспроизведение не стартовало
-            def _fallback_play_bg(path: str):
-                try:
-                    import platform, subprocess, shlex, os
-                    system = platform.system()
-                    ext = os.path.splitext(path)[1].lower()
-                    if system == "Windows":
-                        if ext == ".wav":
+            def _loop():
+                while self._bg_music_running:
+                    try:
+                        # Неблокирующее воспроизведение, чтобы можно было остановить .stop()
+                        inst = playsound(music_path, block=False)
+                        self._bg_music_instance = inst
+                        # Ожидаем завершение или команду остановки
+                        while self._bg_music_running and hasattr(inst, 'is_alive') and inst.is_alive():
+                            time.sleep(0.05)
+                        # Если остановили — прерываем цикл
+                        if not self._bg_music_running:
                             try:
-                                import winsound
-                                winsound.PlaySound(path, winsound.SND_FILENAME | winsound.SND_ASYNC)
-                                return
+                                if hasattr(inst, 'stop'):
+                                    inst.stop()
                             except Exception:
                                 pass
-                            try:
-                                self.bg_fallback_proc = subprocess.Popen(["powershell", "-NoProfile", "-WindowStyle", "Hidden", f"(New-Object Media.SoundPlayer '{path}').PlayLooping()"])
-                                return
-                            except Exception:
-                                pass
-                        # Для MP3 безопасного штатного fallback нет — оставляем только Qt
-                        return
-                    elif system == "Darwin":
-                        loop_cmd = f"while true; do afplay {shlex.quote(path)}; done"
-                        self.bg_fallback_proc = subprocess.Popen(["bash", "-lc", loop_cmd], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                        return
-                    else:
-                        # Linux: попытаться с ffplay бесконечным циклом, иначе оболочкой с paplay/aplay
-                        try:
-                            self.bg_fallback_proc = subprocess.Popen(["ffplay", "-nodisp", "-autoexit", "-loglevel", "quiet", "-stream_loop", "-1", path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                        except Exception:
-                            loop_cmd = f"while true; do (paplay {shlex.quote(path)} || aplay {shlex.quote(path)} || ffplay -nodisp -autoexit -loglevel quiet {shlex.quote(path)}); done"
-                            try:
-                                self.bg_fallback_proc = subprocess.Popen(["bash", "-lc", loop_cmd], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                            except Exception:
-                                pass
-                except Exception:
-                    pass
+                            break
+                        # Иначе петелька продолжит следующее воспроизведение
+                    except Exception:
+                        # Если ошибка — делаем короткую паузу и пробуем дальше
+                        time.sleep(0.5)
+                        continue
 
-            def ensure_bg_playing():
-                try:
-                    if not self.bg_music_player or self.bg_music_player.playbackState() != QMediaPlayer.PlaybackState.PlayingState:
-                        _fallback_play_bg(music_path)
-                except Exception:
-                    _fallback_play_bg(music_path)
-
-            from PyQt6.QtCore import QTimer
-            QTimer.singleShot(700, ensure_bg_playing)
-
+            self._bg_music_thread = threading.Thread(target=_loop, daemon=True)
+            self._bg_music_thread.start()
         except Exception as e:
             print(f"Error starting background music: {e}")
 
     def _handle_media_status_changed(self, status):
-        """Безопасно обрабатывает зацикливание музыки, проверяя наличие плеера."""
-        sender_player = self.sender()
-        if isinstance(sender_player, QMediaPlayer) and status == QMediaPlayer.MediaStatus.EndOfMedia:
-            sender_player.play()
+        """Больше не используется (QtMultimedia удалён). Оставлено для совместимости."""
+        pass
+
 
     def _stop_background_music(self):
-        """Останавливает фоновую музыку"""
+        """Останавливает фоновую музыку, запущенную через playsound3 (мгновенно)."""
         try:
-            if self.bg_music_player and self.bg_music_player.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
-                self.bg_music_player.stop()
+            self._bg_music_running = False
+            # Останавливаем активный инстанс playsound, если есть
+            inst = getattr(self, "_bg_music_instance", None)
+            if inst and hasattr(inst, 'is_alive'):
+                try:
+                    if inst.is_alive() and hasattr(inst, 'stop'):
+                        inst.stop()
+                except Exception:
+                    pass
+            self._bg_music_instance = None
+            # Завершаем поток
+            thr = getattr(self, "_bg_music_thread", None)
+            if thr and thr.is_alive():
+                thr.join(timeout=0.3)
+            self._bg_music_thread = None
         except Exception as e:
             print(f"Error stopping background music: {e}")
-        # Остановка fallback процесса, если запущен
+        # Доп. очистка для старых fallback-механизмов
         try:
             if hasattr(self, 'bg_fallback_proc') and self.bg_fallback_proc:
                 if self.bg_fallback_proc.poll() is None:
                     self.bg_fallback_proc.terminate()
-            # Windows winsound очистка
             if platform.system() == "Windows":
                 try:
                     import winsound
