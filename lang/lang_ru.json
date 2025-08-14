@@ -5,8 +5,8 @@
     "qt_translation": "qtbase_ru"
   },
   "ui": {
-    "add_data_file": "Добавить DATA/PATCH файл",
-    "add_data_patch_file": "Добавить DATA/PATCH файл",
+    "add_data_file": "Добавить DATA файл",
+    "add_data_patch_file": "Добавить XDELTA файл",
     "add_extra_files": "Добавить доп. файлы",
     "apply_patch": "Применить патч",
     "apply_patch_button": "Применить патч",
@@ -281,7 +281,7 @@
     "select_original_file": "Выберите оригинальный файл",
     "select_original_for_patch": "Выберите оригинальный файл для применения патча",
     "select_patch_file": "Выберите файл патча (.xdelta)",
-    "select_patch_file_xdelta": "Выберите PATCH файл (.xdelta)",
+    "select_patch_file_xdelta": "Выберите ПАТЧ файл (.xdelta)",
     "select_save_file": "Выберите файл сейва",
     "select_saves_folder": "Куда экспорт сейвов",
     "select_slot": "Выберите слот",
@@ -349,7 +349,7 @@
     "file_to": "файлу",
     "icon_direct_link": "Иконка (прямая ссылка):",
     "icon_label": "Иконка",
-    "patch_file": "PATCH - Файл",
+    "patch_file": "XDELTA - Файл",
     "path_to": "Путь к",
     "update_file_label": "{'Ссылка на скачивание' if is_public else 'Путь к'} {'.xdelta' if is_patch else 'DATA'} файла:",
     "version": "Версия",

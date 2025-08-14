@@ -1369,7 +1369,12 @@ class ModEditorDialog(QDialog):
         self.file_tabs.setStyleSheet("QTabWidget::tab-bar { alignment: center; } QTabBar::tab { padding: 4px 8px; }")
         self.demo_checkbox.stateChanged.connect(self._update_file_tabs)
         self.piracy_checkbox.stateChanged.connect(self._update_data_file_labels)
+        # On mode change, recreate DATA/PATCH frames so type switches cleanly
+        self.piracy_checkbox.stateChanged.connect(self._recreate_data_frames)
+        # Update add button text everywhere
+        self.piracy_checkbox.stateChanged.connect(self._update_data_add_button_texts)
         if not self.is_public:
+            # Legacy: local tabs used to be rebuilt entirely; keep behavior
             self.piracy_checkbox.stateChanged.connect(self._update_file_tabs)
 
         files_layout.addWidget(self.file_tabs)
@@ -1399,15 +1404,82 @@ class ModEditorDialog(QDialog):
                 elif field_type == "version":
                     widget.setText(tr("files.version_label_colon", is_patch=is_patch))
 
+    def _recreate_data_frames(self):
+        """Удаляет существующие DATA/PATCH фреймы во всех вкладках и создает новые по текущему режиму."""
+        for tab_index in range(self.file_tabs.count()):
+            tab = self.file_tabs.widget(tab_index)
+            if not tab:
+                continue
+            layout = tab.layout()
+            if not layout:
+                continue
+            # Найти и удалить все фреймы DATA/PATCH
+            found = False
+            for i in range(layout.count()-1, -1, -1):
+                item = layout.itemAt(i)
+                w = item.widget() if item else None
+                if w is None or not hasattr(w, 'layout'):
+                    continue
+                frame = w
+                frame_layout = frame.layout() if hasattr(frame, 'layout') else None
+                if not frame_layout or frame_layout.count() == 0:
+                    continue
+                first_item = frame_layout.itemAt(0)
+                first = first_item.widget() if first_item and first_item.widget() else None
+                if isinstance(first, QLabel):
+                    # Предпочтительно через property
+                    ftype = first.property("file_type") if hasattr(first, 'property') else None
+                    is_data_frame = ftype in ("data", "patch")
+                    # Фолбек на текст
+                    if not is_data_frame:
+                        txt = first.text() if hasattr(first, 'text') else ""
+                        is_data_frame = (isinstance(txt, str) and (txt.startswith("DATA") or txt.startswith("PATCH")))
+                    if is_data_frame:
+                        found = True
+                        self._remove_data_file(None, layout, frame)
+            # Создать новый пустой фрейм, если удаляли
+            if found:
+                self._add_data_file(tab, layout)
+
+    def _data_button_text(self) -> str:
+        return tr("ui.add_data_patch_file") if self.piracy_checkbox.isChecked() else tr("ui.add_data_file")
+
+    def _update_data_add_button_texts(self):
+        for ti in range(self.file_tabs.count()):
+            tab = self.file_tabs.widget(ti)
+            if not tab:
+                continue
+            layout = tab.layout()
+            if not layout:
+                continue
+            # first row contains buttons_layout
+            for i in range(layout.count()):
+                item = layout.itemAt(i)
+                btn_layout = item.layout() if item else None
+                if not btn_layout:
+                    continue
+                for j in range(btn_layout.count()):
+                    btn_item = btn_layout.itemAt(j)
+                    w = btn_item.widget() if btn_item and btn_item.widget() else None
+                    # Only QPushButton has setText; guard with isinstance
+                    if w is not None and isinstance(w, QPushButton) and w.property("is_data_button"):
+                        w.setText(self._data_button_text())
+                break
+
     def _update_file_tabs(self):
         while self.file_tabs.count(): self.file_tabs.removeTab(0)
         if self.demo_checkbox.isChecked(): self._create_file_tab(tr("tabs.demo"))
         else:
             for tab_name in [tr("tabs.menu_root"), tr("tabs.chapter_1"), tr("tabs.chapter_2"), tr("tabs.chapter_3"), tr("tabs.chapter_4")]: self._create_file_tab(tab_name)
+        # After rebuild, also refresh button texts
+        self._update_data_add_button_texts()
 
     def _create_file_tab(self, tab_name):
         tab = QWidget(); layout = QVBoxLayout(tab); buttons_layout = QHBoxLayout()
-        data_button = QPushButton(tr("ui.add_data_patch_file")); data_button.clicked.connect(lambda: self._add_data_file(tab, layout))
+        # DATA/XDELTA button with dynamic text
+        data_button = QPushButton(self._data_button_text())
+        data_button.setProperty("is_data_button", True)
+        data_button.clicked.connect(lambda: self._add_data_file(tab, layout))
         extra_button = QPushButton(tr("ui.add_extra_files")); extra_button.clicked.connect(lambda: self._add_extra_files(tab, layout))
         for btn in [data_button, extra_button]: buttons_layout.addWidget(btn)
         layout.addLayout(buttons_layout); layout.addStretch(); self.file_tabs.addTab(tab, tab_name)
@@ -1436,12 +1508,17 @@ class ModEditorDialog(QDialog):
             version_label = tr("files.version")
             file_filter = get_file_filter("archive_files")
             browse_title = tr("ui.select_archive")
-            
-            title_label = QLabel(title); title_label.setStyleSheet("font-weight: bold;")
-            if file_type == 'extra' and key_name:
-                title_label.setProperty("clean_key", key_name)
-                title_label.setProperty("file_type", "extra")
-            layout.addWidget(title_label); layout.addWidget(QLabel(input_label))
+        
+        # Create and add the title label for both types
+        title_label = QLabel(title)
+        title_label.setStyleSheet("font-weight: bold;")
+        if file_type == 'extra' and key_name:
+            title_label.setProperty("clean_key", key_name)
+            title_label.setProperty("file_type", "extra")
+        elif file_type == 'data':
+            title_label.setProperty("file_type", "patch" if is_patch else "data")
+        layout.addWidget(title_label)
+        layout.addWidget(QLabel(input_label))
 
         if is_local:
             container = QHBoxLayout(); input_edit = QLineEdit(); input_edit.setReadOnly(True); input_edit.setPlaceholderText(tr("ui.select_file"))
@@ -1551,6 +1628,8 @@ class ModEditorDialog(QDialog):
 
         signals = WorkerSignals()
         signals.update_label.connect(self.on_validation_complete)
+        # Keep a reference to avoid GC while thread is running
+        self._last_validation_signals = signals
 
         def check_url():
             from urllib.parse import urlparse, unquote
@@ -1562,9 +1641,15 @@ class ModEditorDialog(QDialog):
                     r.raise_for_status()
                     headers = r.headers
                 else:
-                    rh = requests.head(url, headers={'User-Agent': 'Mozilla/5.0'}, allow_redirects=True, timeout=10)
-                    rh.raise_for_status()
-                    headers = rh.headers
+                    # Some hosts reject HEAD; fallback to GET if HEAD fails
+                    try:
+                        rh = requests.head(url, headers={'User-Agent': 'Mozilla/5.0'}, allow_redirects=True, timeout=10)
+                        rh.raise_for_status()
+                        headers = rh.headers
+                    except Exception:
+                        rg = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, stream=True, timeout=10)
+                        rg.raise_for_status()
+                        headers = rg.headers
 
                 # Определяем размер в байтах
                 size_bytes = int(headers.get('content-length', 0)) if headers.get('content-length', '').isdigit() else 0

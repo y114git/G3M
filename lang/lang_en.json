@@ -5,8 +5,8 @@
     "qt_translation": "qtbase_en"
   },
   "ui": {
-    "add_data_file": "Add DATA/PATCH file",
-    "add_data_patch_file": "Add DATA/PATCH file",
+    "add_data_file": "Add DATA file",
+    "add_data_patch_file": "Add XDELTA file",
     "add_extra_files": "Add extra files",
     "apply_patch": "Apply Patch",
     "apply_patch_button": "Apply Patch",
@@ -349,7 +349,7 @@
     "file_to": "file",
     "icon_direct_link": "Icon (direct link):",
     "icon_label": "Icon",
-    "patch_file": "PATCH - File",
+    "patch_file": "XDELTA - File",
     "path_to": "Path to",
     "update_file_label": "{'Download link' if is_public else 'Path to'} {'.xdelta' if is_patch else 'DATA'} file:",
     "version": "Version",
