@@ -6,3 +6,4 @@ rarfile
 python-dotenv
 playsound3
 pyxdelta
+py7zr

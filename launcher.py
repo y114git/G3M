@@ -1156,7 +1156,10 @@ class ModEditorDialog(QDialog):
             self.game_version_combo = NoScrollComboBox(); self._load_game_versions(); form_layout.addWidget(self.game_version_combo)
         else:
             self.description_url_edit = QLineEdit(); self.description_url_edit.hide()
-            self.game_version_combo = NoScrollComboBox(); self.game_version_combo.addItem("1.03"); self.game_version_combo.hide()
+            # Local mods: free text field for game version
+            form_layout.addWidget(QLabel(tr("ui.game_version_label")))
+            self.game_version_edit = QLineEdit(); self.game_version_edit.setPlaceholderText("1.03")
+            form_layout.addWidget(self.game_version_edit)
 
     def _create_icon_section(self, form_layout):
         if self.is_public:
@@ -1433,10 +1436,12 @@ class ModEditorDialog(QDialog):
             version_label = tr("files.version")
             file_filter = get_file_filter("archive_files")
             browse_title = tr("ui.select_archive")
-
-        title_label = QLabel(title); title_label.setStyleSheet("font-weight: bold;")
-        if file_type == 'extra' and key_name: title_label.setProperty("clean_key", key_name)
-        layout.addWidget(title_label); layout.addWidget(QLabel(input_label))
+            
+            title_label = QLabel(title); title_label.setStyleSheet("font-weight: bold;")
+            if file_type == 'extra' and key_name:
+                title_label.setProperty("clean_key", key_name)
+                title_label.setProperty("file_type", "extra")
+            layout.addWidget(title_label); layout.addWidget(QLabel(input_label))
 
         if is_local:
             container = QHBoxLayout(); input_edit = QLineEdit(); input_edit.setReadOnly(True); input_edit.setPlaceholderText(tr("ui.select_file"))
@@ -1528,10 +1533,15 @@ class ModEditorDialog(QDialog):
         elif file_type == "data" and hasattr(self, 'icon_edit') and line_edit == self.icon_edit:
             base_title, file_type = tr("files.icon_label"), "icon"
 
-        # Проверяем на extra files через локализованный ключ
-        clean_text = re.sub('<[^<]+?>', '', title_label.text())
-        if tr("files.extra_files") in clean_text:
-            base_title, file_type = clean_text.split(" (")[0], "extra"
+        # Проверяем тип по property, без зависимости от текста локализации
+        label_ftype = title_label.property("file_type") if hasattr(title_label, 'property') else None
+        if label_ftype == "extra":
+            base_title, file_type = tr("files.extra_files_title", key_name=title_label.property("clean_key") or "extra"), "extra"
+        else:
+            # Fallback: Проверяем на extra files через локализованный ключ (для старых записей)
+            clean_text = re.sub('<[^<]+?>', '', title_label.text())
+            if tr("files.extra_files") in clean_text or tr("files.extra_files_title", key_name="")[:-2] in clean_text:
+                base_title, file_type = clean_text.split(" (")[0], "extra"
 
         if not url:
             title_label.setText(base_title)
@@ -1591,7 +1601,7 @@ class ModEditorDialog(QDialog):
                 data_extensions = ['.xdelta'] if is_patch or "PATCH" in base_title else ['.win', '.ios']
                 format_checks = {
                     "icon": (None, 2),  # Для иконок не проверяем расширение, только размер (лимит 2 МБ для оффлайн проверки может быть иным)
-                    "extra": (['.zip', '.rar'], float('inf')),
+                    "extra": (['.zip', '.rar', '.7z'], float('inf')),
                     "description": (['.md', '.txt'], 1),
                     "data": (data_extensions, 200)
                 }
@@ -1666,7 +1676,30 @@ class ModEditorDialog(QDialog):
 
     def _add_local_extra_files_frame_with_data(self, tab, tab_layout, key_name, filenames):
         """Добавляет локальные дополнительные файлы с данными."""
+        # Create the frame and then populate it similar to _select_local_extra_files
         self._create_file_frame(tab_layout, 'extra', key_name)
+        # Find the last inserted frame in the tab layout and populate with filenames
+        for i in range(tab_layout.count() - 1, -1, -1):
+            item = tab_layout.itemAt(i)
+            if item and item.widget() and hasattr(item.widget(), 'layout'):
+                frame = item.widget()
+                frame_layout = frame.layout()
+                # Ensure title has proper properties
+                if frame_layout and isinstance(frame_layout.itemAt(0).widget(), QLabel):
+                    title = frame_layout.itemAt(0).widget()
+                    if title.property("clean_key") == key_name:
+                        # Add file labels and hidden QLineEdits with properties so _extract_local_frame_data can read them
+                        for fn in filenames:
+                            file_label = QLabel(f"• {os.path.basename(fn)}")
+                            file_label.setStyleSheet("color: gray; font-size: 10px;")
+                            frame_layout.addWidget(file_label)
+                            path_edit = QLineEdit()
+                            path_edit.setText(fn)
+                            path_edit.hide()
+                            path_edit.setProperty("is_local_extra_path", True)
+                            path_edit.setProperty("extra_key", key_name)
+                            frame_layout.addWidget(path_edit)
+                        return
 
     def _fill_local_data_file_in_tab(self, tab, file_path, version):
         """Заполняет последний добавленный DATA фрейм в табе данными."""
@@ -1721,15 +1754,19 @@ class ModEditorDialog(QDialog):
             self.icon_preview.setText(tr("status.loading"))
             from PyQt6.QtCore import QThread, pyqtSignal
             class IconLoader(QThread):
-                loaded, failed = pyqtSignal(QPixmap), pyqtSignal()
+                loaded, failed = pyqtSignal(QPixmap, str), pyqtSignal(str)
                 def __init__(self, url): super().__init__(); self.url = url
                 def run(self):
                     try:
                         import requests; response = requests.get(self.url, timeout=10); response.raise_for_status(); pixmap = QPixmap()
-                        if pixmap.loadFromData(response.content): self.loaded.emit(pixmap)
-                        else: self.failed.emit()
-                    except Exception: self.failed.emit()
-            self.icon_loader = IconLoader(url); self.icon_loader.loaded.connect(self._on_icon_loaded); self.icon_loader.failed.connect(self._load_default_icon); self.icon_loader.start()
+                        if pixmap.loadFromData(response.content): self.loaded.emit(pixmap, self.url)
+                        else: self.failed.emit(self.url)
+                    except Exception: self.failed.emit(self.url)
+            current_url = url
+            self.icon_loader = IconLoader(url)
+            self.icon_loader.loaded.connect(lambda pm, u: self._on_icon_loaded(pm) if u == self.current_icon_url else None)
+            self.icon_loader.failed.connect(lambda u: (self._load_default_icon() if u == self.current_icon_url else None))
+            self.icon_loader.start()
         except Exception: self._load_default_icon()
 
     def _on_icon_loaded(self, pixmap):
@@ -2194,7 +2231,7 @@ class ModEditorDialog(QDialog):
             "is_piracy_protected": self.piracy_checkbox.isChecked(),
             "is_demo_mod": self.demo_checkbox.isChecked(),
             # NOTE: do not set is_verified here; preserve server value on update
-            "game_version": self.game_version_combo.currentText(),
+            "game_version": (self.game_version_combo.currentText() if self.is_public else (self.game_version_edit.text().strip() or "1.03")),
             "files": files_data,
             "screenshots_url": getattr(self, 'screenshots_urls', [])
         }
@@ -2837,9 +2874,13 @@ class ModEditorDialog(QDialog):
 
         # Версия игры
         game_version = actual_mod_data.get('game_version', '')
-        index = self.game_version_combo.findText(game_version)
-        if index >= 0:
-            self.game_version_combo.setCurrentIndex(index)
+        if self.is_public:
+            index = self.game_version_combo.findText(game_version)
+            if index >= 0:
+                self.game_version_combo.setCurrentIndex(index)
+        else:
+            if hasattr(self, 'game_version_edit'):
+                self.game_version_edit.setText(game_version)
         
         # Скриншоты
         self.screenshots_urls = actual_mod_data.get('screenshots_url', []) or []
@@ -9967,6 +10008,8 @@ class DeltaHubApp(QWidget):
         # Подготавливаем данные для редактора
         mod_data = selected_mod["data"].copy()
         mod_data["key"] = selected_mod["key"]
+        # Pass folder name to resolve relative file paths during editing
+        mod_data["folder_name"] = os.path.basename(selected_mod["folder_path"]) if selected_mod.get("folder_path") else ""
 
         editor = ModEditorDialog(self, is_creating=False, is_public=False, mod_data=mod_data)
         editor.exec()

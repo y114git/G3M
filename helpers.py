@@ -83,7 +83,7 @@ ARCH = platform.machine()
 DEFAULT_FONT_FALLBACK_CHAIN = ["Determination Sans Rus", "DejaVu Sans", "Noto Sans", "Liberation Sans", "Arial", "Noto Color Emoji", "Segoe UI Emoji", "Apple Color Emoji"]
 SOCIAL_LINKS = {"telegram": "https://t.me/y_maintg", "discord": "https://discord.gg/gg4EvZpWKd"}
 UI_COLORS = {"status_error": "red", "status_warning": "orange", "status_success": "green", "status_info": "gray", "status_ready": "lightgreen", "status_steam": "blue", "link": "#00BFFF", "social_discord": "#8A2BE2", "saves_button": "yellow"}
-THEMES = {"default": {"name": "Deltarune", "background": "assets/bg_fountain.gif", "font_family": "Determination Sans Rus", "font_size_main": 16, "font_size_small": 12, "colors": {"main_fg": "#000000", "top_level_fg": "#000000", "button": "#000000", "button_hover": "#222222", "button_text": "#FFFFFF", "border": "#FFFFFF", "text": "#FFFFFF"}}}
+THEMES = {"default": {"name": "Deltarune", "background": "assets/bg_fountain.gif", "font_family": "Determination Sans Rus", "font_size_main": 16, "font_size_small": 12, "colors": {"main_fg": "#000000", "top_level_fg": "#000000", "button": "#000000", "button_hover": "#333333", "button_text": "#FFFFFF", "border": "#FFFFFF", "text": "#FFFFFF"}}}
 BROWSER_HEADERS = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
 
 def resource_path(relative_path: str) -> str:
@@ -199,9 +199,22 @@ def _download_file(session, url, tmp_path, progress_signal, total_size, download
 
 def _extract_archive(tmp_path, target_dir, fname, is_game_installation=False):
     import rarfile
-    low = fname.lower(); extractors = {"zip": lambda: zipfile.ZipFile(tmp_path, "r").extractall(target_dir), "rar": lambda: rarfile.RarFile(tmp_path, "r").extractall(target_dir)}
+    low = fname.lower()
+    extractors = {
+        "zip": lambda: zipfile.ZipFile(tmp_path, "r").extractall(target_dir),
+        "rar": lambda: rarfile.RarFile(tmp_path, "r").extractall(target_dir)
+    }
+    # Try py7zr if available
+    try:
+        import py7zr
+        extractors["7z"] = lambda: py7zr.SevenZipFile(tmp_path, mode='r').extractall(path=target_dir)
+    except Exception:
+        pass
     for ext, extractor in extractors.items():
-        if low.endswith(f".{ext}"): extractor(); _cleanup_extracted_archive(target_dir, is_game_installation); return
+        if low.endswith(f".{ext}"):
+            extractor()
+            _cleanup_extracted_archive(target_dir, is_game_installation)
+            return
     shutil.copy2(tmp_path, os.path.join(target_dir, fname))
 
 def _cleanup_extracted_archive(target_dir: str, is_game_installation: bool = False):
@@ -1119,7 +1132,7 @@ def get_file_filter(filter_type: str) -> str:
         'background_images': '*.jpg *.png *.bmp *.gif',
         'xdelta_files': '*.xdelta',
         'data_files': '*.win *.ios',
-        'archive_files': '*.zip *.rar',
+        'archive_files': '*.zip *.rar *.7z',
         'extended_archives': '*.zip *.rar *.7z *.tar.gz',
         'game_files': '*.exe',
         'text_files': '*.txt',
