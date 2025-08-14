@@ -5,3 +5,4 @@ packaging
 rarfile
 python-dotenv
 playsound3
+pyxdelta

@@ -209,8 +209,6 @@ def get_launcher_volume():
         pass
     return 100
 
-
-
 def play_deltahub_sound():
     """Воспроизводит звук заставки через playsound3 (только MP3)."""
     global _sound_instance
