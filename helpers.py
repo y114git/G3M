@@ -259,24 +259,50 @@ class PresenceWorker(QObject):
         try:
             # Update own heartbeat under stats/sessions/<id>
             requests.put(_fb_url(DATA_FIREBASE_URL, f"stats/sessions/{self.session_id}"), json=now, timeout=5)
-            # Compute online by counting active sessions in last 70s
+            # Compute online by counting active sessions in last 70s and purge stale ones
             try:
                 resp = requests.get(_fb_url(DATA_FIREBASE_URL, "stats/sessions"), timeout=5)
                 online = 0
                 if resp.status_code == 200 and isinstance(resp.json(), dict):
+                    sessions = resp.json() or {}
                     now_ts = int(time.time())
-                    for _, ts in (resp.json() or {}).items():
+                    # Count active sessions
+                    for _, ts in sessions.items():
                         try:
                             if isinstance(ts, int) and (now_ts - ts) <= 70:
                                 online += 1
+                        except Exception:
+                            pass
+                    # Purge sessions that are definitely stale
+                    STALE_TTL_SEC = 600  # 10 minutes without heartbeat => remove
+                    stale_ids = []
+                    for sid, val in sessions.items():
+                        try:
+                            if isinstance(val, int):
+                                if (now_ts - val) > STALE_TTL_SEC:
+                                    stale_ids.append(sid)
+                            elif isinstance(val, dict):
+                                end_ts = val.get("endTime")
+                                start_ts = val.get("startTime")
+                                if isinstance(end_ts, int) and (now_ts - end_ts) > 60:
+                                    stale_ids.append(sid)
+                                elif isinstance(start_ts, int) and (now_ts - start_ts) > STALE_TTL_SEC:
+                                    stale_ids.append(sid)
+                        except Exception:
+                            pass
+                    for sid in stale_ids:
+                        try:
+                            requests.delete(_fb_url(DATA_FIREBASE_URL, f"stats/sessions/{sid}"), timeout=5)
                         except Exception:
                             pass
                 self.update_online_count.emit(max(online, 0))
             except requests.RequestException:
                 pass
 
-        except requests.RequestException: pass
-        finally: self.finished.emit()
+        except requests.RequestException:
+            pass
+        finally:
+            self.finished.emit()
 
 class FetchTranslationsThread(QThread):
     result, status = pyqtSignal(bool), pyqtSignal(str, str)

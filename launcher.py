@@ -10903,11 +10903,9 @@ class DeltaHubApp(QWidget):
 
         self._stop_presence_thread()
         try:
-            now = int(time.time())
             from helpers import _fb_url, DATA_FIREBASE_URL
-            requests.patch(
+            requests.delete(
                 _fb_url(DATA_FIREBASE_URL, f"stats/sessions/{self.session_id}"),
-                json={"endTime": now},
                 timeout=5
             )
         except Exception:
