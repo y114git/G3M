@@ -9479,50 +9479,34 @@ class DeltaHubApp(QWidget):
                 mod_type_str = tr("ui.mod_type_local") if is_local else tr("ui.mod_type_public")
                 self.update_status_signal.emit(tr("status.applying_mod", mod_name=mod.name, mod_type=mod_type_str), UI_COLORS["status_warning"])
 
-                # Проверяем, является ли это xdelta модом
+                # --- ИСПРАВЛЕНИЕ: Унифицированная логика для ВСЕХ модов ---
+                # Теперь и xdelta, и обычные моды обрабатываются одинаково,
+                # применяясь только к той главе, для которой они были выбраны в интерфейсе.
+
+                if chapter_id in applied_chapters:
+                    continue
+
+                # Проверяем, является ли это xdelta модом (нужно для след. шага)
                 is_xdelta_mod = self._is_xdelta_mod(mod, source_dir, chapter_id)
 
-                if is_xdelta_mod:
-                    # Для xdelta модов применяем ко всем доступным главам
-                    available_chapters = self._get_xdelta_chapters(source_dir, mod)
+                # Пропускаем главы без файлов (для обычных модов)
+                # Для xdelta модов эта проверка не нужна, т.к. наличие патча проверяется позже
+                if not is_xdelta_mod and not mod.get_chapter_data(chapter_id) and not is_local:
+                    continue
+                
+                target_dir = self._get_target_dir(chapter_id)
+                if not target_dir:
+                    continue
 
-                    if not available_chapters:
-                        self.update_status_signal.emit(tr("errors.xdelta_patch_files_not_found", mod_name=mod.name), UI_COLORS["status_warning"])
-                        continue
+                if not ensure_writable(target_dir):
+                    raise PermissionError(tr("errors.no_write_permission_for", path=target_dir))
 
-                    for target_chapter_id in available_chapters:
-                        if target_chapter_id in applied_chapters:
-                            continue
-
-                        target_dir = self._get_target_dir(target_chapter_id)
-                        if not target_dir:
-                            continue
-
-                        if not ensure_writable(target_dir):
-                            raise PermissionError(tr("errors.no_write_permission_for", path=target_dir))
-
-                        if not self._create_backup_and_copy_mod_files(source_dir, target_dir, target_chapter_id, mod):
-                            return False
-                        applied_chapters.add(target_chapter_id)
-                else:
-                    # Для обычных модов применяем только к выбранной главе
-                    if chapter_id in applied_chapters:
-                        continue
-
-                    # Пропускаем главы без файлов вместо показа ошибки
-                    if not mod.get_chapter_data(chapter_id) and not is_local:
-                        continue
-
-                    target_dir = self._get_target_dir(chapter_id)
-                    if not target_dir:
-                        continue
-
-                    if not ensure_writable(target_dir):
-                        raise PermissionError(tr("errors.no_write_permission_for", path=target_dir))
-
-                    if not self._create_backup_and_copy_mod_files(source_dir, target_dir, chapter_id, mod):
-                        return False
-                    applied_chapters.add(chapter_id)
+                # Вызываем _create_backup_and_copy_mod_files для ОДНОЙ конкретной главы
+                if not self._create_backup_and_copy_mod_files(source_dir, target_dir, chapter_id, mod):
+                    return False
+                
+                applied_chapters.add(chapter_id)
+                # --- КОНЕЦ ИСПРАВЛЕНИЯ ---
 
             return True
         except PermissionError as e:
@@ -9676,8 +9660,11 @@ class DeltaHubApp(QWidget):
 
                     # Резервное копирование оригинального файла, если он существует
                     if os.path.exists(game_file_path):
-                        backup_rel_path = os.path.relpath(game_file_path, target_dir)
-                        backup_file_path = os.path.join(self._backup_temp_dir, backup_rel_path)
+                        # --- ИСПРАВЛЕНИЕ: Создаем уникальное имя для бэкапа, чтобы избежать коллизий ---
+                        unique_hash = hashlib.md5(game_file_path.encode('utf-8')).hexdigest()
+                        backup_filename = f"{unique_hash}_{os.path.basename(game_file_path)}"
+                        backup_file_path = os.path.join(self._backup_temp_dir, backup_filename)
+                        # --- КОНЕЦ ИСПРАВЛЕНИЯ ---
                         os.makedirs(os.path.dirname(backup_file_path), exist_ok=True)
 
                         # Перемещаем оригинал в резервную папку
@@ -9765,7 +9752,12 @@ class DeltaHubApp(QWidget):
                 self._backup_temp_dir = tempfile.mkdtemp(prefix="deltahub_backup_")
                 self._update_session_manifest(backup_temp_dir=self._backup_temp_dir)
 
-            backup_file_path = os.path.join(self._backup_temp_dir, f"xdelta_{os.path.basename(original_data_file)}")
+            # --- ИСПРАВЛЕНИЕ: Создаем уникальное имя для бэкапа ---
+            unique_hash = hashlib.md5(original_data_file.encode('utf-8')).hexdigest()
+            backup_filename = f"xdelta_{unique_hash}_{os.path.basename(original_data_file)}"
+            backup_file_path = os.path.join(self._backup_temp_dir, backup_filename)
+            # --- КОНЕЦ ИСПРАВЛЕНИЯ ---
+
             shutil.move(original_data_file, backup_file_path)
 
             if not hasattr(self, '_backup_files'):
