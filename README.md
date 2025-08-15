@@ -1,80 +1,85 @@
-# DELTAHUB — твоя дверь в мир модов Deltarune
+"""
+# DELTAHUB — Your Gateway to the World of Deltarune Mods
 
 [Telegram](https://t.me/y_maintg) • [Discord](https://discord.gg/gg4EvZpWKd)
 
-Хочешь больше эмоций, неожиданных поворотов и свежих ощущений от Deltarune? DELTAHUB — это удобный лаунчер, который превращает поиск и установку модов в удовольствие. Минимум действий — максимум магии.
+Want more emotions, unexpected twists, and fresh sensations from Deltarune? DELTAHUB is a convenient launcher that turns finding and installing mods into a pleasure. Minimum effort — maximum magic.
 
-## Почему DELTAHUB?
+## Why DELTAHUB?
 
-- Огромный мир модов в одном месте
-  
-  Находи любимые работы сообщества — от простой смены спрайтов до полноценных переводов и больших сборок. Красивые обложки, авторы, описания — выбирай сердцем.
+* A huge world of mods in one place
 
-- Поддержка демо и полной версии игры
-  
-  Отдельные подборки и режимы для Полноценной версии игры и даже ДЕМО — выбирай то, что тебе нужно прямо сейчас.
+  Find your favorite community creations — from simple sprite changes to full translations and large compilations. Beautiful covers, authors, descriptions — choose with your heart.
 
-- Установка и удаление в один клик
-  
-  Никаких сложных файлов, замен и путей. Нажал — готово. Пора играть.
+* Support for demo and full versions of the game
 
-- Обновления по кнопке
-  
-  Лаунчер подскажет, когда вышла новая версия, и обновит мод без лишних действий.
+  Separate selections and modes for the full game and even the DEMO — choose what you need right now.
 
-- Поглавный режим
-  
-  Меню, главы 1–4 и универсальные сборки — собирай собственное прохождение. Переключай моды под настроение.
+* One-click installation and removal
 
-- Быстрый старт нужной главы
-  
-  Запускай нужное место прямо из лаунчера, без надоедливого главного меню.
+  No complicated files, replacements, or paths. Just click — and it's done. Time to play.
 
-- Ярлык!
-  
-  Какой ещё ярлык?! А такой! Позволяет запустить игру с выбранными настройками и модами даже без участия лаунчера, М О М Е Н Т А Л Ь Н О!
+* One-button updates
 
-- Удобное создание и контроль модов
-  
-  Все удобства для мододелов в одном приложении, десятки разных функций и это только с одним модом!
+  The launcher will tell you when a new version is released and update the mod without extra steps.
 
-- Редактор сохранений
-  
-  В игре всего 3 слота под ваши сохранения? А как на счёт бесконечности слотов! Создавайте коллекции сохранений для любой ситуации, 500 вариантов СнЕжНоГо ГрОбА ждут вас! Ну и так по мелочи... сохранения можно редактировать!
+* Per-chapter mode
 
-- Полная кастомизация под тебя
-  
-  Меняй - ВСЁ! Темы, цвета, фон и музыка — оформи DELTAHUB в своём стиле.
+  Menu, Chapters 1–4, and universal compilations — create your own playthrough. Switch mods to match your mood.
 
-- Удобные карточки модов
-  
-  Обложка, автор, версия, теги, счётчик загрузок и значки доверия — всё, чтобы быстро понять, что ставишь.
+* Quick start for the desired chapter
 
-- Расширенные функции для знатоков
-  
-  Кастомные файлы запуска, восстановление файлов и многое другое - всё для вашего удобства.
+  Launch the specific part you want directly from the launcher, without the annoying main menu.
 
-- Работает там, где ты играешь
-  
-  Windows, macOS и Linux. Все пути, файлы и поиски - оставьте на лаунчер, а сами, расслабтесь прыгая по Ральзею-Луже.
+* Shortcut!
 
-- Живое сообщество
-  
-  Мы рядом — делимся новостями, слушаем обратную связь и вместе делаем опыт лучше - и вам всегда рады!
+  What kind of shortcut?! This kind! It allows you to launch the game with your selected settings and mods even without the launcher, I N S T A N T L Y!
 
-## Как начать
+* Convenient mod creation and control
 
-1) Скачай DELTAHUB.
-2) Запусти его.
-3) Выбери мод — и играй.
+  All the conveniences for modders in one application, dozens of different functions, and that's just with one mod!
 
-Всё остальное он сделает за тебя.
+* Save editor
 
-## Присоединяйся
+  The game only has 3 slots for your saves? What about infinite slots! Create collections of saves for any situation, 500 variants of SnOwGrAve await you! And other small things... you can edit saves!
 
-- Поддержка и новости в [Telegram](https://t.me/y_maintg)
-- Обсуждения и компания в [Discord](https://discord.gg/gg4EvZpWKd)
+* Full customization for you
 
-## Лицензия
+  Change - EVERYTHING! Themes, colors, background, and music — style DELTAHUB in your own way.
 
-Использование регулируется условиями лицензии. См. [LICENSE](file:///c:/DELTAHUB/LICENSE).
+* Convenient mod cards
+
+  Cover, author, version, tags, download counter, and trust icons — everything you need to quickly understand what you are installing.
+
+* Advanced features for experts
+
+  Custom launch files, file restoration, and much more — all for your convenience.
+
+* Works wherever you play
+
+  Windows, macOS, and Linux. All paths, files, and searches - leave it to the launcher, and you, relax while jumping with Ralsei-Puddle.
+
+* A lively community
+
+  We are here — we share news, listen to feedback, and together we make the experience better — and you are always welcome!
+
+## How to get started
+
+1. Download DELTAHUB.
+
+2. Launch it.
+
+3. Choose a mod — and play.
+
+It will do everything else for you.
+
+## Join us
+
+* Support and news on [Telegram](https://t.me/y_maintg)
+
+* Discussions and community on [Discord](https://discord.gg/gg4EvZpWKd)
+
+## License
+
+Usage is governed by the terms of the license. See [LICENSE](https://www.google.com/search?q=file:///c:/DELTAHUB/LICENSE)
+"""
