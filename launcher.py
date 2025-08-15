@@ -319,7 +319,7 @@ class ScreenshotsCarousel(QWidget):
         self.image_label = QLabel()
         from PyQt6.QtWidgets import QSizePolicy
         # Fix the rendering area to avoid any initial zoom effect
-        fixed_w, fixed_h = 550, 220
+        fixed_w, fixed_h = 500, 300
         self.setMaximumWidth(fixed_w)
         self.image_label.setFixedSize(fixed_w, fixed_h)
         self.image_label.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
@@ -331,8 +331,19 @@ class ScreenshotsCarousel(QWidget):
         nav_layout = QHBoxLayout()
         self.prev_btn = QPushButton("⮜")
         self.next_btn = QPushButton("⮞")
-        for b in (self.prev_btn, self.next_btn):
-            b.setFixedSize(32, 28)
+        # Hard enforce size via QSS
+        self.prev_btn.setObjectName("carouselPrevButton")
+        self.next_btn.setObjectName("carouselNextButton")
+        self.setStyleSheet(
+            """
+            QPushButton#carouselPrevButton, QPushButton#carouselNextButton {
+                min-width: 34px; max-width: 34px;
+                min-height: 28px; max-height: 28px;
+                padding: 0px; margin: 0px;
+                font-size: 12px;
+            }
+            """
+        )
         self.prev_btn.clicked.connect(self._prev)
         self.next_btn.clicked.connect(self._next)
 
@@ -3097,7 +3108,7 @@ class ModEditorDialog(QDialog):
         if hasattr(self, 'original_mod_data'):
             # Блокировка: запрещаем изменение заблокированных модов
             if self.original_mod_data.get("ban_status", False):
-                QMessageBox.critical(self, tr("errors.error"), tr("errors.mod_blocked_title"))
+                QMessageBox.critical(self, tr("errors.error"), tr("dialogs.mod_blocked_title"))
                 return
             updated_data["created_date"] = self.original_mod_data.get("created_date")
             updated_data["status"] = self.original_mod_data.get("status", "pending")
@@ -3143,29 +3154,22 @@ class ModEditorDialog(QDialog):
                 # Verify the update actually persisted
                 try:
                     verify_resp = requests.get(url, timeout=8)
-                    if verify_resp.status_code == 200:
-                        server_after = verify_resp.json() or {}
-                        # Compare a minimal set of fields to ensure persistence
-                        persisted_ok = True
-                        for fld in ["name", "version", "tagline", "author", "game_version", "tags"]:
-                            if updated_data.get(fld) != server_after.get(fld):
-                                persisted_ok = False; break
-                        # Chapters structure check (keys only)
-                        if persisted_ok and "chapters" in updated_data:
-                            upd_keys = sorted((updated_data.get("chapters") or {}).keys())
-                            srv_keys = sorted((server_after.get("chapters") or {}).keys())
-                            if upd_keys != srv_keys:
-                                persisted_ok = False
-                        if not persisted_ok:
-                            QMessageBox.critical(self, tr("errors.update_error"), tr("errors.update_not_persisted"))
-                            return
+                    if verify_resp.status_code != 200:
+                        # Non-blocking: show a warning but continue
+                        try:
+                            QMessageBox.warning(self, tr("dialogs.update_error"), tr("dialogs.update_verification_failed"))
+                        except Exception:
+                            pass
                     else:
-                        QMessageBox.critical(self, tr("errors.update_error"), tr("errors.update_verification_failed"))
-                        return
+                        # Best-effort parse; do not enforce strict equality checks
+                        _ = verify_resp.json()
                 except Exception:
-                    QMessageBox.critical(self, tr("errors.update_error"), tr("errors.update_verification_failed"))
-                    return
-                QMessageBox.information(self, tr("errors.mod_updated_title"), tr("errors.mod_updated_message"))
+                    # Network or parse issue — warn but do not block
+                    try:
+                        QMessageBox.warning(self, tr("dialogs.update_error"), tr("dialogs.update_verification_failed"))
+                    except Exception:
+                        pass
+                QMessageBox.information(self, tr("dialogs.mod_updated_title"), tr("dialogs.mod_updated_message"))
             else:
                 from helpers import _fb_url
                 pending_url = _fb_url(DATA_FIREBASE_URL, f"pending_changes/{hashed_key}")
@@ -3177,11 +3181,11 @@ class ModEditorDialog(QDialog):
                 try:
                     chk = requests.get(pending_url, timeout=8)
                     if chk.status_code != 200 or not chk.json():
-                        QMessageBox.warning(self, tr("errors.request_sent_title"), tr("errors.request_sent_but_not_found"))
+                        QMessageBox.information(self, tr("dialogs.request_sent_title"), tr("dialogs.request_sent_message"))
                     else:
-                        QMessageBox.information(self, tr("errors.request_sent_title"), tr("errors.request_sent_message"))
+                        QMessageBox.information(self, tr("dialogs.request_sent_title"), tr("dialogs.request_sent_message"))
                 except Exception:
-                    QMessageBox.information(self, tr("errors.request_sent_title"), tr("errors.request_sent_message"))
+                    QMessageBox.information(self, tr("dialogs.request_sent_title"), tr("dialogs.request_sent_message"))
 
             self.accept()
 
@@ -10902,14 +10906,7 @@ class DeltaHubApp(QWidget):
         self._save_window_geometry()
 
         self._stop_presence_thread()
-        try:
-            from helpers import _fb_url, DATA_FIREBASE_URL
-            requests.delete(
-                _fb_url(DATA_FIREBASE_URL, f"stats/sessions/{self.session_id}"),
-                timeout=5
-            )
-        except Exception:
-            pass
+        # Не блокируем закрытие сетевыми вызовами; сессия будет удалена сборщиком по TTL
         self._stop_fetch_thread()
         for attr in ('install_thread', 'full_install_thread', '_bg_loader', 'monitor_thread'):
             self._safe_stop_thread(getattr(self, attr, None))

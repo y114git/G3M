@@ -546,6 +546,7 @@
     "mod_on_moderation_message": "This mod is under moderation and cannot be changed.\\nWait for moderator approval, after which you can make changes.",
     "mod_submitted": "Mod submitted",
     "mod_updated": "Mod updated",
+    "mod_updated_message": "Changes saved successfully.",
     "mod_updated_successfully": "The mod was successfully updated in the database!",
     "mod_version_too_long": "Mod version cannot be longer than 10 characters.",
     "mod_visibility_changed": "Mod {state}.",

@@ -190,13 +190,76 @@ def _get_filename_from_url(session, url):
     except: pass
     return Path(url.split("?", 1)[0]).name or "file.tmp"
 
-def _download_file(session, url, tmp_path, progress_signal, total_size, downloaded_ref):
-    with session.get(url, stream=True, timeout=60, allow_redirects=True) as r:
-        r.raise_for_status()
-        with open(tmp_path, "wb") as f:
-            for chunk in r.iter_content(chunk_size=262144):
-                if chunk: f.write(chunk); downloaded_ref[0] += len(chunk)
-                if total_size > 0: progress_signal.emit(int(downloaded_ref[0] / total_size * 100))
+def _download_file(session, url, tmp_path, progress_signal, total_size, downloaded_ref, max_retries: int = 5):
+    import os, time
+    expected_size = 0
+    try:
+        h = session.head(url, allow_redirects=True, timeout=15)
+        expected_size = int(h.headers.get("content-length", 0))
+    except Exception:
+        expected_size = 0
+    attempt = 0
+    while attempt < max_retries:
+        attempt += 1
+        try:
+            current_size = os.path.getsize(tmp_path) if os.path.exists(tmp_path) else 0
+            headers = {}
+            if expected_size and 0 < current_size < expected_size:
+                headers["Range"] = f"bytes={current_size}-"
+            r = session.get(url, stream=True, timeout=60, allow_redirects=True, headers=headers)
+            r.raise_for_status()
+            status_code = getattr(r, "status_code", 200)
+            # If server ignored Range (200) but we have partial data, avoid double-counting progress
+            duplicate_remaining = 0
+            mode = "ab"
+            if status_code == 206 and "Range" in headers:
+                mode = "ab"
+            else:
+                mode = "wb"
+                if current_size > 0:
+                    duplicate_remaining = current_size
+            this_request_expected = 0
+            try:
+                this_request_expected = int(r.headers.get("content-length", 0))
+            except Exception:
+                this_request_expected = 0
+            written_this_request = 0
+            with open(tmp_path, mode) as f:
+                for chunk in r.iter_content(chunk_size=262144):
+                    if not chunk:
+                        continue
+                    f.write(chunk)
+                    sz = len(chunk)
+                    written_this_request += sz
+                    if duplicate_remaining > 0:
+                        if sz <= duplicate_remaining:
+                            duplicate_remaining -= sz
+                        else:
+                            add = sz - duplicate_remaining
+                            downloaded_ref[0] += add
+                            duplicate_remaining = 0
+                    else:
+                        downloaded_ref[0] += sz
+                    if total_size > 0:
+                        try:
+                            progress_signal.emit(int(min(100, max(0, downloaded_ref[0] / total_size * 100))))
+                        except Exception:
+                            pass
+            final_size = os.path.getsize(tmp_path) if os.path.exists(tmp_path) else 0
+            # Validate per-request and overall sizes when known
+            if this_request_expected and written_this_request < this_request_expected:
+                raise IOError("connection dropped during download")
+            if expected_size and final_size < expected_size:
+                # try to resume more
+                continue
+            return
+        except Exception:
+            if attempt >= max_retries:
+                raise
+            try:
+                time.sleep(min(2.0, 0.2 * attempt))
+            except Exception:
+                pass
 
 def _extract_archive(tmp_path, target_dir, fname, is_game_installation=False):
     import rarfile
@@ -997,24 +1060,13 @@ class InstallTranslationsThread(QThread):
         os.makedirs(target_dir, exist_ok=True)
         target_path = os.path.join(target_dir, filename)
 
-
         try:
-            response = session.get(url, stream=True, timeout=30)
-            response.raise_for_status()
-
-            with open(target_path, 'wb') as f:
-                for chunk in response.iter_content(chunk_size=8192):
-                    if chunk:
-                        f.write(chunk)
-                        downloaded_ref[0] += len(chunk)
-                        if total_size > 0:
-                            progress_signal.emit(int(downloaded_ref[0] / total_size * 100))
-
+            _download_file(session, url, target_path, progress_signal, total_size, downloaded_ref)
         except Exception as e:
             if os.path.exists(target_path):
                 try:
                     os.remove(target_path)
-                except:
+                except Exception:
                     pass
             raise e
 
@@ -1040,22 +1092,12 @@ class InstallTranslationsThread(QThread):
         target_path = os.path.join(target_dir, filename)
 
         try:
-            response = session.get(url, stream=True, timeout=30)
-            response.raise_for_status()
-
-            with open(target_path, 'wb') as f:
-                for chunk in response.iter_content(chunk_size=8192):
-                    if chunk:
-                        f.write(chunk)
-                        downloaded_ref[0] += len(chunk)
-                        if total_size > 0:
-                            progress_signal.emit(int(downloaded_ref[0] / total_size * 100))
-
+            _download_file(session, url, target_path, progress_signal, total_size, downloaded_ref)
         except Exception as e:
             if os.path.exists(target_path):
                 try:
                     os.remove(target_path)
-                except:
+                except Exception:
                     pass
             raise e
 
