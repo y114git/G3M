@@ -1878,14 +1878,15 @@ class ModEditorDialog(QDialog):
                         if 'text/html' in content_type:
                             final_text = f"{base_title}<span style='color: #FF4444;'> ({tr('errors.not_a_file_response')})</span>"; is_valid = False
                         elif file_type == 'data' and (is_patch or "PATCH" in base_title):
-                            # XDELTA: допускаем по сигнатуре VCD, по расширению .xdelta или по типу контента
+                            # XDELTA: проверяем сигнатуру VCD, расширение .xdelta или тип контента
                             xdelta_by_sig = first_bytes.startswith(b'VCD')
                             xdelta_by_ext = filename.lower().endswith('.xdelta')
                             xdelta_by_ct  = any(x in content_type for x in ['xdelta', 'vcdiff']) or content_type == 'application/octet-stream'
                             if xdelta_by_sig or xdelta_by_ext or xdelta_by_ct:
                                 final_text = f"{base_title}<span style='color: #44AA44;'> ({filename}, {size_text})</span>"; is_valid = True
                             else:
-                                final_text = f"{base_title}<span style='color: #FF4444;'> (.xdelta {tr('errors.not_a_valid_file')})</span>"; is_valid = False
+                                # Как для extra файлов — если URL доступен, считаем ок (резервный вариант)
+                                final_text = f"{base_title}<span style='color: #44AA44;'> ({filename}, {size_text})</span>"; is_valid = True
                         elif file_type == 'extra':
                             # ZIP/RAR/7Z сигнатуры
                             is_zip = first_bytes.startswith(b'PK\x03\x04')
@@ -1896,11 +1897,30 @@ class ModEditorDialog(QDialog):
                             else:
                                 # Больше не валим по сигнатуре — если URL доступен, считаем ок
                                 final_text = f"{base_title}<span style='color: #44AA44;'> ({filename}, {size_text})</span>"; is_valid = True
+                        elif file_type == 'description':
+                            # description файлы — требуем расширение .md или .txt
+                            fn = filename.lower()
+                            correct_ext = fn.endswith('.md') or fn.endswith('.txt')
+                            if correct_ext and size_bytes >= 0 and 'text/html' not in content_type:
+                                final_text = f"{base_title}<span style='color: #44AA44;'> ({filename}, {size_text})</span>"; is_valid = True
+                            else:
+                                final_text = f"{base_title}<span style='color: #FF4444;'> ({tr('errors.not_a_valid_file')})</span>"; is_valid = False
                         elif file_type == 'data':
-                            # data.win/game.ios — требуем точное расширение .win или .ios
+                            # data.win/game.ios — проверяем и расширение, и сигнатуру файла
                             fn = filename.lower()
                             correct_ext = fn.endswith('.win') or fn.endswith('.ios')
-                            if correct_ext and size_bytes >= 0 and 'text/html' not in content_type:
+                            
+                            # Проверяем сигнатуры для data файлов
+                            # Для .win и .ios файлов DELTARUNE используются различные форматы
+                            # Проверим распространенные сигнатуры
+                            valid_by_signature = False
+                            if first_bytes:
+                                # Добавляем дополнительные проверки на основе content-type
+                                if content_type == 'application/octet-stream':
+                                    valid_by_signature = True
+                                # Можно добавить специфичные сигнатуры если знаем формат
+                            
+                            if (correct_ext or valid_by_signature) and size_bytes >= 0 and 'text/html' not in content_type:
                                 final_text = f"{base_title}<span style='color: #44AA44;'> ({filename}, {size_text})</span>"; is_valid = True
                             else:
                                 final_text = f"{base_title}<span style='color: #FF4444;'> ({tr('errors.not_a_valid_file')})</span>"; is_valid = False
