@@ -8,13 +8,33 @@ from PyQt6.QtGui import QBrush, QColor, QDesktopServices, QFont, QFontDatabase, 
 from PyQt6.QtWidgets import QApplication, QButtonGroup, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFrame, QHeaderView, QLabel, QLineEdit, QMessageBox, QProgressBar, QPushButton, QTableWidget, QTableWidgetItem, QTabWidget, QTextBrowser, QVBoxLayout, QWidget, QHBoxLayout, QSizePolicy, QInputDialog, QColorDialog, QListWidget, QLayoutItem, QScrollArea, QSlider
 # QtMultimedia removed; using playsound3 for audio
 from localization import get_localization_manager, tr
+import logging
+
+# Centralized logging to file in config dir; truncate on each launch
+try:
+    cfg_dir = get_app_support_path()
+    os.makedirs(cfg_dir, exist_ok=True)
+    LOG_PATH = os.path.join(cfg_dir, "deltahub.log.txt")
+    with open(LOG_PATH, 'w', encoding='utf-8') as _f:
+        _f.write("")
+    logging.basicConfig(
+        filename=LOG_PATH,
+        filemode='a',
+        encoding='utf-8',
+        level=logging.INFO,
+        format='%(asctime)s %(levelname)s: %(message)s'
+    )
+    sys.stdout = open(LOG_PATH, 'a', encoding='utf-8')
+    sys.stderr = sys.stdout
+except Exception:
+    pass
 
 # ============================================================================
 #                               UTILITY FUNCTIONS
 # ============================================================================
 
 def load_mod_icon_universal(icon_label, mod_data, size=80):
-    """Универсальная функция для загрузки иконки мода"""
+    """Универсальная функция для загрузки иконки мода (без блокировки UI)."""
     # Сначала всегда устанавливаем иконку по умолчанию
     assets_icon_path = os.path.join(os.path.dirname(__file__), "assets", "icon.ico")
     fallback_icon_path = os.path.join(os.path.dirname(__file__), "icon.ico")
@@ -25,7 +45,6 @@ def load_mod_icon_universal(icon_label, mod_data, size=80):
             try:
                 default_pixmap = QPixmap(default_icon_path)
                 if not default_pixmap.isNull():
-                    # Обрезаем изображение под квадрат
                     icon_size = min(default_pixmap.width(), default_pixmap.height())
                     if icon_size > 0:
                         cropped = default_pixmap.copy((default_pixmap.width() - icon_size) // 2, (default_pixmap.height() - icon_size) // 2, icon_size, icon_size)
@@ -33,42 +52,69 @@ def load_mod_icon_universal(icon_label, mod_data, size=80):
                     else:
                         default_pixmap = default_pixmap.scaled(size, size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
                     break
-            except:
+            except Exception:
                 default_pixmap = None
 
-    # Если нет icon.ico, создаем заглушку
     if default_pixmap is None:
         default_pixmap = QPixmap(size, size)
         default_pixmap.fill(QColor("#333"))
 
-    # Устанавливаем иконку по умолчанию
     icon_label.setPixmap(default_pixmap)
 
-    # Пытаемся загрузить иконку мода (локальный путь или URL)
+    # Пытаемся загрузить иконку мода (локальный путь или URL) — сеть в QThread
     try:
         pixmap = None
-        # Приоритет: локальный путь
         if getattr(mod_data, 'icon_path', None) and os.path.exists(mod_data.icon_path):
             pixmap = QPixmap(mod_data.icon_path)
-        # Иначе пробуем URL
+            if not pixmap.isNull():
+                icon_size = min(pixmap.width(), pixmap.height())
+                cropped = pixmap.copy((pixmap.width() - icon_size) // 2, (pixmap.height() - icon_size) // 2, icon_size, icon_size)
+                icon_label.setPixmap(cropped.scaled(size, size, Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation))
+                return
         elif getattr(mod_data, 'icon_url', None):
             icon_url = mod_data.icon_url
             if isinstance(icon_url, str) and icon_url.startswith(('http://', 'https://')):
+                from PyQt6.QtCore import QThread, pyqtSignal
+                class _IconLoader(QThread):
+                    loaded = pyqtSignal(object)
+                    failed = pyqtSignal(str)
+                    def __init__(self, url):
+                        super().__init__(); self.url = url
+                    def run(self):
+                        try:
+                            import requests
+                            resp = requests.get(self.url, timeout=8)
+                            resp.raise_for_status()
+                            img = QImage()
+                            if img.loadFromData(resp.content):
+                                self.loaded.emit(QPixmap.fromImage(img))
+                            else:
+                                self.failed.emit('decode')
+                        except requests.RequestException as e:
+                            self.failed.emit(str(e))
+
+                worker = _IconLoader(icon_url)
+                # Привязываем к label, чтобы не был собран GC
+                setattr(icon_label, '_icon_loader', worker)
+                # Безопасно останавливаем поток при уничтожении label
                 try:
-                    import requests
-                    response = requests.get(icon_url, timeout=5)
-                    if response.ok:
-                        img = QImage()
-                        if img.loadFromData(response.content):
-                            pixmap = QPixmap.fromImage(img)
+                    icon_label.destroyed.connect(lambda *_: (worker.requestInterruption(), worker.quit(), worker.wait(1000)))
                 except Exception:
                     pass
-
-        if pixmap and not pixmap.isNull():
-            # Обрезаем изображение под квадрат
-            icon_size = min(pixmap.width(), pixmap.height())
-            cropped = pixmap.copy((pixmap.width() - icon_size) // 2, (pixmap.height() - icon_size) // 2, icon_size, icon_size)
-            icon_label.setPixmap(cropped.scaled(size, size, Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation))
+                def _on_loaded(pm: QPixmap):
+                    try:
+                        if pm and not pm.isNull():
+                            icon_size = min(pm.width(), pm.height())
+                            cropped = pm.copy((pm.width() - icon_size) // 2, (pm.height() - icon_size) // 2, icon_size, icon_size)
+                            icon_label.setPixmap(cropped.scaled(size, size, Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation))
+                    except Exception as e:
+                        print(f"Error applying mod icon: {e}")
+                def _on_failed(err: str):
+                    # Логируем, но не тревожим UI
+                    print(f"Icon load failed: {err}")
+                worker.loaded.connect(_on_loaded)
+                worker.failed.connect(_on_failed)
+                worker.start()
     except Exception as e:
         print(f"Error loading mod icon: {e}")
 
@@ -236,11 +282,33 @@ class ScreenshotsCarousel(QWidget):
         self.urls = [u for u in urls if isinstance(u, str) and u.startswith(('http://','https://'))][:10]
         self.index = 0
         self._images = [None] * len(self.urls)
+        self._workers = {}
+        # loading flags must match urls length to avoid IndexError
+        self._loading = [False] * len(self.urls)
+        # Останавливаем фоновые потоки при уничтожении виджета
+        try:
+            self.destroyed.connect(self._stop_all_workers)
+        except Exception:
+            pass
         self._init_ui()
         if self.urls:
             self._show_current()
         else:
             self._update_nav_state()
+
+    def _stop_all_workers(self):
+        try:
+            # Останавливаем все QThread из коллекции
+            for k, w in list(getattr(self, '_workers', {}).items()):
+                try:
+                    if w.isRunning():
+                        w.requestInterruption(); w.quit(); w.wait(1000)
+                except Exception:
+                    pass
+            if hasattr(self, '_workers'):
+                self._workers.clear()
+        except Exception:
+            pass
 
     def _init_ui(self):
         layout = QVBoxLayout(self)
@@ -305,7 +373,6 @@ class ScreenshotsCarousel(QWidget):
             lbl.setStyleSheet("color: white; font-size: 14px;")
             self._dot_labels.append(lbl)
             self.dots_layout.addWidget(lbl)
-        self.dots_layout.addStretch()
 
     def _prev(self):
         if not self.urls: return
@@ -518,24 +585,6 @@ class ModPlaqueWidget(QFrame):
         version_label.setStyleSheet("font-size: 16px;")
         title_layout.addWidget(version_label)
 
-        # Добавляем статус лицензии
-        if getattr(self.mod_data, 'is_piracy_protected', False):
-            license_label = QLabel(tr("ui.license_label"))
-            license_label.setStyleSheet("font-size: 14px; color: #2196F3; font-weight: bold; margin-left: 10px;")
-            title_layout.addWidget(license_label)
-
-        # Добавляем индикатор демоверсии
-        if self.mod_data.is_demo_mod:
-            demo_label = QLabel(tr("ui.demo_label"))
-            demo_label.setStyleSheet("font-size: 14px; color: #FF9800; font-weight: bold; margin-left: 10px;")
-            title_layout.addWidget(demo_label)
-
-        # Добавляем статус верификации
-        if self.mod_data.is_verified:
-            verified_label = QLabel(tr("ui.verified_label"))
-            verified_label.setStyleSheet("font-size: 14px; color: #4CAF50; font-weight: bold; margin-left: 10px;")
-            title_layout.addWidget(verified_label)
-
         title_layout.addStretch()
 
         downloads_label = QLabel(f"⤓ {self.mod_data.downloads}")
@@ -615,6 +664,31 @@ class ModPlaqueWidget(QFrame):
         tagline_label.setWordWrap(True)
         tagline_label.setObjectName("secondaryText")
         info_layout.addWidget(tagline_label)
+
+        # Создаем отдельный layout для тегов под описанием
+        tags_layout = QHBoxLayout()
+        tags_layout.setContentsMargins(0, 5, 0, 0) # Небольшой отступ сверху
+        tags_layout.setSpacing(10)
+
+        # Добавляем статус лицензии
+        if getattr(self.mod_data, 'is_piracy_protected', False):
+            license_label = QLabel(tr("ui.license_label"))
+            license_label.setStyleSheet("font-size: 14px; color: #2196F3; font-weight: bold;")
+            tags_layout.addWidget(license_label)
+
+        # Добавляем индикатор демоверсии
+        if self.mod_data.is_demo_mod:
+            demo_label = QLabel(tr("ui.demo_label"))
+            demo_label.setStyleSheet("font-size: 14px; color: #FF9800; font-weight: bold;")
+            tags_layout.addWidget(demo_label)
+
+        # Добавляем статус верификации
+        if self.mod_data.is_verified:
+            verified_label = QLabel(tr("ui.verified_label"))
+            verified_label.setStyleSheet("font-size: 14px; color: #4CAF50; font-weight: bold;")
+            tags_layout.addWidget(verified_label)
+        tags_layout.addStretch()
+        info_layout.addLayout(tags_layout)
 
         info_layout.addStretch()
 
@@ -726,12 +800,18 @@ class InstalledModWidget(QFrame):
         self.has_update = has_update
         self.is_selected = False
         self.is_in_slot = False  # Для отслеживания, вставлен ли мод в слот
+        # Явный статус виджета: 'ready' | 'needs_update' | 'in_slot'
+        self.status = 'ready'
+        if has_update:
+            self.status = 'needs_update'
         self.setObjectName("installedMod")
         self.setFrameShape(QFrame.Shape.StyledPanel)
         self.setFixedHeight(120)  # Увеличили для больших иконок
         self.parent_app = parent
         self._init_ui()
         self._update_style()
+        # Применяем состояние к кнопке
+        self._update_button_from_status()
 
     def _init_ui(self):
         main_layout = QHBoxLayout(self)
@@ -811,7 +891,15 @@ class InstalledModWidget(QFrame):
         game_version_container_layout.addWidget(game_version_label_title)
         game_version_container_layout.addWidget(game_version_label_value)
 
-        installed_date_text = self.mod_data.created_date or 'N/A'
+        # Installed date should reflect user's installation time, not mod's created date
+        installed_date_text = 'N/A'
+        try:
+            if self.parent_app and hasattr(self.parent_app, '_get_mod_config_by_key'):
+                cfg = self.parent_app._get_mod_config_by_key(self.mod_data.key)
+                if isinstance(cfg, dict):
+                    installed_date_text = cfg.get('installed_date') or cfg.get('created_date') or 'N/A'
+        except Exception:
+            installed_date_text = 'N/A'
         date_label_text = tr("ui.created_label") if self.is_local else tr("ui.installed_label")
         installed_container = QWidget()
         installed_container_layout = QHBoxLayout(installed_container)
@@ -896,10 +984,10 @@ class InstalledModWidget(QFrame):
         self.actions_widget.setVisible(selected)
         self._update_style()  # Используем единый метод обновления стиля
 
-    def set_in_slot(self, in_slot):
-        """Устанавливает, находится ли мод в слоте"""
-        self.is_in_slot = in_slot
-        if in_slot:
+    def _update_button_from_status(self):
+        """Обновляет текст и стиль кнопки на основе текущего статуса."""
+        if self.status == 'in_slot':
+            # Оранжевый стиль для удаления из слота
             self.use_button.setText(tr("ui.remove_button"))
             self.use_button.setStyleSheet("""
                 QPushButton#plaqueButtonInstall {
@@ -910,30 +998,44 @@ class InstalledModWidget(QFrame):
                     background-color: #F57C00;
                 }
             """)
+        elif self.status == 'needs_update':
+            # Оранжевый стиль для обновления
+            self.use_button.setText(tr("ui.update_button"))
+            self.use_button.setStyleSheet("""
+                QPushButton#plaqueButtonInstall {
+                    background-color: #FF9800;
+                    font-weight: bold;
+                }
+                QPushButton#plaqueButtonInstall:hover {
+                    background-color: #F57C00;
+                }
+            """)
         else:
-            # Проверяем, нужно ли моду обновление
+            # Зеленый стиль для использования
+            self.use_button.setText(tr("ui.use_button"))
+            self.use_button.setStyleSheet("""
+                QPushButton#plaqueButtonInstall {
+                    background-color: #4CAF50;
+                    font-weight: bold;
+                }
+                QPushButton#plaqueButtonInstall:hover {
+                    background-color: #5cb85c;
+                }
+            """)
+
+    def set_in_slot(self, in_slot):
+        """Устанавливает, находится ли мод в слоте"""
+        self.is_in_slot = in_slot
+        if self.is_in_slot:
+            self.status = 'in_slot'
+        else:
+            # Если мод не в слоте, статус зависит от наличия обновлений
             if self._mod_needs_update():
-                self.use_button.setText(tr("ui.update_button"))
-                self.use_button.setStyleSheet("""
-                    QPushButton#plaqueButtonInstall {
-                        background-color: #FF9800;
-                        font-weight: bold;
-                    }
-                    QPushButton#plaqueButtonInstall:hover {
-                        background-color: #F57C00;
-                    }
-                """)
+                self.status = 'needs_update'
             else:
-                self.use_button.setText(tr("ui.use_button"))
-                self.use_button.setStyleSheet("""
-                    QPushButton#plaqueButtonInstall {
-                        background-color: #4CAF50;
-                        font-weight: bold;
-                    }
-                    QPushButton#plaqueButtonInstall:hover {
-                        background-color: #5cb85c;
-                    }
-                """)
+                self.status = 'ready'
+        # Обновляем кнопку на основе нового статуса
+        self._update_button_from_status()
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
@@ -1051,8 +1153,10 @@ class XdeltaDialog(QDialog):
         except Exception as e: self._show_message(tr("errors.patch_create_error"), tr("errors.patch_create_exception", error=str(e)), QMessageBox.Icon.Critical)
         finally:
             if temp_dir and os.path.exists(temp_dir):
-                try: shutil.rmtree(temp_dir)
-                except Exception as e: print(f"Debug: Failed to remove temp dir {temp_dir}: {e}")  # Debug print
+                try:
+                    shutil.rmtree(temp_dir)
+                except Exception as e:
+                    logging.debug(f"Failed to remove temp dir {temp_dir}: {e}")  # Debug print
     def apply_patch(self):
         try: import pyxdelta
         except ImportError: self._show_message(tr("dialogs.error"), tr("errors.component_unavailable_apply"), QMessageBox.Icon.Critical); return
@@ -1072,7 +1176,8 @@ class XdeltaDialog(QDialog):
         finally:
             if temp_dir and os.path.exists(temp_dir):
                 try: shutil.rmtree(temp_dir)
-                except Exception as e: print(f"Failed to remove temp dir {temp_dir}: {e}")  # Debug print
+                except Exception as e:
+                    logging.debug(f"Failed to remove temp dir {temp_dir}: {e}")  # Debug print
 
 # ============================================================================
 #                             MOD EDITOR DIALOG
@@ -1173,7 +1278,7 @@ class ModEditorDialog(QDialog):
         if self.is_public:
             self.icon_edit.setPlaceholderText(tr("ui.leave_empty_for_default_icon"))
             self.icon_edit.textChanged.connect(self._on_icon_url_changed)
-            self.icon_edit.textChanged.connect(lambda: self._trigger_validation(self.icon_edit, self._validate_url_for_title, title_label=self.icon_title_label, is_patch=False))
+            # Отключаем любую автоматическую валидацию/подписи возле заголовка для иконки
         else:
             self.icon_edit.setPlaceholderText(tr("ui.icon_file_path_placeholder")); self.icon_edit.setReadOnly(True)
             self.icon_browse_button = QPushButton(tr("ui.browse_button")); self.icon_browse_button.clicked.connect(self._browse_local_icon)
@@ -1537,33 +1642,49 @@ class ModEditorDialog(QDialog):
         delete_btn.clicked.connect(lambda: self._remove_data_file(None, tab_layout, frame) if file_type == 'data' else self._remove_extra_files(tab_layout, frame))
         layout.addWidget(delete_btn); tab_layout.insertWidget(tab_layout.count() - 1, frame)
 
-    def _hide_add_button(self, tab_layout, button_text):
+    def _hide_add_button(self, tab_layout, button_text=None):
         for i in range(tab_layout.count()):
             if (layout_item := tab_layout.itemAt(i)) and layout_item.layout():
                 if buttons_layout := layout_item.layout():
                     for j in range(buttons_layout.count()):
                         if (button_item := buttons_layout.itemAt(j)) and button_item.widget():
                             button = button_item.widget()
-                            if hasattr(button, 'text') and button_text in button.text(): button.hide(); return
+                            if isinstance(button, QPushButton) and button.property("is_data_button"):
+                                button.hide(); return
 
-    def _add_data_file(self, tab, tab_layout): self._create_file_frame(tab_layout, 'data')
+    def _add_data_file(self, tab, tab_layout):
+        # Не даем добавить второй DATA/PATCH фрейм в ту же вкладку
+        # Проверяем наличие существующего data/patch фрейма
+        for i in range(tab_layout.count()):
+            item = tab_layout.itemAt(i)
+            w = item.widget() if item else None
+            if w is not None and hasattr(w, 'layout'):
+                fl = w.layout()
+                if fl and fl.count() > 0 and isinstance(fl.itemAt(0).widget(), QLabel):
+                    title = fl.itemAt(0).widget()
+                    ftype = title.property('file_type') if hasattr(title, 'property') else None
+                    txt = title.text() if hasattr(title, 'text') else ''
+                    if ftype in ('data','patch') or (isinstance(txt, str) and (txt.startswith('DATA') or txt.startswith('PATCH') or txt.startswith('XDELTA'))):
+                        return  # Уже есть один DATA/PATCH
+        self._create_file_frame(tab_layout, 'data')
     def _add_extra_files(self, tab, tab_layout): self._create_file_frame(tab_layout, 'extra')
 
     def _remove_data_file(self, tab, tab_layout, data_frame):
         data_frame.hide(); tab_layout.removeWidget(data_frame); data_frame.deleteLater()
-        self._show_add_button(tab_layout, "DATA/PATCH")
+        self._show_add_button(tab_layout)
 
     def _remove_extra_files(self, tab_layout, extra_frame):
         extra_frame.hide(); tab_layout.removeWidget(extra_frame); extra_frame.deleteLater()
 
-    def _show_add_button(self, tab_layout, button_text):
+    def _show_add_button(self, tab_layout, button_text=None):
         for i in range(tab_layout.count()):
             if (layout_item := tab_layout.itemAt(i)) and layout_item.layout():
                 if buttons_layout := layout_item.layout():
                     for j in range(buttons_layout.count()):
                         if (button_item := buttons_layout.itemAt(j)) and button_item.widget():
                             button = button_item.widget()
-                            if hasattr(button, 'text') and button_text in button.text(): button.show(); break
+                            if isinstance(button, QPushButton) and button.property("is_data_button"):
+                                button.show(); break
 
 
     def _setup_version_validation(self, line_edit):
@@ -1600,7 +1721,7 @@ class ModEditorDialog(QDialog):
             if label_file_type == "description":
                 base_title, file_type = tr("ui.full_description_link"), "description"
             elif label_file_type == "icon":
-                base_title, file_type = tr("files.icon_label"), "icon"
+                base_title, file_type = tr("files.icon_direct_link"), "icon"
             elif label_file_type == "patch" or is_patch:
                 base_title, file_type = tr("files.patch_file"), "data"
 
@@ -1608,7 +1729,7 @@ class ModEditorDialog(QDialog):
         if file_type == "data" and hasattr(self, 'description_url_edit') and line_edit == self.description_url_edit:
             base_title, file_type = tr("ui.full_description_link"), "description"
         elif file_type == "data" and hasattr(self, 'icon_edit') and line_edit == self.icon_edit:
-            base_title, file_type = tr("files.icon_label"), "icon"
+            base_title, file_type = tr("files.icon_direct_link"), "icon"
 
         # Проверяем тип по property, без зависимости от текста локализации
         label_ftype = title_label.property("file_type") if hasattr(title_label, 'property') else None
@@ -1619,6 +1740,11 @@ class ModEditorDialog(QDialog):
             clean_text = re.sub('<[^<]+?>', '', title_label.text())
             if tr("files.extra_files") in clean_text or tr("files.extra_files_title", key_name="")[:-2] in clean_text:
                 base_title, file_type = clean_text.split(" (")[0], "extra"
+
+        # Иконка: полностью отключаем валидацию и любые подписи рядом с заголовком
+        if hasattr(self, 'icon_edit') and line_edit == self.icon_edit:
+            title_label.setText(tr("files.icon_direct_link"))
+            return
 
         if not url:
             title_label.setText(base_title)
@@ -1634,6 +1760,20 @@ class ModEditorDialog(QDialog):
         def check_url():
             from urllib.parse import urlparse, unquote
             try:
+                # Если это иконка и превью уже валидно — не делаем сетевые проверки, сразу зелёный
+                if file_type == 'icon' and hasattr(self, 'icon_edit') and self.icon_edit.property('isValid') is True:
+                    try:
+                        filename = tr("ui.file_generic")
+                        p = urlparse(url).path
+                        if p and p not in ['/', ''] and not p.endswith('/'):
+                            nm = os.path.basename(unquote(p))
+                            if nm:
+                                filename = nm
+                        final_text = f"{base_title}<span style='color: #44AA44;'> ({filename})</span>"; is_valid = True
+                        signals.update_label.emit(line_edit, title_label, final_text, is_valid)
+                        return
+                    except Exception:
+                        pass
                 # Для иконок используем GET (нужно проверить, что это изображение), для остальных HEAD
                 r = None
                 if file_type == "icon":
@@ -1651,11 +1791,36 @@ class ModEditorDialog(QDialog):
                         rg.raise_for_status()
                         headers = rg.headers
 
-                # Определяем размер в байтах
+                # Определяем размер в байтах и тип контента
                 size_bytes = int(headers.get('content-length', 0)) if headers.get('content-length', '').isdigit() else 0
+                content_type = headers.get('Content-Type', headers.get('content-type', '')).lower()
+                # Если это иконка и превью уже валидно — считаем ОК без дополнительных проверок
+                if file_type == 'icon' and hasattr(self, 'icon_edit') and self.icon_edit.property('isValid') is True:
+                    try:
+                        from urllib.parse import urlparse, unquote
+                        filename = tr("ui.file_generic")
+                        path = urlparse(url).path
+                        if path and path not in ['/', ''] and not path.endswith('/'):
+                            potential_name = os.path.basename(unquote(path))
+                            if potential_name:
+                                filename = potential_name
+                        # формируем текст и выходим
+                        final_text = f"{base_title}<span style='color: #44AA44;'> ({filename})</span>"; is_valid = True
+                        signals.update_label.emit(line_edit, title_label, final_text, is_valid)
+                        return
+                    except Exception:
+                        pass
                 # Если это иконка и нет content-length, используем фактический размер ответа
+                first_bytes = b''
                 if file_type == 'icon' and r is not None and size_bytes == 0:
                     size_bytes = len(r.content)
+                # Для остальных типов при GET-резерве читаем часть тела для сигнатуры
+                if file_type != 'icon' and 'rg' in locals():
+                    try:
+                        chunk = next(rg.iter_content(chunk_size=16), b'')
+                        first_bytes = chunk or b''
+                    except Exception:
+                        first_bytes = b''
 
                 # Форматирование размера
                 try:
@@ -1708,16 +1873,40 @@ class ModEditorDialog(QDialog):
                         except Exception:
                             final_text = f"{base_title}<span style='color: #FF4444;'> ({tr('errors.validation_error')})</span>"
                             is_valid = False
-                    elif valid_exts and not any(filename.lower().endswith(ext) for ext in valid_exts):
-                        final_text = f"{base_title}<span style='color: #FF4444;'> ({tr('errors.need_extension', extensions='/'.join(valid_exts))})</span>"
-                        is_valid = False
-                    elif (size_bytes / (1024*1024)) > max_size and max_size != float('inf'):
-                        final_text = f"{base_title}<span style='color: #FF4444;'> ({tr('errors.file_too_large', max_size=max_size)})</span>"
-                        is_valid = False
                     else:
-                        color = "#FFAA00" if (size_bytes / (1024*1024)) > 200 and file_type == "data" else "#44AA44"
-                        final_text = f"{base_title}<span style='color: {color};'> ({filename}, {size_text})</span>"
-                        is_valid = True
+                        # Строгая проверка: расширение недостаточно; запрещаем text/html и проверяем сигнатуры, где возможно
+                        if 'text/html' in content_type:
+                            final_text = f"{base_title}<span style='color: #FF4444;'> ({tr('errors.not_a_file_response')})</span>"; is_valid = False
+                        elif file_type == 'data' and (is_patch or "PATCH" in base_title):
+                            # XDELTA: допускаем по сигнатуре VCD, по расширению .xdelta или по типу контента
+                            xdelta_by_sig = first_bytes.startswith(b'VCD')
+                            xdelta_by_ext = filename.lower().endswith('.xdelta')
+                            xdelta_by_ct  = any(x in content_type for x in ['xdelta', 'vcdiff']) or content_type == 'application/octet-stream'
+                            if xdelta_by_sig or xdelta_by_ext or xdelta_by_ct:
+                                final_text = f"{base_title}<span style='color: #44AA44;'> ({filename}, {size_text})</span>"; is_valid = True
+                            else:
+                                final_text = f"{base_title}<span style='color: #FF4444;'> (.xdelta {tr('errors.not_a_valid_file')})</span>"; is_valid = False
+                        elif file_type == 'extra':
+                            # ZIP/RAR/7Z сигнатуры
+                            is_zip = first_bytes.startswith(b'PK\x03\x04')
+                            is_rar = first_bytes.startswith(b'Rar!')
+                            is_7z  = first_bytes.startswith(b'7z\xBC\xAF\x27\x1C')
+                            if is_zip or is_rar or is_7z:
+                                final_text = f"{base_title}<span style='color: #44AA44;'> ({filename}, {size_text})</span>"; is_valid = True
+                            else:
+                                # Больше не валим по сигнатуре — если URL доступен, считаем ок
+                                final_text = f"{base_title}<span style='color: #44AA44;'> ({filename}, {size_text})</span>"; is_valid = True
+                        elif file_type == 'data':
+                            # data.win/game.ios — требуем точное расширение .win или .ios
+                            fn = filename.lower()
+                            correct_ext = fn.endswith('.win') or fn.endswith('.ios')
+                            if correct_ext and size_bytes >= 0 and 'text/html' not in content_type:
+                                final_text = f"{base_title}<span style='color: #44AA44;'> ({filename}, {size_text})</span>"; is_valid = True
+                            else:
+                                final_text = f"{base_title}<span style='color: #FF4444;'> ({tr('errors.not_a_valid_file')})</span>"; is_valid = False
+
+                    if is_valid and (size_bytes / (1024*1024)) > max_size and max_size != float('inf'):
+                        final_text = f"{base_title}<span style='color: #FF4444;'> ({tr('errors.file_too_large', max_size=max_size)})</span>"; is_valid = False
                 else:
                     final_text = f"{base_title}<span style='color: #44AA44;'> ({filename}, {size_text})</span>"
                     is_valid = True
@@ -1733,6 +1922,14 @@ class ModEditorDialog(QDialog):
 
     def on_validation_complete(self, line_edit: QLineEdit, label: QLabel, text: str, is_valid: bool):
         """Слот, который обновляет и текст метки, и флаг валидности поля."""
+        # Абсолютное правило для иконки: если превью не загрузилось, поле всегда невалидно
+        try:
+            # Для иконки не меняем заголовок и не выставляем никаких статусов здесь
+            if hasattr(self, 'icon_edit') and line_edit == self.icon_edit:
+                text = tr('files.icon_direct_link')
+                is_valid = True
+        except Exception:
+            pass
         if label and not sip.isdeleted(label):
             label.setText(text)
         if line_edit and not sip.isdeleted(line_edit):
@@ -1850,23 +2047,48 @@ class ModEditorDialog(QDialog):
             current_url = url
             self.icon_loader = IconLoader(url)
             self.icon_loader.loaded.connect(lambda pm, u: self._on_icon_loaded(pm) if u == self.current_icon_url else None)
-            self.icon_loader.failed.connect(lambda u: (self._load_default_icon() if u == self.current_icon_url else None))
+            self.icon_loader.failed.connect(lambda u: (self._on_icon_load_failed(u) if u == self.current_icon_url else None))
             self.icon_loader.start()
         except Exception: self._load_default_icon()
 
     def _on_icon_loaded(self, pixmap):
+        # Успешная загрузка иконки — считаем ссылку валидной (для публичных модов)
+        # Помечаем превью как пользовательское изображение
+        try:
+            self.icon_preview.setProperty('isDefaultIcon', False)
+        except Exception:
+            pass
         # Обрезаем изображение под квадрат
         size = min(pixmap.width(), pixmap.height())
         cropped = pixmap.copy((pixmap.width() - size) // 2, (pixmap.height() - size) // 2, size, size)
         self.icon_preview.setPixmap(cropped.scaled(64, 64, Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation))
+        # Не добавляем подписи рядом с заголовком для иконки
+
+    def _on_icon_load_failed(self, url: str):
+        # При ошибке загрузки иконки: показываем дефолт и помечаем ссылку как невалидную
+        self._load_default_icon()
+        if self.is_public and hasattr(self, 'icon_edit'):
+            self.icon_edit.setProperty("isValid", False)
+        # Обновляем заголовок иконки, если есть
+        if self.is_public and hasattr(self, 'icon_title_label'):
+            base_title = tr("files.icon_label")
+            error_text = tr('errors.not_an_image')
+            self.icon_title_label.setText(f"{base_title}<span style='color: #FF4444;'> ({error_text})</span>")
 
     def _load_default_icon(self):
         try:
             logo_path = resource_path("assets/icon.ico")
             if os.path.exists(logo_path) and not (pixmap := QPixmap(logo_path)).isNull():
-                self.icon_preview.setPixmap(pixmap.scaled(64, 64, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)); return
-        except: pass
+                self.icon_preview.setPixmap(pixmap.scaled(64, 64, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+                self.icon_preview.setProperty('isDefaultIcon', True)
+                return
+        except Exception as e:
+            logging.warning(f"Load default icon preview failed: {e}")
         self.icon_preview.setText(tr("status.deltarune_logo"))
+        try:
+            self.icon_preview.setProperty('isDefaultIcon', True)
+        except Exception:
+            pass
 
     def _browse_local_icon(self):
         file_path, _ = QFileDialog.getOpenFileName(self, tr("ui.select_icon_file"), "", get_file_filter("image_files"))
@@ -1876,6 +2098,11 @@ class ModEditorDialog(QDialog):
         try:
             pixmap = QPixmap(file_path)
             if not pixmap.isNull():
+                # Помечаем как не дефолт
+                try:
+                    self.icon_preview.setProperty('isDefaultIcon', False)
+                except Exception:
+                    pass
                 # Обрезаем изображение под квадрат
                 size = min(pixmap.width(), pixmap.height())
                 cropped = pixmap.copy((pixmap.width() - size) // 2, (pixmap.height() - size) // 2, size, size)
@@ -1912,12 +2139,16 @@ class ModEditorDialog(QDialog):
                     update_response = requests.put(_fb_url(DATA_FIREBASE_URL, f"mods/{self.mod_key}"),
                                                  json=current_data, timeout=10)
                     update_response.raise_for_status()
-                    self.mod_data['hide_mod'] = new_state
-                    if hasattr(self, 'hide_mod_button'):
-                        self.hide_mod_button.setText(tr("ui.show_mod") if new_state else tr("ui.hide_mod"))
-
-                    QMessageBox.information(self, tr("dialogs.updated"),
-                                          tr("dialogs.mod_visibility_changed", state=tr("ui.hidden_from_list") if new_state else tr("ui.shown_in_list")))
+                    # Verify the flag actually changed on the server
+                    verify_resp = requests.get(_fb_url(DATA_FIREBASE_URL, f"mods/{self.mod_key}"), timeout=8)
+                    if verify_resp.status_code == 200 and isinstance(verify_resp.json(), dict) and verify_resp.json().get('hide_mod') == new_state:
+                        self.mod_data['hide_mod'] = new_state
+                        if hasattr(self, 'hide_mod_button'):
+                            self.hide_mod_button.setText(tr("ui.show_mod") if new_state else tr("ui.hide_mod"))
+                        QMessageBox.information(self, tr("dialogs.updated"),
+                                              tr("dialogs.mod_visibility_changed", state=tr("ui.hidden_from_list") if new_state else tr("ui.shown_in_list")))
+                    else:
+                        QMessageBox.critical(self, tr("dialogs.update_error"), tr("dialogs.update_verification_failed"))
                 else:
                     QMessageBox.warning(self, tr("dialogs.error"), tr("dialogs.mod_not_found"))
             else:
@@ -1931,15 +2162,12 @@ class ModEditorDialog(QDialog):
 
     def _save_mod(self):
         """Сохраняет мод."""
+        # Сначала быстрая валидация обязательных полей
         if not self._validate_fields():
             return
-
-        url_edits = self.findChildren(QLineEdit)
-        for line_edit in url_edits:
-            if line_edit.property("isValid") is False: # Проверяем свойство, установленное валидатором
-                QMessageBox.warning(self, tr("dialogs.validation_error"),
-                                tr("dialogs.validation_url_error", url=line_edit.text()))
-                return
+        # Жесткая повторная валидация текущих значений (не опираемся на флаги UI)
+        if not self._revalidate_on_save():
+            return
 
         if self.is_creating:
             if self.is_public:
@@ -1956,12 +2184,178 @@ class ModEditorDialog(QDialog):
             QMessageBox.warning(self, tr("dialogs.error"), tr("dialogs.mod_author_empty")); return False
         if len(self.version_edit.text().strip()) > 10:
             QMessageBox.warning(self, tr("dialogs.error"), tr("dialogs.mod_version_too_long")); return False
+        # Публичные: иконка и полное описание НЕ обязательны здесь; их проверяем на этапе финальной валидации,
+        # и только если поля не пустые.
+        if self.is_public:
+            pass
         if hasattr(self, 'tag_other') and not any([self.tag_translation.isChecked(), self.tag_customization.isChecked(), self.tag_gameplay.isChecked(), self.tag_other.isChecked()]):
             self.tag_other.setChecked(True)
         return self._validate_file_data()
 
     def _validate_file_data(self):
         return self._validate_public_file_data() if self.is_public else self._validate_local_file_data()
+
+    def _revalidate_on_save(self) -> bool:
+        """Повторно валидирует поля при нажатии Сохранить/Завершить, не полагаясь на UI-флаги."""
+        try:
+            import re
+            import requests
+            from urllib.parse import unquote
+            # 1) Публичные: новая логика валидации иконки
+            if self.is_public and hasattr(self, 'icon_edit') and hasattr(self, 'icon_preview'):
+                icon_url = self.icon_edit.text().strip()
+                is_default = bool(self.icon_preview.property('isDefaultIcon'))
+                # Пустое поле и дефолтное превью — допустимо
+                # Незапустое поле и дефолтное превью — ошибка
+                if icon_url and is_default:
+                    QMessageBox.warning(self, tr("dialogs.validation_error"), tr('errors.icon_invalid'))
+                    return False
+                # 2) Публичные: описание — строгий .md/.txt (если поле не пусто)
+                desc_url = self.description_url_edit.text().strip()
+                if desc_url and not re.match(r'^https?://.+\.(md|txt)(\?.*)?$', desc_url, re.IGNORECASE):
+                    # Разрешаем, если по заголовкам это текст
+                    try:
+                        h = requests.head(desc_url, headers={'User-Agent': 'Mozilla/5.0'}, allow_redirects=True, timeout=6)
+                        ct = (h.headers.get('Content-Type') or '').lower()
+                        if not (ct.startswith('text/') or 'markdown' in ct):
+                            raise ValueError('not text')
+                    except Exception:
+                        QMessageBox.warning(self, tr("dialogs.validation_error"), tr('errors.description_md_txt_required'))
+                        return False
+                # 3) Строгая валидация ссылок файлов во вкладках (без UI-флагов)
+                for i in range(self.file_tabs.count()):
+                    tab = self.file_tabs.widget(i)
+                    if tab is None:
+                        continue
+                    layout = tab.layout() if hasattr(tab, 'layout') else None
+                    if layout is None:
+                        continue
+                    for j in range(layout.count()):
+                        item = layout.itemAt(j)
+                        w = item.widget() if item and item.widget() else None
+                        if w is None or not hasattr(w, 'layout'):
+                            continue
+                        frame_layout = w.layout() if hasattr(w, 'layout') else None
+                        if frame_layout is None:
+                            continue
+                        # title label
+                        title_item = frame_layout.itemAt(0)
+                        title_label = title_item.widget() if title_item and title_item.widget() else None
+                        if not isinstance(title_label, QLabel):
+                            continue
+                        # Collect URL and version edits
+                        url_edit = version_edit = None
+                        for k in range(frame_layout.count()):
+                            sub = frame_layout.itemAt(k)
+                            subw = sub.widget() if sub else None
+                            if isinstance(subw, QLineEdit):
+                                # Look at prev widget to classify
+                                prev_item = frame_layout.itemAt(k-1) if k > 0 else None
+                                prevw = prev_item.widget() if prev_item and prev_item.widget() else None
+                                if isinstance(prevw, QLabel):
+                                    ftype = detect_field_type_by_text(prevw.text())
+                                    if ftype == 'file_path':
+                                        url_edit = subw
+                                    elif ftype == 'version':
+                                        version_edit = subw
+                        if not url_edit:
+                            continue
+                        url = url_edit.text().strip()
+                        if not url:
+                            # пустая строка допускается, пропускаем блок
+                            continue
+                        # Determine frame type
+                        label_ftype = title_label.property('file_type') if hasattr(title_label, 'property') else None
+                        is_patch = (label_ftype == 'patch')
+                        is_extra = (label_ftype == 'extra')
+                        # Request
+                        headers = {'User-Agent': 'Mozilla/5.0'}
+                        # First try HEAD
+                        content_type = ''
+                        size_bytes = 0
+                        first_bytes = b''
+                        ok = False
+                        try:
+                            h = requests.head(url, headers=headers, allow_redirects=True, timeout=8)
+                            if h.status_code in (200, 206, 301, 302, 303, 307, 308):
+                                ok = True
+                                ct = h.headers.get('Content-Type') or h.headers.get('content-type') or ''
+                                content_type = ct.lower()
+                                cb = h.headers.get('content-length', '')
+                                size_bytes = int(cb) if cb.isdigit() else 0
+                                content_disp = h.headers.get('content-disposition', '')
+                            else:
+                                content_disp = ''
+                        except Exception:
+                            ok, content_disp = False, ''
+                        if not ok:
+                            try:
+                                g = requests.get(url, headers=headers, allow_redirects=True, stream=True, timeout=12)
+                                g.raise_for_status()
+                                ct = g.headers.get('Content-Type') or g.headers.get('content-type') or ''
+                                content_type = ct.lower()
+                                cb = g.headers.get('content-length', '')
+                                size_bytes = int(cb) if cb.isdigit() else 0
+                                content_disp = g.headers.get('content-disposition', '')
+                                try:
+                                    first_bytes = next(g.iter_content(chunk_size=16), b'') or b''
+                                except Exception:
+                                    first_bytes = b''
+                                ok = True
+                            except Exception:
+                                ok = False
+                        if not ok:
+                            QMessageBox.warning(self, tr("dialogs.validation_error"), tr("dialogs.validation_url_error", url=url))
+                            return False
+                        # Вспомогательная логика: имя файла и расширение из URL/заголовка
+                        def _infer_filename(u: str, content_disp_hdr: str) -> str:
+                            try:
+                                cd = content_disp_hdr.lower()
+                                if 'filename=' in cd:
+                                    val = cd.split('filename=')[-1].strip().strip('"')
+                                    return unquote(val)
+                            except Exception:
+                                pass
+                            try:
+                                from urllib.parse import urlparse
+                                p = urlparse(u)
+                                return os.path.basename(p.path)
+                            except Exception:
+                                return ''
+                        fname = _infer_filename(url, content_disp)
+                        fext = (os.path.splitext(fname)[1] or '').lower()
+                        # Relaxed checks
+                        if is_patch:
+                            xdelta_by_sig = first_bytes.startswith(b'VCD')
+                            xdelta_by_ct = any(x in content_type for x in ['xdelta', 'vcdiff']) or content_type == 'application/octet-stream'
+                            xdelta_by_ext = fext == '.xdelta'
+                            if not (xdelta_by_sig or xdelta_by_ct or xdelta_by_ext):
+                                QMessageBox.warning(self, tr("dialogs.validation_error"), ".xdelta " + tr('errors.not_a_valid_file'))
+                                return False
+                        elif is_extra:
+                            sig_ok = first_bytes.startswith(b'PK\x03\x04') or first_bytes.startswith(b'Rar!') or first_bytes.startswith(b"7z\xBC\xAF'\x1C")
+                            by_ext = fext in ['.zip', '.rar', '.7z']
+                            by_ct = any(x in content_type for x in ['zip', 'x-zip', 'rar', '7z']) or content_type == 'application/octet-stream'
+                            if not (sig_ok or by_ext or by_ct):
+                                # Больше не блокируем по сигнатуре — принимаем, если доступно по сети
+                                pass
+                        else:
+                            # data.win / game.ios
+                            looks_like_data = any(x in fext for x in ['.win', '.ios', '.data'])
+                            if 'text/html' in content_type and not looks_like_data:
+                                QMessageBox.warning(self, tr("dialogs.validation_error"), tr('errors.not_a_valid_file'))
+                                return False
+                        # version required if URL is present
+                        if version_edit and not version_edit.text().strip():
+                            QMessageBox.warning(self, tr("dialogs.validation_error"), tr("dialogs.tab_no_version", tab_name=self.file_tabs.tabText(i)))
+                            return False
+            else:
+                # Локальные моды: проверяем что файлы существуют
+                if not self._validate_local_file_data():
+                    return False
+            return True
+        except Exception:
+            return False
 
     def _validate_public_file_data(self):
         import re
@@ -1971,10 +2365,24 @@ class ModEditorDialog(QDialog):
             if not tab or not (layout := tab.layout()): continue
             for j in range(layout.count()):
                 if not (item := layout.itemAt(j)) or not (widget := item.widget()) or not hasattr(widget, 'layout') or not (frame_layout := widget.layout()): continue
-                title_label = next((widget for k in range(frame_layout.count())
-                                  if (item := frame_layout.itemAt(k)) and (widget := item.widget()) and isinstance(widget, QLabel)
-                                  and any(widget.text().startswith(prefix) for prefix in ["DATA", "PATCH", tr("files.extra_files")])), None)
-                if not title_label: continue
+                # Find title label by checking its file_type property for robustness across locales
+                title_label = None
+                for k in range(frame_layout.count()):
+                    item_k = frame_layout.itemAt(k)
+                    w_k = item_k.widget() if item_k else None
+                    if isinstance(w_k, QLabel):
+                        ftype = w_k.property("file_type") if hasattr(w_k, 'property') else None
+                        if ftype in ("data", "patch", "extra"):
+                            title_label = w_k
+                            break
+                if not title_label:
+                    # Fallback to text-based detection for legacy frames
+                    title_label = next((w for k in range(frame_layout.count())
+                                       if (it := frame_layout.itemAt(k)) and (w := it.widget()) and isinstance(w, QLabel)
+                                       and any((isinstance(w.text(), str) and w.text().startswith(prefix)) for prefix in ["DATA", "PATCH", "XDELTA", tr("files.extra_files")])
+                                      ), None)
+                if not title_label:
+                    continue
                 url_edit = version_edit = None
                 for k in range(frame_layout.count()):
                     if not (frame_item := frame_layout.itemAt(k)) or not (frame_widget := frame_item.widget()) or not isinstance(frame_widget, QLineEdit): continue
@@ -2208,19 +2616,37 @@ class ModEditorDialog(QDialog):
         url_edit = None
         version_edit = None
 
+        # Найти заголовок по свойству file_type (надёжно при локализации)
         for i in range(frame_layout.count()):
             item = frame_layout.itemAt(i)
             if not item or not item.widget():
                 continue
+            w = item.widget()
+            if isinstance(w, QLabel):
+                ftype = w.property("file_type") if hasattr(w, 'property') else None
+                if ftype in ("data", "patch", "extra"):
+                    title_label = w
+                    break
+        # Фолбэк: по тексту (для старых записей/UI)
+        if not title_label:
+            for i in range(frame_layout.count()):
+                item = frame_layout.itemAt(i)
+                if not item or not item.widget():
+                    continue
+                w = item.widget()
+                if isinstance(w, QLabel):
+                    txt = w.text()
+                    if isinstance(txt, str) and (txt.startswith("DATA") or txt.startswith("PATCH") or txt.startswith("XDELTA") or txt.startswith(tr("files.extra_files"))):
+                        title_label = w
+                        break
 
+        # Собрать поля URL/Version
+        for i in range(frame_layout.count()):
+            item = frame_layout.itemAt(i)
+            if not item or not item.widget():
+                continue
             widget = item.widget()
-
-            if isinstance(widget, QLabel):
-                text = widget.text()
-                if (text.startswith("DATA") or text.startswith("PATCH") or
-                    text.startswith(tr("files.extra_files"))):
-                    title_label = widget
-            elif isinstance(widget, QLineEdit):
+            if isinstance(widget, QLineEdit):
                 prev_item = frame_layout.itemAt(i-1)
                 if prev_item and prev_item.widget():
                     prev_widget = prev_item.widget()
@@ -2230,24 +2656,27 @@ class ModEditorDialog(QDialog):
                             url_edit = widget
                         elif field_type == "version":
                             version_edit = widget
+
         if title_label and url_edit and version_edit:
             url_text = url_edit.text().strip()
             version_text = version_edit.text().strip()
-
             if url_text and version_text:
-                frame_data = {
-                    'url': url_text,
-                    'version': version_text
-                }
-
-                title_text = title_label.text()
-                if title_text.startswith("DATA") or title_text.startswith("PATCH"):
+                frame_data = {'url': url_text, 'version': version_text}
+                # Определяем тип по свойству, затем по тексту
+                ftype = title_label.property("file_type") if hasattr(title_label, 'property') else None
+                if ftype in ("data", "patch"):
                     frame_data['type'] = 'data'
-                elif title_text.startswith(tr("files.extra_files")):
-                    key = title_label.property("clean_key") or title_text.replace(tr("files.extra_files"), "").strip()
+                elif ftype == 'extra':
                     frame_data['type'] = 'extra'
-                    frame_data['key'] = key
-
+                    frame_data['key'] = title_label.property("clean_key") or 'extra'
+                else:
+                    t = title_label.text()
+                    if t.startswith("DATA") or t.startswith("PATCH") or t.startswith("XDELTA"):
+                        frame_data['type'] = 'data'
+                    elif t.startswith(tr("files.extra_files")):
+                        key = title_label.property("clean_key") or t.replace(tr("files.extra_files"), "").strip()
+                        frame_data['type'] = 'extra'
+                        frame_data['key'] = key
                 return frame_data
 
         return None
@@ -2372,9 +2801,12 @@ class ModEditorDialog(QDialog):
                                 "url": file_data["url"],
                                 "version": file_data["version"]
                             })
+                        # Ренумерация ключей как последовательность "1","2","3"...
+                        for idx, ef in enumerate(extra_files, start=1):
+                            ef["key"] = str(idx)
                         chapter_data["extra_files"] = extra_files
 
-                    chapters[f"c{chapter_id}"] = chapter_data
+                    chapters[str(chapter_id)] = chapter_data
 
                 # Заменяем files на chapters
                 mod_data.pop("files")
@@ -2519,12 +2951,19 @@ class ModEditorDialog(QDialog):
             files_data = {}  # Добавляем информацию о файлах для редактора
 
             for ch_id, ch_data in local_chapters.items():
-                chapters_data[str(ch_id)] = {
-                    "composite_version": ch_data if ch_data else "1.0.0"
-                }
+                # Формируем словарь версий вместо composite_version
+                versions = {}
+                chapter_files = mod_data.get("files", {}).get(ch_id, {})
+                if chapter_files.get("data_win_url"):
+                    versions['data'] = chapter_files.get("data_win_version", "1.0.0")
+                if chapter_files.get("extra_files"):
+                    for group_key, paths in chapter_files["extra_files"].items():
+                        if paths:  # если есть хотя бы один файл этой группы
+                            versions[group_key] = "1.0.0"
+                if versions:
+                    chapters_data[str(ch_id)] = {"versions": versions}
 
                 # Добавляем информацию о файлах для этой главы
-                chapter_files = mod_data.get("files", {}).get(ch_id, {})
                 files_data[str(ch_id)] = {}
 
                 # DATA-файл
@@ -2624,9 +3063,12 @@ class ModEditorDialog(QDialog):
                             "url": file_data["url"],
                             "version": file_data["version"]
                         })
+                    # Ренумерация ключей как последовательность "1","2","3"...
+                    for idx, ef in enumerate(extra_files, start=1):
+                        ef["key"] = str(idx)
                     chapter_data["extra_files"] = extra_files
 
-                chapters[chapter_id] = chapter_data
+                chapters[str(chapter_id)] = chapter_data
 
             # Заменяем files на chapters
             updated_data.pop("files")
@@ -2678,6 +3120,31 @@ class ModEditorDialog(QDialog):
                 url = _fb_url(DATA_FIREBASE_URL, f"mods/{hashed_key}")
                 response = requests.put(url, json=updated_data, timeout=10)
                 response.raise_for_status()
+                # Verify the update actually persisted
+                try:
+                    verify_resp = requests.get(url, timeout=8)
+                    if verify_resp.status_code == 200:
+                        server_after = verify_resp.json() or {}
+                        # Compare a minimal set of fields to ensure persistence
+                        persisted_ok = True
+                        for fld in ["name", "version", "tagline", "author", "game_version", "tags"]:
+                            if updated_data.get(fld) != server_after.get(fld):
+                                persisted_ok = False; break
+                        # Chapters structure check (keys only)
+                        if persisted_ok and "chapters" in updated_data:
+                            upd_keys = sorted((updated_data.get("chapters") or {}).keys())
+                            srv_keys = sorted((server_after.get("chapters") or {}).keys())
+                            if upd_keys != srv_keys:
+                                persisted_ok = False
+                        if not persisted_ok:
+                            QMessageBox.critical(self, tr("errors.update_error"), tr("errors.update_not_persisted"))
+                            return
+                    else:
+                        QMessageBox.critical(self, tr("errors.update_error"), tr("errors.update_verification_failed"))
+                        return
+                except Exception:
+                    QMessageBox.critical(self, tr("errors.update_error"), tr("errors.update_verification_failed"))
+                    return
                 QMessageBox.information(self, tr("errors.mod_updated_title"), tr("errors.mod_updated_message"))
             else:
                 from helpers import _fb_url
@@ -2686,7 +3153,15 @@ class ModEditorDialog(QDialog):
                 updated_data["original_mod_key"] = hashed_key
                 response = requests.put(pending_url, json=updated_data, timeout=10)
                 response.raise_for_status()
-                QMessageBox.information(self, tr("errors.request_sent_title"), tr("errors.request_sent_message"))
+                # Optional: verify pending record exists
+                try:
+                    chk = requests.get(pending_url, timeout=8)
+                    if chk.status_code != 200 or not chk.json():
+                        QMessageBox.warning(self, tr("errors.request_sent_title"), tr("errors.request_sent_but_not_found"))
+                    else:
+                        QMessageBox.information(self, tr("errors.request_sent_title"), tr("errors.request_sent_message"))
+                except Exception:
+                    QMessageBox.information(self, tr("errors.request_sent_title"), tr("errors.request_sent_message"))
 
             self.accept()
 
@@ -2815,9 +3290,17 @@ class ModEditorDialog(QDialog):
             # Обновляем config.json с новыми данными
             chapters_data = {}
             for ch_id, ch_data in local_chapters.items():
-                chapters_data[str(ch_id)] = {
-                    "composite_version": ch_data if ch_data else "1.0.0"
-                }
+                # Формируем словарь версий вместо composite_version
+                versions = {}
+                chapter_files = updated_data.get("files", {}).get(ch_id, {})
+                if chapter_files.get("data_win_url"):
+                    versions['data'] = chapter_files.get("data_win_version", "1.0.0")
+                if chapter_files.get("extra_files"):
+                    for group_key, paths in chapter_files["extra_files"].items():
+                        if paths:
+                            versions[group_key] = "1.0.0"
+                if versions:
+                    chapters_data[str(ch_id)] = {"versions": versions}
 
             # Обновляем config_data
             config_data.update({
@@ -2864,7 +3347,13 @@ class ModEditorDialog(QDialog):
             from helpers import _fb_url
             requests.delete(_fb_url(DATA_FIREBASE_URL, f"mods/{hashed_key}"), timeout=10)
             try: requests.delete(_fb_url(DATA_FIREBASE_URL, f"pending_changes/{hashed_key}"), timeout=10)
-            except: pass
+            except Exception as e:
+                logging.warning(f"Failed to delete pending_changes record: {e}")
+            # Verify deletion
+            chk = requests.get(_fb_url(DATA_FIREBASE_URL, f"mods/{hashed_key}"), timeout=8)
+            if chk.status_code == 200 and chk.json():
+                QMessageBox.critical(self, tr("errors.deletion_error"), tr("errors.mod_deletion_verification_failed"))
+                return
             QMessageBox.information(self, tr("errors.mod_deleted_title"), tr("errors.mod_deleted_message"))
             self.accept()
         except Exception as e: QMessageBox.critical(self, tr("errors.deletion_error"), tr("errors.mod_deletion_failed", error=str(e)))
@@ -3259,6 +3748,9 @@ class DeltaHubApp(QWidget):
 
         self.local_config   = self._read_json(self.config_path) or {}
 
+        # Автовосстановление после сбоя прошлой сессии (если было вмешательство в файлы игры)
+        self._recover_previous_session()
+
         # Инициализируем локализацию
         self._init_localization()
 
@@ -3268,7 +3760,7 @@ class DeltaHubApp(QWidget):
         self.current_collection_idx: Dict[int, int] = {}
         self.selected_slot: Optional[tuple[int, int]] = None
 
-        self.resize(850, 750)
+        self.resize(875, 750)
 
         self.background_movie = None
         self.setWindowIcon(QIcon(resource_path("assets/icon.ico")))
@@ -3341,6 +3833,74 @@ class DeltaHubApp(QWidget):
                 timeout=5
             )
         except Exception:
+            pass
+
+    # ---------------- Session manifest (crash-safe restore) ----------------
+    def _session_manifest_path(self):
+        return os.path.join(self.config_dir, "session.lock")
+
+    def _load_session_manifest(self) -> dict:
+        try:
+            with open(self._session_manifest_path(), 'r', encoding='utf-8') as f:
+                return json.load(f) or {}
+        except Exception:
+            return {}
+
+    def _write_session_manifest(self, data: dict):
+        try:
+            with open(self._session_manifest_path(), 'w', encoding='utf-8') as f:
+                json.dump(data, f, ensure_ascii=False)
+        except Exception:
+            pass
+
+    def _ensure_session_manifest(self) -> dict:
+        data = self._load_session_manifest()
+        if not data:
+            data = {"backup_files": {}, "mod_files_to_cleanup": [], "mod_dirs_to_cleanup": [], "backup_temp_dir": None, "direct_launch": None}
+            self._write_session_manifest(data)
+        return data
+
+    def _update_session_manifest(self, backup_files: Optional[dict] = None, mod_files: Optional[list] = None, backup_temp_dir: Optional[str] = None, direct_launch: Optional[dict] = None, mod_dirs: Optional[list] = None):
+        data = self._ensure_session_manifest()
+        if backup_files:
+            data.setdefault("backup_files", {}).update(backup_files)
+        if mod_files:
+            existing = set(data.get("mod_files_to_cleanup", []))
+            for p in mod_files:
+                if p not in existing:
+                    data.setdefault("mod_files_to_cleanup", []).append(p)
+        if mod_dirs:
+            existing_dirs = set(data.get("mod_dirs_to_cleanup", []))
+            for d in mod_dirs:
+                if d not in existing_dirs:
+                    data.setdefault("mod_dirs_to_cleanup", []).append(d)
+        if backup_temp_dir is not None:
+            data["backup_temp_dir"] = backup_temp_dir
+        if direct_launch is not None:
+            data["direct_launch"] = direct_launch
+        self._write_session_manifest(data)
+
+    def _clear_session_manifest(self):
+        try:
+            os.remove(self._session_manifest_path())
+        except Exception:
+            pass
+
+    def _recover_previous_session(self):
+        try:
+            data = self._load_session_manifest()
+            if not data:
+                return
+            # Восстанавливаем внутренние структуры и запускаем очистку
+            self._backup_files = data.get("backup_files", {})
+            self._mod_files_to_cleanup = data.get("mod_files_to_cleanup", [])
+            self._backup_temp_dir = data.get("backup_temp_dir")
+            self._direct_launch_cleanup_info = data.get("direct_launch")
+            self.update_status_signal.emit(tr("status.recovering_previous_session"), UI_COLORS["status_warning"])
+            self._cleanup_direct_launch_files()
+            self._clear_session_manifest()
+        except Exception:
+            # Если что-то пошло не так — не блокируем запуск
             pass
 
     def _shortcut_launch(self, args):
@@ -3538,7 +4098,8 @@ class DeltaHubApp(QWidget):
                                 if test_config.get('mod_key') == mod.key:
                                     config_path = test_config_path
                                     break
-                            except:
+                            except Exception as e:
+                                logging.warning(f"Failed reading config {test_config_path}: {e}")
                                 continue
 
                     # Обновляем флаг доступности для найденных модов
@@ -3590,7 +4151,8 @@ class DeltaHubApp(QWidget):
                                     if test_config.get('mod_key') == mod_key:
                                         mod_folder_path = folder_path
                                         break
-                                except:
+                                except Exception as e:
+                                    logging.warning(f"Failed reading config {test_config_path}: {e}")
                                     continue
 
                         for ch_id_str, ch_info in chapters_data.items():
@@ -3629,7 +4191,7 @@ class DeltaHubApp(QWidget):
                             mod_chapter = ModChapterData(
                                 description=config_data.get("tagline", ""),
                                 data_file_url=data_file_url,
-                                data_win_version=chapter_files.get("data_win_version", ch_info.get("composite_version", "1.0.0")),
+                                data_win_version=chapter_files.get("data_win_version", (ch_info.get("versions", {}) or {}).get("data", "1.0.0")),
                                 extra_files=extra_files
                             )
                             mod.chapters[ch_id] = mod_chapter
@@ -3637,11 +4199,13 @@ class DeltaHubApp(QWidget):
                         # Добавляем мод только если у него есть хотя бы одна глава
                         if mod.chapters:
                             self.all_mods.append(mod)
-                    except Exception:
+                    except Exception as e:
+                        logging.warning(f"Failed to build local ModInfo: {e}")
                         continue
 
             return True
-        except Exception:
+        except Exception as e:
+            logging.error(f"_load_local_mods_from_folders failed: {e}")
             return False
 
     def _get_mod_config_by_key(self, mod_key: str) -> dict:
@@ -3662,7 +4226,8 @@ class DeltaHubApp(QWidget):
                 config_data = self._read_json(config_path)
                 if config_data and config_data.get('mod_key') == mod_key:
                     return config_data
-            except:
+            except Exception as e:
+                logging.warning(f"Failed to read mod config {config_path}: {e}")
                 continue
 
         return {}
@@ -3749,6 +4314,17 @@ class DeltaHubApp(QWidget):
         self.online_label.setToolTip(tr("tooltips.online_counter"))
 
         self.top_frame.addWidget(self.settings_button)
+        # Top refresh button right after settings
+        self.top_refresh_button = QPushButton("🔄️")
+        self.top_refresh_button.setObjectName("topRefreshBtn")
+        self.top_refresh_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        # Enforce strict square size regardless of layout/styles
+        self.top_refresh_button.setMinimumSize(40, 40)
+        self.top_refresh_button.setMaximumSize(40, 40)
+        self.top_refresh_button.setStyleSheet("min-width:40px; max-width:40px; min-height:40px; max-height:40px; padding:0; margin:0;")
+        self.top_refresh_button.setToolTip(tr("ui.update_mod_list"))
+        self.top_refresh_button.clicked.connect(lambda: self._refresh_translations(force=True))
+        self.top_frame.addWidget(self.top_refresh_button)
         self.top_frame.addWidget(self.online_label)
         self.top_frame.addStretch()
 
@@ -3972,16 +4548,6 @@ class DeltaHubApp(QWidget):
 
         self.change_background_button = QPushButton(tr("buttons.change_background"))
         self.change_background_button.clicked.connect(self._on_background_button_click)
-
-        self.force_refresh_button = QPushButton(tr("buttons.refresh_mods_info"))
-        self.force_refresh_button.setFixedWidth(400)
-        self.force_refresh_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        self.force_refresh_button.clicked.connect(
-            lambda: self._refresh_translations(force=True)
-        )
-
-        settings_menu_layout.addSpacing(20)  # Дополнительный отступ перед кнопкой
-        settings_menu_layout.addWidget(self.force_refresh_button, alignment=Qt.AlignmentFlag.AlignHCenter)
 
         settings_customization_layout = QVBoxLayout(self.settings_customization_page)
         back_button_cust = QPushButton(tr("ui.back_button"))
@@ -5187,14 +5753,11 @@ class DeltaHubApp(QWidget):
                             mod_widget = widget
                             break
 
-        # Проверяем, что показывает кнопка
-        use_button = getattr(mod_widget, 'use_button', None)
-        button_text = use_button.text() if use_button else ""
+        # Получаем статус виджета вместо проверки текста на кнопке
+        status = getattr(mod_widget, 'status', 'ready') if mod_widget else 'ready'
 
-
-        if button_text == tr("ui.update_button"):
-            # Кнопка показывает "Обновить" - значит нужно обновить мод
-
+        if status == 'needs_update':
+            # Требуется обновление — запускаем процесс обновления
             self._update_mod(mod_data)
             return  # Важно: выходим, чтобы не выполнялась логика вставки в слот
 
@@ -5458,7 +6021,8 @@ class DeltaHubApp(QWidget):
                         config_data['is_local_mod'] = config_data.get('is_local_mod', False)
 
                         installed_mods.append(config_data)
-                except:
+                except Exception as e:
+                    logging.warning(f"Failed to read config {config_path}: {e}")
                     continue
 
         return installed_mods
@@ -5566,14 +6130,11 @@ class DeltaHubApp(QWidget):
                                 mod_widget = widget
                                 break
 
-            # Проверяем, что показывает кнопка
-            use_button = getattr(mod_widget, 'use_button', None)
-            button_text = use_button.text() if use_button else ""
+            # Получаем статус виджета вместо проверки текста на кнопке
+            status = getattr(mod_widget, 'status', 'ready') if mod_widget else 'ready'
 
-
-            if button_text == tr("ui.update_button"):
-                # Кнопка показывает "Обновить" - значит нужно обновить мод
-
+            if status == 'needs_update':
+                # Требуется обновление — запускаем процесс обновления
                 self._update_mod(mod_data)
                 return  # Важно: выходим, чтобы не выполнялась логика вставки в слот
             else:
@@ -6221,7 +6782,8 @@ class DeltaHubApp(QWidget):
                         if config_data and config_data.get('mod_key') == mod_data.key:
                             mod_folder_found = folder_path
                             break
-                    except:
+                    except Exception as e:
+                        logging.warning(f"Failed to read installed mod config {config_path}: {e}")
                         continue
 
             if mod_folder_found and os.path.exists(mod_folder_found):
@@ -6363,7 +6925,8 @@ class DeltaHubApp(QWidget):
                     year += 1900
 
                 return (year, month, day, hour, minute)
-        except:
+        except Exception as e:
+            logging.debug(f"_parse_date failed for '{date_str}': {e}")
             pass
 
         return (0, 0, 0, 0, 0)
@@ -6442,22 +7005,45 @@ class DeltaHubApp(QWidget):
             self.is_installing = True
             self._set_install_buttons_enabled(False)
             self.action_button.setText(tr("ui.cancel_button"))
+            # Обновляем идентификатор операции для инвалидации старых сигналов
+            self._install_op_id = getattr(self, '_install_op_id', 0) + 1
+            op_id = self._install_op_id
             self.current_install_thread = InstallTranslationsThread(self, install_tasks)
             self.install_thread = self.current_install_thread
 
-            self.install_thread.progress.connect(self.set_progress_signal)
-            self.install_thread.status.connect(self.update_status_signal)
-            self.install_thread.finished.connect(self._on_single_mod_install_finished)
+            # Подключаем сигналы через обертки, чтобы игнорировать старые потоки после отмены/перезапуска
+            self.install_thread.progress.connect(lambda v, oid=op_id: self._on_install_progress_token(v, oid))
+            self.install_thread.status.connect(lambda msg, col, oid=op_id: self._on_install_status_token(msg, col, oid))
+            self.install_thread.finished.connect(lambda ok, oid=op_id: self._on_install_finished_token(ok, oid))
 
-            # Показываем прогресс бар
+            # Показываем прогресс бар и сразу выставляем 0%
             self.progress_bar.setVisible(True)
+            self.progress_bar.setValue(0)
+            try:
+                self.update_status_signal.emit(tr("status.preparing_download"), UI_COLORS["status_warning"])
+            except Exception:
+                pass
             self._update_ui_for_selection()
-
+ 
             self.install_thread.start()
 
         except Exception as e:
             print(f"Error installing mod {mod.name}: {e}")
             QMessageBox.critical(self, tr("errors.error"), tr("errors.mod_install_failed", error=str(e)))
+
+    # Версии с маркером операции, чтобы отбрасывать сигналы от старых потоков
+    def _on_install_progress_token(self, value: int, op_id: int):
+        if getattr(self, '_install_op_id', 0) == op_id and self.is_installing:
+            self.progress_bar.setValue(value)
+
+    def _on_install_status_token(self, message: str, color: str, op_id: int):
+        if getattr(self, '_install_op_id', 0) == op_id and self.is_installing:
+            self._update_status(message, color)
+
+    def _on_install_finished_token(self, success: bool, op_id: int):
+        if getattr(self, '_install_op_id', 0) != op_id:
+            return
+        self._on_single_mod_install_finished(success)
 
     def _on_single_mod_install_finished(self, success):
         """Обработчик завершения установки одиночного мода"""
@@ -6467,7 +7053,23 @@ class DeltaHubApp(QWidget):
         if success:
             self.update_status_signal.emit(tr("status.mod_installed_success"), UI_COLORS["status_success"])
         else:
-            self.update_status_signal.emit(tr("status.mod_install_error"), UI_COLORS["status_error"])
+            # Разруливаем отмену отдельно: не показываем "Ошибка установки мода"
+            if getattr(self, '_operation_cancelled', False):
+                # Сообщение об отмене уже отправлено при клике; просто сбросим флаг
+                try:
+                    self._operation_cancelled = False
+                except Exception:
+                    pass
+            else:
+                self.update_status_signal.emit(tr("status.mod_install_error"), UI_COLORS["status_error"])
+            # Очистка временной папки после отмены/ошибки
+            try:
+                thr = self.current_install_thread
+                temp_root = getattr(thr, 'temp_root', None)
+                if temp_root and os.path.isdir(temp_root):
+                    shutil.rmtree(temp_root, ignore_errors=True)
+            except Exception:
+                pass
         self.is_installing = False
         self._set_install_buttons_enabled(True)
         self.current_install_thread = None
@@ -6489,7 +7091,6 @@ class DeltaHubApp(QWidget):
 
     def _on_mod_uninstall_requested(self, mod):
         """Обработчик запроса на удаление мода"""
-        print(f"Uninstall requested for mod: {mod.name}")
 
         # Проверяем что не идет установка
         if self.is_installing:
@@ -7490,11 +8091,9 @@ class DeltaHubApp(QWidget):
                 self.current_settings_page.setVisible(False)
             prev.setVisible(True)
             self.current_settings_page = prev
-            self.force_refresh_button.setVisible(prev is self.settings_menu_page)
         else:
             # Если стек пуст, возвращаемся в главное меню (выходим из настроек)
             self._toggle_settings_view()
-            self.force_refresh_button.setVisible(False)
 
     def paintEvent(self, event):
         painter = QPainter(self)
@@ -7872,7 +8471,7 @@ class DeltaHubApp(QWidget):
                     QMessageBox.warning(self, tr("errors.error"), tr("errors.copy_startup_sound_failed"))
 
     def _start_background_music(self):
-        """Запускает фоновую музыку через playsound3 в отдельном потоке (зациклено) с возможностью мгновенной остановки."""
+        """Запускает фоновую музыку через playsound3 в QThread (зациклено) с возможностью мгновенной остановки."""
         try:
             music_path = self._get_background_music_path()
             if not music_path or not os.path.exists(music_path):
@@ -7881,36 +8480,35 @@ class DeltaHubApp(QWidget):
             # Останавливаем предыдущий цикл, если есть
             self._stop_background_music()
 
-            import threading
+            from PyQt6.QtCore import QThread, pyqtSignal
             from playsound3 import playsound
 
             self._bg_music_running = True
             self._bg_music_instance = None
 
-            def _loop():
-                while self._bg_music_running:
-                    try:
-                        # Неблокирующее воспроизведение, чтобы можно было остановить .stop()
-                        inst = playsound(music_path, block=False)
-                        self._bg_music_instance = inst
-                        # Ожидаем завершение или команду остановки
-                        while self._bg_music_running and hasattr(inst, 'is_alive') and inst.is_alive():
-                            time.sleep(0.05)
-                        # Если остановили — прерываем цикл
-                        if not self._bg_music_running:
-                            try:
-                                if hasattr(inst, 'stop'):
-                                    inst.stop()
-                            except Exception:
-                                pass
-                            break
-                        # Иначе петелька продолжит следующее воспроизведение
-                    except Exception:
-                        # Если ошибка — делаем короткую паузу и пробуем дальше
-                        time.sleep(0.5)
-                        continue
+            class _MusicLoop(QThread):
+                def __init__(self, outer, path):
+                    super().__init__(); self.outer, self.path = outer, path
+                def run(self):
+                    while getattr(self.outer, '_bg_music_running', False):
+                        try:
+                            inst = playsound(self.path, block=False)
+                            self.outer._bg_music_instance = inst
+                            while getattr(self.outer, '_bg_music_running', False) and hasattr(inst, 'is_alive') and inst.is_alive():
+                                time.sleep(0.05)
+                            if not getattr(self.outer, '_bg_music_running', False):
+                                try:
+                                    if hasattr(inst, 'stop'):
+                                        inst.stop()
+                                except Exception:
+                                    pass
+                                break
+                        except Exception:
+                            # Более длительная пауза перед повтором, чтобы не грузить CPU
+                            time.sleep(3)
+                            continue
 
-            self._bg_music_thread = threading.Thread(target=_loop, daemon=True)
+            self._bg_music_thread = _MusicLoop(self, music_path)
             self._bg_music_thread.start()
         except Exception as e:
             print(f"Error starting background music: {e}")
@@ -8460,23 +9058,20 @@ class DeltaHubApp(QWidget):
     def _on_action_button_click(self):
         # Если идет установка, то это кнопка отмены
         if self.is_installing and self.current_install_thread:
-            # Устанавливаем флаг отмены сразу для предотвращения дополнительных действий
+            # Устанавливаем флаг отмены — поток сам завершится, а очистку выполним в обработчике finished
             self._operation_cancelled = True
-
-            # Сразу показываем сообщение об отмене
             self.update_status_signal.emit(tr("status.operation_cancelled"), UI_COLORS["status_error"])
-
-            # Отменяем поток
-            self.current_install_thread.cancel()
-            self.is_installing = False
-            self._set_install_buttons_enabled(True)  # Разблокируем все кнопки установки
-            self.current_install_thread = None
-            self.progress_bar.setVisible(False)  # Скрываем прогресс-бар
-
-            self._update_ui_for_selection()  # Обновляем UI и восстанавливаем текст кнопки
-
-            # Через небольшую задержку сбрасываем флаг отмены
-            QTimer.singleShot(1000, lambda: setattr(self, '_operation_cancelled', False))
+            # Скрываем прогресс немедленно, чтобы не было ощущения продолжения скачивания
+            try:
+                self.progress_bar.setValue(0)
+                self.progress_bar.setVisible(False)
+            except Exception:
+                pass
+            # Не сбрасываем UI и не инвалидируем сигналы — дождемся корректного завершения потока
+            try:
+                self.current_install_thread.cancel()
+            except Exception:
+                pass
             return
 
         if isinstance(self.game_mode, DemoGameMode) and getattr(self, "full_install_checkbox", None) is not None \
@@ -8546,7 +9141,6 @@ class DeltaHubApp(QWidget):
 
         self._stop_fetch_thread()
 
-        self.force_refresh_button.setEnabled(False)
         threading.Thread(target=self._check_for_launcher_updates, daemon=True).start()
 
         self.fetch_thread = FetchTranslationsThread(self, force_update=force)
@@ -8560,10 +9154,6 @@ class DeltaHubApp(QWidget):
             loop.exec()
         else:
             self.fetch_thread.start()
-
-    def _set_server_controls_enabled(self, state: bool):
-        if hasattr(self, "force_refresh_button"):
-            self.force_refresh_button.setEnabled(state)
 
     def _stop_fetch_thread(self):
         self._safe_stop_thread(getattr(self, "fetch_thread", None))
@@ -8616,8 +9206,6 @@ class DeltaHubApp(QWidget):
                 self.update_status_signal.emit(fallback_msg, UI_COLORS["status_error"])
         except Exception as e:
             self.update_status_signal.emit(tr("errors.mod_list_processing_error", error=str(e)), UI_COLORS["status_error"])
-        finally:
-            self._set_server_controls_enabled(True)
 
     def _refresh_mods_in_slots(self):
         """Обновляет объекты модов в слотах с новыми данными из all_mods"""
@@ -8679,6 +9267,15 @@ class DeltaHubApp(QWidget):
     def _on_install_finished(self, success):
         self.progress_bar.setValue(0)
         self.progress_bar.setVisible(False)
+        # Очистка временной папки при отмене/ошибке
+        if not success:
+            try:
+                thr = self.current_install_thread
+                temp_root = getattr(thr, 'temp_root', None)
+                if temp_root and os.path.isdir(temp_root):
+                    shutil.rmtree(temp_root, ignore_errors=True)
+            except Exception:
+                pass
         self.is_installing = False
         self._set_install_buttons_enabled(True)  # Разблокируем все кнопки установки
         self.current_install_thread = None
@@ -8957,6 +9554,8 @@ class DeltaHubApp(QWidget):
             self._mod_files_to_cleanup = []
         if not hasattr(self, '_backup_files'):
             self._backup_files = {}
+        # Готовим манифест сессии
+        self._ensure_session_manifest()
 
         # Определяем, является ли мод xdelta-модом
         is_xdelta_mod = self._is_xdelta_mod(mod_info, source_dir, chapter_id)
@@ -8983,6 +9582,7 @@ class DeltaHubApp(QWidget):
         # Создаем временную папку для резервных копий
         if not hasattr(self, '_backup_temp_dir') or not self._backup_temp_dir:
             self._backup_temp_dir = tempfile.mkdtemp(prefix="deltahub_backup_")
+            self._update_session_manifest(backup_temp_dir=self._backup_temp_dir)
 
         for root, _, files in os.walk(mod_source_dir):
             for file in files:
@@ -9029,7 +9629,17 @@ class DeltaHubApp(QWidget):
                 game_file_path = os.path.join(target_dir, target_rel_path)
 
                 try:
-                    os.makedirs(os.path.dirname(game_file_path), exist_ok=True)
+                    target_dirname = os.path.dirname(game_file_path)
+                    os.makedirs(target_dirname, exist_ok=True)
+                    try:
+                        # Запоминаем созданные папки для последующей очистки (если останутся пустыми)
+                        if not hasattr(self, '_mod_dirs_to_cleanup'):
+                            self._mod_dirs_to_cleanup = []
+                        if target_dirname not in self._mod_dirs_to_cleanup:
+                            self._mod_dirs_to_cleanup.append(target_dirname)
+                            self._update_session_manifest(mod_dirs=[target_dirname])
+                    except Exception:
+                        pass
 
                     # Для xdelta модов обрабатываем .xdelta файлы отдельно
                     if is_xdelta_mod and file_lower.endswith('.xdelta') and is_core_data_file:
@@ -9053,6 +9663,7 @@ class DeltaHubApp(QWidget):
                         # Перемещаем оригинал в резервную папку
                         shutil.move(game_file_path, backup_file_path)
                         self._backup_files[game_file_path] = backup_file_path
+                        self._update_session_manifest(backup_files={game_file_path: backup_file_path})
 
                     # Проверяем, является ли файл архивом
                     if file_lower.endswith(('.zip', '.rar', '.7z')) and not is_core_data_file:
@@ -9060,6 +9671,7 @@ class DeltaHubApp(QWidget):
                         extracted_files = self._extract_archive_to_target(cache_file_path, target_dir)
                         if extracted_files:
                             self._mod_files_to_cleanup.extend(extracted_files)
+                            self._update_session_manifest(mod_files=extracted_files)
                         files_copied += 1
                     else:
                         # Для обычных файлов - копируем
@@ -9067,6 +9679,7 @@ class DeltaHubApp(QWidget):
                         files_copied += 1
                         # Добавляем файл в список для последующей очистки
                         self._mod_files_to_cleanup.append(game_file_path)
+                        self._update_session_manifest(mod_files=[game_file_path])
 
                 except Exception as e:
                     self.update_status_signal.emit(tr("errors.file_copy_error", file=file, error=str(e)), UI_COLORS["status_error"])
@@ -9130,6 +9743,7 @@ class DeltaHubApp(QWidget):
             # Используем общую временную папку для резервных копий
             if not hasattr(self, '_backup_temp_dir') or not self._backup_temp_dir:
                 self._backup_temp_dir = tempfile.mkdtemp(prefix="deltahub_backup_")
+                self._update_session_manifest(backup_temp_dir=self._backup_temp_dir)
 
             backup_file_path = os.path.join(self._backup_temp_dir, f"xdelta_{os.path.basename(original_data_file)}")
             shutil.move(original_data_file, backup_file_path)
@@ -9137,6 +9751,7 @@ class DeltaHubApp(QWidget):
             if not hasattr(self, '_backup_files'):
                 self._backup_files = {}
             self._backup_files[original_data_file] = backup_file_path
+            self._update_session_manifest(backup_files={original_data_file: backup_file_path})
 
 
 
@@ -9244,7 +9859,16 @@ class DeltaHubApp(QWidget):
                                 name_without_ext = os.path.splitext(file)[0]
                                 target_file = os.path.join(os.path.dirname(target_file), name_without_ext + ".win")
 
-                        os.makedirs(os.path.dirname(target_file), exist_ok=True)
+                        target_dirname = os.path.dirname(target_file)
+                        os.makedirs(target_dirname, exist_ok=True)
+                        try:
+                            if not hasattr(self, '_mod_dirs_to_cleanup'):
+                                self._mod_dirs_to_cleanup = []
+                            if target_dirname not in self._mod_dirs_to_cleanup:
+                                self._mod_dirs_to_cleanup.append(target_dirname)
+                                self._update_session_manifest(mod_dirs=[target_dirname])
+                        except Exception:
+                            pass
 
                         # Создаем резервную копию, если файл уже существует
                         if os.path.exists(target_file):
@@ -9256,6 +9880,7 @@ class DeltaHubApp(QWidget):
                                 if not hasattr(self, '_backup_files'):
                                     self._backup_files = {}
                                 self._backup_files[target_file] = backup_file_path
+                                self._update_session_manifest(backup_files={target_file: backup_file_path})
 
                         shutil.copy2(source_file, target_file)
                         extracted_files.append(target_file)
@@ -9316,6 +9941,8 @@ class DeltaHubApp(QWidget):
                 'chapter_folder': chapter_folder,
                 'use_custom_exe': use_custom_exe
             }
+            # Записываем в манифест для восстановления после сбоев
+            self._update_session_manifest(direct_launch=self._direct_launch_cleanup_info)
 
             return {'target': target_exe, 'cwd': chapter_folder, 'type': 'subprocess'}
 
@@ -9364,6 +9991,24 @@ class DeltaHubApp(QWidget):
                 except Exception as e:
                     pass
 
+            # Пытаемся удалить созданные пустые директории (в обратном порядке вложенности)
+            try:
+                dirs = []
+                if hasattr(self, '_mod_dirs_to_cleanup') and self._mod_dirs_to_cleanup:
+                    dirs = sorted(set(self._mod_dirs_to_cleanup), key=lambda p: len(p.split(os.sep)), reverse=True)
+                else:
+                    data = self._load_session_manifest() or {}
+                    dirs = sorted(set(data.get('mod_dirs_to_cleanup', [])), key=lambda p: len(p.split(os.sep)), reverse=True)
+                for d in dirs:
+                    try:
+                        if os.path.isdir(d) and not os.listdir(d):
+                            os.rmdir(d)
+                    except Exception:
+                        pass
+                self._mod_dirs_to_cleanup = []
+            except Exception:
+                pass
+
             # Существующая логика для прямого запуска
             cleanup_info = getattr(self, '_direct_launch_cleanup_info', None)
             if cleanup_info:
@@ -9372,6 +10017,8 @@ class DeltaHubApp(QWidget):
                 self._direct_launch_cleanup_info = None
 
             self.update_status_signal.emit(tr("status.files_restored"), UI_COLORS["status_success"])
+            # Удаляем файл-манифест после успешного восстановления
+            self._clear_session_manifest()
 
         except Exception as e:
             self.update_status_signal.emit(tr("errors.files_restore_error", error=str(e)), UI_COLORS["status_error"])
@@ -9616,10 +10263,13 @@ class DeltaHubApp(QWidget):
         result = msg_box.exec()
 
         if msg_box.clickedButton() == restart_button:
-            # Перезапускаем лаунчер
-            import subprocess
-            import sys
-            subprocess.Popen([sys.executable] + sys.argv)
+            # Перезапускаем лаунчер (надежно для собранной версии)
+            try:
+                from PyQt6.QtCore import QProcess
+                QProcess.startDetached(sys.executable, sys.argv[1:])
+            except Exception:
+                import subprocess
+                subprocess.Popen([sys.executable] + sys.argv)
             QApplication.quit()
 
 
@@ -9941,6 +10591,10 @@ class DeltaHubApp(QWidget):
         # Открываем диалог создания мода
         editor = ModEditorDialog(self, is_creating=True, is_public=public)
         editor.exec()
+        try:
+            self.activateWindow(); self.raise_(); self.setFocus()
+        except Exception:
+            pass
 
     def _edit_public_mod(self, parent_dialog):
         """Редактирует публичный мод."""
@@ -9998,8 +10652,21 @@ class DeltaHubApp(QWidget):
             return
 
         if found_in_pending:
-            QMessageBox.warning(self, tr("dialogs.mod_on_moderation"),
-                              tr("dialogs.mod_on_moderation_message"))
+            # Show dialog with option to withdraw submission
+            msg_box = QMessageBox(self)
+            msg_box.setWindowTitle(tr("dialogs.mod_on_moderation"))
+            msg_box.setText(tr("dialogs.mod_on_moderation_message"))
+            withdraw_btn = msg_box.addButton(tr("buttons.withdraw_request"), QMessageBox.ButtonRole.DestructiveRole)
+            ok_btn = msg_box.addButton(tr("buttons.ok"), QMessageBox.ButtonRole.AcceptRole)
+            msg_box.setDefaultButton(ok_btn)
+            msg_box.exec()
+            if msg_box.clickedButton() == withdraw_btn:
+                try:
+                    from helpers import _fb_url, DATA_FIREBASE_URL as _DB_URL
+                    requests.delete(_fb_url(_DB_URL, f"pending_mods/{hashed_key}"), timeout=10)
+                    QMessageBox.information(self, tr("dialogs.request_withdrawn"), tr("dialogs.withdrawal_success"))
+                except Exception as e:
+                    QMessageBox.critical(self, tr("errors.error"), tr("errors.request_revoke_failed", error=str(e)))
             return
 
         # Проверяем, есть ли заявка на изменения для этого мода
@@ -10037,6 +10704,10 @@ class DeltaHubApp(QWidget):
         # Открываем редактор с данными мода
         editor = ModEditorDialog(self, is_creating=False, is_public=True, mod_data=mod_data)
         editor.exec()
+        try:
+            self.activateWindow(); self.raise_(); self.setFocus()
+        except Exception:
+            pass
 
     def _edit_local_mod(self, parent_dialog):
         """Редактирует локальный мод."""
@@ -10098,28 +10769,11 @@ class DeltaHubApp(QWidget):
 
         editor = ModEditorDialog(self, is_creating=False, is_public=False, mod_data=mod_data)
         editor.exec()
+        try:
+            self.activateWindow(); self.raise_(); self.setFocus()
+        except Exception:
+            pass
 
-    def _get_composite_version_for_chapter(self, mod: ModInfo, chapter_id: int) -> Optional[str]:
-        """Создает составную строку версии для файлов мода в конкретной главе.
-        Формат: 'data:1.0.1|key1:1.0.0|key2:1.0.2' для надежной привязки к файлам."""
-        if chapter_id == -1: # Демо
-            return mod.demo_version
-
-        chapter_data = mod.get_chapter_data(chapter_id)
-
-        if not chapter_data:
-
-            return None
-
-        version_parts = []
-
-        if chapter_data.data_win_version:
-            version_parts.append(f"data:{chapter_data.data_win_version}")
-
-        for extra_file in sorted(chapter_data.extra_files, key=lambda ef: ef.key):
-            version_parts.append(f"{extra_file.key}:{extra_file.version}")
-
-        return "|".join(version_parts) if version_parts else None
 
     def _get_mod_status_for_chapter(self, mod: ModInfo, chapter_id: int) -> str:
         if mod.key.startswith("local_"):
@@ -10128,33 +10782,51 @@ class DeltaHubApp(QWidget):
         if not os.path.exists(self.mods_dir):
             return "install"
 
+        # Собираем удалённые версии по главе
+        def _collect_remote_versions(m: ModInfo, ch_id: int) -> dict:
+            if ch_id == -1:
+                return {'demo': m.demo_version} if (m.is_valid_for_demo() and m.demo_version) else {}
+            ch = m.get_chapter_data(ch_id)
+            if not ch:
+                return {}
+            d = {}
+            if ch.data_win_version:
+                d['data'] = ch.data_win_version
+            for ef in ch.extra_files:
+                d[ef.key] = ef.version
+            return d
+
+        remote_versions = _collect_remote_versions(mod, chapter_id)
+        if not remote_versions:
+            return "n/a"
+
         for mod_folder in os.listdir(self.mods_dir):
             mod_cache_dir = os.path.join(self.mods_dir, mod_folder)
             config_path = os.path.join(mod_cache_dir, "config.json")
-
             if not os.path.isfile(config_path):
                 continue
-
             try:
                 config_data = self._read_json(config_path)
                 if config_data.get("mod_key") == mod.key:
-                    remote_version = self._get_composite_version_for_chapter(mod, chapter_id)
-                    if not remote_version:
-                        return "n/a"
-
-                    local_chapters = config_data.get("chapters", {})
-                    local_chapter_data = local_chapters.get(str(chapter_id), {})
-                    local_chapter_version = local_chapter_data.get("composite_version") if isinstance(local_chapter_data, dict) else None
-
-
-
-                    if remote_version == local_chapter_version:
-                        return "ready"
-                    elif local_chapter_version:
-                        return "update"
-                    else:
+                    local_versions = (config_data.get("chapters", {})
+                                      .get(str(chapter_id), {})
+                                      .get("versions", {})) or {}
+                    if not local_versions:
                         return "install"
-            except:
+                    # Сравниваем покомпонентно
+                    # Если есть локальный компонент, которого нет на сервере — требуется обновление (удаление)
+                    for k in local_versions.keys():
+                        if k not in remote_versions:
+                            return "update"
+                    # Проверяем, что удалённые компоненты новее
+                    from helpers import version_sort_key
+                    for k, rv in remote_versions.items():
+                        lv = local_versions.get(k)
+                        if version_sort_key(rv) > version_sort_key(lv or "0.0.0"):
+                            return "update"
+                    return "ready"
+            except Exception as e:
+                logging.warning(f"Failed to parse local config {config_path}: {e}")
                 continue
 
         return "install"
@@ -10172,7 +10844,8 @@ class DeltaHubApp(QWidget):
                     stored_key = config_data.get("mod_key") or config_data.get("key")
                     if stored_key == mod_key:
                         return True
-                except:
+                except Exception as e:
+                    logging.warning(f"Failed to parse local config {config_path}: {e}")
                     continue
         return False
 

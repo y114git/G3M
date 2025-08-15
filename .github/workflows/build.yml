@@ -7,6 +7,26 @@ on:
         description: "Launcher version (X.X.X)"
         required: true
         type: string
+      linux_archive_name:
+        description: "Inner archive name for Linux (e.g. MyLinux.zip)"
+        required: false
+        type: string
+      macos_x64_archive_name:
+        description: "Inner archive name for macOS x86_64 (e.g. MyMac-x64.zip)"
+        required: false
+        type: string
+      macos_arm64_archive_name:
+        description: "Inner archive name for macOS arm64 (e.g. MyMac-arm64.zip)"
+        required: false
+        type: string
+      windows_bin_archive_name:
+        description: "Inner archive name for Windows binary (e.g. MyWin.zip)"
+        required: false
+        type: string
+      windows_setup_archive_name:
+        description: "Inner archive name for Windows installer (e.g. MyInstaller.zip)"
+        required: false
+        type: string
   push:
     tags: ["v*.*.*"]
 
@@ -28,12 +48,13 @@ jobs:
       FIREBASE_AUTH_EMAIL: ${{ secrets.FIREBASE_AUTH_EMAIL }}
       FIREBASE_AUTH_PASS: ${{ secrets.FIREBASE_AUTH_PASS }}
       INTERNAL_SALT: ${{ secrets.INTERNAL_SALT }}
+      INNER_ARCHIVE_NAME: ${{ github.event_name == 'workflow_dispatch' && inputs.linux_archive_name || format('DELTAHUB-Linux-{0}.zip', env.RELEASE_VERSION) }}
     steps:
       - uses: actions/checkout@v4
       - name: Install build deps
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential libglib2.0-dev libgl1-mesa-dev patchelf upx
+          sudo apt-get install -y build-essential libglib2.0-dev libgl1-mesa-dev patchelf upx zip
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -66,6 +87,9 @@ jobs:
           pyinstaller -y DELTAHUB.spec
           strip dist/DELTAHUB || true
           upx -9 dist/DELTAHUB || true
+      - name: Create inner archive (zip)
+        run: |
+          zip -j "${{ env.INNER_ARCHIVE_NAME }}" dist/DELTAHUB
       - name: Cleanup secrets
         if: always()
         run: |
@@ -74,7 +98,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: DELTAHUB-Linux
-          path: dist/DELTAHUB
+          path: "${{ env.INNER_ARCHIVE_NAME }}"
 
   macos-x64:
     name: macOS · x86_64 (spec)
@@ -85,6 +109,7 @@ jobs:
       FIREBASE_AUTH_EMAIL: ${{ secrets.FIREBASE_AUTH_EMAIL }}
       FIREBASE_AUTH_PASS: ${{ secrets.FIREBASE_AUTH_PASS }}
       INTERNAL_SALT: ${{ secrets.INTERNAL_SALT }}
+      INNER_ARCHIVE_NAME: ${{ github.event_name == 'workflow_dispatch' && inputs.macos_x64_archive_name || format('DELTAHUB-macOS-x86_64-{0}.zip', env.RELEASE_VERSION) }}
     steps:
       - uses: actions/checkout@v4
       - name: Extra tools
@@ -125,13 +150,13 @@ jobs:
         if: always()
         run: |
           rm -f secrets_embed.py || true
-      - name: Zip .app
+      - name: Zip .app (inner archive)
         run: |
-          ditto -c -k --sequesterRsrc --keepParent "dist/DELTAHUB.app" "DELTAHUB-macOS-x86_64-${{ env.RELEASE_VERSION }}.zip"
+          ditto -c -k --sequesterRsrc --keepParent "dist/DELTAHUB.app" "${{ env.INNER_ARCHIVE_NAME }}"
       - uses: actions/upload-artifact@v4
         with:
           name: DELTAHUB-macOS-x86_64
-          path: "DELTAHUB-macOS-x86_64-*.zip"
+          path: "${{ env.INNER_ARCHIVE_NAME }}"
 
   macos-arm64:
     name: macOS · arm64 (spec)
@@ -142,6 +167,7 @@ jobs:
       FIREBASE_AUTH_EMAIL: ${{ secrets.FIREBASE_AUTH_EMAIL }}
       FIREBASE_AUTH_PASS: ${{ secrets.FIREBASE_AUTH_PASS }}
       INTERNAL_SALT: ${{ secrets.INTERNAL_SALT }}
+      INNER_ARCHIVE_NAME: ${{ github.event_name == 'workflow_dispatch' && inputs.macos_arm64_archive_name || format('DELTAHUB-macOS-arm64-{0}.zip', env.RELEASE_VERSION) }}
     steps:
       - uses: actions/checkout@v4
       - name: Extra tools
@@ -182,13 +208,13 @@ jobs:
         if: always()
         run: |
           rm -f secrets_embed.py || true
-      - name: Zip .app
+      - name: Zip .app (inner archive)
         run: |
-          ditto -c -k --sequesterRsrc --keepParent "dist/DELTAHUB.app" "DELTAHUB-macOS-arm64-${{ env.RELEASE_VERSION }}.zip"
+          ditto -c -k --sequesterRsrc --keepParent "dist/DELTAHUB.app" "${{ env.INNER_ARCHIVE_NAME }}"
       - uses: actions/upload-artifact@v4
         with:
           name: DELTAHUB-macOS-arm64
-          path: "DELTAHUB-macOS-arm64-*.zip"
+          path: "${{ env.INNER_ARCHIVE_NAME }}"
 
   windows:
     name: Windows · exe (spec + Inno)
@@ -199,6 +225,8 @@ jobs:
       FIREBASE_AUTH_EMAIL: ${{ secrets.FIREBASE_AUTH_EMAIL }}
       FIREBASE_AUTH_PASS: ${{ secrets.FIREBASE_AUTH_PASS }}
       INTERNAL_SALT: ${{ secrets.INTERNAL_SALT }}
+      BIN_ARCHIVE_NAME: ${{ github.event_name == 'workflow_dispatch' && inputs.windows_bin_archive_name || format('DELTAHUB-Windows-{0}.zip', env.RELEASE_VERSION) }}
+      SETUP_ARCHIVE_NAME: ${{ github.event_name == 'workflow_dispatch' && inputs.windows_setup_archive_name || format('DELTAHUB-Windows-Setup-{0}.zip', env.RELEASE_VERSION) }}
 
     steps:
       - uses: actions/checkout@v4
@@ -248,10 +276,14 @@ jobs:
       - name: Build via spec
         run: |
           pyinstaller -y DELTAHUB.spec
+      - name: Create inner archive for Windows binary (zip)
+        shell: powershell
+        run: |
+          Compress-Archive -Path "dist/DELTAHUB.exe" -DestinationPath "$env:BIN_ARCHIVE_NAME" -Force
       - uses: actions/upload-artifact@v4
         with:
           name: DELTAHUB-Windows
-          path: dist/DELTAHUB.exe
+          path: "${{ env.BIN_ARCHIVE_NAME }}"
       # Inno Setup packaging
       - name: Install Inno Setup
         shell: powershell
@@ -297,10 +329,14 @@ jobs:
           if (-not $exe) { Write-Error "Installer not found"; exit 1 }
           Copy-Item $exe.FullName "DELTAHUB-Windows-Setup-$ver.exe" -Force
           Write-Host "Collected installer: DELTAHUB-Windows-Setup-$ver.exe"
+      - name: Create inner archive for Windows installer (zip)
+        shell: powershell
+        run: |
+          Compress-Archive -Path "DELTAHUB-Windows-Setup-$env:RELEASE_VERSION.exe" -DestinationPath "$env:SETUP_ARCHIVE_NAME" -Force
       - uses: actions/upload-artifact@v4
         with:
           name: DELTAHUB-Windows-Setup
-          path: "DELTAHUB-Windows-Setup-${{ env.RELEASE_VERSION }}.exe"
+          path: "${{ env.SETUP_ARCHIVE_NAME }}"
 
   release:
     name: Create GitHub Release and upload assets
@@ -335,7 +371,20 @@ jobs:
       - name: List gathered assets
         run: |
           find ./release_assets -type f -maxdepth 6 -print
-      - name: Create GitHub Release and upload assets
+      - name: Remove existing assets if release already exists
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "${{ env.RELEASE_VERSION }}" >/dev/null 2>&1; then
+            echo "Release exists. Deleting all existing assets..."
+            for a in $(gh release view "${{ env.RELEASE_VERSION }}" --json assets --jq '.assets[].name'); do
+              echo "Deleting asset: $a"
+              gh release delete-asset "${{ env.RELEASE_VERSION }}" "$a" -y || true
+            done
+          else
+            echo "Release does not exist yet. It will be created."
+          fi
+      - name: Create/Update GitHub Release and upload inner archives
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.RELEASE_VERSION }}
@@ -346,8 +395,6 @@ jobs:
           make_latest: true
           fail_on_unmatched_files: true
           files: |
-            release_assets/DELTAHUB-Linux/DELTAHUB
-            release_assets/DELTAHUB-macOS-x86_64/DELTAHUB-macOS-x86_64-${{ env.RELEASE_VERSION }}.zip
-            release_assets/DELTAHUB-macOS-arm64/DELTAHUB-macOS-arm64-${{ env.RELEASE_VERSION }}.zip
-            release_assets/DELTAHUB-Windows/DELTAHUB.exe
-            release_assets/DELTAHUB-Windows-Setup/DELTAHUB-Windows-Setup-${{ env.RELEASE_VERSION }}.exe
+            release_assets/**/*.zip
+        env:
+          GITHUB_TOKEN: ${{ github.token }}

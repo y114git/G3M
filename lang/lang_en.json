@@ -158,7 +158,7 @@
     "launching_game": "Launching game...",
     "leave_empty_for_default_icon": "Leave empty for default icon",
     "library_tab": "Library",
-    "license_desc": "You must own a licensed copy of the game to use this mod.",
+    "license_desc": "The mod works only with the original files of the game (Always check what version you have and what mod it works on).",
     "license_label": "License",
     "load_error": "Load\\nError",
     "loading": "Loading...",
@@ -382,14 +382,14 @@
     "tag_demo": "DEMO",
     "tag_gameplay": "Gameplay",
     "tag_other": "Other",
-    "tag_translation": "Translation/Text"
+    "tag_translation": "Translation"
   },
   "tags": {
     "customization": "Customization",
     "demo": "DEMO",
     "gameplay": "Gameplay",
     "other": "Other",
-    "translation": "DEMO",
+    "translation": "Translation",
     "translation_text": "Translation/Text"
   },
   "buttons": {
@@ -828,9 +828,12 @@
     "copy_background_music_failed": "Failed to copy background music file",
     "remove_background_music_failed": "Failed to remove background music file",
     "copy_startup_sound_failed": "Failed to copy startup sound file",
-    "remove_startup_sound_failed": "Failed to remove startup sound file"
+    "remove_startup_sound_failed": "Failed to remove startup sound file",
+    "icon_url_required": "Icon URL is required.",
+    "description_md_txt_required": "Full description must be a direct link to a .md or .txt file."
   },
   "status": {
+    "ready": "Ready",
     "applying_mod": "Applying mod: {mod_name} ({mod_type})...",
     "autodetecting_path": "Game path not found or outdated. Auto-detecting...",
     "cant_update_while_running": "Cannot update while game is running.",
@@ -916,7 +919,13 @@
     "updating_mod": "Updating mod {mod_name}...",
     "version_current": "Mod version is up to date.",
     "xdelta_patch_applied": "xdelta patch applied successfully: {patch_name}",
-    "xdelta_patch_applied_alt": "xdelta patch applied successfully with alt format: {patch_name}"
+    "xdelta_patch_applied_alt": "xdelta patch applied successfully with alt format: {patch_name}",
+    "icon_url_required": "Icon URL is required.",
+    "description_md_txt_required": "Full description must be a direct link to a .md or .txt file.",
+    "request_revoke_failed": "Failed to withdraw request: {error}",
+    "icon_invalid": "Icon URL is invalid.",
+    "not_a_file_response": "URL does not return a file.",
+    "not_a_valid_file": "not a valid file"
   },
   "startup": {
     "launch_error": "Launch error: {error}",

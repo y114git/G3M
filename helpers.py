@@ -7,6 +7,7 @@ from PyQt6.QtGui import QImage
 from PyQt6.QtWidgets import QMessageBox
 from localization import tr
 
+
 LAUNCHER_VERSION = "2.0.0"
 
 APP_ID = "deltahub.y.114"
@@ -219,23 +220,19 @@ def _extract_archive(tmp_path, target_dir, fname, is_game_installation=False):
 
 def _cleanup_extracted_archive(target_dir: str, is_game_installation: bool = False):
     if is_game_installation:
+        # Чистим только временные директории при установке игры
         cleanup_dir_pattern = re.compile(r'^chapter\d+_(windows|mac)$', re.I)
         for root, dirs, files in os.walk(target_dir, topdown=False):
             for dir_name in dirs[:]:
                 if cleanup_dir_pattern.match(dir_name):
-                    try: shutil.rmtree(os.path.join(root, dir_name)); dirs.remove(dir_name)
-                    except OSError: pass
+                    try:
+                        shutil.rmtree(os.path.join(root, dir_name))
+                        dirs.remove(dir_name)
+                    except OSError:
+                        pass
     else:
-        cleanup_files, cleanup_dir_pattern = ('data.win', 'game.ios'), re.compile(r'^chapter\d+_(windows|mac)$', re.I)
-        for root, dirs, files in os.walk(target_dir, topdown=False):
-            for file in files:
-                if file.lower() in cleanup_files:
-                    try: os.remove(os.path.join(root, file))
-                    except OSError: pass
-            for dir_name in dirs[:]:
-                if cleanup_dir_pattern.match(dir_name):
-                    try: shutil.rmtree(os.path.join(root, dir_name)); dirs.remove(dir_name)
-                    except OSError: pass
+        # Ничего не удаляем в мод-папках — модовые файлы должны оставаться нетронутыми
+        return
 
 class GameMonitorThread(QThread):
     finished = pyqtSignal(bool)
@@ -415,14 +412,17 @@ class FetchTranslationsThread(QThread):
 
 class InstallTranslationsThread(QThread):
     progress, status, finished = pyqtSignal(int), pyqtSignal(str, str), pyqtSignal(bool)
-    def __init__(self, main_window, install_tasks): super().__init__(main_window); self.main_window, self.install_tasks, self._cancelled, self._installed_dirs = main_window, install_tasks, False, []
+    def __init__(self, main_window, install_tasks):
+        super().__init__(main_window)
+        self.main_window = main_window
+        self.install_tasks = install_tasks
+        self._cancelled = False
+        self._installed_dirs = []
+        self.temp_root = None  # Временная папка для безопасной установки
     def cancel(self):
-        self._cancelled = True; import shutil
-        for dir_path in self._installed_dirs:
-            try:
-                if os.path.exists(dir_path): shutil.rmtree(dir_path)
-            except: pass
-        self.status.emit(tr("status.operation_cancelled"), UI_COLORS["status_error"]); self.finished.emit(False)
+        # Только устанавливаем флаг отмены и уведомляем UI. Очистку выполняет основной поток после завершения.
+        self._cancelled = True
+        self.status.emit(tr("status.operation_cancelled"), UI_COLORS["status_error"]) 
 
     def _find_existing_mod_folder(self, mod_key: str) -> str:
         if not os.path.exists(self.main_window.mods_dir):
@@ -439,21 +439,35 @@ class InstallTranslationsThread(QThread):
                     continue
         return ""
 
-    def _parse_composite_version(self, composite_version: str) -> dict:
-        if not composite_version:
-            return {}
-
-        result = {}
-        parts = composite_version.split('|')
-
-        for part in parts:
-            if ':' in part:
-                key, version = part.split(':', 1)
-                result[key] = version
-
-        return result
+    def _collect_remote_versions_for_chapter(self, mod: ModInfo, chapter_id: int) -> dict:
+        """Формирует словарь версий для удалённых компонентов главы мода.
+        Структура: {'data': '1.0.1', 'key1': '1.0.0', ...}
+        """
+        versions: dict[str, str] = {}
+        if chapter_id == -1:
+            # Для демо-версии используем отдельный ключ
+            if mod.is_valid_for_demo() and mod.demo_version:
+                versions['demo'] = mod.demo_version
+            return versions
+        chapter_data = mod.get_chapter_data(chapter_id)
+        if not chapter_data:
+            return versions
+        if chapter_data.data_win_version:
+            versions['data'] = chapter_data.data_win_version
+        for extra_file in chapter_data.extra_files:
+            if extra_file and extra_file.key and extra_file.version:
+                versions[extra_file.key] = extra_file.version
+        return versions
 
     def _should_update_component(self, mod: ModInfo, chapter_id: int, existing_folder: str) -> dict:
+        """
+        Возвращает словарь компонентов, требующих обновления/удаления.
+        Ключи — имена компонентов ('data' и ключи extra), значения — dict с полями:
+          - url (если требуется скачивание)
+          - local_version / remote_version
+          - delete: True (если компонент удалён на сервере)
+          - is_xdelta / type_changed (для 'data' при смене типа установки)
+        """
         if not existing_folder:
             return {}
 
@@ -463,49 +477,62 @@ class InstallTranslationsThread(QThread):
 
         try:
             config_data = self.main_window._read_json(config_path)
-            local_chapters = config_data.get("chapters", {})
-            local_chapter_data = local_chapters.get(str(chapter_id), {})
-            local_composite = local_chapter_data.get("composite_version", "")
+            # Читаем локальные версии из структурированного словаря
+            local_versions = (config_data.get("chapters", {})
+                              .get(str(chapter_id), {})
+                              .get("versions", {})) or {}
 
-            local_versions = self._parse_composite_version(local_composite)
-            remote_composite = self.main_window._get_composite_version_for_chapter(mod, chapter_id)
-            remote_versions = self._parse_composite_version(remote_composite)
+            # Собираем удалённые версии
+            remote_versions = self._collect_remote_versions_for_chapter(mod, chapter_id)
 
-            components_to_update = {}
-            chapter_data = mod.get_chapter_data(chapter_id)
+            components_to_update: dict[str, dict] = {}
+            chapter_data = mod.get_chapter_data(chapter_id) if chapter_id != -1 else None
 
-            if chapter_data:
+            # Обработка data (учитываем возможный xdelta)
+            if chapter_data and chapter_data.data_file_url and remote_versions.get('data'):
                 is_xdelta_mod = getattr(mod, 'is_piracy_protected', False)
+                local_is_xdelta = False
+                try:
+                    local_is_xdelta = any(
+                        f.lower().endswith('.xdelta')
+                        for f in os.listdir(os.path.join(self.main_window.mods_dir, existing_folder))
+                        if os.path.isfile(os.path.join(self.main_window.mods_dir, existing_folder, f))
+                    )
+                except Exception:
+                    local_is_xdelta = False
+                type_changed = (is_xdelta_mod != local_is_xdelta)
 
-                remote_data_version = remote_versions.get('data')
-                local_data_version = local_versions.get('data')
-
-                local_is_xdelta = any(f.endswith('.xdelta') for f in os.listdir(os.path.join(self.main_window.mods_dir, existing_folder)) if os.path.isfile(os.path.join(self.main_window.mods_dir, existing_folder, f)))
-
-                if is_xdelta_mod != local_is_xdelta:
-                    mod_folder_path = os.path.join(self.main_window.mods_dir, existing_folder)
-                    self._remove_data_files_from_mod_folder(mod_folder_path)
-
-                if remote_data_version and remote_data_version != local_data_version:
+                local_data_v = local_versions.get('data')
+                remote_data_v = remote_versions.get('data')
+                # Сравнение по ключу сортировки версий
+                if (remote_data_v and
+                    (type_changed or version_sort_key(remote_data_v) > version_sort_key(local_data_v or "0.0.0"))):
                     components_to_update['data'] = {
                         'url': chapter_data.data_file_url,
-                        'local_version': local_data_version,
-                        'remote_version': remote_data_version,
-                        'is_xdelta': is_xdelta_mod
+                        'local_version': local_data_v,
+                        'remote_version': remote_data_v,
+                        'is_xdelta': is_xdelta_mod,
+                        'type_changed': type_changed
                     }
 
+            # Обработка extra-файлов (обновления)
+            if chapter_data:
                 for extra_file in chapter_data.extra_files:
-                    remote_version = remote_versions.get(extra_file.key)
-                    local_version = local_versions.get(extra_file.key)
-                    if remote_version and remote_version != local_version:
+                    rv = remote_versions.get(extra_file.key)
+                    lv = local_versions.get(extra_file.key)
+                    if rv and version_sort_key(rv) > version_sort_key(lv or "0.0.0"):
                         components_to_update[extra_file.key] = {
                             'url': extra_file.url,
-                            'local_version': local_version,
-                            'remote_version': remote_version
+                            'local_version': lv,
+                            'remote_version': rv
                         }
 
-            return components_to_update
+                # Удалённые на сервере extra-файлы — помечаем на удаление
+                remote_extra_keys = {ef.key for ef in chapter_data.extra_files}
+                for missing_key in [k for k in local_versions.keys() if k != 'data' and k not in remote_extra_keys]:
+                    components_to_update[missing_key] = {'delete': True}
 
+            return components_to_update
         except Exception:
             return {}
 
@@ -516,8 +543,7 @@ class InstallTranslationsThread(QThread):
                     file_lower = file.lower()
                     if (file_lower.endswith('.win') and 'data' in file_lower) or \
                        (file_lower.endswith('.ios') and 'game' in file_lower) or \
-                       file_lower in ('data.win', 'data.ios', 'game.ios') or \
-                       file_lower.endswith('.xdelta'):
+                       file_lower in ('data.win', 'data.ios', 'game.ios'):
                         file_path = os.path.join(root, file)
                         try:
                             os.remove(file_path)
@@ -527,8 +553,10 @@ class InstallTranslationsThread(QThread):
             print(f"Error removing data files from {mod_folder_path}: {e}")
 
     def run(self):
-        import os, shutil
+        import os, shutil, tempfile
         try:
+            # Готовим временную директорию для безопасной установки
+            self.temp_root = tempfile.mkdtemp(prefix="deltahub-install-")
             tasks = []
             total_bytes = 0
             mod_folders = {}
@@ -556,8 +584,24 @@ class InstallTranslationsThread(QThread):
                             tasks.append({'mod': mod, 'url': extra_file.url, 'chapter_id': chapter_id, 'component': extra_file.key, 'is_xdelta': False})
                     else:
                         for component, info in components_to_update.items():
+                            if info.get('delete'):
+                                tasks.append({'mod': mod, 'chapter_id': chapter_id, 'component': component, 'delete': True})
+                                continue
                             is_xdelta = info.get('is_xdelta', False) if component == 'data' else False
-                            tasks.append({'mod': mod, 'url': info['url'], 'chapter_id': chapter_id, 'component': component, 'is_xdelta': is_xdelta})
+                            t = {'mod': mod, 'url': info['url'], 'chapter_id': chapter_id, 'component': component, 'is_xdelta': is_xdelta}
+                            if component == 'data' and info.get('type_changed'):
+                                t['type_changed'] = True
+                            tasks.append(t)
+                    # Добавляем задачу очистки устаревших архивов (удаленные extra)
+                    if chapter_data:
+                        from urllib.parse import urlparse, unquote
+                        allowed = set()
+                        for extra_file in chapter_data.extra_files:
+                            p = urlparse(extra_file.url).path
+                            fn = unquote(os.path.basename(p)) if p else ''
+                            if fn:
+                                allowed.add(fn.lower())
+                        tasks.append({'mod': mod, 'chapter_id': chapter_id, 'cleanup_archives': True, 'allowed': list(allowed)})
 
             if not tasks:
                 self.finished.emit(True)
@@ -575,9 +619,12 @@ class InstallTranslationsThread(QThread):
             session.mount("https://", adapter)
 
 
+            # Составляем список реальных задач загрузки (с URL)
+            download_tasks = [t for t in tasks if t.get('url')]
+
             file_sizes_cache = {}
-            for task in tasks:
-                u = task['url']
+            for task in download_tasks:
+                u = task.get('url')
                 try:
                     h = session.head(u, allow_redirects=True, timeout=15)
                     content_length = int(h.headers.get("content-length", 0))
@@ -593,60 +640,128 @@ class InstallTranslationsThread(QThread):
                 return
 
             if self._cancelled:
+                self.finished.emit(False)
                 return
 
-            self.status.emit(tr("status.preparing_download"), UI_COLORS["status_warning"])
+            self.status.emit(tr("status.preparing_download"), UI_COLORS["status_warning"]) 
 
             if self._cancelled:
+                self.finished.emit(False)
                 return
 
             downloaded_ref = [0]
             done_files = 0
             installed_mods = {}
 
+            total_items = len(download_tasks)
+            current_index = 0
             for task in tasks:
                 if self._cancelled:
+                    self.finished.emit(False)
                     return
 
-                mod, url, chapter_id = task['mod'], task['url'], task['chapter_id']
-                file_size_mb = tr("status.unknown_size")
-                file_size_bytes = file_sizes_cache.get(url, 0)
-                if file_size_bytes > 0:
-                    size_mb = file_size_bytes / (1024 * 1024)
-                    file_size_mb = tr("status.unknown_size") if size_mb < 0.05 else f"{size_mb:.1f} MB"
-
-                self.status.emit(tr("status.downloading").format(mod.name, file_size_mb), UI_COLORS["status_warning"])
+                mod = task.get('mod')
+                chapter_id = task.get('chapter_id')
                 mod_folder_name = mod_folders[mod.key]
-                mod_dir = os.path.join(self.main_window.mods_dir, mod_folder_name)
-                if chapter_id == -1:
-                    cache_dir = os.path.join(mod_dir, "demo")
+                # Пишем во временную папку; позже перенесем в финальную mods_dir
+                mod_dir = os.path.join(self.temp_root, mod_folder_name)
+                cache_dir = os.path.join(mod_dir, "demo" if chapter_id == -1 else f"chapter_{chapter_id}")
+
+                # Очистка устаревших архивов (удаленные extra)
+                if task.get('cleanup_archives'):
+                    try:
+                        allowed = set((task.get('allowed') or []))
+                        if os.path.exists(cache_dir):
+                            for fname in os.listdir(cache_dir):
+                                fl = fname.lower()
+                                if fl.endswith(('.zip', '.rar', '.7z')) and fl not in allowed:
+                                    try:
+                                        os.remove(os.path.join(cache_dir, fname))
+                                    except Exception:
+                                        pass
+                    except Exception: pass
+                    continue
+
+                # Удаление компонента (extra, отсутствующий на сервере)
+                if task.get('delete'):
+                    try:
+                        if os.path.exists(cache_dir):
+                            for fname in os.listdir(cache_dir):
+                                fl = fname.lower()
+                                if fl.endswith(('.zip', '.rar', '.7z')):
+                                    # Удаление конкретных лишних архивов уже обработано в cleanup_archives
+                                    pass
+                    except Exception:
+                        pass
+                    continue
+
+                url = task.get('url')
+                # Для задач без URL (удаление/очистка) не увеличиваем счётчик и не показываем прогресс как скачивание
+                if not url:
+                    # Выполняем нефайловые задачи (cleanup/delete) как и раньше
+                    file_size_mb = tr("status.unknown_size")
                 else:
-                    cache_dir = os.path.join(mod_dir, f"chapter_{chapter_id}")
+                    current_index += 1
+                    file_size_mb = tr("status.unknown_size")
+                    file_size_bytes = file_sizes_cache.get(url, 0)
+                    if file_size_bytes > 0:
+                        size_mb = file_size_bytes / (1024 * 1024)
+                        file_size_mb = tr("status.unknown_size") if size_mb < 0.05 else f"{size_mb:.1f} MB"
+
+                    # Показываем только информацию о компоненте
+                    self.status.emit(f"{mod.name} {current_index}/{total_items} ({file_size_mb})", UI_COLORS["status_warning"]) 
 
                 self._installed_dirs.append(cache_dir)
                 chapter_data = mod.get_chapter_data(chapter_id)
-                is_data_file = chapter_data and chapter_data.data_file_url == url
+                is_data_file = chapter_data and url and (chapter_data.data_file_url == url)
                 is_xdelta = task.get('is_xdelta', False)
 
-                if is_data_file:
-                    if is_xdelta:
-                        self._download_xdelta_file(
-                            url, cache_dir, self.progress, total_bytes, downloaded_ref, session)
+                # Если меняется тип data↔xdelta — удаляем противоположный тип перед скачиванием
+                if is_data_file and task.get('type_changed'):
+                    try:
+                        if is_xdelta:
+                            # Переход на xdelta — удалить data.win/game.ios
+                            if os.path.exists(cache_dir):
+                                for fname in os.listdir(cache_dir):
+                                    fl = fname.lower()
+                                    if fl in ('data.win','game.ios') or fl.endswith('.win') or fl.endswith('.ios'):
+                                        try:
+                                            os.remove(os.path.join(cache_dir, fname))
+                                        except Exception:
+                                            pass
+                        else:
+                            # Переход на data — удалить .xdelta
+                            if os.path.exists(cache_dir):
+                                for fname in os.listdir(cache_dir):
+                                    if fname.lower().endswith('.xdelta'):
+                                        try:
+                                            os.remove(os.path.join(cache_dir, fname))
+                                        except Exception:
+                                            pass
+                    except Exception: pass
+
+                try:
+                    if is_data_file:
+                        if is_xdelta:
+                            self._download_xdelta_file(
+                                url, cache_dir, self.progress, total_bytes, downloaded_ref, session)
+                        else:
+                            download_and_extract_archive(
+                                url, cache_dir, self.progress, total_bytes, downloaded_ref, session)
                     else:
-                        download_and_extract_archive(
+                        self._download_archive_file(
                             url, cache_dir, self.progress, total_bytes, downloaded_ref, session)
-                else:
-                    self._download_archive_file(
-                        url, cache_dir, self.progress, total_bytes, downloaded_ref, session)
+                except Exception:
+                    raise
 
 
                 if mod.key not in installed_mods:
                     installed_mods[mod.key] = {'mod': mod, 'chapters': set()}
                 installed_mods[mod.key]['chapters'].add(chapter_id)
 
-                if total_bytes == 0:
+                if url and total_bytes == 0:
                     done_files += 1
-                    self.progress.emit(int(done_files / len(tasks) * 100))
+                    self.progress.emit(int(done_files / max(1, len(download_tasks)) * 100))
 
 
             for mod_key, mod_data in installed_mods.items():
@@ -657,12 +772,19 @@ class InstallTranslationsThread(QThread):
                 chapters_data = {}
                 for chapter_id in mod_data['chapters']:
                     chapter_data = mod.get_chapter_data(chapter_id) if chapter_id != -1 else None
+                    versions_dict = {}
                     if chapter_data:
-                        composite_version = self.main_window._get_composite_version_for_chapter(mod, chapter_id)
-                        if composite_version:
-                            chapters_data[str(chapter_id)] = {"composite_version": composite_version}
+                        # Формируем словарь версий по компонентам
+                        if chapter_data.data_win_version:
+                            versions_dict['data'] = chapter_data.data_win_version
+                        for extra_file in chapter_data.extra_files:
+                            versions_dict[extra_file.key] = extra_file.version
                     elif chapter_id == -1 and mod.is_valid_for_demo():
-                        chapters_data[str(chapter_id)] = {"composite_version": mod.demo_version}
+                        # Для демо сохраняем версию как отдельный компонент
+                        if mod.demo_version:
+                            versions_dict['demo'] = mod.demo_version
+                    if versions_dict:
+                        chapters_data[str(chapter_id)] = {"versions": versions_dict}
 
                 config_data = {
                     "is_local_mod": False,
@@ -681,7 +803,40 @@ class InstallTranslationsThread(QThread):
                 self.main_window._write_json(config_path, config_data)
 
 
-            self._increment_downloads_for_installed_mods(installed_mods)
+                self._increment_downloads_for_installed_mods(installed_mods)
+
+                # Переносим из временной папки в финальную директорию модов
+                try:
+                    os.makedirs(self.main_window.mods_dir, exist_ok=True)
+                    for entry in os.listdir(self.temp_root or ""):
+                        src = os.path.join(self.temp_root, entry)
+                        dst = os.path.join(self.main_window.mods_dir, entry)
+                        if os.path.isdir(src):
+                            try:
+                                shutil.copytree(src, dst, dirs_exist_ok=True)
+                            except TypeError:
+                                # Python <3.8 fallback: merge manually
+                                if not os.path.exists(dst):
+                                    shutil.move(src, dst)
+                                else:
+                                    for root, dirs, files in os.walk(src):
+                                        rel = os.path.relpath(root, src)
+                                        target_root = os.path.join(dst, rel)
+                                        os.makedirs(target_root, exist_ok=True)
+                                        for d in dirs:
+                                            os.makedirs(os.path.join(target_root, d), exist_ok=True)
+                                        for f in files:
+                                            shutil.copy2(os.path.join(root, f), os.path.join(target_root, f))
+                        else:
+                            shutil.copy2(src, dst)
+                except Exception:
+                    pass
+                finally:
+                    try:
+                        if self.temp_root and os.path.isdir(self.temp_root):
+                            shutil.rmtree(self.temp_root, ignore_errors=True)
+                    except Exception:
+                        pass
 
             self.status.emit(tr("status.installation_complete"), UI_COLORS["status_success"])
             self.finished.emit(True)
@@ -696,6 +851,14 @@ class InstallTranslationsThread(QThread):
         except Exception as e:
             self.status.emit(tr("errors.installation_error").format(str(e)), UI_COLORS["status_error"])
             self.finished.emit(False)
+        finally:
+            # Если установка была отменена — не удаляем здесь temp_root, очистку выполнит основной поток
+            if not self._cancelled:
+                try:
+                    if self.temp_root and os.path.isdir(self.temp_root):
+                        shutil.rmtree(self.temp_root, ignore_errors=True)
+                except Exception:
+                    pass
 
     def _increment_downloads_for_installed_mods(self, installed_mods):
         try:
@@ -718,6 +881,10 @@ class InstallTranslationsThread(QThread):
                     try:
                         config_data = self.main_window._read_json(config_path)
                         if config_data.get("mod_key") == mod_key:
+                            # Разрешаем первый инкремент сразу, если не было пред. инкремента
+                            last_inc = config_data.get("last_download_increment", "")
+                            if not last_inc:
+                                return True
                             installed_date_str = config_data.get("installed_date", "")
                             if installed_date_str:
                                 installed_date = datetime.datetime.strptime(installed_date_str, '%Y-%m-%d %H:%M:%S')
@@ -738,7 +905,9 @@ class InstallTranslationsThread(QThread):
                     try:
                         config_data = self.main_window._read_json(config_path)
                         if config_data.get("mod_key") == mod_key:
-                            config_data["installed_date"] = time.strftime('%Y-%m-%d %H:%M:%S')
+                            now_str = time.strftime('%Y-%m-%d %H:%M:%S')
+                            config_data["installed_date"] = now_str
+                            config_data["last_download_increment"] = now_str
                             self.main_window._write_json(config_path, config_data)
                             return
                     except:
