@@ -213,7 +213,7 @@ jobs:
           $archiveName = "${{ github.event.inputs.archive_name_windows }}"
           if (-not $archiveName) { $archiveName = "DELTAHUB-Windows-${{ env.RELEASE_VERSION }}" }
           "archive_path=$($archiveName).zip" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-          
+
           $setupName = "${{ github.event.inputs.archive_name_windows_setup }}"
           if (-not $setupName) { $setupName = "DELTAHUB-Windows-Setup-${{ env.RELEASE_VERSION }}" }
           "setup_archive_path=$($setupName).zip" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
@@ -241,15 +241,23 @@ jobs:
         with:
           name: DELTAHUB-Windows
           path: ${{ steps.set_names.outputs.archive_path }}
-      
+
       # Inno Setup packaging
       - name: Install Inno Setup
         run: choco install innosetup -y
+      # ИЗМЕНЕНО: Заменяем проблемный шаг на этот
       - name: Inject version into setup.iss
         shell: powershell
         run: |
           $ver = $env:RELEASE_VERSION.TrimStart('v')
-          (Get-Content -Path setup.iss -Raw) -replace '(?m)^(#define\s+AppVersion\s+\").*?(\")$', "`$1$ver`$2" | Set-Content -Path setup.iss -Encoding utf8NoBOM
+          $content = Get-Content -Path setup.iss -Raw
+          $newContent = $content -replace '(?m)^(#define\s+AppVersion\s+\").*?(\")$', "`$1$ver`$2"
+
+          # Используем метод .NET для сохранения в UTF-8 без BOM
+          $utf8NoBomEncoding = New-Object System.Text.UTF8Encoding($false)
+          [System.IO.File]::WriteAllText("$pwd\setup.iss", $newContent, $utf8NoBomEncoding)
+
+          Write-Host "AppVersion successfully set to $ver in setup.iss"
       - name: Build installer (Inno Setup)
         shell: powershell
         run: |
@@ -274,8 +282,8 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: ./release_assets
-          merge-multiple: true 
-          
+          merge-multiple: true
+
       - name: List gathered assets
         run: find ./release_assets -type f -name "*.zip" -print
 
@@ -295,7 +303,7 @@ jobs:
               if (error.status === 404) return null;
               throw error;
             }
-      
+
       - name: Delete existing release assets if release exists
         if: steps.get_release.outputs.result != 'null'
         uses: actions/github-script@v7
