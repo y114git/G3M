@@ -1,5 +1,6 @@
-"""
 # DELTAHUB — Your Gateway to the World of Deltarune Mods
+
+_([Нажмите, чтобы прочитать русскую версию этого файла.](https://github.com/y114git/DELTAHUB/wiki/Modder's-Guide-(RU)))_
 
 [Telegram](https://t.me/y_maintg) • [Discord](https://discord.gg/gg4EvZpWKd)
 
@@ -82,4 +83,3 @@ It will do everything else for you.
 ## License
 
 Usage is governed by the terms of the license. See [LICENSE](https://www.google.com/search?q=file:///c:/DELTAHUB/LICENSE)
-"""
