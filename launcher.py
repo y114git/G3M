@@ -1,4 +1,4 @@
-import base64, json, os, platform, re, shutil, sys, tempfile, threading, time, uuid, ctypes, subprocess, webbrowser, rarfile, textwrap, argparse
+import base64, json, os, platform, re, shutil, sys, tempfile, threading, time, uuid, ctypes, subprocess, webbrowser, rarfile, textwrap, argparse, hashlib
 from typing import Callable, Optional, List
 from helpers import *
 from packaging import version as version_parser
@@ -3899,6 +3899,8 @@ class DeltaHubApp(QWidget):
         if direct_launch is not None:
             data["direct_launch"] = direct_launch
         self._write_session_manifest(data)
+
+
 
     def _clear_session_manifest(self):
         try:
@@ -9479,11 +9481,13 @@ class DeltaHubApp(QWidget):
                 mod_type_str = tr("ui.mod_type_local") if is_local else tr("ui.mod_type_public")
                 self.update_status_signal.emit(tr("status.applying_mod", mod_name=mod.name, mod_type=mod_type_str), UI_COLORS["status_warning"])
 
+
                 # --- ИСПРАВЛЕНИЕ: Унифицированная логика для ВСЕХ модов ---
                 # Теперь и xdelta, и обычные моды обрабатываются одинаково,
                 # применяясь только к той главе, для которой они были выбраны в интерфейсе.
 
                 if chapter_id in applied_chapters:
+    
                     continue
 
                 # Проверяем, является ли это xdelta модом (нужно для след. шага)
@@ -9492,6 +9496,7 @@ class DeltaHubApp(QWidget):
                 # Пропускаем главы без файлов (для обычных модов)
                 # Для xdelta модов эта проверка не нужна, т.к. наличие патча проверяется позже
                 if not is_xdelta_mod and not mod.get_chapter_data(chapter_id) and not is_local:
+
                     continue
                 
                 target_dir = self._get_target_dir(chapter_id)
@@ -9523,26 +9528,40 @@ class DeltaHubApp(QWidget):
         if mod_info and getattr(mod_info, 'is_piracy_protected', False):
             return True
 
-        # Для локальных модов ищем .xdelta файлы в соответствующей папке
+        # Для локальных модов ищем .xdelta файлы в папке конкретной главы
+        # ВАЖНО: не используем корневую папку как fallback для глав > 0, иначе патч меню попадет в главы
         if chapter_id is not None:
+            search_dir = None
             if chapter_id == -1:  # Демо
                 demo_dir = os.path.join(source_dir, "demo")
-                search_dir = demo_dir if os.path.isdir(demo_dir) else source_dir
+                if os.path.isdir(demo_dir):
+                    search_dir = demo_dir
+                else:
+                    # Для демо допускаем патч из корня мода
+                    search_dir = source_dir
             elif chapter_id == 0:  # Меню
                 menu_dir = os.path.join(source_dir, "chapter_0")
-                search_dir = menu_dir if os.path.isdir(menu_dir) else source_dir
-            else:  # Главы
+                if os.path.isdir(menu_dir):
+                    search_dir = menu_dir
+                else:
+                    # Для меню разрешаем искать патч в корне мода
+                    search_dir = source_dir
+            else:  # Главы 1-4
                 chapter_dir = os.path.join(source_dir, f"chapter_{chapter_id}")
-                search_dir = chapter_dir if os.path.isdir(chapter_dir) else source_dir
+                if os.path.isdir(chapter_dir):
+                    search_dir = chapter_dir
+            # Если специальной папки нет (и это не меню) — считаем, что для этой главы xdelta нет
+            if not search_dir:
+                return False
         else:
             search_dir = source_dir
 
-        # Ищем .xdelta файлы в папке
+        # Ищем .xdelta файлы в выбранной папке
         if os.path.exists(search_dir):
             for root, _, files in os.walk(search_dir):
                 for file in files:
                     if file.lower().endswith('.xdelta'):
-                        return True  # Любой .xdelta файл означает xdelta мод
+                        return True  # Наличие .xdelta файла означает xdelta мод только для этой главы
 
         return False
 
@@ -9564,7 +9583,8 @@ class DeltaHubApp(QWidget):
         # Определяем, является ли мод xdelta-модом
         is_xdelta_mod = self._is_xdelta_mod(mod_info, source_dir, chapter_id)
 
-
+        # В рамках одной главы применяем не более ОДНОГО xdelta патча
+        applied_xdelta_for_this_chapter = False
 
         files_copied = 0
 
@@ -9575,11 +9595,15 @@ class DeltaHubApp(QWidget):
             mod_source_dir = os.path.join(source_dir, chapter_folder_name)
 
             if not os.path.isdir(mod_source_dir):
-                mod_source_dir = source_dir
+                # ВАЖНО: не используем корень как fallback для глав > 0, чтобы не тянуть корневой патч в главы
+                if chapter_id in (-1, 0):
+                    mod_source_dir = source_dir
+                else:
+                    mod_source_dir = None
         else:
             mod_source_dir = source_dir
 
-        if not os.path.isdir(mod_source_dir):
+        if not mod_source_dir or not os.path.isdir(mod_source_dir):
             self.update_status_signal.emit(tr("status.no_files_to_copy"), UI_COLORS["status_warning"])
             return True
 
@@ -9647,11 +9671,15 @@ class DeltaHubApp(QWidget):
 
                     # Для xdelta модов обрабатываем .xdelta файлы отдельно
                     if is_xdelta_mod and file_lower.endswith('.xdelta') and is_core_data_file:
+                        # Применяем только один патч на главу и только к целевому data файлу
+                        if applied_xdelta_for_this_chapter:
+                            continue
 
                         if not self._apply_xdelta_patch(cache_file_path, game_file_path, target_dir):
                             self.update_status_signal.emit(tr("errors.xdelta_apply_error", file=file), UI_COLORS["status_error"])
                             return False
                         files_copied += 1
+                        applied_xdelta_for_this_chapter = True
                         continue
 
                     # Пропускаем .xdelta файлы для обычных модов
@@ -9659,7 +9687,7 @@ class DeltaHubApp(QWidget):
                         continue
 
                     # Резервное копирование оригинального файла, если он существует
-                    if os.path.exists(game_file_path):
+                    if os.path.exists(game_file_path) and game_file_path not in self._backup_files:
                         # --- ИСПРАВЛЕНИЕ: Создаем уникальное имя для бэкапа, чтобы избежать коллизий ---
                         unique_hash = hashlib.md5(game_file_path.encode('utf-8')).hexdigest()
                         backup_filename = f"{unique_hash}_{os.path.basename(game_file_path)}"
@@ -9701,7 +9729,6 @@ class DeltaHubApp(QWidget):
     def _apply_xdelta_patch(self, xdelta_file_path: str, target_game_file_path: str, target_dir: str) -> bool:
         """Применяет xdelta патч к оригинальному data файлу с поддержкой альтернативных форматов."""
 
-
         try:
             import pyxdelta
         except ImportError:
@@ -9720,8 +9747,6 @@ class DeltaHubApp(QWidget):
         else:
             primary_file = data_win
             secondary_file = game_ios
-
-
 
         # Ищем существующий data файл
         original_data_file = None
@@ -9752,20 +9777,18 @@ class DeltaHubApp(QWidget):
                 self._backup_temp_dir = tempfile.mkdtemp(prefix="deltahub_backup_")
                 self._update_session_manifest(backup_temp_dir=self._backup_temp_dir)
 
-            # --- ИСПРАВЛЕНИЕ: Создаем уникальное имя для бэкапа ---
             unique_hash = hashlib.md5(original_data_file.encode('utf-8')).hexdigest()
             backup_filename = f"xdelta_{unique_hash}_{os.path.basename(original_data_file)}"
             backup_file_path = os.path.join(self._backup_temp_dir, backup_filename)
-            # --- КОНЕЦ ИСПРАВЛЕНИЯ ---
 
-            shutil.move(original_data_file, backup_file_path)
-
+            # FIX: Only back up the file if it hasn't been backed up already in this session
             if not hasattr(self, '_backup_files'):
                 self._backup_files = {}
-            self._backup_files[original_data_file] = backup_file_path
-            self._update_session_manifest(backup_files={original_data_file: backup_file_path})
-
-
+            
+            if original_data_file not in self._backup_files:
+                shutil.move(original_data_file, backup_file_path)
+                self._backup_files[original_data_file] = backup_file_path
+                self._update_session_manifest(backup_files={original_data_file: backup_file_path})
 
             def try_patch_with_format(original_file, output_file, format_name):
                 """Попытка применить патч с определенным форматом файла."""
@@ -9779,12 +9802,11 @@ class DeltaHubApp(QWidget):
             if try_patch_with_format(temp_original, temp_output, os.path.basename(original_data_file)):
                 # Успешно - копируем результат
                 shutil.copy2(temp_output, original_data_file)
-
+                self._mod_files_to_cleanup.append(original_data_file)
                 self.update_status_signal.emit(tr("status.xdelta_patch_applied", patch_name=os.path.basename(xdelta_file_path)), UI_COLORS["status_success"])
                 return True
 
             # Если первая попытка не удалась, пробуем с альтернативным форматом
-
             # Переименовываем файл для альтернативной попытки
             if original_data_file.endswith('data.win'):
                 temp_alt_original = os.path.join(temp_dir, "original_data_alt.ios")
@@ -9802,7 +9824,7 @@ class DeltaHubApp(QWidget):
             if try_patch_with_format(temp_alt_original, temp_alt_output, alt_format_name):
                 # Успешно - копируем результат с правильным расширением
                 shutil.copy2(temp_alt_output, original_data_file)
-
+                self._mod_files_to_cleanup.append(original_data_file)
                 self.update_status_signal.emit(tr("status.xdelta_patch_applied_alt", patch_name=os.path.basename(xdelta_file_path)), UI_COLORS["status_success"])
                 return True
 
@@ -9966,6 +9988,9 @@ class DeltaHubApp(QWidget):
     def _cleanup_direct_launch_files(self):
         """Очищает файлы модов и восстанавливает оригинальные файлы."""
         try:
+            # Запомним список целей, для которых мы делали бэкапы (инлайновая замена)
+            backed_up_targets = set(self._backup_files.keys()) if hasattr(self, '_backup_files') and self._backup_files else set()
+
             # Сначала восстанавливаем оригинальные файлы из резервной копии
             if hasattr(self, '_backup_files') and self._backup_files:
                 for original_path, backup_path in self._backup_files.items():
@@ -9986,6 +10011,9 @@ class DeltaHubApp(QWidget):
             if hasattr(self, '_mod_files_to_cleanup') and self._mod_files_to_cleanup:
                 remaining_files = []
                 for file_path in self._mod_files_to_cleanup:
+                    # Не удаляем файлы, для которых мы только что восстановили оригиналы
+                    if file_path in backed_up_targets:
+                        continue
                     try:
                         if os.path.exists(file_path):
                             os.remove(file_path)
