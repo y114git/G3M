@@ -871,29 +871,56 @@ class InstallTranslationsThread(QThread):
     def _get_user_ip(self):
         try: return requests.get('https://api.ipify.org', timeout=5).text.strip()
         except Exception: return "127.0.0.1"
+    
+    def _get_global_rate_limit_data(self):
+        """Получает данные rate limiting из глобального конфига приложения."""
+        try:
+            config_path = os.path.join(get_app_support_path(), "rate_limit_data.json")
+            if os.path.exists(config_path):
+                return self.main_window._read_json(config_path)
+            return {}
+        except:
+            return {}
+    
+    def _update_global_rate_limit_data(self, mod_key):
+        """Обновляет данные rate limiting в глобальном конфиге."""
+        try:
+            current_ip = self._get_user_ip()
+            config_path = os.path.join(get_app_support_path(), "rate_limit_data.json")
+            
+            # Читаем существующие данные
+            rate_limit_data = self._get_global_rate_limit_data()
+            
+            # Добавляем/обновляем запись для текущего IP+мода
+            ip_mod_key = f"{current_ip}:{mod_key}"
+            now_str = time.strftime('%Y-%m-%d %H:%M:%S')
+            rate_limit_data[ip_mod_key] = now_str
+            
+            # Сохраняем обновленные данные
+            self.main_window._write_json(config_path, rate_limit_data)
+        except:
+            pass
 
     def _can_increment_download_by_config(self, mod_key):
         try:
             import datetime
-            for folder_name in os.listdir(self.main_window.mods_dir):
-                config_path = os.path.join(self.main_window.mods_dir, folder_name, "config.json")
-                if os.path.isfile(config_path):
-                    try:
-                        config_data = self.main_window._read_json(config_path)
-                        if config_data.get("mod_key") == mod_key:
-                            # Разрешаем первый инкремент сразу, если не было пред. инкремента
-                            last_inc = config_data.get("last_download_increment", "")
-                            if not last_inc:
-                                return True
-                            installed_date_str = config_data.get("installed_date", "")
-                            if installed_date_str:
-                                installed_date = datetime.datetime.strptime(installed_date_str, '%Y-%m-%d %H:%M:%S')
-                                time_diff = datetime.datetime.now() - installed_date
-                                return time_diff.total_seconds() >= 43200
-                            return True
-                    except:
-                        continue
-            return False
+            current_ip = self._get_user_ip()
+            
+            # Читаем глобальные данные rate limiting из конфига приложения
+            rate_limit_data = self._get_global_rate_limit_data()
+            
+            # Проверяем последний инкремент для текущего IP и мода
+            ip_mod_key = f"{current_ip}:{mod_key}"
+            last_increment_time = rate_limit_data.get(ip_mod_key, "")
+            
+            # Если нет записи для этого IP+мода, разрешаем инкремент
+            if not last_increment_time:
+                return True
+            
+            # Проверяем прошло ли 12 часов с последнего инкремента
+            last_increment_dt = datetime.datetime.strptime(last_increment_time, '%Y-%m-%d %H:%M:%S')
+            time_diff = datetime.datetime.now() - last_increment_dt
+            return time_diff.total_seconds() >= 43200  # 12 часов = 43200 секунд
         except:
             return False
 
@@ -909,6 +936,9 @@ class InstallTranslationsThread(QThread):
                             config_data["installed_date"] = now_str
                             config_data["last_download_increment"] = now_str
                             self.main_window._write_json(config_path, config_data)
+                            
+                            # Обновляем глобальные данные rate limiting
+                            self._update_global_rate_limit_data(mod_key)
                             return
                     except:
                         continue
