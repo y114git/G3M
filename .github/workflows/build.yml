@@ -7,24 +7,24 @@ on:
         description: "Launcher version (X.X.X)"
         required: true
         type: string
-      linux_archive_name:
-        description: "Inner archive name for Linux (e.g. MyLinux.zip)"
+      archive_name_linux:
+        description: "Archive name for Linux (e.g., DELTAHUB-Linux-v2.0.0)"
         required: false
         type: string
-      macos_x64_archive_name:
-        description: "Inner archive name for macOS x86_64 (e.g. MyMac-x64.zip)"
+      archive_name_macos_x64:
+        description: "Archive name for macOS x64 (e.g., DELTAHUB-macOS-x64-v2.0.0)"
         required: false
         type: string
-      macos_arm64_archive_name:
-        description: "Inner archive name for macOS arm64 (e.g. MyMac-arm64.zip)"
+      archive_name_macos_arm64:
+        description: "Archive name for macOS arm64 (e.g., DELTAHUB-macOS-arm64-v2.0.0)"
         required: false
         type: string
-      windows_bin_archive_name:
-        description: "Inner archive name for Windows binary (e.g. MyWin.zip)"
+      archive_name_windows:
+        description: "Archive name for Windows Portable (e.g., DELTAHUB-Windows-v2.0.0)"
         required: false
         type: string
-      windows_setup_archive_name:
-        description: "Inner archive name for Windows installer (e.g. MyInstaller.zip)"
+      archive_name_windows_setup:
+        description: "Archive name for Windows Setup (e.g., DELTAHUB-Windows-Setup-v2.0.0)"
         required: false
         type: string
   push:
@@ -35,7 +35,6 @@ permissions:
 
 env:
   PYTHON_VERSION: "3.12"
-  # If run manually, prefix the provided version with 'v'. If triggered by tag push, use the tag name.
   RELEASE_VERSION: ${{ github.event_name == 'workflow_dispatch' && format('v{0}', inputs.version) || github.ref_name }}
 
 jobs:
@@ -48,9 +47,14 @@ jobs:
       FIREBASE_AUTH_EMAIL: ${{ secrets.FIREBASE_AUTH_EMAIL }}
       FIREBASE_AUTH_PASS: ${{ secrets.FIREBASE_AUTH_PASS }}
       INTERNAL_SALT: ${{ secrets.INTERNAL_SALT }}
-      INNER_ARCHIVE_NAME: ${{ github.event_name == 'workflow_dispatch' && inputs.linux_archive_name || format('DELTAHUB-Linux-{0}.zip', env.RELEASE_VERSION) }}
     steps:
       - uses: actions/checkout@v4
+      - name: Set Archive Name
+        # ИЗМЕНЕНО: Добавляем ID и используем GITHUB_OUTPUT
+        id: set_names
+        run: |
+          archive_name="${{ github.event.inputs.archive_name_linux || format('DELTAHUB-Linux-{0}', env.RELEASE_VERSION) }}"
+          echo "archive_path=${archive_name}.zip" >> $GITHUB_OUTPUT
       - name: Install build deps
         run: |
           sudo apt-get update
@@ -67,38 +71,31 @@ jobs:
         run: |
           python - <<'PY'
           import os, base64
-          def e(v):
-              return base64.b64encode(v.encode('utf-8')).decode('ascii')
-          vals = {
-            'DATA_FIREBASE_URL': os.environ.get('DATA_FIREBASE_URL',''),
-            'FIREBASE_API_KEY': os.environ.get('FIREBASE_API_KEY',''),
-            'FIREBASE_AUTH_EMAIL': os.environ.get('FIREBASE_AUTH_EMAIL',''),
-            'FIREBASE_AUTH_PASS': os.environ.get('FIREBASE_AUTH_PASS',''),
-            'INTERNAL_SALT': os.environ.get('INTERNAL_SALT',''),
-          }
-          with open('secrets_embed.py','w', encoding='utf-8') as f:
-              f.write('import base64\n')
-              f.write('def d(s): return base64.b64decode(s).decode(\'utf-8\')\n')
-              for k,v in vals.items():
-                  f.write(f"{k}=d('{e(v)}')\n")
+          def e(v): return base64.b64encode(v.encode('utf-8')).decode('ascii')
+          vals = {'DATA_FIREBASE_URL':os.environ.get('DATA_FIREBASE_URL',''),'FIREBASE_API_KEY':os.environ.get('FIREBASE_API_KEY',''),'FIREBASE_AUTH_EMAIL':os.environ.get('FIREBASE_AUTH_EMAIL',''),'FIREBASE_AUTH_PASS':os.environ.get('FIREBASE_AUTH_PASS',''),'INTERNAL_SALT':os.environ.get('INTERNAL_SALT','')}
+          with open('secrets_embed.py','w',encoding='utf-8') as f:
+            f.write('import base64\n'); f.write("def d(s): return base64.b64decode(s).decode('utf-8')\n")
+            for k,v in vals.items(): f.write(f"{k}=d('{e(v)}')\n")
           PY
       - name: Build via spec
         run: |
           pyinstaller -y DELTAHUB.spec
           strip dist/DELTAHUB || true
           upx -9 dist/DELTAHUB || true
-      - name: Create inner archive (zip)
-        run: |
-          zip -j "${{ env.INNER_ARCHIVE_NAME }}" dist/DELTAHUB
       - name: Cleanup secrets
         if: always()
+        run: rm -f secrets_embed.py || true
+      - name: Create archive
+        # ИЗМЕНЕНО: Используем output из предыдущего шага
         run: |
-          git update-index --refresh || true
-          rm -f secrets_embed.py || true
+          mkdir -p archive_content
+          mv dist/DELTAHUB archive_content/
+          zip -r ${{ steps.set_names.outputs.archive_path }} archive_content
       - uses: actions/upload-artifact@v4
         with:
           name: DELTAHUB-Linux
-          path: "${{ env.INNER_ARCHIVE_NAME }}"
+          # ИЗМЕНЕНО: Используем output из предыдущего шага
+          path: ${{ steps.set_names.outputs.archive_path }}
 
   macos-x64:
     name: macOS · x86_64 (spec)
@@ -109,9 +106,13 @@ jobs:
       FIREBASE_AUTH_EMAIL: ${{ secrets.FIREBASE_AUTH_EMAIL }}
       FIREBASE_AUTH_PASS: ${{ secrets.FIREBASE_AUTH_PASS }}
       INTERNAL_SALT: ${{ secrets.INTERNAL_SALT }}
-      INNER_ARCHIVE_NAME: ${{ github.event_name == 'workflow_dispatch' && inputs.macos_x64_archive_name || format('DELTAHUB-macOS-x86_64-{0}.zip', env.RELEASE_VERSION) }}
     steps:
       - uses: actions/checkout@v4
+      - name: Set Archive Name
+        id: set_names
+        run: |
+          archive_name="${{ github.event.inputs.archive_name_macos_x64 || format('DELTAHUB-macOS-x64-{0}', env.RELEASE_VERSION) }}"
+          echo "archive_path=${archive_name}.zip" >> $GITHUB_OUTPUT
       - name: Extra tools
         run: brew install upx || true
       - uses: actions/setup-python@v5
@@ -125,38 +126,25 @@ jobs:
         run: |
           python - <<'PY'
           import os, base64
-          def e(v):
-              return base64.b64encode(v.encode('utf-8')).decode('ascii')
-          vals = {
-            'DATA_FIREBASE_URL': os.environ.get('DATA_FIREBASE_URL',''),
-            'FIREBASE_API_KEY': os.environ.get('FIREBASE_API_KEY',''),
-            'FIREBASE_AUTH_EMAIL': os.environ.get('FIREBASE_AUTH_EMAIL',''),
-            'FIREBASE_AUTH_PASS': os.environ.get('FIREBASE_AUTH_PASS',''),
-            'INTERNAL_SALT': os.environ.get('INTERNAL_SALT',''),
-          }
-          with open('secrets_embed.py','w', encoding='utf-8') as f:
-              f.write('import base64\n')
-              f.write('def d(s): return base64.b64decode(s).decode(\'utf-8\')\n')
-              for k,v in vals.items():
-                  f.write(f"{k}=d('{e(v)}')\n")
+          def e(v): return base64.b64encode(v.encode('utf-8')).decode('ascii')
+          vals = {'DATA_FIREBASE_URL':os.environ.get('DATA_FIREBASE_URL',''),'FIREBASE_API_KEY':os.environ.get('FIREBASE_API_KEY',''),'FIREBASE_AUTH_EMAIL':os.environ.get('FIREBASE_AUTH_EMAIL',''),'FIREBASE_AUTH_PASS':os.environ.get('FIREBASE_AUTH_PASS',''),'INTERNAL_SALT':os.environ.get('INTERNAL_SALT','')}
+          with open('secrets_embed.py','w',encoding='utf-8') as f:
+            f.write('import base64\n'); f.write("def d(s): return base64.b64decode(s).decode('utf-8')\n")
+            for k,v in vals.items(): f.write(f"{k}=d('{e(v)}')\n")
           PY
       - name: Build via spec (x86_64)
-        run: |
-          pyinstaller -y DELTAHUB.spec
+        run: pyinstaller -y DELTAHUB.spec
       - name: Codesign (adhoc)
-        run: |
-          codesign --force --deep --sign - "dist/DELTAHUB.app"
+        run: codesign --force --deep --sign - "dist/DELTAHUB.app"
       - name: Cleanup secrets
         if: always()
-        run: |
-          rm -f secrets_embed.py || true
-      - name: Zip .app (inner archive)
-        run: |
-          ditto -c -k --sequesterRsrc --keepParent "dist/DELTAHUB.app" "${{ env.INNER_ARCHIVE_NAME }}"
+        run: rm -f secrets_embed.py || true
+      - name: Create archive
+        run: ditto -c -k --sequesterRsrc --keepParent "dist/DELTAHUB.app" "${{ steps.set_names.outputs.archive_path }}"
       - uses: actions/upload-artifact@v4
         with:
           name: DELTAHUB-macOS-x86_64
-          path: "${{ env.INNER_ARCHIVE_NAME }}"
+          path: ${{ steps.set_names.outputs.archive_path }}
 
   macos-arm64:
     name: macOS · arm64 (spec)
@@ -167,9 +155,13 @@ jobs:
       FIREBASE_AUTH_EMAIL: ${{ secrets.FIREBASE_AUTH_EMAIL }}
       FIREBASE_AUTH_PASS: ${{ secrets.FIREBASE_AUTH_PASS }}
       INTERNAL_SALT: ${{ secrets.INTERNAL_SALT }}
-      INNER_ARCHIVE_NAME: ${{ github.event_name == 'workflow_dispatch' && inputs.macos_arm64_archive_name || format('DELTAHUB-macOS-arm64-{0}.zip', env.RELEASE_VERSION) }}
     steps:
       - uses: actions/checkout@v4
+      - name: Set Archive Name
+        id: set_names
+        run: |
+          archive_name="${{ github.event.inputs.archive_name_macos_arm64 || format('DELTAHUB-macOS-arm64-{0}', env.RELEASE_VERSION) }}"
+          echo "archive_path=${archive_name}.zip" >> $GITHUB_OUTPUT
       - name: Extra tools
         run: brew install upx || true
       - uses: actions/setup-python@v5
@@ -183,38 +175,25 @@ jobs:
         run: |
           python - <<'PY'
           import os, base64
-          def e(v):
-              return base64.b64encode(v.encode('utf-8')).decode('ascii')
-          vals = {
-            'DATA_FIREBASE_URL': os.environ.get('DATA_FIREBASE_URL',''),
-            'FIREBASE_API_KEY': os.environ.get('FIREBASE_API_KEY',''),
-            'FIREBASE_AUTH_EMAIL': os.environ.get('FIREBASE_AUTH_EMAIL',''),
-            'FIREBASE_AUTH_PASS': os.environ.get('FIREBASE_AUTH_PASS',''),
-            'INTERNAL_SALT': os.environ.get('INTERNAL_SALT',''),
-          }
-          with open('secrets_embed.py','w', encoding='utf-8') as f:
-              f.write('import base64\n')
-              f.write('def d(s): return base64.b64decode(s).decode(\'utf-8\')\n')
-              for k,v in vals.items():
-                  f.write(f"{k}=d('{e(v)}')\n")
+          def e(v): return base64.b64encode(v.encode('utf-8')).decode('ascii')
+          vals = {'DATA_FIREBASE_URL':os.environ.get('DATA_FIREBASE_URL',''),'FIREBASE_API_KEY':os.environ.get('FIREBASE_API_KEY',''),'FIREBASE_AUTH_EMAIL':os.environ.get('FIREBASE_AUTH_EMAIL',''),'FIREBASE_AUTH_PASS':os.environ.get('FIREBASE_AUTH_PASS',''),'INTERNAL_SALT':os.environ.get('INTERNAL_SALT','')}
+          with open('secrets_embed.py','w',encoding='utf-8') as f:
+            f.write('import base64\n'); f.write("def d(s): return base64.b64decode(s).decode('utf-8')\n")
+            for k,v in vals.items(): f.write(f"{k}=d('{e(v)}')\n")
           PY
       - name: Build via spec (arm64)
-        run: |
-          pyinstaller -y DELTAHUB.spec
+        run: pyinstaller -y DELTAHUB.spec
       - name: Codesign (adhoc)
-        run: |
-          codesign --force --deep --sign - "dist/DELTAHUB.app"
+        run: codesign --force --deep --sign - "dist/DELTAHUB.app"
       - name: Cleanup secrets
         if: always()
-        run: |
-          rm -f secrets_embed.py || true
-      - name: Zip .app (inner archive)
-        run: |
-          ditto -c -k --sequesterRsrc --keepParent "dist/DELTAHUB.app" "${{ env.INNER_ARCHIVE_NAME }}"
+        run: rm -f secrets_embed.py || true
+      - name: Create archive
+        run: ditto -c -k --sequesterRsrc --keepParent "dist/DELTAHUB.app" "${{ steps.set_names.outputs.archive_path }}"
       - uses: actions/upload-artifact@v4
         with:
           name: DELTAHUB-macOS-arm64
-          path: "${{ env.INNER_ARCHIVE_NAME }}"
+          path: ${{ steps.set_names.outputs.archive_path }}
 
   windows:
     name: Windows · exe (spec + Inno)
@@ -225,11 +204,19 @@ jobs:
       FIREBASE_AUTH_EMAIL: ${{ secrets.FIREBASE_AUTH_EMAIL }}
       FIREBASE_AUTH_PASS: ${{ secrets.FIREBASE_AUTH_PASS }}
       INTERNAL_SALT: ${{ secrets.INTERNAL_SALT }}
-      BIN_ARCHIVE_NAME: ${{ github.event_name == 'workflow_dispatch' && inputs.windows_bin_archive_name || format('DELTAHUB-Windows-{0}.zip', env.RELEASE_VERSION) }}
-      SETUP_ARCHIVE_NAME: ${{ github.event_name == 'workflow_dispatch' && inputs.windows_setup_archive_name || format('DELTAHUB-Windows-Setup-{0}.zip', env.RELEASE_VERSION) }}
-
     steps:
       - uses: actions/checkout@v4
+      - name: Set Archive Names
+        id: set_names
+        shell: powershell
+        run: |
+          $archiveName = "${{ github.event.inputs.archive_name_windows }}"
+          if (-not $archiveName) { $archiveName = "DELTAHUB-Windows-${{ env.RELEASE_VERSION }}" }
+          "archive_path=$($archiveName).zip" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          
+          $setupName = "${{ github.event.inputs.archive_name_windows_setup }}"
+          if (-not $setupName) { $setupName = "DELTAHUB-Windows-Setup-${{ env.RELEASE_VERSION }}" }
+          "setup_archive_path=$($setupName).zip" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -241,150 +228,90 @@ jobs:
       - name: Generate secrets_embed.py
         shell: powershell
         run: |
-          $vals = @{ 
-            DATA_FIREBASE_URL = "$env:DATA_FIREBASE_URL";
-            FIREBASE_API_KEY = "$env:FIREBASE_API_KEY";
-            FIREBASE_AUTH_EMAIL = "$env:FIREBASE_AUTH_EMAIL";
-            FIREBASE_AUTH_PASS = "$env:FIREBASE_AUTH_PASS";
-            INTERNAL_SALT = "$env:INTERNAL_SALT" 
-          }
-          $py = @()
-          $py += 'import base64'
-          $py += "def d(s): return base64.b64decode(s).decode('utf-8')"
-          foreach ($k in $vals.Keys) {
-            $b64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($vals[$k]))
-            $py += "$k=d('$b64')"
-          }
-          # ✅ ИСПРАВЛЕНО: Сохраняем файл secrets_embed.py в UTF-8 без BOM
-          $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-          [System.IO.File]::WriteAllLines('secrets_embed.py', $py, $utf8NoBom)
-      - name: Locate VC runtime (auto)
-        shell: powershell
-        run: |
-          $names = @("vcruntime140.dll", "vcruntime140_1.dll", "msvcp140.dll")
-          $found = @()
-          foreach ($n in $names) {
-            $p = Join-Path $env:WINDIR ("System32/" + $n)
-            if (Test-Path $p) { $found += $p }
-          }
-          if ($found.Count -gt 0) {
-            $joined = [string]::Join([IO.Path]::PathSeparator, $found)
-            echo "VCREDIST_DLLS=$joined" >> $env:GITHUB_ENV
-          } else {
-            Write-Host "No VC runtime DLLs found"
-          }
+          $vals = @{'DATA_FIREBASE_URL'="$env:DATA_FIREBASE_URL";'FIREBASE_API_KEY'="$env:FIREBASE_API_KEY";'FIREBASE_AUTH_EMAIL'="$env:FIREBASE_AUTH_EMAIL";'FIREBASE_AUTH_PASS'="$env:FIREBASE_AUTH_PASS";'INTERNAL_SALT'="$env:INTERNAL_SALT"}
+          $py = @('import base64', "def d(s): return base64.b64decode(s).decode('utf-8')")
+          foreach ($k in $vals.Keys) { $b64=[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($vals[$k])); $py += "$k=d('$b64')"}
+          $utf8NoBom = New-Object System.Text.UTF8Encoding($false); [System.IO.File]::WriteAllLines('secrets_embed.py',$py,$utf8NoBom)
       - name: Build via spec
-        run: |
-          pyinstaller -y DELTAHUB.spec
-      - name: Create inner archive for Windows binary (zip)
+        run: pyinstaller -y DELTAHUB.spec
+      - name: Create archive for portable exe
         shell: powershell
-        run: |
-          Compress-Archive -Path "dist/DELTAHUB.exe" -DestinationPath "$env:BIN_ARCHIVE_NAME" -Force
+        run: Compress-Archive -Path dist\DELTAHUB.exe -DestinationPath "${{ steps.set_names.outputs.archive_path }}"
       - uses: actions/upload-artifact@v4
         with:
           name: DELTAHUB-Windows
-          path: "${{ env.BIN_ARCHIVE_NAME }}"
+          path: ${{ steps.set_names.outputs.archive_path }}
+      
       # Inno Setup packaging
       - name: Install Inno Setup
-        shell: powershell
-        run: |
-          choco install innosetup -y
-      - name: Check wizard small image exists
-        shell: powershell
-        run: |
-          if (-not (Test-Path "assets/icon_small.bmp")) {
-            Write-Error "assets/icon_small.bmp is missing. Commit it to the repo."; exit 1
-          }
-          Write-Host "Found assets/icon_small.bmp"
-          dir assets
-      - name: Sanitize setup.iss (normalize spaces & encoding)
-        shell: powershell
-        run: |
-          $c = Get-Content setup.iss -Raw
-          $c = $c.Replace([char]0x00A0, ' ').Replace([char]0x2007, ' ').Replace([char]0x202F, ' ')
-          # ✅ ИСПРАВЛЕНО: Сохраняем файл в UTF-8 без BOM
-          $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-          [System.IO.File]::WriteAllText("$pwd\setup.iss", $c, $utf8NoBom)
+        run: choco install innosetup -y
       - name: Inject version into setup.iss
         shell: powershell
         run: |
           $ver = $env:RELEASE_VERSION.TrimStart('v')
-          $content = Get-Content -Path setup.iss -Raw
-          $newContent = $content -replace '(?m)^(#define\s+AppVersion\s+\").*?(\")$', "`$1$ver`$2"
-          # ✅ ИСПРАВЛЕНО: Сохраняем файл в UTF-8 без BOM
-          $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-          [System.IO.File]::WriteAllText("$pwd\setup.iss", $newContent, $utf8NoBom)
-          Write-Host "AppVersion set to $ver in setup.iss"
+          (Get-Content -Path setup.iss -Raw) -replace '(?m)^(#define\s+AppVersion\s+\").*?(\")$', "`$1$ver`$2" | Set-Content -Path setup.iss -Encoding utf8NoBOM
       - name: Build installer (Inno Setup)
         shell: powershell
         run: |
-          $iscc = (Get-Command iscc -ErrorAction SilentlyContinue).Source
-          if (!$iscc) { $iscc = "C:\\Program Files (x86)\\Inno Setup 6\\ISCC.exe" }
-          if (Test-Path $iscc) { & "$iscc" setup.iss } else { Write-Host "ISCC not found after install"; exit 1 }
-      - name: Collect installer to workspace root
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" setup.iss
+      - name: Create archive for setup exe
         shell: powershell
         run: |
-          $ver = $env:RELEASE_VERSION
-          $exe = Get-ChildItem -Recurse -Filter "DELTAHUB_setup_v*.exe" | Select-Object -First 1
+          $exe = Get-ChildItem -Path "Output" -Filter "DELTAHUB_setup_v*.exe" | Select-Object -First 1
           if (-not $exe) { Write-Error "Installer not found"; exit 1 }
-          Copy-Item $exe.FullName "DELTAHUB-Windows-Setup-$ver.exe" -Force
-          Write-Host "Collected installer: DELTAHUB-Windows-Setup-$ver.exe"
-      - name: Create inner archive for Windows installer (zip)
-        shell: powershell
-        run: |
-          Compress-Archive -Path "DELTAHUB-Windows-Setup-$env:RELEASE_VERSION.exe" -DestinationPath "$env:SETUP_ARCHIVE_NAME" -Force
+          Compress-Archive -Path $exe.FullName -DestinationPath "${{ steps.set_names.outputs.setup_archive_path }}"
       - uses: actions/upload-artifact@v4
         with:
           name: DELTAHUB-Windows-Setup
-          path: "${{ env.SETUP_ARCHIVE_NAME }}"
+          path: ${{ steps.set_names.outputs.setup_archive_path }}
 
   release:
     name: Create GitHub Release and upload assets
     runs-on: ubuntu-latest
     needs: [linux, macos-x64, macos-arm64, windows]
     steps:
-      - name: Download Linux artifact
+      - name: Download all build artifacts
         uses: actions/download-artifact@v4
         with:
-          name: DELTAHUB-Linux
-          path: ./release_assets/DELTAHUB-Linux
-      - name: Download macOS x86_64 artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: DELTAHUB-macOS-x86_64
-          path: ./release_assets/DELTAHUB-macOS-x86_64
-      - name: Download macOS arm64 artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: DELTAHUB-macOS-arm64
-          path: ./release_assets/DELTAHUB-macOS-arm64
-      - name: Download Windows installer artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: DELTAHUB-Windows-Setup
-          path: ./release_assets/DELTAHUB-Windows-Setup
-      - name: Download Windows binary artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: DELTAHUB-Windows
-          path: ./release_assets/DELTAHUB-Windows
+          path: ./release_assets
+          merge-multiple: true 
+          
       - name: List gathered assets
-        run: |
-          find ./release_assets -type f -maxdepth 6 -print
-      - name: Remove existing assets if release already exists
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          if gh release view "${{ env.RELEASE_VERSION }}" >/dev/null 2>&1; then
-            echo "Release exists. Deleting all existing assets..."
-            for a in $(gh release view "${{ env.RELEASE_VERSION }}" --json assets --jq '.assets[].name'); do
-              echo "Deleting asset: $a"
-              gh release delete-asset "${{ env.RELEASE_VERSION }}" "$a" -y || true
-            done
-          else
-            echo "Release does not exist yet. It will be created."
-          fi
-      - name: Create/Update GitHub Release and upload inner archives
+        run: find ./release_assets -type f -name "*.zip" -print
+
+      - name: Get existing release
+        id: get_release
+        uses: actions/github-script@v7
+        with:
+          script: |
+            try {
+              const release = await github.rest.repos.getReleaseByTag({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                tag: '${{ env.RELEASE_VERSION }}'
+              });
+              return release.data;
+            } catch (error) {
+              if (error.status === 404) return null;
+              throw error;
+            }
+      
+      - name: Delete existing release assets if release exists
+        if: steps.get_release.outputs.result != 'null'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const release = JSON.parse('${{ steps.get_release.outputs.result }}');
+            for (const asset of release.assets) {
+              console.log('Deleting existing asset:', asset.name);
+              await github.rest.repos.deleteReleaseAsset({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                asset_id: asset.id,
+              });
+            }
+
+      - name: Create or update GitHub Release and upload assets
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.RELEASE_VERSION }}
@@ -395,6 +322,4 @@ jobs:
           make_latest: true
           fail_on_unmatched_files: true
           files: |
-            release_assets/**/*.zip
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
+            release_assets/*.zip
