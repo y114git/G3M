@@ -1,34 +1,61 @@
-# Proprietary License — No permission to use, modify, or distribute source code without explicit consent
+DeltaHub Contributor License
+Version 1.0 — 2025-08-17
 
-Copyright (c) 2025 Y114
+Copyright (c) 2025 Y114. All rights reserved.
 
-Permission is granted to view the source code solely for the purpose of security and transparency verification.
+1. Definitions
+--------------
+- "Software" means the DeltaHub launcher and all associated source code,
+  binaries, assets, and documentation published in this repository.
+- "Author" means the copyright holder, Y114.
+- "Commercial use" means any use of the Software or derivative works
+  for direct or indirect financial gain, including but not limited to:
+  selling, renting, licensing, offering as a paid service, or bundling
+  with paid products.
 
+2. Permissions
+--------------
+The Author grants to any individual the right to:
+- Download, install, and use the unmodified Software for personal,
+  non-commercial purposes.
+- Share the unmodified Software, provided that this License and
+  proper attribution to the Author are included.
+- Publicly demonstrate, review, or advertise the Software,
+  provided that attribution to the Author is clear and accurate.
+- Submit contributions (code, documentation, artwork, or other resources)
+  to the Author for potential inclusion in the official project.
+
+3. Restrictions
+---------------
 You are NOT allowed to:
+- Copy, modify, publish, distribute, sublicense, or create derivative
+  works of the Software without explicit prior written permission
+  from the Author.
+- Use the Software or any derivative work for commercial purposes
+  without explicit prior written permission from the Author.
+- Misrepresent authorship or remove attribution notices.
+- Distribute altered or misleading information about the Software.
 
-- Copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the source code or any part of it.
-- Use the source code in any other project, product, or service.
-- Create derivative works based on the source code.
+4. Rights
+---------
+All rights, title, and interest in the Software, including all
+contributions, remain the exclusive property of the Author.
+Submitting contributions does not grant the Contributor any
+ownership rights in the Software.
 
-Permission is granted to distribute compiled (executable) versions of this software under the following conditions:
+5. Termination
+--------------
+Any violation of these terms immediately and automatically terminates
+the permissions granted by this License. Upon termination, you must
+cease all use and distribution of the Software and destroy all copies
+in your possession.
 
-- Distribution must be free of charge.
-- The executable must remain unmodified.
-- This license must be included with any distribution.
-
-Commercial use of compiled versions is strictly prohibited.
-
-Special Permissions:
-The copyright holder may grant explicit written permission to perform actions otherwise prohibited by this license.
-Such permission must be provided in the form of a signed and dated document (digital or physical), and will apply
-only under the specific terms stated in that document.
-
-Disclaimer:
-THIS SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
-THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND NON-INFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
-TORT, OR OTHERWISE, ARISING FROM, OUT OF, OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-
-Any violation of these terms automatically terminates your rights under this license.
-
-ALL RIGHTS RESERVED.
+6. Disclaimer of Warranty
+-------------------------
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
+IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY CLAIM, DAMAGES, OR
+OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT, OR OTHERWISE,
+ARISING FROM, OUT OF, OR IN CONNECTION WITH THE SOFTWARE OR THE USE
+OR OTHER DEALINGS IN THE SOFTWARE.
