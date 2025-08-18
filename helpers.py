@@ -29,7 +29,7 @@ def _load_config_sources():
         import importlib
         _se = importlib.import_module('secrets_embed')
         # Only set if not already present in environment
-        for k in ("DATA_FIREBASE_URL", "FIREBASE_API_KEY", "FIREBASE_AUTH_EMAIL", "FIREBASE_AUTH_PASS", "INTERNAL_SALT"):
+        for k in ("DATA_FIREBASE_URL", "CLOUD_FUNCTIONS_BASE_URL", "INTERNAL_SALT"):
             if not os.getenv(k, "") and hasattr(_se, k):
                 os.environ[k] = getattr(_se, k)
     except Exception:
@@ -38,47 +38,23 @@ def _load_config_sources():
 _load_config_sources()
 # Single database URL for data (mods, globals, stats)
 DATA_FIREBASE_URL = os.getenv("DATA_FIREBASE_URL", "")
-FIREBASE_API_KEY = os.getenv("FIREBASE_API_KEY", "")
-FIREBASE_AUTH_EMAIL = os.getenv("FIREBASE_AUTH_EMAIL", "")
-FIREBASE_AUTH_PASS = os.getenv("FIREBASE_AUTH_PASS", "")
+# Base URL for Cloud Functions (set this after deploy)
+CLOUD_FUNCTIONS_BASE_URL = os.getenv("CLOUD_FUNCTIONS_BASE_URL", "")
 
 _FB_ID_TOKEN = None
 _FB_TOKEN_EXPIRES_AT = 0.0
 
 def get_firebase_id_token() -> str:
-    import time
-    global _FB_ID_TOKEN, _FB_TOKEN_EXPIRES_AT
-    if not (FIREBASE_API_KEY and FIREBASE_AUTH_EMAIL and FIREBASE_AUTH_PASS):
-        return ""
-    if _FB_ID_TOKEN and time.time() < _FB_TOKEN_EXPIRES_AT - 30:
-        return _FB_ID_TOKEN
-    try:
-        resp = requests.post(
-            f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={FIREBASE_API_KEY}",
-            json={"email": FIREBASE_AUTH_EMAIL, "password": FIREBASE_AUTH_PASS, "returnSecureToken": True},
-            timeout=10,
-        )
-        data = resp.json() if resp.ok else {}
-        token = data.get("idToken", "")
-        expires_in = int(data.get("expiresIn", 0)) if token else 0
-        if token and expires_in:
-            _FB_ID_TOKEN = token
-            _FB_TOKEN_EXPIRES_AT = time.time() + expires_in
-            return token
-    except Exception:
-        pass
+    # Disabled: no client-side Firebase auth. All writes go through Cloud Functions.
     return ""
 
 def _fb_url(base: str, path: str, with_auth: bool = True) -> str:
     base = base.rstrip('/')
+    # Client no longer appends auth tokens; reads are public via security rules
     url = f"{base}/{path}.json"
-    if with_auth:
-        t = get_firebase_id_token()
-        if t:
-            return f"{url}?auth={t}"
     return url
-STEAM_APP_ID_FULL, STEAM_APP_ID_DEMO = "1671210", "1690940"
-GAME_PROCESS_NAMES = ["DELTARUNE.exe", "DELTARUNE", "runner"]
+STEAM_APP_ID_FULL, STEAM_APP_ID_DEMO, STEAM_APP_ID_UNDERTALE = "1671210", "1690940", "391540"
+GAME_PROCESS_NAMES = ["DELTARUNE.exe", "DELTARUNE", "UNDERTALE.exe", "UNDERTALE", "runner"]
 SAVE_SLOT_FINISH_MAP = {0: 3, 1: 4, 2: 5}
 ARCH = platform.machine()
 DEFAULT_FONT_FALLBACK_CHAIN = ["Determination Sans Rus", "DejaVu Sans", "Noto Sans", "Liberation Sans", "Arial", "Noto Color Emoji", "Segoe UI Emoji", "Apple Color Emoji"]
@@ -105,13 +81,19 @@ class FullGameMode(GameMode):
     def __init__(self):
         self._path_key, self._custom_exec_key, self.steam_id, self.tab_names, self.path_change_button_text, self.direct_launch_allowed = 'game_path', 'custom_executable_path', STEAM_APP_ID_FULL, [tr("tabs.main_menu"), tr("tabs.chapter_1"), tr("tabs.chapter_2"), tr("tabs.chapter_3"), tr("tabs.chapter_4")], tr("buttons.change_path"), True
     def get_chapter_id(self, ui_index: int) -> int: return ui_index
-    def filter_mods_for_ui(self, all_mods: list['ModInfo']) -> dict[int, list['ModInfo']]: return {i: [mod for mod in all_mods if not mod.is_demo_mod and not mod.hide_mod and not mod.ban_status and mod.get_chapter_data(i)] for i in range(5)}
+    def filter_mods_for_ui(self, all_mods: list['ModInfo']) -> dict[int, list['ModInfo']]: return {i: [mod for mod in all_mods if mod.modtype == 'deltarune' and not mod.hide_mod and not mod.ban_status and mod.get_chapter_data(i)] for i in range(5)}
 
 class DemoGameMode(GameMode):
     def __init__(self):
         self._path_key, self._custom_exec_key, self.steam_id, self.tab_names, self.path_change_button_text, self.direct_launch_allowed = 'demo_game_path', 'demo_custom_executable_path', STEAM_APP_ID_DEMO, [tr("tabs.demo")], tr("buttons.change_demo_path"), False
     def get_chapter_id(self, ui_index: int) -> int: return -1
     def filter_mods_for_ui(self, all_mods: list['ModInfo']) -> dict[int, list['ModInfo']]: return {0: [mod for mod in all_mods if mod.is_valid_for_demo() and not mod.hide_mod and not mod.ban_status]}
+
+class UndertaleGameMode(GameMode):
+    def __init__(self):
+        self._path_key, self._custom_exec_key, self.steam_id, self.tab_names, self.path_change_button_text, self.direct_launch_allowed = 'undertale_game_path', 'undertale_custom_executable_path', STEAM_APP_ID_UNDERTALE, [tr("tabs.undertale")], tr("buttons.change_undertale_path"), True
+    def get_chapter_id(self, ui_index: int) -> int: return 0  # Single file for UNDERTALE
+    def filter_mods_for_ui(self, all_mods: list['ModInfo']) -> dict[int, list['ModInfo']]: return {0: [mod for mod in all_mods if mod.modtype == 'undertale' and not mod.hide_mod and not mod.ban_status and mod.files.get('undertale')]}
 
 @dataclass
 class ModExtraFile:
@@ -123,7 +105,7 @@ class ModExtraFile:
 class ModChapterData:
     description: Optional[str] = None
     data_file_url: Optional[str] = None
-    data_win_version: Optional[str] = None
+    data_file_version: Optional[str] = None
     extra_files: List[ModExtraFile] = field(default_factory=list)
 
     def is_valid(self) -> bool:
@@ -139,14 +121,14 @@ class ModInfo:
     game_version: str
     description_url: str
     downloads: int
-    is_demo_mod: bool
+    modtype: str  # "deltarune", "deltarunedemo", or "undertale"
     is_verified: bool
     icon_url: Optional[str] = None
     tags: List[str] = field(default_factory=list)
     hide_mod: bool = False
-    is_piracy_protected: bool = False
+    is_xdelta: bool = False
     ban_status: bool = False
-    chapters: Dict[int, ModChapterData] = field(default_factory=dict)
+    files: Dict[str, ModChapterData] = field(default_factory=dict)  # renamed from chapters
     demo_url: Optional[str] = None
     demo_version: Optional[str] = None
     created_date: Optional[str] = None
@@ -154,13 +136,21 @@ class ModInfo:
     screenshots_url: List[str] = field(default_factory=list)
 
     def get_chapter_data(self, chapter_id: int) -> Optional[ModChapterData]:
-        return self.chapters.get(chapter_id)
+        # Map chapter_id to file key
+        chapter_map = {0: "0", 1: "1", 2: "2", 3: "3", 4: "4", -1: "demo"}
+
+        # Special handling for UNDERTALE
+        if self.modtype == 'undertale' and chapter_id == 0:
+            return self.files.get("undertale")
+
+        file_key = chapter_map.get(chapter_id)
+        return self.files.get(file_key) if file_key else None
 
     def is_valid_for_demo(self) -> bool:
-        if not self.is_demo_mod:
+        if self.modtype != 'deltarunedemo':
             return False
         if self.key.startswith('local_'):
-            return bool(self.chapters and self.chapters.get(-1))
+            return bool(self.files and self.files.get("demo"))
         return bool(self.demo_url and self.demo_version)
 
 def download_and_extract_archive(url: str, target_dir: str, progress_signal, total_size: int, downloaded_ref: list[int], session=None, is_game_installation=False):
@@ -316,52 +306,22 @@ class GameMonitorThread(QThread):
 
 class PresenceWorker(QObject):
     finished, update_online_count = pyqtSignal(), pyqtSignal(int)
-    def __init__(self, session_id): super().__init__(); self.session_id = session_id
-    def run(self):
-        now = int(time.time())
-        try:
-            # Update own heartbeat under stats/sessions/<id>
-            requests.put(_fb_url(DATA_FIREBASE_URL, f"stats/sessions/{self.session_id}"), json=now, timeout=5)
-            # Compute online by counting active sessions in last 70s and purge stale ones
-            try:
-                resp = requests.get(_fb_url(DATA_FIREBASE_URL, "stats/sessions"), timeout=5)
-                online = 0
-                if resp.status_code == 200 and isinstance(resp.json(), dict):
-                    sessions = resp.json() or {}
-                    now_ts = int(time.time())
-                    # Count active sessions
-                    for _, ts in sessions.items():
-                        try:
-                            if isinstance(ts, int) and (now_ts - ts) <= 70:
-                                online += 1
-                        except Exception:
-                            pass
-                    # Purge sessions that are definitely stale
-                    STALE_TTL_SEC = 600  # 10 minutes without heartbeat => remove
-                    stale_ids = []
-                    for sid, val in sessions.items():
-                        try:
-                            if isinstance(val, int):
-                                if (now_ts - val) > STALE_TTL_SEC:
-                                    stale_ids.append(sid)
-                            elif isinstance(val, dict):
-                                end_ts = val.get("endTime")
-                                start_ts = val.get("startTime")
-                                if isinstance(end_ts, int) and (now_ts - end_ts) > 60:
-                                    stale_ids.append(sid)
-                                elif isinstance(start_ts, int) and (now_ts - start_ts) > STALE_TTL_SEC:
-                                    stale_ids.append(sid)
-                        except Exception:
-                            pass
-                    for sid in stale_ids:
-                        try:
-                            requests.delete(_fb_url(DATA_FIREBASE_URL, f"stats/sessions/{sid}"), timeout=5)
-                        except Exception:
-                            pass
-                self.update_online_count.emit(max(online, 0))
-            except requests.RequestException:
-                pass
 
+    def __init__(self, session_id):
+        super().__init__()
+        self.session_id = session_id
+
+    def run(self):
+        try:
+            # Use Cloud Function to update presence and compute current online count
+            resp = requests.post(f"{CLOUD_FUNCTIONS_BASE_URL}/presenceHeartbeat", json={"sessionId": self.session_id}, timeout=8)
+            if resp.status_code == 200:
+                try:
+                    data = resp.json() or {}
+                    online = int(data.get("online", 0))
+                    self.update_online_count.emit(max(online, 0))
+                except Exception:
+                    pass
         except requests.RequestException:
             pass
         finally:
@@ -372,7 +332,7 @@ class FetchTranslationsThread(QThread):
     def __init__(self, main_window, force_update=False): super().__init__(main_window); self.main_window, self.force_update = main_window, force_update
     def run(self):
         try:
-            response = requests.get(_fb_url(DATA_FIREBASE_URL, "mods"), timeout=15); response.raise_for_status()
+            response = requests.get(f"{CLOUD_FUNCTIONS_BASE_URL}/getMods", timeout=15); response.raise_for_status()
             all_mods = []
 
 
@@ -380,38 +340,68 @@ class FetchTranslationsThread(QThread):
             for key, data in (response.json() or {}).items():
                 if not isinstance(data, dict): continue
                 files_data = {}
-                chapters_data = data.get("chapters", {})
 
-                if isinstance(chapters_data, list):
-                    chapters_items = [(str(i), chapter_data) for i, chapter_data in enumerate(chapters_data) if chapter_data is not None]
-                elif isinstance(chapters_data, dict):
-                    chapters_items = list(chapters_data.items())
+                # Support both new "files" and legacy "chapters" structure
+                raw_data = data.get("files", data.get("chapters", {}))
+
+                if isinstance(raw_data, list):
+                    chapters_items = [(str(i), chapter_data) for i, chapter_data in enumerate(raw_data) if chapter_data is not None]
+                elif isinstance(raw_data, dict):
+                    chapters_items = list(raw_data.items())
                 else:
                     chapters_items = []
 
-
+                # Determine modtype from is_demo_mod or explicit modtype
+                modtype = data.get("modtype", "deltarune")  # Default to deltarune
+                if modtype == "deltarune" and data.get("is_demo_mod", False):
+                    modtype = "deltarunedemo"  # Legacy compatibility
 
                 for chapter_key, chapter_data in chapters_items:
-                        if not isinstance(chapter_data, dict): continue
+                    if not isinstance(chapter_data, dict):
+                        continue
 
-
-
-                        try: chapter_id = int(chapter_key[1:]) if chapter_key.startswith("c") else int(chapter_key)
-                        except (ValueError, TypeError):
-                            continue
-
-                        if chapter_id == -1: chapter_key = 'demo'
-                        elif chapter_id == 0: chapter_key = 'menu'
-                        elif 1 <= chapter_id <= 4: chapter_key = f'chapter_{chapter_id}'
+                    # Handle legacy chapter ID format
+                    try:
+                        chapter_id = int(chapter_key[1:]) if chapter_key.startswith("c") else int(chapter_key)
+                    except (ValueError, TypeError):
+                        # New format uses string keys directly
+                        if chapter_key in ["0", "1", "2", "3", "4", "demo", "undertale"]:
+                            pass  # Valid key
                         else:
                             continue
 
-                        files_entry = {}
-                        if chapter_data.get('data_file_url'): files_entry.update({'data_win_url': chapter_data['data_file_url'], 'data_win_version': chapter_data.get('data_win_version', '1.0.0')})
-                        if extra_files := chapter_data.get('extra_files', []): files_entry['extra'] = {ef.get('key', 'unknown'): {'url': ef.get('url', ''), 'version': ef.get('version', '1.0.0')} for ef in extra_files if isinstance(ef, dict)}
+                    # Map legacy chapter IDs to new format
+                    if isinstance(chapter_key, str) and chapter_key.isdigit():
+                        # Already in new format (0, 1, 2, 3, 4)
+                        pass
+                    elif chapter_key == "demo":
+                        # Already correct
+                        pass
+                    elif chapter_key == "undertale":
+                        # Already correct
+                        pass
+                    else:
+                        # Legacy format conversion
+                        if chapter_id == -1:
+                            chapter_key = 'demo'
+                        elif chapter_id == 0:
+                            chapter_key = '0'
+                        elif 1 <= chapter_id <= 4:
+                            chapter_key = str(chapter_id)
+                        else:
+                            continue
 
-                        if files_entry:
-                            files_data[chapter_key] = files_entry
+                    data_url = chapter_data.get('data_file_url')
+                    data_version = chapter_data.get('data_file_version', '1.0.0')
+                    files_entry = {}
+                    if data_url:
+                        files_entry.update({'data_file_url': data_url, 'data_file_version': data_version})
+                    if extra_files := chapter_data.get('extra_files', []):
+                        files_entry['extra'] = {ef.get('key', 'unknown'): {'url': ef.get('url', ''), 'version': ef.get('version', '1.0.0')} for ef in extra_files if isinstance(ef, dict)}
+
+                    if files_entry:
+                        files_data[chapter_key] = files_entry
+
                 composite_version = self._aggregate_versions(files_data); base_version = data.get("version")
                 screens_list = data.get("screenshots_url", [])
                 if isinstance(screens_list, str):
@@ -419,7 +409,8 @@ class FetchTranslationsThread(QThread):
                     screens_list = [s.strip() for s in screens_list.split(",") if s.strip()]
                 elif not isinstance(screens_list, list):
                     screens_list = []
-                mod = ModInfo(key=key, name=data.get("name", tr("status.unknown_mod")), author=data.get("author", tr("status.unknown_author_status")), version=f"{base_version}|{composite_version}" if base_version else composite_version, tagline=data.get("tagline", tr("status.no_description_status")), game_version=data.get("game_version", tr("status.no_version")), description_url=data.get("description_url", ""), downloads=data.get("downloads", 0), is_demo_mod=data.get("is_demo_mod", False), is_verified=data.get("is_verified", False), icon_url=data.get("icon_url"), tags=data.get("tags", []), hide_mod=data.get("hide_mod", False), is_piracy_protected=data.get("is_piracy_protected", False), ban_status=data.get("ban_status", False), demo_url=files_data.get("demo", {}).get("url") if files_data else None, demo_version=files_data.get("demo", {}).get("version", "1.0.0") if files_data else "1.0.0", created_date=data.get("created_date"), last_updated=data.get("last_updated"), screenshots_url=screens_list)
+
+                mod = ModInfo(key=key, name=data.get("name", tr("status.unknown_mod")), author=data.get("author", tr("status.unknown_author_status")), version=f"{base_version}|{composite_version}" if base_version else composite_version, tagline=data.get("tagline", tr("status.no_description_status")), game_version=data.get("game_version", tr("status.no_version")), description_url=data.get("description_url", ""), downloads=data.get("downloads", 0), modtype=modtype, is_verified=data.get("is_verified", False), icon_url=data.get("icon_url"), tags=data.get("tags", []), hide_mod=data.get("hide_mod", False), is_xdelta=(data.get("is_xdelta", data.get("is_piracy_protected", False))), ban_status=data.get("ban_status", False), demo_url=files_data.get("demo", {}).get("url") if files_data else None, demo_version=files_data.get("demo", {}).get("version", "1.0.0") if files_data else "1.0.0", created_date=data.get("created_date"), last_updated=data.get("last_updated"), screenshots_url=screens_list)
 
                 if self._process_mod_chapters(mod, files_data):
                     all_mods.append(mod)
@@ -456,23 +447,24 @@ class FetchTranslationsThread(QThread):
                 for item in n: _walk(item)
         _walk(node); return "|".join(sorted(collected, key=version_sort_key, reverse=True)) if collected else "1.0.0"
     def _process_mod_chapters(self, mod, files_data):
-        for chapter_name, chapter_id in {"menu": 0, "chapter_1": 1, "chapter_2": 2, "chapter_3": 3, "chapter_4": 4}.items():
-            if not (chapter_data := files_data.get(chapter_name)):
+        # Process all file entries, now using string keys instead of chapter IDs
+        for file_key, chapter_data in files_data.items():
+            if not isinstance(chapter_data, dict):
                 continue
 
-            has_dw_version = not chapter_data.get("data_win_url") or bool(chapter_data.get("data_win_version"))
+            has_df_version = not chapter_data.get("data_file_url") or bool(chapter_data.get("data_file_version"))
             extra_files_data = chapter_data.get("extra", {}).items()
 
-            if not has_dw_version or (extra_files_data and not all(v.get("version") for _, v in extra_files_data)):
+            if not has_df_version or (extra_files_data and not all(v.get("version") for _, v in extra_files_data)):
                 return False
 
-            mod_chapter_data = ModChapterData(data_file_url=chapter_data.get("data_win_url"), data_win_version=chapter_data.get("data_win_version", "1.0.0"), extra_files=[ModExtraFile(key=k, **v) for k, v in extra_files_data])
+            mod_chapter_data = ModChapterData(data_file_url=chapter_data.get("data_file_url"), data_file_version=chapter_data.get("data_file_version", "1.0.0"), extra_files=[ModExtraFile(key=k, **v) for k, v in extra_files_data])
             if description_url := chapter_data.get("description_url"):
                 try: desc_resp = requests.get(description_url, timeout=10); desc_resp.raise_for_status(); mod_chapter_data.description = desc_resp.text
                 except requests.RequestException: mod_chapter_data.description = tr("errors.description_load_failed")
 
             if mod_chapter_data.is_valid():
-                mod.chapters[chapter_id] = mod_chapter_data
+                mod.files[file_key] = mod_chapter_data
         return True
     def _update_remote_exists_flags(self, all_mods):
         remote_mod_keys = {mod.key for mod in all_mods}
@@ -511,7 +503,7 @@ class InstallTranslationsThread(QThread):
     def cancel(self):
         # Только устанавливаем флаг отмены и уведомляем UI. Очистку выполняет основной поток после завершения.
         self._cancelled = True
-        self.status.emit(tr("status.operation_cancelled"), UI_COLORS["status_error"]) 
+        self.status.emit(tr("status.operation_cancelled"), UI_COLORS["status_error"])
 
     def _find_existing_mod_folder(self, mod_key: str) -> str:
         if not os.path.exists(self.main_window.mods_dir):
@@ -541,8 +533,8 @@ class InstallTranslationsThread(QThread):
         chapter_data = mod.get_chapter_data(chapter_id)
         if not chapter_data:
             return versions
-        if chapter_data.data_win_version:
-            versions['data'] = chapter_data.data_win_version
+        if chapter_data.data_file_version:
+            versions['data'] = chapter_data.data_file_version
         for extra_file in chapter_data.extra_files:
             if extra_file and extra_file.key and extra_file.version:
                 versions[extra_file.key] = extra_file.version
@@ -579,7 +571,7 @@ class InstallTranslationsThread(QThread):
 
             # Обработка data (учитываем возможный xdelta)
             if chapter_data and chapter_data.data_file_url and remote_versions.get('data'):
-                is_xdelta_mod = getattr(mod, 'is_piracy_protected', False)
+                is_xdelta_mod = getattr(mod, 'is_xdelta', getattr(mod, 'is_piracy_protected', False))
                 local_is_xdelta = False
                 try:
                     local_is_xdelta = any(
@@ -667,10 +659,11 @@ class InstallTranslationsThread(QThread):
 
                     if not components_to_update:
                         if chapter_data.data_file_url:
-                            is_xdelta_mod = getattr(mod, 'is_piracy_protected', False)
+                            is_xdelta_mod = getattr(mod, 'is_xdelta', getattr(mod, 'is_piracy_protected', False))
                             tasks.append({'mod': mod, 'url': chapter_data.data_file_url, 'chapter_id': chapter_id, 'component': 'data', 'is_xdelta': is_xdelta_mod})
                         for extra_file in chapter_data.extra_files:
-                            tasks.append({'mod': mod, 'url': extra_file.url, 'chapter_id': chapter_id, 'component': extra_file.key, 'is_xdelta': False})
+                            is_xdelta_mod = getattr(mod, 'is_xdelta', getattr(mod, 'is_piracy_protected', False))
+                            tasks.append({'mod': mod, 'url': extra_file.url, 'chapter_id': chapter_id, 'component': extra_file.key, 'is_xdelta': is_xdelta_mod})
                     else:
                         for component, info in components_to_update.items():
                             if info.get('delete'):
@@ -732,7 +725,7 @@ class InstallTranslationsThread(QThread):
                 self.finished.emit(False)
                 return
 
-            self.status.emit(tr("status.preparing_download"), UI_COLORS["status_warning"]) 
+            self.status.emit(tr("status.preparing_download"), UI_COLORS["status_warning"])
 
             if self._cancelled:
                 self.finished.emit(False)
@@ -754,7 +747,13 @@ class InstallTranslationsThread(QThread):
                 mod_folder_name = mod_folders[mod.key]
                 # Пишем во временную папку; позже перенесем в финальную mods_dir
                 mod_dir = os.path.join(self.temp_root, mod_folder_name)
-                cache_dir = os.path.join(mod_dir, "demo" if chapter_id == -1 else f"chapter_{chapter_id}")
+                # Определяем папку для файлов на основе chapter_id
+                if chapter_id == -1:
+                    cache_dir = os.path.join(mod_dir, "demo")
+                elif chapter_id == 0:
+                    cache_dir = os.path.join(mod_dir, "chapter_0")  # Меню/глава 0 храним в 'chapter_0' для согласованности с лаунчером
+                else:
+                    cache_dir = os.path.join(mod_dir, f"chapter_{chapter_id}")
 
                 # Очистка устаревших архивов (удаленные extra)
                 if task.get('cleanup_archives'):
@@ -798,7 +797,7 @@ class InstallTranslationsThread(QThread):
                         file_size_mb = tr("status.unknown_size") if size_mb < 0.05 else f"{size_mb:.1f} MB"
 
                     # Показываем только информацию о компоненте
-                    self.status.emit(f"{mod.name} {current_index}/{total_items} ({file_size_mb})", UI_COLORS["status_warning"]) 
+                    self.status.emit(f"{mod.name} {current_index}/{total_items} ({file_size_mb})", UI_COLORS["status_warning"])
 
                 self._installed_dirs.append(cache_dir)
                 chapter_data = mod.get_chapter_data(chapter_id)
@@ -858,22 +857,48 @@ class InstallTranslationsThread(QThread):
                 mod_folder_name = mod_folders[mod.key]
                 mod_dir = os.path.join(self.main_window.mods_dir, mod_folder_name)
 
-                chapters_data = {}
+                files_data = {}
                 for chapter_id in mod_data['chapters']:
                     chapter_data = mod.get_chapter_data(chapter_id) if chapter_id != -1 else None
                     versions_dict = {}
+                    file_info = {}
+
                     if chapter_data:
                         # Формируем словарь версий по компонентам
-                        if chapter_data.data_win_version:
-                            versions_dict['data'] = chapter_data.data_win_version
+                        if chapter_data.data_file_version:
+                            versions_dict['data'] = chapter_data.data_file_version
+                        if chapter_data.data_file_url:
+                            file_info['data_file_url'] = chapter_data.data_file_url
+                            file_info['data_file_version'] = chapter_data.data_file_version
+
+                        # Extra files
+                        extra_files_dict = {}
                         for extra_file in chapter_data.extra_files:
                             versions_dict[extra_file.key] = extra_file.version
+                            if extra_file.key not in extra_files_dict:
+                                extra_files_dict[extra_file.key] = []
+                            extra_files_dict[extra_file.key].append(os.path.basename(extra_file.url))
+
+                        if extra_files_dict:
+                            file_info['extra_files'] = extra_files_dict
+                        if versions_dict:
+                            file_info['versions'] = versions_dict
+
                     elif chapter_id == -1 and mod.is_valid_for_demo():
                         # Для демо сохраняем версию как отдельный компонент
                         if mod.demo_version:
                             versions_dict['demo'] = mod.demo_version
-                    if versions_dict:
-                        chapters_data[str(chapter_id)] = {"versions": versions_dict}
+                            file_info['versions'] = versions_dict
+
+                    if file_info:
+                        # Map chapter_id to file key
+                        if chapter_id == -1:
+                            file_key = 'demo'
+                        elif chapter_id == 0:
+                            file_key = '0'
+                        else:
+                            file_key = str(chapter_id)
+                        files_data[file_key] = file_info
 
                 config_data = {
                     "is_local_mod": False,
@@ -882,10 +907,10 @@ class InstallTranslationsThread(QThread):
                     "author": mod.author,
                     "version": mod.version,
                     "game_version": mod.game_version,
-                    "is_demo_mod": mod.is_demo_mod,
+                    "modtype": mod.modtype,
                     "installed_date": time.strftime('%Y-%m-%d %H:%M:%S'),
                     "is_available_on_server": True,
-                    "chapters": chapters_data
+                    "files": files_data
                 }
 
                 config_path = os.path.join(mod_dir, "config.json")
@@ -960,7 +985,7 @@ class InstallTranslationsThread(QThread):
     def _get_user_ip(self):
         try: return requests.get('https://api.ipify.org', timeout=5).text.strip()
         except Exception: return "127.0.0.1"
-    
+
     def _get_global_rate_limit_data(self):
         """Получает данные rate limiting из глобального конфига приложения."""
         try:
@@ -970,21 +995,21 @@ class InstallTranslationsThread(QThread):
             return {}
         except:
             return {}
-    
+
     def _update_global_rate_limit_data(self, mod_key):
         """Обновляет данные rate limiting в глобальном конфиге."""
         try:
             current_ip = self._get_user_ip()
             config_path = os.path.join(get_app_support_path(), "rate_limit_data.json")
-            
+
             # Читаем существующие данные
             rate_limit_data = self._get_global_rate_limit_data()
-            
+
             # Добавляем/обновляем запись для текущего IP+мода
             ip_mod_key = f"{current_ip}:{mod_key}"
             now_str = time.strftime('%Y-%m-%d %H:%M:%S')
             rate_limit_data[ip_mod_key] = now_str
-            
+
             # Сохраняем обновленные данные
             self.main_window._write_json(config_path, rate_limit_data)
         except:
@@ -994,18 +1019,18 @@ class InstallTranslationsThread(QThread):
         try:
             import datetime
             current_ip = self._get_user_ip()
-            
+
             # Читаем глобальные данные rate limiting из конфига приложения
             rate_limit_data = self._get_global_rate_limit_data()
-            
+
             # Проверяем последний инкремент для текущего IP и мода
             ip_mod_key = f"{current_ip}:{mod_key}"
             last_increment_time = rate_limit_data.get(ip_mod_key, "")
-            
+
             # Если нет записи для этого IP+мода, разрешаем инкремент
             if not last_increment_time:
                 return True
-            
+
             # Проверяем прошло ли 12 часов с последнего инкремента
             last_increment_dt = datetime.datetime.strptime(last_increment_time, '%Y-%m-%d %H:%M:%S')
             time_diff = datetime.datetime.now() - last_increment_dt
@@ -1025,7 +1050,7 @@ class InstallTranslationsThread(QThread):
                             config_data["installed_date"] = now_str
                             config_data["last_download_increment"] = now_str
                             self.main_window._write_json(config_path, config_data)
-                            
+
                             # Обновляем глобальные данные rate limiting
                             self._update_global_rate_limit_data(mod_key)
                             return
@@ -1036,12 +1061,10 @@ class InstallTranslationsThread(QThread):
 
     def _increment_mod_downloads_on_server(self, mod_key):
         try:
-            check_response = requests.get(_fb_url(DATA_FIREBASE_URL, f"mods/{mod_key}"), timeout=10)
-            if check_response.status_code != 200 or not (mod_data := check_response.json()): return False
-            new_downloads = mod_data.get('downloads', 0) + 1
-            response = requests.put(_fb_url(DATA_FIREBASE_URL, f"mods/{mod_key}/downloads"), json=new_downloads, timeout=10)
-            return response.status_code in [200, 204]
-        except Exception: return False
+            response = requests.post(f"{CLOUD_FUNCTIONS_BASE_URL}/incrementDownloads", json={"modId": mod_key}, timeout=10)
+            return response.status_code == 200
+        except Exception:
+            return False
 
     def _download_archive_file(self, url: str, target_dir: str, progress_signal, total_size: int, downloaded_ref: list[int], session=None):
         import os
@@ -1186,10 +1209,9 @@ class FetchChangelogThread(QThread):
 def increment_launch_counter():
     os_key = {"Windows": "windows", "Linux": "linux", "Darwin": "macos"}.get(platform.system(), "other")
     try:
-        current_resp = requests.get(_fb_url(DATA_FIREBASE_URL, f"stats/launches/{os_key}"), timeout=5)
-        current = current_resp.json() if current_resp.status_code == 200 and isinstance(current_resp.json(), int) else 0
-        requests.put(_fb_url(DATA_FIREBASE_URL, f"stats/launches/{os_key}"), json=current + 1, timeout=5)
-    except requests.RequestException: pass
+        requests.post(f"{CLOUD_FUNCTIONS_BASE_URL}/incrementLaunches", json={"os": os_key}, timeout=5)
+    except requests.RequestException:
+        pass
 
 def get_app_support_path():
     system = platform.system()
@@ -1245,17 +1267,20 @@ def is_game_running():
 def get_default_save_path() -> str:
     system = platform.system()
     return {"Windows": os.path.join(os.environ.get("USERPROFILE", ""), "AppData", "Local", "DELTARUNE"), "Darwin": os.path.expanduser("~/Library/Application Support/com.tobyfox.deltarune")}.get(system, os.path.expanduser("~/.steam/steam/steamapps/compatdata/1690940/pfx/drive_c/users/steamuser/Local Settings/Application Data/DELTARUNE"))
-    
+
 def is_valid_save_path(path: str) -> bool: return bool(path and os.path.isdir(path) and os.listdir(path))
 
-def is_valid_game_path(path: str, skip_data_check: bool = False) -> bool:
+def is_valid_game_path(path: str, skip_data_check: bool = False, game_type: str = "deltarune") -> bool:
     if not path or not os.path.isdir(path):
         return False
 
     if platform.system() == "Darwin":
         app_path = Path(path)
         if not path.endswith(".app"):
-            app_path = next((app_path / name for name in ("DELTARUNE.app", "DELTARUNEdemo.app") if (app_path / name).is_dir()), None)
+            if game_type == "undertale":
+                app_path = next((app_path / name for name in ("UNDERTALE.app",) if (app_path / name).is_dir()), None)
+            else:
+                app_path = next((app_path / name for name in ("DELTARUNE.app", "DELTARUNEdemo.app") if (app_path / name).is_dir()), None)
 
         if not app_path or not app_path.is_dir():
             return False
@@ -1278,8 +1303,13 @@ def is_valid_game_path(path: str, skip_data_check: bool = False) -> bool:
         has_data = (res_dir / "game.ios").is_file() or (res_dir / "data.win").is_file()
         return has_executable and has_data
 
-    return (os.path.isfile(os.path.join(path, "DELTARUNE.exe")) or
-            os.path.isfile(os.path.join(path, "DELTARUNE")))
+    # Windows/Linux validation
+    if game_type == "undertale":
+        return (os.path.isfile(os.path.join(path, "UNDERTALE.exe")) or
+                os.path.isfile(os.path.join(path, "UNDERTALE")))
+    else:
+        return (os.path.isfile(os.path.join(path, "DELTARUNE.exe")) or
+                os.path.isfile(os.path.join(path, "DELTARUNE")))
 
 def ensure_writable(path: str) -> bool:
     try:
@@ -1377,7 +1407,7 @@ def detect_field_type_by_text(text: str) -> str:
     ВНИМАНИЕ: Эта функция временная, нужно заменить на data-атрибуты!
     """
     text_lower = text.lower()
-    
+
     # Проверяем ключевые слова для определения типа поля
     if any(keyword in text_lower for keyword in ["ссылка", "путь", "url", "link"]):
         return "file_path"
@@ -1385,7 +1415,7 @@ def detect_field_type_by_text(text: str) -> str:
         return "version"
     elif "дополнительные файлы" in text_lower or "extra files" in text_lower:
         return "extra_files"
-    
+
     return "unknown"
 
 def get_file_filter(filter_type: str) -> str:
@@ -1405,7 +1435,7 @@ def get_file_filter(filter_type: str) -> str:
         'text_files': '*.txt',
         'all_files': '*'
     }
-    
+
     # Локализованные описания (можно переводить)
     FILTER_DESCRIPTIONS = {
         'image_files': tr('file_descriptions.image_files'),
@@ -1418,11 +1448,11 @@ def get_file_filter(filter_type: str) -> str:
         'text_files': tr('file_descriptions.text_files'),
         'all_files': tr('file_descriptions.all_files')
     }
-    
+
     # Получаем расширения и описание
     extensions = FILTER_EXTENSIONS.get(filter_type, '*')
     description = FILTER_DESCRIPTIONS.get(filter_type, filter_type)
-    
+
     # Формируем фильтр в правильном формате
     all_files_desc = FILTER_DESCRIPTIONS.get('all_files', 'All files')
     return f"{description} ({extensions});;{all_files_desc} (*)"

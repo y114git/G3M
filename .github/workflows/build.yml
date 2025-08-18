@@ -36,17 +36,14 @@ permissions:
 env:
   PYTHON_VERSION: "3.12"
   RELEASE_VERSION: ${{ github.event_name == 'workflow_dispatch' && format('v{0}', inputs.version) || github.ref_name }}
+  DATA_FIREBASE_URL: ${{ secrets.DATA_FIREBASE_URL }}
+  CLOUD_FUNCTIONS_BASE_URL: ${{ secrets.CLOUD_FUNCTIONS_BASE_URL }}
+  INTERNAL_SALT: ${{ secrets.INTERNAL_SALT }}
 
 jobs:
   linux:
     name: Linux · onefile (spec)
     runs-on: ubuntu-22.04
-    env:
-      DATA_FIREBASE_URL: ${{ secrets.DATA_FIREBASE_URL }}
-      FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
-      FIREBASE_AUTH_EMAIL: ${{ secrets.FIREBASE_AUTH_EMAIL }}
-      FIREBASE_AUTH_PASS: ${{ secrets.FIREBASE_AUTH_PASS }}
-      INTERNAL_SALT: ${{ secrets.INTERNAL_SALT }}
     steps:
       - uses: actions/checkout@v4
       - name: Set Archive Name
@@ -72,7 +69,7 @@ jobs:
           python - <<'PY'
           import os, base64
           def e(v): return base64.b64encode(v.encode('utf-8')).decode('ascii')
-          vals = {'DATA_FIREBASE_URL':os.environ.get('DATA_FIREBASE_URL',''),'FIREBASE_API_KEY':os.environ.get('FIREBASE_API_KEY',''),'FIREBASE_AUTH_EMAIL':os.environ.get('FIREBASE_AUTH_EMAIL',''),'FIREBASE_AUTH_PASS':os.environ.get('FIREBASE_AUTH_PASS',''),'INTERNAL_SALT':os.environ.get('INTERNAL_SALT','')}
+          vals = {'DATA_FIREBASE_URL':os.environ.get('DATA_FIREBASE_URL',''),'CLOUD_FUNCTIONS_BASE_URL':os.environ.get('CLOUD_FUNCTIONS_BASE_URL',''),'INTERNAL_SALT':os.environ.get('INTERNAL_SALT','')}
           with open('secrets_embed.py','w',encoding='utf-8') as f:
             f.write('import base64\n'); f.write("def d(s): return base64.b64decode(s).decode('utf-8')\n")
             for k,v in vals.items(): f.write(f"{k}=d('{e(v)}')\n")
@@ -100,12 +97,6 @@ jobs:
   macos-x64:
     name: macOS · x86_64 (spec)
     runs-on: macos-13
-    env:
-      DATA_FIREBASE_URL: ${{ secrets.DATA_FIREBASE_URL }}
-      FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
-      FIREBASE_AUTH_EMAIL: ${{ secrets.FIREBASE_AUTH_EMAIL }}
-      FIREBASE_AUTH_PASS: ${{ secrets.FIREBASE_AUTH_PASS }}
-      INTERNAL_SALT: ${{ secrets.INTERNAL_SALT }}
     steps:
       - uses: actions/checkout@v4
       - name: Set Archive Name
@@ -127,7 +118,7 @@ jobs:
           python - <<'PY'
           import os, base64
           def e(v): return base64.b64encode(v.encode('utf-8')).decode('ascii')
-          vals = {'DATA_FIREBASE_URL':os.environ.get('DATA_FIREBASE_URL',''),'FIREBASE_API_KEY':os.environ.get('FIREBASE_API_KEY',''),'FIREBASE_AUTH_EMAIL':os.environ.get('FIREBASE_AUTH_EMAIL',''),'FIREBASE_AUTH_PASS':os.environ.get('FIREBASE_AUTH_PASS',''),'INTERNAL_SALT':os.environ.get('INTERNAL_SALT','')}
+          vals = {'DATA_FIREBASE_URL':os.environ.get('DATA_FIREBASE_URL',''),'CLOUD_FUNCTIONS_BASE_URL':os.environ.get('CLOUD_FUNCTIONS_BASE_URL',''),'INTERNAL_SALT':os.environ.get('INTERNAL_SALT','')}
           with open('secrets_embed.py','w',encoding='utf-8') as f:
             f.write('import base64\n'); f.write("def d(s): return base64.b64decode(s).decode('utf-8')\n")
             for k,v in vals.items(): f.write(f"{k}=d('{e(v)}')\n")
@@ -149,12 +140,6 @@ jobs:
   macos-arm64:
     name: macOS · arm64 (spec)
     runs-on: macos-14
-    env:
-      DATA_FIREBASE_URL: ${{ secrets.DATA_FIREBASE_URL }}
-      FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
-      FIREBASE_AUTH_EMAIL: ${{ secrets.FIREBASE_AUTH_EMAIL }}
-      FIREBASE_AUTH_PASS: ${{ secrets.FIREBASE_AUTH_PASS }}
-      INTERNAL_SALT: ${{ secrets.INTERNAL_SALT }}
     steps:
       - uses: actions/checkout@v4
       - name: Set Archive Name
@@ -176,7 +161,7 @@ jobs:
           python - <<'PY'
           import os, base64
           def e(v): return base64.b64encode(v.encode('utf-8')).decode('ascii')
-          vals = {'DATA_FIREBASE_URL':os.environ.get('DATA_FIREBASE_URL',''),'FIREBASE_API_KEY':os.environ.get('FIREBASE_API_KEY',''),'FIREBASE_AUTH_EMAIL':os.environ.get('FIREBASE_AUTH_EMAIL',''),'FIREBASE_AUTH_PASS':os.environ.get('FIREBASE_AUTH_PASS',''),'INTERNAL_SALT':os.environ.get('INTERNAL_SALT','')}
+          vals = {'DATA_FIREBASE_URL':os.environ.get('DATA_FIREBASE_URL',''),'CLOUD_FUNCTIONS_BASE_URL':os.environ.get('CLOUD_FUNCTIONS_BASE_URL',''),'INTERNAL_SALT':os.environ.get('INTERNAL_SALT','')}
           with open('secrets_embed.py','w',encoding='utf-8') as f:
             f.write('import base64\n'); f.write("def d(s): return base64.b64decode(s).decode('utf-8')\n")
             for k,v in vals.items(): f.write(f"{k}=d('{e(v)}')\n")
@@ -198,12 +183,6 @@ jobs:
   windows:
     name: Windows · exe (spec + Inno)
     runs-on: windows-latest
-    env:
-      DATA_FIREBASE_URL: ${{ secrets.DATA_FIREBASE_URL }}
-      FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
-      FIREBASE_AUTH_EMAIL: ${{ secrets.FIREBASE_AUTH_EMAIL }}
-      FIREBASE_AUTH_PASS: ${{ secrets.FIREBASE_AUTH_PASS }}
-      INTERNAL_SALT: ${{ secrets.INTERNAL_SALT }}
     steps:
       - uses: actions/checkout@v4
       - name: Set Archive Names
@@ -228,7 +207,7 @@ jobs:
       - name: Generate secrets_embed.py
         shell: powershell
         run: |
-          $vals = @{'DATA_FIREBASE_URL'="$env:DATA_FIREBASE_URL";'FIREBASE_API_KEY'="$env:FIREBASE_API_KEY";'FIREBASE_AUTH_EMAIL'="$env:FIREBASE_AUTH_EMAIL";'FIREBASE_AUTH_PASS'="$env:FIREBASE_AUTH_PASS";'INTERNAL_SALT'="$env:INTERNAL_SALT"}
+          $vals = @{'DATA_FIREBASE_URL'="$env:DATA_FIREBASE_URL";'CLOUD_FUNCTIONS_BASE_URL'="$env:CLOUD_FUNCTIONS_BASE_URL";'INTERNAL_SALT'="$env:INTERNAL_SALT"}
           $py = @('import base64', "def d(s): return base64.b64decode(s).decode('utf-8')")
           foreach ($k in $vals.Keys) { $b64=[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($vals[$k])); $py += "$k=d('$b64')"}
           $utf8NoBom = New-Object System.Text.UTF8Encoding($false); [System.IO.File]::WriteAllLines('secrets_embed.py',$py,$utf8NoBom)

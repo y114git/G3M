@@ -1,14 +1,84 @@
-import base64, json, os, platform, re, shutil, sys, tempfile, threading, time, uuid, ctypes, subprocess, webbrowser, rarfile, textwrap, argparse, hashlib
+import base64, json, os, platform, re, shutil, sys, tempfile, threading, time, uuid, ctypes, subprocess, webbrowser, rarfile, argparse, hashlib
 from typing import Callable, Optional, List
 from helpers import *
 from packaging import version as version_parser
 from PyQt6 import sip
 from PyQt6.QtCore import Qt, QEvent, QEventLoop, QThread, QTimer, QUrl, pyqtSignal
-from PyQt6.QtGui import QBrush, QColor, QDesktopServices, QFont, QFontDatabase, QIcon, QImage, QMovie, QPainter, QPalette, QPixmap
+from PyQt6.QtGui import QBrush, QColor, QDesktopServices, QFont, QFontDatabase, QIcon, QImage, QMovie, QPainter, QPalette, QPixmap, QPen, QPainterPath
 from PyQt6.QtWidgets import QApplication, QButtonGroup, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFrame, QHeaderView, QLabel, QLineEdit, QMessageBox, QProgressBar, QPushButton, QTableWidget, QTableWidgetItem, QTabWidget, QTextBrowser, QVBoxLayout, QWidget, QHBoxLayout, QSizePolicy, QInputDialog, QColorDialog, QListWidget, QLayoutItem, QScrollArea, QSlider
-# QtMultimedia removed; using playsound3 for audio
 from localization import get_localization_manager, tr
 import logging
+import threading
+
+class OutlinedTextLabel(QLabel):
+    def __init__(self, text: str = "", parent=None, outline_color=QColor("white"), fill_color=QColor("black"), outline_width: float = 1.0):
+        super().__init__(text, parent)
+        self._outline_color = QColor(outline_color)
+        self._fill_color = QColor(fill_color)
+        self._outline_width = float(outline_width)
+        self._outline_opacity = 1.0
+        self._left_margin = 0
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+
+    def setColors(self, fill, outline):
+        self._fill_color = QColor(fill)
+        self._outline_color = QColor(outline)
+        self.update()
+
+    def setOutlineWidth(self, w: float):
+        try:
+            self._outline_width = max(0.0, float(w))
+        except Exception:
+            self._outline_width = 0.0
+        self.update()
+
+    def setOutlineOpacity(self, opacity: float):
+        # 0.0 .. 1.0
+        try:
+            self._outline_opacity = min(1.0, max(0.0, float(opacity)))
+        except Exception:
+            self._outline_opacity = 1.0
+        self.update()
+
+    def setLeftMargin(self, m: int):
+        self._left_margin = max(0, int(m))
+        self.update()
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setRenderHint(QPainter.RenderHint.TextAntialiasing)
+
+        font = self.font()
+        painter.setFont(font)
+        text = self.text() or ""
+        if not text:
+            return
+
+        # Left align, vertically centered baseline
+        rect = self.rect()
+        fm = self.fontMetrics()
+        ascent = fm.ascent()
+        descent = fm.descent()
+        x = rect.x() + self._left_margin
+        y = rect.y() + (rect.height() + ascent - descent) / 2
+
+        path = QPainterPath()
+        path.addText(x, y, font, text)
+
+        pen_color = QColor(self._outline_color)
+        # Apply opacity multiplier, keeping original alpha
+        pen_color.setAlphaF(self._outline_opacity * (pen_color.alphaF()))
+        pen = QPen(pen_color)
+        pen.setWidthF(self._outline_width)
+        pen.setStyle(Qt.PenStyle.SolidLine)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+        pen.setCosmetic(True)
+        painter.setPen(pen)
+        painter.setBrush(QBrush(self._fill_color))
+        painter.drawPath(path)
+
 
 # Centralized logging to file in config dir; truncate on each launch
 try:
@@ -32,6 +102,15 @@ except Exception:
 # ============================================================================
 #                               UTILITY FUNCTIONS
 # ============================================================================
+
+# Global lightweight image cache and network concurrency guard
+try:
+    _IMG_CACHE: dict[str, QImage] = {}
+    _PIX_CACHE: dict[str, QPixmap] = {}
+    _IMG_CACHE_LOCK = threading.Lock()
+    _NET_SEM = threading.Semaphore(6)  # cap concurrent network fetches
+except Exception:
+    _IMG_CACHE, _PIX_CACHE, _IMG_CACHE_LOCK, _NET_SEM = {}, {}, None, None
 
 def load_mod_icon_universal(icon_label, mod_data, size=80):
     """Универсальная функция для загрузки иконки мода (без блокировки UI)."""
@@ -82,23 +161,61 @@ def load_mod_icon_universal(icon_label, mod_data, size=80):
                         super().__init__(); self.url = url
                     def run(self):
                         try:
+                            # Cache hit
+                            global _PIX_CACHE, _IMG_CACHE_LOCK, _NET_SEM
+                            if _PIX_CACHE is not None and _IMG_CACHE_LOCK is not None:
+                                with _IMG_CACHE_LOCK:
+                                    if self.url in _PIX_CACHE:
+                                        self.loaded.emit(_PIX_CACHE[self.url]); return
                             import requests
-                            resp = requests.get(self.url, timeout=8)
+                            # Concurrency guard
+                            if _NET_SEM:
+                                _NET_SEM.acquire()
+                            try:
+                                resp = requests.get(self.url, timeout=8)
+                            finally:
+                                try:
+                                    if _NET_SEM:
+                                        _NET_SEM.release()
+                                except Exception:
+                                    pass
                             resp.raise_for_status()
                             img = QImage()
                             if img.loadFromData(resp.content):
-                                self.loaded.emit(QPixmap.fromImage(img))
+                                pm = QPixmap.fromImage(img)
+                                if _PIX_CACHE is not None:
+                                    try:
+                                        if _IMG_CACHE_LOCK is not None:
+                                            _IMG_CACHE_LOCK.acquire()
+                                        _PIX_CACHE[self.url] = pm
+                                    except Exception:
+                                        pass
+                                    finally:
+                                        try:
+                                            if _IMG_CACHE_LOCK is not None:
+                                                _IMG_CACHE_LOCK.release()
+                                        except Exception:
+                                            pass
+                                self.loaded.emit(pm)
                             else:
                                 self.failed.emit('decode')
-                        except requests.RequestException as e:
+                        except Exception as e:
                             self.failed.emit(str(e))
 
                 worker = _IconLoader(icon_url)
                 # Привязываем к label, чтобы не был собран GC
                 setattr(icon_label, '_icon_loader', worker)
                 # Безопасно останавливаем поток при уничтожении label
+                def safe_cleanup():
+                    try:
+                        if worker and not sip.isdeleted(worker):
+                            worker.requestInterruption()
+                            worker.quit()
+                            worker.wait(1000)
+                    except:
+                        pass
                 try:
-                    icon_label.destroyed.connect(lambda *_: (worker.requestInterruption(), worker.quit(), worker.wait(1000)))
+                    icon_label.destroyed.connect(safe_cleanup)
                 except Exception:
                     pass
                 def _on_loaded(pm: QPixmap):
@@ -319,7 +436,7 @@ class ScreenshotsCarousel(QWidget):
         self.image_label = QLabel()
         from PyQt6.QtWidgets import QSizePolicy
         # Fix the rendering area to avoid any initial zoom effect
-        fixed_w, fixed_h = 500, 300
+        fixed_w, fixed_h = 500, 280
         self.setMaximumWidth(fixed_w)
         self.image_label.setFixedSize(fixed_w, fixed_h)
         self.image_label.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
@@ -434,13 +551,34 @@ class ScreenshotsCarousel(QWidget):
                         self.idx, self.url = idx, url
                     def run(self):
                         try:
+                            global _IMG_CACHE, _IMG_CACHE_LOCK, _NET_SEM
+                            # Cache hit
+                            if _IMG_CACHE is not None and _IMG_CACHE_LOCK is not None:
+                                with _IMG_CACHE_LOCK:
+                                    if self.url in _IMG_CACHE:
+                                        self.loaded.emit(self.idx, _IMG_CACHE[self.url]); return
                             import requests
-                            r = requests.get(self.url, timeout=10)
+                            if _NET_SEM:
+                                _NET_SEM.acquire()
+                            try:
+                                r = requests.get(self.url, timeout=10)
+                            finally:
+                                try:
+                                    if _NET_SEM:
+                                        _NET_SEM.release()
+                                except Exception:
+                                    pass
                             if not r.ok:
                                 self.failed.emit(self.idx); return
                             q = QImage()
                             if not q.loadFromData(r.content):
                                 self.failed.emit(self.idx); return
+                            if _IMG_CACHE is not None and _IMG_CACHE_LOCK is not None:
+                                try:
+                                    with _IMG_CACHE_LOCK:
+                                        _IMG_CACHE[self.url] = q
+                                except Exception:
+                                    pass
                             self.loaded.emit(self.idx, q)
                         except Exception:
                             self.failed.emit(self.idx)
@@ -449,13 +587,31 @@ class ScreenshotsCarousel(QWidget):
                     if i < len(self._images):
                         self._images[i] = qimg
                         self._loading[i] = False
-                        if i == self.index:
-                            self._set_pixmap(qimg)
+                    # Guard: widget may be gone
+                    try:
+                        from PyQt6 import sip as _sip
+                        if not hasattr(self, 'image_label') or _sip.isdeleted(self.image_label):
+                            return
+                    except Exception:
+                        pass
+                    if i == self.index:
+                        self._set_pixmap(qimg)
                 def on_failed(i):
                     if i < len(self._loading):
                         self._loading[i] = False
+                    try:
+                        from PyQt6 import sip as _sip
+                        if not hasattr(self, 'image_label') or _sip.isdeleted(self.image_label):
+                            return
+                    except Exception:
+                        pass
                     if i == self.index:
-                        self.image_label.setText(tr('errors.file_not_available'))
+                        try:
+                            from PyQt6 import sip as _sip
+                            if hasattr(self, 'image_label') and not _sip.isdeleted(self.image_label):
+                                self.image_label.setText(tr('errors.file_not_available'))
+                        except Exception:
+                            pass
                 worker.loaded.connect(on_loaded)
                 worker.failed.connect(on_failed)
                 # Keep reference so worker isn't GC'd
@@ -491,13 +647,33 @@ class ScreenshotsCarousel(QWidget):
                 self.i, self.url = i, url
             def run(self):
                 try:
+                    global _IMG_CACHE, _IMG_CACHE_LOCK, _NET_SEM
+                    if _IMG_CACHE is not None and _IMG_CACHE_LOCK is not None:
+                        with _IMG_CACHE_LOCK:
+                            if self.url in _IMG_CACHE:
+                                self.loaded.emit(self.i, _IMG_CACHE[self.url]); return
                     import requests
-                    r = requests.get(self.url, timeout=10)
+                    if _NET_SEM:
+                        _NET_SEM.acquire()
+                    try:
+                        r = requests.get(self.url, timeout=10)
+                    finally:
+                        try:
+                            if _NET_SEM:
+                                _NET_SEM.release()
+                        except Exception:
+                            pass
                     if not r.ok:
                         self.failed.emit(self.i); return
                     q = QImage()
                     if not q.loadFromData(r.content):
                         self.failed.emit(self.i); return
+                    if _IMG_CACHE is not None and _IMG_CACHE_LOCK is not None:
+                        try:
+                            with _IMG_CACHE_LOCK:
+                                _IMG_CACHE[self.url] = q
+                        except Exception:
+                            pass
                     self.loaded.emit(self.i, q)
                 except Exception:
                     self.failed.emit(self.i)
@@ -522,6 +698,13 @@ class ScreenshotsCarousel(QWidget):
     # Note: fade-in animation removed intentionally for stability and to keep position while scrolling.
 
     def _set_pixmap(self, qimg: QImage):
+        # Guard against deleted widgets (rapid open/close)
+        try:
+            from PyQt6 import sip as _sip
+            if not hasattr(self, 'image_label') or _sip.isdeleted(self.image_label):
+                return
+        except Exception:
+            pass
         # letterbox fit into a fixed-height area; cap width to avoid horizontal growth
         # Use fixed label dimensions to avoid any size-based scaling on first show
         label_w = self.image_label.width() or 760
@@ -544,7 +727,12 @@ class ScreenshotsCarousel(QWidget):
         if self.urls and 0 <= self.index < len(self._images):
             current = self._images[self.index]
             if current is not None:
-                self._set_pixmap(current)
+                try:
+                    from PyQt6 import sip as _sip
+                    if hasattr(self, 'image_label') and not _sip.isdeleted(self.image_label):
+                        self._set_pixmap(current)
+                except Exception:
+                    pass
 
 
 class ModPlaqueWidget(QFrame):
@@ -681,22 +869,42 @@ class ModPlaqueWidget(QFrame):
         tags_layout.setContentsMargins(0, 5, 0, 0) # Небольшой отступ сверху
         tags_layout.setSpacing(10)
 
-        # Добавляем статус лицензии
-        if getattr(self.mod_data, 'is_piracy_protected', False):
-            license_label = QLabel(tr("ui.license_label"))
-            license_label.setStyleSheet("font-size: 14px; color: #2196F3; font-weight: bold;")
-            tags_layout.addWidget(license_label)
+        # Добавляем тег типа мода как первый элемент
+        modtype = getattr(self.mod_data, 'modtype', 'deltarune')
+        modtype_text = ""
+        modtype_style = ""
+        
+        if modtype == 'deltarune':
+            modtype_text = "DELTARUNE"
+            modtype_style = "background-color: black; color: white; border: 1px solid white;"
+        elif modtype == 'deltarunedemo':
+            modtype_text = "DELTARUNE DEMO"
+            modtype_style = "background-color: black; color: white; border: 1px solid lightgreen;"
+        elif modtype == 'undertale':
+            modtype_text = "UNDERTALE"
+            modtype_style = "background-color: red; color: white; border: 1px solid red;"
+        
+        if modtype_text:
+            modtype_label = QLabel(modtype_text)
+            modtype_label.setStyleSheet(f"font-weight: bold; padding: 2px 5px; border-radius: 3px; {modtype_style}")
+            tags_layout.addWidget(modtype_label)
 
-        # Добавляем индикатор демоверсии
-        if self.mod_data.is_demo_mod:
-            demo_label = QLabel(tr("ui.demo_label"))
-            demo_label.setStyleSheet("font-size: 14px; color: #FF9800; font-weight: bold;")
-            tags_layout.addWidget(demo_label)
+        # Добавляем тег типа модификации
+        if getattr(self.mod_data, 'is_xdelta', getattr(self.mod_data, 'is_piracy_protected', False)):
+            # Патчинг (XDELTA)
+            patching_label = QLabel(tr("ui.patching_label"))
+            patching_label.setStyleSheet("color: #2196F3; font-size: 14px;")
+            tags_layout.addWidget(patching_label)
+        else:
+            # Замена файлов
+            replacement_label = QLabel(tr("ui.file_replacement_label"))
+            replacement_label.setStyleSheet("color: #FF9800; font-size: 14px;")
+            tags_layout.addWidget(replacement_label)
 
         # Добавляем статус верификации
         if self.mod_data.is_verified:
             verified_label = QLabel(tr("ui.verified_label"))
-            verified_label.setStyleSheet("font-size: 14px; color: #4CAF50; font-weight: bold;")
+            verified_label.setStyleSheet("color: #4CAF50; font-size: 14px;")
             tags_layout.addWidget(verified_label)
         tags_layout.addStretch()
         info_layout.addLayout(tags_layout)
@@ -1225,13 +1433,19 @@ class ModEditorDialog(QDialog):
 
         settings_frame = QFrame(); settings_frame.setFrameStyle(QFrame.Shape.Box); settings_layout = QVBoxLayout(settings_frame)
 
-        checkboxes_layout = QHBoxLayout(); checkboxes_layout.addStretch()
-        self.demo_checkbox = QCheckBox(tr("checkboxes.demo_version"))
-        checkboxes_layout.addWidget(self.demo_checkbox)
-        checkboxes_layout.addSpacing(12)
+        # Mod type and settings
+        modtype_layout = QHBoxLayout(); modtype_layout.addStretch()
+        modtype_layout.addWidget(QLabel(tr("ui.mod_type_label")))
+        self.modtype_combo = QComboBox()
+        self.modtype_combo.addItem("DELTARUNE", "deltarune")
+        self.modtype_combo.addItem("DELTARUNE DEMO", "deltarunedemo")
+        self.modtype_combo.addItem("UNDERTALE", "undertale")
+        self.modtype_combo.currentIndexChanged.connect(self._update_file_tabs)
+        modtype_layout.addWidget(self.modtype_combo)
+        modtype_layout.addSpacing(12)
         self.piracy_checkbox = QCheckBox(tr("checkboxes.piracy_protection"))
-        checkboxes_layout.addWidget(self.piracy_checkbox)
-        checkboxes_layout.addStretch(); settings_layout.addLayout(checkboxes_layout)
+        modtype_layout.addWidget(self.piracy_checkbox)
+        modtype_layout.addStretch(); settings_layout.addLayout(modtype_layout)
 
         form_layout = QVBoxLayout()
         self._create_form_fields(form_layout)
@@ -1311,17 +1525,55 @@ class ModEditorDialog(QDialog):
                 if checked: getattr(self, attr).setChecked(True)
 
     def _load_game_versions(self):
+        # Populate defaults immediately; replace asynchronously when loaded
         try:
-            from helpers import _fb_url
-            response = requests.get(_fb_url(DATA_FIREBASE_URL, "globals"), timeout=10)
-            if response.status_code == 200:
-                globals_data = response.json() or {}
-                supported_versions = globals_data.get("supported_game_versions", ["1.03"])
-                supported_versions.sort(key=game_version_sort_key, reverse=True)
-            else: supported_versions = ["1.03"]
-        except Exception: supported_versions = ["1.03"]
-        self.game_version_combo.addItems(supported_versions)
-        if supported_versions: self.game_version_combo.setCurrentIndex(0)
+            self.game_version_combo.blockSignals(True)
+            self.game_version_combo.clear()
+            self.game_version_combo.addItems(["1.03"])  # sensible default
+            self.game_version_combo.setCurrentIndex(0)
+            self.game_version_combo.blockSignals(False)
+        except Exception:
+            pass
+
+        from PyQt6.QtCore import QThread, pyqtSignal
+
+        class _VersFetch(QThread):
+            got = pyqtSignal(list)
+            def __init__(self, parent=None):
+                super().__init__(parent)
+            def run(self):
+                try:
+                    from helpers import CLOUD_FUNCTIONS_BASE_URL
+                    import requests
+                    r = requests.get(f"{CLOUD_FUNCTIONS_BASE_URL}/getGlobalSettings", timeout=6)
+                    if r.status_code == 200:
+                        data = r.json() or {}
+                        vers = data.get("supported_game_versions", ["1.03"]) or ["1.03"]
+                        if isinstance(vers, list):
+                            self.got.emit(vers)
+                except Exception:
+                    pass
+
+        worker = _VersFetch(self)
+        def _apply(vers):
+            try:
+                vers = list(vers)
+                vers.sort(key=game_version_sort_key, reverse=True)
+                self.game_version_combo.blockSignals(True)
+                self.game_version_combo.clear()
+                self.game_version_combo.addItems(vers)
+                if vers:
+                    self.game_version_combo.setCurrentIndex(0)
+                self.game_version_combo.blockSignals(False)
+            except Exception:
+                pass
+        worker.got.connect(_apply)
+        # Keep a reference on the instance to avoid GC while running
+        try:
+            self._version_fetch_worker = worker
+        except Exception:
+            pass
+        worker.start()
 
     def _trigger_validation(self, line_edit, validation_func, **kwargs):
         if hasattr(line_edit, '_validation_timer'): line_edit._validation_timer.stop()
@@ -1380,63 +1632,117 @@ class ModEditorDialog(QDialog):
 
             editors = []
             previews = []
+            timers = []
+            workers = {}
 
             MAX_MB = 2
             MAX_BYTES = MAX_MB * 1024 * 1024
 
-            def make_preview(index):
-                url = editors[index].text().strip()
-                editors[index].setProperty('isValidShot', False)
-                if not url or not (url.startswith('http://') or url.startswith('https://')):
-                    previews[index].setText('')
-                    previews[index].setPixmap(QPixmap())
-                    previews[index].hide()
-                    return
-                try:
-                    import requests
-                    # First try HEAD for size
+            from PyQt6.QtCore import QThread, pyqtSignal, QTimer as _QTimer
+
+            class ShotLoader(QThread):
+                loaded = pyqtSignal(int, object)
+                failed = pyqtSignal(int, str)
+                def __init__(self, idx, url):
+                    super().__init__()
+                    self.idx, self.url = idx, url
+                def run(self):
                     try:
-                        h = requests.head(url, allow_redirects=True, timeout=6)
-                        cl = h.headers.get('content-length')
-                        if cl and cl.isdigit() and int(cl) > MAX_BYTES:
-                            previews[index].setText(tr('errors.file_too_large', max_size=MAX_MB))
-                            previews[index].show()
-                            return
+                        global _IMG_CACHE, _IMG_CACHE_LOCK, _NET_SEM
+                        # Cache
+                        if _IMG_CACHE is not None and _IMG_CACHE_LOCK is not None:
+                            with _IMG_CACHE_LOCK:
+                                if self.url in _IMG_CACHE:
+                                    self.loaded.emit(self.idx, _IMG_CACHE[self.url]); return
+                        import requests
+                        # HEAD for size
+                        try:
+                            if _NET_SEM: _NET_SEM.acquire()
+                            try:
+                                h = requests.head(self.url, allow_redirects=True, timeout=6)
+                            finally:
+                                if _NET_SEM: _NET_SEM.release()
+                            cl = h.headers.get('content-length')
+                            if cl and cl.isdigit() and int(cl) > MAX_BYTES:
+                                self.failed.emit(self.idx, 'too_large'); return
+                        except Exception:
+                            pass
+                        # GET content
+                        if _NET_SEM: _NET_SEM.acquire()
+                        try:
+                            resp = requests.get(self.url, timeout=8)
+                        finally:
+                            if _NET_SEM: _NET_SEM.release()
+                        if not resp.ok:
+                            self.failed.emit(self.idx, 'unavailable'); return
+                        if len(resp.content) > MAX_BYTES:
+                            self.failed.emit(self.idx, 'too_large'); return
+                        qimg = QImage()
+                        if not qimg.loadFromData(resp.content):
+                            self.failed.emit(self.idx, 'not_image'); return
+                        if _IMG_CACHE is not None and _IMG_CACHE_LOCK is not None:
+                            try:
+                                with _IMG_CACHE_LOCK:
+                                    _IMG_CACHE[self.url] = qimg
+                            except Exception:
+                                pass
+                        self.loaded.emit(self.idx, qimg)
+                    except Exception:
+                        self.failed.emit(self.idx, 'error')
+
+            def _apply_preview(index, qimg):
+                area_w, area_h = 640, 200
+                pm = QPixmap.fromImage(qimg)
+                scaled = pm.scaled(area_w, area_h, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                canvas = QPixmap(area_w, area_h)
+                canvas.fill(QColor('black'))
+                p = QPainter(canvas)
+                x = (area_w - scaled.width())//2
+                y = (area_h - scaled.height())//2
+                p.drawPixmap(x, y, scaled)
+                p.end()
+                previews[index].setPixmap(canvas)
+                previews[index].show()
+                editors[index].setProperty('isValidShot', True)
+
+            def _apply_error(index, kind):
+                msg = {
+                    'too_large': tr('errors.file_too_large', max_size=MAX_MB),
+                    'unavailable': tr('errors.file_not_available'),
+                    'not_image': tr('errors.not_an_image'),
+                    'error': tr('errors.url_error')
+                }.get(kind, tr('errors.url_error'))
+                previews[index].setText(msg)
+                previews[index].show()
+                editors[index].setProperty('isValidShot', False)
+
+            def schedule_preview(index):
+                # debounce
+                t = timers[index]
+                t.stop()
+                t.start(300)
+
+            def run_preview(index):
+                url = editors[index].text().strip()
+                previews[index].setText('')
+                previews[index].setPixmap(QPixmap())
+                previews[index].hide()
+                editors[index].setProperty('isValidShot', False)
+                if not url or not url.startswith(('http://','https://')):
+                    return
+                # cancel previous worker
+                if index in workers:
+                    try:
+                        w = workers.pop(index)
+                        if w.isRunning():
+                            w.requestInterruption(); w.quit(); w.wait(100)
                     except Exception:
                         pass
-                    resp = requests.get(url, timeout=8)
-                    if not resp.ok:
-                        previews[index].setText(tr('errors.file_not_available'))
-                        previews[index].show()
-                        return
-                    # If no content-length, check actual size
-                    if len(resp.content) > MAX_BYTES:
-                        previews[index].setText(tr('errors.file_too_large', max_size=MAX_MB))
-                        previews[index].show()
-                        return
-                    qimg = QImage()
-                    if not qimg.loadFromData(resp.content):
-                        previews[index].setText(tr('errors.not_an_image'))
-                        previews[index].show()
-                        return
-                    # Fit wide area with letterbox
-                    area_w = 640
-                    area_h = 200
-                    pm = QPixmap.fromImage(qimg)
-                    scaled = pm.scaled(area_w, area_h, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
-                    canvas = QPixmap(area_w, area_h)
-                    canvas.fill(QColor('black'))
-                    p = QPainter(canvas)
-                    x = (area_w - scaled.width())//2
-                    y = (area_h - scaled.height())//2
-                    p.drawPixmap(x, y, scaled)
-                    p.end()
-                    previews[index].setPixmap(canvas)
-                    previews[index].show()
-                    editors[index].setProperty('isValidShot', True)
-                except Exception:
-                    previews[index].setText(tr('errors.url_error'))
-                    previews[index].show()
+                w = ShotLoader(index, url)
+                workers[index] = w
+                w.loaded.connect(lambda i, img: _apply_preview(i, img))
+                w.failed.connect(lambda i, k: _apply_error(i, k))
+                w.start()
 
             for i in range(10):
                 le = QLineEdit()
@@ -1452,9 +1758,13 @@ class ModEditorDialog(QDialog):
                 prev.hide()
                 previews.append(prev)
                 content_layout.addWidget(prev)
-                le.textChanged.connect(lambda _=None, idx=i: make_preview(idx))
-                # initial — immediately validate and show if valid
-                make_preview(i)
+                t = _QTimer(dlg)
+                t.setSingleShot(True)
+                t.timeout.connect(lambda idx=i: run_preview(idx))
+                timers.append(t)
+                le.textChanged.connect(lambda _=None, idx=i: schedule_preview(idx))
+                # initial
+                schedule_preview(i)
 
             btns = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
             def save_and_close():
@@ -1483,7 +1793,7 @@ class ModEditorDialog(QDialog):
         self.file_tabs = NoScrollTabWidget()
         # Центрируем вкладки
         self.file_tabs.setStyleSheet("QTabWidget::tab-bar { alignment: center; } QTabBar::tab { padding: 4px 8px; }")
-        self.demo_checkbox.stateChanged.connect(self._update_file_tabs)
+        self.modtype_combo.currentIndexChanged.connect(self._update_file_tabs)
         self.piracy_checkbox.stateChanged.connect(self._update_data_file_labels)
         # On mode change, recreate DATA/PATCH frames so type switches cleanly
         self.piracy_checkbox.stateChanged.connect(self._recreate_data_frames)
@@ -1584,8 +1894,12 @@ class ModEditorDialog(QDialog):
 
     def _update_file_tabs(self):
         while self.file_tabs.count(): self.file_tabs.removeTab(0)
-        if self.demo_checkbox.isChecked(): self._create_file_tab(tr("tabs.demo"))
-        else:
+        modtype = self.modtype_combo.currentData()
+        if modtype == 'deltarunedemo':
+            self._create_file_tab(tr("tabs.demo"))
+        elif modtype == 'undertale':
+            self._create_file_tab("UNDERTALE")
+        else:  # deltarune
             for tab_name in [tr("tabs.menu_root"), tr("tabs.chapter_1"), tr("tabs.chapter_2"), tr("tabs.chapter_3"), tr("tabs.chapter_4")]: self._create_file_tab(tab_name)
         # After rebuild, also refresh button texts
         self._update_data_add_button_texts()
@@ -2155,39 +2469,15 @@ class ModEditorDialog(QDialog):
         new_state = not current_hidden
 
         try:
-            from helpers import DATA_FIREBASE_URL
             import requests
-
-            from helpers import _fb_url
-            response = requests.get(_fb_url(DATA_FIREBASE_URL, f"mods/{self.mod_key}"), timeout=10)
-            if response.status_code == 200:
-                current_data = response.json()
-                if current_data:
-                    current_data['hide_mod'] = new_state
-                    from helpers import format_timestamp
-                    current_data['last_updated'] = format_timestamp()
-
-                    update_response = requests.put(_fb_url(DATA_FIREBASE_URL, f"mods/{self.mod_key}"),
-                                                 json=current_data, timeout=10)
-                    update_response.raise_for_status()
-                    # Verify the flag actually changed on the server
-                    verify_resp = requests.get(_fb_url(DATA_FIREBASE_URL, f"mods/{self.mod_key}"), timeout=8)
-                    if verify_resp.status_code == 200 and isinstance(verify_resp.json(), dict) and verify_resp.json().get('hide_mod') == new_state:
-                        self.mod_data['hide_mod'] = new_state
-                        if hasattr(self, 'hide_mod_button'):
-                            self.hide_mod_button.setText(tr("ui.show_mod") if new_state else tr("ui.hide_mod"))
-                        QMessageBox.information(self, tr("dialogs.updated"),
-                                              tr("dialogs.mod_visibility_changed", state=tr("ui.hidden_from_list") if new_state else tr("ui.shown_in_list")))
-                    else:
-                        QMessageBox.critical(self, tr("dialogs.update_error"), tr("dialogs.update_verification_failed"))
-                else:
-                    QMessageBox.warning(self, tr("dialogs.error"), tr("dialogs.mod_not_found"))
-            else:
-                QMessageBox.warning(self, tr("dialogs.error"), tr("dialogs.failed_to_get_mod_data"))
-
+            from helpers import CLOUD_FUNCTIONS_BASE_URL
+            # Submit a change request to toggle visibility; moderators will apply it
+            change = {"hide_mod": new_state}
+            resp = requests.post(f"{CLOUD_FUNCTIONS_BASE_URL}/submitModChange", json={"modData": change, "hashedKey": self.mod_key}, timeout=10)
+            resp.raise_for_status()
+            QMessageBox.information(self, tr("dialogs.request_sent_title"), tr("errors.request_sent_message"))
         except Exception as e:
-            QMessageBox.critical(self, tr("dialogs.update_error"),
-                               tr("dialogs.failed_to_update_mod", error=str(e)))
+            QMessageBox.critical(self, tr("dialogs.update_error"), tr("dialogs.failed_to_update_mod", error=str(e)))
 
 
 
@@ -2569,15 +2859,20 @@ class ModEditorDialog(QDialog):
         files_data = {}
 
 
+        modtype = self.modtype_combo.currentData()
         if self.is_public:
-            if self.demo_checkbox.isChecked():
+            if modtype == 'deltarunedemo':
                 tab_keys = ["demo"]
-            else:
+            elif modtype == 'undertale':
+                tab_keys = ["undertale"]
+            else:  # deltarune
                 tab_keys = ["menu", "chapter_1", "chapter_2", "chapter_3", "chapter_4"]
         else:
-            if self.demo_checkbox.isChecked():
-                tab_keys = ["-1"]
-            else:
+            if modtype == 'deltarunedemo':
+                tab_keys = ["demo"]
+            elif modtype == 'undertale':
+                tab_keys = ["undertale"]
+            else:  # deltarune
                 tab_keys = ["0", "1", "2", "3", "4"]
 
         for tab_index in range(self.file_tabs.count()):
@@ -2615,8 +2910,8 @@ class ModEditorDialog(QDialog):
                     frame_data = self._extract_frame_data(frame_layout)
                     if frame_data:
                         if frame_data['type'] == 'data':
-                            tab_files['data_win_url'] = frame_data['url']
-                            tab_files['data_win_version'] = frame_data['version']
+                            tab_files['data_file_url'] = frame_data['url']
+                            tab_files['data_file_version'] = frame_data['version']
                         elif frame_data['type'] == 'extra':
                             if 'extra' not in tab_files:
                                 tab_files['extra'] = {}
@@ -2630,8 +2925,8 @@ class ModEditorDialog(QDialog):
                         continue
 
                     if local_data['type'] == 'data' and local_data.get('path'):
-                        tab_files['data_win_url'] = local_data['path']
-                        tab_files['data_win_version'] = local_data.get('version', '1.0.0')
+                        tab_files['data_file_url'] = local_data['path']
+                        tab_files['data_file_version'] = local_data.get('version', '1.0.0')
 
                     elif local_data['type'] == 'extra' and local_data.get('paths'):
                         if 'extra_files' not in tab_files:
@@ -2773,8 +3068,8 @@ class ModEditorDialog(QDialog):
             "icon_url": self.icon_edit.text().strip(),
             "tags": tags,
             "hide_mod": False,
-            "is_piracy_protected": self.piracy_checkbox.isChecked(),
-            "is_demo_mod": self.demo_checkbox.isChecked(),
+            "is_xdelta": self.piracy_checkbox.isChecked(),
+            "modtype": self.modtype_combo.currentData() or "deltarune",
             # NOTE: do not set is_verified here; preserve server value on update
             "game_version": (self.game_version_combo.currentText() if self.is_public else (self.game_version_edit.text().strip() or "1.03")),
             "files": files_data,
@@ -2802,46 +3097,8 @@ class ModEditorDialog(QDialog):
         try:
             mod_data = self._collect_mod_data()
 
-            # Преобразуем структуру files в chapters (единый стандарт)
-            if "files" in mod_data:
-                chapters = {}
-
-                for chapter_key, chapter_files in mod_data["files"].items():
-                    # Правильный маппинг согласно стандарту
-                    if chapter_key == "demo":
-                        chapter_id = -1
-                    elif chapter_key == "menu":
-                        chapter_id = 0
-                    elif chapter_key.startswith("chapter_"):
-                        chapter_id = int(chapter_key.replace("chapter_", ""))
-                    else:
-                        continue
-
-                    chapter_data = {}
-                    if "data_win_url" in chapter_files:
-                        chapter_data["data_file_url"] = chapter_files["data_win_url"]
-                    if "data_win_version" in chapter_files:
-                        chapter_data["data_win_version"] = chapter_files["data_win_version"]
-
-                    # Преобразуем extra files в правильный формат
-                    if "extra" in chapter_files:
-                        extra_files = []
-                        for key, file_data in chapter_files["extra"].items():
-                            extra_files.append({
-                                "key": key,
-                                "url": file_data["url"],
-                                "version": file_data["version"]
-                            })
-                        # Ренумерация ключей как последовательность "1","2","3"...
-                        for idx, ef in enumerate(extra_files, start=1):
-                            ef["key"] = str(idx)
-                        chapter_data["extra_files"] = extra_files
-
-                    chapters[str(chapter_id)] = chapter_data
-
-                # Заменяем files на chapters
-                mod_data.pop("files")
-                mod_data["chapters"] = chapters
+            # Keep files structure as-is (modern standard)
+            # No conversion needed - server should accept files structure
 
             from helpers import format_timestamp
             timestamp = format_timestamp()
@@ -2854,9 +3111,9 @@ class ModEditorDialog(QDialog):
             from helpers import DATA_FIREBASE_URL
             import requests
 
-            from helpers import _fb_url
-            pending_url = _fb_url(DATA_FIREBASE_URL, f"pending_mods/{hashed_key}")
-            response = requests.put(pending_url, json=mod_data, timeout=10)
+            from helpers import CLOUD_FUNCTIONS_BASE_URL
+            functions_url = f"{CLOUD_FUNCTIONS_BASE_URL}/submitNewMod"
+            response = requests.post(functions_url, json={"modData": mod_data, "hashedKey": hashed_key}, timeout=10)
             response.raise_for_status()
 
             # Мод успешно отправлен, теперь сохраняем ключ
@@ -2931,83 +3188,69 @@ class ModEditorDialog(QDialog):
                 mod_data["icon_url"] = icon_filename
 
             # Преобразуем структуру для локальных модов
-            local_chapters = {}
+            local_files = {}
 
-            # Копируем файлы глав с правильной структурой
-            for chapter_key, chapter_files in mod_data.get("files", {}).items():
-                # Преобразуем строковые ключи в числовые для главы
-                try:
-                    chapter_id = int(chapter_key)
-                except ValueError:
+            # Копируем файлы с правильной структурой
+            for file_key, file_data in mod_data.get("files", {}).items():
+                file_version_parts = []
+
+                # Определяем подпапку для файлов
+                if file_key == "demo":
+                    file_folder = os.path.join(mod_dir, "demo")
+                elif file_key == "undertale":
+                    file_folder = os.path.join(mod_dir, "undertale")
+                elif file_key == "0":
+                    file_folder = os.path.join(mod_dir, "chapter_0")
+                elif file_key in ["1", "2", "3", "4"]:
+                    file_folder = os.path.join(mod_dir, f"chapter_{file_key}")
+                else:
                     continue
-
-                chapter_version_parts = []
-
-                # Определяем подпапку для главы
-                if chapter_id == -1:  # Демо
-                    chapter_folder = os.path.join(mod_dir, "demo")
-                elif chapter_id == 0:   # Меню
-                    chapter_folder = os.path.join(mod_dir, "chapter_0")
-                else:  # Главы 1, 2, 3, ...
-                    chapter_folder = os.path.join(mod_dir, f"chapter_{chapter_id}")
-                os.makedirs(chapter_folder, exist_ok=True)
+                os.makedirs(file_folder, exist_ok=True)
 
                 # DATA-файл
-                data_path = chapter_files.get("data_win_url")
+                data_path = file_data.get("data_file_url")
                 if data_path and os.path.exists(data_path):
                     data_filename = os.path.basename(data_path)
-                    destination = os.path.join(chapter_folder, data_filename)
+                    destination = os.path.join(file_folder, data_filename)
                     shutil.copy2(data_path, destination)
-                    chapter_files["data_win_url"] = data_filename # Относительный путь
-                    chapter_version_parts.append(chapter_files.get("data_win_version", "1.0.0"))
+                    file_data["data_file_url"] = data_filename # Относительный путь
+                    file_version_parts.append(file_data.get("data_file_version", "1.0.0"))
 
                 # Дополнительные файлы
-                extra_files = chapter_files.get("extra_files", {})
+                extra_files = file_data.get("extra_files", {})
                 for group_key, paths in extra_files.items():
                     copied_paths = []
                     for path in paths:
                         if os.path.exists(path):
                             filename = os.path.basename(path)
-                            shutil.copy2(path, os.path.join(chapter_folder, filename))
+                            shutil.copy2(path, os.path.join(file_folder, filename))
                             copied_paths.append(filename)
                     extra_files[group_key] = copied_paths # Обновляем на относительные пути
-                    chapter_version_parts.append("1.0.0")  # Для доп. файлов
+                    file_version_parts.append("1.0.0")  # Для доп. файлов
 
-                # Создаем версию главы если есть файлы
-                if chapter_version_parts:
-                    local_chapters[str(chapter_id)] = "|".join(chapter_version_parts)
+                # Создаем версию файла если есть файлы
+                if file_version_parts:
+                    local_files[file_key] = "|".join(file_version_parts)
 
             # Создаем config.json в папке мода с полной информацией о файлах
-            chapters_data = {}
-            files_data = {}  # Добавляем информацию о файлах для редактора
+            files_data = {}
 
-            for ch_id, ch_data in local_chapters.items():
-                # Формируем словарь версий вместо composite_version
-                versions = {}
-                chapter_files = mod_data.get("files", {}).get(ch_id, {})
-                if chapter_files.get("data_win_url"):
-                    versions['data'] = chapter_files.get("data_win_version", "1.0.0")
-                if chapter_files.get("extra_files"):
-                    for group_key, paths in chapter_files["extra_files"].items():
-                        if paths:  # если есть хотя бы один файл этой группы
-                            versions[group_key] = "1.0.0"
-                if versions:
-                    chapters_data[str(ch_id)] = {"versions": versions}
-
-                # Добавляем информацию о файлах для этой главы
-                files_data[str(ch_id)] = {}
+            for file_key, file_version in local_files.items():
+                # Добавляем информацию о файлах
+                file_info = mod_data.get("files", {}).get(file_key, {})
+                files_data[file_key] = {}
 
                 # DATA-файл
-                if chapter_files.get("data_win_url"):
-                    files_data[str(ch_id)]["data_win_url"] = os.path.basename(chapter_files["data_win_url"])
-                    files_data[str(ch_id)]["data_win_version"] = chapter_files.get("data_win_version", "1.0.0")
+                if file_info.get("data_file_url"):
+                    files_data[file_key]["data_file_url"] = os.path.basename(file_info["data_file_url"])
+                    files_data[file_key]["data_file_version"] = file_info.get("data_file_version", "1.0.0")
 
                 # Дополнительные файлы
-                extra_files = chapter_files.get("extra_files", {})
+                extra_files = file_info.get("extra_files", {})
                 if extra_files:
-                    files_data[str(ch_id)]["extra_files"] = {}
+                    files_data[file_key]["extra_files"] = {}
                     for group_key, paths in extra_files.items():
-                        files_data[str(ch_id)]["extra_files"][group_key] = [os.path.basename(path) for path in paths]
+                        files_data[file_key]["extra_files"][group_key] = [os.path.basename(path) for path in paths]
 
             config_data = {
                 "is_local_mod": True,
@@ -3019,9 +3262,8 @@ class ModEditorDialog(QDialog):
                 "author": mod_data.get("author", ""),
                 "tagline": mod_data.get("tagline", tr("defaults.no_short_description")),
                 "game_version": mod_data.get("game_version", tr("defaults.not_specified")),
-                "is_demo_mod": mod_data.get("is_demo_mod", False),
-                "chapters": chapters_data,
-                "files": files_data  # Добавляем информацию о файлах
+                "modtype": mod_data.get("modtype", "deltarune"),
+                "files": files_data
             }
 
             config_path = os.path.join(mod_dir, "config.json")
@@ -3065,45 +3307,7 @@ class ModEditorDialog(QDialog):
 
         updated_data = self._collect_mod_data()
 
-        # Преобразуем структуру files в chapters для совместимости с сервером
-        if "files" in updated_data:
-            chapters = {}
-            for chapter_key, chapter_files in updated_data["files"].items():
-                # Правильный маппинг ключей глав в ID
-                if chapter_key == "demo":
-                    chapter_id = -1
-                elif chapter_key == "menu":
-                    chapter_id = 0
-                elif chapter_key.startswith("chapter_"):
-                    chapter_id = int(chapter_key.replace("chapter_", ""))
-                else:
-                    continue
-
-                chapter_data = {}
-                if "data_win_url" in chapter_files:
-                    chapter_data["data_file_url"] = chapter_files["data_win_url"]
-                if "data_win_version" in chapter_files:
-                    chapter_data["data_win_version"] = chapter_files["data_win_version"]
-
-                # Преобразуем extra files в правильный формат
-                if "extra" in chapter_files:
-                    extra_files = []
-                    for key, file_data in chapter_files["extra"].items():
-                        extra_files.append({
-                            "key": key,
-                            "url": file_data["url"],
-                            "version": file_data["version"]
-                        })
-                    # Ренумерация ключей как последовательность "1","2","3"...
-                    for idx, ef in enumerate(extra_files, start=1):
-                        ef["key"] = str(idx)
-                    chapter_data["extra_files"] = extra_files
-
-                chapters[str(chapter_id)] = chapter_data
-
-            # Заменяем files на chapters
-            updated_data.pop("files")
-            updated_data["chapters"] = chapters
+        # Keep files structure as-is (modern standard)
 
         if hasattr(self, 'original_mod_data'):
             # Блокировка: запрещаем изменение заблокированных модов
@@ -3128,8 +3332,8 @@ class ModEditorDialog(QDialog):
 
             # Проверяем актуальный статус верификации с сервера
             try:
-                from helpers import _fb_url
-                chk = requests.get(_fb_url(DATA_FIREBASE_URL, f"mods/{hashed_key}"), timeout=8)
+                from helpers import CLOUD_FUNCTIONS_BASE_URL
+                chk = requests.get(f"{CLOUD_FUNCTIONS_BASE_URL}/getModData?modId={hashed_key}", timeout=8)
                 if chk.status_code == 200 and isinstance(chk.json(), dict):
                     server_data = chk.json()
                     is_verified = bool(server_data.get("is_verified", self.original_mod_data.get("is_verified", False)))
@@ -3146,46 +3350,13 @@ class ModEditorDialog(QDialog):
                 is_verified = self.original_mod_data.get("is_verified", False)
                 updated_data["is_verified"] = is_verified
 
-            if is_verified:
-                from helpers import _fb_url
-                url = _fb_url(DATA_FIREBASE_URL, f"mods/{hashed_key}")
-                response = requests.put(url, json=updated_data, timeout=10)
-                response.raise_for_status()
-                # Verify the update actually persisted
-                try:
-                    verify_resp = requests.get(url, timeout=8)
-                    if verify_resp.status_code != 200:
-                        # Non-blocking: show a warning but continue
-                        try:
-                            QMessageBox.warning(self, tr("dialogs.update_error"), tr("dialogs.update_verification_failed"))
-                        except Exception:
-                            pass
-                    else:
-                        # Best-effort parse; do not enforce strict equality checks
-                        _ = verify_resp.json()
-                except Exception:
-                    # Network or parse issue — warn but do not block
-                    try:
-                        QMessageBox.warning(self, tr("dialogs.update_error"), tr("dialogs.update_verification_failed"))
-                    except Exception:
-                        pass
-                QMessageBox.information(self, tr("dialogs.mod_updated_title"), tr("dialogs.mod_updated_message"))
-            else:
-                from helpers import _fb_url
-                pending_url = _fb_url(DATA_FIREBASE_URL, f"pending_changes/{hashed_key}")
-                updated_data["change_type"] = "update"
-                updated_data["original_mod_key"] = hashed_key
-                response = requests.put(pending_url, json=updated_data, timeout=10)
-                response.raise_for_status()
-                # Optional: verify pending record exists
-                try:
-                    chk = requests.get(pending_url, timeout=8)
-                    if chk.status_code != 200 or not chk.json():
-                        QMessageBox.information(self, tr("dialogs.request_sent_title"), tr("dialogs.request_sent_message"))
-                    else:
-                        QMessageBox.information(self, tr("dialogs.request_sent_title"), tr("dialogs.request_sent_message"))
-                except Exception:
-                    QMessageBox.information(self, tr("dialogs.request_sent_title"), tr("dialogs.request_sent_message"))
+            # Always submit change via Cloud Function; moderators will approve if needed
+            from helpers import CLOUD_FUNCTIONS_BASE_URL
+            updated_data["change_type"] = "update"
+            updated_data["original_mod_key"] = hashed_key
+            response = requests.post(f"{CLOUD_FUNCTIONS_BASE_URL}/submitModChange", json={"modData": updated_data, "hashedKey": hashed_key}, timeout=10)
+            response.raise_for_status()
+            QMessageBox.information(self, tr("dialogs.request_sent_title"), tr("errors.request_sent_message"))
 
             self.accept()
 
@@ -3204,7 +3375,7 @@ class ModEditorDialog(QDialog):
         """Проверяет, есть ли реальные изменения в моде."""
         if not hasattr(self, 'original_mod_data') or not self.original_mod_data: return True
         current_data, original_data = self._collect_mod_data(), self.original_mod_data
-        fields_to_compare = ['name', 'version', 'author', 'tagline', 'description_url', 'icon_url', 'tags', 'is_piracy_protected', 'is_demo_mod', 'game_version', 'files', 'screenshots_url']
+        fields_to_compare = ['name', 'version', 'author', 'tagline', 'description_url', 'icon_url', 'tags', 'is_xdelta', 'modtype', 'game_version', 'files', 'screenshots_url']
         return any(current_data.get(field) != original_data.get(field) for field in fields_to_compare)
 
 
@@ -3260,71 +3431,46 @@ class ModEditorDialog(QDialog):
                 updated_data["icon_url"] = icon_filename
 
             # Преобразуем структуру для локальных модов
-            local_chapters = {}
             files_data = {}
 
             # Копируем обновленные файлы с правильной структурой
-            for chapter_key, chapter_files in updated_data.get("files", {}).items():
-                try:
-                    chapter_id = int(chapter_key)
-                except ValueError:
+            for file_key, file_data in updated_data.get("files", {}).items():
+                # Определяем подпапку для файлов
+                if file_key == "demo":
+                    file_folder = os.path.join(mod_folder_path, "demo")
+                elif file_key == "undertale":
+                    file_folder = os.path.join(mod_folder_path, "undertale")
+                elif file_key == "0":
+                    file_folder = os.path.join(mod_folder_path, "chapter_0")
+                elif file_key in ["1", "2", "3", "4"]:
+                    file_folder = os.path.join(mod_folder_path, f"chapter_{file_key}")
+                else:
                     continue
+                os.makedirs(file_folder, exist_ok=True)
 
-                chapter_version_parts = []
-
-                # Определяем подпапку для главы
-                if chapter_id == -1:  # Демо
-                    chapter_folder = os.path.join(mod_folder_path, "demo")
-                elif chapter_id == 0:   # Меню
-                    chapter_folder = os.path.join(mod_folder_path, "chapter_0")
-                else:  # Главы 1, 2, 3, ...
-                    chapter_folder = os.path.join(mod_folder_path, f"chapter_{chapter_id}")
-                os.makedirs(chapter_folder, exist_ok=True)
-
-                files_data[str(chapter_id)] = {}
+                files_data[file_key] = {}
 
                 # DATA-файл
-                data_path = chapter_files.get("data_win_url")
+                data_path = file_data.get("data_file_url")
                 if data_path and os.path.exists(data_path):
                     data_filename = os.path.basename(data_path)
-                    shutil.copy2(data_path, os.path.join(chapter_folder, data_filename))
-                    files_data[str(chapter_id)]["data_win_url"] = data_filename
-                    files_data[str(chapter_id)]["data_win_version"] = chapter_files.get("data_win_version", "1.0.0")
-                    chapter_version_parts.append(chapter_files.get("data_win_version", "1.0.0"))
+                    shutil.copy2(data_path, os.path.join(file_folder, data_filename))
+                    files_data[file_key]["data_file_url"] = data_filename
+                    files_data[file_key]["data_file_version"] = file_data.get("data_file_version", "1.0.0")
 
                 # Дополнительные файлы
-                extra_files = chapter_files.get("extra_files", {})
+                extra_files = file_data.get("extra_files", {})
                 if extra_files:
-                    files_data[str(chapter_id)]["extra_files"] = {}
+                    files_data[file_key]["extra_files"] = {}
                     for group_key, paths in extra_files.items():
                         copied_paths = []
                         for path in paths:
                             if os.path.exists(path):
                                 filename = os.path.basename(path)
-                                shutil.copy2(path, os.path.join(chapter_folder, filename))
+                                shutil.copy2(path, os.path.join(file_folder, filename))
                                 copied_paths.append(filename)
                         if copied_paths:
-                            files_data[str(chapter_id)]["extra_files"][group_key] = copied_paths
-                            chapter_version_parts.append("1.0.0")
-
-                # Создаем версию главы если есть файлы
-                if chapter_version_parts:
-                    local_chapters[str(chapter_id)] = "|".join(chapter_version_parts)
-
-            # Обновляем config.json с новыми данными
-            chapters_data = {}
-            for ch_id, ch_data in local_chapters.items():
-                # Формируем словарь версий вместо composite_version
-                versions = {}
-                chapter_files = updated_data.get("files", {}).get(ch_id, {})
-                if chapter_files.get("data_win_url"):
-                    versions['data'] = chapter_files.get("data_win_version", "1.0.0")
-                if chapter_files.get("extra_files"):
-                    for group_key, paths in chapter_files["extra_files"].items():
-                        if paths:
-                            versions[group_key] = "1.0.0"
-                if versions:
-                    chapters_data[str(ch_id)] = {"versions": versions}
+                            files_data[file_key]["extra_files"][group_key] = copied_paths
 
             # Обновляем config_data
             config_data.update({
@@ -3333,8 +3479,7 @@ class ModEditorDialog(QDialog):
                 "author": updated_data.get("author", ""),
                 "tagline": updated_data.get("tagline", ""),
                 "game_version": updated_data.get("game_version", tr("defaults.not_specified")),
-                "is_demo_mod": updated_data.get("is_demo_mod", False),
-                "chapters": chapters_data,
+                "modtype": updated_data.get("modtype", "deltarune"),
                 "files": files_data
             })
 
@@ -3368,16 +3513,9 @@ class ModEditorDialog(QDialog):
         try:
             from helpers import DATA_FIREBASE_URL
             import requests
-            from helpers import _fb_url
-            requests.delete(_fb_url(DATA_FIREBASE_URL, f"mods/{hashed_key}"), timeout=10)
-            try: requests.delete(_fb_url(DATA_FIREBASE_URL, f"pending_changes/{hashed_key}"), timeout=10)
-            except Exception as e:
-                logging.warning(f"Failed to delete pending_changes record: {e}")
-            # Verify deletion
-            chk = requests.get(_fb_url(DATA_FIREBASE_URL, f"mods/{hashed_key}"), timeout=8)
-            if chk.status_code == 200 and chk.json():
-                QMessageBox.critical(self, tr("errors.deletion_error"), tr("errors.mod_deletion_verification_failed"))
-                return
+            from helpers import CLOUD_FUNCTIONS_BASE_URL
+            resp = requests.post(f"{CLOUD_FUNCTIONS_BASE_URL}/deletePublicMod", json={"hashedKey": hashed_key}, timeout=10)
+            resp.raise_for_status()
             QMessageBox.information(self, tr("errors.mod_deleted_title"), tr("errors.mod_deleted_message"))
             self.accept()
         except Exception as e: QMessageBox.critical(self, tr("errors.deletion_error"), tr("errors.mod_deletion_failed", error=str(e)))
@@ -3459,9 +3597,13 @@ class ModEditorDialog(QDialog):
 
         self.description_url_edit.setText(actual_mod_data.get('description_url', ''))
 
-        # Чекбоксы
-        self.demo_checkbox.setChecked(actual_mod_data.get('is_demo_mod', False))
-        self.piracy_checkbox.setChecked(actual_mod_data.get('is_piracy_protected', False))
+        # Mod type combo
+        modtype = actual_mod_data.get('modtype', 'deltarune')
+        for i in range(self.modtype_combo.count()):
+            if self.modtype_combo.itemData(i) == modtype:
+                self.modtype_combo.setCurrentIndex(i)
+                break
+        self.piracy_checkbox.setChecked(actual_mod_data.get('is_xdelta', actual_mod_data.get('is_piracy_protected', False)))
 
         # Теги (исправляем на правильные ключи)
         tags = actual_mod_data.get('tags', [])
@@ -3505,28 +3647,34 @@ class ModEditorDialog(QDialog):
 
         # Получаем файлы или главы в зависимости от структуры данных
         files_data = actual_mod_data.get('files', {})
+        # Legacy support
         chapters_data = actual_mod_data.get('chapters', {})
 
-        # Если это публичный мод, файлы могут быть в files или chapters
+        # Если это публичный мод, файлы могут быть в files или legacy chapters
         if files_data:
             self._populate_from_files_structure(files_data)
         elif chapters_data:
-            self._populate_from_chapters_structure(chapters_data)
+            self._populate_from_files_structure(chapters_data)
 
     def _populate_from_files_structure(self, files_data):
         """Заполняет вкладки из структуры files (публичные и локальные моды)."""
         # Маппинг ключей файлов к индексам вкладок
+        modtype = self.modtype_combo.currentData()
         if self.is_public:
             # Для публичных модов используем текстовые ключи
-            if self.demo_checkbox.isChecked():
+            if modtype == 'deltarunedemo':
                 file_keys = {"demo": 0}
-            else:
+            elif modtype == 'undertale':
+                file_keys = {"undertale": 0}
+            else:  # deltarune
                 file_keys = {"menu": 0, "chapter_1": 1, "chapter_2": 2, "chapter_3": 3, "chapter_4": 4}
         else:
             # Для локальных модов используем числовые ключи
-            if self.demo_checkbox.isChecked():
+            if modtype == 'deltarunedemo':
                 file_keys = {"0": 0}
-            else:
+            elif modtype == 'undertale':
+                file_keys = {"0": 0}
+            else:  # deltarune
                 file_keys = {"0": 0, "1": 1, "2": 2, "3": 3, "4": 4}
 
         for file_key, tab_index in file_keys.items():
@@ -3534,77 +3682,7 @@ class ModEditorDialog(QDialog):
                 file_info = files_data[file_key]
                 self._populate_tab_with_file_data(tab_index, file_info)
 
-    def _populate_from_chapters_structure(self, chapters_data):
-        """Заполяет вкладки из структуры chapters (локальные моды)."""
-        # Обрабатываем chapters как список или словарь
-        if isinstance(chapters_data, list):
-            # Новый формат - список chapters
-            for tab_index, chapter_data in enumerate(chapters_data):
-                if tab_index < self.file_tabs.count() and chapter_data is not None:
-                    # Извлекаем data_file_url и extra_files
-                    data_url = chapter_data.get('data_file_url', '')
-                    data_version = chapter_data.get('data_win_version', '')
 
-                    # Конвертируем в старый формат для _populate_tab_with_file_data
-                    files_info = {}
-                    if data_url:
-                        files_info['data_win_url'] = data_url
-                        files_info['data_win_version'] = data_version
-
-                    # Обрабатываем extra_files
-                    extra_files = chapter_data.get('extra_files', [])
-                    if extra_files:
-                        files_info['extra'] = {}
-                        for extra_file in extra_files:
-                            if isinstance(extra_file, dict):
-                                key = extra_file.get('key', 'unknown')
-                                files_info['extra'][key] = {
-                                    'url': extra_file.get('url', ''),
-                                    'version': extra_file.get('version', '')
-                                }
-
-                    self._populate_tab_with_file_data(tab_index, files_info)
-        elif isinstance(chapters_data, dict):
-            # Единый формат - словарь chapters с числовыми ключами (строками)
-            for chapter_key, chapter_data in chapters_data.items():
-                try:
-                    # Парсим ключ главы (формат: "c{id}")
-                    if chapter_key.startswith("c"):
-                        chapter_id = int(chapter_key[1:])  # "c1" → 1
-                    else:
-                        chapter_id = int(chapter_key)  # Обратная совместимость
-                    # Правильный маппинг chapter_id в tab_index согласно стандарту
-                    if chapter_id == -1:
-                        tab_index = 0 if self.demo_checkbox.isChecked() else None  # Демо
-                    elif chapter_id == 0:
-                        tab_index = 0 if not self.demo_checkbox.isChecked() else None  # Меню
-                    elif 1 <= chapter_id <= 4:
-                        tab_index = chapter_id if not self.demo_checkbox.isChecked() else None  # Глава 1-4
-                    else:
-                        continue
-
-                    if tab_index is not None and tab_index < self.file_tabs.count():
-                        # Конвертируем данные главы в формат files для отображения
-                        files_info = {}
-                        if chapter_data.get('data_file_url'):
-                            files_info['data_win_url'] = chapter_data.get('data_file_url')
-                            files_info['data_win_version'] = chapter_data.get('data_win_version', '1.0.0')
-
-                        # Обрабатываем extra_files
-                        extra_files = chapter_data.get('extra_files', [])
-                        if extra_files and isinstance(extra_files, list):
-                            files_info['extra'] = {}
-                            for extra_file in extra_files:
-                                if isinstance(extra_file, dict):
-                                    key = extra_file.get('key', 'unknown')
-                                    files_info['extra'][key] = {
-                                        'url': extra_file.get('url', ''),
-                                        'version': extra_file.get('version', '1.0.0')
-                                    }
-
-                        self._populate_tab_with_file_data(tab_index, files_info)
-                except (ValueError, TypeError):
-                    continue
 
     def _populate_tab_with_file_data(self, tab_index, file_info):
         """Заполняет конкретную вкладку данными файлов."""
@@ -3617,21 +3695,21 @@ class ModEditorDialog(QDialog):
             return
 
         # DATA файл
-        data_file_url = file_info.get('data_win_url')
-        data_win_version = file_info.get('data_win_version')
+        data_file_url = file_info.get('data_file_url')
+        data_file_version = file_info.get('data_file_version')
 
         if data_file_url:
             # Для локальных модов создаем редактируемый фрейм, для публичных - добавляем форму
             if not self.is_public:
                 # Создаем локальный фрейм DATA с предзаполненными данными
                 self._create_file_frame(layout, 'data')
-                self._fill_local_data_file_in_tab(tab, data_file_url, data_win_version)
+                self._fill_local_data_file_in_tab(tab, data_file_url, data_file_version)
             else:
                 # Добавляем DATA файл если его еще нет
                 if not self._has_data_file_in_tab(tab):
                     self._add_data_file(tab, layout)
                     # Заполняем данные
-                    self._fill_data_file_in_tab(tab, data_file_url, data_win_version)
+                    self._fill_data_file_in_tab(tab, data_file_url, data_file_version)
 
         # Дополнительные файлы для публичных модов
         extra_files = file_info.get('extra', {})
@@ -3787,7 +3865,6 @@ class DeltaHubApp(QWidget):
         self.resize(875, 750)
 
         self.background_movie = None
-        self.setWindowIcon(QIcon(resource_path("assets/icon.ico")))
         self.background_pixmap: Optional[QPixmap] = None
         self.custom_font_family = None
         self.game_path = ""
@@ -3796,6 +3873,10 @@ class DeltaHubApp(QWidget):
         self.translations_by_chapter = {i: [] for i in range(5)}
         self.all_mods: List[ModInfo] = []
         self.is_settings_view = False
+        
+        # Initialize UI attributes early to prevent AttributeError
+        self.current_mode = "normal"
+        self.slots = {}
         self.update_in_progress = False
         self.is_changelog_view = False
         self.is_help_view = False
@@ -3814,8 +3895,8 @@ class DeltaHubApp(QWidget):
         self._bg_music_running = False
         self._bg_music_thread = None
 
-        is_demo_enabled = self.local_config.get("demo_mode_enabled", False)
-        self.game_mode: GameMode = DemoGameMode() if is_demo_enabled else FullGameMode()
+        # Game mode will be set based on selection in the UI
+        self.game_mode: GameMode = FullGameMode()  # Default
 
         self.init_ui()
         self.load_font()
@@ -3849,13 +3930,9 @@ class DeltaHubApp(QWidget):
 
     def _init_session(self):
         try:
-            now = int(time.time())
-            from helpers import _fb_url, DATA_FIREBASE_URL
-            requests.put(
-                _fb_url(DATA_FIREBASE_URL, f"stats/sessions/{self.session_id}"),
-                json={"startTime": now, "os": platform.system()},
-                timeout=5
-            )
+            import requests
+            from helpers import CLOUD_FUNCTIONS_BASE_URL
+            requests.post(f"{CLOUD_FUNCTIONS_BASE_URL}/presenceHeartbeat", json={"sessionId": self.session_id}, timeout=5)
         except Exception:
             pass
 
@@ -4148,12 +4225,12 @@ class DeltaHubApp(QWidget):
                             "game_version": config_data.get("game_version", tr("defaults.not_specified")),
                             "description_url": "",
                             "downloads": 0,
-                            "is_demo_mod": config_data.get("is_demo_mod", False),
+                            "modtype": config_data.get("modtype", "deltarune"),
                             "is_verified": False,
                             "icon_url": "",
                             "tags": ["local"],
                             "hide_mod": False,
-                            "is_piracy_protected": False,
+                            "is_xdelta": False,
                             "ban_status": False,
                             "demo_url": None,
                             "demo_version": "1.0.0",
@@ -4162,8 +4239,7 @@ class DeltaHubApp(QWidget):
                         }
 
                         mod = ModInfo(**safe_mod_info)
-                        # Создаем главы с полной информацией о файлах
-                        chapters_data = config_data.get("chapters", {})
+                        # Создаем файлы с полной информацией о файлах (после миграции chapters уже преобразованы в files)
                         files_data = config_data.get("files", {})
 
                         # Находим папку мода один раз
@@ -4181,27 +4257,40 @@ class DeltaHubApp(QWidget):
                                     logging.warning(f"Failed reading config {test_config_path}: {e}")
                                     continue
 
-                        for ch_id_str, ch_info in chapters_data.items():
-                            ch_id = int(ch_id_str)
+                        for file_key, ch_info in files_data.items():
+                            # ch_info contains the file information for this key
+                            chapter_files = ch_info  # This is the actual file data
 
-                            # Получаем информацию о файлах для этой главы
-                            chapter_files = files_data.get(ch_id_str, {})
-
-                            # Определяем папку главы
+                            # Determine chapter folder based on file key
                             if mod_folder_path:
-                                if ch_id == -1:
+                                if file_key == "demo":
                                     chapter_folder = os.path.join(mod_folder_path, "demo")
-                                elif ch_id == 0:
-                                    chapter_folder = os.path.join(mod_folder_path, "chapter_0")
+                                elif file_key == "undertale":
+                                    chapter_folder = os.path.join(mod_folder_path, "undertale")
+                                elif file_key in ["0", "1", "2", "3", "4"]:
+                                    if file_key == "0":
+                                        chapter_folder = os.path.join(mod_folder_path, "chapter_0")
+                                    else:
+                                        chapter_folder = os.path.join(mod_folder_path, f"chapter_{file_key}")
                                 else:
-                                    chapter_folder = os.path.join(mod_folder_path, f"chapter_{ch_id}")
+                                    # Legacy handling - try to convert
+                                    try:
+                                        ch_id = int(file_key)
+                                        if ch_id == -1:
+                                            chapter_folder = os.path.join(mod_folder_path, "demo")
+                                        elif ch_id == 0:
+                                            chapter_folder = os.path.join(mod_folder_path, "chapter_0")
+                                        else:
+                                            chapter_folder = os.path.join(mod_folder_path, f"chapter_{ch_id}")
+                                    except ValueError:
+                                        continue
 
-                            # Создаем data_file_url
+                            # Create data_file_url
                             data_file_url = ""
-                            if chapter_files.get("data_win_url") and mod_folder_path:
-                                data_file_url = os.path.join(chapter_folder, chapter_files["data_win_url"])
+                            if chapter_files.get("data_file_url") and mod_folder_path:
+                                data_file_url = os.path.join(chapter_folder, chapter_files["data_file_url"])
 
-                            # Создаем extra_files
+                            # Create extra_files
                             from helpers import ModExtraFile
                             extra_files = []
                             if chapter_files.get("extra_files") and mod_folder_path:
@@ -4217,13 +4306,13 @@ class DeltaHubApp(QWidget):
                             mod_chapter = ModChapterData(
                                 description=config_data.get("tagline", ""),
                                 data_file_url=data_file_url,
-                                data_win_version=chapter_files.get("data_win_version", (ch_info.get("versions", {}) or {}).get("data", "1.0.0")),
+                                data_file_version=chapter_files.get("data_file_version", (ch_info.get("versions", {}) or {}).get("data", "1.0.0")),
                                 extra_files=extra_files
                             )
-                            mod.chapters[ch_id] = mod_chapter
+                            mod.files[file_key] = mod_chapter
 
                         # Добавляем мод только если у него есть хотя бы одна глава
-                        if mod.chapters:
+                        if mod.files:
                             self.all_mods.append(mod)
                     except Exception as e:
                         logging.warning(f"Failed to build local ModInfo: {e}")
@@ -4753,22 +4842,14 @@ class DeltaHubApp(QWidget):
         self.save_manager_widget.setVisible(False)
         self.main_layout.addWidget(self.save_manager_widget)
         self.current_settings_page = self.settings_menu_page
-        # Старые соединения для совместимости (временно)
-        # TODO: удалить после полной миграции на новый дизайн
-        self.tab_widget = self.main_tab_widget  # Для совместимости
-        self.tabs = {}  # Для совместимости
-
-        # Заглушки для старых элементов интерфейса (для совместимости)
-        # self.full_install_checkbox уже создан в начале init_ui()
-
-        self._chapter_btns = []  # Пустой список кнопок глав
-        self.chapter_btn_widget = QWidget()  # Заглушка виджета кнопок
+        
+        # Legacy compatibility stubs to prevent crashes during transition
+        self.tab_widget = self.main_tab_widget  # For compatibility
+        self.tabs = {}  # For compatibility
+        self.chapter_btn_widget = QWidget()  # Stub widget
         self.chapter_btn_widget.hide()
 
-        self._chapter_btn_bar = QHBoxLayout()  # Заглушка лейаута кнопок
-
-        # TODO: заменить на main_tab_widget.currentChanged когда будет готово
-        # self.main_tab_widget.currentChanged.connect(self._update_ui_for_selection)
+        self.setWindowIcon(QIcon(resource_path("assets/icon.ico")))
 
     def _on_tab_changed(self, index):
         """Обработчик переключения вкладок"""
@@ -4783,6 +4864,10 @@ class DeltaHubApp(QWidget):
             self._on_xdelta_patch_click()
             # Возвращаемся на предыдущую вкладку
             self.main_tab_widget.setCurrentIndex(self.previous_tab_index)
+        elif index == 1:  # Библиотека
+            # Обновляем список модов с учетом режима (поглавный/обычный)
+            self._update_installed_mods_display()
+            self.previous_tab_index = index
         else:
             # Обновляем предыдущую активную вкладку только для обычных вкладок
             self.previous_tab_index = index
@@ -4793,12 +4878,16 @@ class DeltaHubApp(QWidget):
             self.initialization_timer.stop()
         self.initialization_completed = True
         self.initialization_finished.emit()
+        # Запуск фоновой музыки только когда окно видно пользователю
+        self._maybe_start_background_music()
 
     def _force_finish_initialization(self):
         """Принудительно завершает инициализацию по таймауту"""
         self.mods_loaded = True
         self.initialization_completed = True
         self.initialization_finished.emit()
+        # Запуск фоновой музыки только когда окно видно пользователю
+        self._maybe_start_background_music()
 
     def _create_search_mods_tab(self):
         """Создает вкладку 'Искать моды' на основе newdesign.py"""
@@ -4861,55 +4950,64 @@ class DeltaHubApp(QWidget):
         widget = QWidget()
         layout = QVBoxLayout(widget)
 
-        # Управление демоверсией и режимами
+        # Game type selection and mode controls
         controls_layout = QHBoxLayout()
         controls_layout.addStretch()  # Добавляем растяжку слева
 
-        self.demo_mode_checkbox = QCheckBox(tr("checkboxes.demo_version"))
-        self.demo_mode_checkbox.stateChanged.connect(self._on_demo_mode_changed)
-        controls_layout.addWidget(self.demo_mode_checkbox)
+        # Game type dropdown
+        self.game_type_combo = QComboBox()
+        self.game_type_combo.addItem("DELTARUNE", "deltarune")
+        self.game_type_combo.addItem("DELTARUNE DEMO", "deltarunedemo") 
+        self.game_type_combo.addItem("UNDERTALE", "undertale")
+        self.game_type_combo.currentIndexChanged.connect(self._on_game_type_changed)
+        controls_layout.addWidget(self.game_type_combo)
 
         controls_layout.addSpacing(20)
 
+        # Mode checkboxes (visibility controlled by game type)
         self.chapter_mode_checkbox = QCheckBox(tr("ui.chapter_mode"))
         self.chapter_mode_checkbox.stateChanged.connect(self._on_chapter_mode_changed)
         controls_layout.addWidget(self.chapter_mode_checkbox)
 
-        # Загружаем сохраненные состояния галочек
-        saved_demo_mode = self.local_config.get('demo_mode_enabled', False)
+        self.full_install_checkbox = QCheckBox(tr("ui.full_install"))
+        self.full_install_checkbox.stateChanged.connect(self._on_toggle_full_install)
+        controls_layout.addWidget(self.full_install_checkbox)
+
+        # Load saved game type
+        saved_game_type = self.local_config.get('selected_game_type', 'deltarune')
         saved_chapter_mode = self.local_config.get('chapter_mode_enabled', False)
+        saved_full_install = self.local_config.get('full_install_enabled', False)
 
-        # Блокируем сигналы при загрузке состояния, чтобы избежать лишних вызовов
-        self.demo_mode_checkbox.blockSignals(True)
+        # Set game type combo
+        self.game_type_combo.blockSignals(True)
+        for i in range(self.game_type_combo.count()):
+            if self.game_type_combo.itemData(i) == saved_game_type:
+                self.game_type_combo.setCurrentIndex(i)
+                break
+        self.game_type_combo.blockSignals(False)
+
+        # Set checkboxes (avoid firing handlers during initial UI construction)
         self.chapter_mode_checkbox.blockSignals(True)
-
-        self.demo_mode_checkbox.setChecked(saved_demo_mode)
         self.chapter_mode_checkbox.setChecked(saved_chapter_mode)
+        self.chapter_mode_checkbox.blockSignals(False)
+        self.full_install_checkbox.blockSignals(True)
+        self.full_install_checkbox.setChecked(saved_full_install)
+        self.full_install_checkbox.blockSignals(False)
 
-        # Устанавливаем game_mode в соответствии с загруженным состоянием
-        if saved_demo_mode:
+        # Set game mode based on selected type
+        if saved_game_type == 'deltarunedemo':
             self.game_mode = DemoGameMode()
+        elif saved_game_type == 'undertale':
+            self.game_mode = UndertaleGameMode()
         else:
             self.game_mode = FullGameMode()
 
-        # Обновляем взаимное блокирование галочек
-        if saved_demo_mode:
-            self.chapter_mode_checkbox.setEnabled(False)
-        elif saved_chapter_mode:
-            self.demo_mode_checkbox.setEnabled(False)
-
-        # Разблокируем сигналы
-        self.demo_mode_checkbox.blockSignals(False)
-        self.chapter_mode_checkbox.blockSignals(False)
-
-        # Устанавливаем режим работы
-        if saved_chapter_mode:
-            self.current_mode = "chapter"
-        else:
-            self.current_mode = "normal"
-
-        # Инициализируем предыдущий режим для корректного переключения
+        # Set mode
+        self.current_mode = "chapter" if saved_chapter_mode else "normal"
         self._previous_mode = self.current_mode
+
+        # Update checkbox visibility based on game type
+        self._update_checkbox_visibility()
 
         controls_layout.addStretch()  # Добавляем растяжку справа
         layout.addLayout(controls_layout)
@@ -5007,7 +5105,8 @@ class DeltaHubApp(QWidget):
         QTimer.singleShot(700, self._update_mod_widgets_slot_status)
 
         # Теперь инициализируем слоты в правильном режиме (после создания UI)
-        self._init_slots_system()
+        self.slots = {}
+        self._update_slots_display()
 
         # Загружаем сохраненное состояние слотов после инициализации
         QTimer.singleShot(400, self._load_slots_state)
@@ -5040,6 +5139,17 @@ class DeltaHubApp(QWidget):
 
         filters_layout.addSpacing(20)
 
+        # Фильтр по типу мода
+        self.modtype_combo = QComboBox()
+        self.modtype_combo.addItem(tr("dropdowns.all_mods"), "")
+        self.modtype_combo.addItem(tr("dropdowns.filter_deltarune"), "deltarune")
+        self.modtype_combo.addItem(tr("dropdowns.filter_deltarunedemo"), "deltarunedemo")
+        self.modtype_combo.addItem(tr("dropdowns.filter_undertale"), "undertale")
+        self.modtype_combo.currentIndexChanged.connect(self._on_modtype_filter_changed)
+        filters_layout.addWidget(self.modtype_combo)
+
+        filters_layout.addSpacing(20)
+
         # Теги
         filters_layout.addWidget(QLabel(tr("ui.tags_label")))
 
@@ -5048,7 +5158,6 @@ class DeltaHubApp(QWidget):
         self.tag_customization = QCheckBox(tr("tags.customization"))
         self.tag_gameplay = QCheckBox(tr("tags.gameplay"))
         self.tag_other = QCheckBox(tr("tags.other"))
-        self.tag_demo = QCheckBox(tr("tags.demo"))
 
         # Стилизация для чекбоксов
         tag_style = """
@@ -5063,7 +5172,7 @@ class DeltaHubApp(QWidget):
             }
         """
 
-        for tag in [self.tag_translation, self.tag_customization, self.tag_gameplay, self.tag_other, self.tag_demo]:
+        for tag in [self.tag_translation, self.tag_customization, self.tag_gameplay, self.tag_other]:
             tag.setStyleSheet(tag_style)
             tag.stateChanged.connect(self._on_tag_filter_changed)
             filters_layout.addWidget(tag)
@@ -5132,6 +5241,11 @@ class DeltaHubApp(QWidget):
         self.current_page = 1  # Сбрасываем на первую страницу при изменении фильтров
         self._update_filtered_mods()
 
+    def _on_modtype_filter_changed(self, index):
+        """Обработчик изменения фильтра по типу мода"""
+        self.current_page = 1  # Сбрасываем на первую страницу при изменении фильтров
+        self._update_filtered_mods()
+
     def _show_search_dialog(self):
         """Показывает диалог поиска или сбрасывает поиск"""
         if self.search_text:
@@ -5169,59 +5283,78 @@ class DeltaHubApp(QWidget):
         # current_mode и selected_chapter_id уже инициализированы выше
         self._update_slots_display()
 
-    def _on_demo_mode_changed(self, state):
-        """Обработчик изменения режима демоверсии"""
-        # Сохраняем предыдущий режим
-        old_mode = getattr(self, 'current_mode', 'normal')
-        old_game_mode = 'demo' if isinstance(getattr(self, 'game_mode', None), DemoGameMode) else old_mode
-        self._previous_mode = old_game_mode
+    def _on_game_type_changed(self, index):
+        """Handler for game type dropdown change"""
+        game_type = self.game_type_combo.itemData(index)
+        if not game_type:
+            return
+        # 1. Запоминаем старый режим для корректного сохранения
+        old_game_mode = self.game_mode
+        old_is_chapter_mode = hasattr(self, 'chapter_mode_checkbox') and self.chapter_mode_checkbox.isChecked()
 
-        is_demo = bool(state)
-        # ВАЖНО: Обновляем game_mode!
-        if is_demo:
+        # 2. Сохраняем состояние для старого режима
+        self._save_slots_state()
+
+        # 3. Обновляем режим игры
+        if game_type == 'deltarunedemo':
             self.game_mode = DemoGameMode()
+        elif game_type == 'undertale':
+            self.game_mode = UndertaleGameMode()
         else:
             self.game_mode = FullGameMode()
 
-        # При включении демоверсии отключаем поглавный режим
-        if is_demo and self.chapter_mode_checkbox.isChecked():
-            self.chapter_mode_checkbox.setChecked(False)
-            self.current_mode = "normal"
+        # Update checkbox visibility
+        self._update_checkbox_visibility()
 
-        # Блокируем/разблокируем поглавный режим
-        self.chapter_mode_checkbox.setEnabled(not is_demo)
-
-        # Обновляем отображение слотов (это важно делать после смены game_mode)
         self._update_slots_display()
+        self._load_slots_state()
 
-        # Обновляем список установленных модов в соответствии с режимом
+        # Update installed mods display to filter by game type
         self._update_installed_mods_display()
 
-        # Обновляем текст кнопки смены пути игры
+        # Update path button text
         self._update_change_path_button_text()
 
-        # Сохраняем состояние демо-режима
-        self.local_config['demo_mode_enabled'] = is_demo
+        # Save game type selection
+        self.local_config['selected_game_type'] = game_type
         self._write_local_config()
+
+    def _update_checkbox_visibility(self):
+        """Update visibility of checkboxes based on selected game type"""
+        game_type = self.game_type_combo.currentData()
+        
+        if game_type == 'deltarune':
+            self.chapter_mode_checkbox.setVisible(True)
+            self.full_install_checkbox.setVisible(False)
+        elif game_type == 'deltarunedemo':
+            self.chapter_mode_checkbox.setVisible(False)
+            self.full_install_checkbox.setVisible(True)
+        else:  # undertale
+            self.chapter_mode_checkbox.setVisible(False)
+            self.full_install_checkbox.setVisible(False)
+
+    def _clear_all_slots(self):
+        """Clear all slot assignments"""
+        for slot_frame in getattr(self, 'slots', {}).values():
+            slot_frame.mod_data = None
+            slot_frame.is_selected = False
+            self._update_slot_visual_state(slot_frame)
 
     def _on_chapter_mode_changed(self, state):
         """Обработчик изменения поглавного режима"""
+        # Only available for deltarune game type
+        game_type = self.game_type_combo.currentData()
+        if game_type != 'deltarune':
+            return
+
         # Сохраняем предыдущий режим
         old_mode = getattr(self, 'current_mode', 'normal')
         self._previous_mode = old_mode
 
         is_chapter = bool(state)
-
-        # При включении поглавного режима отключаем демоверсию
-        if is_chapter and self.demo_mode_checkbox.isChecked():
-            self.demo_mode_checkbox.setChecked(False)
-
-        # Блокируем/разблокируем демоверсию
-        self.demo_mode_checkbox.setEnabled(not is_chapter)
-
         self.current_mode = "chapter" if is_chapter else "normal"
 
-        # _update_slots_display() автоматически сохранит текущие слоты перед очисткой
+        self._save_slots_state()
         self._update_slots_display()
 
         # Обновляем состояние кнопок и интерфейса при переключении режимов
@@ -5278,28 +5411,6 @@ class DeltaHubApp(QWidget):
     def _update_slots_display(self):
         """Обновляет отображение слотов в зависимости от режима"""
 
-        # Проверяем, что это не первый вызов (когда слоты еще не инициализированы)
-        has_existing_slots = hasattr(self, 'slots') and self.slots
-
-        # Определяем предыдущий режим для корректного сохранения
-        old_mode = getattr(self, '_previous_mode', None)
-
-        # ВАЖНО: Сохраняем слоты в конфиг ПЕРЕД очисткой (только если слоты уже существуют)
-        if has_existing_slots and old_mode:
-            self._save_slots_state_for_mode(old_mode)
-        elif has_existing_slots:
-            self._save_slots_state()  # Fallback для первого запуска
-
-        # Сохраняем текущее состояние слотов в памяти для восстановления
-        if not hasattr(self, 'saved_slots_state'):
-            self.saved_slots_state = {}
-
-        # Сохраняем назначенные моды перед очисткой
-        if has_existing_slots:
-            for slot_id, slot_frame in self.slots.items():
-                if slot_frame.assigned_mod:
-                    self.saved_slots_state[slot_id] = slot_frame.assigned_mod
-
         # Очищаем текущие слоты
         if hasattr(self, 'active_slots_layout'):
             clear_layout_widgets(self.active_slots_layout, keep_last_n=0)
@@ -5313,48 +5424,46 @@ class DeltaHubApp(QWidget):
         is_demo_mode = isinstance(self.game_mode, DemoGameMode)
         if self.current_mode == "normal":
             if is_demo_mode:
-                # Демо слот (отдельный от универсального)
-                slot = self._create_slot_widget(tr("ui.demo_slot"), -2)  # -2 для демо
-                self.active_slots_layout.addWidget(slot)
-                self.active_slots_layout.addSpacing(20)
-                self.slots[-2] = slot
-
-                # Добавляем чекбокс установки как отдельный виджет (по аналогии с индикаторами глав)
-                self._create_demo_install_checkbox()
-
-                # Восстанавливаем сохраненный мод для демо слота (только если совместим с демо режимом)
-                if -2 in self.saved_slots_state:
-                    self._assign_mod_to_slot(slot, self.saved_slots_state[-2])
+                # Demo slot
+                slot = self._create_slot_widget(tr("ui.demo_slot"), -10)  # Unique ID for demo
+                if hasattr(self, 'active_slots_layout'):
+                    self.active_slots_layout.addWidget(slot)
+                self.slots[-10] = slot
+            elif isinstance(self.game_mode, UndertaleGameMode):
+                # Undertale slot
+                slot = self._create_slot_widget(tr("ui.universal_slot"), -20)  # Unique ID for undertale
+                if hasattr(self, 'active_slots_layout'):
+                    self.active_slots_layout.addWidget(slot)
+                self.slots[-20] = slot
             else:
-                # Один слот для обычного режима
+                # Deltarune universal slot
                 slot = self._create_slot_widget(tr("ui.mod_slot"), -1)
-                self.active_slots_layout.addWidget(slot)
+                if hasattr(self, 'active_slots_layout'):
+                    self.active_slots_layout.addWidget(slot)
                 self.slots[-1] = slot
 
                 # Добавляем индикаторы глав
                 self._create_chapter_indicators()
-
-                # Восстанавливаем сохраненный мод для универсального слота (только если совместим с обычным режимом)
-                if -1 in self.saved_slots_state:
-                    self._assign_mod_to_slot(slot, self.saved_slots_state[-1])
         else:
             # Пять слотов для поглавного режима
             slot_names = [tr("chapters.menu"), tr("tabs.chapter_1"), tr("tabs.chapter_2"), tr("tabs.chapter_3"), tr("tabs.chapter_4")]
             for i, name in enumerate(slot_names):
                 slot = self._create_slot_widget(name, i)
-                self.active_slots_layout.addWidget(slot)
+                if hasattr(self, 'active_slots_layout'):
+                    self.active_slots_layout.addWidget(slot)
                 self.slots[i] = slot
-                # Восстанавливаем сохраненный мод для слота главы (только если совместим с поглавным режимом)
-                if i in self.saved_slots_state and i in [0, 1, 2, 3, 4]:
-                    self._assign_mod_to_slot(slot, self.saved_slots_state[i])
 
-        # После создания всех слотов загружаем состояние из конфига для нового режима
-        new_mode = self.current_mode
-        if isinstance(self.game_mode, DemoGameMode):
-            new_mode = 'demo'
-        self._load_slots_state(new_mode)
+        # После создания всех слотов загружаем состояние из конфига
+        self._load_slots_state()
 
-        # После создания всех слотов - чекбокс уже добавлен при создании демо-слота
+    def _get_slots_config_key(self, game_mode_instance, is_chapter_mode):
+        """Возвращает уникальный ключ для сохранения/загрузки слотов."""
+        if isinstance(game_mode_instance, DemoGameMode):
+            return 'saved_slots_deltarunedemo'
+        elif isinstance(game_mode_instance, UndertaleGameMode):
+            return 'saved_slots_undertale'
+        else:  # FullGameMode (Deltarune)
+            return 'saved_slots_deltarune_chapter' if is_chapter_mode else 'saved_slots_deltarune'
 
     def _create_chapter_indicators(self):
         """Создает индикаторы глав для универсального слота"""
@@ -5392,26 +5501,8 @@ class DeltaHubApp(QWidget):
             }
 
             # Добавляем в layout
-            self.active_slots_layout.addWidget(indicator_frame)
-
-    def _create_demo_install_checkbox(self):
-        """Создает чекбокс установки для демо-слота (по аналогии с индикаторами глав)"""
-        # Создаем контейнер для чекбокса
-        checkbox_frame = QFrame()
-        checkbox_layout = QVBoxLayout(checkbox_frame)
-        checkbox_layout.setContentsMargins(0, 5, 5, 5)  # Убрали левый отступ
-        checkbox_layout.setSpacing(0)
-        checkbox_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
-        # Добавляем чекбокс в контейнер
-        self.full_install_checkbox.setVisible(True)
-        checkbox_layout.addWidget(self.full_install_checkbox)
-
-        # Сохраняем ссылку для управления видимостью
-        self.demo_checkbox_frame = checkbox_frame
-
-        # Добавляем контейнер в layout рядом со слотом
-        self.active_slots_layout.addWidget(checkbox_frame)
+            if hasattr(self, 'active_slots_layout'):
+                self.active_slots_layout.addWidget(indicator_frame)
 
     def _update_chapter_indicators(self, mod=None):
         """Обновляет индикаторы глав на основе выбранного мода"""
@@ -5448,11 +5539,9 @@ class DeltaHubApp(QWidget):
         """Создает виджет слота"""
         slot_frame = SlotFrame()
 
-        # Размеры слотов
-        if chapter_id == -2:
-            slot_frame.setFixedSize(250, 100)  # Демо слот еще шире и выше
-        elif chapter_id == -1:
-            slot_frame.setFixedSize(250, 100)  # Универсальный слот тоже широкий и выше
+        # Размеры слотов  
+        if chapter_id in [-1, -10, -20]:  # Универсальный, демо и Undertale слоты
+            slot_frame.setFixedSize(250, 100)  # Широкие слоты
         else:
             slot_frame.setFixedSize(150, 100)  # Увеличили высоту для слотов глав
 
@@ -5560,6 +5649,7 @@ class DeltaHubApp(QWidget):
                 msg_box.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
                 if msg_box.exec() == QMessageBox.StandardButton.Yes:
                     self._remove_mod_from_slot(slot_frame, slot_frame.assigned_mod)
+                    self._save_slots_state()
             else:
                 self._show_mod_selection_for_slot(slot_frame)
         else:
@@ -5637,13 +5727,13 @@ class DeltaHubApp(QWidget):
         installed_mods = self._get_installed_mods_list()
 
         # Фильтруем по режиму демоверсии
-        is_demo_mode = getattr(self, 'demo_mode_checkbox', None) and self.demo_mode_checkbox.isChecked()
+        is_demo_mode = hasattr(self, 'game_type_combo') and self.game_type_combo.currentData() == 'deltarunedemo'
 
         for mod_info in installed_mods:
             # Фильтрация по демо режиму
-            if is_demo_mode and not mod_info.get('is_demo_mod', False):
+            if is_demo_mode and not mod_info.get('modtype', 'deltarune') == 'deltarunedemo':
                 continue
-            elif not is_demo_mode and mod_info.get('is_demo_mod', False):
+            elif not is_demo_mode and mod_info.get('modtype', 'deltarune') == 'deltarunedemo':
                 continue
 
             # Если выбран конкретный слот, фильтруем моды
@@ -5714,19 +5804,26 @@ class DeltaHubApp(QWidget):
                     with open(config_path, 'r', encoding='utf-8') as f:
                         config_data = json.load(f)
 
-                    chapters_data = config_data.get('chapters', {})
+                    files_data = config_data.get('files', {})
 
-                    # Если у мода есть информация о главах в config.json
-                    if chapters_data:
-                        # Преобразуем chapter_id в строку для сравнения с ключами в config
-                        chapter_str = str(chapter_id)
-
-                        # Для универсального слота (-1) проверяем есть ли хотя бы одна глава
+                    # Если у мода есть информация о файлах в config.json
+                    if files_data:
+                        # Преобразуем chapter_id в строковый ключ для сравнения
                         if chapter_id == -1:
-                            return len(chapters_data) > 0
+                            file_key = "demo"
+                        elif chapter_id == 0:
+                            file_key = "0"
+                        elif chapter_id > 0:
+                            file_key = str(chapter_id)
+                        else:
+                            return False
+
+                        # Для демо (-1) проверяем есть ли demo ключ
+                        if chapter_id == -1:
+                            return "demo" in files_data or "undertale" in files_data
 
                         # Для конкретной главы проверяем есть ли она в списке
-                        return chapter_str in chapters_data
+                        return file_key in files_data
 
                 except Exception as e:
                     pass
@@ -5837,11 +5934,23 @@ class DeltaHubApp(QWidget):
                 if not mod_exists:
                     continue
 
-                # Фильтрация по демо режиму
-                if is_demo_mode and not mod_info.get('is_demo_mod', False):
-                    continue
-                elif not is_demo_mode and mod_info.get('is_demo_mod', False):
-                    continue
+                # Фильтрация по типу мода и слоту
+                mod_modtype = mod_info.get('modtype', 'deltarune')
+                slot_id = slot_frame.chapter_id
+                
+                # Проверяем совместимость мода с слотом
+                if slot_id == -10:  # Demo slot
+                    if mod_modtype != 'deltarunedemo':
+                        continue
+                elif slot_id == -20:  # Undertale slot
+                    if mod_modtype != 'undertale':
+                        continue
+                elif slot_id == -1:  # Universal slot
+                    if mod_modtype not in ['deltarune', 'deltarunedemo']:
+                        continue
+                else:  # Chapter slots (0-4)
+                    if mod_modtype != 'deltarune':
+                        continue
 
                 # Создаем объект мода из информации
                 mod_data = self._create_mod_object_from_info(mod_info)
@@ -5899,15 +6008,38 @@ class DeltaHubApp(QWidget):
                 self._show_chapter_mode_instruction()
                 return
 
+        # Асинхронно сканируем и рендерим
+        self._refresh_installed_mods_async()
+
+    def _update_installed_mods_display_from_list(self, installed_mods):
+        """Рендерит список установленных модов из уже отсканированных данных."""
+        # Защита: в поглавном режиме без выбранного слота показываем инструкцию
+        is_chapter_mode = hasattr(self, 'chapter_mode_checkbox') and self.chapter_mode_checkbox.isChecked()
+        if is_chapter_mode:
+            selected_id = getattr(self, 'selected_chapter_id', None)
+            if selected_id is None:
+                if hasattr(self, 'installed_mods_container') and hasattr(self, 'installed_mods_layout'):
+                    self.installed_mods_container.setUpdatesEnabled(False)
+                    clear_layout_widgets(self.installed_mods_layout, keep_last_n=1)
+                    self._show_chapter_mode_instruction()
+                    self.installed_mods_container.setUpdatesEnabled(True)
+                return
+            else:
+                # Делегируем специализированному рендеру для поглавного режима
+                self._update_installed_mods_for_chapter_mode(selected_id)
+                return
+
         # Очищаем текущий список
+        self.installed_mods_container.setUpdatesEnabled(False)
         clear_layout_widgets(self.installed_mods_layout, keep_last_n=1)
 
-        # Получаем установленные моды и проверяем их существование
-        installed_mods = self._get_installed_mods_list()
+        # Проверяем отсутствующие файлы
         self._cleanup_missing_mods(installed_mods)
 
-        # Фильтруем по режиму демоверсии
-        is_demo_mode = getattr(self, 'demo_mode_checkbox', None) and self.demo_mode_checkbox.isChecked()
+        # Фильтруем по типу игры из game_type_combo
+        current_game_type = 'deltarune'
+        if hasattr(self, 'game_type_combo'):
+            current_game_type = self.game_type_combo.currentData() or 'deltarune'
 
         for mod_info in installed_mods:
             # Проверяем, что мод еще существует (после очистки)
@@ -5915,10 +6047,9 @@ class DeltaHubApp(QWidget):
             if not mod_exists:
                 continue
 
-            # Фильтрация по демо режиму
-            if is_demo_mode and not mod_info.get('is_demo_mod', False):
-                continue
-            elif not is_demo_mode and mod_info.get('is_demo_mod', False):
+            # Фильтрация по типу игры
+            mod_modtype = mod_info.get('modtype', 'deltarune')
+            if mod_modtype != current_game_type:
                 continue
 
             # Создаем виджет для установленного мода
@@ -5932,7 +6063,7 @@ class DeltaHubApp(QWidget):
                 public_mod = next((mod for mod in self.all_mods if mod.key == mod_info.get('key')), None)
                 if public_mod:
                     has_update = any(self._mod_has_files_for_chapter(public_mod, i) and
-                                   self._get_mod_status_for_chapter(public_mod, i) == 'update' for i in range(5))
+                                     self._get_mod_status_for_chapter(public_mod, i) == 'update' for i in range(5))
 
             # Создаем объект мода для виджета
             mod_data = self._create_mod_object_from_info(mod_info)
@@ -5941,18 +6072,56 @@ class DeltaHubApp(QWidget):
                 mod_widget.clicked.connect(self._on_installed_mod_clicked)
                 mod_widget.remove_requested.connect(self._on_installed_mod_remove)
                 mod_widget.use_requested.connect(self._on_installed_mod_use)
-
-                # Вставляем перед stretch элементом
                 self.installed_mods_layout.insertWidget(self.installed_mods_layout.count() - 1, mod_widget)
 
-        # Если список пуст, показываем сообщение
-        if self.installed_mods_layout.count() <= 1:  # Только stretch элемент
+        if self.installed_mods_layout.count() <= 1:
             self._show_empty_mods_message()
 
-        # Обновляем состояние кнопок Use/Remove
         self._update_mod_widgets_slot_status()
-        # Обновляем основной интерфейс
         self._update_ui_for_selection()
+        self.installed_mods_container.setUpdatesEnabled(True)
+
+    def _refresh_installed_mods_async(self):
+        """Сканирует установленные моды в фоне и затем рендерит их.
+        Защита: в поглавном режиме без выбранного слота не запускаем сканирование,
+        а сразу показываем инструкцию или делегируем специализированному рендеру.
+        """
+        # Ранний выход для поглавного режима
+        is_chapter_mode = hasattr(self, 'chapter_mode_checkbox') and self.chapter_mode_checkbox.isChecked()
+        if is_chapter_mode:
+            selected_id = getattr(self, 'selected_chapter_id', None)
+            if selected_id is None:
+                if hasattr(self, 'installed_mods_container') and hasattr(self, 'installed_mods_layout'):
+                    self.installed_mods_container.setUpdatesEnabled(False)
+                    clear_layout_widgets(self.installed_mods_layout, keep_last_n=1)
+                    self._show_chapter_mode_instruction()
+                    self.installed_mods_container.setUpdatesEnabled(True)
+                return
+            else:
+                # Если слот выбран, строим список для конкретной главы без общего сканирования
+                self._update_installed_mods_for_chapter_mode(selected_id)
+                return
+
+        from PyQt6.QtCore import QThread, pyqtSignal
+        class _Scan(QThread):
+            done = pyqtSignal(list)
+            def __init__(self, outer):
+                super().__init__(outer)
+                self.outer = outer
+            def run(self):
+                try:
+                    mods = self.outer._get_installed_mods_list()
+                except Exception:
+                    mods = []
+                self.done.emit(mods)
+        try:
+            self._installed_scan_thread = _Scan(self)
+            self._installed_scan_thread.done.connect(self._update_installed_mods_display_from_list)
+            self._installed_scan_thread.start()
+        except Exception:
+            # Fallback sync
+            mods = self._get_installed_mods_list()
+            self._update_installed_mods_display_from_list(mods)
 
     def _show_empty_mods_message(self):
         """Показывает сообщение о пустом списке модов"""
@@ -6013,16 +6182,21 @@ class DeltaHubApp(QWidget):
             if mod_data:
                 # Удаляем из всех слотов
                 self._remove_mod_from_all_slots(mod_data)
-                # Удаляем из сохраненного состояния слотов
-                if hasattr(self, 'saved_slots_state'):
+                # Удаляем из всех сохраненных состояний слотов в конфиге
+                config_keys = ['saved_slots_deltarune', 'saved_slots_deltarune_chapter', 'saved_slots_deltarunedemo', 'saved_slots_undertale']
+                for config_key in config_keys:
+                    slots_data = self.local_config.get(config_key, {})
                     slots_to_clear = []
-                    for slot_id, saved_mod in self.saved_slots_state.items():
-                        if hasattr(saved_mod, 'key') and hasattr(mod_data, 'key') and saved_mod.key == mod_data.key:
-                            slots_to_clear.append(slot_id)
-                        elif hasattr(saved_mod, 'name') and hasattr(mod_data, 'name') and saved_mod.name == mod_data.name:
-                            slots_to_clear.append(slot_id)
-                    for slot_id in slots_to_clear:
-                        del self.saved_slots_state[slot_id]
+                    for slot_id_str, slot_info in slots_data.items():
+                        if isinstance(slot_info, dict):
+                            saved_mod_key = slot_info.get('mod_key')
+                            if hasattr(mod_data, 'key') and saved_mod_key == mod_data.key:
+                                slots_to_clear.append(slot_id_str)
+                    for slot_id_str in slots_to_clear:
+                        del slots_data[slot_id_str]
+                    if slots_to_clear:
+                        self.local_config[config_key] = slots_data
+                        self._write_local_config()
 
     def _get_installed_mods_list(self):
         """Получает список установленных модов"""
@@ -6076,7 +6250,7 @@ class DeltaHubApp(QWidget):
             game_version=mod_info.get('game_version', '1.03'),
             description_url='',  # Значение по умолчанию
             downloads=0,  # Значение по умолчанию
-            is_demo_mod=mod_info.get('is_demo_mod', False),
+            modtype=mod_info.get('modtype', 'deltarune'),  # Default to deltarune
             is_verified=False  # Значение по умолчанию
         )
 
@@ -6135,6 +6309,7 @@ class DeltaHubApp(QWidget):
         if current_slot:
             # Мод уже в слоте - убираем его
             self._remove_mod_from_slot(current_slot, mod_data)
+            self._save_slots_state()
         else:
             # Проверяем режим
             is_chapter_mode = self.chapter_mode_checkbox.isChecked()
@@ -6168,7 +6343,14 @@ class DeltaHubApp(QWidget):
                 if not is_chapter_mode or is_demo_mode:
                     # В обычном режиме или демо-режиме - автоматически вставляем в соответствующий слот
                     target_slot = None
-                    target_slot_id = -2 if is_demo_mode else -1  # -2 для демо, -1 для универсального
+                    
+                    # Определяем правильный слот на основе типа мода
+                    if is_demo_mode:
+                        target_slot_id = -10  # Demo slot
+                    elif hasattr(mod_data, 'modtype') and mod_data.modtype == 'undertale':
+                        target_slot_id = -20  # Undertale slot
+                    else:
+                        target_slot_id = -1  # Universal slot for deltarune mods
 
                     for key, slot_frame in self.slots.items():
                         if slot_frame.chapter_id == target_slot_id:
@@ -6249,9 +6431,6 @@ class DeltaHubApp(QWidget):
 
         # Обновляем состояние кнопки действия
         self._update_ui_for_selection()
-
-        # Сохраняем состояние слотов
-        self._save_slots_state()
 
     def _show_slot_selection_dialog(self, mod_data):
         """Показывает диалог выбора слота для мода"""
@@ -6416,9 +6595,9 @@ class DeltaHubApp(QWidget):
         version_label.setStyleSheet(f"font-size: 14px; color: {secondary_text_color}; margin-bottom: 10px;")
         right_layout.addWidget(version_label)
 
-        # Отдельное пространство для tagline высотой с иконку
+        # Отдельное пространство для tagline с увеличенной высотой для тегов
         tagline_container = QWidget()
-        tagline_container.setFixedHeight(120)  # Высота как у иконки
+        tagline_container.setMinimumHeight(180)  # Увеличенная высота для тегов
         tagline_layout = QVBoxLayout(tagline_container)
         tagline_layout.setContentsMargins(0, 0, 0, 0)
 
@@ -6429,53 +6608,109 @@ class DeltaHubApp(QWidget):
             tagline_label.setAlignment(Qt.AlignmentFlag.AlignTop)
             tagline_layout.addWidget(tagline_label)
 
+        # Добавляем больше расстояния перед тегами
+        tagline_layout.addSpacing(20)
+        
+        # Статусы
+        status_layout = QVBoxLayout()
+        status_layout.setSpacing(15)  # Увеличиваем spacing между тегами
+        
+        # Добавляем тег типа игры в начало с заголовком и описанием
+        modtype_container = QVBoxLayout()
+        modtype_container.setSpacing(4)
+        # Заголовок с обводкой
+        modtype_label = OutlinedTextLabel(tr(f"ui.{mod_data.modtype}_label"))
+        # Цвета по типу игры: белый текст, цветная обводка
+        fill_color = "white"
+        outline_color = "#222222"
+        if mod_data.modtype == 'deltarune':
+            outline_color = "#222222"
+        elif mod_data.modtype == 'deltarunedemo':
+            outline_color = "lightgreen"
+        elif mod_data.modtype == 'undertale':
+            outline_color = "#750B0B"
+        # Настраиваем шрифт и толщину обводки
+        f = modtype_label.font(); f.setBold(True); f.setPointSize(15); modtype_label.setFont(f)
+        modtype_label.setColors(fill_color, outline_color)
+        modtype_label.setOutlineWidth(0.8)
+        modtype_label.setMinimumHeight(26)
+        modtype_label.setLeftMargin(0)
+        modtype_container.addWidget(modtype_label)
+        
+        # Короткое описание соответствующего цвета с обводкой
+        modtype_desc = OutlinedTextLabel(tr(f"ui.{mod_data.modtype}_desc"))
+        df = modtype_desc.font(); df.setPointSize(11); modtype_desc.setFont(df)
+        modtype_desc.setColors(fill_color, outline_color)
+        modtype_desc.setOutlineWidth(0.7)
+        modtype_desc.setMinimumHeight(18)
+        modtype_desc.setLeftMargin(12)
+        modtype_container.addWidget(modtype_desc)
+        
+        status_layout.addLayout(modtype_container)
+        
+        tagline_layout.addLayout(status_layout)
         tagline_layout.addStretch()
         right_layout.addWidget(tagline_container)
 
-        # Статусы
-        status_layout = QVBoxLayout()
-        status_layout.setSpacing(8)
-
         if getattr(mod_data, 'is_verified', False):
             verified_container = QVBoxLayout()
+            verified_container.setSpacing(4)
             verified_label = QLabel(tr("ui.verified_label"))
-            verified_label.setStyleSheet("color: #4CAF50; font-weight: bold; font-size: 15px;")
+            verified_label.setStyleSheet("color: #4CAF50; font-size: 15px;")
             verified_container.addWidget(verified_label)
 
             verified_desc = QLabel(tr("ui.verified_desc"))
-            verified_desc.setStyleSheet("color: #4CAF50; font-size: 11px; margin-left: 15px;")
+            verified_desc.setStyleSheet("color: #4CAF50; font-size: 11px; margin-left: 12px;")
             verified_desc.setWordWrap(True)
             verified_container.addWidget(verified_desc)
 
             status_layout.addLayout(verified_container)
 
-        if getattr(mod_data, 'is_piracy_protected', False):
-            license_container = QVBoxLayout()
-            license_label = QLabel(tr("ui.license_label"))
-            license_label.setStyleSheet("color: #2196F3; font-weight: bold; font-size: 15px;")
-            license_container.addWidget(license_label)
+        # Отображаем тип модификации
+        if getattr(mod_data, 'is_xdelta', getattr(mod_data, 'is_piracy_protected', False)):
+            # Патчинг (XDELTA)
+            patching_container = QVBoxLayout()
+            patching_container.setSpacing(4)
+            patching_label = QLabel(tr("ui.patching_label"))
+            patching_label.setStyleSheet("color: #2196F3; font-size: 15px;")
+            patching_container.addWidget(patching_label)
 
-            license_desc = QLabel(tr("ui.license_desc"))
-            license_desc.setStyleSheet("color: #2196F3; font-size: 11px; margin-left: 15px;")
-            license_desc.setWordWrap(True)
-            license_container.addWidget(license_desc)
+            patching_desc = QLabel(tr("ui.patching_desc"))
+            patching_desc.setStyleSheet("color: #2196F3; font-size: 11px; margin-left: 12px;")
+            patching_desc.setWordWrap(True)
+            patching_container.addWidget(patching_desc)
 
-            status_layout.addLayout(license_container)
+            status_layout.addLayout(patching_container)
+        else:
+            # Замена файлов
+            replacement_container = QVBoxLayout()
+            replacement_container.setSpacing(4)
+            replacement_label = QLabel(tr("ui.file_replacement_label"))
+            replacement_label.setStyleSheet("color: #FF9800; font-size: 15px;")
+            replacement_container.addWidget(replacement_label)
 
-        if mod_data.is_demo_mod:
+            replacement_desc = QLabel(tr("ui.file_replacement_desc"))
+            replacement_desc.setStyleSheet("color: #FF9800; font-size: 11px; margin-left: 12px;")
+            replacement_desc.setWordWrap(True)
+            replacement_container.addWidget(replacement_desc)
+
+            status_layout.addLayout(replacement_container)
+
+        if mod_data.modtype == 'deltarunedemo':
             demo_container = QVBoxLayout()
+            demo_container.setSpacing(4)
             demo_label = QLabel(tr("ui.demo_label"))
             demo_label.setStyleSheet("color: #FF9800; font-weight: bold; font-size: 15px;")
             demo_container.addWidget(demo_label)
 
             demo_desc = QLabel(tr("ui.demo_desc"))
-            demo_desc.setStyleSheet("color: #FF9800; font-size: 11px; margin-left: 15px;")
+            demo_desc.setStyleSheet("color: #FF9800; font-size: 11px; margin-left: 12px;")
             demo_desc.setWordWrap(True)
             demo_container.addWidget(demo_desc)
 
             status_layout.addLayout(demo_container)
 
-        right_layout.addLayout(status_layout)
+        # status_layout уже добавлен в tagline_layout выше
         right_layout.addStretch()
 
         header_layout.addLayout(right_layout)
@@ -6714,6 +6949,10 @@ class DeltaHubApp(QWidget):
 
     def _update_mod_widgets_slot_status(self):
         """Обновляет состояние кнопок Use/Remove в библиотеке"""
+        # Если список установленныx модов ещё не инициализирован, выходим
+        if not hasattr(self, 'installed_mods_layout') or self.installed_mods_layout is None:
+            return
+
         # Проходим по всем виджетам модов в библиотеке и обновляем их состояние
         for i in range(self.installed_mods_layout.count() - 1):  # -1 для stretch
             item = self.installed_mods_layout.itemAt(i)
@@ -6837,6 +7076,8 @@ class DeltaHubApp(QWidget):
                 if assigned_mod_key == mod_key:
                     # Используем существующий метод для очистки слота
                     self._remove_mod_from_slot(slot_frame, slot_frame.assigned_mod)
+        # Сохраняем состояние после удаления мода из всех слотов
+        self._save_slots_state()
 
     def _populate_search_mods(self):
         """Заполняет список модов на вкладке поиска с фильтрацией и пагинацией"""
@@ -6861,8 +7102,10 @@ class DeltaHubApp(QWidget):
         if hasattr(self, 'tag_other') and self.tag_other.isChecked():
             selected_tags.append('other')
 
-        # Проверяем фильтр демо
-        demo_filter = hasattr(self, 'tag_demo') and self.tag_demo.isChecked()
+        # Получаем выбранный тип мода
+        selected_modtype = ""
+        if hasattr(self, 'modtype_combo'):
+            selected_modtype = self.modtype_combo.currentData() or ""
 
         # Фильтруем моды
         self.filtered_mods = []
@@ -6888,9 +7131,10 @@ class DeltaHubApp(QWidget):
                 if not all(tag in mod_tags for tag in selected_tags):
                     continue
 
-            # Проверяем фильтр демо
-            if demo_filter:
-                if not getattr(mod, 'is_demo_mod', False):
+            # Проверяем фильтр по типу мода
+            if selected_modtype:
+                mod_modtype = getattr(mod, 'modtype', 'deltarune')
+                if mod_modtype != selected_modtype:
                     continue
 
             # Проверяем текстовый поиск
@@ -6968,16 +7212,20 @@ class DeltaHubApp(QWidget):
         current_page_mods = self.filtered_mods[start_index:end_index]
 
         # Добавляем моды текущей страницы
-        for mod in current_page_mods:
-            plaque = ModPlaqueWidget(mod, parent=self)
-            plaque.install_requested.connect(self._on_mod_install_requested)
-            plaque.uninstall_requested.connect(self._on_mod_uninstall_requested)
-            plaque.clicked.connect(self._on_mod_clicked)
-            plaque.details_requested.connect(self._on_mod_details_requested)
-            # Устанавливаем состояние кнопки в зависимости от процесса установки
-            plaque.install_button.setEnabled(not self.is_installing)
-            # Вставляем перед stretch элементом
-            self.mod_list_layout.insertWidget(self.mod_list_layout.count() - 1, plaque)
+        self.mod_list_widget.setUpdatesEnabled(False)
+        try:
+            for mod in current_page_mods:
+                plaque = ModPlaqueWidget(mod, parent=self)
+                plaque.install_requested.connect(self._on_mod_install_requested)
+                plaque.uninstall_requested.connect(self._on_mod_uninstall_requested)
+                plaque.clicked.connect(self._on_mod_clicked)
+                plaque.details_requested.connect(self._on_mod_details_requested)
+                # Устанавливаем состояние кнопки в зависимости от процесса установки
+                plaque.install_button.setEnabled(not self.is_installing)
+                # Вставляем перед stretch элементом
+                self.mod_list_layout.insertWidget(self.mod_list_layout.count() - 1, plaque)
+        finally:
+            self.mod_list_widget.setUpdatesEnabled(True)
 
         # Обновляем пагинацию
         self._update_pagination_controls()
@@ -7014,14 +7262,29 @@ class DeltaHubApp(QWidget):
                 return
 
             # Используем реальную систему установки
-            # Найдем ВСЕ доступные главы у мода
+            # Найдем ВСЕ доступные главы/файлы у мода
             available_chapters = []
-            for chapter_id in range(0, 5):  # Проверяем главы 0-4
-                if mod.get_chapter_data(chapter_id):
-                    available_chapters.append(chapter_id)
+            
+            if mod.modtype == 'undertale':
+                # Для UNDERTALE проверяем специальный ключ "undertale"
+                if mod.files.get('undertale'):
+                    available_chapters.append(0)  # Используем 0 как ID для UNDERTALE
+            elif mod.modtype == 'deltarunedemo':
+                # Для демо проверяем ключ "demo"
+                if mod.files.get('demo'):
+                    available_chapters.append(-1)  # Используем -1 как ID для demo
+            else:
+                # Для DELTARUNE проверяем главы 0-4
+                for chapter_id in range(0, 5):
+                    chapter_data = mod.get_chapter_data(chapter_id)
+                    if chapter_data:
+                        available_chapters.append(chapter_id)
 
             if not available_chapters:
-                QMessageBox.warning(self, tr("errors.error"), tr("errors.mod_no_files", mod_name=mod.name))
+                # Debug info for troubleshooting
+                debug_info = f"Mod type: {mod.modtype}, Files keys: {list(mod.files.keys())}"
+                print(f"Debug: {debug_info}")
+                QMessageBox.warning(self, tr("errors.error"), tr("errors.mod_no_files", mod_name=mod.name) + f"\n\nDebug: {debug_info}")
                 return
 
             # Создаем задачи для всех доступных глав
@@ -8396,9 +8659,8 @@ class DeltaHubApp(QWidget):
         dest = os.path.join(self.config_dir, "custom_background_music.mp3")
         if os.path.exists(dest):
             return dest
-        # Фолбэк — встроенный MP3 ассет
-        asset_mp3 = resource_path("assets/deltahub.wav")
-        return dest if os.path.exists(dest) else (asset_mp3 if os.path.exists(asset_mp3) else "")
+        # Не возвращаем дефолтную музыку автоматически - только если пользователь выбрал
+        return ""
 
     def _get_startup_sound_path(self):
         """Получает путь к файлу звука заставки (только MP3) в папке конфигов"""
@@ -8454,8 +8716,8 @@ class DeltaHubApp(QWidget):
                     dest_path = os.path.join(self.config_dir, "custom_background_music.mp3")
                     shutil.copy2(file_path, dest_path)
                     self.background_music_button.setText(self._get_background_music_button_text())
-                    # Запускаем фоновую музыку
-                    self._start_background_music()
+                    # Запускаем фоновую музыку (только если окно показано)
+                    self._maybe_start_background_music()
                     QMessageBox.information(self, tr("dialogs.success"), tr("dialogs.background_music_selected"))
                 except Exception as e:
                     print(f"Error copying background music: {e}")
@@ -8580,6 +8842,22 @@ class DeltaHubApp(QWidget):
         finally:
             self.bg_fallback_proc = None
 
+    def _maybe_start_background_music(self):
+        """Старт фоновой музыки только когда инициализация завершена и окно показано пользователю."""
+        try:
+            # Нужен пользовательский файл и не должен идти запуск игры
+            music_path = self._get_background_music_path()
+            if not music_path or not os.path.exists(music_path):
+                return
+            # Условия: инициализация завершена и окно показано пользователю
+            if self.initialization_completed and getattr(self, 'is_shown_to_user', False) and self.isVisible():
+                self._start_background_music()
+            else:
+                # Пробуем позже
+                QTimer.singleShot(500, self._maybe_start_background_music)
+        except Exception:
+            pass
+
     def _on_toggle_direct_launch_for_slot(self, slot_id):
         """Включает прямой запуск для указанного слота"""
         if not self.game_mode.direct_launch_allowed:
@@ -8635,78 +8913,19 @@ class DeltaHubApp(QWidget):
 
 
 
-    def _rebuild_tabs_for_demo_mode(self):
-        self.tab_widget.blockSignals(True)
 
-        while self.tab_widget.count():
-            self.tab_widget.removeTab(0)
-        self.tabs.clear()
 
-        self.tabs[0] = self._create_chapter_tab(self._current_tab_names()[0], 0)
-
-        for b in self._chapter_btns:
-            b.deleteLater()
-        self._chapter_btns.clear()
-
-        try:
-            old_grp = getattr(self, "chapter_button_group", None)
-            if old_grp is not None:
-                old_grp.deleteLater()
-        except RuntimeError:
-            pass
-
-        self.chapter_button_group = QButtonGroup(self)
-        self.chapter_button_group.setExclusive(True)
-
-        for idx, title in enumerate(self._current_tab_names()):
-            b = QPushButton(title)
-            b.setCheckable(True)
-            b.setMinimumWidth(100)
-            self.chapter_button_group.addButton(b, idx)
-            self._chapter_btns.append(b)
-            self._chapter_btn_bar.addWidget(b)
-
-        # Первая вкладка активна по умолчанию
-        first_btn = self.chapter_button_group.button(0)
-        if first_btn is not None:
-            first_btn.setChecked(True)
-
-        # Клик по кнопке  → переключаем вкладку
-        self.chapter_button_group.idClicked.connect(self.tab_widget.setCurrentIndex)
-
-        # Переключение вкладки колёсиком/клавиатурой → обновляем кнопки
-        def _sync_chapter_buttons(index: int):
-            for i, btn in enumerate(self._chapter_btns):
-                old = btn.blockSignals(True)
-                btn.setChecked(i == index)
-                btn.blockSignals(old)
-        self.tab_widget.currentChanged.connect(_sync_chapter_buttons)
-
-        self._chapter_btn_bar.addWidget(self.full_install_checkbox)
-
-        self._update_chapter_button_visibility()
-
-        self.tab_widget.blockSignals(False)
-        self.tab_widget.setCurrentIndex(0)
-        self.tab_widget.currentChanged.emit(0)
         self.apply_theme()
 
-    def _update_chapter_button_visibility(self):
-        is_demo = isinstance(self.game_mode, DemoGameMode)
-        for btn in self._chapter_btns:
-            btn.setVisible(not is_demo)
 
-        # Управляем видимостью чекбокса через его фрейм
-        if hasattr(self, 'demo_checkbox_frame'):
-            self.demo_checkbox_frame.setVisible(is_demo)
 
 
 
     def _perform_initial_setup(self):
         # Сначала загружаем глобальные настройки, они могут понадобиться для UI
         try:
-            from helpers import _fb_url
-            response = requests.get(_fb_url(DATA_FIREBASE_URL, "globals"), timeout=5)
+            from helpers import CLOUD_FUNCTIONS_BASE_URL
+            response = requests.get(f"{CLOUD_FUNCTIONS_BASE_URL}/getGlobalSettings", timeout=5)
             if response.status_code == 200:
                 self.global_settings = response.json() or {}
         except requests.RequestException:
@@ -8746,21 +8965,23 @@ class DeltaHubApp(QWidget):
         saved_demo_mode = self.local_config.get('demo_mode_enabled', False)
         saved_chapter_mode = self.local_config.get('chapter_mode_enabled', False)
 
-        # Блокируем сигналы чтобы не было дублирования обработчиков
-        self.demo_mode_checkbox.blockSignals(True)
+        # Set game type combo if demo mode was previously enabled
+        if hasattr(self, 'game_type_combo') and saved_demo_mode:
+            self.game_type_combo.blockSignals(True)
+            for i in range(self.game_type_combo.count()):
+                if self.game_type_combo.itemData(i) == 'deltarunedemo':
+                    self.game_type_combo.setCurrentIndex(i)
+                    break
+            self.game_type_combo.blockSignals(False)
+
+        # Set chapter mode checkbox if it exists
         if hasattr(self, 'chapter_mode_checkbox'):
             self.chapter_mode_checkbox.blockSignals(True)
-
-        self.demo_mode_checkbox.setChecked(saved_demo_mode)
-        if hasattr(self, 'chapter_mode_checkbox'):
             self.chapter_mode_checkbox.setChecked(saved_chapter_mode)
+            self.chapter_mode_checkbox.blockSignals(False)
+
         self.disable_background_checkbox.setChecked(self.local_config.get("background_disabled", False))
         self.disable_splash_checkbox.setChecked(self.local_config.get("disable_splash", False))
-
-        # Разблокируем сигналы
-        self.demo_mode_checkbox.blockSignals(False)
-        if hasattr(self, 'chapter_mode_checkbox'):
-            self.chapter_mode_checkbox.blockSignals(False)
 
         # Режимы уже применены при создании вкладок, не нужно их вызывать снова
 
@@ -8787,7 +9008,7 @@ class DeltaHubApp(QWidget):
         self.setEnabled(True)
 
         self._populate_ui_with_mods()
-        if not self._find_and_validate_game_path():
+        if not self._find_and_validate_game_path(is_initial=True):
             self.action_button.setEnabled(False)
         # Убираем прямой вызов initialization_finished.emit(), теперь ждем загрузки модов
 
@@ -8796,8 +9017,15 @@ class DeltaHubApp(QWidget):
             return
         try:
             home_dir = os.path.expanduser('~')
-            native_save_path = os.path.join(home_dir, ".config", "DELTARUNE")
-            proton_save_path = os.path.join(home_dir, ".steam", "steam", "steamapps", "compatdata", "1671210", "pfx", "drive_c", "users", "steamuser", "AppData", "Local", "DELTARUNE")
+            # Use dynamic game name and Steam app ID based on current game mode
+            if isinstance(self.game_mode, UndertaleGameMode):
+                game_name = "UNDERTALE" 
+            else:
+                game_name = "DELTARUNE"
+            steam_app_id = self.game_mode.steam_id
+            
+            native_save_path = os.path.join(home_dir, ".config", game_name)
+            proton_save_path = os.path.join(home_dir, ".steam", "steam", "steamapps", "compatdata", steam_app_id, "pfx", "drive_c", "users", "steamuser", "AppData", "Local", game_name)
             if not os.path.isdir(proton_save_path):
                 return
             if os.path.lexists(native_save_path):
@@ -8960,7 +9188,6 @@ class DeltaHubApp(QWidget):
         for widget in [self.action_button, self.saves_button, self.shortcut_button, self.change_path_button, self.change_background_button]:
             widget.setEnabled(False)
         self.settings_button.setEnabled(False)
-        for btn in self.chapter_button_group.buttons(): btn.setDisabled(True)
         if not self.is_settings_view:
             self.tab_widget.setEnabled(False)
 
@@ -9075,8 +9302,6 @@ class DeltaHubApp(QWidget):
                 self.tab_widget.setEnabled(True)
                 self._update_ui_for_selection()
             self.settings_button.setEnabled(True)
-            for btn in self.chapter_button_group.buttons():
-                btn.setDisabled(False)
             for widget in [self.shortcut_button, self.change_path_button, self.change_background_button]:
                 widget.setEnabled(True)
             self.update_in_progress = False
@@ -9211,7 +9436,7 @@ class DeltaHubApp(QWidget):
                     self.mods_loaded = True
                     self.mods_loaded_signal.emit()
 
-            # Обновляем библиотеку модов с новыми статусами доступности
+            # Обновляем библиотеку модов с учетом режима (поглавный/обычный)
             if hasattr(self, 'installed_mods_layout'):
                 self._update_installed_mods_display()
 
@@ -9410,7 +9635,7 @@ class DeltaHubApp(QWidget):
         available_chapters = []
 
         # Для публичных модов с флагом is_piracy_protected нужно проверить данные главы
-        if mod_info and getattr(mod_info, 'is_piracy_protected', False):
+        if mod_info and getattr(mod_info, 'is_xdelta', getattr(mod_info, 'is_piracy_protected', False)):
             # Проверяем какие главы есть у мода в данных
             for chapter_id in range(-1, 5):  # -1 для демо, 0-4 для глав
                 if chapter_id == -1:  # Демо
@@ -9438,11 +9663,13 @@ class DeltaHubApp(QWidget):
                                 break
                 elif chapter_id == 0:  # Меню
                     chapter_dir = os.path.join(source_dir, "chapter_0")
-                    if os.path.isdir(chapter_dir):
-                        for file in os.listdir(chapter_dir):
-                            if file.lower().endswith('.xdelta'):
-                                available_chapters.append(chapter_id)
-                                break
+                    chapter_dir_alt = os.path.join(source_dir, "menu")
+                    for chk in (chapter_dir, chapter_dir_alt):
+                        if os.path.isdir(chk):
+                            for file in os.listdir(chk):
+                                if file.lower().endswith('.xdelta'):
+                                    available_chapters.append(chapter_id)
+                                    break
                 else:  # Главы 1-4
                     chapter_dir = os.path.join(source_dir, f"chapter_{chapter_id}")
                     if os.path.isdir(chapter_dir):
@@ -9483,7 +9710,9 @@ class DeltaHubApp(QWidget):
                     continue
 
                 mod_type_str = tr("ui.mod_type_local") if is_local else tr("ui.mod_type_public")
-                self.update_status_signal.emit(tr("status.applying_mod", mod_name=mod.name, mod_type=mod_type_str), UI_COLORS["status_warning"])
+                self.update_status_signal.emit(tr("status.applying_mod", mod_name=mod.name, mod_type=mod_type_str), UI_COLORS["status_warning"]) 
+                print(f"[XDELTA-DEBUG] UI index={ui_index}, chapter_id={chapter_id}, mod_key={mod_key}, mod_name={mod.name}")
+                print(f"[XDELTA-DEBUG] source_dir={source_dir}")
 
 
                 # --- ИСПРАВЛЕНИЕ: Унифицированная логика для ВСЕХ модов ---
@@ -9496,6 +9725,7 @@ class DeltaHubApp(QWidget):
 
                 # Проверяем, является ли это xdelta модом (нужно для след. шага)
                 is_xdelta_mod = self._is_xdelta_mod(mod, source_dir, chapter_id)
+                print(f"[XDELTA-DEBUG] is_xdelta_mod={is_xdelta_mod}")
 
                 # Пропускаем главы без файлов (для обычных модов)
                 # Для xdelta модов эта проверка не нужна, т.к. наличие патча проверяется позже
@@ -9505,8 +9735,10 @@ class DeltaHubApp(QWidget):
                 
                 target_dir = self._get_target_dir(chapter_id)
                 if not target_dir:
+                    print(f"[XDELTA-DEBUG] target_dir not found for chapter_id={chapter_id}")
                     continue
 
+                print(f"[XDELTA-DEBUG] target_dir={target_dir}")
                 if not ensure_writable(target_dir):
                     raise PermissionError(tr("errors.no_write_permission_for", path=target_dir))
 
@@ -9529,7 +9761,7 @@ class DeltaHubApp(QWidget):
     def _is_xdelta_mod(self, mod_info, source_dir: str, chapter_id: Optional[int] = None) -> bool:
         """Определяет, является ли мод xdelta-модом (для локальных и публичных модов)."""
         # Для публичных модов проверяем флаг is_piracy_protected
-        if mod_info and getattr(mod_info, 'is_piracy_protected', False):
+        if mod_info and getattr(mod_info, 'is_xdelta', getattr(mod_info, 'is_piracy_protected', False)):
             return True
 
         # Для локальных модов ищем .xdelta файлы в папке конкретной главы
@@ -9544,9 +9776,12 @@ class DeltaHubApp(QWidget):
                     # Для демо допускаем патч из корня мода
                     search_dir = source_dir
             elif chapter_id == 0:  # Меню
-                menu_dir = os.path.join(source_dir, "chapter_0")
-                if os.path.isdir(menu_dir):
-                    search_dir = menu_dir
+                chapter0_dir = os.path.join(source_dir, "chapter_0")
+                menu_dir_alt = os.path.join(source_dir, "menu")
+                if os.path.isdir(chapter0_dir):
+                    search_dir = chapter0_dir
+                elif os.path.isdir(menu_dir_alt):
+                    search_dir = menu_dir_alt
                 else:
                     # Для меню разрешаем искать патч в корне мода
                     search_dir = source_dir
@@ -9561,6 +9796,7 @@ class DeltaHubApp(QWidget):
             search_dir = source_dir
 
         # Ищем .xdelta файлы в выбранной папке
+        print(f"[XDELTA-DEBUG] _is_xdelta_mod: chapter_id={chapter_id}, search_dir={search_dir}")
         if os.path.exists(search_dir):
             for root, _, files in os.walk(search_dir):
                 for file in files:
@@ -9599,10 +9835,17 @@ class DeltaHubApp(QWidget):
             mod_source_dir = os.path.join(source_dir, chapter_folder_name)
 
             if not os.path.isdir(mod_source_dir):
-                # ВАЖНО: не используем корень как fallback для глав > 0, чтобы не тянуть корневой патч в главы
-                if chapter_id in (-1, 0):
+                if chapter_id == 0:
+                    # Совместимость со старыми установками, где использовалась папка 'menu'
+                    alt_menu_dir = os.path.join(source_dir, "menu")
+                    if os.path.isdir(alt_menu_dir):
+                        mod_source_dir = alt_menu_dir
+                    else:
+                        mod_source_dir = source_dir  # разрешаем корень как fallback для меню
+                elif chapter_id == -1:
                     mod_source_dir = source_dir
                 else:
+                    # ВАЖНО: не используем корень как fallback для глав > 0, чтобы не тянуть корневой патч в главы
                     mod_source_dir = None
         else:
             mod_source_dir = source_dir
@@ -9616,6 +9859,7 @@ class DeltaHubApp(QWidget):
             self._backup_temp_dir = tempfile.mkdtemp(prefix="deltahub_backup_")
             self._update_session_manifest(backup_temp_dir=self._backup_temp_dir)
 
+        print(f"[XDELTA-DEBUG] _create_backup_and_copy_mod_files: chapter_id={chapter_id}, mod_source_dir={mod_source_dir}, target_dir={target_dir}, is_xdelta_mod={is_xdelta_mod}")
         for root, _, files in os.walk(mod_source_dir):
             for file in files:
                 # Пропускаем служебные файлы и иконки
@@ -9679,6 +9923,7 @@ class DeltaHubApp(QWidget):
                         if applied_xdelta_for_this_chapter:
                             continue
 
+                        print(f"[XDELTA-DEBUG] Chapter {chapter_id}: applying xdelta '{cache_file_path}' -> original in '{target_dir}' (computed game_file_path={game_file_path})")
                         if not self._apply_xdelta_patch(cache_file_path, game_file_path, target_dir):
                             self.update_status_signal.emit(tr("errors.xdelta_apply_error", file=file), UI_COLORS["status_error"])
                             return False
@@ -9753,12 +9998,14 @@ class DeltaHubApp(QWidget):
             secondary_file = game_ios
 
         # Ищем существующий data файл
+        print(f"[XDELTA-DEBUG] _apply_xdelta_patch: xdelta_file={xdelta_file_path}, target_dir={target_dir}")
         original_data_file = None
         if os.path.exists(primary_file):
             original_data_file = primary_file
         elif os.path.exists(secondary_file):
             original_data_file = secondary_file
 
+        print(f"[XDELTA-DEBUG] original_data_file={original_data_file}")
         if not original_data_file:
             from PyQt6.QtWidgets import QMessageBox
             QMessageBox.critical(self, tr("errors.xdelta_error"), tr("errors.original_data_file_not_found", target_dir=target_dir))
@@ -9803,6 +10050,7 @@ class DeltaHubApp(QWidget):
                     return False
 
             # Пытаемся применить патч с оригинальным форматом
+            print(f"[XDELTA-DEBUG] Attempt 1: decode with format={os.path.basename(original_data_file)}")
             if try_patch_with_format(temp_original, temp_output, os.path.basename(original_data_file)):
                 # Успешно - копируем результат
                 shutil.copy2(temp_output, original_data_file)
@@ -9825,6 +10073,7 @@ class DeltaHubApp(QWidget):
             shutil.copy2(temp_original, temp_alt_original)
             temp_alt_output = os.path.join(temp_dir, "patched_data_alt.bin")
 
+            print(f"[XDELTA-DEBUG] Attempt 2: decode with alt_format={alt_format_name}")
             if try_patch_with_format(temp_alt_original, temp_alt_output, alt_format_name):
                 # Успешно - копируем результат с правильным расширением
                 shutil.copy2(temp_alt_output, original_data_file)
@@ -9970,7 +10219,9 @@ class DeltaHubApp(QWidget):
             if use_custom_exe:
                 target_exe = os.path.join(chapter_folder, os.path.basename(source_exe))
             else:
-                target_exe = os.path.join(chapter_folder, "DELTARUNE.exe")
+                # Use appropriate executable name based on game mode
+                exe_name = "UNDERTALE.exe" if isinstance(self.game_mode, UndertaleGameMode) else "DELTARUNE.exe"
+                target_exe = os.path.join(chapter_folder, exe_name)
 
             shutil.copy2(source_exe, target_exe)
             self._direct_launch_cleanup_info = {
@@ -10081,24 +10332,35 @@ class DeltaHubApp(QWidget):
         if not hasattr(self, 'slots'):
             return selections
 
-        # Проверяем демо режим
+        # Проверяем демо режим и UNDERTALE
         is_demo_mode = isinstance(self.game_mode, DemoGameMode)
+        is_undertale_mode = isinstance(self.game_mode, UndertaleGameMode)
 
         if is_demo_mode:
-            # В демо режиме обрабатываем только демо слот (-2)
-            demo_slot = self.slots.get(-2)  # Демо слот
+            # В демо режиме обрабатываем demo слот (-10)
+            demo_slot = self.slots.get(-10)
             if demo_slot and demo_slot.assigned_mod:
-                # Для демо режима используем специальный chapter_id = -1
                 selections[-1] = demo_slot.assigned_mod.key
             else:
                 selections[-1] = "no_change"
+        elif is_undertale_mode:
+            # В UNDERTALE режиме обрабатываем undertale слот (-20)
+            undertale_slot = self.slots.get(-20)
+            if undertale_slot and undertale_slot.assigned_mod:
+                selections[-1] = undertale_slot.assigned_mod.key
+            else:
+                selections[-1] = "no_change"
         elif self.current_mode == "normal":
-            # В обычном режиме универсальный слот применяется ко всем главам
+            # В обычном режиме универсальный слот применяется только к главам, для которых у мода есть файлы
             universal_slot = self.slots.get(-1)  # Универсальный слот
             if universal_slot and universal_slot.assigned_mod:
-                # Применяем мод ко всем главам (0-4)
+                mod = universal_slot.assigned_mod
+                # Проверяем какие главы доступны для этого мода
                 for chapter_id in range(5):
-                    selections[chapter_id] = universal_slot.assigned_mod.key
+                    if mod.get_chapter_data(chapter_id):  # Только если у мода есть данные для этой главы
+                        selections[chapter_id] = mod.key
+                    else:
+                        selections[chapter_id] = "no_change"
             else:
                 # Если нет мода в универсальном слоте, используем "no_change"
                 for chapter_id in range(5):
@@ -10207,6 +10469,11 @@ class DeltaHubApp(QWidget):
             self.restore_window_signal.emit()
 
     def _hide_window_for_game(self):
+        # При скрытии окна (запуск игры) останавливаем фоновую музыку
+        try:
+            self._stop_background_music()
+        except Exception:
+            pass
         self.hide()
 
     def _restore_window_after_game(self):
@@ -10215,6 +10482,8 @@ class DeltaHubApp(QWidget):
         self.raise_()
         self.progress_bar.setVisible(False)
         self._update_ui_for_selection()
+        # При восстановлении окна пробуем запустить музыку заново (если задана)
+        self._maybe_start_background_music()
 
     def _update_status(self, message: str, color: str = "white"):
         if not self.is_shortcut_launch:
@@ -10307,13 +10576,15 @@ class DeltaHubApp(QWidget):
         result = msg_box.exec()
 
         if msg_box.clickedButton() == restart_button:
-            # Перезапускаем лаунчер (надежно для собранной версии)
+            # Перезапускаем лаунчер с правильной рабочей директорией
             try:
                 from PyQt6.QtCore import QProcess
-                QProcess.startDetached(sys.executable, sys.argv[1:])
+                launcher_dir = get_launcher_dir()
+                QProcess.startDetached(sys.executable, sys.argv[1:], launcher_dir)
             except Exception:
                 import subprocess
-                subprocess.Popen([sys.executable] + sys.argv)
+                launcher_dir = get_launcher_dir()
+                subprocess.Popen([sys.executable] + sys.argv, cwd=launcher_dir)
             QApplication.quit()
 
 
@@ -10366,10 +10637,13 @@ class DeltaHubApp(QWidget):
 
         # Определяем активные слоты в зависимости от режима
         if is_demo_mode:
-            # В демо режиме проверяем только демо слот
-            active_slot_ids = [-2]
+            # В демо режиме проверяем только demo слот
+            active_slot_ids = [-10]
+        elif isinstance(self.game_mode, UndertaleGameMode):
+            # В UNDERTALE режиме проверяем только undertale слот
+            active_slot_ids = [-20]
         elif not is_chapter_mode:
-            # В обычном режиме проверяем только универсальный слот
+            # В обычном DELTARUNE режиме проверяем только универсальный слот
             active_slot_ids = [-1]
         else:
             # В поглавном режиме проверяем все поглавные слоты
@@ -10420,7 +10694,9 @@ class DeltaHubApp(QWidget):
 
         # Определяем активные слоты в зависимости от режима
         if is_demo_mode:
-            active_slot_ids = [-2]
+            active_slot_ids = [-10]
+        elif isinstance(self.game_mode, UndertaleGameMode):
+            active_slot_ids = [-20]
         elif not is_chapter_mode:
             active_slot_ids = [-1]
         else:
@@ -10667,11 +10943,12 @@ class DeltaHubApp(QWidget):
         try:
             # Перебираем возможные хеши (текущая соль + legacy)
             found_hash = None
+            from helpers import CLOUD_FUNCTIONS_BASE_URL
             for h in candidate_hashes:
-                resp = requests.get(_fb_url(DATA_FIREBASE_URL, f"mods/{h}"), timeout=10)
+                resp = requests.get(f"{CLOUD_FUNCTIONS_BASE_URL}/getModData?modId={h}", timeout=10)
                 if resp.status_code == 200 and resp.json():
                     mod_data = resp.json(); found_hash = h; break
-                resp = requests.get(_fb_url(DATA_FIREBASE_URL, f"pending_mods/{h}"), timeout=10)
+                resp = requests.get(f"{CLOUD_FUNCTIONS_BASE_URL}/getPendingModData?modId={h}", timeout=10)
                 if resp.status_code == 200 and resp.json():
                     mod_data = resp.json(); found_hash = h; found_in_pending = True; break
             if found_hash and isinstance(mod_data, dict):
@@ -10706,8 +10983,8 @@ class DeltaHubApp(QWidget):
             msg_box.exec()
             if msg_box.clickedButton() == withdraw_btn:
                 try:
-                    from helpers import _fb_url, DATA_FIREBASE_URL as _DB_URL
-                    requests.delete(_fb_url(_DB_URL, f"pending_mods/{hashed_key}"), timeout=10)
+                    from helpers import CLOUD_FUNCTIONS_BASE_URL
+                    requests.post(f"{CLOUD_FUNCTIONS_BASE_URL}/withdrawPendingMod", json={"hashedKey": hashed_key}, timeout=10)
                     QMessageBox.information(self, tr("dialogs.request_withdrawn"), tr("dialogs.withdrawal_success"))
                 except Exception as e:
                     QMessageBox.critical(self, tr("errors.error"), tr("errors.request_revoke_failed", error=str(e)))
@@ -10715,8 +10992,8 @@ class DeltaHubApp(QWidget):
 
         # Проверяем, есть ли заявка на изменения для этого мода
         try:
-            from helpers import _fb_url
-            pending_changes_response = requests.get(_fb_url(DATA_FIREBASE_URL, f"pending_changes/{hashed_key}"), timeout=10)
+            from helpers import CLOUD_FUNCTIONS_BASE_URL
+            pending_changes_response = requests.get(f"{CLOUD_FUNCTIONS_BASE_URL}/getPendingChangeData?modId={hashed_key}", timeout=10)
             if pending_changes_response.status_code == 200 and pending_changes_response.json():
                 # Есть заявка на изменения, показываем диалог с опциями
                 msg_box = QMessageBox(self)
@@ -10731,10 +11008,10 @@ class DeltaHubApp(QWidget):
                 if reply == withdraw_button:
                     # Пользователь хочет отозвать заявку
                     try:
-                        delete_response = requests.delete(_fb_url(DATA_FIREBASE_URL, f"pending_changes/{hashed_key}"), timeout=10)
+                        from helpers import CLOUD_FUNCTIONS_BASE_URL
+                        delete_response = requests.post(f"{CLOUD_FUNCTIONS_BASE_URL}/withdrawPendingChange", json={"hashedKey": hashed_key}, timeout=10)
                         delete_response.raise_for_status()
-                        QMessageBox.information(self, tr("dialogs.request_withdrawn"),
-                                                tr("dialogs.withdrawal_success"))
+                        QMessageBox.information(self, tr("dialogs.request_withdrawn"), tr("dialogs.withdrawal_success"))
                     except requests.RequestException as e:
                         QMessageBox.critical(self, tr("errors.error"), tr("errors.request_revoke_failed", error=str(e)))
                         return
@@ -10834,8 +11111,8 @@ class DeltaHubApp(QWidget):
             if not ch:
                 return {}
             d = {}
-            if ch.data_win_version:
-                d['data'] = ch.data_win_version
+            if ch.data_file_version:
+                d['data'] = ch.data_file_version
             for ef in ch.extra_files:
                 d[ef.key] = ef.version
             return d
@@ -10852,9 +11129,27 @@ class DeltaHubApp(QWidget):
             try:
                 config_data = self._read_json(config_path)
                 if config_data.get("mod_key") == mod.key:
-                    local_versions = (config_data.get("chapters", {})
-                                      .get(str(chapter_id), {})
-                                      .get("versions", {})) or {}
+                    # Convert chapter_id to file key
+                    if chapter_id == -1:
+                        file_key = "demo"
+                    elif chapter_id == 0:
+                        file_key = "0"
+                    elif chapter_id > 0:
+                        file_key = str(chapter_id)
+                    else:
+                        file_key = str(chapter_id)
+                    
+                    local_versions = {}
+                    files_data = config_data.get("files", {})
+                    if file_key in files_data:
+                        file_info = files_data[file_key]
+                        if file_info.get("data_file_version"):
+                            local_versions["data"] = file_info["data_file_version"]
+                        # Add extra files versions
+                        extra_files = file_info.get("extra_files", {})
+                        versions_data = file_info.get("versions", {})
+                        for group_key in extra_files.keys():
+                            local_versions[group_key] = versions_data.get(group_key, "1.0.0")
                     if not local_versions:
                         return "install"
                     # Сравниваем покомпонентно
@@ -10979,7 +11274,32 @@ class DeltaHubApp(QWidget):
     def _read_json(self, path: str):
         try:
             with open(path, "r", encoding="utf-8") as f:
-                return json.load(f)
+                data = json.load(f)
+                
+            # Migration logic for chapters -> files
+            if isinstance(data, dict) and path.endswith("config.json"):
+                needs_migration = False
+                
+                # Migrate chapters to files
+                if "chapters" in data and "files" not in data:
+                    data["files"] = data["chapters"]
+                    del data["chapters"]
+                    needs_migration = True
+                
+                # Migrate is_demo_mod to modtype
+                if "is_demo_mod" in data and "modtype" not in data:
+                    if data.get("is_demo_mod", False):
+                        data["modtype"] = "deltarunedemo"
+                    else:
+                        data["modtype"] = "deltarune"  # Default
+                    del data["is_demo_mod"]
+                    needs_migration = True
+                
+                # Save migrated config back to file
+                if needs_migration:
+                    self._write_json(path, data)
+                    
+            return data
         except FileNotFoundError:
             return {}
         except json.JSONDecodeError:
@@ -11079,17 +11399,22 @@ class DeltaHubApp(QWidget):
             return None
 
         system = platform.system()
+        
+        # Determine base executable name based on game mode
+        is_undertale = isinstance(self.game_mode, UndertaleGameMode)
+        base_exe_name = "UNDERTALE" if is_undertale else "DELTARUNE"
+        exe_extension = ".exe" if system in ["Windows", "Linux"] else ""
 
         if system == "Windows":
-            exe_path = os.path.join(current_game_path, "DELTARUNE.exe")
+            exe_path = os.path.join(current_game_path, f"{base_exe_name}.exe")
             if os.path.isfile(exe_path):
                 return exe_path
         elif system == "Linux":
-            exe_path = os.path.join(current_game_path, "DELTARUNE.exe")
+            exe_path = os.path.join(current_game_path, f"{base_exe_name}.exe")
             if os.path.isfile(exe_path):
                 return exe_path
 
-            native_path = os.path.join(current_game_path, "DELTARUNE")
+            native_path = os.path.join(current_game_path, base_exe_name)
             if os.path.isfile(native_path):
                 return native_path
         elif system == "Darwin":
@@ -11097,7 +11422,12 @@ class DeltaHubApp(QWidget):
                 app_path = current_game_path
             else:
                 app_path = None
-                for name in ("DELTARUNE.app", "DELTARUNEdemo.app"):
+                if is_undertale:
+                    app_names = ["UNDERTALE.app"]
+                else:
+                    app_names = ["DELTARUNE.app", "DELTARUNEdemo.app"]
+                    
+                for name in app_names:
                     candidate = os.path.join(current_game_path, name)
                     if os.path.isdir(candidate):
                         app_path = candidate
@@ -11231,7 +11561,10 @@ class DeltaHubApp(QWidget):
                     raise Exception(tr("errors.specified_executable_not_found"))
             else:
                 # Ищем стандартный исполняемый файл
-                possible_names = ["DELTARUNE.exe", "deltarune.exe", "SURVEY_PROGRAM.exe", "survey_program.exe"]
+                if isinstance(self.game_mode, UndertaleGameMode):
+                    possible_names = ["UNDERTALE.exe", "undertale.exe"]
+                else:
+                    possible_names = ["DELTARUNE.exe", "deltarune.exe", "SURVEY_PROGRAM.exe", "survey_program.exe"]
                 for name in possible_names:
                     test_path = os.path.join(current_game_path, name)
                     if os.path.exists(test_path):
@@ -11244,10 +11577,9 @@ class DeltaHubApp(QWidget):
             # Запускаем игру
             if launch_via_steam:
                 # Запуск через Steam
-                if is_demo_mode:
-                    subprocess.Popen(['cmd', '/c', 'start', 'steam://run/1671210'], shell=True)
-                else:
-                    subprocess.Popen(['cmd', '/c', 'start', 'steam://run/1671210'], shell=True)  # TODO: правильный ID для полной версии
+                # Use dynamic Steam app ID based on current game mode
+                steam_app_id = self.game_mode.steam_id
+                subprocess.Popen(['cmd', '/c', 'start', f'steam://run/{steam_app_id}'], shell=True)
             else:
                 # Прямой запуск
                 args = []
@@ -11421,7 +11753,7 @@ class DeltaHubApp(QWidget):
                 mod_config = self._get_mod_config_by_key(mod_key)
                 if mod_config:
                     chapter_files = mod_config.get("files", {}).get(str(chapter_id), {})
-                    if chapter_files.get("data_win_url"):
+                    if chapter_files.get("data_file_url"):
                         return True
             else:
                 chapter_data = mod.get_chapter_data(chapter_id)
@@ -11430,29 +11762,54 @@ class DeltaHubApp(QWidget):
 
         return False
 
-    def _find_and_validate_game_path(self, selections: Optional[Dict[int, str]] = None):
+    def _find_and_validate_game_path(self, selections: Optional[Dict[int, str]] = None, is_initial: bool = False):
         path_from_config = self._get_current_game_path()
 
         skip_data_check = bool(selections and self._has_mods_with_data_files(selections))
+        
+        # Determine game type based on current game mode
+        if isinstance(self.game_mode, DemoGameMode):
+            game_type = "deltarune"  # Demo also uses deltarune executables
+        elif isinstance(self.game_mode, UndertaleGameMode):
+            game_type = "undertale"
+        else:
+            game_type = "deltarune"
 
-        if is_valid_game_path(path_from_config, skip_data_check):
+        if is_valid_game_path(path_from_config, skip_data_check, game_type):
             self.update_status_signal.emit(tr("status.game_path", path=path_from_config), UI_COLORS["status_info"])
             return True
         self.update_status_signal.emit(tr("status.autodetecting_path"), UI_COLORS["status_info"])
-        autodetected_path = autodetect_path("DELTARUNEdemo" if isinstance(self.game_mode, DemoGameMode) else "DELTARUNE")
+        # Determine the game name for autodetection based on game mode
+        if isinstance(self.game_mode, DemoGameMode):
+            game_name = "DELTARUNEdemo"
+        elif isinstance(self.game_mode, UndertaleGameMode):
+            game_name = "UNDERTALE"
+        else:
+            game_name = "DELTARUNE"
+        autodetected_path = autodetect_path(game_name)
 
 
-        if autodetected_path and is_valid_game_path(autodetected_path, skip_data_check):
+        if autodetected_path and is_valid_game_path(autodetected_path, skip_data_check, game_type):
             self.game_mode.set_game_path(self.local_config, autodetected_path)
             self.update_status_signal.emit(tr("status.game_folder_found", path=autodetected_path), UI_COLORS["status_success"])
             self._write_local_config()
             return True
 
-        return self._prompt_for_game_path(is_initial=True)
+        # Don't automatically prompt - just show info message
+        if is_initial:
+            self.update_status_signal.emit(tr("status.no_game_path"), UI_COLORS["status_error"])
+        return False
 
     def _prompt_for_game_path(self, is_initial=False):
-        title = tr("dialogs.select_demo_folder") if isinstance(self.game_mode, DemoGameMode) else tr("dialogs.select_deltarune_folder")
-        message = tr("dialogs.demo_not_found") if isinstance(self.game_mode, DemoGameMode) else tr("dialogs.deltarune_not_found")
+        if isinstance(self.game_mode, DemoGameMode):
+            title = tr("dialogs.select_demo_folder")
+            message = tr("dialogs.demo_not_found")
+        elif isinstance(self.game_mode, UndertaleGameMode):
+            title = tr("dialogs.select_undertale_folder") 
+            message = tr("dialogs.undertale_not_found")
+        else:
+            title = tr("dialogs.select_deltarune_folder")
+            message = tr("dialogs.deltarune_not_found")
         if is_initial:
             QMessageBox.information(
                 self,
@@ -11476,12 +11833,23 @@ class DeltaHubApp(QWidget):
             # автоматически корректируем путь до самого .app
             corrected_path = path
             if platform.system() == "Darwin" and not path.endswith(".app"):
-                for app_name in ("DELTARUNE.app", "DELTARUNEdemo.app"):
+                if isinstance(self.game_mode, UndertaleGameMode):
+                    app_names = ("UNDERTALE.app",)
+                else:
+                    app_names = ("DELTARUNE.app", "DELTARUNEdemo.app")
+                for app_name in app_names:
                     candidate = os.path.join(path, app_name)
                     if os.path.isdir(candidate):
                         corrected_path = candidate
                         break
-            if is_valid_game_path(corrected_path):
+            
+            # Determine game type for validation
+            if isinstance(self.game_mode, UndertaleGameMode):
+                game_type = "undertale"
+            else:
+                game_type = "deltarune"
+                
+            if is_valid_game_path(corrected_path, False, game_type):
                 self.game_mode.set_game_path(self.local_config, corrected_path)
                 self._write_local_config()
                 self.update_status_signal.emit(tr("status.game_path_set", path=corrected_path), UI_COLORS["status_success"])
@@ -11497,21 +11865,12 @@ class DeltaHubApp(QWidget):
 
     def _save_slots_state(self):
         """Сохраняет текущее состояние слотов в конфиг"""
-        # Определяем текущий режим
-        is_chapter_mode = self.chapter_mode_checkbox.isChecked()
-        is_demo_mode = isinstance(self.game_mode, DemoGameMode)
+        if not hasattr(self, 'slots'):
+            return
 
-        if is_demo_mode:
-            mode = 'demo'
-        elif is_chapter_mode:
-            mode = 'chapter'
-        else:
-            mode = 'normal'
+        is_chapter_mode = hasattr(self, 'chapter_mode_checkbox') and self.chapter_mode_checkbox.isChecked()
+        config_key = self._get_slots_config_key(self.game_mode, is_chapter_mode)
 
-        self._save_slots_state_for_mode(mode)
-
-    def _save_slots_state_for_mode(self, mode):
-        """Сохраняет текущее состояние слотов для указанного режима"""
         slots_data = {}
 
         for slot_id, slot_frame in self.slots.items():
@@ -11522,45 +11881,33 @@ class DeltaHubApp(QWidget):
                     # Преобразуем числовой ключ слота в строку для JSON
                     slots_data[str(slot_id)] = {
                         'mod_key': mod_key,
-                        'mod_name': slot_frame.assigned_mod.name,
-                        'chapter_id': slot_frame.chapter_id
+                        'mod_name': slot_frame.assigned_mod.name
                     }
-
-        # Определяем ключ конфига для указанного режима
-        if mode == 'demo':
-            config_key = 'saved_slots_demo'
-        elif mode == 'chapter':
-            config_key = 'saved_slots_chapter'
-        else:
-            config_key = 'saved_slots_normal'
 
         self.local_config[config_key] = slots_data
         self._write_local_config()
 
-
     def _load_slots_state(self, mode=None):
         """Загружает сохраненное состояние слотов из конфига"""
+        # Этот метод теперь вызывает новая, более умная версия, но для обратной совместимости оставим базовую логику
+        is_chapter_mode = hasattr(self, 'chapter_mode_checkbox') and self.chapter_mode_checkbox.isChecked()
+        config_key = self._get_slots_config_key(self.game_mode, is_chapter_mode)
 
-        # Определяем режим для загрузки
-        if mode is None:
-            # Загружаем слоты в зависимости от текущего режима
-            is_chapter_mode = self.chapter_mode_checkbox.isChecked()
-            is_demo_mode = isinstance(self.game_mode, DemoGameMode)
+        slots_data = self.local_config.get(config_key, {})
 
-            if is_demo_mode:
-                mode = 'demo'
-            elif is_chapter_mode:
-                mode = 'chapter'
-            else:
-                mode = 'normal'
+        # Очищаем текущие слоты перед загрузкой, чтобы избежать дублирования
+        for slot in self.slots.values():
+            if slot.assigned_mod:
+                self._remove_mod_from_slot(slot, slot.assigned_mod)
 
-        # Определяем ключ конфига для загрузки
-        if mode == 'demo':
-            config_key = 'saved_slots_demo'
-        elif mode == 'chapter':
-            config_key = 'saved_slots_chapter'
-        else:
-            config_key = 'saved_slots_normal'
+        # Determine config key for loading based on current game type
+        if isinstance(self.game_mode, DemoGameMode):
+            config_key = 'saved_slots_deltarunedemo'
+        elif isinstance(self.game_mode, UndertaleGameMode):
+            config_key = 'saved_slots_undertale'
+        else:  # deltarune
+            is_chapter_mode = getattr(self, 'chapter_mode_checkbox', None) and self.chapter_mode_checkbox.isChecked()
+            config_key = 'saved_slots_deltarune_chapter' if is_chapter_mode else 'saved_slots_deltarune'
 
 
         slots_data = self.local_config.get(config_key, {})
@@ -11577,17 +11924,23 @@ class DeltaHubApp(QWidget):
             except ValueError:
                 continue
 
-            # Проверяем совместимость слота с загружаемым режимом
-            if mode == 'chapter':
+            # Проверяем совместимость слота с текущим типом игры
+            is_chapter_mode = getattr(self, 'chapter_mode_checkbox', None) and self.chapter_mode_checkbox.isChecked()
+            
+            if isinstance(self.game_mode, DemoGameMode):
+                # В демо режиме только слот -10
+                if numeric_slot_id != -10:
+                    continue
+            elif isinstance(self.game_mode, UndertaleGameMode):
+                # В UNDERTALE режиме только слот -20
+                if numeric_slot_id != -20:
+                    continue
+            elif is_chapter_mode:
                 # В поглавном режиме только слоты 0, 1, 2, 3, 4
                 if numeric_slot_id not in [0, 1, 2, 3, 4]:
                     continue
-            elif mode == 'demo':
-                # В демо режиме только слот -2
-                if numeric_slot_id != -2:
-                    continue
             else:
-                # В обычном режиме только слот -1
+                # В обычном DELTARUNE режиме только слот -1
                 if numeric_slot_id != -1:
                     continue
 
