@@ -7,6 +7,14 @@ on:
         description: "Launcher version (X.X.X)"
         required: true
         type: string
+      release_tag:
+        description: "Release Tag (e.g., v2.0.0-beta)"
+        required: true
+        type: string
+      release_name:
+        description: "Release Name (e.g., v2.0.0 Beta)"
+        required: true
+        type: string
       archive_name_linux:
         description: "Archive name for Linux (e.g., DELTAHUB-Linux-v2.0.0)"
         required: false
@@ -35,7 +43,10 @@ permissions:
 
 env:
   PYTHON_VERSION: "3.12"
+  # Изменяем логику для получения версии и имени релиза из новых input'ов
   RELEASE_VERSION: ${{ github.event_name == 'workflow_dispatch' && format('v{0}', inputs.version) || github.ref_name }}
+  RELEASE_TAG_FINAL: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+  RELEASE_NAME_FINAL: ${{ github.event_name == 'workflow_dispatch' && inputs.release_name || github.ref_name }}
   DATA_FIREBASE_URL: ${{ secrets.DATA_FIREBASE_URL }}
   CLOUD_FUNCTIONS_BASE_URL: ${{ secrets.CLOUD_FUNCTIONS_BASE_URL }}
   INTERNAL_SALT: ${{ secrets.INTERNAL_SALT }}
@@ -275,7 +286,7 @@ jobs:
               const release = await github.rest.repos.getReleaseByTag({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                tag: '${{ env.RELEASE_VERSION }}'
+                tag: '${{ env.RELEASE_TAG_FINAL }}'
               });
               return release.data;
             } catch (error) {
@@ -301,8 +312,8 @@ jobs:
       - name: Create or update GitHub Release and upload assets
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ env.RELEASE_VERSION }}
-          name: "DELTAHUB ${{ env.RELEASE_VERSION }}"
+          tag_name: ${{ env.RELEASE_TAG_FINAL }}
+          name: ${{ env.RELEASE_NAME_FINAL }}
           draft: false
           prerelease: false
           generate_release_notes: true
