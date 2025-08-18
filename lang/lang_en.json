@@ -447,7 +447,7 @@
     "unavailable": "Unavailable",
     "unsaved_changes_lost": "All unsaved changes will be lost. Continue?",
     "update_error": "Update Error",
-    "update_permission_error_details": "Failed to replace launcher files due to insufficient permissions.\n\nTry the following solutions:\n1. Move DELTAHUB.app to another folder (e.g., Desktop) and retry.\n2. Run the launcher with admin rights (sudo).\n3. Download the update manually and replace the app.",
+    "update_permission_error_details": "Failed to replace launcher files due to insufficient permissions or file locks.\n\nTry the following:\n1. Close the launcher and run the installer as Administrator.\n2. Temporarily disable antivirus/SmartScreen or allow the installer.\n3. Install to a different folder (e.g., Desktop) and run from there.\n4. Or download the update manually and replace the application.",
     "update_verification_failed": "Update verification failed. The downloaded file may be corrupted or incomplete.",
     "updated": "Updated",
     "validation_error": "Validation Error",

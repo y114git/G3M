@@ -8,7 +8,7 @@ from PyQt6.QtWidgets import QMessageBox
 from localization import tr
 
 
-LAUNCHER_VERSION = "2.0.1"
+LAUNCHER_VERSION = "2.0.0beta"
 
 APP_ID = "deltahub.y.114"
 from dotenv import load_dotenv
@@ -1382,13 +1382,37 @@ def show_info(parent, title, message): from PyQt6.QtWidgets import QMessageBox; 
 def confirm_action(parent, title, message): from PyQt6.QtWidgets import QMessageBox; return QMessageBox.question(parent, title, message) == QMessageBox.StandardButton.Yes
 def version_sort_key(version_string: str):
     try:
-        numeric_parts = []
-        for part in version_string.split('.'):
-            try: numeric_parts.append(int(part))
-            except ValueError: numeric_parts.append(0)
-        while len(numeric_parts) < 3: numeric_parts.append(0)
-        return tuple(numeric_parts[:3])
-    except: return (0, 0, 0)
+        s = (version_string or "").strip()
+        import re
+        m = re.match(r'^(\d+)(?:\.(\d+))?(?:\.(\d+))?([A-Za-z0-9][A-Za-z0-9._-]*)?$', s)
+        if m:
+            major = int(m.group(1) or 0)
+            minor = int(m.group(2) or 0)
+            patch = int(m.group(3) or 0)
+            suffix = (m.group(4) or "").lower()
+            has_suffix = 1 if suffix else 0
+            # Treat any suffix (e.g., beta, rc) as newer than plain numeric, per launcher policy
+            return (major, minor, patch, has_suffix, suffix)
+        # Fallback: split by dots and parse leading digits; any non-digit indicates a suffix
+        parts = re.split(r'\.', s)
+        nums, has_suffix = [], 0
+        for p in parts[:3]:
+            if p.isdigit():
+                nums.append(int(p))
+            else:
+                m2 = re.match(r'(\d+)', p)
+                if m2:
+                    nums.append(int(m2.group(1)))
+                    has_suffix = 1
+                else:
+                    nums.append(0)
+                    if p:
+                        has_suffix = 1
+        while len(nums) < 3:
+            nums.append(0)
+        return (nums[0], nums[1], nums[2], has_suffix, "")
+    except:
+        return (0, 0, 0, 0, "")
 def game_version_sort_key(version_string: str):
     try:
         import re

@@ -3798,6 +3798,7 @@ class DeltaHubApp(QWidget):
     error_signal = pyqtSignal(str)
     mods_loaded_signal = pyqtSignal()  # Новый сигнал для уведомления о загрузке модов
     update_info_ready = pyqtSignal(dict)  # Сигнал для передачи информации об обновлении из фонового потока
+    update_cleanup = pyqtSignal()  # Сигнал для восстановления UI после завершения обновления
 
     @staticmethod
     def get_launcher_version() -> str:
@@ -3910,6 +3911,7 @@ class DeltaHubApp(QWidget):
         self.error_signal.connect(lambda msg: QMessageBox.critical(self, tr("errors.error"), msg))
         self.mods_loaded_signal.connect(self._on_mods_loaded)
         self.update_info_ready.connect(self._handle_update_info)
+        self.update_cleanup.connect(self._on_update_cleanup)
 
         # Post-show one-time tasks (legacy cleanup)
         self._legacy_cleanup_done = False
@@ -9080,7 +9082,8 @@ class DeltaHubApp(QWidget):
                 self.update_status_signal.emit(tr("status.update_info_not_found"), UI_COLORS["status_warning"])
                 return
             remote_version = launcher_files.get("version")
-            if not remote_version or version_parser.parse(remote_version) <= version_parser.parse(LAUNCHER_VERSION):
+            from helpers import version_sort_key as _vkey
+            if not remote_version or _vkey(remote_version) <= _vkey(LAUNCHER_VERSION):
                 self.update_status_signal.emit(tr("status.launcher_version_up_to_date"), UI_COLORS["status_success"])
                 return
 
@@ -9187,6 +9190,11 @@ class DeltaHubApp(QWidget):
     def _perform_update(self, update_info):
         for widget in [self.action_button, self.saves_button, self.shortcut_button, self.change_path_button, self.change_background_button]:
             widget.setEnabled(False)
+        try:
+            if hasattr(self, 'top_refresh_button') and self.top_refresh_button:
+                self.top_refresh_button.setEnabled(False)
+        except Exception:
+            pass
         self.settings_button.setEnabled(False)
         if not self.is_settings_view:
             self.tab_widget.setEnabled(False)
@@ -9194,6 +9202,27 @@ class DeltaHubApp(QWidget):
         self.progress_bar.setVisible(True)
         self.progress_bar.setValue(0)
         threading.Thread(target=self._update_worker, args=(update_info,), daemon=True).start()
+
+    def _on_update_cleanup(self):
+        try:
+            self.progress_bar.setVisible(False)
+        except Exception:
+            pass
+        self.update_in_progress = False
+        try:
+            if not self.is_settings_view:
+                self.tab_widget.setEnabled(True)
+            for w in [self.action_button, self.saves_button, self.shortcut_button, self.change_path_button, self.change_background_button]:
+                w.setEnabled(True)
+            try:
+                if hasattr(self, 'top_refresh_button') and self.top_refresh_button:
+                    self.top_refresh_button.setEnabled(True)
+            except Exception:
+                pass
+            self.settings_button.setEnabled(True)
+            self._update_ui_for_selection()
+        except Exception:
+            pass
 
     def _update_worker(self, update_info):
         try:
@@ -9233,8 +9262,20 @@ class DeltaHubApp(QWidget):
                     )
                     if not new_exe_path:
                         raise RuntimeError(tr("errors.exe_not_found_in_archive"))
-                    ctypes.windll.shell32.ShellExecuteW(None, "runas", new_exe_path, None, None, 1)
-                    QTimer.singleShot(500, self.close)
+                    try:
+                        os.startfile(new_exe_path)
+                    except Exception:
+                        # Fallback without forcing elevation to avoid abrupt exit
+                        ctypes.windll.shell32.ShellExecuteW(None, "open", new_exe_path, None, None, 1)
+                    # Do not close the launcher; inform user and restore UI
+                    try:
+                        self.update_status_signal.emit("Installer started. Follow its steps and restart the launcher after install.", UI_COLORS["status_success"])
+                    except Exception:
+                        pass
+                    try:
+                        self.update_cleanup.emit()
+                    except Exception:
+                        pass
                     return
 
                 current_exe_path = os.path.realpath(sys.executable)
@@ -9297,14 +9338,10 @@ class DeltaHubApp(QWidget):
             self.update_status_signal.emit(tr("errors.update_failed", error=str(e)), UI_COLORS["status_error"])
             self.error_signal.emit(tr("errors.update_could_not_complete", error=str(e)))
         finally:
-            self.progress_bar.setVisible(False)
-            if not self.is_settings_view:
-                self.tab_widget.setEnabled(True)
-                self._update_ui_for_selection()
-            self.settings_button.setEnabled(True)
-            for widget in [self.shortcut_button, self.change_path_button, self.change_background_button]:
-                widget.setEnabled(True)
-            self.update_in_progress = False
+            try:
+                self.update_cleanup.emit()
+            except Exception:
+                pass
 
     def _on_action_button_click(self):
         # Если идет установка, то это кнопка отмены
