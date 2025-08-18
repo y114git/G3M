@@ -3,12 +3,8 @@ name: Build and Release DELTAHUB (Linux + macOS x64 & arm64 + Windows)
 on:
   workflow_dispatch:
     inputs:
-      version:
-        description: "Launcher version (X.X.X)"
-        required: true
-        type: string
-      release_tag:
-        description: "Release Tag (e.g., v2.0.0-beta)"
+      version_and_tag:
+        description: "Release Version and Tag (e.g., v2.0.0 or v2.0.0-beta)"
         required: true
         type: string
       release_name:
@@ -43,9 +39,9 @@ permissions:
 
 env:
   PYTHON_VERSION: "3.12"
-  # Изменяем логику для получения версии и имени релиза из новых input'ов
-  RELEASE_VERSION: ${{ github.event_name == 'workflow_dispatch' && format('v{0}', inputs.version) || github.ref_name }}
-  RELEASE_TAG_FINAL: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+  # Используем новый input для версии и тега
+  RELEASE_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.version_and_tag || github.ref_name }}
+  RELEASE_TAG_FINAL: ${{ github.event_name == 'workflow_dispatch' && inputs.version_and_tag || github.ref_name }}
   RELEASE_NAME_FINAL: ${{ github.event_name == 'workflow_dispatch' && inputs.release_name || github.ref_name }}
   DATA_FIREBASE_URL: ${{ secrets.DATA_FIREBASE_URL }}
   CLOUD_FUNCTIONS_BASE_URL: ${{ secrets.CLOUD_FUNCTIONS_BASE_URL }}
@@ -58,7 +54,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Set Archive Name
-        # ИЗМЕНЕНО: Добавляем ID и используем GITHUB_OUTPUT
         id: set_names
         run: |
           archive_name="${{ github.event.inputs.archive_name_linux || format('DELTAHUB-Linux-{0}', env.RELEASE_VERSION) }}"
@@ -94,7 +89,6 @@ jobs:
         if: always()
         run: rm -f secrets_embed.py || true
       - name: Create archive
-        # ИЗМЕНЕНО: Используем output из предыдущего шага
         run: |
           mkdir -p archive_content
           mv dist/DELTAHUB archive_content/
@@ -102,7 +96,6 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: DELTAHUB-Linux
-          # ИЗМЕНЕНО: Используем output из предыдущего шага
           path: ${{ steps.set_names.outputs.archive_path }}
 
   macos-x64:
@@ -235,18 +228,14 @@ jobs:
       # Inno Setup packaging
       - name: Install Inno Setup
         run: choco install innosetup -y
-      # ИЗМЕНЕНО: Заменяем проблемный шаг на этот
       - name: Inject version into setup.iss
         shell: powershell
         run: |
           $ver = $env:RELEASE_VERSION.TrimStart('v')
           $content = Get-Content -Path setup.iss -Raw
           $newContent = $content -replace '(?m)^(#define\s+AppVersion\s+\").*?(\")$', "`$1$ver`$2"
-
-          # Используем метод .NET для сохранения в UTF-8 без BOM
           $utf8NoBomEncoding = New-Object System.Text.UTF8Encoding($false)
           [System.IO.File]::WriteAllText("$pwd\setup.iss", $newContent, $utf8NoBomEncoding)
-
           Write-Host "AppVersion successfully set to $ver in setup.iss"
       - name: Build installer (Inno Setup)
         shell: powershell
