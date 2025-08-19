@@ -4023,7 +4023,10 @@ class DeltaHubApp(QWidget):
 
         try:
             # Восстанавливаем настройки из ярлыка
-            self.game_mode = DemoGameMode() if settings.get("is_demo_mode", False) else FullGameMode()
+            if settings.get("is_undertale_mode", False):
+                self.game_mode = UndertaleGameMode()
+            else:
+                self.game_mode = DemoGameMode() if settings.get("is_demo_mode", False) else FullGameMode()
             self.game_path = settings.get("game_path", "")
             self.demo_game_path = settings.get("demo_game_path", "")
 
@@ -4076,9 +4079,12 @@ class DeltaHubApp(QWidget):
             ""
         ]
 
-        # Режим игры
-        mode_text = tr("status.demo_mode") if settings.get("is_demo_mode", False) else tr("status.full_version")
-        description_lines.append(f"<b>{tr('status.mode_label')}</b> {mode_text}")
+        # Игра
+        game_name = (
+            tr('ui.undertale_label') if settings.get('is_undertale_mode', False)
+            else (tr('ui.deltarunedemo_label') if settings.get('is_demo_mode', False) else tr('ui.deltarune_label'))
+        )
+        description_lines.append(f"<b>{tr('ui.mod_type_label')}</b> {game_name}")
 
         # Показываем настройки модов/слотов
         if settings.get("is_demo_mode", False):
@@ -4089,14 +4095,22 @@ class DeltaHubApp(QWidget):
                 mod_name = mod_config.get('name', tr("errors.mod_not_found", mod_key=mod_key)) if mod_config else tr("errors.mod_not_found", mod_key=mod_key)
                 description_lines.append(f"<b>{tr('status.mod_label')}</b> {mod_name}")
             else:
-                description_lines.append(f"<b>{tr('status.mod_label')}</b> <i>{tr('status.no_mods')}</i>")
+                description_lines.append(f"<b>{tr('status.mod_label')}</b> <i>{tr('status.vanilla')}</i>")
+        elif settings.get("is_undertale_mode", False):
+            # UNDERTALE режим - один мод
+            mod_key = settings["mods"].get("undertale")
+            if mod_key:
+                mod_config = self._get_mod_config_by_key(mod_key)
+                mod_name = mod_config.get('name', tr("errors.mod_not_found", mod_key=mod_key)) if mod_config else tr("errors.mod_not_found", mod_key=mod_key)
+                description_lines.append(f"<b>{tr('status.mod_label')}</b> {mod_name}")
+            else:
+                description_lines.append(f"<b>{tr('status.mod_label')}</b> <i>{tr('status.vanilla')}</i>")
         else:
-            # Обычный или поглавный режим
+            # DELTARUNE: обычный или поглавный режим
             is_chapter_mode = settings.get("is_chapter_mode", False)
             direct_launch_slot_id = settings.get('direct_launch_slot_id', -1)
 
             if is_chapter_mode:
-                description_lines.append(f"<b>{tr('status.mode_label')}</b> {tr('status.chapter_mode')}")
                 if direct_launch_slot_id >= 0:
                     chapter_names = {0: tr("chapters.menu"), 1: tr("tabs.chapter_1"), 2: tr("tabs.chapter_2"), 3: tr("tabs.chapter_3"), 4: tr("tabs.chapter_4")}
                     chapter_name = chapter_names.get(direct_launch_slot_id, tr("ui.chapter_tab_title", chapter_num=direct_launch_slot_id))
@@ -4122,17 +4136,14 @@ class DeltaHubApp(QWidget):
                             chapter_name = chapter_names.get(chapter_id, tr("ui.chapter_tab_title", chapter_num=chapter_id))
                             description_lines.append(f"<b>{chapter_name}:</b> {mod_name}")
             else:
-                description_lines.append(f"<b>{tr('status.mode_label')}</b> {tr('status.normal_mode')}")
-                # Показываем моды для всех вкладок
-                tab_names = [tr("chapters.main_menu"), tr("tabs.chapter_1"), tr("tabs.chapter_2"), tr("tabs.chapter_3"), tr("tabs.chapter_4")]
-                for i, tab_name in enumerate(tab_names):
-                    mod_key = settings["mods"].get(str(i))
-                    if mod_key:
-                        mod_config = self._get_mod_config_by_key(mod_key)
-                        mod_name = mod_config.get('name', tr("errors.mod_not_found", mod_key=mod_key)) if mod_config else tr("errors.mod_not_found", mod_key=mod_key)
-                        description_lines.append(f"<b>{tab_name}:</b> {mod_name}")
-                    else:
-                        description_lines.append(f"<b>{tab_name}:</b> <i>{tr('status.no_mod')}</i>")
+                # Обычный режим: показываем один мод из универсального слота
+                uni_key = settings["mods"].get("universal")
+                if uni_key:
+                    mod_config = self._get_mod_config_by_key(uni_key)
+                    mod_name = mod_config.get('name', tr("errors.mod_not_found", mod_key=uni_key)) if mod_config else tr("errors.mod_not_found", mod_key=uni_key)
+                    description_lines.append(f"<b>{tr('status.mod_label')}</b> {mod_name}")
+                else:
+                    description_lines.append(f"<b>{tr('status.mod_label')}</b> <i>{tr('status.no_mod')}</i>")
 
         # Настройки запуска
         description_lines.append("")
@@ -4146,13 +4157,16 @@ class DeltaHubApp(QWidget):
             description_lines.append(f"✓ {tr('status.normal_launch')}")
 
         # Показываем диалог
-        reply = QMessageBox.question(
-            self,
-            tr("dialogs.create_shortcut_question"),
-            "<br>".join(description_lines) +
-            f"<br><br><p>{tr('dialogs.shortcut_create_description')}</p>",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-        )
+        # Используем экземпляр QMessageBox с поддержкой Rich Text
+        msg = QMessageBox(self)
+        msg.setWindowTitle(tr("dialogs.create_shortcut_question"))
+        msg.setIcon(QMessageBox.Icon.Question)
+        msg.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        msg.setTextFormat(Qt.TextFormat.RichText)
+        msg.setText("<br>".join(description_lines) + f"<br><br><p>{tr('dialogs.shortcut_create_description')}</p>")
+        msg_result = msg.exec()
+        # Приводим результат к StandardButton для совместимости с дальнейшей проверкой
+        reply = msg.standardButton(msg.clickedButton())
 
         if reply == QMessageBox.StandardButton.Yes:
             self._save_shortcut(settings)
@@ -11484,6 +11498,7 @@ class DeltaHubApp(QWidget):
 
         is_demo_mode = isinstance(self.game_mode, DemoGameMode)
         is_chapter_mode = hasattr(self, 'chapter_mode_checkbox') and self.chapter_mode_checkbox.isChecked()
+        is_undertale_mode = isinstance(self.game_mode, UndertaleGameMode)
 
         settings = {
             "launcher_version": LAUNCHER_VERSION,
@@ -11491,6 +11506,7 @@ class DeltaHubApp(QWidget):
             "demo_game_path": self.demo_game_path,
             "is_demo_mode": is_demo_mode,
             "is_chapter_mode": is_chapter_mode,
+            "is_undertale_mode": is_undertale_mode,
             "launch_via_steam": self.launch_via_steam_checkbox.isChecked(),
             "use_custom_executable": self.use_custom_executable_checkbox.isChecked(),
             "custom_executable_path": self.local_config.get(FullGameMode().get_custom_exec_config_key(), ""),
@@ -11503,6 +11519,11 @@ class DeltaHubApp(QWidget):
         if is_demo_mode:
             # В демо режиме только один слот
             settings["mods"]["demo"] = self._get_current_demo_mod_key()
+        elif is_undertale_mode:
+            # В режиме UNDERTALE один мод на единственной вкладке (индекс 0)
+            mod_info = self._get_selected_mod_info(0) if self.tab_widget.count() > 0 else None
+            mod_key = mod_info.key if mod_info else None
+            settings["mods"]["undertale"] = mod_key
         elif is_chapter_mode:
             # В поглавном режиме собираем моды по слотам
             for slot_frame in self.slots.values():
@@ -11513,7 +11534,18 @@ class DeltaHubApp(QWidget):
                         mod_key = getattr(slot_frame.assigned_mod, 'key', None) or getattr(slot_frame.assigned_mod, 'mod_key', None)
                     settings["mods"][str(chapter_id)] = mod_key
         else:
-            # В обычном режиме собираем моды по вкладкам
+            # В обычном режиме сохраняем мод из универсального слота и (для совместимости) по вкладкам
+            # Универсальный слот: id = -1
+            universal_mod_key = None
+            try:
+                universal_slot = self.slots.get(-1) if hasattr(self, 'slots') else None
+                if universal_slot and getattr(universal_slot, 'assigned_mod', None):
+                    universal_mod_key = getattr(universal_slot.assigned_mod, 'key', None) or getattr(universal_slot.assigned_mod, 'mod_key', None)
+            except Exception:
+                universal_mod_key = None
+            settings["mods"]["universal"] = universal_mod_key
+
+            # Поддерживаем старую схему с модами по вкладкам
             for i in range(self.tab_widget.count()):
                 mod_info = self._get_selected_mod_info(i)
                 mod_key = mod_info.key if mod_info else None
@@ -11535,12 +11567,18 @@ class DeltaHubApp(QWidget):
                 return
 
             is_demo_mode = isinstance(self.game_mode, DemoGameMode)
+            is_undertale_mode = isinstance(self.game_mode, UndertaleGameMode)
 
             if is_demo_mode:
                 # Демо режим - один мод
                 mod_key = mods_settings.get("demo")
                 if mod_key and mod_key != "no_change":
                     self._apply_demo_mod(mod_key)
+            elif is_undertale_mode:
+                # UNDERTALE режим - один мод
+                mod_key = mods_settings.get("undertale")
+                if mod_key and mod_key != "no_change":
+                    self._apply_mod_by_key(mod_key)
             else:
                 # Для полной игры просто проверяем все указанные моды
                 for key, mod_key in mods_settings.items():

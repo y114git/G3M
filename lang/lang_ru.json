@@ -612,6 +612,7 @@
     "remove_startup_sound_failed": "Не удалось удалить файл звука заставки"
   },
   "status": {
+    "vanilla": "Без изменений",
     "recovering_previous_session": "Восстановление предыдущей сессии...",
     "applying_mod": "Применение мода: {mod_name} ({mod_type})...",
     "autodetecting_path": "Путь к игре не найден или устарел. Идет автоопределение...",

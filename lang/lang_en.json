@@ -613,6 +613,7 @@
     "mod_no_files": "Mod '{mod_name}' has no files to install."
   },
   "status": {
+    "vanilla": "Vanilla",
     "recovering_previous_session": "Recovering previous session...",
     "applying_mod": "Applying mod: {mod_name} ({mod_type})...",
     "autodetecting_path": "Game path not found or outdated. Auto-detecting...",
@@ -672,8 +673,8 @@
     "no_mod": "No mod",
     "no_mods": "No mods",
     "no_version": "Not specified",
-    "normal_launch": "Normal launch",
-    "normal_mode": "Normal",
+    "normal_launch": "Vanilla launch",
+    "normal_mode": "Vanilla",
     "online_count": "Online: {count}",
     "operation_cancelled": "Operation cancelled",
     "permission_change_failed": "Failed to change permissions.",
