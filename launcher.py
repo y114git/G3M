@@ -1488,7 +1488,7 @@ class ModEditorDialog(QDialog):
             self.description_url_edit = QLineEdit(); self.description_url_edit.hide()
             # Local mods: free text field for game version
             form_layout.addWidget(QLabel(tr("ui.game_version_label")))
-            self.game_version_edit = QLineEdit(); self.game_version_edit.setPlaceholderText("1.03")
+            self.game_version_edit = QLineEdit(); self.game_version_edit.setPlaceholderText("1.04")
             form_layout.addWidget(self.game_version_edit)
 
     def _create_icon_section(self, form_layout):
@@ -1529,7 +1529,7 @@ class ModEditorDialog(QDialog):
         try:
             self.game_version_combo.blockSignals(True)
             self.game_version_combo.clear()
-            self.game_version_combo.addItems(["1.03"])  # sensible default
+            self.game_version_combo.addItems(["1.04"])  # sensible default
             self.game_version_combo.setCurrentIndex(0)
             self.game_version_combo.blockSignals(False)
         except Exception:
@@ -1548,7 +1548,7 @@ class ModEditorDialog(QDialog):
                     r = requests.get(f"{CLOUD_FUNCTIONS_BASE_URL}/getGlobalSettings", timeout=6)
                     if r.status_code == 200:
                         data = r.json() or {}
-                        vers = data.get("supported_game_versions", ["1.03"]) or ["1.03"]
+                        vers = data.get("supported_game_versions", ["1.04"]) or ["1.04"]
                         if isinstance(vers, list):
                             self.got.emit(vers)
                 except Exception:
@@ -3071,7 +3071,7 @@ class ModEditorDialog(QDialog):
             "is_xdelta": self.piracy_checkbox.isChecked(),
             "modtype": self.modtype_combo.currentData() or "deltarune",
             # NOTE: do not set is_verified here; preserve server value on update
-            "game_version": (self.game_version_combo.currentText() if self.is_public else (self.game_version_edit.text().strip() or "1.03")),
+            "game_version": (self.game_version_combo.currentText() if self.is_public else (self.game_version_edit.text().strip() or "1.04")),
             "files": files_data,
             "screenshots_url": getattr(self, 'screenshots_urls', [])
         }
@@ -3271,7 +3271,7 @@ class ModEditorDialog(QDialog):
 
             # Обновляем UI после создания
             self.parent_app._load_local_mods_from_folders()
-            self.parent_app._populate_ui_with_mods()
+            self.parent_app._update_installed_mods_display()
 
             QMessageBox.information(self, tr("dialogs.local_mod_created_title"), tr("dialogs.local_mod_created_message", mod_name=mod_data['name']))
             self.accept()
@@ -3488,7 +3488,7 @@ class ModEditorDialog(QDialog):
 
             # Обновляем UI после изменения
             self.parent_app._load_local_mods_from_folders()
-            self.parent_app._populate_ui_with_mods()
+            self.parent_app._update_installed_mods_display()
 
             QMessageBox.information(self, tr("dialogs.local_mod_updated_title"), tr("dialogs.local_mod_updated_message", mod_name=updated_data['name']))
             self.accept()
@@ -3557,7 +3557,7 @@ class ModEditorDialog(QDialog):
 
             # Обновляем UI после удаления
             self.parent_app._load_local_mods_from_folders()
-            self.parent_app._populate_ui_with_mods()
+            self.parent_app._update_installed_mods_display()
 
             QMessageBox.information(self, tr("errors.local_mod_deleted_title"), tr("errors.local_mod_deleted_message"))
             self.accept()
@@ -4394,27 +4394,6 @@ class DeltaHubApp(QWidget):
         button.setStyleSheet(f"{base_style} {style_sheet}" if style_sheet else base_style)
         if on_click: button.clicked.connect(on_click)
         return button
-
-    def _create_chapter_tab(self, name: str, chapter_index: int) -> dict:
-        tab = QWidget()
-        tab_layout = QVBoxLayout(tab)
-        label = QLabel(tr("ui.select_mod"))
-        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        label.setFont(self.font())
-        combo = NoScrollComboBox()
-        combo.setFixedWidth(250)
-        combo.currentIndexChanged.connect(self._update_ui_for_selection)
-        combo_layout = QHBoxLayout()
-        combo_layout.addWidget(combo)
-        combo_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        description = QTextBrowser()
-        description.setOpenExternalLinks(True)
-        description.setFont(self.font())
-        tab_layout.addWidget(label, alignment=Qt.AlignmentFlag.AlignCenter)
-        tab_layout.addLayout(combo_layout)
-        tab_layout.addWidget(description)
-        self.tab_widget.addTab(tab, name)
-        return {"combo": combo, "description": description, "label": label}
 
     def _handle_permission_error(self, path: str):
         detailed_message = tr("dialogs.access_denied_detailed", path=path)
@@ -6263,7 +6242,7 @@ class DeltaHubApp(QWidget):
             tagline=mod_info.get('tagline', tr("defaults.no_description")),  # Используем tagline из конфига
             version=mod_info.get('version', '1.0.0'),
             author=mod_info.get('author', tr("defaults.unknown")),
-            game_version=mod_info.get('game_version', '1.03'),
+            game_version=mod_info.get('game_version', '1.04'),
             description_url='',  # Значение по умолчанию
             downloads=0,  # Значение по умолчанию
             modtype=mod_info.get('modtype', 'deltarune'),  # Default to deltarune
@@ -8669,23 +8648,34 @@ class DeltaHubApp(QWidget):
         self.launcher_icon_label.setPixmap(fallback_pixmap)
 
     def _get_background_music_path(self):
-        """Возвращает путь к пользовательской фоновой музыке (только MP3) в папке конфигов.
+        """Возвращает путь к пользовательской фоновой музыке (MP3 или WAV) в папке конфигов.
         """
         # Сохраняем пользовательские файлы в конфиг‑папке, чтобы избежать проблем с правами
-        dest = os.path.join(self.config_dir, "custom_background_music.mp3")
-        if os.path.exists(dest):
-            return dest
+        mp3_path = os.path.join(self.config_dir, "custom_background_music.mp3")
+        wav_path = os.path.join(self.config_dir, "custom_background_music.wav")
+        if os.path.exists(mp3_path):
+            return mp3_path
+        if os.path.exists(wav_path):
+            return wav_path
         # Не возвращаем дефолтную музыку автоматически - только если пользователь выбрал
         return ""
 
     def _get_startup_sound_path(self):
-        """Получает путь к файлу звука заставки (только MP3) в папке конфигов"""
-        return os.path.join(self.config_dir, "custom_startup_sound.mp3")
+        """Получает путь к файлу звука заставки (MP3 или WAV) в папке конфигов. Возвращает существующий путь или пустую строку."""
+        mp3 = os.path.join(self.config_dir, "custom_startup_sound.mp3")
+        wav = os.path.join(self.config_dir, "custom_startup_sound.wav")
+        if os.path.exists(mp3):
+            return mp3
+        if os.path.exists(wav):
+            return wav
+        return ""
 
     def _get_background_music_button_text(self):
         """Возвращает текст для кнопки фоновой музыки"""
         # Кнопка должна отражать наличие ТОЛЬКО пользовательского файла в конфиг‑папке
-        custom_exists = os.path.exists(os.path.join(self.config_dir, "custom_background_music.mp3"))
+        mp3 = os.path.join(self.config_dir, "custom_background_music.mp3")
+        wav = os.path.join(self.config_dir, "custom_background_music.wav")
+        custom_exists = os.path.exists(mp3) or os.path.exists(wav)
         return tr("buttons.remove_background_music") if custom_exists else tr("buttons.select_background_music")
 
     def _get_startup_sound_button_text(self):
@@ -8697,39 +8687,46 @@ class DeltaHubApp(QWidget):
     def _on_background_music_button_click(self):
         """Обработчик нажатия на кнопку фоновой музыки"""
         # Работает только с пользовательским файлом в конфиг‑папке
-        custom_path = os.path.join(self.config_dir, "custom_background_music.mp3")
+        mp3 = os.path.join(self.config_dir, "custom_background_music.mp3")
+        wav = os.path.join(self.config_dir, "custom_background_music.wav")
+        custom_exists = os.path.exists(mp3) or os.path.exists(wav)
 
-        if os.path.exists(custom_path):
-            # Удаляем существующий файл
+        if custom_exists:
+            # Удаляем существующий файл(ы)
             try:
                 self._stop_background_music()
-                # Останавливаем воспроизведение и удаляем файл
-                os.remove(custom_path)
+                for p in (mp3, wav):
+                    try:
+                        if os.path.exists(p):
+                            os.remove(p)
+                    except Exception:
+                        pass
                 self.background_music_button.setText(self._get_background_music_button_text())
                 QMessageBox.information(self, tr("dialogs.success"), tr("dialogs.background_music_removed"))
             except Exception as e:
                 print(f"Error removing background music: {e}")
                 QMessageBox.warning(self, tr("errors.error"), tr("errors.remove_background_music_failed"))
         else:
-            # Выбираем новый файл
+            # Выбираем новый файл (MP3 или WAV)
             file_path, _ = QFileDialog.getOpenFileName(
                 self,
                 tr("dialogs.select_background_music"),
                 "",
-                "MP3 Files (*.mp3)"
+                "Audio Files (*.mp3 *.wav)"
             )
 
             if file_path:
-                # Разрешаем только .mp3
-                if not file_path.lower().endswith('.mp3'):
-                    QMessageBox.warning(self, tr("errors.error"), "Можно выбрать только MP3 файл")
+                lower = file_path.lower()
+                if not (lower.endswith('.mp3') or lower.endswith('.wav')):
+                    QMessageBox.warning(self, tr("errors.error"), "Можно выбрать только MP3 или WAV файл")
                     return
                 try:
                     # Останавливаем фоновую музыку перед заменой
                     self._stop_background_music()
                     # Копируем в папку конфигов (строго в config_dir, а не в ассеты)
                     os.makedirs(self.config_dir, exist_ok=True)
-                    dest_path = os.path.join(self.config_dir, "custom_background_music.mp3")
+                    ext = '.mp3' if lower.endswith('.mp3') else '.wav'
+                    dest_path = os.path.join(self.config_dir, f"custom_background_music{ext}")
                     shutil.copy2(file_path, dest_path)
                     self.background_music_button.setText(self._get_background_music_button_text())
                     # Запускаем фоновую музыку (только если окно показано)
@@ -8740,34 +8737,44 @@ class DeltaHubApp(QWidget):
                     QMessageBox.warning(self, tr("errors.error"), tr("errors.copy_background_music_failed"))
 
     def _on_startup_sound_button_click(self):
-        """Обработчик нажатия на кнопку звука заставки (только MP3)"""
-        custom_path = self._get_startup_sound_path()
+        """Обработчик нажатия на кнопку звука заставки (MP3 или WAV)"""
+        mp3 = os.path.join(self.config_dir, "custom_startup_sound.mp3")
+        wav = os.path.join(self.config_dir, "custom_startup_sound.wav")
+        existing = self._get_startup_sound_path()
 
-        if os.path.exists(custom_path):
-            # Удаляем существующий файл
+        if existing:
+            # Удаляем существующий файл(ы)
             try:
-                os.remove(custom_path)
+                for p in (mp3, wav):
+                    try:
+                        if os.path.exists(p):
+                            os.remove(p)
+                    except Exception:
+                        pass
                 self.startup_sound_button.setText(self._get_startup_sound_button_text())
                 QMessageBox.information(self, tr("dialogs.success"), tr("dialogs.startup_sound_removed"))
             except Exception as e:
                 print(f"Error removing startup sound: {e}")
                 QMessageBox.warning(self, tr("errors.error"), tr("errors.remove_startup_sound_failed"))
         else:
-            # Выбираем новый файл (только MP3)
+            # Выбираем новый файл (MP3 или WAV)
             file_path, _ = QFileDialog.getOpenFileName(
                 self,
                 tr("dialogs.select_startup_sound"),
                 "",
-                "MP3 Files (*.mp3)"
+                "Audio Files (*.mp3 *.wav)"
             )
 
             if file_path:
-                if not file_path.lower().endswith('.mp3'):
-                    QMessageBox.warning(self, tr("errors.error"), "Можно выбрать только MP3 файл")
+                lower = file_path.lower()
+                if not (lower.endswith('.mp3') or lower.endswith('.wav')):
+                    QMessageBox.warning(self, tr("errors.error"), "Можно выбрать только MP3 или WAV файл")
                     return
                 try:
                     os.makedirs(self.config_dir, exist_ok=True)
-                    shutil.copy2(file_path, custom_path)
+                    ext = '.mp3' if lower.endswith('.mp3') else '.wav'
+                    dest = os.path.join(self.config_dir, f"custom_startup_sound{ext}")
+                    shutil.copy2(file_path, dest)
                     self.startup_sound_button.setText(self._get_startup_sound_button_text())
                     QMessageBox.information(self, tr("dialogs.success"), tr("dialogs.startup_sound_selected"))
                 except Exception as e:
@@ -9023,7 +9030,7 @@ class DeltaHubApp(QWidget):
         self._refresh_translations(force=True, blocking=False)
         self.setEnabled(True)
 
-        self._populate_ui_with_mods()
+        self._update_installed_mods_display()
         if not self._find_and_validate_game_path(is_initial=True):
             self.action_button.setEnabled(False)
         # Убираем прямой вызов initialization_finished.emit(), теперь ждем загрузки модов
@@ -9058,26 +9065,6 @@ class DeltaHubApp(QWidget):
         except Exception as e:
             print(tr("startup.steam_deck_setup_error", error=str(e)))
 
-    def _get_pending_installations(self):
-        pending = []
-        # Collect all unique selected mods
-        for ui_idx in range(self.tab_widget.count()):
-            info = self._get_selected_mod_info(ui_idx)
-            if info and not info.key.startswith("local_"):  # Пропускаем локальные моды
-                if getattr(info, 'ban_status', False): continue  # Пропускаем заблокированные моды
-                chapter_id = self.game_mode.get_chapter_id(ui_idx)
-                status = self._get_mod_status_for_chapter(info, chapter_id)
-                if status in ("install", "update"):
-                    if not any(p[0].key == info.key and p[1] == chapter_id for p in pending):
-                        pending.append((info, chapter_id, status))  # Добавляем статус
-        return pending
-
-    def _count_pending_by_type(self):
-        """Возвращает количество установок и обновлений отдельно."""
-        pending = self._get_pending_installations()
-        install_count = sum(1 for _, _, status in pending if status == "install")
-        update_count = sum(1 for _, _, status in pending if status == "update")
-        return install_count, update_count
 
     def _get_platform_string(self) -> str:
         system = platform.system()
@@ -9400,41 +9387,9 @@ class DeltaHubApp(QWidget):
         self.action_button.setEnabled(False)
         self.saves_button.setEnabled(False)
 
-        # Сразу показываем статус подготовки, если есть файлы для установки
-        needs_install = bool(self._get_pending_installations())
-        if needs_install:
-            self.update_status_signal.emit(tr("status.preparing_download"), UI_COLORS["status_warning"])
-
-        # --- Проверка целостности модов перед действием ---
-        all_selections = [mod for mod in [self._get_selected_mod_info(i) for i in range(self.tab_widget.count())] if mod]
-        mods_to_cleanup = []
-        for mod in all_selections:
-            mod_config = self._get_mod_config_by_key(mod.key)
-            if mod_config:
-                # Если мод есть в списке установленных, проверяем наличие его папки
-                mod_name_from_config = mod_config.get("name", mod.name)
-                sanitized_name = sanitize_filename(mod_name_from_config)
-                mod_cache_dir = os.path.join(self.mods_dir, sanitized_name)
-                if not os.path.isdir(mod_cache_dir):
-                    mods_to_cleanup.append(mod)
-
-        if mods_to_cleanup:
-            mod_names = ", ".join([m.name for m in mods_to_cleanup])
-            QMessageBox.warning(self, tr("dialogs.inconsistencies_detected_title"),
-            tr("dialogs.missing_mod_files_message", mod_names=mod_names))
-            for mod in mods_to_cleanup:
-                # Удаляем конфиг мода, если его папка не найдена
-                pass  # Пока не удаляем - пусть система сама перескачает
-            self._populate_ui_with_mods() # Обновляем UI, чтобы показать изменения
-            # Пересчитываем после очистки кэша
-            needs_install = bool(self._get_pending_installations())
-        if needs_install:
-            self.progress_bar.setVisible(True)
-            self.progress_bar.setValue(0)
-            self._install_translations()
-        else:
-            self.progress_bar.setVisible(False)
-            self._launch_game_with_all_mods()
+        # Пропускаем устаревшую логику установки и запускаем игру напрямую
+        self.progress_bar.setVisible(False)
+        self._launch_game_with_all_mods()
 
     def _refresh_translations(self, force=False, blocking=False):
         if is_game_running():
@@ -9477,7 +9432,6 @@ class DeltaHubApp(QWidget):
         try:
             # Перезагружаем локальные моды после обновления удаленных
             self._load_local_mods_from_folders()
-            self._populate_ui_with_mods()
 
             # Обновляем новую систему поиска модов
             if hasattr(self, 'mod_list_layout'):
@@ -9542,7 +9496,8 @@ class DeltaHubApp(QWidget):
 
             return
 
-        mods_to_install = self._get_pending_installations()
+        # Устаревшая логика сбора установок удалена; в новой системе используем слоты
+        mods_to_install = []
         if not mods_to_install:
             self.progress_bar.setVisible(False)
             self._update_ui_for_selection()
@@ -9585,7 +9540,7 @@ class DeltaHubApp(QWidget):
             # Перезагружаем моды из config.json файлов
             self._load_local_mods_from_folders()
             self.update_status_signal.emit(tr("status.installation_complete"), UI_COLORS["status_success"])
-            self._populate_ui_with_mods()
+            self._update_installed_mods_display()
         self._update_ui_for_selection()
         if hasattr(self, 'full_install_checkbox') and self.full_install_checkbox is not None and isinstance(self.game_mode, DemoGameMode):
             self.full_install_checkbox.setEnabled(True)
@@ -10782,29 +10737,6 @@ class DeltaHubApp(QWidget):
         """Обновляет содержимое всех слотов с модами для обновления статусов"""
         self._refresh_all_slot_status_displays()
 
-    def _update_combo_color(self, chapter_id):
-        if chapter_id < 0: return
-
-        combo = self.tabs[chapter_id]["combo"]
-        selected_mod = self._get_selected_mod_info(chapter_id)
-
-        status = "n/a" # Статус по умолчанию для "Без изменений"
-        if selected_mod:
-            real_chapter_id = self.game_mode.get_chapter_id(chapter_id)
-            status = self._get_mod_status_for_chapter(selected_mod, real_chapter_id)
-
-        color_map = {
-            "ready": "lightgreen",
-            "update": "orange",
-            "install": "white",
-            "n/a": "gray"
-        }
-        color = QColor(color_map.get(status, "white"))
-
-        palette = combo.palette()
-        palette.setColor(QPalette.ColorRole.Text, color)
-        combo.setPalette(palette)
-
     # ===========================================================================
     #                              MOD MANAGEMENT SYSTEM
     # ===========================================================================
@@ -11419,24 +11351,6 @@ class DeltaHubApp(QWidget):
         if self._qt_translator.load(qt_translation, QLibraryInfo.path(QLibraryInfo.LibraryPath.TranslationsPath)):
             app.installTranslator(self._qt_translator)
 
-    def _get_selected_mod_info(self, chapter_id=None):
-        if self.is_shortcut_launch: return None # Нет UI
-        if chapter_id is None:
-            chapter_id = self.tab_widget.currentIndex()
-        if chapter_id not in self.tabs:
-            return None
-        combo = self.tabs[chapter_id]["combo"]
-        selected_index = combo.currentIndex()
-        if selected_index == 0:
-            return None
-        try:
-            mod_key = combo.itemData(selected_index, Qt.ItemDataRole.UserRole)
-        except RuntimeError:
-            return None
-        if not mod_key:
-            return None
-        all_mods_combined = self.all_mods + self._get_local_mods_as_modinfo()
-        return next((mod for mod in all_mods_combined if mod.key == mod_key), None)
 
     def _get_executable_path(self):
         use_custom_exe = self.local_config.get("use_custom_executable", False)
@@ -11517,13 +11431,25 @@ class DeltaHubApp(QWidget):
 
         # Собираем информацию о модах
         if is_demo_mode:
-            # В демо режиме только один слот
-            settings["mods"]["demo"] = self._get_current_demo_mod_key()
+            # В демо режиме только один слот (используем систему слотов)
+            demo_mod_key = None
+            try:
+                demo_slot = self.slots.get(-10) if hasattr(self, 'slots') else None
+                if demo_slot and getattr(demo_slot, 'assigned_mod', None):
+                    demo_mod_key = getattr(demo_slot.assigned_mod, 'key', None) or getattr(demo_slot.assigned_mod, 'mod_key', None)
+            except Exception:
+                demo_mod_key = None
+            settings["mods"]["demo"] = demo_mod_key
         elif is_undertale_mode:
-            # В режиме UNDERTALE один мод на единственной вкладке (индекс 0)
-            mod_info = self._get_selected_mod_info(0) if self.tab_widget.count() > 0 else None
-            mod_key = mod_info.key if mod_info else None
-            settings["mods"]["undertale"] = mod_key
+            # UNDERTALE режим - используем соответствующий слот
+            undertale_mod_key = None
+            try:
+                undertale_slot = self.slots.get(-20) if hasattr(self, 'slots') else None
+                if undertale_slot and getattr(undertale_slot, 'assigned_mod', None):
+                    undertale_mod_key = getattr(undertale_slot.assigned_mod, 'key', None) or getattr(undertale_slot.assigned_mod, 'mod_key', None)
+            except Exception:
+                undertale_mod_key = None
+            settings["mods"]["undertale"] = undertale_mod_key
         elif is_chapter_mode:
             # В поглавном режиме собираем моды по слотам
             for slot_frame in self.slots.values():
@@ -11545,20 +11471,9 @@ class DeltaHubApp(QWidget):
                 universal_mod_key = None
             settings["mods"]["universal"] = universal_mod_key
 
-            # Поддерживаем старую схему с модами по вкладкам
-            for i in range(self.tab_widget.count()):
-                mod_info = self._get_selected_mod_info(i)
-                mod_key = mod_info.key if mod_info else None
-                settings["mods"][str(i)] = mod_key
 
         return settings
 
-    def _get_current_demo_mod_key(self) -> Optional[str]:
-        """Получает ключ текущего мода в демо режиме"""
-        if self.tab_widget.count() > 0:
-            mod_info = self._get_selected_mod_info(0)
-            return mod_info.key if mod_info else None
-        return None
 
     def _apply_shortcut_mods(self, mods_settings: Dict[str, str]):
         """Применяет моды из настроек ярлыка"""
@@ -11737,46 +11652,7 @@ class DeltaHubApp(QWidget):
         # Эта функция больше не нужна, так как всё работает через config.json в папках модов
         pass
 
-    def _populate_ui_with_mods(self):
-        last_selected_map = self.local_config.get("last_selected", {})
-
-        self._cleanup_deleted_local_mods()
-
-        all_mods_combined = self.all_mods + self._get_local_mods_as_modinfo()
-        mods_for_chapter = self.game_mode.filter_mods_for_ui(all_mods_combined)
-
-        for chapter_idx, combo_box_info in self.tabs.items():
-            combo = combo_box_info['combo']
-            mods = mods_for_chapter.get(chapter_idx, [])
-            mods.sort(key=lambda m: m.downloads, reverse=True)
-
-            combo.blockSignals(True)
-            combo.clear()
-
-            combo.addItem(tr("dropdowns.no_changes"))
-            combo.setItemData(0, QBrush(QColor("gray")), Qt.ItemDataRole.ForegroundRole)
-
-            for idx, mod in enumerate(mods, start=1):
-                combo.addItem(mod.name)
-                combo.setItemData(idx, mod.key, Qt.ItemDataRole.UserRole)
-                chapter_id = self.game_mode.get_chapter_id(chapter_idx)
-                status = self._get_mod_status_for_chapter(mod, chapter_id)
-
-                status_color_map = {
-                    "ready": "lightgreen", "update": "orange", "install": "white"
-                }
-                color = QColor(status_color_map.get(status, "gray")) # gray для n/a
-                combo.setItemData(idx, QBrush(QColor(color)), Qt.ItemDataRole.ForegroundRole)
-
-            last_selected_name = last_selected_map.get(str(chapter_idx))
-            index_to_select = combo.findText(last_selected_name) if last_selected_name else -1
-            combo.setCurrentIndex(max(0, index_to_select))
-            current_font = self.font()
-            combo.setFont(current_font)
-            combo.view().setFont(current_font)
-            combo.setEnabled(True)
-            combo.blockSignals(False)
-        self._update_ui_for_selection()
+#
 
     def _get_local_mods_as_modinfo(self):
         # Локальные моды уже загружены в self.all_mods функцией _load_local_mods_from_folders

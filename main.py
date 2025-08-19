@@ -210,18 +210,17 @@ def get_launcher_volume():
     return 100
 
 def play_deltahub_sound():
-    """Воспроизводит звук заставки через playsound3 (только MP3)."""
+    """Воспроизводит звук заставки через playsound3 (MP3 или WAV)."""
     global _sound_instance
 
     sound_path: str = ""
     try:
-        # Предпочтительные варианты звука (только MP3)
-        # 1) Кастомный звук из config_dir
+        # Предпочтительные варианты звука (кастомный из конфигов или встроенный)
         config_mp3 = os.path.join(get_app_support_path(), "custom_startup_sound.mp3")
-        # 2) Встроенный ассет
-        asset_mp3 = resource_path("assets/deltahub.wav")
+        config_wav = os.path.join(get_app_support_path(), "custom_startup_sound.wav")
+        asset_wav = resource_path("assets/deltahub.wav")
 
-        sound_candidates = [config_mp3, asset_mp3]
+        sound_candidates = [config_mp3, config_wav, asset_wav]
 
         found = next((p for p in sound_candidates if os.path.exists(p)), None)
         if not found:

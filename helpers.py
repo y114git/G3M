@@ -8,7 +8,7 @@ from PyQt6.QtWidgets import QMessageBox
 from localization import tr
 
 
-LAUNCHER_VERSION = "2.0.0beta"
+LAUNCHER_VERSION = "2.0.0betafix"
 
 APP_ID = "deltahub.y.114"
 from dotenv import load_dotenv
@@ -360,13 +360,19 @@ class FetchTranslationsThread(QThread):
                     if not isinstance(chapter_data, dict):
                         continue
 
-                    # Handle legacy chapter ID format
+                    # Handle legacy and prefixed chapter ID formats
                     try:
-                        chapter_id = int(chapter_key[1:]) if chapter_key.startswith("c") else int(chapter_key)
+                        chapter_id = int(chapter_key[1:]) if isinstance(chapter_key, str) and chapter_key.startswith("c") else int(chapter_key)
                     except (ValueError, TypeError):
-                        # New format uses string keys directly
-                        if chapter_key in ["0", "1", "2", "3", "4", "demo", "undertale"]:
-                            pass  # Valid key
+                        # Accept common prefixes like "chapter_1", "chap_1", "c1"
+                        if isinstance(chapter_key, str):
+                            m = re.match(r'^(?:chapter_|chap_|c)(\d+)$', chapter_key.strip(), re.IGNORECASE)
+                            if m:
+                                chapter_key = m.group(1)
+                            elif chapter_key in ["0", "1", "2", "3", "4", "demo", "undertale"]:
+                                pass  # Valid key
+                            else:
+                                continue
                         else:
                             continue
 
@@ -392,7 +398,8 @@ class FetchTranslationsThread(QThread):
                             continue
 
                     data_url = chapter_data.get('data_file_url')
-                    data_version = chapter_data.get('data_file_version', '1.0.0')
+                    # Accept both new and legacy version fields
+                    data_version = chapter_data.get('data_file_version') or chapter_data.get('data_win_version') or '1.0.0'
                     files_entry = {}
                     if data_url:
                         files_entry.update({'data_file_url': data_url, 'data_file_version': data_version})
