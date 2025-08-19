@@ -1,4 +1,4 @@
-# DELTAHUB — Your Gateway to the World of Deltarune Mods
+# DELTAHUB — Your Gateway to the World of UT/DR Mods (WIP)
 
 _([Нажмите, чтобы прочитать русскую версию этого файла.](https://github.com/y114git/DELTAHUB/wiki/Modder's-Guide-(RU)))_
 
@@ -12,13 +12,13 @@ Want more emotions, unexpected twists, and fresh sensations from Deltarune? DELT
 
   Find your favorite community creations — from simple sprite changes to full translations and large compilations. Beautiful covers, authors, descriptions — choose with your heart.
 
-* Support for demo and full versions of the game
+* Support for DELTARUNE, DELTARUNEdemo and UNDERTALE
 
-  Separate selections and modes for the full game and even the DEMO — choose what you need right now.
+  Separate selections and modes for the full game, demo and even the UNDERTALE — choose what you need right now.
 
 * One-click installation and removal
 
-  No complicated files, replacements, or paths. Just click — and it's done. Time to play.
+  No complicated files, replacements, or paths. Just click — and it's done.
 
 * One-button updates
 
