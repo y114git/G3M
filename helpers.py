@@ -8,7 +8,7 @@ from PyQt6.QtWidgets import QMessageBox
 from localization import tr
 
 
-LAUNCHER_VERSION = "2.0.0betafix"
+LAUNCHER_VERSION = "2.0.0betasigma"
 
 APP_ID = "deltahub.y.114"
 from dotenv import load_dotenv
