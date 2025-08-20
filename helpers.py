@@ -64,7 +64,15 @@ THEMES = {"default": {"name": "Deltarune", "background": "assets/bg_fountain.gif
 BROWSER_HEADERS = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
 
 def resource_path(relative_path: str) -> str:
-    return os.path.join(getattr(sys, '_MEIPASS', os.path.abspath(".")), relative_path)
+    """ Get absolute path to resource, works for dev and for PyInstaller """
+    if getattr(sys, 'frozen', False):
+        # Use getattr to avoid static type checker warnings; PyInstaller sets _MEIPASS at runtime
+        base_path = getattr(sys, '_MEIPASS', os.path.dirname(sys.executable))
+    else:
+        # Not frozen (running as a script)
+        base_path = os.path.abspath(os.path.dirname(__file__))
+
+    return os.path.join(base_path, relative_path)
 
 def format_timestamp() -> str:
     return time.strftime('%d.%m.%y %H:%M')
@@ -364,15 +372,19 @@ class FetchTranslationsThread(QThread):
                     try:
                         chapter_id = int(chapter_key[1:]) if isinstance(chapter_key, str) and chapter_key.startswith("c") else int(chapter_key)
                     except (ValueError, TypeError):
-                        # Accept common prefixes like "chapter_1", "chap_1", "c1"
+                        # Accept common prefixes like "chapter_1", "chap_1", "c1", and alias "menu" -> 0
                         if isinstance(chapter_key, str):
-                            m = re.match(r'^(?:chapter_|chap_|c)(\d+)$', chapter_key.strip(), re.IGNORECASE)
-                            if m:
-                                chapter_key = m.group(1)
-                            elif chapter_key in ["0", "1", "2", "3", "4", "demo", "undertale"]:
-                                pass  # Valid key
+                            ck = chapter_key.strip()
+                            if ck.lower() == 'menu':
+                                chapter_key = '0'
                             else:
-                                continue
+                                m = re.match(r'^(?:chapter_|chap_|c)(\d+)$', ck, re.IGNORECASE)
+                                if m:
+                                    chapter_key = m.group(1)
+                                elif ck in ["0", "1", "2", "3", "4", "demo", "undertale"]:
+                                    chapter_key = ck
+                                else:
+                                    continue
                         else:
                             continue
 
@@ -403,8 +415,30 @@ class FetchTranslationsThread(QThread):
                     files_entry = {}
                     if data_url:
                         files_entry.update({'data_file_url': data_url, 'data_file_version': data_version})
+
+                    # Accept both legacy list-based and new dict-based extra descriptors
                     if extra_files := chapter_data.get('extra_files', []):
-                        files_entry['extra'] = {ef.get('key', 'unknown'): {'url': ef.get('url', ''), 'version': ef.get('version', '1.0.0')} for ef in extra_files if isinstance(ef, dict)}
+                        files_entry['extra'] = {
+                            str(ef.get('key', 'unknown')): {
+                                'url': ef.get('url', ''),
+                                'version': ef.get('version', '1.0.0')
+                            }
+                            for ef in extra_files if isinstance(ef, dict)
+                        }
+                    elif isinstance(chapter_data.get('extra'), dict):
+                        extra_map = {}
+                        for k, v in chapter_data.get('extra', {}).items():
+                            if isinstance(v, dict):
+                                url = v.get('url', '')
+                                version = v.get('version') or v.get('data_file_version') or '1.0.0'
+                                if url:
+                                    extra_map[str(k)] = {'url': url, 'version': version}
+                        if extra_map:
+                            files_entry['extra'] = extra_map
+
+                    # Optional: carry description_url through for later fetch
+                    if (desc_url := chapter_data.get('description_url')):
+                        files_entry['description_url'] = desc_url
 
                     if files_entry:
                         files_data[chapter_key] = files_entry

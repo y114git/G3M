@@ -3794,6 +3794,7 @@ class DeltaHubApp(QWidget):
     show_update_prompt = pyqtSignal(dict)
     initialization_finished = pyqtSignal()
     hide_window_signal = pyqtSignal()
+    quit_signal = pyqtSignal()
     restore_window_signal = pyqtSignal()
     error_signal = pyqtSignal(str)
     mods_loaded_signal = pyqtSignal()  # Новый сигнал для уведомления о загрузке модов
@@ -3909,6 +3910,7 @@ class DeltaHubApp(QWidget):
         self.set_progress_signal.connect(self.progress_bar.setValue)
         self.show_update_prompt.connect(self._prompt_for_update)
         self.error_signal.connect(lambda msg: QMessageBox.critical(self, tr("errors.error"), msg))
+        self.quit_signal.connect(QApplication.quit)
         self.mods_loaded_signal.connect(self._on_mods_loaded)
         self.update_info_ready.connect(self._handle_update_info)
         self.update_cleanup.connect(self._on_update_cleanup)
@@ -6291,6 +6293,11 @@ class DeltaHubApp(QWidget):
 
                 # Обновляем интерфейс
                 self._update_installed_mods_display()
+                # Обновляем статусы плашек в поиске, чтобы кнопка изменилась на "Установить"
+                try:
+                    self._update_search_mod_plaques()
+                except Exception:
+                    pass
         except Exception as e:
             print(f"Error removing mod {mod_data.name}: {e}")
             QMessageBox.critical(self, tr("errors.error"), tr("errors.mod_removal_failed", error=str(e)))
@@ -8954,9 +8961,8 @@ class DeltaHubApp(QWidget):
         except requests.RequestException:
             self.update_status_signal.emit(tr("status.global_settings_load_failed"), UI_COLORS["status_warning"])
 
-        # Обновляем URL в кнопках
-        self.telegram_button.clicked.connect(lambda: webbrowser.open(self.global_settings.get("telegram_url", SOCIAL_LINKS["telegram"])))
-        self.discord_button.clicked.connect(lambda: webbrowser.open(self.global_settings.get("discord_url", SOCIAL_LINKS["discord"])))
+        # Кнопки уже подключены в init_ui и читают self.global_settings при клике,
+        # повторно не подключаем, чтобы не открывать ссылку дважды.
 
         # Запускаем загрузку списка изменений, используя локализованный URL из глобальных настроек
         manager = get_localization_manager()
@@ -9165,6 +9171,7 @@ class DeltaHubApp(QWidget):
         self.update_in_progress = True
 
         update_message = (tr("dialogs.new_version_banner", version=update_info['version']) +
+                          "<br>" +
                           tr("dialogs.current_version_banner", current_version=LAUNCHER_VERSION))
 
         # Выбираем сообщение в зависимости от текущего языка
@@ -9249,9 +9256,9 @@ class DeltaHubApp(QWidget):
                 extraction_dir = os.path.join(tmp_dir, "extracted")
                 os.makedirs(extraction_dir, exist_ok=True)
 
-                # Универсальная распаковка архива
-                from helpers import _extract_archive
-                _extract_archive(archive_path, extraction_dir, os.path.basename(archive_path))
+                if system != "Darwin":
+                    from helpers import _extract_archive
+                    _extract_archive(archive_path, extraction_dir, os.path.basename(archive_path))
 
                 if system == "Windows":
                     # Ищем .exe в распакованной папке
@@ -9261,23 +9268,11 @@ class DeltaHubApp(QWidget):
                         for f in files if f.lower().endswith('.exe')),
                         None
                     )
-                    if not new_exe_path:
-                        raise RuntimeError(tr("errors.exe_not_found_in_archive"))
-                    try:
-                        os.startfile(new_exe_path)
-                    except Exception:
-                        # Fallback without forcing elevation to avoid abrupt exit
-                        ctypes.windll.shell32.ShellExecuteW(None, "open", new_exe_path, None, None, 1)
-                    # Do not close the launcher; inform user and restore UI
-                    try:
-                        self.update_status_signal.emit("Installer started. Follow its steps and restart the launcher after install.", UI_COLORS["status_success"])
-                    except Exception:
-                        pass
-                    try:
-                        self.update_cleanup.emit()
-                    except Exception:
-                        pass
-                    return
+                    if not new_exe_path: raise RuntimeError(tr("errors.exe_not_found_in_archive"))
+                    ctypes.windll.shell32.ShellExecuteW(None, "runas", new_exe_path, None, None, 1)
+                    self.update_status_signal.emit(tr("status.installer_launched_closing"), UI_COLORS["status_success"])
+                    self.quit_signal.emit() # Отправляем сигнал для закрытия приложения
+                    return # Завершаем поток
 
                 current_exe_path = os.path.realpath(sys.executable)
                 replace_target = (
@@ -9321,17 +9316,6 @@ class DeltaHubApp(QWidget):
                 self.update_status_signal.emit(tr("status.restarting"), UI_COLORS["status_success"])
                 os.execv(current_exe_path, sys.argv)
 
-            if not self.is_settings_view:
-                self.tab_widget.setEnabled(True)
-            for w in (self.action_button, self.shortcut_button,
-                    self.delete_button, self.change_path_button,
-                    self.change_background_button):
-                w.setEnabled(True)
-            self.progress_bar.setVisible(False)
-            self.update_in_progress = False
-            self.update_status_signal.emit(
-                tr("status.update_cancelled_check_permissions"),
-                UI_COLORS["status_warning"])
         except PermissionError:
             self.update_status_signal.emit(tr("errors.update_permission_error"), UI_COLORS["status_error"])
             self.error_signal.emit(tr("dialogs.update_permission_error_details"))
@@ -9339,10 +9323,7 @@ class DeltaHubApp(QWidget):
             self.update_status_signal.emit(tr("errors.update_failed", error=str(e)), UI_COLORS["status_error"])
             self.error_signal.emit(tr("errors.update_could_not_complete", error=str(e)))
         finally:
-            try:
-                self.update_cleanup.emit()
-            except Exception:
-                pass
+            self.update_cleanup.emit()
 
     def _on_action_button_click(self):
         # Если идет установка, то это кнопка отмены
@@ -10130,6 +10111,14 @@ class DeltaHubApp(QWidget):
                 elif file_lower.endswith('.rar'):
                     with rarfile.RarFile(archive_path, 'r') as rf:
                         rf.extractall(temp_dir)
+                elif file_lower.endswith('.7z'):
+                    try:
+                        import py7zr
+                        with py7zr.SevenZipFile(archive_path, mode='r') as zf:
+                            zf.extractall(path=temp_dir)
+                    except Exception as e:
+                        # Fallback: raise to outer handler for message
+                        raise
                 else:
                     with zipfile.ZipFile(archive_path, 'r') as zf:
                         zf.extractall(temp_dir)
