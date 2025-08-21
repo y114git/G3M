@@ -1,6 +1,6 @@
 # DELTAHUB — Your Gateway to the World of UT/DR Mods (WIP)
 
-_([Нажмите, чтобы прочитать русскую версию этого файла.](https://github.com/y114git/DELTAHUB/wiki/Modder's-Guide-(RU)))_
+_([Нажмите, чтобы прочитать русскую версию этого файла.](https://github.com/y114git/DELTAHUB/blob/main/READMERU.md))_
 
 [Telegram](https://t.me/y_maintg) • [Discord](https://discord.gg/gg4EvZpWKd)
 
