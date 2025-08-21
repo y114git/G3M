@@ -735,69 +735,61 @@ class ScreenshotsCarousel(QWidget):
                     pass
 
 
-class ModPlaqueWidget(QFrame):
-    """Плашка мода для поиска"""
+class BaseModWidget(QFrame):
+    """Базовый класс для виджетов модов с общей логикой"""
     clicked = pyqtSignal(object)
-    install_requested = pyqtSignal(object)
-    uninstall_requested = pyqtSignal(object)
-    details_requested = pyqtSignal(object)
-
+    
     def __init__(self, mod_data, parent=None):
         super().__init__(parent)
         self.mod_data = mod_data
         self.is_selected = False
-        self.is_installed = False  # Флаг для отслеживания установки мода
-        self.setObjectName("modPlaque")
-        self.setFrameShape(QFrame.Shape.StyledPanel)
-        self.setFixedHeight(120)  # Уменьшили: 70px иконка + 10px отступы
         self.parent_app = parent
-        self._init_ui()
-        self._update_style()
-        self._check_installation_status()
-
+        self.frame_selector = ""  # Будет установлен в дочерних классах
+        
     def _init_ui(self):
         main_layout = QHBoxLayout(self)
         main_layout.setContentsMargins(10, 10, 10, 10)
         main_layout.setSpacing(15)
 
+        # Иконка
         self.icon_label = QLabel()
         self.icon_label.setObjectName("modIcon")
-        self.icon_label.setFixedSize(80, 80)  # Уменьшили еще больше
+        self.icon_label.setFixedSize(80, 80)
         self.icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._load_icon()
         main_layout.addWidget(self.icon_label)
 
+        # Информационная секция
         info_layout = QVBoxLayout()
         info_layout.setSpacing(2)
 
+        # Заголовок с названием, версией и счетчиком (для ModPlaqueWidget)
         title_layout = QHBoxLayout()
-
+        
         name_label = QLabel(self.mod_data.name)
         name_label.setStyleSheet("font-size: 16px; font-weight: bold;")
         title_layout.addWidget(name_label)
 
-        # Используем базовую версию мода, а не версию файлов
+        # Версия
         mod_version = self.mod_data.version.split('|')[0] if self.mod_data.version and '|' in self.mod_data.version else self.mod_data.version
         version_text = mod_version or "N/A"
         version_label = QLabel(f"({version_text})")
         version_label.setObjectName("versionLabel")
         version_label.setStyleSheet("font-size: 16px;")
         title_layout.addWidget(version_label)
-
+        
+        # Растяжка и дополнительные элементы (индикаторы, счетчики)
         title_layout.addStretch()
-
-        downloads_label = QLabel(f"⤓ {self.mod_data.downloads}")
-        downloads_label.setObjectName("secondaryText")
-        downloads_label.setToolTip(tr("ui.downloads_tooltip"))
-        downloads_label.setAlignment(Qt.AlignmentFlag.AlignRight)
-        title_layout.addWidget(downloads_label)
-
+        
+        # Сохраняем ссылки для дочерних классов
+        self.title_layout = title_layout
         info_layout.addLayout(title_layout)
 
+        # Метаданные 
         metadata_layout = QHBoxLayout()
         metadata_layout.setSpacing(10)
 
-        # Создаем метаданные с белыми заголовками и серыми значениями
+        # Автор
         author_text = self.mod_data.author or tr("ui.unknown_author")
         author_container = QWidget()
         author_container_layout = QHBoxLayout(author_container)
@@ -810,6 +802,7 @@ class ModPlaqueWidget(QFrame):
         author_container_layout.addWidget(author_label_title)
         author_container_layout.addWidget(author_label_value)
 
+        # Версия игры
         game_version_text = self.mod_data.game_version or "N/A"
         game_version_container = QWidget()
         game_version_container_layout = QHBoxLayout(game_version_container)
@@ -822,40 +815,13 @@ class ModPlaqueWidget(QFrame):
         game_version_container_layout.addWidget(game_version_label_title)
         game_version_container_layout.addWidget(game_version_label_value)
 
-        created_date_text = self.mod_data.created_date or 'N/A'
-        created_container = QWidget()
-        created_container_layout = QHBoxLayout(created_container)
-        created_container_layout.setContentsMargins(0, 0, 0, 0)
-        created_container_layout.setSpacing(0)
-        created_label_title = QLabel(tr("ui.created_label"))
-        created_label_title.setObjectName("primaryText")
-        created_label_value = QLabel(f" {created_date_text}")
-        created_label_value.setObjectName("secondaryText")
-        created_container_layout.addWidget(created_label_title)
-        created_container_layout.addWidget(created_label_value)
-
-        updated_date_text = self.mod_data.last_updated or 'N/A'
-        updated_container = QWidget()
-        updated_container_layout = QHBoxLayout(updated_container)
-        updated_container_layout.setContentsMargins(0, 0, 0, 0)
-        updated_container_layout.setSpacing(0)
-        updated_label_title = QLabel(tr("ui.updated_label"))
-        updated_label_title.setObjectName("primaryText")
-        updated_label_value = QLabel(f" {updated_date_text}")
-        updated_label_value.setObjectName("secondaryText")
-        updated_container_layout.addWidget(updated_label_title)
-        updated_container_layout.addWidget(updated_label_value)
-
-        containers_to_add = [author_container, game_version_container, updated_container, created_container]
-        for i, container in enumerate(containers_to_add):
-            metadata_layout.addWidget(container)
-            if i < len(containers_to_add) - 1:
-                separator = QLabel("|")
-                separator.setObjectName("secondaryText")
-                metadata_layout.addWidget(separator)
-        metadata_layout.addStretch()
+        # Сохраняем контейнеры для дочерних классов
+        self.author_container = author_container
+        self.game_version_container = game_version_container
+        self.metadata_layout = metadata_layout
         info_layout.addLayout(metadata_layout)
 
+        # Описание
         tagline_text = self.mod_data.tagline or tr("ui.no_description")
         if len(tagline_text) > 200:
             tagline_text = tagline_text[:197] + "..."
@@ -864,9 +830,70 @@ class ModPlaqueWidget(QFrame):
         tagline_label.setObjectName("secondaryText")
         info_layout.addWidget(tagline_label)
 
-        # Создаем отдельный layout для тегов под описанием
+        # Теги (только для ModPlaqueWidget)
+        self._create_tags_layout_if_needed(info_layout)
+        
+        info_layout.addStretch()
+        main_layout.addLayout(info_layout, 1)
+        
+        # Сохраняем ссылку на main_layout для дочерних классов
+        self.main_layout = main_layout
+
+    def _create_tags_layout_if_needed(self, info_layout):
+        """Создает layout для тегов - переопределяется в ModPlaqueWidget"""
+        pass
+
+    def _load_icon(self):
+        """Загружает иконку мода"""
+        load_mod_icon_universal(self.icon_label, self.mod_data, 80)
+
+    def _update_style(self):
+        """Обновляет стиль виджета с учетом кастомизации"""
+        if self.frame_selector:
+            update_mod_widget_style(self, self.frame_selector, self.parent_app)
+
+    def set_selected(self, selected):
+        """Устанавливает состояние выбора виджета"""
+        self.is_selected = selected
+        actions_widget = getattr(self, 'actions_widget', None)
+        if actions_widget:
+            actions_widget.setVisible(selected)
+        self._update_style()
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.clicked.emit(self.mod_data)
+        super().mousePressEvent(event)
+
+    def mouseDoubleClickEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            details_requested = getattr(self, 'details_requested', None)
+            if details_requested:
+                details_requested.emit(self.mod_data)
+        super().mouseDoubleClickEvent(event)
+
+
+class ModPlaqueWidget(BaseModWidget):
+    """Плашка мода для поиска"""
+    install_requested = pyqtSignal(object)
+    uninstall_requested = pyqtSignal(object)
+    details_requested = pyqtSignal(object)
+
+    def __init__(self, mod_data, parent=None):
+        super().__init__(mod_data, parent)
+        self.is_installed = False  # Флаг для отслеживания установки мода
+        self.frame_selector = "modPlaque"
+        self.setObjectName("modPlaque")
+        self.setFrameShape(QFrame.Shape.StyledPanel)
+        self.setFixedHeight(120)
+        self._init_ui()
+        self._update_style()
+        self._check_installation_status()
+
+    def _create_tags_layout_if_needed(self, info_layout):
+        """Переопределяем для создания тегов в ModPlaqueWidget"""
         tags_layout = QHBoxLayout()
-        tags_layout.setContentsMargins(0, 5, 0, 0) # Небольшой отступ сверху
+        tags_layout.setContentsMargins(0, 5, 0, 0)
         tags_layout.setSpacing(10)
 
         # Добавляем тег типа мода как первый элемент
@@ -909,12 +936,53 @@ class ModPlaqueWidget(QFrame):
         tags_layout.addStretch()
         info_layout.addLayout(tags_layout)
 
-        info_layout.addStretch()
+    def _init_ui(self):
+        # Вызываем базовый UI
+        super()._init_ui()
+        
+        # Добавляем счетчик скачиваний в title_layout
+        downloads_label = QLabel(f"⤓ {self.mod_data.downloads}")
+        downloads_label.setObjectName("secondaryText")
+        downloads_label.setToolTip(tr("ui.downloads_tooltip"))
+        downloads_label.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self.title_layout.addWidget(downloads_label)
 
+        # Добавляем дополнительные контейнеры даты в metadata
+        created_date_text = self.mod_data.created_date or 'N/A'
+        created_container = QWidget()
+        created_container_layout = QHBoxLayout(created_container)
+        created_container_layout.setContentsMargins(0, 0, 0, 0)
+        created_container_layout.setSpacing(0)
+        created_label_title = QLabel(tr("ui.created_label"))
+        created_label_title.setObjectName("primaryText")
+        created_label_value = QLabel(f" {created_date_text}")
+        created_label_value.setObjectName("secondaryText")
+        created_container_layout.addWidget(created_label_title)
+        created_container_layout.addWidget(created_label_value)
 
-        main_layout.addLayout(info_layout, 1) # 1 = stretch factor
+        updated_date_text = self.mod_data.last_updated or 'N/A'
+        updated_container = QWidget()
+        updated_container_layout = QHBoxLayout(updated_container)
+        updated_container_layout.setContentsMargins(0, 0, 0, 0)
+        updated_container_layout.setSpacing(0)
+        updated_label_title = QLabel(tr("ui.updated_label"))
+        updated_label_title.setObjectName("primaryText")
+        updated_label_value = QLabel(f" {updated_date_text}")
+        updated_label_value.setObjectName("secondaryText")
+        updated_container_layout.addWidget(updated_label_title)
+        updated_container_layout.addWidget(updated_label_value)
 
-        # 3. Кнопки действий (справа)
+        # Добавляем все контейнеры в правильном порядке
+        containers = [self.author_container, self.game_version_container, updated_container, created_container]
+        for i, container in enumerate(containers):
+            self.metadata_layout.addWidget(container)
+            if i < len(containers) - 1:
+                separator = QLabel("|")
+                separator.setObjectName("secondaryText")
+                self.metadata_layout.addWidget(separator)
+        self.metadata_layout.addStretch()
+
+        # Создаем кнопки действий
         self.actions_widget = QWidget()
         actions_layout = QVBoxLayout(self.actions_widget)
         actions_layout.setContentsMargins(0, 0, 0, 0)
@@ -930,35 +998,12 @@ class ModPlaqueWidget(QFrame):
         self.install_button.clicked.connect(self._on_install_button_clicked)
 
         actions_layout.addWidget(self.details_button)
-
-
         actions_layout.addWidget(self.install_button)
+        
         self.actions_widget.setVisible(False)
-        main_layout.addWidget(self.actions_widget)
+        self.main_layout.addWidget(self.actions_widget)
 
-    def _load_icon(self):
-        """Загружает иконку для ModPlaqueWidget"""
-        load_mod_icon_universal(self.icon_label, self.mod_data, 80)
 
-    def _update_style(self):
-        """Обновляет стиль плашки с учетом кастомизации"""
-        update_mod_widget_style(self, "modPlaque", self.parent_app)
-
-    def set_selected(self, selected):
-        """Устанавливает состояние выбора плашки"""
-        self.is_selected = selected
-        self.actions_widget.setVisible(selected)
-        self._update_style()  # Используем единый метод обновления стиля
-
-    def mousePressEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton:
-            self.clicked.emit(self.mod_data)
-        super().mousePressEvent(event)
-
-    def mouseDoubleClickEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton:
-            self.details_requested.emit(self.mod_data)
-        super().mouseDoubleClickEvent(event)
 
     def _check_installation_status(self):
         """Проверяет, установлен ли мод и обновляет кнопку"""
@@ -1005,62 +1050,38 @@ class ModPlaqueWidget(QFrame):
 
 
 
-class InstalledModWidget(QFrame):
+class InstalledModWidget(BaseModWidget):
     """Виджет для отображения установленного мода в библиотеке"""
-    clicked = pyqtSignal(object)
     remove_requested = pyqtSignal(object)
     use_requested = pyqtSignal(object)
 
     def __init__(self, mod_data, is_local=False, is_available=True, has_update=False, parent=None):
-        super().__init__(parent)
-        self.mod_data = mod_data
+        super().__init__(mod_data, parent)
         self.is_local = is_local
         self.is_available = is_available
         self.has_update = has_update
-        self.is_selected = False
         self.is_in_slot = False  # Для отслеживания, вставлен ли мод в слот
         # Явный статус виджета: 'ready' | 'needs_update' | 'in_slot'
         self.status = 'ready'
         if has_update:
             self.status = 'needs_update'
+        self.frame_selector = "installedMod"
         self.setObjectName("installedMod")
         self.setFrameShape(QFrame.Shape.StyledPanel)
-        self.setFixedHeight(120)  # Увеличили для больших иконок
-        self.parent_app = parent
+        self.setFixedHeight(120)
         self._init_ui()
         self._update_style()
         # Применяем состояние к кнопке
         self._update_button_from_status()
 
     def _init_ui(self):
-        main_layout = QHBoxLayout(self)
-
-        main_layout.setContentsMargins(10, 10, 10, 10)
-        main_layout.setSpacing(15)
-        self.icon_label = QLabel()
-        self.icon_label.setObjectName("modIcon")
-        self.icon_label.setFixedSize(80, 80)
-        self.icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._load_mod_icon()
-        main_layout.addWidget(self.icon_label)
-
-        info_layout = QVBoxLayout()
-        info_layout.setSpacing(2)
-        title_layout = QHBoxLayout()
-
-        # Название
-        name_label = QLabel(self.mod_data.name)
-        name_label.setStyleSheet("font-size: 16px; font-weight: bold;")
-        title_layout.addWidget(name_label)
-
-        mod_version = self.mod_data.version.split('|')[0] if self.mod_data.version and '|' in self.mod_data.version else self.mod_data.version
-        version_text = mod_version or "N/A"
-        version_label = QLabel(f"({version_text})")
-        version_label.setObjectName("versionLabel")
-        version_label.setStyleSheet("font-size: 16px;")
-        title_layout.addWidget(version_label)
-
-        # Индикатор статуса
+        # Вызываем базовый UI
+        super()._init_ui()
+        
+        # Добавляем индикатор статуса в title_layout ПЕРЕД addStretch
+        # Сначала удаляем addStretch() если он есть
+        stretch_item = self.title_layout.takeAt(self.title_layout.count() - 1)
+        
         indicator = QLabel("●")
         indicator.setFixedSize(16,16)
         indicator.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -1077,40 +1098,12 @@ class InstalledModWidget(QFrame):
         else:
             indicator.setStyleSheet("font-size: 14px; color: #F44336; font-weight: bold; margin-left: 5px;")
             indicator.setToolTip(tr("tooltips.public_mod_unavailable"))
-        title_layout.addWidget(indicator)
-
-        title_layout.addStretch()
-        info_layout.addLayout(title_layout)
-
-        metadata_layout = QHBoxLayout()
-        metadata_layout.setSpacing(10)
-
-        # Создаем метаданные с белыми заголовками и серыми значениями
-        author_text = self.mod_data.author or tr("ui.unknown_author")
-        author_container = QWidget()
-        author_container_layout = QHBoxLayout(author_container)
-        author_container_layout.setContentsMargins(0, 0, 0, 0)
-        author_container_layout.setSpacing(0)
-        author_label_title = QLabel(tr("ui.author_label"))
-        author_label_title.setObjectName("primaryText")
-        author_label_value = QLabel(f" {author_text}")
-        author_label_value.setObjectName("secondaryText")
-        author_container_layout.addWidget(author_label_title)
-        author_container_layout.addWidget(author_label_value)
-
-        game_version_text = self.mod_data.game_version or "N/A"
-        game_version_container = QWidget()
-        game_version_container_layout = QHBoxLayout(game_version_container)
-        game_version_container_layout.setContentsMargins(0, 0, 0, 0)
-        game_version_container_layout.setSpacing(0)
-        game_version_label_title = QLabel(tr("ui.game_version_label"))
-        game_version_label_title.setObjectName("primaryText")
-        game_version_label_value = QLabel(f" {game_version_text}")
-        game_version_label_value.setObjectName("secondaryText")
-        game_version_container_layout.addWidget(game_version_label_title)
-        game_version_container_layout.addWidget(game_version_label_value)
-
-        # Installed date should reflect user's installation time, not mod's created date
+        self.title_layout.addWidget(indicator)
+        
+        # Возвращаем stretch обратно
+        self.title_layout.addStretch()
+        
+        # Добавляем дополнительный контейнер даты установки в metadata
         installed_date_text = 'N/A'
         try:
             if self.parent_app and hasattr(self.parent_app, '_get_mod_config_by_key'):
@@ -1130,27 +1123,18 @@ class InstalledModWidget(QFrame):
         installed_label_value.setObjectName("secondaryText")
         installed_container_layout.addWidget(installed_label_title)
         installed_container_layout.addWidget(installed_label_value)
-
-        containers_to_add = [author_container, game_version_container, installed_container]
-        for i, container in enumerate(containers_to_add):
-            metadata_layout.addWidget(container)
-            if i < len(containers_to_add) - 1:
+        
+        # Добавляем все контейнеры в правильном порядке
+        containers = [self.author_container, self.game_version_container, installed_container]
+        for i, container in enumerate(containers):
+            self.metadata_layout.addWidget(container)
+            if i < len(containers) - 1:
                 separator = QLabel("|")
                 separator.setObjectName("secondaryText")
-                metadata_layout.addWidget(separator)
-        metadata_layout.addStretch()
-        info_layout.addLayout(metadata_layout)
+                self.metadata_layout.addWidget(separator)
+        self.metadata_layout.addStretch()
 
-        tagline_text = self.mod_data.tagline or tr("ui.no_description")
-        if len(tagline_text) > 200:
-            tagline_text = tagline_text[:197] + "..."
-        tagline_label = QLabel(tagline_text)
-        tagline_label.setWordWrap(True)
-        tagline_label.setObjectName("secondaryText")
-        info_layout.addWidget(tagline_label)
-
-        info_layout.addStretch()
-        main_layout.addLayout(info_layout, 1)
+        # Создаем кнопки действий
         self.actions_widget = QWidget()
         actions_layout = QVBoxLayout(self.actions_widget)
         actions_layout.setContentsMargins(0, 0, 0, 0)
@@ -1177,7 +1161,7 @@ class InstalledModWidget(QFrame):
         actions_layout.addWidget(self.remove_button)
 
         self.actions_widget.setVisible(False)
-        main_layout.addWidget(self.actions_widget)
+        self.main_layout.addWidget(self.actions_widget)
 
     def _mod_needs_update(self):
         """Проверяет, нуждается ли мод в обновлении"""
@@ -1189,19 +1173,7 @@ class InstalledModWidget(QFrame):
 
         return needs_update
 
-    def _load_mod_icon(self):
-        """Загружает иконку для InstalledModWidget"""
-        load_mod_icon_universal(self.icon_label, self.mod_data, 80)
 
-    def _update_style(self):
-        """Обновляет стиль плашки с учетом кастомизации"""
-        update_mod_widget_style(self, "installedMod", self.parent_app)
-
-    def set_selected(self, selected):
-        """Устанавливает состояние выбора плашки"""
-        self.is_selected = selected
-        self.actions_widget.setVisible(selected)
-        self._update_style()  # Используем единый метод обновления стиля
 
     def _update_button_from_status(self):
         """Обновляет текст и стиль кнопки на основе текущего статуса."""
@@ -1255,13 +1227,6 @@ class InstalledModWidget(QFrame):
                 self.status = 'ready'
         # Обновляем кнопку на основе нового статуса
         self._update_button_from_status()
-
-    def mousePressEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton:
-            self.clicked.emit(self.mod_data)
-        super().mousePressEvent(event)
-
-
 
 class SaveEditorDialog(QDialog):
     def __init__(self, file_path: str, parent=None):
@@ -4021,7 +3986,7 @@ class DeltaHubApp(QWidget):
 
         # Загружаем необходимые данные
         self._load_local_data()
-        self._load_all_translations_from_folders()
+        self._load_local_mods_from_folders()
 
         try:
             # Восстанавливаем настройки из ярлыка
@@ -4385,10 +4350,6 @@ class DeltaHubApp(QWidget):
                     if isinstance(widget, InstalledModWidget) and hasattr(widget, 'use_button'):
                         widget.use_button.setEnabled(enabled)
 
-    def _load_all_translations_from_folders(self):
-        """Загружает моды из config.json файлов в папках модов"""
-        return self._load_local_mods_from_folders()
-
     def _create_settings_nav_button(self, text: str, on_click: Callable, style_sheet: str = "") -> QPushButton:
         button = QPushButton(text)
         button.setFixedWidth(400)
@@ -4435,7 +4396,7 @@ class DeltaHubApp(QWidget):
         self.top_refresh_button.setMaximumSize(40, 40)
         self.top_refresh_button.setStyleSheet("min-width:40px; max-width:40px; min-height:40px; max-height:40px; padding:0; margin:0;")
         self.top_refresh_button.setToolTip(tr("ui.update_mod_list"))
-        self.top_refresh_button.clicked.connect(lambda: self._refresh_translations(force=True))
+        self.top_refresh_button.clicked.connect(lambda: self._refresh_mods_list(force=True))
         self.top_frame.addWidget(self.top_refresh_button)
         self.top_frame.addWidget(self.online_label)
         self.top_frame.addStretch()
@@ -4467,6 +4428,35 @@ class DeltaHubApp(QWidget):
         self.launcher_icon_label.setFixedSize(225, 80) # Новый, желаемый размер
         self.launcher_icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._load_launcher_icon()
+
+        self.bottom_widget = QFrame()
+        self.bottom_widget.setObjectName("bottom_widget")
+        self.bottom_frame = QVBoxLayout(self.bottom_widget)
+        self.status_label = QLabel(tr("ui.initialization"))
+        self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setVisible(False)
+        self.action_frame = QHBoxLayout()
+        self.shortcut_button = QPushButton(tr("buttons.shortcut"))
+        self.shortcut_button.clicked.connect(self._create_shortcut_flow)
+        self.action_button = QPushButton(tr("status.please_wait"))
+        self.action_button.setEnabled(False)
+        self.action_button.setMinimumWidth(200)
+        self.action_button.clicked.connect(self._on_action_button_click)
+
+        # Состояния для отслеживания установки
+        self.is_installing = False
+        self.current_install_thread = None
+        self.pending_updates = []
+        self.saves_button = QPushButton(tr("ui.saves_button"))
+        self.saves_button.setStyleSheet("color: yellow;")
+        self.saves_button.clicked.connect(self._on_configure_saves_click)
+        self.action_frame.addWidget(self.shortcut_button)
+        self.action_frame.addWidget(self.action_button)
+        self.action_frame.addWidget(self.saves_button)
+        self.bottom_frame.addWidget(self.status_label)
+        self.bottom_frame.addWidget(self.progress_bar)
+        self.bottom_frame.addLayout(self.action_frame)
 
         # Увеличиваем spacing между верхней панелью и вкладками
         self.main_layout.addSpacing(20)
@@ -4504,35 +4494,6 @@ class DeltaHubApp(QWidget):
         """)
 
         self.main_layout.addWidget(self.main_tab_widget)
-
-        self.bottom_widget = QFrame()
-        self.bottom_widget.setObjectName("bottom_widget")
-        self.bottom_frame = QVBoxLayout(self.bottom_widget)
-        self.status_label = QLabel(tr("ui.initialization"))
-        self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setVisible(False)
-        self.action_frame = QHBoxLayout()
-        self.shortcut_button = QPushButton(tr("buttons.shortcut"))
-        self.shortcut_button.clicked.connect(self._create_shortcut_flow)
-        self.action_button = QPushButton(tr("status.please_wait"))
-        self.action_button.setEnabled(False)
-        self.action_button.setMinimumWidth(200)
-        self.action_button.clicked.connect(self._on_action_button_click)
-
-        # Состояния для отслеживания установки
-        self.is_installing = False
-        self.current_install_thread = None
-        self.pending_updates = []
-        self.saves_button = QPushButton(tr("ui.saves_button"))
-        self.saves_button.setStyleSheet("color: yellow;")
-        self.saves_button.clicked.connect(self._on_configure_saves_click)
-        self.action_frame.addWidget(self.shortcut_button)
-        self.action_frame.addWidget(self.action_button)
-        self.action_frame.addWidget(self.saves_button)
-        self.bottom_frame.addWidget(self.status_label)
-        self.bottom_frame.addWidget(self.progress_bar)
-        self.bottom_frame.addLayout(self.action_frame)
         self.main_layout.addWidget(self.bottom_widget)
 
         self.settings_widget = QFrame()
@@ -5356,7 +5317,7 @@ class DeltaHubApp(QWidget):
 
         # Обновляем состояние кнопок и интерфейса при переключении режимов
         self._update_mod_widgets_slot_status()
-        self._update_ui_for_selection()
+        self._update_action_button_state()
 
         # Обновляем отображение модов в зависимости от режима
         if is_chapter:
@@ -6075,7 +6036,7 @@ class DeltaHubApp(QWidget):
             self._show_empty_mods_message()
 
         self._update_mod_widgets_slot_status()
-        self._update_ui_for_selection()
+        self._update_action_button_state()
         self.installed_mods_container.setUpdatesEnabled(True)
 
     def _refresh_installed_mods_async(self):
@@ -6432,7 +6393,7 @@ class DeltaHubApp(QWidget):
             self._update_chapter_indicators(None)
 
         # Обновляем состояние кнопки действия
-        self._update_ui_for_selection()
+        self._update_action_button_state()
 
     def _show_slot_selection_dialog(self, mod_data):
         """Показывает диалог выбора слота для мода"""
@@ -6921,7 +6882,7 @@ class DeltaHubApp(QWidget):
             self._update_chapter_indicators(mod_data)
 
         # Обновляем состояние кнопки действия
-        self._update_ui_for_selection()
+        self._update_action_button_state()
 
         # Сохраняем состояние слотов (если не отключено)
         if save_state:
@@ -7252,8 +7213,6 @@ class DeltaHubApp(QWidget):
         # Проверяем что не идет установка
         if self.is_installing:
             return
-        # TODO: Реализовать логику установки мода
-        # Можно использовать существующую систему InstallTranslationsThread
         self._install_single_mod(mod)
 
     def _install_single_mod(self, mod):
@@ -7299,7 +7258,8 @@ class DeltaHubApp(QWidget):
             # Обновляем идентификатор операции для инвалидации старых сигналов
             self._install_op_id = getattr(self, '_install_op_id', 0) + 1
             op_id = self._install_op_id
-            self.current_install_thread = InstallTranslationsThread(self, install_tasks)
+            was_installed_before = self._is_mod_installed(mod.key)
+            self.current_install_thread = InstallTranslationsThread(self, install_tasks, was_installed_before)
             self.install_thread = self.current_install_thread
 
             # Подключаем сигналы через обертки, чтобы игнорировать старые потоки после отмены/перезапуска
@@ -7314,7 +7274,7 @@ class DeltaHubApp(QWidget):
                 self.update_status_signal.emit(tr("status.preparing_download"), UI_COLORS["status_warning"])
             except Exception:
                 pass
-            self._update_ui_for_selection()
+            self._update_action_button_state()
  
             self.install_thread.start()
 
@@ -7338,6 +7298,10 @@ class DeltaHubApp(QWidget):
 
     def _on_single_mod_install_finished(self, success):
         """Обработчик завершения установки одиночного мода"""
+        was_installed_before = False
+        if hasattr(self, 'current_install_thread') and self.current_install_thread:
+            # Проверяем, был ли мод установлен до начала этой операции
+            was_installed_before = getattr(self.current_install_thread, 'was_installed_before', False)
         self.progress_bar.setValue(0)
         self.progress_bar.setVisible(False)
         # Если была установка (а не отмена), обновляем UI
@@ -7376,9 +7340,13 @@ class DeltaHubApp(QWidget):
             if hasattr(self, '_update_installed_mods_display'):
                 self._update_installed_mods_display()
 
+            if not was_installed_before:
+                QMessageBox.information(self, tr("dialogs.mod_installed_title"),
+                                      tr("dialogs.mod_installed_apply_info"))
+
             self.update_status_signal.emit(tr("status.mod_installed_success"), UI_COLORS["status_success"])
 
-        self._update_ui_for_selection()
+        self._update_action_button_state()
 
     def _on_mod_uninstall_requested(self, mod):
         """Обработчик запроса на удаление мода"""
@@ -7475,7 +7443,7 @@ class DeltaHubApp(QWidget):
         self.current_install_thread = None
         self.progress_bar.setVisible(False)
         # Восстанавливаем текст кнопки через обновление UI
-        self._update_ui_for_selection()
+        self._update_action_button_state()
 
         if success:
             self.update_status_signal.emit(tr("status.mod_installed_success"), UI_COLORS["status_success"])
@@ -7483,7 +7451,7 @@ class DeltaHubApp(QWidget):
             self._update_installed_mods_display()
             # Обновляем состояние кнопок и статусов
             self._update_mod_widgets_slot_status()
-            self._update_ui_for_selection()
+            self._update_action_button_state()
 
             # Обновляем содержимое слотов для обновленных модов
             self._refresh_slots_content()
@@ -7554,7 +7522,7 @@ class DeltaHubApp(QWidget):
             return
 
         # Обновляем текст кнопки действия
-        self._update_ui_for_selection()
+        self._update_action_button_state()
 
     def _save_window_geometry(self):
         geom_ba = self.saveGeometry()
@@ -8449,7 +8417,7 @@ class DeltaHubApp(QWidget):
             self.update()
             self.repaint()
 
-            self._update_ui_for_selection()
+            self._update_action_button_state()
 
     def _toggle_changelog_view(self):
         self._toggle_settings_view(show_changelog=True)
@@ -8545,10 +8513,6 @@ class DeltaHubApp(QWidget):
         self.apply_theme()
         # Обновляем UI элементы, которые могли измениться
         self._update_dynamic_elements()
-
-    def _on_volume_changed(self, value):
-        """Регулировка громкости удалена."""
-        return
 
     def _update_dynamic_elements(self):
         """Обновляет элементы UI, которые используют кастомизируемые цвета"""
@@ -8831,11 +8795,6 @@ class DeltaHubApp(QWidget):
         except Exception as e:
             print(f"Error starting background music: {e}")
 
-    def _handle_media_status_changed(self, status):
-        """Больше не используется (QtMultimedia удалён). Оставлено для совместимости."""
-        pass
-
-
     def _stop_background_music(self):
         """Останавливает фоновую музыку, запущенную через playsound3 (мгновенно)."""
         try:
@@ -8893,7 +8852,6 @@ class DeltaHubApp(QWidget):
         if not self.game_mode.direct_launch_allowed:
             return
 
-        # Проверяем совместимость с Steam и MacOS
         if self.local_config.get('launch_via_steam', False):
             QMessageBox.warning(
             self,
@@ -8917,6 +8875,26 @@ class DeltaHubApp(QWidget):
 
         # Блокируем Steam галочку
         self.launch_via_steam_checkbox.setEnabled(False)
+
+    def _update_action_button_state(self):
+        """Обновляет текст и состояние главной кнопки действия на основе текущего состояния лаунчера."""
+        if getattr(self, 'is_installing', False):
+            self.action_button.setText(tr("ui.cancel_button"))
+            self.action_button.setEnabled(True)
+            return
+
+        is_demo_mode = isinstance(self.game_mode, DemoGameMode)
+        is_full_install_enabled = (is_demo_mode and hasattr(self, 'full_install_checkbox') and self.full_install_checkbox.isChecked())
+
+        if is_full_install_enabled:
+            action_text = tr("buttons.install")
+        elif self._check_active_slots_need_updates():
+            action_text = tr("ui.update_button")
+        else:
+            action_text = tr("ui.launch_button")
+
+        self.action_button.setText(action_text)
+        self.action_button.setEnabled(True)
 
     def _disable_direct_launch(self):
         """Отключает прямой запуск"""
@@ -9030,10 +9008,10 @@ class DeltaHubApp(QWidget):
 
         self.apply_theme()
 
-        self._load_all_translations_from_folders()
+        self._load_local_mods_from_folders()
         self.setEnabled(False)
 
-        self._refresh_translations(force=True, blocking=False)
+        self._refresh_mods_list(force=True, blocking=False)
         self.setEnabled(True)
 
         self._update_installed_mods_display()
@@ -9228,7 +9206,7 @@ class DeltaHubApp(QWidget):
             except Exception:
                 pass
             self.settings_button.setEnabled(True)
-            self._update_ui_for_selection()
+            self._update_action_button_state()
         except Exception:
             pass
 
@@ -9358,9 +9336,6 @@ class DeltaHubApp(QWidget):
             self._update_mods_in_active_slots()
             return
 
-        self._handle_modded_action()
-
-    def _handle_modded_action(self):
         # Не выполняем действия если операция была отменена
         if getattr(self, '_operation_cancelled', False):
             return
@@ -9372,7 +9347,7 @@ class DeltaHubApp(QWidget):
         self.progress_bar.setVisible(False)
         self._launch_game_with_all_mods()
 
-    def _refresh_translations(self, force=False, blocking=False):
+    def _refresh_mods_list(self, force=False, blocking=False):
         if is_game_running():
             self.update_status_signal.emit(tr("status.cant_update_while_running"), UI_COLORS["status_warning"])
             return
@@ -9381,7 +9356,7 @@ class DeltaHubApp(QWidget):
 
         threading.Thread(target=self._check_for_launcher_updates, daemon=True).start()
 
-        self.fetch_thread = FetchTranslationsThread(self, force_update=force)
+        self.fetch_thread = FetchModsThread(self, force_update=force)
         self.fetch_thread.status.connect(self.update_status_signal)
         self.fetch_thread.result.connect(self._on_fetch_translations_finished)
 
@@ -9434,7 +9409,7 @@ class DeltaHubApp(QWidget):
 
             # Принудительно обновляем проверку слотов после загрузки данных
 
-            self._update_ui_for_selection()
+            self._update_action_button_state()
 
             if success:
                 self.update_status_signal.emit(tr("status.mod_list_updated"), UI_COLORS["status_success"])
@@ -9471,35 +9446,7 @@ class DeltaHubApp(QWidget):
         try: requests.head("https://clients3.google.com/generate_204", timeout=3); return True
         except requests.RequestException: return False
 
-    def _install_translations(self):
-        # Строгая проверка - блокируем если уже идет установка
-        if self.is_installing:
-
-            return
-
-        # Устаревшая логика сбора установок удалена; в новой системе используем слоты
-        mods_to_install = []
-        if not mods_to_install:
-            self.progress_bar.setVisible(False)
-            self._update_ui_for_selection()
-            return
-        # Преобразуем формат данных для InstallTranslationsThread (убираем статус)
-        install_tasks = [(mod, chapter_id) for mod, chapter_id, status in mods_to_install]
-
-        # Устанавливаем состояние установки
-        self.is_installing = True
-        self._set_install_buttons_enabled(False)  # Блокируем все кнопки установки
-        self.action_button.setText(tr("ui.cancel_button"))  # Меняем текст кнопки на "Отменить"
-        self.current_install_thread = InstallTranslationsThread(self, install_tasks)
-        self.install_thread = self.current_install_thread  # Для совместимости
-
-        self.install_thread.progress.connect(self.set_progress_signal)
-        self.install_thread.status.connect(self.update_status_signal)
-        self.install_thread.finished.connect(self._on_install_finished)
-
-        # Обновляем UI чтобы показать кнопку отмены
-        self._update_ui_for_selection()
-
+        self._update_action_button_state()
         self.install_thread.start()
 
     def _on_install_finished(self, success):
@@ -9522,10 +9469,10 @@ class DeltaHubApp(QWidget):
             self._load_local_mods_from_folders()
             self.update_status_signal.emit(tr("status.installation_complete"), UI_COLORS["status_success"])
             self._update_installed_mods_display()
-        self._update_ui_for_selection()
+        self._update_action_button_state()
         if hasattr(self, 'full_install_checkbox') and self.full_install_checkbox is not None and isinstance(self.game_mode, DemoGameMode):
             self.full_install_checkbox.setEnabled(True)
-        self._update_ui_for_selection()
+        self._update_action_button_state()
 
     def _perform_full_install(self):
         # Строгая проверка - блокируем если уже идет установка
@@ -9599,13 +9546,13 @@ class DeltaHubApp(QWidget):
             self.update_status_signal.emit(tr("status.game_files_install_complete"), UI_COLORS["status_success"])
 
             # Обновляем UI и выходим
-            self._update_ui_for_selection()
+            self._update_action_button_state()
             return
         else:
             self.update_status_signal.emit(tr("status.game_files_install_failed"), UI_COLORS["status_error"])
 
         self._write_local_config()
-        self._update_ui_for_selection()
+        self._update_action_button_state()
 
     def _run_as_admin_windows(self, path: str) -> bool:
         script = f"import os, stat; p = r'{path}'; [os.chmod(os.path.join(r, f), os.stat(os.path.join(r, f)).st_mode | stat.S_IWRITE) for r, _, fs in os.walk(p) for f in fs] if os.path.isdir(p) else os.chmod(p, os.stat(p).st_mode | stat.S_IWRITE) if os.path.exists(p) else None"
@@ -9671,7 +9618,6 @@ class DeltaHubApp(QWidget):
         """Копирует файлы модов (публичных или локальных) в игровые директории."""
         try:
             applied_chapters = set()
-            all_mods_combined = self.all_mods + self._get_local_mods_as_modinfo()
 
             for ui_index, mod_key in selections.items():
                 if mod_key == "no_change":
@@ -9680,7 +9626,7 @@ class DeltaHubApp(QWidget):
                 chapter_id = self.game_mode.get_chapter_id(ui_index)
 
                 # Ищем мод в общем списке
-                mod = next((m for m in all_mods_combined if m.key == mod_key), None)
+                mod = next((m for m in self.all_mods if m.key == mod_key), None)
                 if not mod:
                     continue
 
@@ -10089,12 +10035,7 @@ class DeltaHubApp(QWidget):
                 try:
                     shutil.rmtree(temp_dir)
                 except Exception as e:
-                    print(tr("errors.temp_dir_delete_failed", temp_dir=temp_dir, error=e))
-
-    def _copy_mod_files_to_target(self, source_dir: str, target_dir: str, chapter_id: Optional[int] = None):
-        """Устаревший метод - оставлен для обратной совместимости."""
-        # Вызываем новый метод без информации о моде
-        return self._create_backup_and_copy_mod_files(source_dir, target_dir, chapter_id, None)
+                    print(tr("errors.temp_dir_delete_failed", temp_dir=temp_dir, error=e))  
 
     def _extract_archive_to_target(self, archive_path: str, target_dir: str):
         """Извлекает архив в целевую директорию и возвращает список извлеченных файлов."""
@@ -10182,7 +10123,7 @@ class DeltaHubApp(QWidget):
                         platform.system() != "Darwin")
 
         if use_steam:
-            return self._handle_steam_launch()
+            return {'target': f"steam://rungameid/{self.game_mode.steam_id}", 'cwd': None, 'type': 'webbrowser'}
 
         if direct_launch:
             # Запускаем прямой запуск для выбранного слота
@@ -10194,9 +10135,6 @@ class DeltaHubApp(QWidget):
             self.update_status_signal.emit(tr("errors.executable_not_found"), UI_COLORS["status_error"])
             return None
         return {'target': launch_target, 'cwd': self._get_current_game_path(), 'type': 'subprocess'}
-
-    def _handle_steam_launch(self) -> Dict[str, Any]:
-        return {'target': f"steam://rungameid/{self.game_mode.steam_id}", 'cwd': None, 'type': 'webbrowser'}
 
     def _handle_direct_launch(self, selected_tab_index: int) -> Optional[Dict[str, Any]]:
         chapter_folder = self._get_target_dir(self.game_mode.get_chapter_id(selected_tab_index))
@@ -10374,7 +10312,7 @@ class DeltaHubApp(QWidget):
         self.hide_window_signal.emit()
         def restore_and_return():
             self.restore_window_signal.emit()
-            self._update_ui_for_selection()
+            self._update_action_button_state()
 
         if not self._find_and_validate_game_path(selections): restore_and_return(); return
         if not self._prepare_game_files(selections): restore_and_return(); return
@@ -10476,7 +10414,7 @@ class DeltaHubApp(QWidget):
         self.activateWindow()
         self.raise_()
         self.progress_bar.setVisible(False)
-        self._update_ui_for_selection()
+        self._update_action_button_state()
         # При восстановлении окна пробуем запустить музыку заново (если задана)
         self._maybe_start_background_music()
 
@@ -10575,48 +10513,12 @@ class DeltaHubApp(QWidget):
             try:
                 from PyQt6.QtCore import QProcess
                 launcher_dir = get_launcher_dir()
-                QProcess.startDetached(sys.executable, sys.argv[1:], launcher_dir)
+                QProcess.startDetached(sys.executable, sys.argv, launcher_dir)
             except Exception:
                 import subprocess
                 launcher_dir = get_launcher_dir()
                 subprocess.Popen([sys.executable] + sys.argv, cwd=launcher_dir)
             QApplication.quit()
-
-
-    def _update_ui_for_selection(self):
-
-        # В новой системе с вкладками "Искать моды" и "Библиотека"
-        # этот метод пока не нужен, так как UI управляется по-новому
-        # TODO: Переработать под новую систему или удалить
-
-        # Обновляем только базовый статус для совместимости
-        if hasattr(self, 'action_button'):
-            if getattr(self, 'is_installing', False):
-                return
-            # Проверяем, нужны ли обновления в активных слотах
-            slots_need_update = self._check_active_slots_need_updates()
-
-
-            # Определяем текст кнопки в зависимости от состояния чекбокса полной установки
-            is_demo_mode = isinstance(self.game_mode, DemoGameMode)
-            is_full_install_enabled = (is_demo_mode and hasattr(self, 'full_install_checkbox') and
-                                     self.full_install_checkbox.isChecked())
-
-
-            if is_full_install_enabled:
-                action_text = tr("buttons.install")
-            elif slots_need_update:
-                action_text = tr("ui.update_button")
-            else:
-                action_text = tr("ui.launch_button")
-
-
-            self.action_button.setText(action_text)
-            self.action_button.setEnabled(True)
-
-        # Кнопка Сохранения должна быть всегда активна
-        if hasattr(self, 'saves_button'):
-            self.saves_button.setEnabled(True)
 
     def _check_active_slots_need_updates(self):
         """Проверяет, нужны ли обновления в активных слотах в зависимости от режима"""
@@ -11637,18 +11539,6 @@ class DeltaHubApp(QWidget):
             self.update_status_signal.emit(tr("status.shortcut_creation_error", error=str(e)), UI_COLORS["status_error"])
             QMessageBox.critical(self, tr("errors.error"), tr("errors.shortcut_creation_failed", error=str(e)))
 
-    def _cleanup_deleted_local_mods(self):
-        # Эта функция больше не нужна, так как всё работает через config.json в папках модов
-        pass
-
-#
-
-    def _get_local_mods_as_modinfo(self):
-        # Локальные моды уже загружены в self.all_mods функцией _load_local_mods_from_folders
-        # Эта функция теперь просто возвращает пустой список, так как локальные моды
-        # обрабатываются в _load_local_mods_from_folders
-        return []
-
     def _get_target_dir(self, chapter_id):
         target_base = self._get_current_game_path()
         if not target_base: return None
@@ -11677,13 +11567,12 @@ class DeltaHubApp(QWidget):
             return None
 
     def _has_mods_with_data_files(self, selections: Dict[int, str]) -> bool:
-        all_mods_combined = self.all_mods + self._get_local_mods_as_modinfo()
 
         for ui_index, mod_key in selections.items():
             if mod_key == "no_change":
                 continue
 
-            mod = next((m for m in all_mods_combined if m.key == mod_key), None)
+            mod = next((m for m in self.all_mods if m.key == mod_key), None)
             if not mod:
                 continue
 
@@ -11793,7 +11682,7 @@ class DeltaHubApp(QWidget):
                 self.game_mode.set_game_path(self.local_config, corrected_path)
                 self._write_local_config()
                 self.update_status_signal.emit(tr("status.game_path_set", path=corrected_path), UI_COLORS["status_success"])
-                self._update_ui_for_selection()
+                self._update_action_button_state()
                 return True
             else:
                 QMessageBox.warning(self, tr("dialogs.invalid_folder"), tr("dialogs.invalid_game_folder"))
@@ -11922,7 +11811,7 @@ class DeltaHubApp(QWidget):
         QTimer.singleShot(100, self._refresh_slots_content)
         QTimer.singleShot(200, self._update_mod_widgets_slot_status)
         QTimer.singleShot(300, self._refresh_all_slot_status_displays)
-        QTimer.singleShot(300, self._update_ui_for_selection)
+        QTimer.singleShot(300, self._update_action_button_state)
 
     def _is_mod_in_specific_slot(self, mod_data, chapter_id):
         """Проверяет, находится ли мод в конкретном слоте главы"""

@@ -335,7 +335,7 @@ class PresenceWorker(QObject):
         finally:
             self.finished.emit()
 
-class FetchTranslationsThread(QThread):
+class FetchModsThread(QThread):
     result, status = pyqtSignal(bool), pyqtSignal(str, str)
     def __init__(self, main_window, force_update=False): super().__init__(main_window); self.main_window, self.force_update = main_window, force_update
     def run(self):
@@ -534,10 +534,11 @@ class FetchTranslationsThread(QThread):
 
 class InstallTranslationsThread(QThread):
     progress, status, finished = pyqtSignal(int), pyqtSignal(str, str), pyqtSignal(bool)
-    def __init__(self, main_window, install_tasks):
+    def __init__(self, main_window, install_tasks, was_installed_before: bool):
         super().__init__(main_window)
         self.main_window = main_window
         self.install_tasks = install_tasks
+        self.was_installed_before = was_installed_before
         self._cancelled = False
         self._installed_dirs = []
         self.temp_root = None  # Временная папка для безопасной установки
@@ -1270,7 +1271,7 @@ def get_legacy_ylauncher_path() -> str:
     else:
         return os.path.join(os.path.expanduser('~'), ".local/share/YLauncher")
 
-def get_launcher_dir() -> str: return os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else os.path.abspath(".")
+def get_launcher_dir() -> str: return os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else os.path.abspath(os.path.dirname(__file__))
 
 # User-writable data root for mods/logs/etc.
 def get_user_data_root() -> str:
