@@ -21,10 +21,10 @@ else:
         binaries_extra.append((vcredist_dll, '.'))
 
 a = Analysis(
-    ['src/main.py'],  # Единственная точка входа в src/
-    pathex=['.'],
+    ['../src/main.py'],  # Единственная точка входа в src/
+    pathex=['..'],
     binaries=binaries_extra,
-    datas=[('src', 'src')],
+    datas=[('../src', 'src')],
     hiddenimports=[
         'psutil',
         'packaging',
@@ -60,7 +60,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     name='DELTAHUB',
-    icon='src/resources/icons/icon.ico',
+    icon='../src/resources/icons/icon.ico',
     console=False,
     upx=False,
 )
@@ -70,6 +70,6 @@ if sys.platform == 'darwin':
     app = BUNDLE(
         exe,
         name='DELTAHUB.app',
-        icon='src/resources/icons/icon.icns',
+        icon='../src/resources/icons/icon.icns',
         bundle_identifier='com.y114.deltahub'
     )
