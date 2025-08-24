@@ -18,6 +18,7 @@ DisableDirPage=no
 UsePreviousAppDir=no
 WizardSmallImageFile={#AppSmallIcon}
 OutputBaseFilename={#AppName}_setup_v{#AppVersion}
+OutputDir=..\\Output
 ArchitecturesAllowed=x64
 ArchitecturesInstallIn64BitMode=x64
 MinVersion=0,10.0.17763
