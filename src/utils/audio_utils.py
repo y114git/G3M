@@ -1,7 +1,7 @@
 import json
 import os
 from typing import Optional, Protocol
-from utils.path_utils import get_app_support_path
+from utils.path_utils import get_user_data_root
 
 class SoundInstance(Protocol):
 
@@ -14,7 +14,7 @@ _sound_instance: Optional[SoundInstance] = None
 
 def get_launcher_volume() -> int:
     try:
-        config_path = os.path.join(get_app_support_path(), 'config.json')
+        config_path = os.path.join(get_user_data_root(), 'cache', 'config.json')
         if os.path.exists(config_path):
             with open(config_path, 'r', encoding='utf-8') as f:
                 config = json.load(f)
@@ -25,8 +25,9 @@ def get_launcher_volume() -> int:
 
 def play_deltahub_sound() -> None:
     global _sound_instance
-    config_mp3 = os.path.join(get_app_support_path(), 'custom_startup_sound.mp3')
-    config_wav = os.path.join(get_app_support_path(), 'custom_startup_sound.wav')
+    app_support_path = os.path.join(get_user_data_root(), 'cache')
+    config_mp3 = os.path.join(app_support_path, 'custom_startup_sound.mp3')
+    config_wav = os.path.join(app_support_path, 'custom_startup_sound.wav')
     asset_wav = os.path.join(os.path.dirname(__file__), '..', 'resources', 'audio', 'deltahub.wav')
     sound_candidates = [config_mp3, config_wav, asset_wav]
     sound_path = next((p for p in sound_candidates if os.path.exists(p)), None)

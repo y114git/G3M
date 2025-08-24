@@ -12,7 +12,7 @@ import requests
 from PyQt6.QtWidgets import QMessageBox
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
-from src.config.constants import BROWSER_HEADERS
+from config.constants import BROWSER_HEADERS
 
 def resource_path(relative_path: str) -> str:
     if getattr(sys, 'frozen', False):
@@ -317,6 +317,3 @@ def get_file_filter(filter_type: str) -> str:
     description = FILTER_DESCRIPTIONS.get(filter_type, filter_type)
     all_files_desc = FILTER_DESCRIPTIONS.get('all_files', 'All files')
     return f'{description} ({extensions});;{all_files_desc} (*)'
-
-def format_timestamp() -> str:
-    return time.strftime('%d.%m.%y %H:%M')

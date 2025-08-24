@@ -1,14 +1,28 @@
 import os
 import shutil
+import sys
 import tempfile
 import logging
+import platform
+import subprocess
 from PyQt6.QtWidgets import QDialog, QVBoxLayout, QPushButton, QFileDialog, QMessageBox, QLineEdit, QWidget
 from localization.manager import tr
 from utils.file_utils import get_file_filter
 from ui.widgets.custom_controls import NoScrollTabWidget
 from ui.styling import create_file_group_universal
+from config.constants import resource_path
 
 class XdeltaDialog(QDialog):
+
+    def _get_xdelta_path(self):
+        system = platform.system()
+        exe_name = 'xdelta3.exe' if system == 'Windows' else 'xdelta3'
+        path = resource_path(f'../resources/bin/{exe_name}')
+        if not os.path.exists(path) and not getattr(sys, 'frozen', False):
+            dev_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'resources', 'bin', exe_name))
+            if os.path.exists(dev_path):
+                return dev_path
+        return path if os.path.exists(path) else None
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -94,10 +108,9 @@ class XdeltaDialog(QDialog):
         msg_box.exec()
 
     def create_patch(self):
-        try:
-            import pyxdelta
-        except ImportError:
-            self._show_message(tr('dialogs.error'), tr('errors.component_unavailable_create'), QMessageBox.Icon.Critical)
+        xdelta_path = self._get_xdelta_path()
+        if not xdelta_path:
+            self._show_message(tr('dialogs.error'), tr('errors.xdelta_unavailable'), QMessageBox.Icon.Critical)
             return
         original_file = self.original_create_edit.text()
         modified_file = self.modified_create_edit.text()
@@ -119,12 +132,15 @@ class XdeltaDialog(QDialog):
             temp_output = os.path.join(temp_dir, 'output.xdelta')
             shutil.copy2(original_file, temp_original)
             shutil.copy2(modified_file, temp_modified)
-            success = pyxdelta.run(infile=temp_original, outfile=temp_modified, patchfile=temp_output)
-            if success:
+            command = [xdelta_path, '-e', '-s', temp_original, temp_modified, temp_output]
+            result = subprocess.run(command, capture_output=True, text=True, encoding='utf-8')
+            if result.returncode == 0:
                 shutil.move(temp_output, output_patch)
                 self._show_message(tr('ui.success'), tr('ui.patch_success', path=output_patch))
             else:
-                self._show_message(tr('errors.patch_create_error'), tr('errors.patch_create_failed'), QMessageBox.Icon.Critical)
+                error_message = result.stderr or result.stdout
+                logging.error(f'xdelta create patch failed: {error_message}')
+                self._show_message(tr('errors.patch_create_error'), tr('errors.patch_create_failed_details', error=error_message), QMessageBox.Icon.Critical)
         except Exception as e:
             self._show_message(tr('errors.patch_create_error'), tr('errors.patch_create_exception', error=str(e)), QMessageBox.Icon.Critical)
         finally:
@@ -135,10 +151,9 @@ class XdeltaDialog(QDialog):
                     logging.debug(f'Failed to remove temp dir {temp_dir}: {e}')
 
     def apply_patch(self):
-        try:
-            import pyxdelta
-        except ImportError:
-            self._show_message(tr('dialogs.error'), tr('errors.component_unavailable_apply'), QMessageBox.Icon.Critical)
+        xdelta_path = self._get_xdelta_path()
+        if not xdelta_path:
+            self._show_message(tr('dialogs.error'), tr('errors.xdelta_unavailable'), QMessageBox.Icon.Critical)
             return
         original_file = self.original_apply_edit.text()
         patch_file = self.patch_apply_edit.text()
@@ -160,12 +175,15 @@ class XdeltaDialog(QDialog):
             temp_output = os.path.join(temp_dir, 'patched_output.bin')
             shutil.copy2(original_file, temp_original)
             shutil.copy2(patch_file, temp_patch)
-            success = pyxdelta.decode(infile=temp_original, patchfile=temp_patch, outfile=temp_output)
-            if success:
+            command = [xdelta_path, '-d', '-s', temp_original, temp_patch, temp_output]
+            result = subprocess.run(command, capture_output=True, text=True, encoding='utf-8')
+            if result.returncode == 0:
                 shutil.move(temp_output, output_file)
                 self._show_message(tr('ui.success'), tr('ui.patch_apply_success', path=output_file))
             else:
-                self._show_message(tr('errors.patch_apply_error'), tr('errors.patch_apply_failed', original=os.path.basename(original_file), patch=os.path.basename(patch_file)), QMessageBox.Icon.Critical)
+                error_message = result.stderr or result.stdout
+                logging.error(f'xdelta apply patch failed: {error_message}')
+                self._show_message(tr('errors.patch_apply_error'), tr('errors.patch_apply_failed_details', error=error_message), QMessageBox.Icon.Critical)
         except Exception as e:
             self._show_message(tr('errors.patch_apply_error'), tr('errors.patch_apply_exception', error=str(e)), QMessageBox.Icon.Critical)
         finally:

@@ -29,8 +29,3 @@ def get_user_data_root() -> str:
 
 def get_user_mods_dir() -> str:
     return os.path.join(get_user_data_root(), 'mods')
-
-def get_app_support_path() -> str:
-    path = get_user_data_root()
-    cache_path = os.path.join(path, 'cache')
-    return cache_path

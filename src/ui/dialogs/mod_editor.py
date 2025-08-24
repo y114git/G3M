@@ -4,6 +4,7 @@ import re
 import shutil
 import subprocess
 import threading
+import time
 import uuid
 import webbrowser
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
@@ -13,7 +14,7 @@ from PyQt6 import sip
 from localization.manager import tr
 from ui.widgets.custom_controls import NoScrollComboBox, NoScrollTabWidget
 from ui.widgets.worker_signals import WorkerSignals
-from utils.file_utils import resource_path, detect_field_type_by_text, get_file_filter, format_timestamp, sanitize_filename
+from utils.file_utils import resource_path, detect_field_type_by_text, get_file_filter, sanitize_filename
 from utils.crypto_utils import generate_secret_key, hash_secret_key
 from utils.file_utils import game_version_sort_key
 import logging
@@ -1626,8 +1627,7 @@ class ModEditorDialog(QDialog):
             return
         try:
             mod_data = self._collect_mod_data()
-            from utils.file_utils import format_timestamp
-            timestamp = format_timestamp()
+            timestamp = time.strftime('%d.%m.%y %H:%M')
             mod_data.update({'status': 'pending', 'downloads': 0, 'is_verified': False, 'submission_date': timestamp, 'created_date': timestamp, 'last_updated': timestamp})
             import requests
             from config.constants import CLOUD_FUNCTIONS_BASE_URL
@@ -1636,7 +1636,7 @@ class ModEditorDialog(QDialog):
             response.raise_for_status()
             try:
                 with open(key_file_path, 'w', encoding='utf-8') as f:
-                    f.write(f"{tr('ui.secret_key_colon')} {secret_key}\n{tr('ui.mod_name_colon')} {self.name_edit.text()}\n{tr('ui.creation_date_colon')} {format_timestamp()}\n\n{tr('ui.secret_key_important')}\n")
+                    f.write(f"{tr('ui.secret_key_colon')} {secret_key}\n{tr('ui.mod_name_colon')} {self.name_edit.text()}\n{tr('ui.creation_date_colon')} {time.strftime('%d.%m.%y %H:%M')}\n\n{tr('ui.secret_key_important')}\n")
                 QMessageBox.information(self, tr('dialogs.mod_submitted'), tr('errors.mod_submitted_success', key_file_path=key_file_path))
                 self._open_file_directory(key_file_path)
             except Exception:
@@ -1732,7 +1732,7 @@ class ModEditorDialog(QDialog):
                     files_data[file_key]['extra_files'] = {}
                     for group_key, paths in extra_files.items():
                         files_data[file_key]['extra_files'][group_key] = [os.path.basename(path) for path in paths]
-            config_data = {'is_local_mod': True, 'mod_key': mod_key, 'created_date': format_timestamp(), 'is_available_on_server': False, 'name': mod_data.get('name', ''), 'version': mod_data.get('version', '1.0.0'), 'author': mod_data.get('author', ''), 'tagline': mod_data.get('tagline', tr('defaults.no_short_description')), 'game_version': mod_data.get('game_version', tr('defaults.not_specified')), 'modtype': mod_data.get('modtype', 'deltarune'), 'files': files_data}
+            config_data = {'is_local_mod': True, 'mod_key': mod_key, 'created_date': time.strftime('%d.%m.%y %H:%M'), 'is_available_on_server': False, 'name': mod_data.get('name', ''), 'version': mod_data.get('version', '1.0.0'), 'author': mod_data.get('author', ''), 'tagline': mod_data.get('tagline', tr('defaults.no_short_description')), 'game_version': mod_data.get('game_version', tr('defaults.not_specified')), 'modtype': mod_data.get('modtype', 'deltarune'), 'files': files_data}
             config_path = os.path.join(mod_dir, 'config.json')
             self.parent_app._write_json(config_path, config_data)
             self.parent_app._load_local_mods_from_folders()
@@ -1767,8 +1767,7 @@ class ModEditorDialog(QDialog):
             updated_data['created_date'] = self.original_mod_data.get('created_date')
             updated_data['status'] = self.original_mod_data.get('status', 'pending')
             updated_data['downloads'] = self.original_mod_data.get('downloads', 0)
-        from utils.file_utils import format_timestamp
-        updated_data['last_updated'] = format_timestamp()
+        updated_data['last_updated'] = time.strftime('%d.%m.%y %H:%M')
         try:
             import requests
             hashed_key = self.mod_key

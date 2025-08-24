@@ -29,7 +29,7 @@ from models.mod_models import ModInfo, ModChapterData
 from models.game_modes import FullGameMode, DemoGameMode, UndertaleGameMode
 from utils.file_utils import autodetect_path, resource_path, get_file_filter, sanitize_filename, ensure_writable, fix_macos_python_symlink
 from utils.game_utils import is_game_running, get_default_save_path, is_valid_save_path, is_valid_game_path
-from utils.path_utils import get_app_support_path, get_launcher_dir, get_legacy_ylauncher_path
+from utils.path_utils import get_user_data_root, get_launcher_dir, get_legacy_ylauncher_path
 from utils.network_utils import check_internet_connection
 from threads.fetch_mods import FetchModsThread
 from threads.game_monitor import GameMonitorThread
@@ -82,10 +82,6 @@ class DeltaHubApp(QWidget):
     update_info_ready = pyqtSignal(dict)
     update_cleanup = pyqtSignal()
 
-    @staticmethod
-    def get_launcher_version() -> str:
-        return LAUNCHER_VERSION
-
     def __init__(self, args: Optional[argparse.Namespace] = None, parent_for_dialogs: Optional[QWidget] = None):
         super().__init__()
         self.is_shortcut_launch = args and args.shortcut_launch
@@ -105,7 +101,7 @@ class DeltaHubApp(QWidget):
         self.setWindowTitle('DELTAHUB')
         self._supports_volume = platform.system() == 'Windows'
         self._initial_size = None
-        self.config_dir = get_app_support_path()
+        self.config_dir = os.path.join(get_user_data_root(), 'cache')
         self.launcher_dir = get_launcher_dir()
         from utils.path_utils import get_user_mods_dir
         self.mods_dir = get_user_mods_dir()

@@ -10,7 +10,7 @@ from PyQt6.QtWidgets import QApplication, QMessageBox
 from localization.manager import get_localization_manager, tr
 from utils.audio_utils import play_deltahub_sound
 from core.splash import create_splash, create_png_splash
-from utils.path_utils import get_app_support_path
+from utils.path_utils import get_user_data_root
 
 def create_app_reference():
     from core.app import DeltaHubApp
@@ -96,7 +96,7 @@ def setup_app():
 
 def check_splash_settings():
     try:
-        config_path = os.path.join(get_app_support_path(), 'config.json')
+        config_path = os.path.join(get_user_data_root(), 'cache', 'config.json')
         if os.path.exists(config_path):
             import json
             with open(config_path, 'r', encoding='utf-8') as f:

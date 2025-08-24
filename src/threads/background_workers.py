@@ -213,8 +213,8 @@ class InstallModsThread(QThread):
 
     def _get_global_rate_limit_data(self):
         try:
-            from utils.path_utils import get_app_support_path
-            config_path = os.path.join(get_app_support_path(), 'rate_limit_data.json')
+            from utils.path_utils import get_user_data_root
+            config_path = os.path.join(get_user_data_root(), 'cache', 'rate_limit_data.json')
             if os.path.exists(config_path):
                 return self.main_window._read_json(config_path)
             return {}
@@ -224,8 +224,8 @@ class InstallModsThread(QThread):
     def _update_global_rate_limit_data(self, mod_key):
         try:
             current_ip = self._get_user_ip()
-            from utils.path_utils import get_app_support_path
-            config_path = os.path.join(get_app_support_path(), 'rate_limit_data.json')
+            from utils.path_utils import get_user_data_root
+            config_path = os.path.join(get_user_data_root(), 'cache', 'rate_limit_data.json')
             rate_limit_data = self._get_global_rate_limit_data()
             ip_mod_key = f'{current_ip}:{mod_key}'
             now_str = time.strftime('%Y-%m-%d %H:%M:%S')
