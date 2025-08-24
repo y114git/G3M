@@ -3,14 +3,6 @@ name: Build and Release DELTAHUB (Linux + macOS x64 & arm64 + Windows)
 on:
   workflow_dispatch:
     inputs:
-      branch:
-        description: "Branch to build from"
-        required: true
-        type: choice
-        options:
-          - stable
-          - dev
-        default: 'stable'
       version_and_tag:
         description: "Release Version and Tag (e.g., v2.0.0 or v2.0.0-beta)"
         required: true
@@ -61,8 +53,6 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.inputs.branch }}
       - name: Set Archive Name
         id: set_names
         run: |
@@ -113,8 +103,6 @@ jobs:
     runs-on: macos-13
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.inputs.branch }}
       - name: Set Archive Name
         id: set_names
         run: |
@@ -158,8 +146,6 @@ jobs:
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.inputs.branch }}
       - name: Set Archive Name
         id: set_names
         run: |
@@ -203,8 +189,6 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.inputs.branch }}
       - name: Set Archive Names
         id: set_names
         shell: powershell
