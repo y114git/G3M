@@ -40,6 +40,7 @@ a = Analysis(
         'dotenv',
         'py7zr',
         'PIL',
+        'PIL.Image',
     ],
     excludes=[
         'PyQt6.QtQml',
