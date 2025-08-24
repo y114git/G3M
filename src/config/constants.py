@@ -46,10 +46,3 @@ SOCIAL_LINKS = {'telegram': 'https://t.me/y_maintg', 'discord': 'https://discord
 UI_COLORS = {'status_error': 'red', 'status_warning': 'orange', 'status_success': 'green', 'status_info': 'gray', 'status_ready': 'lightgreen', 'status_steam': 'blue', 'link': '#00BFFF', 'social_discord': '#8A2BE2', 'saves_button': 'yellow'}
 THEMES = {'default': {'name': 'Deltarune', 'background': 'images/bg_fountain.gif', 'font_family': 'Determination Sans Rus', 'font_size_main': 16, 'font_size_small': 12, 'colors': {'main_fg': '#000000', 'top_level_fg': '#000000', 'button': '#000000', 'button_hover': '#333333', 'button_text': '#FFFFFF', 'border': '#FFFFFF', 'text': '#FFFFFF'}}}
 BROWSER_HEADERS = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
-
-def resource_path(relative_path: str) -> str:
-    if getattr(sys, 'frozen', False):
-        base_path = getattr(sys, '_MEIPASS', os.path.dirname(sys.executable))
-    else:
-        base_path = os.path.abspath(os.path.dirname(__file__))
-    return os.path.join(base_path, relative_path)

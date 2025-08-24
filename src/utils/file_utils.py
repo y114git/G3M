@@ -13,13 +13,7 @@ from PyQt6.QtWidgets import QMessageBox
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from config.constants import BROWSER_HEADERS
-
-def resource_path(relative_path: str) -> str:
-    if getattr(sys, 'frozen', False):
-        base_path = getattr(sys, '_MEIPASS', os.path.dirname(sys.executable))
-    else:
-        base_path = os.path.join(os.path.dirname(__file__), '..', 'resources')
-    return os.path.join(base_path, relative_path)
+from utils.path_utils import resource_path
 
 def download_and_extract_archive(url: str, target_dir: str, progress_signal, total_size: int, downloaded_ref: list[int], session=None, is_game_installation=False):
     os.makedirs(target_dir, exist_ok=True)

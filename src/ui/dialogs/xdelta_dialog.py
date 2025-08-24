@@ -10,18 +10,22 @@ from localization.manager import tr
 from utils.file_utils import get_file_filter
 from ui.widgets.custom_controls import NoScrollTabWidget
 from ui.styling import create_file_group_universal
-from config.constants import resource_path
+from utils.path_utils import resource_path
 
 class XdeltaDialog(QDialog):
 
     def _get_xdelta_path(self):
         system = platform.system()
         exe_name = 'xdelta3.exe' if system == 'Windows' else 'xdelta3'
-        path = resource_path(f'../resources/bin/{exe_name}')
+
+        path = resource_path(f'resources/bin/{exe_name}')
+
+        # fallback для dev mode (не собранного приложения)
         if not os.path.exists(path) and not getattr(sys, 'frozen', False):
             dev_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'resources', 'bin', exe_name))
             if os.path.exists(dev_path):
                 return dev_path
+
         return path if os.path.exists(path) else None
 
     def __init__(self, parent=None):

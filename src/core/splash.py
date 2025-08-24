@@ -89,7 +89,7 @@ class CustomSplashScreen(QSplashScreen):
 
 def create_png_splash():
     pixmap = QPixmap()
-    splash_path = resource_path('images/splash.png')
+    splash_path = resource_path('resources/images/splash.png')
     if not pixmap.load(splash_path):
         pixmap = QPixmap(600, 600)
         pixmap.fill(Qt.GlobalColor.transparent)
@@ -107,7 +107,7 @@ def create_png_splash():
 
 
 def create_splash():
-    gif_path = resource_path('images/splash.gif')
+    gif_path = resource_path('resources/images/splash.gif')
     if os.path.exists(gif_path):
         splash = CustomSplashScreen(gif_path=gif_path)
         return splash

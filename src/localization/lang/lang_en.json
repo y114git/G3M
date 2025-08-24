@@ -46,8 +46,6 @@
     "delete_button": "Delete",
     "delete_local_mod": "Delete local mod",
     "delete_mod": "Delete mod",
-    "demo_desc": "This mod was made for the demo and won't work with the full game.",
-    "demo_label": "FOR DEMO",
     "demo_slot": "DEMO slot",
     "descending": "Descending",
     "desktop_shortcut_filter": "Desktop Shortcut (*.desktop)",
@@ -89,7 +87,6 @@
     "installed_label": "Installed:",
     "installed_mods_label": "Installed Mods:",
     "language_label": "Language:",
-    "later_button": "Later",
     "launch_button": "Launch",
     "launcher_customization": "Customization",
     "leave_empty_for_default_icon": "Leave empty for default icon",
@@ -131,7 +128,6 @@
     "page_label": "Page {current} of {total}",
     "patch_apply_success": "Patch applied successfully!\\nModified file: {path}",
     "patch_file_label": "Patch file (.xdelta):",
-    "patch_file_not_found": "Patch file not found:\\n{path}",
     "patch_success": "Patch created successfully!\\nPath: {path}",
     "patching_tab": "Patching (XDELTA)",
     "placeholder_format": "<NICK> (<D$>)\\n<STATUS>",
@@ -207,7 +203,11 @@
     "mod_type_label": "Mod Type:",
     "deltarune_label": "DELTARUNE",
     "deltarunedemo_label": "DELTARUNE DEMO",
-    "undertale_label": "UNDERTALE"
+    "undertale_label": "UNDERTALE",
+    "patch__not_found": "Patch file not found",
+    "deltarune_desc": "This mod is for the full version of DELTARUNE.",
+    "undertale_desc": "This mod is for UNDERTALE and will not work with DELTARUNE.",
+    "deltarunedemo_desc": "This mod was made for the demo and won't work with the full game."
   },
   "files": {
     "archive_link": "Archive link",
@@ -453,7 +453,8 @@
     "startup_sound_selected": "Startup sound has been set!",
     "startup_sound_removed": "Startup sound has been removed!",
     "reset_settings_confirm_title": "Reset Settings",
-    "reset_settings_confirm_text": "Are you sure you want to reset all settings to their default values?\\n\\nThis action will affect:\\n- Game paths\\n- Customization settings (background, colors, music, startup sound)\\n- Library slots (installed mods will remain, but you will need to reassign them)\\n\\nUnaffected:\\n- Selected language\\n- Installed mods"
+    "reset_settings_confirm_text": "Are you sure you want to reset all settings to their default values?\\n\\nThis action will affect:\\n- Game paths\\n- Customization settings (background, colors, music, startup sound)\\n- Library slots (installed mods will remain, but you will need to reassign them)\\n\\nUnaffected:\\n- Selected language\\n- Installed mods",
+    "permission_error_message": "Permission error: {error}"
   },
   "errors": {
     "access_denied": "Access Denied",
@@ -464,8 +465,6 @@
     "archive_unpack_error": "Error unpacking archive {archive_name}: {error}",
     "changelog_load_failed": "Failed to load changelog",
     "chapter_folder_search_error": "Error searching for chapter folder: {error}",
-    "component_unavailable_apply": "An error occurred while applying the patch.\\nSome components are unavailable.",
-    "component_unavailable_create": "An error occurred while creating the patch.\\nSome components are unavailable.",
     "connection_error": "Connection Error",
     "copy_failed": "Could not copy:\n{error}",
     "data_structure_error": "Data structure error. Check all required fields.",
@@ -474,7 +473,6 @@
     "deletion_failed": "Could not delete:\n{error}",
     "description_http_error_code": "Error loading description: HTTP {code}",
     "description_load_error_details": "Error loading description: {error}",
-    "description_load_failed": "Failed to load description.",
     "direct_launch_error": "Direct launch error: chapter folder or EXE not found!",
     "edit_mod_internet": "Editing a public mod requires an internet connection.\nCheck your connection and try again.",
     "empty_folder_message": "No saves in selected folder.\\nRun the game, save, and try again.",
@@ -547,12 +545,9 @@
     "original_data_file_not_found": "Original data file not found in: {target_dir}\nExpected: data.win or game.ios",
     "patch_apply_error": "Error applying patch",
     "patch_apply_exception": "An error occurred: {error}",
-    "patch_apply_failed": "Patch apply operation failed.\\n\\nPerhaps the original file ({original}) does not match the version for which the patch was created, or the patch file ({patch}) is corrupted.",
-    "patch_create_error": "Error creating patch",
-    "patch_create_exception": "An error occurred: {error}",
-    "patch_create_failed": "Patch creation failed.\\nEnsure source files are correct and accessible for read/write.",
-    "patch_incompatible": "Failed to apply patch '{patch_name}'.\nTried both formats: data.win and game.ios.\nPatch may be incompatible with this game file.",
-    "patch_incompatible_details": "Failed to apply patch. Error: {error}",
+    "patch_create_error": "Patch Creation Error",
+    "patch_create_exception": "An exception occurred during patch creation: {error}",
+    "patch_incompatible_details": "The selected files are incompatible for patching. Ensure you are using the correct original and modified game files.",
     "patching_window_failed": "Failed to open patching window:\n{error}",
     "public_mod_internet": "Creating a public mod requires an internet connection.\nCheck connection and try again.",
     "rename_failed": "Could not rename:\n{error}",
@@ -566,7 +561,6 @@
     "specified_executable_not_found": "Specified executable not found",
     "submission_error_title": "Submission Error",
     "target_slot_not_found": "Could not find target slot.",
-    "temp_dir_delete_failed": "Failed to delete temp directory {temp_dir}: {error}",
     "unknown_path": "unknown path",
     "update_check_general_error": "Error checking for updates: {error}",
     "update_check_network_error": "Network error during update check: {error}",
@@ -602,7 +596,11 @@
     "startup_error_message": "An error occurred during startup: {details}",
     "startup_error_title": "Startup Error",
     "game_running_title": "Game Already Running",
-    "game_running_message": "Please close {game_name} before launching DELTAHUB."
+    "game_running_message": "Please close {game_name} before launching DELTAHUB.",
+    "installation_error": "Installation error: {error}",
+    "permission_error_install": "Permission error during installation: {error}",
+    "wine_not_found": "WINE/Proton not found. Please install it to run .exe files.",
+    "xdelta_not_found": "xdelta executable not found at: {path}"
   },
   "status": {
     "vanilla": "Vanilla",
@@ -680,9 +678,9 @@
     "updating_mod": "Updating mod {mod_name}...",
     "version_current": "Mod version is up to date.",
     "xdelta_patch_applied": "xdelta patch applied successfully: {patch_name}",
-    "xdelta_patch_applied_alt": "xdelta patch applied successfully with alt format: {patch_name}",
     "installer_launched_closing": "Installer launched. Closing launcher...",
-    "settings_reset_success": "Settings have been reset successfully."
+    "settings_reset_success": "Settings have been reset successfully.",
+    "unknown_size": "Unknown size"
   },
   "startup": {
     "launch_error": "Launch error: {error}",

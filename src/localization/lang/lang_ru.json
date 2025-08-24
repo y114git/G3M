@@ -46,8 +46,6 @@
     "delete_button": "Удалить",
     "delete_local_mod": "Удалить локальный мод",
     "delete_mod": "Удалить мод",
-    "demo_desc": "Мод был создан для демоверсии игры и не работает с полной версиией игры.",
-    "demo_label": "ДЛЯ ДЕМО",
     "demo_slot": "ДЕМО слот",
     "descending": "По убыванию",
     "desktop_shortcut_filter": "Ярлык рабочего стола (*.desktop)",
@@ -88,7 +86,6 @@
     "installed_label": "Установлен:",
     "installed_mods_label": "Установленные моды:",
     "language_label": "Язык:",
-    "later_button": "Позже",
     "launch_button": "Запустить",
     "launcher_customization": "Кастомизация",
     "leave_empty_for_default_icon": "Оставьте пустым для иконки по умолчанию",
@@ -134,7 +131,6 @@
     "page_label": "Страница {current} из {total}",
     "patch_apply_success": "Патч успешно применен!\nМодифицированный файл: {path}",
     "patch_file_label": "Файл патча (.xdelta):",
-    "patch_file_not_found": "Файл патча не найден:\n{path}",
     "patch_success": "Патч успешно создан!\nПуть: {path}",
     "patching_tab": "Патчинг (XDELTA)",
     "placeholder_format": "<НИК> (<D$>)\n<СТАТУС>",
@@ -207,7 +203,11 @@
     "verified_label": "Верифицирован ✓",
     "version_colon": "Версия:",
     "windows_shortcut_filter": "Ярлык Windows (*.bat)",
-    "full_install": "Полная установка"
+    "full_install": "Полная установка",
+    "patch__not_found": "Файл патча не найден",
+    "deltarune_desc": "Этот мод предназначен для полной версии DELTARUNE.",
+    "undertale_desc": "Этот мод предназначен для UNDERTALE и не будет работать с DELTARUNE.",
+    "deltarunedemo_desc": "Этот мод был создан для демоверсии игры и не работает с полной версиией игры."
   },
   "files": {
     "archive_link": "Ссылка на архив",
@@ -453,7 +453,8 @@
     "select_undertale_folder": "Выберите папку игры UNDERTALE",
     "undertale_not_found": "Не удалось найти UNDERTALE.",
     "reset_settings_confirm_title": "Сброс настроек",
-    "reset_settings_confirm_text": "Вы уверены, что хотите сбросить все настройки до значений по умолчанию?\n\nЭто действие затронет:\n- Пути к игре\n- Настройки кастомизации (фон, цвета, музыка, звук заставки)\n- Слоты в библиотеке (установленные моды останутся, но их нужно будет заново назначить)\n\nНе будут затронуты:\n- Выбранный язык\n- Установленные моды"
+    "reset_settings_confirm_text": "Вы уверены, что хотите сбросить все настройки до значений по умолчанию?\n\nЭто действие затронет:\n- Пути к игре\n- Настройки кастомизации (фон, цвета, музыка, звук заставки)\n- Слоты в библиотеке (установленные моды останутся, но их нужно будет заново назначить)\n\nНе будут затронуты:\n- Выбранный язык\n- Установленные моды",
+    "permission_error_message": "Ошибка прав доступа: {error}"
   },
   "errors": {
     "access_denied": "Ошибка прав доступа",
@@ -464,8 +465,6 @@
     "archive_unpack_error": "Ошибка распаковки архива {archive_name}: {error}",
     "changelog_load_failed": "Не удалось загрузить журнал изменений",
     "chapter_folder_search_error": "Ошибка при поиске папки главы: {error}",
-    "component_unavailable_apply": "Произошла ошибка при применении патча.\nНекоторые компоненты недоступны.",
-    "component_unavailable_create": "Произошла ошибка при создании патча.\nНекоторые компоненты недоступны.",
     "connection_error": "Ошибка подключения",
     "copy_failed": "Не удалось скопировать:\n{error}",
     "data_structure_error": "Ошибка в структуре данных. Проверьте заполнение всех обязательных полей.",
@@ -474,7 +473,6 @@
     "deletion_failed": "Не удалось удалить:\n{error}",
     "description_http_error_code": "Ошибка загрузки описания: HTTP {code}",
     "description_load_error_details": "Ошибка загрузки описания: {error}",
-    "description_load_failed": "Не удалось загрузить описание.",
     "description_md_txt_required": "Полное описание должно быть прямой ссылкой на .md или .txt файл.",
     "request_revoke_failed": "Не удалось отозвать заявку: {error}",
     "direct_launch_error": "Ошибка прямого запуска: папка главы или EXE не найден!",
@@ -553,12 +551,9 @@
     "original_data_file_not_found": "Оригинальный data файл не найден в папке: {target_dir}\nОжидались файлы: data.win или game.ios",
     "patch_apply_error": "Ошибка при применении патча",
     "patch_apply_exception": "Произошла ошибка: {error}",
-    "patch_apply_failed": "Операция применения патча завершилась с ошибкой.\n\nВозможно, оригинальный файл ({original}) не соответствует той версии, для которой был создан патч, или файл патча ({patch}) поврежден.",
     "patch_create_error": "Ошибка при создании патча",
     "patch_create_exception": "Произошла ошибка: {error}",
-    "patch_create_failed": "Операция создания патча завершилась с ошибкой.\nУбедитесь, что исходные файлы корректны и доступны для чтения/записи.",
-    "patch_incompatible": "Не удалось применить патч '{patch_name}'.\nПопробованы оба формата: data.win и game.ios.\nВозможно, патч несовместим с данным файлом игры.",
-    "patch_incompatible_details": "Не удалось применить патч. Ошибка: {error}",
+    "patch_incompatible_details": "Выбранные файлы несовместимы для создания патча. Убедитесь, что вы используете правильные оригинальные и измененные файлы игры.",
     "patching_window_failed": "Не удалось открыть окно патчинга:\n{error}",
     "public_mod_internet": "Для создания публичного мода требуется подключение к интернету.\nПроверьте подключение и попробуйте снова.",
     "rename_failed": "Не удалось переименовать:\n{error}",
@@ -571,7 +566,6 @@
     "specified_executable_not_found": "Указанный исполняемый файл не найден",
     "submission_error_title": "Ошибка отправки",
     "target_slot_not_found": "Не удалось найти целевой слот.",
-    "temp_dir_delete_failed": "Не удалось удалить временную директорию {temp_dir}: {error}",
     "unknown_path": "неизвестный путь",
     "update_check_general_error": "Ошибка при проверке обновлений: {error}",
     "update_check_network_error": "Ошибка сети при проверке обновлений: {error}",
@@ -602,7 +596,11 @@
     "startup_error_message": "Произошла ошибка при запуске: {details}",
     "startup_error_title": "Ошибка запуска",
     "game_running_title": "Игра уже запущена",
-    "game_running_message": "Пожалуйста, закройте {game_name} перед запуском DELTAHUB."
+    "game_running_message": "Пожалуйста, закройте {game_name} перед запуском DELTAHUB.",
+    "installation_error": "Ошибка установки: {error}",
+    "permission_error_install": "Ошибка прав доступа при установке: {error}",
+    "wine_not_found": "WINE/Proton не найден. Пожалуйста, установите его для запуска .exe файлов.",
+    "xdelta_not_found": "Исполняемый файл xdelta не найден по пути: {path}"
   },
   "status": {
     "vanilla": "Без изменений",
@@ -680,9 +678,9 @@
     "updating_mod": "Обновление мода {mod_name}...",
     "version_current": "Версия мода актуальна.",
     "xdelta_patch_applied": "xdelta патч успешно применен: {patch_name}",
-    "xdelta_patch_applied_alt": "xdelta патч успешно применен с альтернативным форматом: {patch_name}",
     "installer_launched_closing": "Установщик запущен. Закрытие лаунчера...",
-    "settings_reset_success": "Настройки успешно сброшены."
+    "settings_reset_success": "Настройки успешно сброшены.",
+    "unknown_size": "Неизвестный размер"
   },
   "startup": {
     "launch_error": "Ошибка запуска: {error}",

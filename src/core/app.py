@@ -51,14 +51,11 @@ _sound_instance = None
 
 
 def get_xdelta_path():
-    if getattr(sys, 'frozen', False):
-        application_path = os.path.dirname(sys.executable)
-    else:
-        application_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+    from utils.path_utils import resource_path
     xdelta_exe = 'xdelta3.exe' if platform.system() == 'Windows' else 'xdelta3'
-    xdelta_path = os.path.join(application_path, 'resources', 'bin', xdelta_exe)
+    xdelta_path = resource_path(f'resources/bin/{xdelta_exe}')
     if not os.path.exists(xdelta_path) and platform.system() != 'Windows':
-        xdelta_path_fallback = os.path.join(application_path, 'resources', 'bin', 'xdelta3.exe')
+        xdelta_path_fallback = resource_path('resources/bin/xdelta3.exe')
         if os.path.exists(xdelta_path_fallback):
             xdelta_path = xdelta_path_fallback
     if platform.system() != 'Windows' and os.path.exists(xdelta_path) and (not xdelta_path.lower().endswith('.exe')):
@@ -831,7 +828,7 @@ class DeltaHubApp(QWidget):
         self.tabs = {}
         self.chapter_btn_widget = QWidget()
         self.chapter_btn_widget.hide()
-        self.setWindowIcon(QIcon(resource_path('icons/icon.ico')))
+        self.setWindowIcon(QIcon(resource_path('resources/icons/icon.ico')))
 
     def _on_tab_changed(self, index):
         if index == 2:
@@ -2041,17 +2038,6 @@ class DeltaHubApp(QWidget):
             replacement_desc.setWordWrap(True)
             replacement_container.addWidget(replacement_desc)
             status_layout.addLayout(replacement_container)
-        if mod_data.modtype == 'deltarunedemo':
-            demo_container = QVBoxLayout()
-            demo_container.setSpacing(4)
-            demo_label = QLabel(tr('ui.demo_label'))
-            demo_label.setStyleSheet('color: #FF9800; font-weight: bold; font-size: 15px;')
-            demo_container.addWidget(demo_label)
-            demo_desc = QLabel(tr('ui.demo_desc'))
-            demo_desc.setStyleSheet('color: #FF9800; font-size: 11px; margin-left: 12px;')
-            demo_desc.setWordWrap(True)
-            demo_container.addWidget(demo_desc)
-            status_layout.addLayout(demo_container)
         right_layout.addStretch()
         header_layout.addLayout(right_layout)
         scroll_layout.addLayout(header_layout)
@@ -2655,7 +2641,7 @@ class DeltaHubApp(QWidget):
     def load_font(self):
         self.custom_font_family = None
         self._font_families_chain = list(DEFAULT_FONT_FALLBACK_CHAIN)
-        font_path = resource_path('fonts/main.ttf')
+        font_path = resource_path('resources/fonts/main.ttf')
         if os.path.exists(font_path):
             font_id = QFontDatabase.addApplicationFont(font_path)
             if font_id != -1:
@@ -2679,7 +2665,7 @@ class DeltaHubApp(QWidget):
             self.background_movie = None
         self.background_pixmap = None
         if not background_disabled:
-            background_path = self.local_config.get('custom_background_path') or resource_path(theme.get('background', ''))
+            background_path = self.local_config.get('custom_background_path') or resource_path(f"resources/{theme.get('background', '')}")
             if background_path:
                 self._bg_loader = BgLoader(background_path, self.size())
                 self._bg_loader.loaded.connect(self._on_bg_ready)
@@ -3587,7 +3573,7 @@ class DeltaHubApp(QWidget):
 
     def _load_launcher_icon(self):
         try:
-            splash_path = resource_path('images/splash.png')
+            splash_path = resource_path('resources/images/splash.png')
             if os.path.exists(splash_path):
                 pixmap = QPixmap(splash_path)
                 if not pixmap.isNull():
@@ -5748,7 +5734,7 @@ class DeltaHubApp(QWidget):
             elif system == 'Darwin':
                 content = f'#!/bin/bash\nnohup "{launcher_executable_path}" {args} > /dev/null 2>&1 &'
             else:
-                icon_path = resource_path('icons/icon.ico')
+                icon_path = resource_path('resources/icons/icon.ico')
                 content = f'[Desktop Entry]\nVersion=1.0\nType=Application\nName=Deltarune (DELTAHUB)\nExec="{launcher_executable_path}" {args}\nIcon={icon_path}\nTerminal=false\n'
             with open(shortcut_path, 'w', encoding='utf-8') as f:
                 f.write(content)

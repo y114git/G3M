@@ -29,3 +29,15 @@ def get_user_data_root() -> str:
 
 def get_user_mods_dir() -> str:
     return os.path.join(get_user_data_root(), 'mods')
+
+def resource_path(relative_path: str) -> str:
+    """ Get absolute path to resource, works for dev and for PyInstaller """
+    if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        # The spec file bundles the 'src' folder, so our base is _MEIPASS/src
+        base_path = os.path.join(getattr(sys, '_MEIPASS'), 'src')
+    else:
+        # In dev mode, the base path is the 'src' directory.
+        # This file is in src/utils, so we go up one level.
+        base_path = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    return os.path.join(base_path, relative_path)
