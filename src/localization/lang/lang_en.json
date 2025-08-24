@@ -48,7 +48,6 @@
     "delete_mod": "Delete mod",
     "demo_desc": "This mod was made for the demo and won't work with the full game.",
     "demo_label": "FOR DEMO",
-    "deltarune_desc": "This mod was made for Deltarune (Chapter 1+).",
     "demo_slot": "DEMO slot",
     "descending": "Descending",
     "desktop_shortcut_filter": "Desktop Shortcut (*.desktop)",
@@ -92,7 +91,7 @@
     "language_label": "Language:",
     "later_button": "Later",
     "launch_button": "Launch",
-    "launcher_customization": "Launcher Customization",
+    "launcher_customization": "Customization",
     "leave_empty_for_default_icon": "Leave empty for default icon",
     "library_tab": "Library",
     "file_replacement_desc": "The mod replaces original game files with direct copying.",
@@ -208,7 +207,6 @@
     "mod_type_label": "Mod Type:",
     "deltarune_label": "DELTARUNE",
     "deltarunedemo_label": "DELTARUNE DEMO",
-    "undertale_desc": "This mod was made for Undertale.",
     "undertale_label": "UNDERTALE"
   },
   "files": {
@@ -283,6 +281,7 @@
     "telegram": "TELEGRAM",
     "withdraw_request": "Withdraw request",
     "help": "Help & Info",
+    "reset_settings": "Reset",
     "select_background_music": "Select Background Music",
     "remove_background_music": "Remove Background Music",
     "select_startup_sound": "Change Startup Sound",
@@ -402,7 +401,6 @@
     "overwrite_selected_slot_collection": "Overwrite selected slot in collection?",
     "path_not_found": "Path not found",
     "path_not_specified": "Game path not specified.",
-    "permission_error_message": "Failed to save mod files due to a permission error.\n\n<b>Folder:</b> <code>{0}</code>\n\nEnsure the launcher has write permissions to its own folder and try again.",
     "request_pending": "Change request is pending review.",
     "request_sent_title": "Request Sent",
     "request_withdrawn": "Request withdrawn",
@@ -453,10 +451,14 @@
     "background_music_selected": "Background music has been set!",
     "background_music_removed": "Background music has been removed!",
     "startup_sound_selected": "Startup sound has been set!",
-    "startup_sound_removed": "Startup sound has been removed!"
+    "startup_sound_removed": "Startup sound has been removed!",
+    "reset_settings_confirm_title": "Reset Settings",
+    "reset_settings_confirm_text": "Are you sure you want to reset all settings to their default values?\\n\\nThis action will affect:\\n- Game paths\\n- Customization settings (background, colors, music, startup sound)\\n- Library slots (installed mods will remain, but you will need to reassign them)\\n\\nUnaffected:\\n- Selected language\\n- Installed mods"
   },
   "errors": {
     "access_denied": "Access Denied",
+    "already_running": "Another instance of DELTAHUB is already running.",
+    "already_running_title": "Already Running",
     "access_permission_error": "Access error. Check mod edit permissions.",
     "app_not_found_after_unpack": "DELTAHUB.app not found after unpacking.",
     "archive_unpack_error": "Error unpacking archive {archive_name}: {error}",
@@ -498,7 +500,6 @@
     "game_launch_error": "Error launching game: {error}",
     "game_launch_failed": "Failed to launch game:\n{error}",
     "hide_show_mod": "Hide mod",
-    "installation_error": "Installation error: {0}",
     "internet_required": "Managing mods requires an internet connection.\nCheck connection and try again.",
     "invalid_file": "Invalid file",
     "key_check_failed": "Failed to check key: {error}",
@@ -551,8 +552,8 @@
     "patch_create_exception": "An error occurred: {error}",
     "patch_create_failed": "Patch creation failed.\\nEnsure source files are correct and accessible for read/write.",
     "patch_incompatible": "Failed to apply patch '{patch_name}'.\nTried both formats: data.win and game.ios.\nPatch may be incompatible with this game file.",
+    "patch_incompatible_details": "Failed to apply patch. Error: {error}",
     "patching_window_failed": "Failed to open patching window:\n{error}",
-    "permission_error_install": "Permission error during installation.",
     "public_mod_internet": "Creating a public mod requires an internet connection.\nCheck connection and try again.",
     "rename_failed": "Could not rename:\n{error}",
     "request_revoke_failed": "Failed to revoke request: {error}",
@@ -576,7 +577,7 @@
     "update_list_failed": "List update error: {0}",
     "update_local_as_public": "Attempt to update local mod as public.",
     "update_permission_error": "Permission error during update.",
-    "url_error": "(URL Error)",
+    "url_error": "URL Error",
     "validation_data_error": "Data validation error. Check all fields are correct.",
     "validation_error": "(❌ validation error)",
     "working_directory_not_found": "Error: Working directory not found '{path}'",
@@ -595,7 +596,11 @@
     "icon_invalid": "Icon URL is invalid.",
     "not_a_file_response": "URL does not return a file.",
     "not_a_valid_file": "Not a valid file",
-    "mod_no_files": "Mod '{mod_name}' has no files to install."
+    "mod_no_files": "Mod '{mod_name}' has no files to install.",
+    "startup_error_message": "An error occurred during startup: {details}",
+    "startup_error_title": "Startup Error",
+    "game_running_title": "Game Already Running",
+    "game_running_message": "Please close {game_name} before launching DELTAHUB."
   },
   "status": {
     "vanilla": "Vanilla",
@@ -665,7 +670,6 @@
     "steam_launch": "Launch via Steam",
     "unknown_author_status": "Unknown",
     "unknown_mod": "Unknown mod",
-    "unknown_size": "? MB",
     "unpacking_and_installing": "Unpacking and installing...",
     "update_available": "Update available",
     "update_info_not_found": "Update information not found.",
@@ -675,7 +679,8 @@
     "version_current": "Mod version is up to date.",
     "xdelta_patch_applied": "xdelta patch applied successfully: {patch_name}",
     "xdelta_patch_applied_alt": "xdelta patch applied successfully with alt format: {patch_name}",
-    "installer_launched_closing": "Installer launched. Closing launcher..."
+    "installer_launched_closing": "Installer launched. Closing launcher...",
+    "settings_reset_success": "Settings have been reset successfully."
   },
   "startup": {
     "launch_error": "Launch error: {error}",

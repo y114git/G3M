@@ -3,6 +3,14 @@ name: Build and Release DELTAHUB (Linux + macOS x64 & arm64 + Windows)
 on:
   workflow_dispatch:
     inputs:
+      branch:
+        description: "Branch to build from"
+        required: true
+        type: choice
+        options:
+          - stable
+          - dev
+        default: 'stable'
       version_and_tag:
         description: "Release Version and Tag (e.g., v2.0.0 or v2.0.0-beta)"
         required: true
@@ -53,6 +61,8 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch }}
       - name: Set Archive Name
         id: set_names
         run: |
@@ -69,7 +79,7 @@ jobs:
       - name: Install pip deps
         run: |
           python -m pip install -U pip wheel
-          pip install -r requirements.txt pyinstaller
+          pip install -r builds/requirements.txt pyinstaller
       - name: Generate secrets_embed.py
         run: |
           python - <<'PY'
@@ -82,7 +92,7 @@ jobs:
           PY
       - name: Build via spec
         run: |
-          pyinstaller -y DELTAHUB.spec
+          pyinstaller -y builds/DELTAHUB.spec
           strip dist/DELTAHUB || true
           upx -9 dist/DELTAHUB || true
       - name: Cleanup secrets
@@ -103,6 +113,8 @@ jobs:
     runs-on: macos-13
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch }}
       - name: Set Archive Name
         id: set_names
         run: |
@@ -116,7 +128,7 @@ jobs:
       - name: Install pip deps
         run: |
           python -m pip install -U pip wheel
-          pip install -r requirements.txt pyinstaller
+          pip install -r builds/requirements.txt pyinstaller
       - name: Generate secrets_embed.py
         run: |
           python - <<'PY'
@@ -128,7 +140,7 @@ jobs:
             for k,v in vals.items(): f.write(f"{k}=d('{e(v)}')\n")
           PY
       - name: Build via spec (x86_64)
-        run: pyinstaller -y DELTAHUB.spec
+        run: pyinstaller -y builds/DELTAHUB.spec
       - name: Codesign (adhoc)
         run: codesign --force --deep --sign - "dist/DELTAHUB.app"
       - name: Cleanup secrets
@@ -146,6 +158,8 @@ jobs:
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch }}
       - name: Set Archive Name
         id: set_names
         run: |
@@ -159,7 +173,7 @@ jobs:
       - name: Install pip deps
         run: |
           python -m pip install -U pip wheel
-          pip install -r requirements.txt pyinstaller
+          pip install -r builds/requirements.txt pyinstaller
       - name: Generate secrets_embed.py
         run: |
           python - <<'PY'
@@ -171,7 +185,7 @@ jobs:
             for k,v in vals.items(): f.write(f"{k}=d('{e(v)}')\n")
           PY
       - name: Build via spec (arm64)
-        run: pyinstaller -y DELTAHUB.spec
+        run: pyinstaller -y builds/DELTAHUB.spec
       - name: Codesign (adhoc)
         run: codesign --force --deep --sign - "dist/DELTAHUB.app"
       - name: Cleanup secrets
@@ -189,6 +203,8 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch }}
       - name: Set Archive Names
         id: set_names
         shell: powershell
@@ -207,7 +223,7 @@ jobs:
       - name: Install pip deps
         run: |
           python -m pip install -U pip wheel
-          pip install -r requirements.txt pyinstaller
+          pip install -r builds/requirements.txt pyinstaller
       - name: Generate secrets_embed.py
         shell: powershell
         run: |
@@ -216,7 +232,7 @@ jobs:
           foreach ($k in $vals.Keys) { $b64=[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($vals[$k])); $py += "$k=d('$b64')"}
           $utf8NoBom = New-Object System.Text.UTF8Encoding($false); [System.IO.File]::WriteAllLines('secrets_embed.py',$py,$utf8NoBom)
       - name: Build via spec
-        run: pyinstaller -y DELTAHUB.spec
+        run: pyinstaller -y builds/DELTAHUB.spec
       - name: Create archive for portable exe
         shell: powershell
         run: Compress-Archive -Path dist\DELTAHUB.exe -DestinationPath "${{ steps.set_names.outputs.archive_path }}"
@@ -232,15 +248,15 @@ jobs:
         shell: powershell
         run: |
           $ver = $env:RELEASE_VERSION.TrimStart('v')
-          $content = Get-Content -Path setup.iss -Raw
+          $content = Get-Content -Path builds/setup.iss -Raw
           $newContent = $content -replace '(?m)^(#define\s+AppVersion\s+\").*?(\")$', "`$1$ver`$2"
           $utf8NoBomEncoding = New-Object System.Text.UTF8Encoding($false)
-          [System.IO.File]::WriteAllText("$pwd\setup.iss", $newContent, $utf8NoBomEncoding)
+          [System.IO.File]::WriteAllText("$pwd\builds\setup.iss", $newContent, $utf8NoBomEncoding)
           Write-Host "AppVersion successfully set to $ver in setup.iss"
       - name: Build installer (Inno Setup)
         shell: powershell
         run: |
-          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" setup.iss
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" builds/setup.iss
       - name: Create archive for setup exe
         shell: powershell
         run: |

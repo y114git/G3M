@@ -1,6 +1,6 @@
 # -*- mode: python ; coding: utf-8 -*-
 # Универсальный spec: одна точка входа, все ассеты внутри
-# Запускается:  pyinstaller -y DELTAHUB.spec
+# Запускается:  pyinstaller -y builds/DELTAHUB.spec
 
 block_cipher = None
 
@@ -21,10 +21,10 @@ else:
         binaries_extra.append((vcredist_dll, '.'))
 
 a = Analysis(
-    ['main.py', 'launcher.py', 'helpers.py'],
+    ['src/main.py'],  # Единственная точка входа в src/
     pathex=['.'],
     binaries=binaries_extra,
-    datas=[('assets', 'assets'), ('lang', 'lang')],
+    datas=[('src', 'src')],
     hiddenimports=[
         'psutil',
         'packaging',
@@ -60,7 +60,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     name='DELTAHUB',
-    icon='assets/icon.ico',
+    icon='src/resources/icons/icon.ico',
     console=False,
     upx=False,
 )
@@ -70,6 +70,6 @@ if sys.platform == 'darwin':
     app = BUNDLE(
         exe,
         name='DELTAHUB.app',
-        icon='assets/icon.icns',
+        icon='src/resources/icons/icon.icns',
         bundle_identifier='com.y114.deltahub'
     )
