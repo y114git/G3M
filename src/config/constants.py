@@ -2,7 +2,7 @@ import os
 import sys
 import platform
 from dotenv import load_dotenv
-LAUNCHER_VERSION = '2.0.0betasigma'
+LAUNCHER_VERSION = '2.0.0pre1'
 APP_ID = 'deltahub.y.114'
 
 def _load_config_sources():
