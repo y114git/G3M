@@ -3,6 +3,9 @@ import os
 import platform
 import sys
 import tempfile
+import subprocess
+import socket
+import threading
 import time
 import psutil
 from PyQt6.QtCore import QLibraryInfo, Qt, QTranslator, QTimer
@@ -10,11 +13,15 @@ from PyQt6.QtWidgets import QApplication, QMessageBox
 from localization.manager import get_localization_manager, tr
 from utils.audio_utils import play_deltahub_sound
 from core.splash import create_splash, create_png_splash
-from utils.path_utils import get_user_data_root
+from utils.path_utils import get_user_data_root, get_launcher_dir
+
+if platform.system() == "Windows":
+    import winreg
 
 def create_app_reference():
     from core.app import DeltaHubApp
     return DeltaHubApp
+SINGLE_INSTANCE_PORT = 48114
 _translator = QTranslator()
 _lock_file = None
 _splash_start_time = None
@@ -31,42 +38,53 @@ def check_game_processes():
             pass
     return None
 
+def register_url_protocol():
+    """Registers the deltahub:// URL protocol."""
+    if getattr(sys, 'frozen', False):
+        executable_path = f'"{sys.executable}"'
+    else:
+        # In dev mode, construct the command to run the main script
+        main_script_path = os.path.abspath(os.path.join(get_launcher_dir(), '..', 'src', 'main.py'))
+        executable_path = f'"{sys.executable}" "{main_script_path}"'
+
+    system = platform.system()
+    try:
+        if system == "Windows":
+            key_path = r"Software\Classes\deltahub"
+            with winreg.CreateKey(winreg.HKEY_CURRENT_USER, key_path) as key:
+                winreg.SetValue(key, "", winreg.REG_SZ, "URL:DELTAHUB Protocol")
+                winreg.SetValueEx(key, "URL Protocol", 0, winreg.REG_SZ, "")
+                
+                command_key_path = fr"{key_path}\shell\open\command"
+                with winreg.CreateKey(winreg.HKEY_CURRENT_USER, command_key_path) as command_key:
+                    # The "%1" is crucial for passing the URL to the application
+                    command = f'{executable_path} "%1"'
+                    winreg.SetValue(command_key, "", winreg.REG_SZ, command)
+        elif system == "Linux":
+            desktop_file_content = f"""[Desktop Entry]
+Name=DELTAHUB Launcher
+Exec={executable_path} %u
+Type=Application
+Terminal=false
+MimeType=x-scheme-handler/deltahub;
+"""
+            apps_dir = os.path.expanduser("~/.local/share/applications")
+            os.makedirs(apps_dir, exist_ok=True)
+            desktop_file_path = os.path.join(apps_dir, "deltahub.desktop")
+            with open(desktop_file_path, "w", encoding="utf-8") as f:
+                f.write(desktop_file_content)
+            
+            # Register the handler
+            subprocess.run(["xdg-mime", "default", "deltahub.desktop", "x-scheme-handler/deltahub"], check=False)
+    except Exception as e:
+        print(f"Failed to register URL protocol: {e}")
+
 def check_single_instance():
     global _lock_file
     temp_dir = tempfile.gettempdir()
     lock_file_path = os.path.join(temp_dir, 'deltahub_launcher.lock')
     if os.path.exists(lock_file_path):
-        try:
-            file_age = time.time() - os.path.getmtime(lock_file_path)
-            if file_age > 10:
-                os.remove(lock_file_path)
-            else:
-                with open(lock_file_path, 'r') as f:
-                    pid = int(f.read().strip())
-                process_alive = False
-                if platform.system() == 'Windows':
-                    import subprocess
-                    try:
-                        result = subprocess.check_output(['tasklist', '/FI', f'PID eq {pid}', '/FO', 'CSV'], creationflags=subprocess.CREATE_NO_WINDOW, text=True)
-                        lines = result.strip().split('\n')
-                        process_alive = len(lines) > 1 and str(pid) in result
-                    except subprocess.CalledProcessError:
-                        process_alive = False
-                else:
-                    try:
-                        os.kill(pid, 0)
-                        process_alive = True
-                    except OSError:
-                        process_alive = False
-                if process_alive:
-                    return False
-                else:
-                    os.remove(lock_file_path)
-        except Exception:
-            try:
-                os.remove(lock_file_path)
-            except Exception:
-                pass
+        return False
     try:
         _lock_file = open(lock_file_path, 'w')
         _lock_file.write(str(os.getpid()))
@@ -74,6 +92,31 @@ def check_single_instance():
         return True
     except Exception:
         return False
+
+class SingleInstanceServer(threading.Thread):
+    def __init__(self, app_instance):
+        super().__init__(daemon=True)
+        self.app_instance = app_instance
+
+    def run(self):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            try:
+                s.bind(("127.0.0.1", SINGLE_INSTANCE_PORT))
+                s.listen()
+                while True:
+                    conn, _ = s.accept()
+                    with conn:
+                        data = conn.recv(4096)
+                        if data:
+                            url = data.decode('utf-8')
+                            if url.startswith("deltahub://"):
+                                # Use a signal to safely call the handler in the main thread
+                                self.app_instance.url_received_signal.emit(url)
+            except OSError:
+                # Port is already in use, which shouldn't happen if client check worked, but good to handle.
+                pass 
+            except Exception as e:
+                print(f"Single instance server error: {e}")
 
 def setup_app():
     manager = get_localization_manager()
@@ -112,20 +155,35 @@ def run_app():
     parser.add_argument('--shortcut-launch', type=str)
     parser.add_argument('--shortcut-path', type=str)
     parser.add_argument('--force-start', action='store_true', help='Force start even if another instance is detected')
-    args = parser.parse_args()
+    args, unknown_args = parser.parse_known_args()
+    # Combine unknown args to find the URL
+    url_arg = next((arg for arg in sys.argv[1:] if arg.startswith('deltahub://')), None)
+
+    # Attempt to connect to an existing instance
+    try:
+        with socket.create_connection(("127.0.0.1", SINGLE_INSTANCE_PORT), timeout=1):
+            # Connection successful, another instance is running
+            if url_arg:
+                with socket.create_connection(("127.0.0.1", SINGLE_INSTANCE_PORT), timeout=1) as s:
+                    s.sendall(url_arg.encode('utf-8'))
+            # This instance should now exit
+            sys.exit(0)
+    except (socket.timeout, ConnectionRefusedError):
+        # No instance is running, so this one becomes the primary
+        pass
     if not args.force_start:
         running_game = check_game_processes()
         if running_game:
             app = setup_app()
             QMessageBox.critical(None, tr('errors.game_running_title'), tr('errors.game_running_message', game_name=running_game))
             sys.exit(1)
-    if not args.shortcut_launch and (not args.force_start) and (not check_single_instance()):
-        app = setup_app()
-        QMessageBox.critical(None, tr('errors.already_running_title'), tr('errors.already_running'))
-        sys.exit(1)
     if platform.system() == 'Linux' and (not args.shortcut_launch):
         os.environ.setdefault('NO_AT_BRIDGE', '1')
     app = setup_app()
+    try:
+        register_url_protocol()
+    except Exception as e:
+        print(f"Could not register protocol handler: {e}")
     if args.shortcut_launch:
         DeltaHubApp = create_app_reference()
         DeltaHubApp(args=args)
@@ -152,7 +210,9 @@ def run_app():
         def create_launcher_no_animation():
             try:
                 DeltaHubApp = create_app_reference()
-                launcher_app['instance'] = DeltaHubApp(parent_for_dialogs=splash)
+                launcher_app['instance'] = DeltaHubApp(parent_for_dialogs=splash, initial_url=url_arg)
+                server = SingleInstanceServer(launcher_app['instance'])
+                server.start()
                 launcher_app['instance'].initialization_finished.connect(close_splash_and_show_launcher)
                 QTimer.singleShot(15000, close_splash_and_show_launcher)
             except Exception as e:
@@ -227,7 +287,9 @@ def run_app():
     def create_launcher():
         try:
             DeltaHubApp = create_app_reference()
-            launcher_app['instance'] = DeltaHubApp(parent_for_dialogs=splash)
+            launcher_app['instance'] = DeltaHubApp(parent_for_dialogs=splash, initial_url=url_arg)
+            server = SingleInstanceServer(launcher_app['instance'])
+            server.start()
             launcher_app['instance'].initialization_finished.connect(close_splash_when_ready)
             QTimer.singleShot(15000, close_splash_when_ready)
         except Exception as e:

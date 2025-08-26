@@ -77,7 +77,7 @@
     "game_version_label": "Версия игры:",
     "hide_mod_button": "Спрятать мод",
     "hover_color": "Цвет выбора и наведения:",
-    "how_to_create_mod": "Выберите игру:",
+    "how_to_create_mod": "Выберите тип:",
     "icon_file_path_placeholder": "Путь к файлу иконки или оставьте пустым",
     "icon_preview": "Предпросмотр",
     "initialization": "Инициализация...",
@@ -207,7 +207,9 @@
     "patch__not_found": "Файл патча не найден",
     "deltarune_desc": "Этот мод предназначен для полной версии DELTARUNE.",
     "undertale_desc": "Этот мод предназначен для UNDERTALE и не будет работать с DELTARUNE.",
-    "deltarunedemo_desc": "Этот мод был создан для демоверсии игры и не работает с полной версиией игры."
+    "deltarunedemo_desc": "Этот мод был создан для демоверсии игры и не работает с полной версиией игры.",
+    "gamebanana_url_optional": "GameBanana URL (Необязательно)",
+    "view_on_gamebanana": "Посмотреть на GameBanana"
   },
   "files": {
     "archive_link": "Ссылка на архив",
@@ -454,7 +456,16 @@
     "undertale_not_found": "Не удалось найти UNDERTALE.",
     "reset_settings_confirm_title": "Сброс настроек",
     "reset_settings_confirm_text": "Вы уверены, что хотите сбросить все настройки до значений по умолчанию?\n\nЭто действие затронет:\n- Пути к игре\n- Настройки кастомизации (фон, цвета, музыка, звук заставки)\n- Слоты в библиотеке (установленные моды останутся, но их нужно будет заново назначить)\n\nНе будут затронуты:\n- Выбранный язык\n- Установленные моды",
-    "permission_error_message": "Ошибка прав доступа: {error}"
+    "permission_error_message": "Ошибка прав доступа: {error}",
+    "invalid_gamebanana_url": "Неверный URL. Ссылка должна начинаться с https://gamebanana.com/mods/",
+    "update_confirmation_title": "Мод уже установлен",
+    "update_confirmation_body": "Мод «{mod_name}» уже установлен. Хотите обновить его этой версией?",
+    "local_mod_warning_title": "Предупреждение о безопасности",
+    "local_mod_warning_body": "Внимание! Это непроверенный локальный мод. Он не проходил модерацию DELTAHUB. Вы уверены, что хотите продолжить установку?",
+    "install_in_progress_title": "Идет установка",
+    "install_in_progress_body": "Другая установка уже выполняется. Пожалуйста, дождитесь ее завершения.",
+    "local_mod_update_title": "Локальный мод уже существует",
+    "local_mod_update_body": "Локальный мод с названием «{mod_name}» уже установлен. Хотите заменить его файлы этой версией?"
   },
   "errors": {
     "access_denied": "Ошибка прав доступа",
@@ -600,7 +611,12 @@
     "installation_error": "Ошибка установки: {error}",
     "permission_error_install": "Ошибка прав доступа при установке: {error}",
     "wine_not_found": "WINE/Proton не найден. Пожалуйста, установите его для запуска .exe файлов.",
-    "xdelta_not_found": "Исполняемый файл xdelta не найден по пути: {path}"
+    "xdelta_not_found": "Исполняемый файл xdelta не найден по пути: {path}",
+    "config_not_found_in_archive": "Неверный архив мода: файл config.json не найден.",
+    "mod_is_banned": "Этот мод был заблокирован и не может быть установлен.",
+    "unsupported_archive_format": "Неподдерживаемый формат архива.",
+    "no_valid_url_found": "В ссылке не найден корректный URL (HTTP/HTTPS).",
+    "smart_install_mod_not_found": "Ошибка умной установки: Мод с указанным ключом не найден на серверах DELTAHUB."
   },
   "status": {
     "vanilla": "Без изменений",
@@ -680,7 +696,13 @@
     "xdelta_patch_applied": "xdelta патч успешно применен: {patch_name}",
     "installer_launched_closing": "Установщик запущен. Закрытие лаунчера...",
     "settings_reset_success": "Настройки успешно сброшены.",
-    "unknown_size": "Неизвестный размер"
+    "unknown_size": "Неизвестный размер",
+    "downloading_from_external": "Загрузка мода из внешнего источника...",
+    "smart_install_starting": "Умная установка: «{mod_name}» будет установлен с серверов DELTAHUB.",
+    "update_cancelled": "Обновление отменено пользователем.",
+    "install_cancelled_by_user": "Установка отменена пользователем.",
+    "unpacking_mod": "Распаковка мода: {mod_name}...",
+    "install_complete_success": "Мод «{mod_name}» успешно установлен!"
   },
   "startup": {
     "launch_error": "Ошибка запуска: {error}",

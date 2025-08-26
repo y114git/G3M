@@ -78,7 +78,7 @@
     "game_version_label": "Game Version:",
     "hide_mod_button": "Hide Mod",
     "hover_color": "Select & Hover Color:",
-    "how_to_create_mod": "Choose game:",
+    "how_to_create_mod": "Choose type:",
     "icon_file_path_placeholder": "Path to icon file or leave empty",
     "icon_preview": "Preview",
     "initialization": "Initializing...",
@@ -207,7 +207,9 @@
     "patch__not_found": "Patch file not found",
     "deltarune_desc": "This mod is for the full version of DELTARUNE.",
     "undertale_desc": "This mod is for UNDERTALE and will not work with DELTARUNE.",
-    "deltarunedemo_desc": "This mod was made for the demo and won't work with the full game."
+    "deltarunedemo_desc": "This mod was made for the demo and won't work with the full game.",
+    "gamebanana_url_optional": "GameBanana URL (Optional)",
+    "view_on_gamebanana": "View on GameBanana"
   },
   "files": {
     "archive_link": "Archive link",
@@ -454,7 +456,16 @@
     "startup_sound_removed": "Startup sound has been removed!",
     "reset_settings_confirm_title": "Reset Settings",
     "reset_settings_confirm_text": "Are you sure you want to reset all settings to their default values?\\n\\nThis action will affect:\\n- Game paths\\n- Customization settings (background, colors, music, startup sound)\\n- Library slots (installed mods will remain, but you will need to reassign them)\\n\\nUnaffected:\\n- Selected language\\n- Installed mods",
-    "permission_error_message": "Permission error: {error}"
+    "permission_error_message": "Permission error: {error}",
+    "invalid_gamebanana_url": "Invalid URL. The link must start with https://gamebanana.com/mods/",
+    "update_confirmation_title": "Mod Already Installed",
+    "update_confirmation_body": "Mod '{mod_name}' is already installed. Do you want to update it with this version?",
+    "local_mod_warning_title": "Security Warning",
+    "local_mod_warning_body": "Attention! This is an unverified local mod. It has not been moderated by DELTAHUB. Are you sure you want to proceed with the installation?",
+    "install_in_progress_title": "Installation in Progress",
+    "install_in_progress_body": "Another installation is already in progress. Please wait for it to complete.",
+    "local_mod_update_title": "Local Mod Exists",
+    "local_mod_update_body": "A local mod named '{mod_name}' is already installed. Do you want to replace its files with this version?"
   },
   "errors": {
     "access_denied": "Access Denied",
@@ -600,7 +611,12 @@
     "installation_error": "Installation error: {error}",
     "permission_error_install": "Permission error during installation: {error}",
     "wine_not_found": "WINE/Proton not found. Please install it to run .exe files.",
-    "xdelta_not_found": "xdelta executable not found at: {path}"
+    "xdelta_not_found": "xdelta executable not found at: {path}",
+    "config_not_found_in_archive": "Invalid mod archive: config.json not found.",
+    "mod_is_banned": "This mod has been blocked and cannot be installed.",
+    "unsupported_archive_format": "Unsupported archive format.",
+    "no_valid_url_found": "No valid HTTP/HTTPS URL found in the link.",
+    "smart_install_mod_not_found": "Smart Install Failed: The mod with the specified key could not be found on DELTAHUB servers."
   },
   "status": {
     "vanilla": "Vanilla",
@@ -680,7 +696,13 @@
     "xdelta_patch_applied": "xdelta patch applied successfully: {patch_name}",
     "installer_launched_closing": "Installer launched. Closing launcher...",
     "settings_reset_success": "Settings have been reset successfully.",
-    "unknown_size": "Unknown size"
+    "unknown_size": "Unknown size",
+    "downloading_from_external": "Downloading mod from external source...",
+    "smart_install_starting": "Smart Install: '{mod_name}' will be installed from DELTAHUB servers.",
+    "update_cancelled": "Update cancelled by user.",
+    "install_cancelled_by_user": "Installation cancelled by user.",
+    "unpacking_mod": "Unpacking mod: {mod_name}...",
+    "install_complete_success": "Successfully installed '{mod_name}'!"
   },
   "startup": {
     "launch_error": "Launch error: {error}",

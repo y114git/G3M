@@ -33,7 +33,7 @@ from utils.path_utils import get_user_data_root, get_launcher_dir, get_legacy_yl
 from utils.network_utils import check_internet_connection
 from threads.fetch_mods import FetchModsThread
 from threads.game_monitor import GameMonitorThread
-from threads.background_workers import PresenceWorker, FetchChangelogThread, BgLoader, FullInstallThread, InstallModsThread
+from threads.background_workers import PresenceWorker, FetchChangelogThread, BgLoader, FullInstallThread, InstallModsThread, GameBananaInstallThread, FetchHelpContentThread
 from ui.styling import get_theme_color, clear_layout_widgets, load_mod_icon_universal, show_empty_message_in_layout
 from ui.widgets.custom_controls import NoScrollComboBox, NoScrollTabWidget, ClickableLabel, SlotFrame
 from ui.widgets.outlined_label import OutlinedTextLabel
@@ -78,10 +78,13 @@ class DeltaHubApp(QWidget):
     mods_loaded_signal = pyqtSignal()
     update_info_ready = pyqtSignal(dict)
     update_cleanup = pyqtSignal()
+    url_received_signal = pyqtSignal(str)
+    install_from_gb_signal = pyqtSignal(object)
 
-    def __init__(self, args: Optional[argparse.Namespace] = None, parent_for_dialogs: Optional[QWidget] = None):
+    def __init__(self, args: Optional[argparse.Namespace] = None, parent_for_dialogs: Optional[QWidget] = None, initial_url: str | None = None):
         super().__init__()
         self.is_shortcut_launch = args and args.shortcut_launch
+        self._pending_install_url = initial_url
         self.dialog_parent = parent_for_dialogs or self
         self.session_id = uuid.uuid4().hex
         self._init_session()
@@ -152,6 +155,9 @@ class DeltaHubApp(QWidget):
         self.mods_loaded_signal.connect(self._on_mods_loaded)
         self.update_info_ready.connect(self._handle_update_info)
         self.update_cleanup.connect(self._on_update_cleanup)
+        self.url_received_signal.connect(self.handle_one_click_install)
+        self.install_from_gb_signal.connect(lambda mod: self._install_single_mod(mod, force=True))
+        self.initialization_finished.connect(self._handle_pending_install)
         self._legacy_cleanup_done = False
         QTimer.singleShot(1000, self._maybe_run_legacy_cleanup)
         self.initialization_timer = QTimer()
@@ -164,6 +170,53 @@ class DeltaHubApp(QWidget):
                 self.restoreGeometry(QByteArray.fromHex(saved.encode()))
             except Exception:
                 pass
+
+    def _handle_pending_install(self):
+        """Handles a URL passed at launch, after the app is initialized."""
+        if self._pending_install_url:
+            self.handle_one_click_install(self._pending_install_url)
+            self._pending_install_url = None
+
+    def handle_one_click_install(self, url: str):
+        """Starts the 1-click installation process from a URL."""
+        if is_game_running():
+            return
+        self.activateWindow()
+        self.raise_()
+
+        if self.is_installing:
+            QMessageBox.warning(self, tr('dialogs.install_in_progress_title'), tr('dialogs.install_in_progress_body'))
+            return
+
+        self.gb_install_thread = GameBananaInstallThread(self, url)
+        self.gb_install_thread.status.connect(self._update_status)
+        self.gb_install_thread.progress.connect(self.progress_bar.setValue)
+        self.gb_install_thread.finished.connect(self._on_gb_install_finished)
+        self.gb_install_thread.prompt_required.connect(self._handle_gb_thread_prompt)
+        
+        self.is_installing = True
+        self._set_install_buttons_enabled(False)
+        self.progress_bar.setVisible(True)
+        self.progress_bar.setValue(0)
+        self.gb_install_thread.start()
+
+    def _handle_thread_prompt(self, title, message, event, result_list):
+        reply = QMessageBox.question(self, title, message, QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        result_list.append(reply == QMessageBox.StandardButton.Yes)
+        event.set()
+
+    def _on_gb_install_finished(self, success: bool, message: str):
+        self.is_installing = False
+        self._set_install_buttons_enabled(True)
+        self.progress_bar.setVisible(False)
+        self._update_installed_mods_display()
+        status_color = UI_COLORS['status_success'] if success else UI_COLORS['status_error']
+        self._update_status(message, status_color)
+
+    def _handle_gb_thread_prompt(self, title, message):
+        reply = QMessageBox.question(self, title, message, QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        self.gb_install_thread.prompt_result = (reply == QMessageBox.StandardButton.Yes)
+        self.gb_install_thread.prompt_event.set()
 
     def _init_session(self):
         try:
@@ -392,7 +445,13 @@ class DeltaHubApp(QWidget):
             for mod_key, config_data in installed_mods.items():
                 if mod_key not in existing_keys and config_data.get('is_local_mod'):
                     try:
-                        safe_mod_info = {'key': mod_key, 'name': config_data.get('name', tr('defaults.local_mod')), 'version': config_data.get('version', '1.0.0'), 'author': config_data.get('author', tr('defaults.unknown')), 'tagline': config_data.get('tagline', tr('defaults.no_description')), 'game_version': config_data.get('game_version', tr('defaults.not_specified')), 'description_url': '', 'downloads': 0, 'modtype': config_data.get('modtype', 'deltarune'), 'is_verified': False, 'icon_url': '', 'tags': ['local'], 'hide_mod': False, 'is_xdelta': False, 'ban_status': False, 'demo_url': None, 'demo_version': '1.0.0', 'created_date': config_data.get('created_date', 'N/A'), 'last_updated': config_data.get('created_date', 'N/A')}
+                        safe_mod_info = {'key': mod_key, 'name': config_data.get('name', tr('defaults.local_mod')), 'version': config_data.get('version', '1.0.0'),
+                                         'author': config_data.get('author', tr('defaults.unknown')), 'tagline': config_data.get('tagline', tr('defaults.no_description')),
+                                         'game_version': config_data.get('game_version', tr('defaults.not_specified')), 'description_url': '', 'downloads': 0,
+                                         'modtype': config_data.get('modtype', 'deltarune'), 'is_verified': False, 'icon_url': '', 'tags': ['local'],
+                                         'hide_mod': False, 'is_xdelta': False, 'ban_status': False, 'demo_url': None, 'demo_version': '1.0.0',
+                                         'created_date': config_data.get('created_date', 'N/A'), 'last_updated': config_data.get('created_date', 'N/A'),
+                                         'gamebanana_url': config_data.get('gamebanana_url')}
                         mod = ModInfo(**safe_mod_info)
                         files_data = config_data.get('files', {})
                         mod_folder_path = None
@@ -1717,6 +1776,7 @@ class DeltaHubApp(QWidget):
                     if config_data:
                         config_data['is_available_on_server'] = config_data.get('is_available_on_server', False)
                         config_data['is_local_mod'] = config_data.get('is_local_mod', False)
+                        config_data['folder_name'] = folder_name
                         installed_mods.append(config_data)
                 except Exception as e:
                     logging.warning(f'Failed to read config {config_path}: {e}')
@@ -1951,6 +2011,11 @@ class DeltaHubApp(QWidget):
         left_layout.addStretch()
         header_layout.addWidget(left_container)
         right_layout = QVBoxLayout()
+        if hasattr(mod_data, 'gamebanana_url') and mod_data.gamebanana_url:
+            gb_button = QPushButton(tr('ui.view_on_gamebanana'))
+            gb_button.clicked.connect(lambda: webbrowser.open(mod_data.gamebanana_url))
+            gb_button.setStyleSheet('color: #FFD700; font-weight: bold;')
+            right_layout.addWidget(gb_button)
         title_label = QLabel(f'<h2>{mod_data.name}</h2>')
         title_label.setWordWrap(True)
         right_layout.addWidget(title_label)
@@ -2401,9 +2466,9 @@ class DeltaHubApp(QWidget):
             return
         self._install_single_mod(mod)
 
-    def _install_single_mod(self, mod):
+    def _install_single_mod(self, mod, force=False):
         try:
-            if self.is_installing:
+            if self.is_installing and not force:
                 return
             available_chapters = []
             if mod.modtype == 'undertale':
@@ -2571,7 +2636,7 @@ class DeltaHubApp(QWidget):
             return
         self._install_single_mod(mod_data)
 
-    def _on_mod_install_finished(self, success):
+    def _on_mod_install_finished(self, success, from_gb=False):
         self.is_installing = False
         self._set_install_buttons_enabled(True)
         self.current_install_thread = None
@@ -3460,7 +3525,6 @@ class DeltaHubApp(QWidget):
         self._update_settings_page_visibility()
 
     def _load_help_content(self):
-        from threads.background_workers import FetchHelpContentThread
         manager = get_localization_manager()
         current_language = manager.get_current_language() if manager else 'en'
         if current_language == 'ru':
@@ -4909,6 +4973,7 @@ class DeltaHubApp(QWidget):
         self.showNormal()
         self.activateWindow()
         self.raise_()
+        self.saves_button.setEnabled(True)
         self.progress_bar.setVisible(False)
         self._update_action_button_state()
         QTimer.singleShot(100, self.updateGeometry)
