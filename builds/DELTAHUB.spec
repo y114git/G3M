@@ -79,5 +79,13 @@ if sys.platform == 'darwin':
         exe,
         name='DELTAHUB.app',
         icon='../src/resources/icons/icon.icns',
-        bundle_identifier='com.y114.deltahub'
+        bundle_identifier='com.y114.deltahub',
+        info_plist={
+            'CFBundleURLTypes': [
+                {
+                    'CFBundleURLName': 'DELTAHUB Mod URL',
+                    'CFBundleURLSchemes': ['deltahub']
+                }
+            ]
+        }
     )

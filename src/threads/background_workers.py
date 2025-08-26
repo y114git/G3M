@@ -1,11 +1,16 @@
 import os
+import threading
 import time
 import requests
+import zipfile
+import rarfile
+import py7zr
 from PyQt6.QtCore import QObject, QThread, pyqtSignal
 from PyQt6.QtGui import QImage
 from config.constants import CLOUD_FUNCTIONS_BASE_URL, BROWSER_HEADERS, UI_COLORS
 from utils.file_utils import download_and_extract_archive
 from localization.manager import tr
+from utils.file_utils import get_unique_mod_dir
 
 class PresenceWorker(QObject):
     finished, update_online_count = (pyqtSignal(), pyqtSignal(int))
@@ -197,74 +202,8 @@ class InstallModsThread(QThread):
 
     def _increment_downloads_for_installed_mods(self, installed_mods):
         try:
-            for mod_key in installed_mods:
-                if not mod_key.startswith('local_') and self._can_increment_download_by_config(mod_key):
-                    if self._increment_mod_downloads_on_server(mod_key):
-                        self._update_install_date_in_config(mod_key)
-        except Exception:
-            pass
-
-    def _get_user_ip(self):
-        try:
-            response = requests.get('https://api.ipify.org', timeout=5)
-            return response.text.strip()
-        except Exception:
-            return '127.0.0.1'
-
-    def _get_global_rate_limit_data(self):
-        try:
-            from utils.path_utils import get_user_data_root
-            config_path = os.path.join(get_user_data_root(), 'cache', 'rate_limit_data.json')
-            if os.path.exists(config_path):
-                return self.main_window._read_json(config_path)
-            return {}
-        except Exception:
-            return {}
-
-    def _update_global_rate_limit_data(self, mod_key):
-        try:
-            current_ip = self._get_user_ip()
-            from utils.path_utils import get_user_data_root
-            config_path = os.path.join(get_user_data_root(), 'cache', 'rate_limit_data.json')
-            rate_limit_data = self._get_global_rate_limit_data()
-            ip_mod_key = f'{current_ip}:{mod_key}'
-            now_str = time.strftime('%Y-%m-%d %H:%M:%S')
-            rate_limit_data[ip_mod_key] = now_str
-            self.main_window._write_json(config_path, rate_limit_data)
-        except Exception:
-            pass
-
-    def _can_increment_download_by_config(self, mod_key):
-        try:
-            import datetime
-            current_ip = self._get_user_ip()
-            rate_limit_data = self._get_global_rate_limit_data()
-            ip_mod_key = f'{current_ip}:{mod_key}'
-            last_increment_time = rate_limit_data.get(ip_mod_key, '')
-            if not last_increment_time:
-                return True
-            last_increment_dt = datetime.datetime.strptime(last_increment_time, '%Y-%m-%d %H:%M:%S')
-            time_diff = datetime.datetime.now() - last_increment_dt
-            return time_diff.total_seconds() >= 43200
-        except Exception:
-            return False
-
-    def _update_install_date_in_config(self, mod_key):
-        try:
-            for folder_name in os.listdir(self.main_window.mods_dir):
-                config_path = os.path.join(self.main_window.mods_dir, folder_name, 'config.json')
-                if os.path.isfile(config_path):
-                    try:
-                        config_data = self.main_window._read_json(config_path)
-                        if config_data.get('mod_key') == mod_key:
-                            now_str = time.strftime('%Y-%m-%d %H:%M:%S')
-                            config_data['installed_date'] = now_str
-                            config_data['last_download_increment'] = now_str
-                            self.main_window._write_json(config_path, config_data)
-                            self._update_global_rate_limit_data(mod_key)
-                            return
-                    except Exception:
-                        continue
+            for mod_key in [key for key in installed_mods if not key.startswith('local_')]:
+                self._increment_mod_downloads_on_server(mod_key)
         except Exception:
             pass
 
@@ -474,7 +413,6 @@ class InstallModsThread(QThread):
                         if chapter_data.data_file_version:
                             versions_dict['data'] = chapter_data.data_file_version
                         if chapter_data.data_file_url:
-                            file_info['data_file_url'] = chapter_data.data_file_url
                             file_info['data_file_version'] = chapter_data.data_file_version
                         extra_files_dict = {}
                         for extra_file in chapter_data.extra_files:
@@ -547,6 +485,216 @@ class InstallModsThread(QThread):
                 except Exception:
                     pass
 
+class GameBananaInstallThread(QThread):
+    status = pyqtSignal(str, str)
+    progress = pyqtSignal(int)
+    finished = pyqtSignal(bool, str)
+    prompt_required = pyqtSignal(str, str)
+
+    def __init__(self, main_window, url: str):
+        super().__init__(main_window)
+        self.main_window = main_window
+        self.url = url
+        self.prompt_event = threading.Event()
+        self.prompt_result = False
+
+    def run(self):
+        import tempfile
+        import shutil
+        import json
+
+        with tempfile.TemporaryDirectory(prefix='gb-install-') as temp_dir:
+            try:
+                # 1. Download
+                if not self.url.startswith("deltahub://"):
+                    raise ValueError("Invalid URL scheme")
+                
+                content = self.url[len("deltahub://"):]
+                parts = content.split(',')
+                url_part = parts[0]
+
+                # Find the start of http and reconstruct, correcting common mangling.
+                http_pos = url_part.find('http')
+                if http_pos == -1:
+                    raise ValueError(tr('errors.no_valid_url_found'))
+
+                download_url = url_part[http_pos:]
+                if not download_url.startswith(('http://', 'https://')):
+                    download_url = download_url.replace('https//', 'https://').replace('http//', 'http://')
+                self.status.emit(tr('status.downloading_from_external'), UI_COLORS['status_warning'])
+                archive_path = self._download_archive(download_url, temp_dir)
+
+                # 2. Inspect for config.json
+                config_data_from_archive = self._extract_and_read_config(archive_path)
+                if config_data_from_archive is None:
+                    raise ValueError(tr('errors.config_not_found_in_archive'))
+
+                mod_name_from_archive = config_data_from_archive.get('name', 'Unknown Mod')
+
+                # 3. Decision Logic
+                mod_key = config_data_from_archive.get('mod_key')
+                is_local = config_data_from_archive.get('is_local_mod', not bool(mod_key))
+
+                if mod_key and not is_local:
+                    # Public Mod Flow
+                    mod_info = next((m for m in self.main_window.all_mods if m.key == mod_key), None)
+                    mod_name = mod_info.name if mod_info else mod_name_from_archive
+                    if mod_info and mod_info.ban_status: 
+                        raise ValueError(tr('errors.mod_is_banned'))
+
+                    if self._is_metadata_only(archive_path):
+                        if not mod_info:
+                            raise ValueError(tr('errors.smart_install_mod_not_found'))
+                        self.status.emit(tr('status.smart_install_starting', mod_name=mod_name), UI_COLORS['status_info'])
+                        self.main_window.install_from_gb_signal.emit(mod_info)
+                        return
+                    if self.main_window._is_mod_installed(mod_key):
+                        result = self._ask_user(tr('dialogs.update_confirmation_title', mod_name=mod_name), tr('dialogs.update_confirmation_body', mod_name=mod_name))
+                        if not result:
+                            self.finished.emit(False, tr('status.update_cancelled'))
+                            return
+                else:
+                    mod_name = mod_name_from_archive
+                    # 1. Security warning first
+                    result = self._ask_user(tr('dialogs.local_mod_warning_title'), tr('dialogs.local_mod_warning_body'))
+                    if not result:
+                        self.finished.emit(False, tr('status.install_cancelled_by_user'))
+                        return
+                    
+                    # 2. Then, check for existing mod and ask to update
+                    installed_mods = self.main_window._get_installed_mods_list()
+                    existing_local_mod = next((m for m in installed_mods if m.get('is_local_mod') and m.get('name') == mod_name), None)
+                    if existing_local_mod:
+                        update_result = self._ask_user(tr('dialogs.local_mod_update_title'), tr('dialogs.local_mod_update_body', mod_name=mod_name))
+                        if not update_result:
+                            self.finished.emit(False, tr('status.install_cancelled_by_user'))
+                            return
+                existing_folder_name = None
+                if 'existing_local_mod' in locals() and existing_local_mod:
+                    existing_folder_name = existing_local_mod.get('folder_name')
+                elif mod_key and self.main_window._is_mod_installed(mod_key):
+                    installed_mods = self.main_window._get_installed_mods_list()
+                    existing_public_mod = next((m for m in installed_mods if m.get('mod_key') == mod_key), None)
+                    if existing_public_mod:
+                        existing_folder_name = existing_public_mod.get('folder_name')
+
+                # 4. Unpack and Install
+                self.status.emit(tr('status.unpacking_mod', mod_name=mod_name), UI_COLORS['status_info'])
+                folder_name = existing_folder_name or get_unique_mod_dir(self.main_window.mods_dir, mod_name)
+                config_data = config_data_from_archive
+                target_mod_dir = os.path.join(self.main_window.mods_dir, existing_folder_name or get_unique_mod_dir(self.main_window.mods_dir, mod_name))
+
+                # Clean destination if it's an update
+                if os.path.exists(target_mod_dir):
+                    shutil.rmtree(target_mod_dir)
+                os.makedirs(target_mod_dir)
+
+                self._extract_full_archive(archive_path, target_mod_dir)
+
+                # Ensure the config file is in the final location
+                final_config_path = os.path.join(target_mod_dir, 'config.json')
+                if not os.path.exists(final_config_path):
+                     self.main_window._write_json(final_config_path, config_data)
+
+                self.finished.emit(True, tr('status.install_complete_success', mod_name=mod_name))
+
+            except Exception as e:
+                self.finished.emit(False, str(e))
+    
+    def _ask_user(self, title: str, message: str) -> bool:
+        self.prompt_event.clear()
+        self.prompt_required.emit(title, message)
+        self.prompt_event.wait() # Block until the main thread sets the event
+        return self.prompt_result
+
+    def _download_archive(self, url: str, temp_dir: str) -> str:
+        from urllib.parse import urlparse, unquote
+
+        parsed_url = urlparse(url)
+        filename = unquote(os.path.basename(parsed_url.path))
+        if not filename:
+            filename = "mod.zip"
+
+        archive_path = os.path.join(temp_dir, filename)
+        
+        response = requests.get(url, stream=True, timeout=30, headers=BROWSER_HEADERS)
+        response.raise_for_status()
+
+        total_size = int(response.headers.get('content-length', 0))
+        downloaded_size = 0
+
+        with open(archive_path, 'wb') as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                f.write(chunk)
+                downloaded_size += len(chunk)
+                if total_size > 0:
+                    progress = int(downloaded_size * 100 / total_size)
+                    self.progress.emit(progress)
+        
+        self.progress.emit(100)
+        return archive_path
+
+    def _extract_and_read_config(self, archive_path: str) -> dict | None:
+        import json
+        archive_path_lower = archive_path.lower()
+        config_content = None
+
+        try:
+            if archive_path_lower.endswith('.zip'):
+                with zipfile.ZipFile(archive_path, 'r') as zf:
+                    if 'config.json' in zf.namelist():
+                        config_content = zf.read('config.json')
+            elif archive_path_lower.endswith('.rar'):
+                with rarfile.RarFile(archive_path, 'r') as rf:
+                    if 'config.json' in rf.namelist():
+                        config_content = rf.read('config.json')
+            elif archive_path_lower.endswith('.7z'):
+                with py7zr.SevenZipFile(archive_path, mode='r') as zf:
+                    if 'config.json' in zf.getnames():
+                        # Extract just the config to a temp location to read it, avoiding memory read issues
+                        extract_dir = os.path.join(os.path.dirname(archive_path), "7z_config")
+                        zf.extract(path=extract_dir, targets=['config.json'])
+                        config_file_path = os.path.join(extract_dir, 'config.json')
+                        if os.path.exists(config_file_path):
+                            with open(config_file_path, 'rb') as f:
+                                config_content = f.read()
+            
+            if config_content:
+                return json.loads(config_content)
+        except Exception:
+            return None
+        return None
+
+    def _is_metadata_only(self, archive_path: str) -> bool:
+        archive_path_lower = archive_path.lower()
+        try:
+            if archive_path_lower.endswith('.zip'):
+                with zipfile.ZipFile(archive_path, 'r') as zf:
+                    return len(zf.namelist()) == 1 and zf.namelist()[0] == 'config.json'
+            elif archive_path_lower.endswith('.rar'):
+                with rarfile.RarFile(archive_path, 'r') as rf:
+                    return len(rf.namelist()) == 1 and rf.namelist()[0] == 'config.json'
+            elif archive_path_lower.endswith('.7z'):
+                with py7zr.SevenZipFile(archive_path, mode='r') as zf:
+                    return len(zf.getnames()) == 1 and zf.getnames()[0] == 'config.json'
+        except Exception:
+            return False
+        return False
+    
+    def _extract_full_archive(self, archive_path: str, target_dir: str):
+        archive_path_lower = archive_path.lower()
+
+        if archive_path_lower.endswith('.zip'):
+            with zipfile.ZipFile(archive_path, 'r') as zf:
+                zf.extractall(target_dir)
+        elif archive_path_lower.endswith('.rar'):
+            with rarfile.RarFile(archive_path, 'r') as rf:
+                rf.extractall(target_dir)
+        elif archive_path_lower.endswith('.7z'):
+            with py7zr.SevenZipFile(archive_path, mode='r') as zf:
+                zf.extractall(path=target_dir)
+        else:
+            raise ValueError(tr('errors.unsupported_archive_format'))
 class FetchHelpContentThread(QThread):
     finished = pyqtSignal(str)
 

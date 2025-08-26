@@ -63,10 +63,10 @@ def clear_layout_widgets(layout, keep_last_n=1):
 
 def load_mod_icon_universal(icon_label, mod_data, size=80):
     from utils.file_utils import resource_path
-    assets_icon_path = resource_path('icons/icon.ico')
+    assets_icon_path = resource_path('resources/icons/icon.ico')
     fallback_icon_path = os.path.join(os.path.dirname(__file__), 'icon.ico')
     default_pixmap = None
-    for default_icon_path in (assets_icon_path, fallback_icon_path):
+    for default_icon_path in (assets_icon_path,):
         if os.path.exists(default_icon_path):
             try:
                 default_pixmap = QPixmap(default_icon_path)

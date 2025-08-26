@@ -90,6 +90,10 @@ class ModEditorDialog(QDialog):
         self.tagline_edit.setMaxLength(200)
         self.tagline_edit.setPlaceholderText(tr('ui.short_description_placeholder'))
         form_layout.addWidget(self.tagline_edit)
+        form_layout.addWidget(QLabel(tr('ui.gamebanana_url_optional')))
+        self.gamebanana_url_edit = QLineEdit()
+        self.gamebanana_url_edit.setPlaceholderText('https://gamebanana.com/mods/...')
+        form_layout.addWidget(self.gamebanana_url_edit)
         self._create_icon_section(form_layout)
         self._create_tags_section(form_layout)
         form_layout.addWidget(QLabel(tr('ui.overall_mod_version')))
@@ -243,176 +247,177 @@ class ModEditorDialog(QDialog):
         files_frame = QFrame()
         files_frame.setFrameStyle(QFrame.Shape.Box)
         files_layout = QVBoxLayout(files_frame)
-        if not hasattr(self, 'screenshots_urls'):
-            self.screenshots_urls = []
-        manage_btn = QPushButton(tr('ui.manage_screenshots'))
+        if self.is_public:
+            if not hasattr(self, 'screenshots_urls'):
+                self.screenshots_urls = []
+            manage_btn = QPushButton(tr('ui.manage_screenshots'))
 
-        def _open_screenshots_dialog():
-            dlg = QDialog(self)
-            dlg.setWindowTitle(tr('ui.manage_screenshots'))
-            dlg.setMinimumSize(500, 400)
-            dlg.resize(700, 700)
-            dlg.setSizeGripEnabled(True)
-            v_layout = QVBoxLayout(dlg)
-            from PyQt6.QtWidgets import QScrollArea
-            scroll = QScrollArea()
-            scroll.setWidgetResizable(True)
-            content = QWidget()
-            content_layout = QVBoxLayout(content)
-            scroll.setWidget(content)
-            v_layout.addWidget(scroll)
-            editors = []
-            previews = []
-            timers = []
-            workers = {}
-            MAX_MB = 2
-            MAX_BYTES = MAX_MB * 1024 * 1024
-            from PyQt6.QtCore import QThread, QTimer as _QTimer
+            def _open_screenshots_dialog():
+                dlg = QDialog(self)
+                dlg.setWindowTitle(tr('ui.manage_screenshots'))
+                dlg.setMinimumSize(500, 400)
+                dlg.resize(700, 700)
+                dlg.setSizeGripEnabled(True)
+                v_layout = QVBoxLayout(dlg)
+                from PyQt6.QtWidgets import QScrollArea
+                scroll = QScrollArea()
+                scroll.setWidgetResizable(True)
+                content = QWidget()
+                content_layout = QVBoxLayout(content)
+                scroll.setWidget(content)
+                v_layout.addWidget(scroll)
+                editors = []
+                previews = []
+                timers = []
+                workers = {}
+                MAX_MB = 2
+                MAX_BYTES = MAX_MB * 1024 * 1024
+                from PyQt6.QtCore import QThread, QTimer as _QTimer
 
-            class ShotLoader(QThread):
-                loaded = pyqtSignal(int, object)
-                failed = pyqtSignal(int, str)
+                class ShotLoader(QThread):
+                    loaded = pyqtSignal(int, object)
+                    failed = pyqtSignal(int, str)
 
-                def __init__(self, idx, url):
-                    super().__init__()
-                    self.idx, self.url = (idx, url)
+                    def __init__(self, idx, url):
+                        super().__init__()
+                        self.idx, self.url = (idx, url)
 
-                def run(self):
-                    try:
-                        from utils.cache import _IMG_CACHE, _IMG_CACHE_LOCK, _NET_SEM
-                        if _IMG_CACHE is not None and _IMG_CACHE_LOCK is not None:
-                            with _IMG_CACHE_LOCK:
-                                if self.url in _IMG_CACHE:
-                                    self.loaded.emit(self.idx, _IMG_CACHE[self.url])
-                                    return
-                        import requests
+                    def run(self):
                         try:
+                            from utils.cache import _IMG_CACHE, _IMG_CACHE_LOCK, _NET_SEM
+                            if _IMG_CACHE is not None and _IMG_CACHE_LOCK is not None:
+                                with _IMG_CACHE_LOCK:
+                                    if self.url in _IMG_CACHE:
+                                        self.loaded.emit(self.idx, _IMG_CACHE[self.url])
+                                        return
+                            import requests
+                            try:
+                                if _NET_SEM:
+                                    _NET_SEM.acquire()
+                                try:
+                                    h = requests.head(self.url, allow_redirects=True, timeout=6)
+                                finally:
+                                    if _NET_SEM:
+                                        _NET_SEM.release()
+                                cl = h.headers.get('content-length')
+                                if cl and cl.isdigit() and (int(cl) > MAX_BYTES):
+                                    self.failed.emit(self.idx, 'too_large')
+                                    return
+                            except Exception:
+                                pass
                             if _NET_SEM:
                                 _NET_SEM.acquire()
                             try:
-                                h = requests.head(self.url, allow_redirects=True, timeout=6)
+                                resp = requests.get(self.url, timeout=8)
                             finally:
                                 if _NET_SEM:
                                     _NET_SEM.release()
-                            cl = h.headers.get('content-length')
-                            if cl and cl.isdigit() and (int(cl) > MAX_BYTES):
+                            if not resp.ok:
+                                self.failed.emit(self.idx, 'unavailable')
+                                return
+                            if len(resp.content) > MAX_BYTES:
                                 self.failed.emit(self.idx, 'too_large')
                                 return
+                            qimg = QImage()
+                            if not qimg.loadFromData(resp.content):
+                                self.failed.emit(self.idx, 'not_image')
+                                return
+                            if _IMG_CACHE is not None and _IMG_CACHE_LOCK is not None:
+                                try:
+                                    with _IMG_CACHE_LOCK:
+                                        _IMG_CACHE[self.url] = qimg
+                                except Exception:
+                                    pass
+                            self.loaded.emit(self.idx, qimg)
+                        except Exception:
+                            self.failed.emit(self.idx, 'error')
+
+                def _apply_preview(index, qimg):
+                    area_w, area_h = (640, 200)
+                    pm = QPixmap.fromImage(qimg)
+                    scaled = pm.scaled(area_w, area_h, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                    canvas = QPixmap(area_w, area_h)
+                    canvas.fill(QColor('black'))
+                    p = QPainter(canvas)
+                    x = (area_w - scaled.width()) // 2
+                    y = (area_h - scaled.height()) // 2
+                    p.drawPixmap(x, y, scaled)
+                    p.end()
+                    previews[index].setPixmap(canvas)
+                    previews[index].show()
+                    editors[index].setProperty('isValidShot', True)
+
+                def _apply_error(index, kind):
+                    msg = {'too_large': tr('errors.file_too_large', max_size=MAX_MB), 'unavailable': tr('errors.file_not_available'), 'not_image': tr('errors.not_an_image'), 'error': tr('errors.url_error')}.get(kind, tr('errors.url_error'))
+                    previews[index].setText(msg)
+                    previews[index].show()
+                    editors[index].setProperty('isValidShot', False)
+
+                def schedule_preview(index):
+                    t = timers[index]
+                    t.stop()
+                    t.start(300)
+
+                def run_preview(index):
+                    url = editors[index].text().strip()
+                    previews[index].setText('')
+                    previews[index].setPixmap(QPixmap())
+                    previews[index].hide()
+                    editors[index].setProperty('isValidShot', False)
+                    if not url or not url.startswith(('http://', 'https://')):
+                        return
+                    if index in workers:
+                        try:
+                            w = workers.pop(index)
+                            if w.isRunning():
+                                w.requestInterruption()
+                                w.quit()
+                                w.wait(100)
                         except Exception:
                             pass
-                        if _NET_SEM:
-                            _NET_SEM.acquire()
-                        try:
-                            resp = requests.get(self.url, timeout=8)
-                        finally:
-                            if _NET_SEM:
-                                _NET_SEM.release()
-                        if not resp.ok:
-                            self.failed.emit(self.idx, 'unavailable')
-                            return
-                        if len(resp.content) > MAX_BYTES:
-                            self.failed.emit(self.idx, 'too_large')
-                            return
-                        qimg = QImage()
-                        if not qimg.loadFromData(resp.content):
-                            self.failed.emit(self.idx, 'not_image')
-                            return
-                        if _IMG_CACHE is not None and _IMG_CACHE_LOCK is not None:
-                            try:
-                                with _IMG_CACHE_LOCK:
-                                    _IMG_CACHE[self.url] = qimg
-                            except Exception:
-                                pass
-                        self.loaded.emit(self.idx, qimg)
-                    except Exception:
-                        self.failed.emit(self.idx, 'error')
+                    w = ShotLoader(index, url)
+                    workers[index] = w
+                    w.loaded.connect(lambda i, img: _apply_preview(i, img))
+                    w.failed.connect(lambda i, k: _apply_error(i, k))
+                    w.start()
+                for i in range(10):
+                    le = QLineEdit()
+                    le.setPlaceholderText(tr('ui.screenshot_url_placeholder'))
+                    if i < len(self.screenshots_urls):
+                        le.setText(self.screenshots_urls[i])
+                    editors.append(le)
+                    content_layout.addWidget(le)
+                    prev = QLabel()
+                    prev.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                    prev.setMinimumHeight(200)
+                    prev.setStyleSheet('background-color: black; border: 1px solid #444;')
+                    prev.hide()
+                    previews.append(prev)
+                    content_layout.addWidget(prev)
+                    t = _QTimer(dlg)
+                    t.setSingleShot(True)
+                    t.timeout.connect(lambda idx=i: run_preview(idx))
+                    timers.append(t)
+                    le.textChanged.connect(lambda _=None, idx=i: schedule_preview(idx))
+                    schedule_preview(i)
+                btns = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
 
-            def _apply_preview(index, qimg):
-                area_w, area_h = (640, 200)
-                pm = QPixmap.fromImage(qimg)
-                scaled = pm.scaled(area_w, area_h, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
-                canvas = QPixmap(area_w, area_h)
-                canvas.fill(QColor('black'))
-                p = QPainter(canvas)
-                x = (area_w - scaled.width()) // 2
-                y = (area_h - scaled.height()) // 2
-                p.drawPixmap(x, y, scaled)
-                p.end()
-                previews[index].setPixmap(canvas)
-                previews[index].show()
-                editors[index].setProperty('isValidShot', True)
-
-            def _apply_error(index, kind):
-                msg = {'too_large': tr('errors.file_too_large', max_size=MAX_MB), 'unavailable': tr('errors.file_not_available'), 'not_image': tr('errors.not_an_image'), 'error': tr('errors.url_error')}.get(kind, tr('errors.url_error'))
-                previews[index].setText(msg)
-                previews[index].show()
-                editors[index].setProperty('isValidShot', False)
-
-            def schedule_preview(index):
-                t = timers[index]
-                t.stop()
-                t.start(300)
-
-            def run_preview(index):
-                url = editors[index].text().strip()
-                previews[index].setText('')
-                previews[index].setPixmap(QPixmap())
-                previews[index].hide()
-                editors[index].setProperty('isValidShot', False)
-                if not url or not url.startswith(('http://', 'https://')):
-                    return
-                if index in workers:
-                    try:
-                        w = workers.pop(index)
-                        if w.isRunning():
-                            w.requestInterruption()
-                            w.quit()
-                            w.wait(100)
-                    except Exception:
-                        pass
-                w = ShotLoader(index, url)
-                workers[index] = w
-                w.loaded.connect(lambda i, img: _apply_preview(i, img))
-                w.failed.connect(lambda i, k: _apply_error(i, k))
-                w.start()
-            for i in range(10):
-                le = QLineEdit()
-                le.setPlaceholderText(tr('ui.screenshot_url_placeholder'))
-                if i < len(self.screenshots_urls):
-                    le.setText(self.screenshots_urls[i])
-                editors.append(le)
-                content_layout.addWidget(le)
-                prev = QLabel()
-                prev.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                prev.setMinimumHeight(200)
-                prev.setStyleSheet('background-color: black; border: 1px solid #444;')
-                prev.hide()
-                previews.append(prev)
-                content_layout.addWidget(prev)
-                t = _QTimer(dlg)
-                t.setSingleShot(True)
-                t.timeout.connect(lambda idx=i: run_preview(idx))
-                timers.append(t)
-                le.textChanged.connect(lambda _=None, idx=i: schedule_preview(idx))
-                schedule_preview(i)
-            btns = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
-
-            def save_and_close():
-                urls = []
-                for e in editors:
-                    u = e.text().strip()
-                    if u and u.startswith(('http://', 'https://')):
-                        urls.append(u)
-                    if len(urls) >= 10:
-                        break
-                self.screenshots_urls = urls
-                dlg.accept()
-            btns.accepted.connect(save_and_close)
-            btns.rejected.connect(dlg.reject)
-            v_layout.addWidget(btns)
-            dlg.exec()
-        manage_btn.clicked.connect(_open_screenshots_dialog)
-        files_layout.addWidget(manage_btn, alignment=Qt.AlignmentFlag.AlignHCenter)
+                def save_and_close():
+                    urls = []
+                    for e in editors:
+                        u = e.text().strip()
+                        if u and u.startswith(('http://', 'https://')):
+                            urls.append(u)
+                        if len(urls) >= 10:
+                            break
+                    self.screenshots_urls = urls
+                    dlg.accept()
+                btns.accepted.connect(save_and_close)
+                btns.rejected.connect(dlg.reject)
+                v_layout.addWidget(btns)
+                dlg.exec()
+            manage_btn.clicked.connect(_open_screenshots_dialog)
+            files_layout.addWidget(manage_btn, alignment=Qt.AlignmentFlag.AlignHCenter)
         files_label = QLabel(tr('ui.files_management'))
         files_label.setStyleSheet('font-weight: bold; font-size: 18px;')
         files_layout.addWidget(files_label, alignment=Qt.AlignmentFlag.AlignHCenter)
@@ -1115,6 +1120,10 @@ class ModEditorDialog(QDialog):
         if self.is_public and (not self.author_edit.text().strip()):
             QMessageBox.warning(self, tr('dialogs.error'), tr('dialogs.mod_author_empty'))
             return False
+        gamebanana_url = self.gamebanana_url_edit.text().strip()
+        if gamebanana_url and not gamebanana_url.startswith('https://gamebanana.com/mods/'):
+            QMessageBox.warning(self, tr('dialogs.error'), tr('dialogs.invalid_gamebanana_url'))
+            return False
         if len(self.version_edit.text().strip()) > 10:
             QMessageBox.warning(self, tr('dialogs.error'), tr('dialogs.mod_version_too_long'))
             return False
@@ -1614,7 +1623,13 @@ class ModEditorDialog(QDialog):
             author = tr('defaults.local_author')
         version = self.version_edit.text().strip() or '1.0.0'
         tagline = self.tagline_edit.text().strip() or tr('defaults.no_short_description')
-        return {'name': self.name_edit.text().strip(), 'version': version, 'author': author, 'tagline': tagline, 'description_url': self.description_url_edit.text().strip(), 'icon_url': self.icon_edit.text().strip(), 'tags': tags, 'hide_mod': False, 'is_xdelta': self.piracy_checkbox.isChecked(), 'modtype': self.modtype_combo.currentData() or 'deltarune', 'game_version': self.game_version_combo.currentText() if self.is_public else self.game_version_edit.text().strip() or '1.04', 'files': files_data, 'screenshots_url': getattr(self, 'screenshots_urls', [])}
+        return {'name': self.name_edit.text().strip(), 'version': version, 'author': author, 'tagline': tagline,
+                'gamebanana_url': self.gamebanana_url_edit.text().strip(),
+                'description_url': self.description_url_edit.text().strip(),
+                'icon_url': self.icon_edit.text().strip(), 'tags': tags, 'hide_mod': False,
+                'is_xdelta': self.piracy_checkbox.isChecked(), 'modtype': self.modtype_combo.currentData() or 'deltarune',
+                'game_version': self.game_version_combo.currentText() if self.is_public else self.game_version_edit.text().strip() or '1.04',
+                'files': files_data, 'screenshots_url': getattr(self, 'screenshots_urls', [])}
 
     def _save_public_mod(self):
         QMessageBox.information(self, tr('errors.save_secret_key_title'), tr('dialogs.save_secret_key_instruction'))
@@ -1732,7 +1747,11 @@ class ModEditorDialog(QDialog):
                     files_data[file_key]['extra_files'] = {}
                     for group_key, paths in extra_files.items():
                         files_data[file_key]['extra_files'][group_key] = [os.path.basename(path) for path in paths]
-            config_data = {'is_local_mod': True, 'mod_key': mod_key, 'created_date': time.strftime('%d.%m.%y %H:%M'), 'is_available_on_server': False, 'name': mod_data.get('name', ''), 'version': mod_data.get('version', '1.0.0'), 'author': mod_data.get('author', ''), 'tagline': mod_data.get('tagline', tr('defaults.no_short_description')), 'game_version': mod_data.get('game_version', tr('defaults.not_specified')), 'modtype': mod_data.get('modtype', 'deltarune'), 'files': files_data}
+            config_data = {'is_local_mod': True, 'mod_key': mod_key, 'created_date': time.strftime('%d.%m.%y %H:%M'),
+                           'is_available_on_server': False, 'name': mod_data.get('name', ''), 'version': mod_data.get('version', '1.0.0'),
+                           'author': mod_data.get('author', ''), 'tagline': mod_data.get('tagline', tr('defaults.no_short_description')),
+                           'gamebanana_url': mod_data.get('gamebanana_url', ''), 'game_version': mod_data.get('game_version', tr('defaults.not_specified')),
+                           'modtype': mod_data.get('modtype', 'deltarune'), 'files': files_data}
             config_path = os.path.join(mod_dir, 'config.json')
             self.parent_app._write_json(config_path, config_data)
             self.parent_app._load_local_mods_from_folders()
@@ -1811,7 +1830,7 @@ class ModEditorDialog(QDialog):
         if not hasattr(self, 'original_mod_data') or not self.original_mod_data:
             return True
         current_data, original_data = (self._collect_mod_data(), self.original_mod_data)
-        fields_to_compare = ['name', 'version', 'author', 'tagline', 'description_url', 'icon_url', 'tags', 'is_xdelta', 'modtype', 'game_version', 'files', 'screenshots_url']
+        fields_to_compare = ['name', 'version', 'author', 'tagline', 'gamebanana_url', 'description_url', 'icon_url', 'tags', 'is_xdelta', 'modtype', 'game_version', 'files', 'screenshots_url']
         return any((current_data.get(field) != original_data.get(field) for field in fields_to_compare))
 
     def _update_local_mod(self):
@@ -1883,7 +1902,11 @@ class ModEditorDialog(QDialog):
                                 copied_paths.append(filename)
                         if copied_paths:
                             files_data[file_key]['extra_files'][group_key] = copied_paths
-            config_data.update({'name': updated_data.get('name', ''), 'version': updated_data.get('version', '1.0.0'), 'author': updated_data.get('author', ''), 'tagline': updated_data.get('tagline', ''), 'game_version': updated_data.get('game_version', tr('defaults.not_specified')), 'modtype': updated_data.get('modtype', 'deltarune'), 'files': files_data})
+            config_data.update({'name': updated_data.get('name', ''), 'version': updated_data.get('version', '1.0.0'),
+                                'author': updated_data.get('author', ''), 'tagline': updated_data.get('tagline', ''),
+                                'gamebanana_url': updated_data.get('gamebanana_url', ''),
+                                'game_version': updated_data.get('game_version', tr('defaults.not_specified')),
+                                'modtype': updated_data.get('modtype', 'deltarune'), 'files': files_data})
             self.parent_app._write_json(config_path, config_data)
             self.parent_app._load_local_mods_from_folders()
             self.parent_app._update_installed_mods_display()
@@ -1960,6 +1983,7 @@ class ModEditorDialog(QDialog):
         self.name_edit.setText(actual_mod_data.get('name', ''))
         self.author_edit.setText(actual_mod_data.get('author', ''))
         self.tagline_edit.setText(actual_mod_data.get('tagline', ''))
+        self.gamebanana_url_edit.setText(actual_mod_data.get('gamebanana_url', ''))
         icon_value = actual_mod_data.get('icon_url', '')
         self.icon_edit.setText(icon_value)
         if icon_value:

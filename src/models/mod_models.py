@@ -39,6 +39,7 @@ class ModInfo:
     demo_version: Optional[str] = None
     created_date: Optional[str] = None
     last_updated: Optional[str] = None
+    gamebanana_url: Optional[str] = None
     screenshots_url: List[str] = field(default_factory=list)
 
     def get_chapter_data(self, chapter_id: int) -> Optional[ModChapterData]:
