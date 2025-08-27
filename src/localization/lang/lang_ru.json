@@ -206,8 +206,8 @@
     "full_install": "Полная установка",
     "patch__not_found": "Файл патча не найден",
     "deltarune_desc": "Этот мод предназначен для полной версии DELTARUNE.",
-    "undertale_desc": "Этот мод предназначен для UNDERTALE и не будет работать с DELTARUNE.",
-    "deltarunedemo_desc": "Этот мод был создан для демоверсии игры и не работает с полной версиией игры.",
+    "undertale_desc": "Этот мод предназначен для UNDERTALE.",
+    "deltarunedemo_desc": "Этот мод предназначен для DELTARUNEdemo.",
     "gamebanana_url_optional": "GameBanana URL (Необязательно)",
     "view_on_gamebanana": "Посмотреть на GameBanana"
   },
