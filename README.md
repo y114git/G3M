@@ -54,7 +54,7 @@ While DH doesn't plan to be completely dependent on GameBanana, it fully support
 
 -   **Bugs & Issues:** DH will be updated many more times with new games and features. Please report all bugs and other issues [here](https://github.com/y114git/DELTAHUB/issues).
 
--   **Wiki:** For detailed information on "How to properly create mods," "How to verify a mod," etc., please visit the [Wiki](https://github.com/y114git/DELTAHUB/wiki).
+-   **Wiki:** For detailed info on "How to properly create mods," "How to verify a mod," etc., please visit the [Wiki](https://github.com/y114git/DELTAHUB/wiki).
 
 ---
 
