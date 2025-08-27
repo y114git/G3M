@@ -1,4 +1,4 @@
-# DELTAHUB (DH)
+# DELTAHUB - The ultimate Mod/Save/Other stuff manager.
 
 **DELTAHUB (DH)** is a cross-platform, universal, and extremely convenient Mod Manager, Saves Manager, and multi-functional manager for games such as **DELTARUNE**, **DELTARUNEdemo**, and **UNDERTALE**. In the future, it will support other games made with GameMaker.
 
