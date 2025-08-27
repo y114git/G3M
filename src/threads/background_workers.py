@@ -485,7 +485,7 @@ class InstallModsThread(QThread):
                 except Exception:
                     pass
 
-class GameBananaInstallThread(QThread):
+class UrlInstallThread(QThread):
     status = pyqtSignal(str, str)
     progress = pyqtSignal(int)
     finished = pyqtSignal(bool, str)
@@ -501,105 +501,112 @@ class GameBananaInstallThread(QThread):
     def run(self):
         import tempfile
         import shutil
-        import json
+        try:
+            if not self.url.startswith("deltahub://"):
+                raise ValueError("Invalid URL scheme")
 
-        with tempfile.TemporaryDirectory(prefix='gb-install-') as temp_dir:
-            try:
-                # 1. Download
-                if not self.url.startswith("deltahub://"):
-                    raise ValueError("Invalid URL scheme")
-                
-                content = self.url[len("deltahub://"):]
-                parts = content.split(',')
-                url_part = parts[0]
+            content = self.url[len("deltahub://"):].split(',')[0].strip()
 
-                # Find the start of http and reconstruct, correcting common mangling.
-                http_pos = url_part.find('http')
-                if http_pos == -1:
-                    raise ValueError(tr('errors.no_valid_url_found'))
+            if not content.startswith(('http://', 'https://')):
+                 content = content.replace('https//', 'https://').replace('http//', 'http://')
 
-                download_url = url_part[http_pos:]
-                if not download_url.startswith(('http://', 'https://')):
-                    download_url = download_url.replace('https//', 'https://').replace('http//', 'http://')
-                self.status.emit(tr('status.downloading_from_external'), UI_COLORS['status_warning'])
-                archive_path = self._download_archive(download_url, temp_dir)
+            if content.startswith(('http://', 'https://')):
+                with tempfile.TemporaryDirectory(prefix='gb-install-') as temp_dir:
+                    download_url = content
 
-                # 2. Inspect for config.json
-                config_data_from_archive = self._extract_and_read_config(archive_path)
-                if config_data_from_archive is None:
-                    raise ValueError(tr('errors.config_not_found_in_archive'))
+                    self.status.emit(tr('status.downloading_from_external'), UI_COLORS['status_warning'])
+                    archive_path = self._download_archive(download_url, temp_dir)
 
-                mod_name_from_archive = config_data_from_archive.get('name', 'Unknown Mod')
+                    config_data_from_archive = self._extract_and_read_config(archive_path)
+                    if config_data_from_archive is None:
+                        raise ValueError(tr('errors.config_not_found_in_archive'))
 
-                # 3. Decision Logic
-                mod_key = config_data_from_archive.get('mod_key')
-                is_local = config_data_from_archive.get('is_local_mod', not bool(mod_key))
+                    mod_name_from_archive = config_data_from_archive.get('name', 'Unknown Mod')
 
-                if mod_key and not is_local:
-                    # Public Mod Flow
-                    mod_info = next((m for m in self.main_window.all_mods if m.key == mod_key), None)
-                    mod_name = mod_info.name if mod_info else mod_name_from_archive
-                    if mod_info and mod_info.ban_status: 
-                        raise ValueError(tr('errors.mod_is_banned'))
+                    mod_key = config_data_from_archive.get('mod_key')
+                    is_local = config_data_from_archive.get('is_local_mod', not bool(mod_key))
 
-                    if self._is_metadata_only(archive_path):
-                        if not mod_info:
-                            raise ValueError(tr('errors.smart_install_mod_not_found'))
-                        self.status.emit(tr('status.smart_install_starting', mod_name=mod_name), UI_COLORS['status_info'])
-                        self.main_window.install_from_gb_signal.emit(mod_info)
-                        return
-                    if self.main_window._is_mod_installed(mod_key):
-                        result = self._ask_user(tr('dialogs.update_confirmation_title', mod_name=mod_name), tr('dialogs.update_confirmation_body', mod_name=mod_name))
-                        if not result:
-                            self.finished.emit(False, tr('status.update_cancelled'))
+                    if mod_key and not is_local:
+                        mod_info = next((m for m in self.main_window.all_mods if m.key == mod_key), None)
+                        mod_name = mod_info.name if mod_info else mod_name_from_archive
+                        if mod_info and mod_info.ban_status: 
+                            raise ValueError(tr('errors.mod_is_banned'))
+
+                        if self._is_metadata_only(archive_path):
+                            if not mod_info:
+                                raise ValueError(tr('errors.smart_install_mod_not_found'))
+                            self.status.emit(tr('status.smart_install_starting', mod_name=mod_name), UI_COLORS['status_info'])
+                            self.main_window.install_from_gb_signal.emit(mod_info)
                             return
-                else:
-                    mod_name = mod_name_from_archive
-                    # 1. Security warning first
-                    result = self._ask_user(tr('dialogs.local_mod_warning_title'), tr('dialogs.local_mod_warning_body'))
-                    if not result:
-                        self.finished.emit(False, tr('status.install_cancelled_by_user'))
-                        return
-                    
-                    # 2. Then, check for existing mod and ask to update
-                    installed_mods = self.main_window._get_installed_mods_list()
-                    existing_local_mod = next((m for m in installed_mods if m.get('is_local_mod') and m.get('name') == mod_name), None)
-                    if existing_local_mod:
-                        update_result = self._ask_user(tr('dialogs.local_mod_update_title'), tr('dialogs.local_mod_update_body', mod_name=mod_name))
-                        if not update_result:
+                        
+                        if self.main_window._is_mod_installed(mod_key):
+                            result = self._ask_user(tr('dialogs.update_confirmation_title', mod_name=mod_name), tr('dialogs.update_confirmation_body', mod_name=mod_name))
+                            if not result:
+                                self.finished.emit(False, tr('status.update_cancelled'))
+                                return
+                    else:
+                        mod_name = mod_name_from_archive
+                        result = self._ask_user(tr('dialogs.local_mod_warning_title'), tr('dialogs.local_mod_warning_body'))
+                        if not result:
                             self.finished.emit(False, tr('status.install_cancelled_by_user'))
                             return
-                existing_folder_name = None
-                if 'existing_local_mod' in locals() and existing_local_mod:
-                    existing_folder_name = existing_local_mod.get('folder_name')
-                elif mod_key and self.main_window._is_mod_installed(mod_key):
-                    installed_mods = self.main_window._get_installed_mods_list()
-                    existing_public_mod = next((m for m in installed_mods if m.get('mod_key') == mod_key), None)
-                    if existing_public_mod:
-                        existing_folder_name = existing_public_mod.get('folder_name')
+                        
+                        installed_mods = self.main_window._get_installed_mods_list()
+                        existing_local_mod = next((m for m in installed_mods if m.get('is_local_mod') and m.get('name') == mod_name), None)
+                        if existing_local_mod:
+                            update_result = self._ask_user(tr('dialogs.local_mod_update_title'), tr('dialogs.local_mod_update_body', mod_name=mod_name))
+                            if not update_result:
+                                self.finished.emit(False, tr('status.install_cancelled_by_user'))
+                                return
+                    
+                    existing_folder_name = None
+                    if 'existing_local_mod' in locals() and existing_local_mod:
+                        existing_folder_name = existing_local_mod.get('folder_name')
+                    elif mod_key and self.main_window._is_mod_installed(mod_key):
+                        installed_mods = self.main_window._get_installed_mods_list()
+                        existing_public_mod = next((m for m in installed_mods if m.get('mod_key') == mod_key), None)
+                        if existing_public_mod:
+                            existing_folder_name = existing_public_mod.get('folder_name')
 
-                # 4. Unpack and Install
-                self.status.emit(tr('status.unpacking_mod', mod_name=mod_name), UI_COLORS['status_info'])
-                folder_name = existing_folder_name or get_unique_mod_dir(self.main_window.mods_dir, mod_name)
-                config_data = config_data_from_archive
-                target_mod_dir = os.path.join(self.main_window.mods_dir, existing_folder_name or get_unique_mod_dir(self.main_window.mods_dir, mod_name))
+                    config_data = config_data_from_archive
+                    target_mod_dir = os.path.join(self.main_window.mods_dir, existing_folder_name or get_unique_mod_dir(self.main_window.mods_dir, mod_name))
+                    
+                    if os.path.exists(target_mod_dir):
+                        shutil.rmtree(target_mod_dir)
+                    os.makedirs(target_mod_dir)
 
-                # Clean destination if it's an update
-                if os.path.exists(target_mod_dir):
-                    shutil.rmtree(target_mod_dir)
-                os.makedirs(target_mod_dir)
+                    self._extract_full_archive(archive_path, target_mod_dir)
 
-                self._extract_full_archive(archive_path, target_mod_dir)
+                    final_config_path = os.path.join(target_mod_dir, 'config.json')
+                    if not os.path.exists(final_config_path):
+                         self.main_window._write_json(final_config_path, config_data)
 
-                # Ensure the config file is in the final location
-                final_config_path = os.path.join(target_mod_dir, 'config.json')
-                if not os.path.exists(final_config_path):
-                     self.main_window._write_json(final_config_path, config_data)
+                    self.finished.emit(True, tr('status.install_complete_success', mod_name=mod_name))
+            elif len(content) == 64 and all(c in '0123456789abcdef' for c in content.lower()):
+                # --- New Logic: Handle direct hash install ---
+                mod_key = content
+                mod_info = next((m for m in self.main_window.all_mods if m.key == mod_key), None)
 
-                self.finished.emit(True, tr('status.install_complete_success', mod_name=mod_name))
+                if not mod_info:
+                    raise ValueError(tr('errors.smart_install_mod_not_found'))
+                if mod_info.ban_status:
+                    raise ValueError(tr('errors.mod_is_banned'))
 
-            except Exception as e:
-                self.finished.emit(False, str(e))
+                mod_name = mod_info.name
+                if self.main_window._is_mod_installed(mod_key):
+                    result = self._ask_user(tr('dialogs.update_confirmation_title', mod_name=mod_name), tr('dialogs.update_confirmation_body', mod_name=mod_name))
+                    if not result:
+                        self.finished.emit(False, tr('status.update_cancelled'))
+                        return
+
+                self.status.emit(tr('status.smart_install_starting', mod_name=mod_name), UI_COLORS['status_info'])
+                self.main_window.install_from_gb_signal.emit(mod_info)
+                return # Handoff complete, this thread's job is done.
+            else:
+                raise ValueError(tr('errors.no_valid_url_found'))
+
+        except Exception as e:
+            self.finished.emit(False, str(e))
     
     def _ask_user(self, title: str, message: str) -> bool:
         self.prompt_event.clear()

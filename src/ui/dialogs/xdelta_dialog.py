@@ -16,17 +16,36 @@ class XdeltaDialog(QDialog):
 
     def _get_xdelta_path(self):
         system = platform.system()
-        exe_name = 'xdelta3.exe' if system == 'Windows' else 'xdelta3'
+        if system == 'Windows':
+            exe_names = ['xdelta3.exe', 'xdelta.exe']
+        elif system == 'Darwin':
+            exe_names = ['xdelta3_mac']
+        else:
+            exe_names = ['xdelta3']
 
-        path = resource_path(f'resources/bin/{exe_name}')
+        path_to_check = None
+        for exe_name in exe_names:
+            path = resource_path(f'resources/bin/{exe_name}')
+            if os.path.exists(path):
+                path_to_check = path
+                break
 
-        # fallback для dev mode (не собранного приложения)
-        if not os.path.exists(path) and not getattr(sys, 'frozen', False):
-            dev_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'resources', 'bin', exe_name))
-            if os.path.exists(dev_path):
-                return dev_path
+        if not path_to_check and not getattr(sys, 'frozen', False):
+            for exe_name in exe_names:
+                dev_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'resources', 'bin', exe_name))
+                if os.path.exists(dev_path):
+                    path_to_check = dev_path
+                    break
 
-        return path if os.path.exists(path) else None
+        if path_to_check:
+            if system != 'Windows':
+                try:
+                    os.chmod(path_to_check, 493)
+                except Exception as e:
+                    logging.warning(f'Could not set executable permission on {path_to_check}: {e}')
+            return path_to_check
+
+        return None
 
     def __init__(self, parent=None):
         super().__init__(parent)

@@ -4,11 +4,10 @@ import platform
 import sys
 import tempfile
 import subprocess
-import socket
-import threading
 import time
 import psutil
 from PyQt6.QtCore import QLibraryInfo, Qt, QTranslator, QTimer
+from PyQt6.QtNetwork import QLocalServer, QLocalSocket
 from PyQt6.QtWidgets import QApplication, QMessageBox
 from localization.manager import get_localization_manager, tr
 from utils.audio_utils import play_deltahub_sound
@@ -21,7 +20,7 @@ if platform.system() == "Windows":
 def create_app_reference():
     from core.app import DeltaHubApp
     return DeltaHubApp
-SINGLE_INSTANCE_PORT = 48114
+SINGLE_INSTANCE_KEY = "deltahub.y.114.single-instance-lock"
 _translator = QTranslator()
 _lock_file = None
 _splash_start_time = None
@@ -79,44 +78,25 @@ MimeType=x-scheme-handler/deltahub;
     except Exception as e:
         print(f"Failed to register URL protocol: {e}")
 
-def check_single_instance():
-    global _lock_file
-    temp_dir = tempfile.gettempdir()
-    lock_file_path = os.path.join(temp_dir, 'deltahub_launcher.lock')
-    if os.path.exists(lock_file_path):
-        return False
-    try:
-        _lock_file = open(lock_file_path, 'w')
-        _lock_file.write(str(os.getpid()))
-        _lock_file.flush()
-        return True
-    except Exception:
-        return False
-
-class SingleInstanceServer(threading.Thread):
+class SingleInstanceServer(QLocalServer):
     def __init__(self, app_instance):
-        super().__init__(daemon=True)
+        super().__init__()
         self.app_instance = app_instance
 
-    def run(self):
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            try:
-                s.bind(("127.0.0.1", SINGLE_INSTANCE_PORT))
-                s.listen()
-                while True:
-                    conn, _ = s.accept()
-                    with conn:
-                        data = conn.recv(4096)
-                        if data:
-                            url = data.decode('utf-8')
-                            if url.startswith("deltahub://"):
-                                # Use a signal to safely call the handler in the main thread
-                                self.app_instance.url_received_signal.emit(url)
-            except OSError:
-                # Port is already in use, which shouldn't happen if client check worked, but good to handle.
-                pass 
-            except Exception as e:
-                print(f"Single instance server error: {e}")
+        self.newConnection.connect(self.handle_new_connection)
+
+    def handle_new_connection(self):
+        socket = self.nextPendingConnection()
+        if socket:
+            socket.readyRead.connect(lambda: self.read_socket_data(socket))
+
+    def read_socket_data(self, socket):
+        data = socket.readAll().data()
+        if data:
+            url = data.decode('utf-8')
+            if url.startswith("deltahub://"):
+                self.app_instance.url_received_signal.emit(url)
+        socket.close()
 
 def setup_app():
     manager = get_localization_manager()
@@ -156,21 +136,25 @@ def run_app():
     parser.add_argument('--shortcut-path', type=str)
     parser.add_argument('--force-start', action='store_true', help='Force start even if another instance is detected')
     args, unknown_args = parser.parse_known_args()
-    # Combine unknown args to find the URL
     url_arg = next((arg for arg in sys.argv[1:] if arg.startswith('deltahub://')), None)
 
-    # Attempt to connect to an existing instance
-    try:
-        with socket.create_connection(("127.0.0.1", SINGLE_INSTANCE_PORT), timeout=1):
-            # Connection successful, another instance is running
-            if url_arg:
-                with socket.create_connection(("127.0.0.1", SINGLE_INSTANCE_PORT), timeout=1) as s:
-                    s.sendall(url_arg.encode('utf-8'))
-            # This instance should now exit
-            sys.exit(0)
-    except (socket.timeout, ConnectionRefusedError):
-        # No instance is running, so this one becomes the primary
-        pass
+    socket = QLocalSocket()
+    socket.connectToServer(SINGLE_INSTANCE_KEY)
+
+    # waitForConnected(500) дает полсекунды на установку соединения.
+    # Этого более чем достаточно и решает проблему гонки состояний.
+    if socket.waitForConnected(500):
+        if url_arg:
+            socket.writeData(url_arg.encode('utf-8'))
+            socket.flush()
+            socket.waitForBytesWritten(1000)
+        # Второй экземпляр успешно передал информацию и должен завершиться.
+        socket.disconnectFromServer()
+        sys.exit(0)
+    
+    # Если подключиться не удалось, значит, это первый экземпляр.
+    # Удаляем старый файл сокета, если он остался от аварийного завершения.
+    QLocalServer.removeServer(SINGLE_INSTANCE_KEY)
     if not args.force_start:
         running_game = check_game_processes()
         if running_game:
@@ -212,7 +196,10 @@ def run_app():
                 DeltaHubApp = create_app_reference()
                 launcher_app['instance'] = DeltaHubApp(parent_for_dialogs=splash, initial_url=url_arg)
                 server = SingleInstanceServer(launcher_app['instance'])
-                server.start()
+                if not server.listen(SINGLE_INSTANCE_KEY):
+                    QMessageBox.critical(None, "Error", "Couldn't start single instance server.")
+                    sys.exit(1)
+                launcher_app['instance'].server = server
                 launcher_app['instance'].initialization_finished.connect(close_splash_and_show_launcher)
                 QTimer.singleShot(15000, close_splash_and_show_launcher)
             except Exception as e:
@@ -289,7 +276,10 @@ def run_app():
             DeltaHubApp = create_app_reference()
             launcher_app['instance'] = DeltaHubApp(parent_for_dialogs=splash, initial_url=url_arg)
             server = SingleInstanceServer(launcher_app['instance'])
-            server.start()
+            if not server.listen(SINGLE_INSTANCE_KEY):
+                QMessageBox.critical(None, "Error", "Couldn't start single instance server.")
+                sys.exit(1)
+            launcher_app['instance'].server = server # Сохраняем ссылку на сервер
             launcher_app['instance'].initialization_finished.connect(close_splash_when_ready)
             QTimer.singleShot(15000, close_splash_when_ready)
         except Exception as e:

@@ -33,7 +33,7 @@ from utils.path_utils import get_user_data_root, get_launcher_dir, get_legacy_yl
 from utils.network_utils import check_internet_connection
 from threads.fetch_mods import FetchModsThread
 from threads.game_monitor import GameMonitorThread
-from threads.background_workers import PresenceWorker, FetchChangelogThread, BgLoader, FullInstallThread, InstallModsThread, GameBananaInstallThread, FetchHelpContentThread
+from threads.background_workers import PresenceWorker, FetchChangelogThread, BgLoader, FullInstallThread, InstallModsThread, UrlInstallThread, FetchHelpContentThread
 from ui.styling import get_theme_color, clear_layout_widgets, load_mod_icon_universal, show_empty_message_in_layout
 from ui.widgets.custom_controls import NoScrollComboBox, NoScrollTabWidget, ClickableLabel, SlotFrame
 from ui.widgets.outlined_label import OutlinedTextLabel
@@ -43,6 +43,7 @@ from ui.widgets.installed_mod_widget import InstalledModWidget
 from ui.dialogs.xdelta_dialog import XdeltaDialog
 from ui.dialogs.save_editor import SaveEditorDialog
 from ui.dialogs.mod_editor import ModEditorDialog
+from core.startup import SingleInstanceServer
 _translator = QTranslator()
 _lock_file = None
 _splash_start_time = None
@@ -52,18 +53,24 @@ _sound_instance = None
 
 def get_xdelta_path():
     from utils.path_utils import resource_path
-    xdelta_exe = 'xdelta3.exe' if platform.system() == 'Windows' else 'xdelta3'
-    xdelta_path = resource_path(f'resources/bin/{xdelta_exe}')
-    if not os.path.exists(xdelta_path) and platform.system() != 'Windows':
-        xdelta_path_fallback = resource_path('resources/bin/xdelta3.exe')
-        if os.path.exists(xdelta_path_fallback):
-            xdelta_path = xdelta_path_fallback
-    if platform.system() != 'Windows' and os.path.exists(xdelta_path) and (not xdelta_path.lower().endswith('.exe')):
-        try:
-            os.chmod(xdelta_path, 493)
-        except Exception as e:
-            logging.warning(f'Could not set executable permission on {xdelta_path}: {e}')
-    return os.path.normpath(xdelta_path)
+    system = platform.system()
+    if system == 'Windows':
+        exe_names = ['xdelta3.exe', 'xdelta.exe']
+    elif system == 'Darwin':
+        exe_names = ['xdelta3_mac']
+    else:
+        exe_names = ['xdelta3']
+
+    for exe_name in exe_names:
+        xdelta_path = resource_path(f'resources/bin/{exe_name}')
+        if os.path.exists(xdelta_path):
+            if system != 'Windows':
+                try:
+                    os.chmod(xdelta_path, 493)
+                except Exception as e:
+                    logging.warning(f'Could not set executable permission on {xdelta_path}: {e}')
+            return os.path.normpath(xdelta_path)
+    return None
 
 
 class DeltaHubApp(QWidget):
@@ -83,6 +90,7 @@ class DeltaHubApp(QWidget):
 
     def __init__(self, args: Optional[argparse.Namespace] = None, parent_for_dialogs: Optional[QWidget] = None, initial_url: str | None = None):
         super().__init__()
+        self.server: SingleInstanceServer | None = None
         self.is_shortcut_launch = args and args.shortcut_launch
         self._pending_install_url = initial_url
         self.dialog_parent = parent_for_dialogs or self
@@ -188,24 +196,24 @@ class DeltaHubApp(QWidget):
             QMessageBox.warning(self, tr('dialogs.install_in_progress_title'), tr('dialogs.install_in_progress_body'))
             return
 
-        self.gb_install_thread = GameBananaInstallThread(self, url)
-        self.gb_install_thread.status.connect(self._update_status)
-        self.gb_install_thread.progress.connect(self.progress_bar.setValue)
-        self.gb_install_thread.finished.connect(self._on_gb_install_finished)
-        self.gb_install_thread.prompt_required.connect(self._handle_gb_thread_prompt)
+        self.url_install_thread = UrlInstallThread(self, url)
+        self.url_install_thread.status.connect(self._update_status)
+        self.url_install_thread.progress.connect(self.progress_bar.setValue)
+        self.url_install_thread.finished.connect(self._on_url_install_finished)
+        self.url_install_thread.prompt_required.connect(self._handle_url_install_prompt)
         
         self.is_installing = True
         self._set_install_buttons_enabled(False)
         self.progress_bar.setVisible(True)
         self.progress_bar.setValue(0)
-        self.gb_install_thread.start()
+        self.url_install_thread.start()
 
     def _handle_thread_prompt(self, title, message, event, result_list):
         reply = QMessageBox.question(self, title, message, QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         result_list.append(reply == QMessageBox.StandardButton.Yes)
         event.set()
 
-    def _on_gb_install_finished(self, success: bool, message: str):
+    def _on_url_install_finished(self, success: bool, message: str):
         self.is_installing = False
         self._set_install_buttons_enabled(True)
         self.progress_bar.setVisible(False)
@@ -213,10 +221,10 @@ class DeltaHubApp(QWidget):
         status_color = UI_COLORS['status_success'] if success else UI_COLORS['status_error']
         self._update_status(message, status_color)
 
-    def _handle_gb_thread_prompt(self, title, message):
+    def _handle_url_install_prompt(self, title, message):
         reply = QMessageBox.question(self, title, message, QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-        self.gb_install_thread.prompt_result = (reply == QMessageBox.StandardButton.Yes)
-        self.gb_install_thread.prompt_event.set()
+        self.url_install_thread.prompt_result = (reply == QMessageBox.StandardButton.Yes)
+        self.url_install_thread.prompt_event.set()
 
     def _init_session(self):
         try:
@@ -4595,8 +4603,8 @@ class DeltaHubApp(QWidget):
 
     def _apply_xdelta_patch(self, xdelta_file_path: str, target_game_file_path: str, target_dir: str) -> bool:
         xdelta_exe = get_xdelta_path()
-        if not os.path.exists(xdelta_exe):
-            QMessageBox.critical(self, tr('errors.xdelta_error'), tr('errors.xdelta_not_found', path=xdelta_exe))
+        if not xdelta_exe:
+            QMessageBox.critical(self, tr('errors.xdelta_error'), tr('errors.xdelta_not_found', path='xdelta'))
             return False
         data_win = os.path.join(target_dir, 'data.win')
         game_ios = os.path.join(target_dir, 'game.ios')
@@ -4629,13 +4637,6 @@ class DeltaHubApp(QWidget):
         command = ['-d', '-f', '-s', self._backup_files[original_data_file], xdelta_file_path, original_data_file]
         try:
             command_to_run = [xdelta_exe] + command
-            if platform.system() != 'Windows' and xdelta_exe.lower().endswith('.exe'):
-                runner = shutil.which('wine') or shutil.which('proton')
-                if runner:
-                    command_to_run.insert(0, runner)
-                else:
-                    QMessageBox.critical(self, tr('errors.xdelta_error'), tr('errors.wine_not_found'))
-                    return False
             startupinfo = None
             if os.name == 'nt':
                 startupinfo = subprocess.STARTUPINFO()

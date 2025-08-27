@@ -205,9 +205,9 @@
     "deltarunedemo_label": "DELTARUNE DEMO",
     "undertale_label": "UNDERTALE",
     "patch__not_found": "Patch file not found",
-    "deltarune_desc": "This mod is for the full version of DELTARUNE.",
-    "undertale_desc": "This mod is for UNDERTALE and will not work with DELTARUNE.",
-    "deltarunedemo_desc": "This mod was made for the demo and won't work with the full game.",
+    "deltarune_desc": "This mod is for DELTARUNE.",
+    "undertale_desc": "This mod is for UNDERTALE.",
+    "deltarunedemo_desc": "This mod is for DELTARUNEdemo.",
     "gamebanana_url_optional": "GameBanana URL (Optional)",
     "view_on_gamebanana": "View on GameBanana"
   },
