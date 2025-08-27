@@ -7,11 +7,12 @@ class InstalledModWidget(BaseModWidget):
     remove_requested = pyqtSignal(object)
     use_requested = pyqtSignal(object)
 
-    def __init__(self, mod_data, is_local=False, is_available=True, has_update=False, parent=None):
+    def __init__(self, mod_data, is_local=False, is_available=True, has_update=False, parent=None, installed_date=None):
         super().__init__(mod_data, parent)
         self.use_button = None
         self.is_local = is_local
         self.is_available = is_available
+        self.installed_date = installed_date
         self.has_update = has_update
         self.is_in_slot = False
         self.status = 'ready'
@@ -54,14 +55,7 @@ class InstalledModWidget(BaseModWidget):
             indicator.setToolTip(tr('tooltips.public_mod_unavailable'))
         self.title_layout.addWidget(indicator)
         self.title_layout.addStretch()
-        installed_date_text = 'N/A'
-        try:
-            if self.parent_app and hasattr(self.parent_app, '_get_mod_config_by_key'):
-                cfg = self.parent_app._get_mod_config_by_key(self.mod_data.key)
-                if isinstance(cfg, dict):
-                    installed_date_text = cfg.get('installed_date') or cfg.get('created_date') or 'N/A'
-        except Exception:
-            installed_date_text = 'N/A'
+        installed_date_text = self.installed_date or self.mod_data.created_date or 'N/A'
         date_label_text = tr('ui.created_label') if self.is_local else tr('ui.installed_label')
         installed_container = QWidget()
         installed_container_layout = QHBoxLayout(installed_container)

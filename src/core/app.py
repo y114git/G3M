@@ -108,10 +108,12 @@ class DeltaHubApp(QWidget):
         self.setWindowTitle('DELTAHUB')
         self._supports_volume = platform.system() == 'Windows'
         self._initial_size = None
-        self.config_dir = os.path.join(get_user_data_root(), 'cache')
+        self.config_dir = os.path.join(get_user_data_root(), 'settings')
         self.launcher_dir = get_launcher_dir()
         from utils.path_utils import get_user_mods_dir
         self.mods_dir = get_user_mods_dir()
+        self.mods_metadata_path = os.path.join(self.mods_dir, 'metadata.json')
+        self._mods_metadata_lock = threading.Lock()
         os.makedirs(self.config_dir, exist_ok=True)
         os.makedirs(self.mods_dir, exist_ok=True)
         self.config_path = os.path.join(self.config_dir, 'config.json')
@@ -166,6 +168,7 @@ class DeltaHubApp(QWidget):
         self.initialization_finished.connect(self._handle_pending_install)
         self._legacy_cleanup_done = False
         QTimer.singleShot(1000, self._maybe_run_legacy_cleanup)
+        self._migrate_metadata_if_needed()
         self.initialization_timer = QTimer()
         self.initialization_timer.setSingleShot(True)
         self.initialization_timer.timeout.connect(self._force_finish_initialization)
@@ -223,6 +226,20 @@ class DeltaHubApp(QWidget):
         reply = QMessageBox.question(self, title, message, QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         self.url_install_thread.prompt_result = (reply == QMessageBox.StandardButton.Yes)
         self.url_install_thread.prompt_event.set()
+
+    def _read_mods_metadata(self) -> Dict:
+        with self._mods_metadata_lock:
+            if not os.path.exists(self.mods_metadata_path):
+                return {}
+            return self._read_json(self.mods_metadata_path) or {}
+
+    def _write_mods_metadata(self, data: Dict):
+        with self._mods_metadata_lock:
+            self._write_json(self.mods_metadata_path, data)
+
+    def _migrate_metadata_if_needed(self):
+        if self.local_config.get('metadata_migrated_v2'):
+            return
 
     def _session_manifest_path(self):
         return os.path.join(self.config_dir, 'session.lock')
@@ -446,7 +463,7 @@ class DeltaHubApp(QWidget):
                         safe_mod_info = {'key': mod_key, 'name': config_data.get('name', tr('defaults.local_mod')), 'version': config_data.get('version', '1.0.0'),
                                          'author': config_data.get('author', tr('defaults.unknown')), 'tagline': config_data.get('tagline', tr('defaults.no_description')),
                                          'game_version': config_data.get('game_version', tr('defaults.not_specified')), 'description_url': '', 'downloads': 0,
-                                         'modtype': config_data.get('modtype', 'deltarune'), 'is_verified': False, 'icon_url': '', 'tags': ['local'],
+                                         'modgame': config_data.get('modgame', 'deltarune'), 'is_verified': False, 'icon_url': '', 'tags': ['local'],
                                          'hide_mod': False, 'is_xdelta': False, 'ban_status': False, 'demo_url': None, 'demo_version': '1.0.0',
                                          'created_date': config_data.get('created_date', 'N/A'), 'last_updated': config_data.get('created_date', 'N/A'),
                                          'gamebanana_url': config_data.get('gamebanana_url')}
@@ -855,7 +872,7 @@ class DeltaHubApp(QWidget):
         self.sort_combo.setCurrentIndex(0)
         self.sort_order_btn.setText('▼')
         self.sort_ascending = False
-        self.modtype_combo.setCurrentIndex(0)
+        self.modgame_combo.setCurrentIndex(0)
         for tag_checkbox in [self.tag_translation, self.tag_customization, self.tag_gameplay, self.tag_other]:
             tag_checkbox.setChecked(False)
         self.search_text = ''
@@ -1069,13 +1086,13 @@ class DeltaHubApp(QWidget):
         self.sort_order_btn.clicked.connect(self._toggle_sort_order)
         filters_layout.addWidget(self.sort_order_btn)
         filters_layout.addSpacing(20)
-        self.modtype_combo = QComboBox()
-        self.modtype_combo.addItem(tr('dropdowns.all_mods'), '')
-        self.modtype_combo.addItem(tr('dropdowns.filter_deltarune'), 'deltarune')
-        self.modtype_combo.addItem(tr('dropdowns.filter_deltarunedemo'), 'deltarunedemo')
-        self.modtype_combo.addItem(tr('dropdowns.filter_undertale'), 'undertale')
-        self.modtype_combo.currentIndexChanged.connect(self._on_modtype_filter_changed)
-        filters_layout.addWidget(self.modtype_combo)
+        self.modgame_combo = QComboBox()
+        self.modgame_combo.addItem(tr('dropdowns.all_mods'), '')
+        self.modgame_combo.addItem(tr('dropdowns.filter_deltarune'), 'deltarune')
+        self.modgame_combo.addItem(tr('dropdowns.filter_deltarunedemo'), 'deltarunedemo')
+        self.modgame_combo.addItem(tr('dropdowns.filter_undertale'), 'undertale')
+        self.modgame_combo.currentIndexChanged.connect(self._on_modgame_filter_changed)
+        filters_layout.addWidget(self.modgame_combo)
         filters_layout.addSpacing(20)
         filters_layout.addWidget(QLabel(tr('ui.tags_label')))
         self.tag_translation = QCheckBox(tr('tags.translation'))
@@ -1137,7 +1154,7 @@ class DeltaHubApp(QWidget):
         self.current_page = 1
         self._update_filtered_mods()
 
-    def _on_modtype_filter_changed(self, index):
+    def _on_modgame_filter_changed(self, index):
         self.current_page = 1
         self._update_filtered_mods()
 
@@ -1443,9 +1460,9 @@ class DeltaHubApp(QWidget):
         installed_mods = self._get_installed_mods_list()
         is_demo_mode = hasattr(self, 'game_type_combo') and self.game_type_combo.currentData() == 'deltarunedemo'
         for mod_info in installed_mods:
-            if is_demo_mode and (not mod_info.get('modtype', 'deltarune') == 'deltarunedemo'):
+            if is_demo_mode and (not mod_info.get('modgame', 'deltarune') == 'deltarunedemo'):
                 continue
-            elif not is_demo_mode and mod_info.get('modtype', 'deltarune') == 'deltarunedemo':
+            elif not is_demo_mode and mod_info.get('modgame', 'deltarune') == 'deltarunedemo':
                 continue
             if selected_chapter_id is not None:
                 mod_data = self._create_mod_object_from_info(mod_info)
@@ -1568,18 +1585,18 @@ class DeltaHubApp(QWidget):
                 mod_exists = self._check_mod_exists(mod_info)
                 if not mod_exists:
                     continue
-                mod_modtype = mod_info.get('modtype', 'deltarune')
+                mod_modgame = mod_info.get('modgame', 'deltarune')
                 slot_id = slot_frame.chapter_id
                 if slot_id == -10:
-                    if mod_modtype != 'deltarunedemo':
+                    if mod_modgame != 'deltarunedemo':
                         continue
                 elif slot_id == -20:
-                    if mod_modtype != 'undertale':
+                    if mod_modgame != 'undertale':
                         continue
                 elif slot_id == -1:
-                    if mod_modtype not in ['deltarune', 'deltarunedemo']:
+                    if mod_modgame not in ['deltarune', 'deltarunedemo']:
                         continue
-                elif mod_modtype != 'deltarune':
+                elif mod_modgame != 'deltarune':
                     continue
                 mod_data = self._create_mod_object_from_info(mod_info)
                 if mod_data and (not self._find_mod_in_slots(mod_data)):
@@ -1645,8 +1662,8 @@ class DeltaHubApp(QWidget):
             mod_exists = self._check_mod_exists(mod_info)
             if not mod_exists:
                 continue
-            mod_modtype = mod_info.get('modtype', 'deltarune')
-            if mod_modtype != current_game_type:
+            mod_modgame = mod_info.get('modgame', 'deltarune')
+            if mod_modgame != current_game_type:
                 continue
             is_local = mod_info.get('is_local_mod', False)
             is_available = mod_info.get('is_available_on_server', True)
@@ -1725,44 +1742,50 @@ class DeltaHubApp(QWidget):
         return False
 
     def _cleanup_missing_mods(self, installed_mods):
-        missing_mods = []
-        for mod_info in installed_mods:
-            mod_key = mod_info.get('mod_key', '')
-            mod_name = mod_info.get('name', '')
-            mod_exists = False
-            if mod_key:
-                mod_folder_by_key = os.path.join(self.mods_dir, mod_key)
-                if os.path.exists(mod_folder_by_key):
-                    mod_exists = True
-            if not mod_exists and mod_name:
-                mod_folder_by_name = os.path.join(self.mods_dir, mod_name)
-                if os.path.exists(mod_folder_by_name):
-                    mod_exists = True
-            if not mod_exists:
-                missing_mods.append(mod_info)
-        for missing_mod in missing_mods:
-            mod_data = self._create_mod_object_from_info(missing_mod)
-            if mod_data:
-                self._remove_mod_from_all_slots(mod_data)
-                config_keys = ['saved_slots_deltarune', 'saved_slots_deltarune_chapter', 'saved_slots_deltarunedemo', 'saved_slots_undertale']
-                for config_key in config_keys:
-                    slots_data = self.local_config.get(config_key, {})
-                    slots_to_clear = []
-                    for slot_id_str, slot_info in slots_data.items():
-                        if isinstance(slot_info, dict):
-                            saved_mod_key = slot_info.get('mod_key')
-                            if hasattr(mod_data, 'key') and saved_mod_key == mod_data.key:
-                                slots_to_clear.append(slot_id_str)
-                    for slot_id_str in slots_to_clear:
-                        del slots_data[slot_id_str]
-                    if slots_to_clear:
-                        self.local_config[config_key] = slots_data
-                        self._write_local_config()
+        installed_mod_keys = {mod.get('mod_key') for mod in installed_mods if mod.get('mod_key')}
+        
+        mods_metadata = self._read_mods_metadata()
+        metadata_updated = False
+        
+        orphaned_keys = set(mods_metadata.keys()) - installed_mod_keys
+        if orphaned_keys:
+            for key in orphaned_keys:
+                del mods_metadata[key]
+            metadata_updated = True
+            
+        if metadata_updated:
+            self._write_mods_metadata(mods_metadata)
+
+        # Clear orphaned mods from slots
+        for orphaned_key in orphaned_keys:
+            # Create a dummy ModInfo object for removal logic
+            dummy_mod_data = self._create_mod_object_from_info({'mod_key': orphaned_key, 'name': 'Orphaned Mod'})
+            if not dummy_mod_data:
+                continue
+            
+            self._remove_mod_from_all_slots(dummy_mod_data)
+            config_keys = ['saved_slots_deltarune', 'saved_slots_deltarune_chapter', 'saved_slots_deltarunedemo', 'saved_slots_undertale']
+            for config_key in config_keys:
+                slots_data = self.local_config.get(config_key, {})
+                slots_to_clear = []
+                for slot_id_str, slot_info in list(slots_data.items()):
+                    if isinstance(slot_info, dict):
+                        saved_mod_key = slot_info.get('mod_key')
+                        if saved_mod_key == orphaned_key:
+                            slots_to_clear.append(slot_id_str)
+                for slot_id_str in slots_to_clear:
+                    del slots_data[slot_id_str]
+                if slots_to_clear:
+                    self.local_config[config_key] = slots_data
+                    self._write_local_config()
 
     def _get_installed_mods_list(self):
         installed_mods = []
         if not hasattr(self, 'mods_dir') or not os.path.exists(self.mods_dir):
             return installed_mods
+        mods_metadata = self._read_mods_metadata()
+        metadata_updated = False
+        found_mod_keys = set()
         for folder_name in os.listdir(self.mods_dir):
             folder_path = os.path.join(self.mods_dir, folder_name)
             if not os.path.isdir(folder_path):
@@ -1772,13 +1795,37 @@ class DeltaHubApp(QWidget):
                 try:
                     config_data = self._read_json(config_path)
                     if config_data:
-                        config_data['is_available_on_server'] = config_data.get('is_available_on_server', False)
+                        mod_key = config_data.get('mod_key')
+                        if not mod_key:
+                            continue
+                        
+                        found_mod_keys.add(mod_key)
+                        mod_meta = mods_metadata.get(mod_key)
+
+                        if not mod_meta:
+                            mods_metadata[mod_key] = {
+                                'installed_date': time.strftime('%Y-%m-%d %H:%M:%S'),
+                                'is_available_on_server': not config_data.get('is_local_mod', False)
+                            }
+                            metadata_updated = True
+                            mod_meta = mods_metadata[mod_key]
+                        
+                        config_data['installed_date'] = mod_meta.get('installed_date')
+                        config_data['is_available_on_server'] = mod_meta.get('is_available_on_server', False)
                         config_data['is_local_mod'] = config_data.get('is_local_mod', False)
                         config_data['folder_name'] = folder_name
                         installed_mods.append(config_data)
                 except Exception as e:
                     logging.warning(f'Failed to read config {config_path}: {e}')
                     continue
+        orphaned_keys = set(mods_metadata.keys()) - found_mod_keys
+        if orphaned_keys:
+            for key in list(orphaned_keys):
+                del mods_metadata[key]
+            metadata_updated = True
+        
+        if metadata_updated:
+            self._write_mods_metadata(mods_metadata)
         return installed_mods
 
     def _create_mod_object_from_info(self, mod_info):
@@ -1788,17 +1835,23 @@ class DeltaHubApp(QWidget):
                 if hasattr(mod, 'key') and mod.key == mod_key:
                     return mod
         from models.mod_models import ModInfo
-        return ModInfo(key=mod_key, name=mod_info.get('name', mod_key), tagline=mod_info.get('tagline', tr('defaults.no_description')), version=mod_info.get('version', '1.0.0'), author=mod_info.get('author', tr('defaults.unknown')), game_version=mod_info.get('game_version', '1.04'), description_url='', downloads=0, modtype=mod_info.get('modtype', 'deltarune'), is_verified=False)
+        return ModInfo(key=mod_key, name=mod_info.get('name', mod_key), tagline=mod_info.get('tagline', tr('defaults.no_description')), version=mod_info.get('version', '1.0.0'), author=mod_info.get('author', tr('defaults.unknown')), game_version=mod_info.get('game_version', '1.04'), description_url='', downloads=0, modgame=mod_info.get('modgame', 'deltarune'), is_verified=False)
 
     def _on_installed_mod_clicked(self, mod_data):
         for i in range(self.installed_mods_layout.count() - 1):
-            item = self.installed_mods_layout.itemAt(i)
-            if item:
-                widget = item.widget()
-                if isinstance(widget, InstalledModWidget) and widget.mod_data == mod_data:
-                    self._clear_all_installed_mod_selections()
-                    widget.set_selected(True)
-                    break
+            try:
+                item = self.installed_mods_layout.itemAt(i)
+                if item:
+                    widget = item.widget()
+                    if isinstance(widget, InstalledModWidget):
+                        widget_mod_key = getattr(widget.mod_data, 'key', None)
+                        mod_data_key = getattr(mod_data, 'key', None)
+                        if widget_mod_key == mod_data_key:
+                             self._clear_all_installed_mod_selections()
+                             widget.set_selected(True)
+                             break
+            except Exception:
+                continue
 
     def _clear_all_installed_mod_selections(self):
         for i in range(self.installed_mods_layout.count() - 1):
@@ -1856,7 +1909,7 @@ class DeltaHubApp(QWidget):
                 target_slot = None
                 if is_demo_mode:
                     target_slot_id = -10
-                elif hasattr(mod_data, 'modtype') and mod_data.modtype == 'undertale':
+                elif hasattr(mod_data, 'modgame') and mod_data.modgame == 'undertale':
                     target_slot_id = -20
                 else:
                     target_slot_id = -1
@@ -2035,36 +2088,36 @@ class DeltaHubApp(QWidget):
         tagline_layout.addSpacing(20)
         status_layout = QVBoxLayout()
         status_layout.setSpacing(15)
-        modtype_container = QVBoxLayout()
-        modtype_container.setSpacing(4)
-        modtype_label = OutlinedTextLabel(tr(f'ui.{mod_data.modtype}_label'))
+        modgame_container = QVBoxLayout()
+        modgame_container.setSpacing(4)
+        modgame_label = OutlinedTextLabel(tr(f'ui.{mod_data.modgame}_label'))
         fill_color = 'white'
         outline_color = '#222222'
-        if mod_data.modtype == 'deltarune':
+        if mod_data.modgame == 'deltarune':
             outline_color = '#222222'
-        elif mod_data.modtype == 'deltarunedemo':
+        elif mod_data.modgame == 'deltarunedemo':
             outline_color = 'lightgreen'
-        elif mod_data.modtype == 'undertale':
+        elif mod_data.modgame == 'undertale':
             outline_color = '#750B0B'
-        f = modtype_label.font()
+        f = modgame_label.font()
         f.setBold(True)
         f.setPointSize(15)
-        modtype_label.setFont(f)
-        modtype_label.setColors(fill_color, outline_color)
-        modtype_label.setOutlineWidth(0.8)
-        modtype_label.setMinimumHeight(26)
-        modtype_label.setLeftMargin(0)
-        modtype_container.addWidget(modtype_label)
-        modtype_desc = OutlinedTextLabel(tr(f'ui.{mod_data.modtype}_desc'))
-        df = modtype_desc.font()
+        modgame_label.setFont(f)
+        modgame_label.setColors(fill_color, outline_color)
+        modgame_label.setOutlineWidth(0.8)
+        modgame_label.setMinimumHeight(26)
+        modgame_label.setLeftMargin(0)
+        modgame_container.addWidget(modgame_label)
+        modgame_desc = OutlinedTextLabel(tr(f'ui.{mod_data.modgame}_desc'))
+        df = modgame_desc.font()
         df.setPointSize(11)
-        modtype_desc.setFont(df)
-        modtype_desc.setColors(fill_color, outline_color)
-        modtype_desc.setOutlineWidth(0.7)
-        modtype_desc.setMinimumHeight(18)
-        modtype_desc.setLeftMargin(12)
-        modtype_container.addWidget(modtype_desc)
-        status_layout.addLayout(modtype_container)
+        modgame_desc.setFont(df)
+        modgame_desc.setColors(fill_color, outline_color)
+        modgame_desc.setOutlineWidth(0.7)
+        modgame_desc.setMinimumHeight(18)
+        modgame_desc.setLeftMargin(12)
+        modgame_container.addWidget(modgame_desc)
+        status_layout.addLayout(modgame_container)
         tagline_layout.addLayout(status_layout)
         tagline_layout.addStretch()
         right_layout.addWidget(tagline_container)
@@ -2366,9 +2419,9 @@ class DeltaHubApp(QWidget):
             selected_tags.append('gameplay')
         if hasattr(self, 'tag_other') and self.tag_other.isChecked():
             selected_tags.append('other')
-        selected_modtype = ''
-        if hasattr(self, 'modtype_combo'):
-            selected_modtype = self.modtype_combo.currentData() or ''
+        selected_modgame = ''
+        if hasattr(self, 'modgame_combo'):
+            selected_modgame = self.modgame_combo.currentData() or ''
         self.filtered_mods = []
         for mod in self.all_mods:
             if getattr(mod, 'hide_mod', False) in [True, 'true', 'True', 1]:
@@ -2384,9 +2437,9 @@ class DeltaHubApp(QWidget):
                 mod_tags = getattr(mod, 'tags', []) or []
                 if not all((tag in mod_tags for tag in selected_tags)):
                     continue
-            if selected_modtype:
-                mod_modtype = getattr(mod, 'modtype', 'deltarune')
-                if mod_modtype != selected_modtype:
+            if selected_modgame:
+                mod_modgame = getattr(mod, 'modgame', 'deltarune')
+                if mod_modgame != selected_modgame:
                     continue
             if hasattr(self, 'search_text') and self.search_text:
                 search_text_lower = self.search_text.lower()
@@ -2469,10 +2522,10 @@ class DeltaHubApp(QWidget):
             if self.is_installing and not force:
                 return
             available_chapters = []
-            if mod.modtype == 'undertale':
+            if mod.modgame == 'undertale':
                 if mod.files.get('undertale'):
                     available_chapters.append(0)
-            elif mod.modtype == 'deltarunedemo':
+            elif mod.modgame == 'deltarunedemo':
                 if mod.files.get('demo'):
                     available_chapters.append(-1)
             else:
@@ -2481,7 +2534,7 @@ class DeltaHubApp(QWidget):
                     if chapter_data:
                         available_chapters.append(chapter_id)
             if not available_chapters:
-                debug_info = f'Mod type: {mod.modtype}, Files keys: {list(mod.files.keys())}'
+                debug_info = f'Mod type: {mod.modgame}, Files keys: {list(mod.files.keys())}'
                 print(f'Debug: {debug_info}')
                 QMessageBox.warning(self, tr('errors.error'), tr('errors.mod_no_files', mod_name=mod.name) + f'\n\nDebug: {debug_info}')
                 return
@@ -5504,6 +5557,43 @@ class DeltaHubApp(QWidget):
     def _load_local_data(self):
         self.local_config = self._read_json(self.config_path) or {}
 
+        mods_metadata = self._read_mods_metadata()
+        updated = False
+        if not os.path.exists(self.mods_dir):
+            return
+
+        for folder_name in os.listdir(self.mods_dir):
+            folder_path = os.path.join(self.mods_dir, folder_name)
+            if not os.path.isdir(folder_path):
+                continue
+            
+            config_path = os.path.join(folder_path, 'config.json')
+            if not os.path.exists(config_path):
+                continue
+
+            try:
+                config_data = self._read_json(config_path)
+                if not config_data or not isinstance(config_data, dict):
+                    continue
+                
+                mod_key = config_data.get('mod_key')
+                if not mod_key: continue
+
+                if 'installed_date' in config_data or 'is_available_on_server' in config_data:
+                    if mod_key not in mods_metadata: mods_metadata[mod_key] = {}
+                    if 'installed_date' in config_data:
+                        mods_metadata[mod_key]['installed_date'] = config_data.pop('installed_date')
+                    if 'is_available_on_server' in config_data:
+                        mods_metadata[mod_key]['is_available_on_server'] = config_data.pop('is_available_on_server')
+                    self._write_json(config_path, config_data)
+                    updated = True
+            except Exception as e:
+                logging.warning(f"Failed to migrate metadata for mod in {folder_name}: {e}")
+        if updated:
+            self._write_mods_metadata(mods_metadata)
+        self.local_config['metadata_migrated_v2'] = True
+        self._write_local_config()
+
     def _migrate_config_if_needed(self):
         self.local_config['cache_format_version'] = LAUNCHER_VERSION
         defaults = {'game_path': '', 'last_selected': {}, 'use_custom_executable': False, 'demo_game_path': '', 'launch_via_steam': False, 'direct_launch_slot_id': -1, 'demo_mode_enabled': False, 'chapter_mode_enabled': False, 'custom_background_path': '', 'custom_executable_path': '', 'background_disabled': False, 'custom_color_background': '', 'custom_color_button': '', 'custom_color_border': '', 'custom_color_button_hover': '', 'custom_color_text': '', 'mods_dir_path': '', 'custom_color_version_text': ''}
@@ -5537,11 +5627,11 @@ class DeltaHubApp(QWidget):
                     data['files'] = data['chapters']
                     del data['chapters']
                     needs_migration = True
-                if 'is_demo_mod' in data and 'modtype' not in data:
+                if 'is_demo_mod' in data and 'modgame' not in data:
                     if data.get('is_demo_mod', False):
-                        data['modtype'] = 'deltarunedemo'
+                        data['modgame'] = 'deltarunedemo'
                     else:
-                        data['modtype'] = 'deltarune'
+                        data['modgame'] = 'deltarune'
                     del data['is_demo_mod']
                     needs_migration = True
                 if needs_migration:

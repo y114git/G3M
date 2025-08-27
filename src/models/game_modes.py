@@ -44,7 +44,7 @@ class FullGameMode(GameMode):
         return ui_index
 
     def filter_mods_for_ui(self, all_mods: list['ModInfo']) -> dict[int, list['ModInfo']]:
-        return {i: [mod for mod in all_mods if mod.modtype == 'deltarune' and (not mod.hide_mod) and (not mod.ban_status) and mod.get_chapter_data(i)] for i in range(5)}
+        return {i: [mod for mod in all_mods if mod.modgame == 'deltarune' and (not mod.hide_mod) and (not mod.ban_status) and mod.get_chapter_data(i)] for i in range(5)}
 
 class DemoGameMode(GameMode):
 
@@ -76,4 +76,4 @@ class UndertaleGameMode(GameMode):
         return 0
 
     def filter_mods_for_ui(self, all_mods: list['ModInfo']) -> dict[int, list['ModInfo']]:
-        return {0: [mod for mod in all_mods if mod.modtype == 'undertale' and (not mod.hide_mod) and (not mod.ban_status) and mod.files.get('undertale')]}
+        return {0: [mod for mod in all_mods if mod.modgame == 'undertale' and (not mod.hide_mod) and (not mod.ban_status) and mod.files.get('undertale')]}

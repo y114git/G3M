@@ -23,23 +23,23 @@ class ModPlaqueWidget(BaseModWidget):
         tags_layout = QHBoxLayout()
         tags_layout.setContentsMargins(0, 5, 0, 0)
         tags_layout.setSpacing(10)
-        modtype = getattr(self.mod_data, 'modtype', 'deltarune')
-        modtype_text = ''
-        modtype_style = ''
-        if modtype == 'deltarune':
-            modtype_text = 'DELTARUNE'
-            modtype_style = 'background-color: black; color: white; border: 1px solid white;'
-        elif modtype == 'deltarunedemo':
-            modtype_text = 'DELTARUNE DEMO'
-            modtype_style = 'background-color: black; color: white; border: 1px solid lightgreen;'
-        elif modtype == 'undertale':
-            modtype_text = 'UNDERTALE'
-            modtype_style = 'background-color: red; color: white; border: 1px solid red;'
-        if modtype_text:
-            modtype_label = QLabel(modtype_text)
-            style_sheet = f'font-weight: bold; padding: 2px 5px; border-radius: 3px; {modtype_style}'
-            modtype_label.setStyleSheet(style_sheet)
-            tags_layout.addWidget(modtype_label)
+        modgame = getattr(self.mod_data, 'modgame', 'deltarune')
+        modgame_text = ''
+        modgame_style = ''
+        if modgame == 'deltarune':
+            modgame_text = 'DELTARUNE'
+            modgame_style = 'background-color: black; color: white; border: 1px solid white;'
+        elif modgame == 'deltarunedemo':
+            modgame_text = 'DELTARUNE DEMO'
+            modgame_style = 'background-color: black; color: white; border: 1px solid lightgreen;'
+        elif modgame == 'undertale':
+            modgame_text = 'UNDERTALE'
+            modgame_style = 'background-color: red; color: white; border: 1px solid red;'
+        if modgame_text:
+            modgame_label = QLabel(modgame_text)
+            style_sheet = f'font-weight: bold; padding: 2px 5px; border-radius: 3px; {modgame_style}'
+            modgame_label.setStyleSheet(style_sheet)
+            tags_layout.addWidget(modgame_label)
         is_piracy_protected = getattr(self.mod_data, 'is_piracy_protected', False)
         is_patch = getattr(self.mod_data, 'is_xdelta', is_piracy_protected)
         if is_patch:

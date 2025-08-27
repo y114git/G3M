@@ -119,7 +119,7 @@ def setup_app():
 
 def check_splash_settings():
     try:
-        config_path = os.path.join(get_user_data_root(), 'cache', 'config.json')
+        config_path = os.path.join(get_user_data_root(), 'settings', 'config.json')
         if os.path.exists(config_path):
             import json
             with open(config_path, 'r', encoding='utf-8') as f:

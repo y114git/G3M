@@ -50,20 +50,20 @@ class ModEditorDialog(QDialog):
         settings_frame = QFrame()
         settings_frame.setFrameStyle(QFrame.Shape.Box)
         settings_layout = QVBoxLayout(settings_frame)
-        modtype_layout = QHBoxLayout()
-        modtype_layout.addStretch()
-        modtype_layout.addWidget(QLabel(tr('ui.mod_type_label')))
-        self.modtype_combo = QComboBox()
-        self.modtype_combo.addItem('DELTARUNE', 'deltarune')
-        self.modtype_combo.addItem('DELTARUNE DEMO', 'deltarunedemo')
-        self.modtype_combo.addItem('UNDERTALE', 'undertale')
-        self.modtype_combo.currentIndexChanged.connect(self._update_file_tabs)
-        modtype_layout.addWidget(self.modtype_combo)
-        modtype_layout.addSpacing(12)
+        modgame_layout = QHBoxLayout()
+        modgame_layout.addStretch()
+        modgame_layout.addWidget(QLabel(tr('ui.mod_type_label')))
+        self.modgame_combo = QComboBox()
+        self.modgame_combo.addItem('DELTARUNE', 'deltarune')
+        self.modgame_combo.addItem('DELTARUNE DEMO', 'deltarunedemo')
+        self.modgame_combo.addItem('UNDERTALE', 'undertale')
+        self.modgame_combo.currentIndexChanged.connect(self._update_file_tabs)
+        modgame_layout.addWidget(self.modgame_combo)
+        modgame_layout.addSpacing(12)
         self.piracy_checkbox = QCheckBox(tr('checkboxes.piracy_protection'))
-        modtype_layout.addWidget(self.piracy_checkbox)
-        modtype_layout.addStretch()
-        settings_layout.addLayout(modtype_layout)
+        modgame_layout.addWidget(self.piracy_checkbox)
+        modgame_layout.addStretch()
+        settings_layout.addLayout(modgame_layout)
         form_layout = QVBoxLayout()
         self._create_form_fields(form_layout)
         settings_layout.addLayout(form_layout)
@@ -423,7 +423,7 @@ class ModEditorDialog(QDialog):
         files_layout.addWidget(files_label, alignment=Qt.AlignmentFlag.AlignHCenter)
         self.file_tabs = NoScrollTabWidget()
         self.file_tabs.setStyleSheet('QTabWidget::tab-bar { alignment: center; } QTabBar::tab { padding: 4px 8px; }')
-        self.modtype_combo.currentIndexChanged.connect(self._update_file_tabs)
+        self.modgame_combo.currentIndexChanged.connect(self._update_file_tabs)
         self.piracy_checkbox.stateChanged.connect(self._update_data_file_labels)
         self.piracy_checkbox.stateChanged.connect(self._recreate_data_frames)
         self.piracy_checkbox.stateChanged.connect(self._update_data_add_button_texts)
@@ -516,10 +516,10 @@ class ModEditorDialog(QDialog):
     def _update_file_tabs(self):
         while self.file_tabs.count():
             self.file_tabs.removeTab(0)
-        modtype = self.modtype_combo.currentData()
-        if modtype == 'deltarunedemo':
+        modgame = self.modgame_combo.currentData()
+        if modgame == 'deltarunedemo':
             self._create_file_tab(tr('tabs.demo'))
-        elif modtype == 'undertale':
+        elif modgame == 'undertale':
             self._create_file_tab('UNDERTALE')
         else:
             for tab_name in [tr('tabs.menu_root'), tr('tabs.chapter_1'), tr('tabs.chapter_2'), tr('tabs.chapter_3'), tr('tabs.chapter_4')]:
@@ -1449,17 +1449,17 @@ class ModEditorDialog(QDialog):
 
     def _collect_files_from_tabs(self):
         files_data = {}
-        modtype = self.modtype_combo.currentData()
+        modgame = self.modgame_combo.currentData()
         if self.is_public:
-            if modtype == 'deltarunedemo':
+            if modgame == 'deltarunedemo':
                 tab_keys = ['demo']
-            elif modtype == 'undertale':
+            elif modgame == 'undertale':
                 tab_keys = ['undertale']
             else:
                 tab_keys = ['menu', 'chapter_1', 'chapter_2', 'chapter_3', 'chapter_4']
-        elif modtype == 'deltarunedemo':
+        elif modgame == 'deltarunedemo':
             tab_keys = ['demo']
-        elif modtype == 'undertale':
+        elif modgame == 'undertale':
             tab_keys = ['undertale']
         else:
             tab_keys = ['0', '1', '2', '3', '4']
@@ -1627,7 +1627,7 @@ class ModEditorDialog(QDialog):
                 'gamebanana_url': self.gamebanana_url_edit.text().strip(),
                 'description_url': self.description_url_edit.text().strip(),
                 'icon_url': self.icon_edit.text().strip(), 'tags': tags, 'hide_mod': False,
-                'is_xdelta': self.piracy_checkbox.isChecked(), 'modtype': self.modtype_combo.currentData() or 'deltarune',
+                'is_xdelta': self.piracy_checkbox.isChecked(), 'modgame': self.modgame_combo.currentData() or 'deltarune',
                 'game_version': self.game_version_combo.currentText() if self.is_public else self.game_version_edit.text().strip() or '1.04',
                 'files': files_data, 'screenshots_url': getattr(self, 'screenshots_urls', [])}
 
@@ -1751,7 +1751,7 @@ class ModEditorDialog(QDialog):
                            'is_available_on_server': False, 'name': mod_data.get('name', ''), 'version': mod_data.get('version', '1.0.0'),
                            'author': mod_data.get('author', ''), 'tagline': mod_data.get('tagline', tr('defaults.no_short_description')),
                            'gamebanana_url': mod_data.get('gamebanana_url', ''), 'game_version': mod_data.get('game_version', tr('defaults.not_specified')),
-                           'modtype': mod_data.get('modtype', 'deltarune'), 'files': files_data}
+                           'modgame': mod_data.get('modgame', 'deltarune'), 'files': files_data}
             config_path = os.path.join(mod_dir, 'config.json')
             self.parent_app._write_json(config_path, config_data)
             self.parent_app._load_local_mods_from_folders()
@@ -1830,7 +1830,7 @@ class ModEditorDialog(QDialog):
         if not hasattr(self, 'original_mod_data') or not self.original_mod_data:
             return True
         current_data, original_data = (self._collect_mod_data(), self.original_mod_data)
-        fields_to_compare = ['name', 'version', 'author', 'tagline', 'gamebanana_url', 'description_url', 'icon_url', 'tags', 'is_xdelta', 'modtype', 'game_version', 'files', 'screenshots_url']
+        fields_to_compare = ['name', 'version', 'author', 'tagline', 'gamebanana_url', 'description_url', 'icon_url', 'tags', 'is_xdelta', 'modgame', 'game_version', 'files', 'screenshots_url']
         return any((current_data.get(field) != original_data.get(field) for field in fields_to_compare))
 
     def _update_local_mod(self):
@@ -1906,7 +1906,7 @@ class ModEditorDialog(QDialog):
                                 'author': updated_data.get('author', ''), 'tagline': updated_data.get('tagline', ''),
                                 'gamebanana_url': updated_data.get('gamebanana_url', ''),
                                 'game_version': updated_data.get('game_version', tr('defaults.not_specified')),
-                                'modtype': updated_data.get('modtype', 'deltarune'), 'files': files_data})
+                                'modgame': updated_data.get('modgame', 'deltarune'), 'files': files_data})
             self.parent_app._write_json(config_path, config_data)
             self.parent_app._load_local_mods_from_folders()
             self.parent_app._update_installed_mods_display()
@@ -1996,10 +1996,10 @@ class ModEditorDialog(QDialog):
             version = version.split('|')[0]
         self.version_edit.setText(version)
         self.description_url_edit.setText(actual_mod_data.get('description_url', ''))
-        modtype = actual_mod_data.get('modtype', 'deltarune')
-        for i in range(self.modtype_combo.count()):
-            if self.modtype_combo.itemData(i) == modtype:
-                self.modtype_combo.setCurrentIndex(i)
+        modgame = actual_mod_data.get('modgame', 'deltarune')
+        for i in range(self.modgame_combo.count()):
+            if self.modgame_combo.itemData(i) == modgame:
+                self.modgame_combo.setCurrentIndex(i)
                 break
         self.piracy_checkbox.setChecked(actual_mod_data.get('is_xdelta', actual_mod_data.get('is_piracy_protected', False)))
         tags = actual_mod_data.get('tags', [])
@@ -2036,17 +2036,17 @@ class ModEditorDialog(QDialog):
             self._populate_from_files_structure(chapters_data)
 
     def _populate_from_files_structure(self, files_data):
-        modtype = self.modtype_combo.currentData()
+        modgame = self.modgame_combo.currentData()
         if self.is_public:
-            if modtype == 'deltarunedemo':
+            if modgame == 'deltarunedemo':
                 file_keys = {'demo': 0}
-            elif modtype == 'undertale':
+            elif modgame == 'undertale':
                 file_keys = {'undertale': 0}
             else:
                 file_keys = {'menu': 0, 'chapter_1': 1, 'chapter_2': 2, 'chapter_3': 3, 'chapter_4': 4}
-        elif modtype == 'deltarunedemo':
+        elif modgame == 'deltarunedemo':
             file_keys = {'0': 0}
-        elif modtype == 'undertale':
+        elif modgame == 'undertale':
             file_keys = {'0': 0}
         else:
             file_keys = {'0': 0, '1': 1, '2': 2, '3': 3, '4': 4}

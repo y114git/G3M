@@ -27,7 +27,7 @@ class ModInfo:
     game_version: str
     description_url: str
     downloads: int
-    modtype: str
+    modgame: str
     is_verified: bool
     icon_url: Optional[str] = None
     tags: List[str] = field(default_factory=list)
@@ -44,13 +44,13 @@ class ModInfo:
 
     def get_chapter_data(self, chapter_id: int) -> Optional[ModChapterData]:
         chapter_map = {0: '0', 1: '1', 2: '2', 3: '3', 4: '4', -1: 'demo'}
-        if self.modtype == 'undertale' and chapter_id == 0:
+        if self.modgame == 'undertale' and chapter_id == 0:
             return self.files.get('undertale')
         file_key = chapter_map.get(chapter_id)
         return self.files.get(file_key) if file_key else None
 
     def is_valid_for_demo(self) -> bool:
-        if self.modtype != 'deltarunedemo':
+        if self.modgame != 'deltarunedemo':
             return False
         if self.key.startswith('local_'):
             return bool(self.files and self.files.get('demo'))

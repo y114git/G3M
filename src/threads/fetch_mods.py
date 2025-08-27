@@ -3,6 +3,7 @@ import os
 import re
 from typing import Any, Dict, List, Optional
 import requests
+import logging
 from PyQt6.QtCore import QThread, pyqtSignal
 from config.constants import CLOUD_FUNCTIONS_BASE_URL, UI_COLORS
 from localization.manager import tr
@@ -54,9 +55,9 @@ class FetchModsThread(QThread):
         files_data = self._extract_files_data(data)
         composite_version = self._aggregate_versions(files_data)
         base_version = data.get('version')
-        modtype = data.get('modtype', 'deltarune')
-        if modtype == 'deltarune' and data.get('is_demo_mod', False):
-            modtype = 'deltarunedemo'
+        modgame = data.get('modgame', 'deltarune')
+        if modgame == 'deltarune' and data.get('is_demo_mod', False):
+            modgame = 'deltarunedemo'
         screens_list = data.get('screenshots_url', [])
         if isinstance(screens_list, str):
             screens_list = [s.strip() for s in screens_list.split(',') if s.strip()]
@@ -65,7 +66,7 @@ class FetchModsThread(QThread):
         mod = ModInfo(key=key, name=data.get('name', tr('status.unknown_mod')), author=data.get('author', tr('status.unknown_author_status')),
                       version=f'{base_version}|{composite_version}' if base_version else composite_version,
                       tagline=data.get('tagline', tr('status.no_description_status')), game_version=data.get('game_version', tr('status.no_version')),
-                      description_url=data.get('description_url', ''), downloads=data.get('downloads', 0), modtype=modtype,
+                      description_url=data.get('description_url', ''), downloads=data.get('downloads', 0), modgame=modgame,
                       is_verified=data.get('is_verified', False), icon_url=data.get('icon_url'), tags=data.get('tags', []),
                       hide_mod=data.get('hide_mod', False), is_xdelta=data.get('is_xdelta', data.get('is_piracy_protected', False)),
                       ban_status=data.get('ban_status', False), demo_url=files_data.get('demo', {}).get('url') if files_data else None,
@@ -197,23 +198,34 @@ class FetchModsThread(QThread):
         remote_mod_keys = {mod.key for mod in all_mods}
         if not hasattr(self.main_window, 'mods_dir') or not os.path.exists(self.main_window.mods_dir):
             return
-        for folder_name in os.listdir(self.main_window.mods_dir):
-            folder_path = os.path.join(self.main_window.mods_dir, folder_name)
-            if not os.path.isdir(folder_path):
-                continue
-            config_path = os.path.join(folder_path, 'config.json')
-            if os.path.exists(config_path):
+        try:
+            mods_metadata = self.main_window._read_mods_metadata()
+            metadata_updated = False
+
+            for folder_name in os.listdir(self.main_window.mods_dir):
+                folder_path = os.path.join(self.main_window.mods_dir, folder_name)
+                if not os.path.isdir(folder_path):
+                    continue
+                config_path = os.path.join(folder_path, 'config.json')
+                if not os.path.exists(config_path):
+                    continue
+                
                 try:
                     config_data = self.main_window._read_json(config_path)
-                    if not config_data:
-                        continue
+                    if not config_data: continue
                     mod_key = config_data.get('mod_key')
-                    is_local = config_data.get('is_local_mod', False)
-                    if mod_key and (not is_local):
-                        is_available = mod_key in remote_mod_keys
-                        is_available_on_server = config_data.get('is_available_on_server')
-                        if is_available_on_server != is_available:
-                            config_data['is_available_on_server'] = is_available
-                            self.main_window._write_json(config_path, config_data)
+                    if not mod_key or config_data.get('is_local_mod', False):
+                        continue
+                    is_available_now = mod_key in remote_mod_keys
+                    mod_meta = mods_metadata.get(mod_key, {})
+                    if mod_meta.get('is_available_on_server') != is_available_now:
+                        mod_meta['is_available_on_server'] = is_available_now
+                        mods_metadata[mod_key] = mod_meta
+                        metadata_updated = True
                 except (IOError, json.JSONDecodeError):
                     continue
+            
+            if metadata_updated:
+                self.main_window._write_mods_metadata(mods_metadata)
+        except Exception as e:
+            logging.warning(f"Failed to update remote exists flags in metadata: {e}")
