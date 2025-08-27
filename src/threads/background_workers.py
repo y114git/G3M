@@ -3,6 +3,7 @@ import threading
 import time
 import requests
 import zipfile
+import json
 import rarfile
 import py7zr
 from PyQt6.QtCore import QObject, QThread, pyqtSignal
@@ -426,9 +427,8 @@ class InstallModsThread(QThread):
                         if versions_dict:
                             file_info['versions'] = versions_dict
                     elif chapter_id == -1 and mod.is_valid_for_demo():
-                        if mod.demo_version:
-                            versions_dict['demo'] = mod.demo_version
-                            file_info['versions'] = versions_dict
+                        file_info['data_file_version'] = mod.demo_version or '1.0.0'
+                        file_info['versions'] = {'demo': mod.demo_version or '1.0.0'}
                     if file_info:
                         if chapter_id == -1:
                             file_key = 'demo'
@@ -437,9 +437,16 @@ class InstallModsThread(QThread):
                         else:
                             file_key = str(chapter_id)
                         files_data[file_key] = file_info
-                config_data = {'is_local_mod': False, 'mod_key': mod.key, 'name': mod.name, 'author': mod.author, 'version': mod.version, 'game_version': mod.game_version, 'modtype': mod.modtype, 'installed_date': time.strftime('%Y-%m-%d %H:%M:%S'), 'is_available_on_server': True, 'files': files_data}
+                config_data = {'is_local_mod': False, 'mod_key': mod.key, 'name': mod.name, 'author': mod.author, 'version': mod.version, 'game_version': mod.game_version, 'modgame': mod.modgame, 'files': files_data}
                 config_path = os.path.join(mod_dir, 'config.json')
                 self.main_window._write_json(config_path, config_data)
+            metadata = self.main_window._read_mods_metadata()
+            for mod_key in installed_mods.keys():
+                metadata[mod_key] = {
+                    'installed_date': time.strftime('%Y-%m-%d %H:%M:%S'),
+                    'is_available_on_server': True
+                }
+            self.main_window._write_mods_metadata(metadata)
             self._increment_downloads_for_installed_mods(installed_mods.keys())
             try:
                 os.makedirs(self.main_window.mods_dir, exist_ok=True)
@@ -578,8 +585,24 @@ class UrlInstallThread(QThread):
                     self._extract_full_archive(archive_path, target_mod_dir)
 
                     final_config_path = os.path.join(target_mod_dir, 'config.json')
-                    if not os.path.exists(final_config_path):
-                         self.main_window._write_json(final_config_path, config_data)
+                    final_config_data = {}
+                    if os.path.exists(final_config_path):
+                        final_config_data = self.main_window._read_json(final_config_path)
+                    else:
+                        final_config_data = config_data_from_archive
+                    
+                    final_config_data.pop('installed_date', None)
+                    final_config_data.pop('is_available_on_server', None)
+                    self.main_window._write_json(final_config_path, final_config_data)
+
+                    mod_key_for_meta = final_config_data.get('mod_key')
+                    if mod_key_for_meta:
+                        metadata = self.main_window._read_mods_metadata()
+                        metadata[mod_key_for_meta] = {
+                            'installed_date': time.strftime('%Y-%m-%d %H:%M:%S'),
+                            'is_available_on_server': not final_config_data.get('is_local_mod', False)
+                        }
+                        self.main_window._write_mods_metadata(metadata)
 
                     self.finished.emit(True, tr('status.install_complete_success', mod_name=mod_name))
             elif len(content) == 64 and all(c in '0123456789abcdef' for c in content.lower()):
