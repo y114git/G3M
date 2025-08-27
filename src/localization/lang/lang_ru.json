@@ -514,6 +514,7 @@
     "game_files_not_found": "Файлы игры не найдены",
     "game_launch_error": "Ошибка при запуске игры: {error}",
     "game_launch_failed": "Не удалось запустить игру:\n{error}",
+    "single_instance_error": "Дубликация приложения",
     "hide_show_mod": "Спрятать мод",
     "internet_required": "Для управления модами требуется подключение к интернету.\nПроверьте подключение и попробуйте снова.",
     "invalid_file": "Неверный файл",

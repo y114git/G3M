@@ -27,7 +27,7 @@ class CustomSplashScreen(QSplashScreen):
             self.movie = QMovie(gif_path)
             if not self.movie.isValid():
                 return False
-            self.movie.setCacheMode(QMovie.CacheMode.CacheAll)
+            self.movie.setCacheMode(QMovie.CacheMode.CacheNone)
             self.movie.setSpeed(100)
             self.movie.jumpToFrame(0)
             gif_size = self.movie.currentPixmap().size()
