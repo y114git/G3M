@@ -197,9 +197,10 @@ def run_app():
                 launcher_app['instance'] = DeltaHubApp(parent_for_dialogs=splash, initial_url=url_arg)
                 server = SingleInstanceServer(launcher_app['instance'])
                 if not server.listen(SINGLE_INSTANCE_KEY):
-                    QMessageBox.critical(None, "Error", "Couldn't start single instance server.")
+                    QMessageBox.critical(None, tr('errors.error'), tr('errors.single_instance_error'))
                     sys.exit(1)
                 launcher_app['instance'].server = server
+                launcher_app['instance']._post_show_initialization()
                 launcher_app['instance'].initialization_finished.connect(close_splash_and_show_launcher)
                 QTimer.singleShot(15000, close_splash_and_show_launcher)
             except Exception as e:
@@ -216,21 +217,20 @@ def run_app():
     global _splash_start_time
     _splash_start_time = time.time()
     splash = create_splash()
+    def start_splash_and_sound():
+        play_deltahub_sound()
+        if hasattr(splash, 'movie'):
+            splash.start_gif_animation()
+
     if hasattr(splash, 'movie'):
-        splash.movie.start()
-        splash.movie.setPaused(True)
         for _ in range(50):
             app.processEvents()
             if splash.movie.currentFrameNumber() >= 0:
                 break
             time.sleep(0.01)
-        splash.movie.stop()
-        splash.movie.jumpToFrame(0)
     splash.show()
     app.processEvents()
-    QTimer.singleShot(1000, play_deltahub_sound)
-    if hasattr(splash, 'movie'):
-        splash.start_gif_animation()
+    QTimer.singleShot(1000, start_splash_and_sound)
     launcher_app = {}
 
     def check_minimum_splash_time():
@@ -248,12 +248,7 @@ def run_app():
         if check_minimum_splash_time():
             close_splash()
             ex = launcher_app.get('instance')
-            if ex:
-                ex.show()
-                ex.is_shown_to_user = True
-                ex.activateWindow()
-                ex.raise_()
-                ex.setWindowState(ex.windowState() & ~Qt.WindowState.WindowMinimized | Qt.WindowState.WindowActive)
+            show_launcher_window(ex)
         else:
             if _splash_start_time is not None:
                 remaining_time = int((11 - (time.time() - _splash_start_time)) * 1000)
@@ -263,13 +258,16 @@ def run_app():
             def show_launcher():
                 close_splash()
                 ex = launcher_app.get('instance')
-                if ex:
-                    ex.show()
-                    ex.is_shown_to_user = True
-                    ex.activateWindow()
-                    ex.raise_()
-                    ex.setWindowState(ex.windowState() & ~Qt.WindowState.WindowMinimized | Qt.WindowState.WindowActive)
+                show_launcher_window(ex)
             QTimer.singleShot(remaining_time, show_launcher)
+
+    def show_launcher_window(ex):
+        if ex:
+            ex.show()
+            ex.is_shown_to_user = True
+            ex.activateWindow()
+            ex.raise_()
+            ex.setWindowState(ex.windowState() & ~Qt.WindowState.WindowMinimized | Qt.WindowState.WindowActive)
 
     def create_launcher():
         try:
@@ -277,9 +275,10 @@ def run_app():
             launcher_app['instance'] = DeltaHubApp(parent_for_dialogs=splash, initial_url=url_arg)
             server = SingleInstanceServer(launcher_app['instance'])
             if not server.listen(SINGLE_INSTANCE_KEY):
-                QMessageBox.critical(None, "Error", "Couldn't start single instance server.")
+                QMessageBox.critical(None, tr('errors.error'), tr('errors.single_instance_error'))
                 sys.exit(1)
-            launcher_app['instance'].server = server # Сохраняем ссылку на сервер
+            launcher_app['instance'].server = server
+            launcher_app['instance']._post_show_initialization()
             launcher_app['instance'].initialization_finished.connect(close_splash_when_ready)
             QTimer.singleShot(15000, close_splash_when_ready)
         except Exception as e:

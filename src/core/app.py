@@ -92,10 +92,6 @@ class DeltaHubApp(QWidget):
         super().__init__()
         self.server: SingleInstanceServer | None = None
         self.is_shortcut_launch = args and args.shortcut_launch
-        self._pending_install_url = initial_url
-        self.dialog_parent = parent_for_dialogs or self
-        self.session_id = uuid.uuid4().hex
-        self._init_session()
         self.presence_thread = None
         self.presence_worker = None
         self._direct_launch_cleanup_info = None
@@ -105,6 +101,9 @@ class DeltaHubApp(QWidget):
         if self.is_shortcut_launch:
             self._shortcut_launch(args)
             return
+        self._pending_install_url = initial_url
+        self.dialog_parent = parent_for_dialogs or self
+        self.session_id = uuid.uuid4().hex
         QTimer.singleShot(0, self._run_presence_tick)
         self.setWindowTitle('DELTAHUB')
         self._supports_volume = platform.system() == 'Windows'
@@ -152,7 +151,6 @@ class DeltaHubApp(QWidget):
         self.game_mode: GameMode = FullGameMode()
         self.init_ui()
         self.load_font()
-        QTimer.singleShot(100, self._perform_initial_setup)
         self.update_status_signal.connect(self._update_status)
         self.hide_window_signal.connect(self._hide_window_for_game)
         self.restore_window_signal.connect(self._restore_window_after_game)
@@ -225,14 +223,6 @@ class DeltaHubApp(QWidget):
         reply = QMessageBox.question(self, title, message, QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         self.url_install_thread.prompt_result = (reply == QMessageBox.StandardButton.Yes)
         self.url_install_thread.prompt_event.set()
-
-    def _init_session(self):
-        try:
-            import requests
-            from config.constants import CLOUD_FUNCTIONS_BASE_URL
-            requests.post(f'{CLOUD_FUNCTIONS_BASE_URL}/presenceHeartbeat', json={'sessionId': self.session_id}, timeout=5)
-        except Exception:
-            pass
 
     def _session_manifest_path(self):
         return os.path.join(self.config_dir, 'session.lock')
@@ -3869,9 +3859,13 @@ class DeltaHubApp(QWidget):
         self.launch_via_steam_checkbox.setEnabled(False)
 
     def _update_action_button_state(self):
-        if getattr(self, 'is_installing', False):
+        if getattr(self, 'is_installing', False) and not getattr(self, '_operation_cancelled', False):
             self.action_button.setText(tr('ui.cancel_button'))
             self.action_button.setEnabled(True)
+            return
+        if not self.initialization_completed:
+            self.action_button.setText(tr('status.please_wait'))
+            self.action_button.setEnabled(False)
             return
         is_demo_mode = isinstance(self.game_mode, DemoGameMode)
         is_full_install_enabled = is_demo_mode and hasattr(self, 'full_install_checkbox') and self.full_install_checkbox.isChecked()
@@ -3896,12 +3890,15 @@ class DeltaHubApp(QWidget):
                 self._update_slot_visual_state(slot)
 
     def _initialize_mutual_exclusions(self):
-        is_direct_launch = self.local_config.get('direct_launch_slot_id', -1) >= 0
+        is_direct_launch = (self.local_config.get('direct_launch_slot_id', -1) >= 0 and self.game_mode.direct_launch_allowed and (platform.system() != 'Darwin'))
+        if not hasattr(self, 'launch_via_steam_checkbox'):
+            return
         if is_direct_launch:
             self.launch_via_steam_checkbox.setEnabled(False)
         self.apply_theme()
 
-    def _perform_initial_setup(self):
+    def _post_show_initialization(self):
+        self._init_session()
         try:
             from config.constants import CLOUD_FUNCTIONS_BASE_URL
             response = requests.get(f'{CLOUD_FUNCTIONS_BASE_URL}/getGlobalSettings', timeout=5)
@@ -5887,6 +5884,13 @@ class DeltaHubApp(QWidget):
         if is_initial:
             self.update_status_signal.emit(tr('status.no_game_path'), UI_COLORS['status_error'])
         return False
+    def _init_session(self):
+        try:
+            import requests
+            from config.constants import CLOUD_FUNCTIONS_BASE_URL
+            requests.post(f'{CLOUD_FUNCTIONS_BASE_URL}/presenceHeartbeat', json={'sessionId': self.session_id}, timeout=5)
+        except Exception:
+            pass
 
     def _prompt_for_game_path(self, is_initial=False):
         if isinstance(self.game_mode, DemoGameMode):

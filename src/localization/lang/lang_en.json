@@ -508,6 +508,7 @@
     "game_files_not_found": "Game files not found",
     "game_launch_error": "Error launching game: {error}",
     "game_launch_failed": "Failed to launch game:\n{error}",
+    "single_instance_error": "Instance dublication",
     "hide_show_mod": "Hide mod",
     "internet_required": "Managing mods requires an internet connection.\nCheck connection and try again.",
     "invalid_file": "Invalid file",
