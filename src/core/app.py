@@ -92,6 +92,16 @@ class DeltaHubApp(QWidget):
         super().__init__()
         self.server: SingleInstanceServer | None = None
         self.is_shortcut_launch = args and args.shortcut_launch
+        self.all_mods: List[ModInfo] = []
+        self.config_dir = os.path.join(get_user_data_root(), 'settings')
+        self.launcher_dir = get_launcher_dir()
+        from utils.path_utils import get_user_mods_dir
+        self.mods_dir = get_user_mods_dir()
+        self.mods_metadata_path = os.path.join(self.mods_dir, 'metadata.json')
+        self._mods_metadata_lock = threading.Lock()
+        os.makedirs(self.config_dir, exist_ok=True)
+        os.makedirs(self.mods_dir, exist_ok=True)
+        self.config_path = os.path.join(self.config_dir, 'config.json')
         self.presence_thread = None
         self.presence_worker = None
         self._direct_launch_cleanup_info = None
@@ -108,15 +118,6 @@ class DeltaHubApp(QWidget):
         self.setWindowTitle('DELTAHUB')
         self._supports_volume = platform.system() == 'Windows'
         self._initial_size = None
-        self.config_dir = os.path.join(get_user_data_root(), 'settings')
-        self.launcher_dir = get_launcher_dir()
-        from utils.path_utils import get_user_mods_dir
-        self.mods_dir = get_user_mods_dir()
-        self.mods_metadata_path = os.path.join(self.mods_dir, 'metadata.json')
-        self._mods_metadata_lock = threading.Lock()
-        os.makedirs(self.config_dir, exist_ok=True)
-        os.makedirs(self.mods_dir, exist_ok=True)
-        self.config_path = os.path.join(self.config_dir, 'config.json')
         self.local_config = self._read_json(self.config_path) or {}
         self._recover_previous_session()
         self._init_localization()
@@ -132,7 +133,6 @@ class DeltaHubApp(QWidget):
         self.game_path = ''
         self.demo_game_path = ''
         self.translations_by_chapter = {i: [] for i in range(5)}
-        self.all_mods: List[ModInfo] = []
         self.is_settings_view = False
         self.current_mode = 'normal'
         self.slots = {}
