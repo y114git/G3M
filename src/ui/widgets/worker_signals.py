@@ -5,4 +5,4 @@ class WorkerSignals(QObject):
     error = pyqtSignal(str, str)
     result = pyqtSignal(object)
     progress = pyqtSignal(int)
-    update_label = pyqtSignal(str, str, bool)
+    update_label = pyqtSignal(object, object, str, bool)
