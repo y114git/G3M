@@ -1491,9 +1491,13 @@ class ModEditorDialog(QDialog):
                             tab_files['data_file_url'] = frame_data['url']
                             tab_files['data_file_version'] = frame_data['version']
                         elif frame_data['type'] == 'extra':
-                            if 'extra' not in tab_files:
-                                tab_files['extra'] = {}
-                            tab_files['extra'][frame_data['key']] = {'url': frame_data['url'], 'version': frame_data['version']}
+                            if 'extra_files' not in tab_files:
+                                tab_files['extra_files'] = []
+                            tab_files['extra_files'].append({
+                                'key': frame_data['key'],
+                                'url': frame_data['url'],
+                                'version': frame_data['version']
+                            })
                 else:
                     local_data = self._extract_local_frame_data(frame_layout)
                     if not local_data:
@@ -1503,8 +1507,11 @@ class ModEditorDialog(QDialog):
                         tab_files['data_file_version'] = local_data.get('version', '1.0.0')
                     elif local_data['type'] == 'extra' and local_data.get('paths'):
                         if 'extra_files' not in tab_files:
-                            tab_files['extra_files'] = {}
-                        tab_files['extra_files'][local_data['key']] = local_data['paths']
+                            tab_files['extra_files'] = []
+                        tab_files['extra_files'].append({
+                            'key': local_data['key'],
+                            'paths': local_data['paths']
+                        })
             if tab_files:
                 files_data[tab_key] = tab_files
         return files_data
@@ -1572,13 +1579,20 @@ class ModEditorDialog(QDialog):
         return None
 
     def _extract_local_frame_data(self, frame_layout):
-        title_widget = frame_layout.itemAt(0).widget()
+        if frame_layout.count() == 0:
+            return None
+
+        title_item = frame_layout.itemAt(0)
+        if not title_item:
+            return None
+
+        title_widget = title_item.widget()
         if not isinstance(title_widget, QLabel):
             return None
         title_text = title_widget.text()
-        if 'DATA' in title_text or 'PATCH' in title_text:
+        if any(keyword in title_text for keyword in ['DATA', 'PATCH', tr('files.patch_file'), tr('files.data_file')]):
             frame_type = 'data'
-        elif detect_field_type_by_text(title_text) == 'extra_files':
+        elif detect_field_type_by_text(title_text) == 'extra_files' or tr('files.extra_files_title', key_name='').split(':')[0] in title_text:
             frame_type = 'extra'
         else:
             return None
@@ -1594,8 +1608,15 @@ class ModEditorDialog(QDialog):
                         return result
             return None
         if frame_type == 'data':
-            if (path_edit := _find_widget_by_property(frame_layout, QLineEdit, 'is_local_path')) and path_edit.text():
-                return {'type': 'data', 'path': path_edit.text()}
+            path_edit = _find_widget_by_property(frame_layout, QLineEdit, 'is_local_path')
+            version_edit = None
+            for i in range(frame_layout.count()):
+                item = frame_layout.itemAt(i)
+                widget = item.widget() if item else None
+                if isinstance(widget, QLineEdit) and not widget.isReadOnly():
+                    version_edit = widget
+            if path_edit and path_edit.text():
+                return {'type': 'data', 'path': path_edit.text(), 'version': version_edit.text() if version_edit else '1.0.0'}
         elif frame_type == 'extra':
             if (extra_edit := _find_widget_by_property(frame_layout, QLineEdit, 'is_local_extra_path')) and extra_edit.text():
                 key = extra_edit.property('extra_key') or 'extra_files'
@@ -1701,57 +1722,49 @@ class ModEditorDialog(QDialog):
             if icon_path and os.path.exists(icon_path):
                 icon_filename = os.path.basename(icon_path)
                 shutil.copy2(icon_path, os.path.join(mod_dir, icon_filename))
-                mod_data['icon_url'] = icon_filename
-            local_files = {}
-            for file_key, file_data in mod_data.get('files', {}).items():
-                file_version_parts = []
+                mod_data['icon_url'] = icon_filename # This will be saved in the config
+
+            # This is the new, corrected file processing logic
+            processed_files_data = {}
+            for file_key, original_file_data in mod_data.get('files', {}).items():
+                new_file_data = {}
                 if file_key == 'demo':
                     file_folder = os.path.join(mod_dir, 'demo')
                 elif file_key == 'undertale':
                     file_folder = os.path.join(mod_dir, 'undertale')
                 elif file_key == '0':
                     file_folder = os.path.join(mod_dir, 'chapter_0')
-                elif file_key in ['1', '2', '3', '4']:
-                    file_folder = os.path.join(mod_dir, f'chapter_{file_key}')
                 else:
-                    continue
+                    file_folder = os.path.join(mod_dir, f'chapter_{file_key}')
+
                 os.makedirs(file_folder, exist_ok=True)
-                data_path = file_data.get('data_file_url')
+                data_path = original_file_data.get('data_file_url')
                 if data_path and os.path.exists(data_path):
                     data_filename = os.path.basename(data_path)
-                    destination = os.path.join(file_folder, data_filename)
-                    shutil.copy2(data_path, destination)
-                    file_data['data_file_url'] = data_filename
-                    file_version_parts.append(file_data.get('data_file_version', '1.0.0'))
-                extra_files = file_data.get('extra_files', {})
-                for group_key, paths in extra_files.items():
-                    copied_paths = []
-                    for path in paths:
-                        if os.path.exists(path):
-                            filename = os.path.basename(path)
-                            shutil.copy2(path, os.path.join(file_folder, filename))
-                            copied_paths.append(filename)
-                    extra_files[group_key] = copied_paths
-                    file_version_parts.append('1.0.0')
-                if file_version_parts:
-                    local_files[file_key] = '|'.join(file_version_parts)
-            files_data = {}
-            for file_key, file_version in local_files.items():
-                file_info = mod_data.get('files', {}).get(file_key, {})
-                files_data[file_key] = {}
-                if file_info.get('data_file_url'):
-                    files_data[file_key]['data_file_url'] = os.path.basename(file_info['data_file_url'])
-                    files_data[file_key]['data_file_version'] = file_info.get('data_file_version', '1.0.0')
-                extra_files = file_info.get('extra_files', {})
-                if extra_files:
-                    files_data[file_key]['extra_files'] = {}
-                    for group_key, paths in extra_files.items():
-                        files_data[file_key]['extra_files'][group_key] = [os.path.basename(path) for path in paths]
+                    shutil.copy2(data_path, os.path.join(file_folder, data_filename))
+                    new_file_data['data_file_url'] = data_filename
+                    new_file_data['data_file_version'] = original_file_data.get('data_file_version', '1.0.0')
+
+                # Process extra files
+                if 'extra_files' in original_file_data:
+                    new_file_data['extra_files'] = {}
+                    for group in original_file_data['extra_files']:
+                        group_key = group.get('key')
+                        paths = group.get('paths', [])
+                        if group_key and paths:
+                            new_file_data['extra_files'][group_key] = []
+                            for path in paths:
+                                if os.path.exists(path):
+                                    filename = os.path.basename(path)
+                                    shutil.copy2(path, os.path.join(file_folder, filename))
+                                    new_file_data['extra_files'][group_key].append(filename)
+                if new_file_data:
+                    processed_files_data[file_key] = new_file_data
             config_data = {'is_local_mod': True, 'mod_key': mod_key, 'created_date': time.strftime('%d.%m.%y %H:%M'),
                            'is_available_on_server': False, 'name': mod_data.get('name', ''), 'version': mod_data.get('version', '1.0.0'),
                            'author': mod_data.get('author', ''), 'tagline': mod_data.get('tagline', tr('defaults.no_short_description')),
-                           'gamebanana_url': mod_data.get('gamebanana_url', ''), 'game_version': mod_data.get('game_version', tr('defaults.not_specified')),
-                           'modgame': mod_data.get('modgame', 'deltarune'), 'files': files_data}
+                           'gamebanana_url': mod_data.get('gamebanana_url', ''), 'game_version': mod_data.get('game_version', tr('defaults.not_specified')), 'modgame': mod_data.get('modgame', 'deltarune'),
+                           'files': processed_files_data}
             config_path = os.path.join(mod_dir, 'config.json')
             self.parent_app._write_json(config_path, config_data)
             self.parent_app._load_local_mods_from_folders()
