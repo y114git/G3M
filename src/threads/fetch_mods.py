@@ -187,7 +187,7 @@ class FetchModsThread(QThread):
             if extra_files and (not all((v.get('version') for _, v in extra_files))):
                 return False
             extra_files_list = [ModExtraFile(key=k, **v) for k, v in extra_files]
-            mod_chapter = ModChapterData(data_file_url=chapter_data.get('data_file_url'), data_file_version=chapter_data.get('data_file_version', '1.0.0'), extra_files=extra_files_list)
+            mod_chapter = ModChapterData(data_file_url=chapter_data.get('data_file_url'), data_file_version=chapter_data.get('data_file_version'), extra_files=extra_files_list)
             if chapter_data.get('description_url'):
                 pass
             if mod_chapter.is_valid():

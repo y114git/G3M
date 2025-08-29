@@ -117,19 +117,6 @@ def setup_app():
     app.setOrganizationName('deltahub')
     return app
 
-def check_splash_settings():
-    try:
-        config_path = os.path.join(get_user_data_root(), 'settings', 'config.json')
-        if os.path.exists(config_path):
-            import json
-            with open(config_path, 'r', encoding='utf-8') as f:
-                config = json.load(f)
-                disable_splash = config.get('disable_splash', False)
-                return not disable_splash
-    except Exception:
-        pass
-    return True
-
 def run_app():
     parser = argparse.ArgumentParser(description='DELTAHUB')
     parser.add_argument('--shortcut-launch', type=str)
@@ -172,8 +159,21 @@ def run_app():
         DeltaHubApp = create_app_reference()
         DeltaHubApp(args=args)
         return
-    splash_enabled = check_splash_settings()
-    if not splash_enabled:
+    config = {}
+    try:
+        config_path = os.path.join(get_user_data_root(), 'settings', 'config.json')
+        if os.path.exists(config_path):
+            import json
+            with open(config_path, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+    except Exception:
+        pass
+
+    is_first_launch = not config.get('first_launch_splash_shown', False)
+    splash_disabled_by_user = config.get('disable_splash', False)
+    show_animated_splash = is_first_launch or not splash_disabled_by_user
+
+    if not show_animated_splash:
         splash = create_png_splash()
         splash.show()
         app.processEvents()

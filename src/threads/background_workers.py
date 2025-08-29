@@ -411,7 +411,7 @@ class InstallModsThread(QThread):
                     versions_dict = {}
                     file_info = {}
                     if chapter_data:
-                        if chapter_data.data_file_version:
+                        if chapter_data.data_file_url and chapter_data.data_file_version:
                             versions_dict['data'] = chapter_data.data_file_version
                         if chapter_data.data_file_url:
                             file_info['data_file_version'] = chapter_data.data_file_version
