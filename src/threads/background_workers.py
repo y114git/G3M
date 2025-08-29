@@ -512,7 +512,7 @@ class UrlInstallThread(QThread):
             if not self.url.startswith("deltahub://"):
                 raise ValueError("Invalid URL scheme")
 
-            content = self.url[len("deltahub://"):].split(',')[0].strip()
+            content = self.url[len("deltahub://"):].split(',')[0].strip().rstrip('/')
 
             if not content.startswith(('http://', 'https://')):
                  content = content.replace('https//', 'https://').replace('http//', 'http://')
@@ -605,6 +605,7 @@ class UrlInstallThread(QThread):
                         self.main_window._write_mods_metadata(metadata)
 
                     self.finished.emit(True, tr('status.install_complete_success', mod_name=mod_name))
+                return
             elif len(content) == 64 and all(c in '0123456789abcdef' for c in content.lower()):
                 # --- New Logic: Handle direct hash install ---
                 mod_key = content
