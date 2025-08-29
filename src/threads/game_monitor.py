@@ -12,7 +12,6 @@ class GameMonitorThread(QThread):
         self.vanilla_mode = vanilla_mode
 
     def run(self):
-        increment_launch_counter()
         if self.process:
             try:
                 self.process.wait()
