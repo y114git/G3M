@@ -179,6 +179,8 @@ class DeltaHubApp(QWidget):
                 self.restoreGeometry(QByteArray.fromHex(saved.encode()))
             except Exception:
                 pass
+        if not self.local_config.get('first_launch_splash_shown', False):
+            self.initialization_finished.connect(self._handle_first_launch_settings)
 
     def _handle_pending_install(self):
         """Handles a URL passed at launch, after the app is initialized."""
@@ -5479,10 +5481,9 @@ class DeltaHubApp(QWidget):
                         file_info = files_data[file_key]
                         if file_info.get('data_file_version'):
                             local_versions['data'] = file_info['data_file_version']
-                        extra_files = file_info.get('extra_files', {})
                         versions_data = file_info.get('versions', {})
-                        for group_key in extra_files.keys():
-                            local_versions[group_key] = versions_data.get(group_key, '1.0.0')
+                        for key, version in versions_data.items():
+                            local_versions[key] = version
                     if not local_versions:
                         return 'install'
                     for k in local_versions.keys():
@@ -6028,6 +6029,15 @@ class DeltaHubApp(QWidget):
             self._start_background_music()
             self.initialization_finished.emit()
             self.update_status_signal.emit(tr('status.no_game_path'), UI_COLORS['status_error'])
+
+    def _handle_first_launch_settings(self):
+        self.local_config['first_launch_splash_shown'] = True
+        self.local_config['disable_splash'] = True
+        self._write_local_config()
+        try:
+            self.initialization_finished.disconnect(self._handle_first_launch_settings)
+        except TypeError:
+            pass
 
     def _save_slots_state(self):
         if not hasattr(self, 'slots'):
