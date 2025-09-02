@@ -2,6 +2,7 @@
   "metadata": {
     "language": "english",
     "language_name": "English",
+    "font": "main.ttf",
     "qt_translation": "qtbase_en"
   },
   "ui": {
@@ -31,6 +32,7 @@
     "chapter_mode_instruction": "Select a slot above to see mods",
     "chapter_n": "chapter {chapter}",
     "chapter_tab_title": "Chapter {chapter_num}",
+    "choice_title": "Choice",
     "clear_search_tooltip": "Clear search: '{text}'",
     "close_button": "Close",
     "collections": "Collections",
@@ -63,7 +65,6 @@
     "enter_author_name": "Enter author's name",
     "enter_author_name_optional": "Enter author's name (optional)",
     "enter_mod_name": "Enter mod name",
-    "extra_files_title": "Extra Files: {key_name}",
     "file_generic": "file",
     "file_not_selected": "File not selected",
     "file_path_placeholder": "Enter path or browse...",
@@ -161,6 +162,9 @@
     "select_data_file": "Select {file_type} file",
     "select_deltarune_saves_folder": "Select DELTARUNE saves folder",
     "select_file": "Select file...",
+    "select_file_or_folder": "Select archive or folder.",
+    "archive": "Archive",
+    "folder": "Folder",
     "select_icon_file": "Select icon file",
     "select_launch_file": "Select launch file",
     "select_mod": "Select mod",
@@ -213,7 +217,7 @@
   },
   "files": {
     "archive_link": "Archive link",
-    "archive_path_label": "{label_type} (.zip/.rar/.7z):",
+    "archive_path_label": "{label_type} (.zip/.rar/.7z/folder):",
     "data_file": "DATA - File",
     "data_path_label": "{label_type} {file_type}:",
     "download_link": "Download link",
@@ -469,8 +473,6 @@
   },
   "errors": {
     "access_denied": "Access Denied",
-    "already_running": "Another instance of DELTAHUB is already running.",
-    "already_running_title": "Already Running",
     "access_permission_error": "Access error. Check mod edit permissions.",
     "app_not_found_after_unpack": "DELTAHUB.app not found after unpacking.",
     "archive_unpack_error": "Error unpacking archive {archive_name}: {error}",
@@ -702,7 +704,6 @@
     "smart_install_starting": "Smart Install: '{mod_name}' will be installed from DELTAHUB servers.",
     "update_cancelled": "Update cancelled by user.",
     "install_cancelled_by_user": "Installation cancelled by user.",
-    "unpacking_mod": "Unpacking mod: {mod_name}...",
     "install_complete_success": "Successfully installed '{mod_name}'!"
   },
   "startup": {

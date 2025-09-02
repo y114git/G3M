@@ -30,6 +30,9 @@ def get_user_data_root() -> str:
 def get_user_mods_dir() -> str:
     return os.path.join(get_user_data_root(), 'mods')
 
+def get_user_lang_dir() -> str:
+    return os.path.join(get_user_data_root(), 'lang')
+
 def resource_path(relative_path: str) -> str:
     """ Get absolute path to resource, works for dev and for PyInstaller """
     if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):

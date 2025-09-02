@@ -9,7 +9,7 @@ import psutil
 from PyQt6.QtCore import QLibraryInfo, Qt, QTranslator, QTimer
 from PyQt6.QtNetwork import QLocalServer, QLocalSocket
 from PyQt6.QtWidgets import QApplication, QMessageBox
-from localization.manager import get_localization_manager, tr
+from localization.manager import localization_manager, tr
 from utils.audio_utils import play_deltahub_sound
 from core.splash import create_splash, create_png_splash
 from utils.path_utils import get_user_data_root, get_launcher_dir
@@ -99,14 +99,13 @@ class SingleInstanceServer(QLocalServer):
         socket.close()
 
 def setup_app():
-    manager = get_localization_manager()
-    language_code = manager.detect_system_language()
-    manager.load_language(language_code)
+    language_code = localization_manager.detect_system_language()
+    localization_manager.load_language(language_code)
     os.environ['QT_LOGGING_RULES'] = ';'.join(['qt.qpa.screen.warning=false', 'qt.qpa.window.warning=false', 'qt.multimedia.ffmpeg=false', 'qt.multimedia=false'])
     if not getattr(sys, 'frozen', False):
         os.environ.setdefault('QT_MEDIA_BACKEND', 'ffmpeg')
     app = QApplication(sys.argv)
-    qt_translation_file = manager.get_qt_translation_name(language_code)
+    qt_translation_file = localization_manager.get_qt_translation_name(language_code)
     if qt_translation_file:
         path = QLibraryInfo.path(QLibraryInfo.LibraryPath.TranslationsPath)
         if _translator.load(qt_translation_file, path):

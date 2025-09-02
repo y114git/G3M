@@ -19,12 +19,12 @@ from typing import Callable, Optional, List, Dict, Any
 import logging
 from pathlib import Path
 import requests
-from PyQt6.QtCore import Qt, QEvent, QEventLoop, QThread, QTimer, QUrl, pyqtSignal, QTranslator
+from PyQt6.QtCore import QTranslator, Qt, QEvent, QEventLoop, QThread, QTimer, QUrl, pyqtSignal
 from PyQt6.QtGui import QColor, QDesktopServices, QFont, QFontDatabase, QIcon, QMovie, QPainter, QPixmap
 from PyQt6.QtWidgets import QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFrame, QLabel, QLineEdit, QMessageBox, QProgressBar, QPushButton, QTabWidget, QTextBrowser, QVBoxLayout, QWidget, QHBoxLayout, QSizePolicy, QInputDialog, QColorDialog, QListWidget, QScrollArea
-from localization.manager import get_localization_manager, tr
+from localization.manager import localization_manager, tr
 from models.game_modes import GameMode
-from config.constants import LAUNCHER_VERSION, UI_COLORS, SOCIAL_LINKS, THEMES, SAVE_SLOT_FINISH_MAP, DEFAULT_FONT_FALLBACK_CHAIN, ARCH
+from config.constants import LAUNCHER_VERSION, UI_COLORS, SOCIAL_LINKS, THEMES, SAVE_SLOT_FINISH_MAP, ARCH
 from models.mod_models import ModInfo, ModChapterData
 from models.game_modes import FullGameMode, DemoGameMode, UndertaleGameMode
 from utils.file_utils import autodetect_path, resource_path, get_file_filter, sanitize_filename, ensure_writable, fix_macos_python_symlink
@@ -604,7 +604,7 @@ class DeltaHubApp(QWidget):
         self.top_refresh_button.setMaximumSize(40, 40)
         self.top_refresh_button.setStyleSheet('min-width:40px; max-width:40px; min-height:40px; max-height:40px; padding:0; margin:0;')
         self.top_refresh_button.setToolTip(tr('ui.update_mod_list'))
-        self.top_refresh_button.clicked.connect(lambda: self._refresh_mods_list(force=True))
+        self.top_refresh_button.clicked.connect(self._on_refresh_clicked)
         self.top_frame.addWidget(self.top_refresh_button)
         self.top_frame.addWidget(self.online_label)
         self.top_frame.addStretch()
@@ -678,9 +678,9 @@ class DeltaHubApp(QWidget):
         settings_menu_layout = QVBoxLayout(self.settings_menu_page)
         settings_menu_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         settings_menu_layout.setSpacing(20)
-        settings_title_label = QLabel(f"<h1>{tr('ui.settings_title')}</h1>")
-        settings_title_label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
-        settings_menu_layout.addWidget(settings_title_label)
+        self.settings_title_label = QLabel(f"<h1>{tr('ui.settings_title')}</h1>")
+        self.settings_title_label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+        settings_menu_layout.addWidget(self.settings_title_label)
         settings_menu_layout.addStretch()
         settings_center_container = QVBoxLayout()
         settings_center_container.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -689,15 +689,14 @@ class DeltaHubApp(QWidget):
         language_layout = QHBoxLayout(language_container)
         language_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         language_layout.setSpacing(10)
-        language_label = QLabel(tr('ui.language_label'))
-        language_label.setStyleSheet('font-size: 20px; font-weight: bold;')
-        language_layout.addWidget(language_label)
+        self.language_label = QLabel(tr('ui.language_label'))
+        self.language_label.setStyleSheet('font-size: 20px; font-weight: bold;')
+        language_layout.addWidget(self.language_label)
         self.language_combo = NoScrollComboBox()
         self.language_combo.setMinimumWidth(200)
         self.language_combo.setMaximumWidth(250)
-        manager = get_localization_manager()
-        available_languages = manager.get_available_languages()
-        current_language = manager.get_current_language()
+        available_languages = localization_manager.get_available_languages()
+        current_language = localization_manager.get_current_language()
         for code, name in available_languages.items():
             self.language_combo.addItem(name, code)
             if code == current_language:
@@ -736,18 +735,18 @@ class DeltaHubApp(QWidget):
         self.change_mods_dir_button.clicked.connect(self._prompt_for_mods_dir)
         settings_center_container.addWidget(self.change_mods_dir_button, alignment=Qt.AlignmentFlag.AlignHCenter)
 
-        customization_button = self._create_settings_nav_button(tr('ui.launcher_customization'), lambda: self._switch_settings_page(self.settings_customization_page), fixed_width=200)
-        reset_button = self._create_settings_nav_button(tr('buttons.reset_settings'), self._on_reset_settings_click, fixed_width=200)
+        self.customization_button = self._create_settings_nav_button(tr('ui.launcher_customization'), lambda: self._switch_settings_page(self.settings_customization_page), fixed_width=200)
+        self.reset_button = self._create_settings_nav_button(tr('buttons.reset_settings'), self._on_reset_settings_click, fixed_width=200)
 
         buttons_layout = QHBoxLayout()
         buttons_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         buttons_layout.setSpacing(10)
-        buttons_layout.addWidget(customization_button)
-        buttons_layout.addWidget(reset_button)
+        buttons_layout.addWidget(self.customization_button)
+        buttons_layout.addWidget(self.reset_button)
 
         settings_center_container.addLayout(buttons_layout)
 
-        self.settings_customization_button = customization_button
+        self.settings_customization_button = self.customization_button
         settings_menu_layout.addLayout(settings_center_container)
         settings_menu_layout.addStretch()
         pages_layout.addWidget(self.settings_menu_page)
@@ -758,9 +757,9 @@ class DeltaHubApp(QWidget):
         self.change_background_button = QPushButton(tr('buttons.change_background'))
         self.change_background_button.clicked.connect(self._on_background_button_click)
         settings_customization_layout = QVBoxLayout(self.settings_customization_page)
-        back_button_cust = QPushButton(tr('ui.back_button'))
-        back_button_cust.clicked.connect(self._go_back)
-        settings_customization_layout.addWidget(back_button_cust, alignment=Qt.AlignmentFlag.AlignLeft)
+        self.back_button_cust = QPushButton(tr('ui.back_button'))
+        self.back_button_cust.clicked.connect(self._go_back)
+        settings_customization_layout.addWidget(self.back_button_cust, alignment=Qt.AlignmentFlag.AlignLeft)
         settings_customization_layout.addSpacing(15)
         self.change_background_button = QPushButton()
         self.change_background_button.setFixedWidth(400)
@@ -1096,7 +1095,8 @@ class DeltaHubApp(QWidget):
         self.modgame_combo.currentIndexChanged.connect(self._on_modgame_filter_changed)
         filters_layout.addWidget(self.modgame_combo)
         filters_layout.addSpacing(20)
-        filters_layout.addWidget(QLabel(tr('ui.tags_label')))
+        self.tags_label = QLabel(tr('ui.tags_label'))
+        filters_layout.addWidget(self.tags_label)
         self.tag_translation = QCheckBox(tr('tags.translation'))
         self.tag_customization = QCheckBox(tr('tags.customization'))
         self.tag_gameplay = QCheckBox(tr('tags.gameplay'))
@@ -2757,21 +2757,15 @@ class DeltaHubApp(QWidget):
         self._write_local_config()
 
     def load_font(self):
+        language = localization_manager.get_current_language()
+        font_path = localization_manager.get_font_path(language)
         self.custom_font_family = None
-        self._font_families_chain = list(DEFAULT_FONT_FALLBACK_CHAIN)
-        font_path = resource_path('resources/fonts/main.ttf')
-        if os.path.exists(font_path):
+        if font_path and os.path.exists(font_path):
             font_id = QFontDatabase.addApplicationFont(font_path)
             if font_id != -1:
                 families = QFontDatabase.applicationFontFamilies(font_id)
                 if families:
                     self.custom_font_family = families[0]
-                else:
-                    pass
-            else:
-                pass
-        else:
-            pass
 
     def apply_theme(self):
         theme = THEMES['default']
@@ -2798,8 +2792,7 @@ class DeltaHubApp(QWidget):
         button_hover_color = self.local_config.get('custom_color_button_hover') or theme['colors']['button_hover']
         main_text_color = self.local_config.get('custom_color_text') or theme['colors']['text']
         base_family = self.custom_font_family or theme['font_family']
-        families = [base_family] + [f for f in self._font_families_chain if f != base_family]
-        font_family_main = families[0]
+        font_family_main = base_family
         font_size_main = theme['font_size_main']
         font_size_small = theme['font_size_small']
         status_font = QFont(font_family_main, font_size_small)
@@ -2809,8 +2802,7 @@ class DeltaHubApp(QWidget):
         for widget, color in zip(explicit_color_widgets, explicit_colors):
             if widget is not None:
                 widget.setStyleSheet(f'color: {color};')
-        qss_font_chain = '", "'.join(families)
-        style_sheet = f'''\n                    QFrame#bottom_widget, QFrame#settings_widget {{ background-color: {frame_bg_color}; }}\n                    QWidget {{ font-family: "{qss_font_chain}"; outline: none; font-size: {font_size_main}pt; color: {main_text_color}; background-color: transparent; }}\n                    QDialog, QMessageBox {{ font-family: "{qss_font_chain}"; font-size: {font_size_small}pt; color: {main_text_color}; background-color: {frame_bg_color}; border: 3px solid {border_color}; }}\n                    QDialog > QLabel, QMessageBox > QLabel {{ background: transparent; font-size: {font_size_small}pt; }}\n                    QDialog QPushButton, QMessageBox QPushButton {{ font-size: {font_size_small}pt; }}\n                    QPushButton {{ background-color: {button_color}; border: 2px solid {border_color}; color: {theme['colors']['button_text']}; padding: 5px; min-height: 30px; min-width: 100px; }}\n                    QPushButton:hover {{ background-color: {button_hover_color}; }}\n                    QPushButton:disabled, QComboBox:disabled {{ background-color: #333333; color: #888888; border: 2px solid #555555; }}\n                    QPushButton#addTranslationButton {{ min-width: 33px; min-height: 33px; padding: 2px; }}\n                    QComboBox {{ background-color: {button_color}; color: {theme['colors']['button_text']}; border: 2px solid {border_color}; padding: 4px; min-height: 30px; }}\n                    QComboBox QAbstractItemView {{ background-color: {button_color}; border: 2px solid {border_color}; color: {theme['colors']['button_text']}; selection-background-color: {button_hover_color}; }}\n                    QTextEdit, QTextBrowser {{ background-color: {frame_bg_color}; border: 2px solid {border_color}; }}\n                    QFrame#filters {{\n                        background-color: {frame_bg_color};\n                        border: 2px solid {border_color};\n                        padding: 4px 8px;\n                    }}\n                    QPushButton#sortOrderBtn {{\n                        min-width: 35px;\n                        max-width: 35px;\n                        padding-left: 0px;\n                        padding-right: 0px;\n                        background-color: {button_color};\n                        border: 2px solid {border_color};\n                        color: {theme['colors']['button_text']};\n                        font-weight: bold;\n                        font-size: 12px;\n                    }}\n                    QPushButton#sortOrderBtn:hover {{\n                        background-color: {button_hover_color};\n                    }}\n                    QPushButton#searchBtn {{\n                        min-width: 35px;\n                        max-width: 35px;\n                        min-height: 30px;\n                        max-height: 30px;\n                        padding-left: 0px;\n                        padding-right: 0px;\n                        background-color: {button_color};\n                        border: 2px solid {border_color};\n                        color: {theme['colors']['button_text']};\n                        font-weight: bold;\n                        font-size: 16px;\n                    }}\n                    QPushButton#searchBtn:hover {{\n                        background-color: {button_hover_color};\n                    }}\n                    QTextEdit, QTextBrowser {{ background-color: {frame_bg_color}; color: {main_text_color}; border: 2px solid {border_color}; min-height: 100px; }}\n                    QTabBar::tab {{ background-color: {button_color}; color: {theme['colors']['button_text']}; border: 2px solid {border_color}; padding: 5px; min-height: 25px; min-width: 80px; }}\n                    QTabBar::tab:selected, QTabBar::tab:hover {{ background-color: {button_hover_color}; }}\n                    QTabBar::tab:disabled {{ background-color: #333333; color: #888888; border: 2px solid #555555; }}\n                    QTabWidget::pane {{ background: transparent; border: 0px; }}\n                    QCheckBox:disabled {{ color: #888888; }}\n                    QCheckBox::indicator {{ width: 15px; height: 15px; background-color: {button_color}; border: 2px solid {border_color}; }}\n                    QCheckBox::indicator:checked {{ background-color: {('#ffffff' if not self.color_widgets['button_hover'].text() else button_hover_color)}; }}\n                    QCheckBox::indicator:disabled {{ background-color: #333333; border: 2px solid #555555; }}\n                    QPushButton:checked {{ background-color: {button_hover_color}; border: 2px solid {main_text_color}; }}\n            '''
+        style_sheet = f'''\n                    QFrame#bottom_widget, QFrame#settings_widget {{ background-color: {frame_bg_color}; }}\n                    QWidget {{ font-family: "{font_family_main}", sans-serif; outline: none; font-size: {font_size_main}pt; color: {main_text_color}; background-color: transparent; }}\n                    QDialog, QMessageBox {{ font-family: "{font_family_main}", sans-serif; font-size: {font_size_small}pt; color: {main_text_color}; background-color: {frame_bg_color}; border: 3px solid {border_color}; }}\n                    QDialog > QLabel, QMessageBox > QLabel {{ background: transparent; font-size: {font_size_small}pt; }}\n                    QDialog QPushButton, QMessageBox QPushButton {{ font-size: {font_size_small}pt; }}\n                    QPushButton {{ background-color: {button_color}; border: 2px solid {border_color}; color: {theme['colors']['button_text']}; padding: 5px; min-height: 30px; min-width: 100px; }}\n                    QPushButton:hover {{ background-color: {button_hover_color}; }}\n                    QPushButton:disabled, QComboBox:disabled {{ background-color: #333333; color: #888888; border: 2px solid #555555; }}\n                    QPushButton#addTranslationButton {{ min-width: 33px; min-height: 33px; padding: 2px; }}\n                    QComboBox {{ background-color: {button_color}; color: {theme['colors']['button_text']}; border: 2px solid {border_color}; padding: 4px; min-height: 30px; }}\n                    QComboBox QAbstractItemView {{ background-color: {button_color}; border: 2px solid {border_color}; color: {theme['colors']['button_text']}; selection-background-color: {button_hover_color}; }}\n                    QTextEdit, QTextBrowser {{ background-color: {frame_bg_color}; border: 2px solid {border_color}; }}\n                    QFrame#filters {{\n                        background-color: {frame_bg_color};\n                        border: 2px solid {border_color};\n                        padding: 4px 8px;\n                    }}\n                    QPushButton#sortOrderBtn {{\n                        min-width: 35px;\n                        max-width: 35px;\n                        padding-left: 0px;\n                        padding-right: 0px;\n                        background-color: {button_color};\n                        border: 2px solid {border_color};\n                        color: {theme['colors']['button_text']};\n                        font-weight: bold;\n                        font-size: 12px;\n                    }}\n                    QPushButton#sortOrderBtn:hover {{\n                        background-color: {button_hover_color};\n                    }}\n                    QPushButton#searchBtn {{\n                        min-width: 35px;\n                        max-width: 35px;\n                        min-height: 30px;\n                        max-height: 30px;\n                        padding-left: 0px;\n                        padding-right: 0px;\n                        background-color: {button_color};\n                        border: 2px solid {border_color};\n                        color: {theme['colors']['button_text']};\n                        font-weight: bold;\n                        font-size: 16px;\n                    }}\n                    QPushButton#searchBtn:hover {{\n                        background-color: {button_hover_color};\n                    }}\n                    QTextEdit, QTextBrowser {{ background-color: {frame_bg_color}; color: {main_text_color}; border: 2px solid {border_color}; min-height: 100px; }}\n                    QTabBar::tab {{ background-color: {button_color}; color: {theme['colors']['button_text']}; border: 2px solid {border_color}; padding: 5px; min-height: 25px; min-width: 80px; }}\n                    QTabBar::tab:selected, QTabBar::tab:hover {{ background-color: {button_hover_color}; }}\n                    QTabBar::tab:disabled {{ background-color: #333333; color: #888888; border: 2px solid #555555; }}\n                    QTabWidget::pane {{ background: transparent; border: 0px; }}\n                    QCheckBox:disabled {{ color: #888888; }}\n                    QCheckBox::indicator {{ width: 15px; height: 15px; background-color: {button_color}; border: 2px solid {border_color}; }}\n                    QCheckBox::indicator:checked {{ background-color: {('#ffffff' if not self.color_widgets['button_hover'].text() else button_hover_color)}; }}\n                    QCheckBox::indicator:disabled {{ background-color: #333333; border: 2px solid #555555; }}\n                    QPushButton:checked {{ background-color: {button_hover_color}; border: 2px solid {main_text_color}; }}\n            '''
         scroll_handle_color = self.local_config.get('custom_color_button') or 'white'
         scroll_groove_color = 'rgba(0, 0, 0, 40)'
         scroll_bar_qss = f'\n                QScrollBar:vertical {{\n                    border: none;\n                    background: {scroll_groove_color};\n                    width: 14px;\n                    margin: 0;\n                }}\n                QScrollBar::handle:vertical {{\n                    background-color: {scroll_handle_color};\n                    min-height: 25px;\n                }}\n                QScrollBar:horizontal {{\n                    border: none;\n                    background: {scroll_groove_color};\n                    height: 14px;\n                    margin: 0;\n                }}\n                QScrollBar::handle:horizontal {{\n                    background-color: {scroll_handle_color};\n                    min-width: 25px;\n                }}\n            '
@@ -3578,9 +3570,7 @@ class DeltaHubApp(QWidget):
         self._update_settings_page_visibility()
 
     def _load_help_content(self):
-        manager = get_localization_manager()
-        current_language = manager.get_current_language() if manager else 'en'
-        if current_language == 'ru':
+        if localization_manager.get_current_language() == 'ru':
             help_url = self.global_settings.get('help_ru_url', self.global_settings.get('help_url', ''))
         else:
             help_url = self.global_settings.get('help_en_url', self.global_settings.get('help_url', ''))
@@ -3961,9 +3951,7 @@ class DeltaHubApp(QWidget):
                 self.global_settings = response.json() or {}
         except requests.RequestException:
             self.update_status_signal.emit(tr('status.global_settings_load_failed'), UI_COLORS['status_warning'])
-        manager = get_localization_manager()
-        current_language = manager.get_current_language() if manager else 'en'
-        if current_language == 'ru':
+        if localization_manager.get_current_language() == 'ru':
             changelog_url = self.global_settings.get('changelog_ru_url', self.global_settings.get('changelog_url'))
         else:
             changelog_url = self.global_settings.get('changelog_en_url', self.global_settings.get('changelog_url'))
@@ -4010,7 +3998,7 @@ class DeltaHubApp(QWidget):
         self.apply_theme()
         self._load_local_mods_from_folders()
         self.setEnabled(False)
-        self._refresh_mods_list(force=True, blocking=False)
+        self._on_refresh_clicked(is_initial=True)
         self.setEnabled(True)
         self._update_installed_mods_display()
         if not self._find_and_validate_game_path(is_initial=True):
@@ -4112,9 +4100,7 @@ class DeltaHubApp(QWidget):
             return
         self.update_in_progress = True
         update_message = tr('dialogs.new_version_banner', version=update_info['version']) + '<br>' + tr('dialogs.current_version_banner', current_version=LAUNCHER_VERSION)
-        manager = get_localization_manager()
-        current_language = manager.get_current_language() if manager else 'en'
-        if current_language == 'ru':
+        if localization_manager.get_current_language() == 'ru':
             message_text = update_info.get('message_ru') or update_info.get('message', '')
         else:
             message_text = update_info.get('message_en') or update_info.get('message', '')
@@ -4255,22 +4241,33 @@ class DeltaHubApp(QWidget):
         self.progress_bar.setVisible(False)
         self._launch_game_with_all_mods()
 
-    def _refresh_mods_list(self, force=False, blocking=False):
+    def _on_refresh_clicked(self, is_initial=False):
+        """Handles the refresh button click, updating languages and mods."""
+        # --- Language Refresh Logic ---
+        current_lang_code = localization_manager.get_current_language()
+        localization_manager.rescan_languages()
+        self.language_combo.blockSignals(True)
+        self.language_combo.clear()
+        available_languages = localization_manager.get_available_languages()
+        for code, name in available_languages.items():
+            self.language_combo.addItem(name, code)
+        index = self.language_combo.findData(current_lang_code)
+        if index != -1:
+            self.language_combo.setCurrentIndex(index)
+        self.language_combo.blockSignals(False)
+
+        # Re-apply translations, then refresh mod data
+        if not is_initial:
+            self._retranslate_ui()
         if is_game_running():
             self.update_status_signal.emit(tr('status.cant_update_while_running'), UI_COLORS['status_warning'])
             return
         self._stop_fetch_thread()
         threading.Thread(target=self._check_for_launcher_updates, daemon=True).start()
-        self.fetch_thread = FetchModsThread(self, force_update=force)
+        self.fetch_thread = FetchModsThread(self, force_update=True)
         self.fetch_thread.status.connect(self.update_status_signal)
         self.fetch_thread.result.connect(self._on_fetch_translations_finished)
-        if blocking:
-            loop = QEventLoop()
-            self.fetch_thread.finished.connect(loop.quit)
-            self.fetch_thread.start()
-            loop.exec()
-        else:
-            self.fetch_thread.start()
+        self.fetch_thread.start()
 
     def _stop_fetch_thread(self):
         self._safe_stop_thread(getattr(self, 'fetch_thread', None))
@@ -5110,30 +5107,103 @@ class DeltaHubApp(QWidget):
         selected_data = self.language_combo.currentData()
         if not selected_data:
             return
-        manager = get_localization_manager()
-        current_language = manager.get_current_language()
+        current_language = self.local_config.get('language', 'en')
         if selected_data == current_language:
             return
         self.local_config['language'] = selected_data
         self._write_json(self.config_path, self.local_config)
-        manager = get_localization_manager()
-        manager.load_language(selected_data)
-        msg_box = QMessageBox(self)
-        msg_box.setWindowTitle(tr('ui.restart_required'))
-        msg_box.setText(tr('ui.restart_message'))
-        msg_box.setIcon(QMessageBox.Icon.Information)
-        restart_button = msg_box.addButton(tr('ui.restart_button'), QMessageBox.ButtonRole.AcceptRole)
-        msg_box.setDefaultButton(restart_button)
-        if msg_box.clickedButton() == restart_button:
-            try:
-                from PyQt6.QtCore import QProcess
-                launcher_dir = get_launcher_dir()
-                QProcess.startDetached(sys.executable, sys.argv, launcher_dir)
-            except Exception:
-                import subprocess
-                launcher_dir = get_launcher_dir()
-                subprocess.Popen([sys.executable] + sys.argv, cwd=launcher_dir)
-            QApplication.quit()
+        self._retranslate_ui()
+
+    def _retranslate_texts(self):
+        """A dedicated method to update text for all widgets."""
+        # Top Panel
+        self.settings_button.setText(tr('ui.back_button') if self.is_settings_view or self.is_save_manager_view else tr('ui.settings_title'))
+        self.online_label.setToolTip(tr('tooltips.online_counter'))
+        self.top_refresh_button.setToolTip(tr('ui.update_mod_list'))
+        self.telegram_button.setText(tr('buttons.telegram'))
+        self.discord_button.setText(tr('buttons.discord'))
+
+        # Bottom Panel
+        self.shortcut_button.setText(tr('buttons.shortcut'))
+        self.saves_button.setText(tr('ui.saves_button'))
+
+        # Main Tabs
+        self.main_tab_widget.setTabText(0, tr('ui.search_tab'))
+        self.main_tab_widget.setTabText(1, tr('ui.library_tab'))
+        self.main_tab_widget.setTabText(2, tr('ui.mod_management'))
+        self.main_tab_widget.setTabText(3, tr('ui.patching_tab'))
+
+        # Search Tab Filters & Pagination
+        self.sort_combo.setItemText(0, tr('ui.sort_by_downloads'))
+        self.sort_combo.setItemText(1, tr('ui.sort_by_update_date'))
+        self.sort_combo.setItemText(2, tr('ui.sort_by_creation_date'))
+        self.modgame_combo.setItemText(0, tr('dropdowns.all_mods'))
+        self.modgame_combo.setItemText(1, tr('dropdowns.filter_deltarune'))
+        self.modgame_combo.setItemText(2, tr('dropdowns.filter_deltarunedemo'))
+        self.modgame_combo.setItemText(3, tr('dropdowns.filter_undertale'))
+        self.tags_label.setText(tr('ui.tags_label'))
+        self.tag_translation.setText(tr('tags.translation'))
+        self.tag_customization.setText(tr('tags.customization'))
+        self.tag_gameplay.setText(tr('tags.gameplay'))
+        self.tag_other.setText(tr('tags.other'))
+        self.search_button.setToolTip(tr('tooltips.search'))
+        self.prev_page_btn.setText(tr('ui.prev_page'))
+        self.next_page_btn.setText(tr('ui.next_page'))
+
+        # Library Tab
+        self.chapter_mode_checkbox.setText(tr('ui.chapter_mode'))
+        self.full_install_checkbox.setText(tr('ui.full_install'))
+        self.full_install_checkbox.setToolTip(self._full_install_tooltip())
+
+        # Settings View
+        self.settings_title_label.setText(f"<h1>{tr('ui.settings_title')}</h1>")
+        self.language_label.setText(tr('ui.language_label'))
+        self.launch_via_steam_checkbox.setText(tr('ui.steam_launch'))
+        self.launch_via_steam_checkbox.setToolTip("<html><body style='white-space: normal;'>" + tr('tooltips.steam') + '</body></html>')
+        self.use_custom_executable_checkbox.setText(tr('ui.custom_executable'))
+        self.use_custom_executable_checkbox.setToolTip("<html><body style='white-space: normal;'>" + tr('tooltips.custom_exe') + '</body></html>')
+        self.select_custom_executable_button.setText(tr('buttons.select_file'))
+        self._update_change_path_button_text()
+        self.change_mods_dir_button.setText(tr('ui.change_mods_dir'))
+        self.change_mods_dir_button.setToolTip(tr('tooltips.change_mods_dir'))
+        self.customization_button.setText(tr('ui.launcher_customization'))
+        self.reset_button.setText(tr('buttons.reset_settings'))
+
+        # Customization Page
+        self.back_button_cust.setText(tr('ui.back_button'))
+        self._update_background_button_state()
+        self.background_music_button.setText(self._get_background_music_button_text())
+        self.startup_sound_button.setText(self._get_startup_sound_button_text())
+        self.disable_background_checkbox.setText(tr('checkboxes.disable_background'))
+        self.disable_splash_checkbox.setText(tr('checkboxes.disable_splash'))
+        for key, widget in self.color_widgets.items():
+            label_widget = widget.parent().findChild(QLabel)
+            if label_widget:
+                label_widget.setText(self.color_config[key])
+            button_widget = widget.parent().findChild(QPushButton)
+            if button_widget:
+                 button_widget.setText(tr('buttons.select_color'))
+
+        # Changelog/Help Buttons
+        self.changelog_button.setText(tr('buttons.changelog_close') if self.is_changelog_view else tr('buttons.changelog'))
+        self.help_button.setText(tr('buttons.help_close') if self.is_help_view else tr('buttons.help'))
+
+    def _retranslate_ui(self):
+        """Coordinates all UI updates after a language change or refresh."""
+        language_code = self.local_config.get('language', 'en')
+        localization_manager.load_language(language_code)
+        self._update_qt_translations(language_code)
+        self.load_font()
+        self._retranslate_texts()
+        self.apply_theme()
+        self._update_filtered_mods()
+        self._update_installed_mods_display()
+        self._update_slots_display()
+        self._update_pagination_controls()
+        if self.is_save_manager_view:
+            self._refresh_save_slots()
+        self._update_action_button_state()
+        self.update()
 
     def _check_active_slots_need_updates(self):
         if not self.all_mods:
@@ -5654,27 +5724,22 @@ class DeltaHubApp(QWidget):
             return {}
 
     def _init_localization(self):
-        manager = get_localization_manager()
-        saved_language = self.local_config.get('language', '')
-        if not saved_language:
-            detected_language = manager.detect_system_language()
-            self.local_config['language'] = detected_language
+        saved_language = self.local_config.get('language')
+
+        if not saved_language or saved_language not in localization_manager.get_available_languages():
+            saved_language = localization_manager.detect_system_language()
+            self.local_config['language'] = saved_language
             self._write_json(self.config_path, self.local_config)
-            saved_language = detected_language
-        if saved_language in manager.get_available_languages():
-            if manager.get_current_language() != saved_language:
-                manager.load_language(saved_language)
-        else:
-            manager.load_language('en')
-            self.local_config['language'] = 'en'
-            self._write_json(self.config_path, self.local_config)
-            saved_language = 'en'
+        if not localization_manager.load_language(saved_language):
+            saved_language = localization_manager.detect_system_language()
+            localization_manager.load_language(saved_language)
+            self.local_config['language'] = saved_language
+            self._write_local_config()
         self._update_qt_translations(saved_language)
 
     def _update_qt_translations(self, language_code):
         from PyQt6.QtCore import QLibraryInfo, QTranslator
-        manager = get_localization_manager()
-        qt_translation = manager.get_qt_translation_name(language_code)
+        qt_translation = localization_manager.get_qt_translation_name(language_code)
         if not qt_translation:
             return
         app = QApplication.instance()

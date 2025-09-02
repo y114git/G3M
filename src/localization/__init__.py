@@ -1,2 +1,2 @@
-from .manager import LocalizationManager, get_localization_manager, tr, init_localization
-__all__ = ['LocalizationManager', 'get_localization_manager', 'tr', 'init_localization']
+from .manager import LocalizationManager, localization_manager, tr, init_localization
+__all__ = ['LocalizationManager', 'localization_manager', 'tr', 'init_localization']

@@ -1,37 +1,82 @@
 import json
 import locale
 import os
+import shutil
 from typing import Dict, Optional
+from utils.path_utils import get_user_lang_dir, resource_path
 
 class LocalizationManager:
 
     def __init__(self, lang_dir: Optional[str]=None):
-        self.lang_dir = lang_dir or os.path.join(os.path.dirname(__file__), 'lang')
+        self.internal_lang_dir = resource_path('localization/lang')
+        self.external_lang_dir = get_user_lang_dir()
+        os.makedirs(self.external_lang_dir, exist_ok=True)
+        self._sync_internal_languages()
         self.current_language = 'en'
         self.translations = {}
         self.available_languages = {}
         self._load_available_languages()
 
-    def _load_available_languages(self):
-        if not os.path.exists(self.lang_dir):
+    def _sync_internal_languages(self):
+        if not os.path.exists(self.internal_lang_dir):
             return
-        for filename in os.listdir(self.lang_dir):
+        for filename in os.listdir(self.internal_lang_dir):
+            internal_path = os.path.join(self.internal_lang_dir, filename)
+            external_path = os.path.join(self.external_lang_dir, filename)
+            if not os.path.exists(external_path):
+                try:
+                    if os.path.isdir(internal_path):
+                        shutil.copytree(internal_path, external_path)
+                    else:
+                        shutil.copy2(internal_path, external_path)
+                except Exception as e:
+                    print(f"Could not copy internal file '{filename}' to external directory: {e}")
+
+    def _load_available_languages(self):
+        self.available_languages = self._scan_lang_dir(self.external_lang_dir)
+
+    def rescan_languages(self):
+        """Rescans language files, restores missing defaults, and reloads the list."""
+        self.available_languages.clear()
+        self._sync_internal_languages()
+        self._load_available_languages()
+
+    def _scan_lang_dir(self, directory: str) -> Dict:
+        langs = {}
+        if not os.path.isdir(directory):
+            return langs
+
+        for filename in os.listdir(directory):
             if filename.startswith('lang_') and filename.endswith('.json'):
                 lang_code = filename[5:-5]
-                lang_path = os.path.join(self.lang_dir, filename)
+                lang_path = os.path.join(directory, filename)
                 try:
                     with open(lang_path, 'r', encoding='utf-8') as f:
                         data = json.load(f)
-                        metadata = data.get('metadata', {})
-                        self.available_languages[lang_code] = {'name': metadata.get('language_name', lang_code.upper()), 'qt_translation': metadata.get('qt_translation', f'qtbase_{lang_code}'), 'language': metadata.get('language', lang_code)}
-                except Exception as e:
-                    print(f'Error loading language file {filename}: {e}')
+                    metadata = data.get('metadata', {})
+                    langs[lang_code] = {'name': metadata.get('language_name', lang_code.upper()),
+                                        'qt_translation': metadata.get('qt_translation', f'qtbase_{lang_code}'),
+                                        'font': metadata.get('font'), # Can be None
+                                        'path': lang_path}
+                except (json.JSONDecodeError, IOError) as e:
+                    print(f'Error loading or parsing language file {filename}: {e}')
+        return langs
 
     def get_available_languages(self) -> Dict[str, str]:
         return {code: info['name'] for code, info in self.available_languages.items()}
 
     def get_qt_translation_name(self, language_code: str) -> str:
         return self.available_languages.get(language_code, {}).get('qt_translation', 'qtbase_en')
+
+    def get_font_path(self, language_code: str) -> Optional[str]:
+        """Returns the full path to the font file for a given language, if specified."""
+        lang_info = self.available_languages.get(language_code)
+        if not lang_info or not lang_info.get('font'):
+            return None
+
+        font_filename = lang_info['font']
+        lang_file_path = lang_info['path']
+        return os.path.join(os.path.dirname(lang_file_path), font_filename)
 
     def detect_system_language(self) -> str:
         try:
@@ -47,9 +92,16 @@ class LocalizationManager:
         return 'en'
 
     def load_language(self, language_code: str) -> bool:
-        if language_code not in self.available_languages:
-            return False
-        lang_file = os.path.join(self.lang_dir, f'lang_{language_code}.json')
+        lang_info = self.available_languages.get(language_code)
+
+        if not lang_info:
+            # If the selected language is no longer available, try falling back to internal
+            internal_path = os.path.join(self.internal_lang_dir, f'lang_{language_code}.json')
+            if not os.path.exists(internal_path):
+                return False
+            lang_info = {'path': internal_path}
+
+        lang_file = lang_info['path']
         try:
             with open(lang_file, 'r', encoding='utf-8') as f:
                 self.translations = json.load(f)
@@ -72,6 +124,8 @@ class LocalizationManager:
                 return value.format(**kwargs)
             return value
         except (KeyError, TypeError, AttributeError):
+            if self.current_language != 'en':
+                return _fallback_tr(key, **kwargs)
             return f'[{key}]'
 
     def _process_escape_sequences(self, text: str) -> str:
@@ -88,23 +142,33 @@ class LocalizationManager:
 
     def get_current_language_name(self) -> str:
         return self.available_languages.get(self.current_language, {}).get('name', self.current_language.upper())
-_localization_manager = None
+localization_manager = LocalizationManager()
+def _fallback_tr(key: str, **kwargs) -> str:
+    """Internal fallback to English if a key is not found in the current language."""
+    try:
+        en_path = os.path.join(localization_manager.external_lang_dir, 'lang_en.json')
+        if not os.path.exists(en_path):
+            en_path = os.path.join(localization_manager.internal_lang_dir, 'lang_en.json')
 
-def get_localization_manager() -> LocalizationManager:
-    global _localization_manager
-    if _localization_manager is None:
-        _localization_manager = LocalizationManager()
-        if 'ru' in _localization_manager.available_languages:
-            _localization_manager.load_language('ru')
-        elif 'en' in _localization_manager.available_languages:
-            _localization_manager.load_language('en')
-    return _localization_manager
+        with open(en_path, 'r', encoding='utf-8') as f:
+            en_translations = json.load(f)
+
+        keys = key.split('.')
+        value = en_translations
+        for k in keys:
+            value = value[k]
+
+        if isinstance(value, str):
+            return value.format(**kwargs) if kwargs else value
+    except Exception:
+        pass
+    return f'[{key}]'
 
 def tr(key: str, **kwargs) -> str:
-    return get_localization_manager().get_text(key, **kwargs)
+    return localization_manager.get_text(key, **kwargs)
 
 def init_localization(language_code: Optional[str]=None) -> bool:
-    manager = get_localization_manager()
+    manager = localization_manager
     if language_code is None:
         language_code = 'en'
     return manager.load_language(language_code)
