@@ -779,8 +779,8 @@ class ModEditorDialog(QDialog):
                     except Exception:
                         first_bytes = b''
                 try:
-                    from localization.manager import get_localization_manager
-                    lang = get_localization_manager().get_current_language()
+                    from localization.manager import localization_manager
+                    lang = localization_manager.get_current_language()
                 except Exception:
                     lang = 'en'
                 suffix = 'МБ' if lang == 'ru' else 'MB'
@@ -885,9 +885,27 @@ class ModEditorDialog(QDialog):
         if line_edit and (not sip.isdeleted(line_edit)):
             line_edit.setProperty('isValid', is_valid)
 
+
     def _browse_file(self, line_edit, title, file_filter):
-        if (file_path := QFileDialog.getOpenFileName(self, title, '', file_filter)[0]):
-            line_edit.setText(file_path)
+        # Показать диалог выбора типа
+        msg = QMessageBox(self)
+        msg.setWindowTitle(tr('ui.choice_title'))
+        msg.setText(tr('ui.select_file_or_folder'))
+        archive_button = msg.addButton(tr('ui.archive'), QMessageBox.ButtonRole.AcceptRole)
+        folder_button = msg.addButton(tr('ui.folder'), QMessageBox.ButtonRole.AcceptRole)
+        msg.setDefaultButton(archive_button)
+        msg.exec()
+
+        if msg.clickedButton() == archive_button:
+            # Выбор файла (архив)
+            file_path, _ = QFileDialog.getOpenFileName(self, title, '', file_filter)
+            if file_path:
+                line_edit.setText(file_path)
+        else:
+            # Выбор папки
+            folder_path = QFileDialog.getExistingDirectory(self, title, '')
+            if folder_path:
+                line_edit.setText(folder_path)
 
     def _add_extra_files_with_data(self, tab, tab_layout, key_name, url, version):
         self._create_file_frame(tab_layout, 'extra', key_name)
@@ -1408,19 +1426,35 @@ class ModEditorDialog(QDialog):
         tab_layout.insertWidget(tab_layout.count() - 1, frame)
 
     def _select_local_extra_files(self, tab, tab_layout):
-        file_paths, _ = QFileDialog.getOpenFileNames(self, tr('ui.select_additional_files'), '', get_file_filter('extended_archives'))
+        # Показать диалог выбора типа
+        msg = QMessageBox(self)
+        msg.setWindowTitle(tr('ui.choice_title'))
+        msg.setText(tr('ui.select_file_or_folder'))
+        archive_button = msg.addButton(tr('ui.archive'), QMessageBox.ButtonRole.AcceptRole)
+        folder_button = msg.addButton(tr('ui.folder'), QMessageBox.ButtonRole.AcceptRole)
+        msg.setDefaultButton(archive_button)
+        msg.exec()
+
+        if msg.clickedButton() == archive_button:
+            # Выбор нескольких файлов
+            file_paths, _ = QFileDialog.getOpenFileNames(self, tr('ui.select_additional_files'), '', get_file_filter('extended_archives'))
+        else:
+            # Выбор одной папки
+            folder_path = QFileDialog.getExistingDirectory(self, tr('ui.select_additional_files'), '')
+            if folder_path:
+                file_paths = [folder_path]
+
         if file_paths:
             key_name, ok = QInputDialog.getText(self, tr('dialogs.file_group_name'), tr('dialogs.enter_file_group_key'))
             if not ok or not key_name.strip():
-                return
+                key_name = 'extra'
             extra_frame = QFrame()
             extra_frame.setFrameStyle(QFrame.Shape.Box)
             extra_layout = QVBoxLayout(extra_frame)
-            title = QLabel(tr('ui.extra_files_title', key_name=key_name))
+            title = QLabel(tr('files.extra_files_title', key_name=key_name))
             title.setStyleSheet('font-weight: bold;')
             title.setProperty('clean_key', key_name)
             extra_layout.addWidget(title)
-            import os
             for file_path in file_paths:
                 filename = os.path.basename(file_path)
                 file_label = QLabel(f'• {filename}')
@@ -1429,7 +1463,7 @@ class ModEditorDialog(QDialog):
                 path_edit = QLineEdit()
                 path_edit.setText(file_path)
                 path_edit.hide()
-                path_edit.setProperty('file_path', True)
+                path_edit.setProperty('is_local_extra_path', True)
                 path_edit.setProperty('extra_key', key_name)
                 extra_layout.addWidget(path_edit)
             delete_button = QPushButton(tr('ui.delete_button'))
@@ -1741,7 +1775,11 @@ class ModEditorDialog(QDialog):
                 data_path = original_file_data.get('data_file_url')
                 if data_path and os.path.exists(data_path):
                     data_filename = os.path.basename(data_path)
-                    shutil.copy2(data_path, os.path.join(file_folder, data_filename))
+                    destination = os.path.join(file_folder, data_filename)
+                    if os.path.isdir(data_path):
+                        shutil.copytree(data_path, destination)
+                    else:
+                        shutil.copy2(data_path, destination)
                     new_file_data['data_file_url'] = data_filename
                     new_file_data['data_file_version'] = original_file_data.get('data_file_version', '1.0.0')
 
@@ -1756,7 +1794,11 @@ class ModEditorDialog(QDialog):
                             for path in paths:
                                 if os.path.exists(path):
                                     filename = os.path.basename(path)
-                                    shutil.copy2(path, os.path.join(file_folder, filename))
+                                    destination = os.path.join(file_folder, filename)
+                                    if os.path.isdir(path):
+                                        shutil.copytree(path, destination)
+                                    else:
+                                        shutil.copy2(path, destination)
                                     new_file_data['extra_files'][group_key].append(filename)
                 if new_file_data:
                     processed_files_data[file_key] = new_file_data
@@ -1900,7 +1942,11 @@ class ModEditorDialog(QDialog):
                 data_path = file_data.get('data_file_url')
                 if data_path and os.path.exists(data_path):
                     data_filename = os.path.basename(data_path)
-                    shutil.copy2(data_path, os.path.join(file_folder, data_filename))
+                    destination = os.path.join(file_folder, data_filename)
+                    if os.path.isdir(data_path):
+                        shutil.copytree(data_path, destination)
+                    else:
+                        shutil.copy2(data_path, destination)
                     files_data[file_key]['data_file_url'] = data_filename
                     files_data[file_key]['data_file_version'] = file_data.get('data_file_version', '1.0.0')
                 extra_files = file_data.get('extra_files', {})
@@ -1911,7 +1957,11 @@ class ModEditorDialog(QDialog):
                         for path in paths:
                             if os.path.exists(path):
                                 filename = os.path.basename(path)
-                                shutil.copy2(path, os.path.join(file_folder, filename))
+                                destination = os.path.join(file_folder, filename)
+                                if os.path.isdir(path):
+                                    shutil.copytree(path, destination)
+                                else:
+                                    shutil.copy2(path, destination)
                                 copied_paths.append(filename)
                         if copied_paths:
                             files_data[file_key]['extra_files'][group_key] = copied_paths

@@ -2,6 +2,7 @@
   "metadata": {
     "language": "russian",
     "language_name": "Русский",
+    "font": "main.ttf",
     "qt_translation": "qtbase_ru"
   },
   "ui": {
@@ -31,6 +32,7 @@
     "chapter_mode_instruction": "Выберите слот выше, чтобы увидеть подходящие моды",
     "chapter_n": "главы {chapter}",
     "chapter_tab_title": "Глава {chapter_num}",
+    "choice_title": "Выбор",
     "clear_search_tooltip": "Сбросить поиск: '{text}'",
     "close_button": "Закрыть",
     "collections": "Коллекции",
@@ -63,7 +65,6 @@
     "enter_author_name": "Введите имя автора",
     "enter_author_name_optional": "Введите имя автора (или оставьте пустым)",
     "enter_mod_name": "Введите название мода",
-    "extra_files_title": "Дополнительные файлы: {key_name}",
     "file_generic": "файл",
     "file_not_selected": "Файл не выбран",
     "file_path_placeholder": "Введите путь или выберите...",
@@ -164,6 +165,7 @@
     "select_data_file": "Выберите {file_type} файл",
     "select_deltarune_saves_folder": "Выберите папку сейвов DELTARUNE",
     "select_file": "Выберите файл...",
+    "select_file_or_folder": "Выбрать файл или папку?",
     "select_icon_file": "Выберите файл иконки",
     "select_launch_file": "Выберите файл запуска",
     "select_mod": "Выберите мод",
@@ -176,6 +178,8 @@
     "select_patch_file_xdelta": "Выберите ПАТЧ файл (.xdelta)",
     "select_save_file": "Выберите файл сейва",
     "select_slot": "Выберите слот",
+    "archive": "Archive",
+    "folder": "Folder",
     "select_slot_for_mod": "Выберите слот для мода '{mod_name}':",
     "select_storage": "Выберите хранилище",
     "settings_title": "Настройки",
@@ -469,8 +473,6 @@
   },
   "errors": {
     "access_denied": "Ошибка прав доступа",
-    "already_running": "Другой экземпляр DELTAHUB уже запущен.",
-    "already_running_title": "Уже запущен",
     "access_permission_error": "Ошибка доступа. Проверьте права на редактирование мода.",
     "app_not_found_after_unpack": "DELTAHUB.app не найден после распаковки.",
     "archive_unpack_error": "Ошибка распаковки архива {archive_name}: {error}",
@@ -702,7 +704,6 @@
     "smart_install_starting": "Умная установка: «{mod_name}» будет установлен с серверов DELTAHUB.",
     "update_cancelled": "Обновление отменено пользователем.",
     "install_cancelled_by_user": "Установка отменена пользователем.",
-    "unpacking_mod": "Распаковка мода: {mod_name}...",
     "install_complete_success": "Мод «{mod_name}» успешно установлен!"
   },
   "startup": {
