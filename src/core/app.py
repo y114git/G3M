@@ -22,7 +22,7 @@ import requests
 from PyQt6.QtCore import QTranslator, Qt, QEvent, QEventLoop, QThread, QTimer, QUrl, pyqtSignal
 from PyQt6.QtGui import QColor, QDesktopServices, QFont, QFontDatabase, QIcon, QMovie, QPainter, QPixmap
 from PyQt6.QtWidgets import QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFrame, QLabel, QLineEdit, QMessageBox, QProgressBar, QPushButton, QTabWidget, QTextBrowser, QVBoxLayout, QWidget, QHBoxLayout, QSizePolicy, QInputDialog, QColorDialog, QListWidget, QScrollArea
-from localization.manager import localization_manager, tr
+from localization import localization_manager, tr
 from models.game_modes import GameMode
 from config.constants import LAUNCHER_VERSION, UI_COLORS, SOCIAL_LINKS, THEMES, SAVE_SLOT_FINISH_MAP, ARCH
 from models.mod_models import ModInfo, ModChapterData
@@ -704,6 +704,10 @@ class DeltaHubApp(QWidget):
         self.language_combo.currentTextChanged.connect(self._on_language_changed)
         language_layout.addWidget(self.language_combo)
         settings_center_container.addWidget(language_container, alignment=Qt.AlignmentFlag.AlignHCenter)
+        self.beta_updates_checkbox = QCheckBox(tr('ui.beta_updates'))
+        self.beta_updates_checkbox.setToolTip(tr('tooltips.beta_updates'))
+        self.beta_updates_checkbox.stateChanged.connect(self._on_toggle_beta_updates)
+        settings_center_container.addWidget(self.beta_updates_checkbox, alignment=Qt.AlignmentFlag.AlignHCenter)
         settings_center_container.addSpacing(30)
         self.launch_via_steam_checkbox = QCheckBox(tr('ui.steam_launch'))
         self.launch_via_steam_checkbox.setToolTip("<html><body style='white-space: normal;'>" + tr('tooltips.steam') + '</body></html>')
@@ -826,6 +830,11 @@ class DeltaHubApp(QWidget):
             custom_style_layout.addLayout(layout)
         settings_customization_layout.addWidget(self.custom_style_frame)
         settings_customization_layout.addStretch()
+        self.theme_button = QPushButton(tr('buttons.theme_management'))
+        self.theme_button.setFixedWidth(400)
+        self.theme_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        self.theme_button.clicked.connect(self._on_theme_button_click)
+        settings_customization_layout.addWidget(self.theme_button, 0, Qt.AlignmentFlag.AlignHCenter)
         pages_layout.addWidget(self.settings_customization_page)
         self.settings_customization_page.setVisible(False)
         self.changelog_widget = QFrame()
@@ -2134,7 +2143,7 @@ class DeltaHubApp(QWidget):
             verified_desc.setWordWrap(True)
             verified_container.addWidget(verified_desc)
             status_layout.addLayout(verified_container)
-        if getattr(mod_data, 'is_xdelta', getattr(mod_data, 'is_piracy_protected', False)):
+        if getattr(mod_data, 'is_xdelta', False):
             patching_container = QVBoxLayout()
             patching_container.setSpacing(4)
             patching_label = QLabel(tr('ui.patching_label'))
@@ -2540,13 +2549,19 @@ class DeltaHubApp(QWidget):
                 print(f'Debug: {debug_info}')
                 QMessageBox.warning(self, tr('errors.error'), tr('errors.mod_no_files', mod_name=mod.name) + f'\n\nDebug: {debug_info}')
                 return
+            was_installed_before = self._is_mod_installed(mod.key)
+            is_xdelta_mod = getattr(mod, 'is_xdelta', False)
+            if not is_xdelta_mod and not was_installed_before:
+                reply = QMessageBox.question(self, tr('dialogs.file_replacement_warning_title'), tr('dialogs.file_replacement_warning_body'), QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No)
+                if reply != QMessageBox.StandardButton.Yes:
+                    self.update_status_signal.emit(tr('status.install_cancelled_by_user'), UI_COLORS['status_info'])
+                    return
             install_tasks = [(mod, chapter_id) for chapter_id in available_chapters]
             self.is_installing = True
             self._set_install_buttons_enabled(False)
             self.action_button.setText(tr('ui.cancel_button'))
             self._install_op_id = getattr(self, '_install_op_id', 0) + 1
             op_id = self._install_op_id
-            was_installed_before = self._is_mod_installed(mod.key)
             self.current_install_thread = InstallModsThread(self, install_tasks, was_installed_before)
             self.install_thread = self.current_install_thread
             self.install_thread.progress.connect(lambda v, oid=op_id: self._on_install_progress_token(v, oid))
@@ -3483,6 +3498,7 @@ class DeltaHubApp(QWidget):
             self.launch_via_steam_checkbox.setChecked(False)
             self.use_custom_executable_checkbox.setChecked(False)
             self.chapter_mode_checkbox.setChecked(False)
+            self.beta_updates_checkbox.setChecked(False)
             self.full_install_checkbox.setChecked(False)
             self.disable_background_checkbox.setChecked(False)
             self.disable_splash_checkbox.setChecked(False)
@@ -3986,6 +4002,7 @@ class DeltaHubApp(QWidget):
         self.disable_background_checkbox.blockSignals(False)
         self.disable_splash_checkbox.blockSignals(True)
         self.disable_splash_checkbox.setChecked(self.local_config.get('disable_splash', False))
+        self.beta_updates_checkbox.setChecked(self.local_config.get('beta_updates_enabled', False))
         self.disable_splash_checkbox.blockSignals(False)
         self._update_change_path_button_text()
         self._update_background_button_state()
@@ -4042,8 +4059,12 @@ class DeltaHubApp(QWidget):
             return 'Linux'
 
     def _check_for_launcher_updates(self):
+        beta_enabled = self.local_config.get('beta_updates_enabled', False)
+        if beta_enabled:
+            self.update_status_signal.emit(tr('status.beta_updates_enabled'), UI_COLORS['status_warning'])
         try:
-            launcher_files = self.global_settings.get('launcher_files')
+            launcher_files_key = 'launcher_beta_files' if beta_enabled else 'launcher_files'
+            launcher_files = self.global_settings.get(launcher_files_key)
             if not isinstance(launcher_files, dict):
                 self.update_status_signal.emit(tr('status.update_info_not_found'), UI_COLORS['status_warning'])
                 return
@@ -4428,7 +4449,7 @@ class DeltaHubApp(QWidget):
 
     def _get_xdelta_chapters(self, source_dir: str, mod_info) -> List[int]:
         available_chapters = []
-        if mod_info and getattr(mod_info, 'is_xdelta', getattr(mod_info, 'is_piracy_protected', False)):
+        if mod_info and getattr(mod_info, 'is_xdelta', False):
             for chapter_id in range(-1, 5):
                 if chapter_id == -1:
                     if mod_info.is_valid_for_demo():
@@ -4513,7 +4534,7 @@ class DeltaHubApp(QWidget):
             return False
 
     def _is_xdelta_mod(self, mod_info, source_dir: str, chapter_id: Optional[int] = None) -> bool:
-        if mod_info and getattr(mod_info, 'is_xdelta', getattr(mod_info, 'is_piracy_protected', False)):
+        if mod_info and getattr(mod_info, 'is_xdelta', False):
             return True
         if chapter_id is not None:
             search_dir = None
@@ -5114,13 +5135,19 @@ class DeltaHubApp(QWidget):
         self._write_json(self.config_path, self.local_config)
         self._retranslate_ui()
 
+    def _on_toggle_beta_updates(self):
+        beta_enabled = self.beta_updates_checkbox.isChecked()
+        self.local_config['beta_updates_enabled'] = beta_enabled
+        self._write_local_config()
+        self._check_for_launcher_updates()
+
     def _retranslate_texts(self):
-        """A dedicated method to update text for all widgets."""
         # Top Panel
         self.settings_button.setText(tr('ui.back_button') if self.is_settings_view or self.is_save_manager_view else tr('ui.settings_title'))
         self.online_label.setToolTip(tr('tooltips.online_counter'))
         self.top_refresh_button.setToolTip(tr('ui.update_mod_list'))
         self.telegram_button.setText(tr('buttons.telegram'))
+        self.beta_updates_checkbox.setToolTip(tr('tooltips.beta_updates'))
         self.discord_button.setText(tr('buttons.discord'))
 
         # Bottom Panel
@@ -5158,6 +5185,7 @@ class DeltaHubApp(QWidget):
         # Settings View
         self.settings_title_label.setText(f"<h1>{tr('ui.settings_title')}</h1>")
         self.language_label.setText(tr('ui.language_label'))
+        self.beta_updates_checkbox.setText(tr('ui.beta_updates'))
         self.launch_via_steam_checkbox.setText(tr('ui.steam_launch'))
         self.launch_via_steam_checkbox.setToolTip("<html><body style='white-space: normal;'>" + tr('tooltips.steam') + '</body></html>')
         self.use_custom_executable_checkbox.setText(tr('ui.custom_executable'))
@@ -5182,7 +5210,7 @@ class DeltaHubApp(QWidget):
                 label_widget.setText(self.color_config[key])
             button_widget = widget.parent().findChild(QPushButton)
             if button_widget:
-                 button_widget.setText(tr('buttons.select_color'))
+                 button_widget.setText(tr('ui.select_color'))
 
         # Changelog/Help Buttons
         self.changelog_button.setText(tr('buttons.changelog_close') if self.is_changelog_view else tr('buttons.changelog'))
@@ -5671,7 +5699,7 @@ class DeltaHubApp(QWidget):
 
     def _migrate_config_if_needed(self):
         self.local_config['cache_format_version'] = LAUNCHER_VERSION
-        defaults = {'game_path': '', 'last_selected': {}, 'use_custom_executable': False, 'demo_game_path': '', 'launch_via_steam': False, 'direct_launch_slot_id': -1, 'demo_mode_enabled': False, 'chapter_mode_enabled': False, 'custom_background_path': '', 'custom_executable_path': '', 'background_disabled': False, 'custom_color_background': '', 'custom_color_button': '', 'custom_color_border': '', 'custom_color_button_hover': '', 'custom_color_text': '', 'mods_dir_path': '', 'custom_color_version_text': ''}
+        defaults = {'game_path': '', 'last_selected': {}, 'use_custom_executable': False, 'demo_game_path': '', 'launch_via_steam': False, 'direct_launch_slot_id': -1, 'demo_mode_enabled': False, 'chapter_mode_enabled': False, 'custom_background_path': '', 'custom_executable_path': '', 'background_disabled': False, 'custom_color_background': '', 'custom_color_button': '', 'custom_color_border': '', 'custom_color_button_hover': '', 'custom_color_text': '', 'mods_dir_path': '', 'custom_color_version_text': '', 'beta_updates_enabled': False}
         for key, value in defaults.items():
             self.local_config.setdefault(key, value)
         self._write_local_config()
@@ -6100,6 +6128,119 @@ class DeltaHubApp(QWidget):
             self.update_status_signal.emit(tr('status.no_game_path'), UI_COLORS['status_error'])
 
     def _handle_first_launch_settings(self):
+        self.local_config['first_launch_splash_shown'] = True
+        self.local_config['disable_splash'] = True
+        self._write_local_config()
+        try:
+            self.initialization_finished.disconnect(self._handle_first_launch_settings)
+        except TypeError:
+            pass
+
+    def _on_theme_button_click(self):
+        msg = QMessageBox(self)
+        msg.setWindowTitle(tr('buttons.theme_management'))
+        msg.setText(tr('dialogs.theme_choice'))
+        import_btn = msg.addButton(tr('buttons.import'), QMessageBox.ButtonRole.AcceptRole)
+        export_btn = msg.addButton(tr('buttons.export'), QMessageBox.ButtonRole.AcceptRole)
+        msg.setStandardButtons(QMessageBox.StandardButton.NoButton)
+        msg.exec()
+
+        if msg.clickedButton() == import_btn:
+            self._import_theme()
+        elif msg.clickedButton() == export_btn:
+            self._export_theme()
+
+    def _export_theme(self):
+        import zipfile
+
+        theme_file_path, _ = QFileDialog.getSaveFileName(self, tr('dialogs.export_theme_title'), '', f"{tr('file_descriptions.theme_files')} (*.dhtheme)")
+        if not theme_file_path:
+            return
+
+        theme_settings = {
+            'custom_color_background': self.local_config.get('custom_color_background', ''),
+            'custom_color_button': self.local_config.get('custom_color_button', ''),
+            'custom_color_border': self.local_config.get('custom_color_border', ''),
+            'custom_color_button_hover': self.local_config.get('custom_color_button_hover', ''),
+            'custom_color_text': self.local_config.get('custom_color_text', ''),
+            'custom_color_version_text': self.local_config.get('custom_color_version_text', ''),
+            'background_disabled': self.local_config.get('background_disabled', False),
+            'disable_splash': self.local_config.get('disable_splash', False)
+        }
+
+        with zipfile.ZipFile(theme_file_path, 'w') as zipf:
+            zipf.writestr('theme.json', json.dumps(theme_settings, indent=2))
+
+            bg_path = self.local_config.get('custom_background_path')
+            if bg_path and os.path.exists(bg_path):
+                zipf.write(bg_path, f"background{os.path.splitext(bg_path)[1]}")
+
+            music_path = self._get_background_music_path()
+            if music_path and os.path.exists(music_path):
+                zipf.write(music_path, f"background_music{os.path.splitext(music_path)[1]}")
+
+            sound_path = self._get_startup_sound_path()
+            if sound_path and os.path.exists(sound_path):
+                zipf.write(sound_path, f"startup_sound{os.path.splitext(sound_path)[1]}")
+
+        QMessageBox.information(self, tr('dialogs.success'), tr('dialogs.theme_exported_success'))
+
+    def _import_theme(self):
+        import zipfile
+        import tempfile
+
+        theme_file_path, _ = QFileDialog.getOpenFileName(self, tr('dialogs.import_theme_title'), '', f"{tr('file_descriptions.theme_files')} (*.dhtheme)")
+        if not theme_file_path:
+            return
+
+        try:
+            with zipfile.ZipFile(theme_file_path, 'r') as zipf:
+                if 'theme.json' not in zipf.namelist():
+                    raise ValueError("Missing theme.json")
+
+                with tempfile.TemporaryDirectory() as temp_dir:
+                    zipf.extractall(temp_dir)
+
+                    with open(os.path.join(temp_dir, 'theme.json'), 'r') as f:
+                        theme_settings = json.load(f)
+
+                    # Apply settings
+                    for key, value in theme_settings.items():
+                        self.local_config[key] = value
+
+                    # Clean up old theme files before copying new ones
+                    for old_file in ['custom_background_music.mp3', 'custom_background_music.wav', 'custom_startup_sound.mp3', 'custom_startup_sound.wav']:
+                        if os.path.exists(os.path.join(self.config_dir, old_file)):
+                            os.remove(os.path.join(self.config_dir, old_file))
+                    self.local_config['custom_background_path'] = ''
+
+                    # Copy new files
+                    for filename in os.listdir(temp_dir):
+                        src_path = os.path.join(temp_dir, filename)
+                        if filename.startswith('background.'):
+                            ext = os.path.splitext(filename)[1]
+                            dest_path = os.path.join(self.config_dir, f"custom_background{ext}")
+                            shutil.copy2(src_path, dest_path)
+                            self.local_config['custom_background_path'] = dest_path
+                        elif filename.startswith('background_music.'):
+                            shutil.copy2(src_path, os.path.join(self.config_dir, f"custom_background_music{os.path.splitext(filename)[1]}"))
+                        elif filename.startswith('startup_sound.'):
+                            shutil.copy2(src_path, os.path.join(self.config_dir, f"custom_startup_sound{os.path.splitext(filename)[1]}"))
+
+            # Persist and update UI
+            self._write_local_config()
+            self._load_custom_style_settings()
+            self.disable_background_checkbox.setChecked(self.local_config.get('background_disabled', False))
+            self.disable_splash_checkbox.setChecked(self.local_config.get('disable_splash', False))
+            self.background_music_button.setText(self._get_background_music_button_text())
+            self.startup_sound_button.setText(self._get_startup_sound_button_text())
+            self._stop_background_music()
+            self._maybe_start_background_music()
+            self.apply_theme()
+            QMessageBox.information(self, tr('dialogs.success'), tr('dialogs.theme_imported_success'))
+
+        except Exception as e:
+            QMessageBox.critical(self, tr('dialogs.error'), tr('dialogs.theme_import_failed', error=str(e)))
         self.local_config['first_launch_splash_shown'] = True
         self.local_config['disable_splash'] = True
         self._write_local_config()

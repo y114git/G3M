@@ -83,10 +83,8 @@ class LocalizationManager:
             system_locale = locale.getdefaultlocale()[0]
             if system_locale:
                 lang_code = system_locale[:2].lower()
-                if lang_code == 'ru' and 'ru' in self.available_languages:
-                    return 'ru'
-                elif lang_code == 'en' and 'en' in self.available_languages:
-                    return 'en'
+                if lang_code in self.available_languages:
+                    return lang_code
         except Exception as e:
             print(f'Error detecting system language: {e}')
         return 'en'

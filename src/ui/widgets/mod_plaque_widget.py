@@ -40,8 +40,7 @@ class ModPlaqueWidget(BaseModWidget):
             style_sheet = f'font-weight: bold; padding: 2px 5px; border-radius: 3px; {modgame_style}'
             modgame_label.setStyleSheet(style_sheet)
             tags_layout.addWidget(modgame_label)
-        is_piracy_protected = getattr(self.mod_data, 'is_piracy_protected', False)
-        is_patch = getattr(self.mod_data, 'is_xdelta', is_piracy_protected)
+        is_patch = getattr(self.mod_data, 'is_xdelta', False)
         if is_patch:
             patching_label = QLabel(tr('ui.patching_label'))
             patching_label.setStyleSheet('color: #2196F3; font-size: 14px;')

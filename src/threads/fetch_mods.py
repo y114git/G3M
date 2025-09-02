@@ -68,7 +68,7 @@ class FetchModsThread(QThread):
                       tagline=data.get('tagline', tr('status.no_description_status')), game_version=data.get('game_version', tr('status.no_version')),
                       description_url=data.get('description_url', ''), downloads=data.get('downloads', 0), modgame=modgame,
                       is_verified=data.get('is_verified', False), icon_url=data.get('icon_url'), tags=data.get('tags', []),
-                      hide_mod=data.get('hide_mod', False), is_xdelta=data.get('is_xdelta', data.get('is_piracy_protected', False)),
+                      hide_mod=data.get('hide_mod', False), is_xdelta=data.get('is_xdelta', False),
                       ban_status=data.get('ban_status', False), demo_url=files_data.get('demo', {}).get('url') if files_data else None,
                       demo_version=files_data.get('demo', {}).get('version', '1.0.0') if files_data else '1.0.0',
                       created_date=data.get('created_date'), last_updated=data.get('last_updated'),

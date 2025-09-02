@@ -248,7 +248,7 @@
 	"checkboxes": {
 	  "disable_background": "禁用背景",
 	  "disable_splash": "禁用啟動畫面",
-	  "piracy_protection": "使用XDELTA代替data.win/.ios"
+	  "xdelta_protection": "使用XDELTA代替data.win/.ios"
 	},
 	"tags": {
 	  "customization": "自訂",
@@ -291,7 +291,8 @@
 	  "select_background_music": "選擇背景音樂",
 	  "remove_background_music": "移除背景音樂",
 	  "select_startup_sound": "更改啟動音效",
-	  "remove_startup_sound": "移除啟動音效"
+	  "remove_startup_sound": "移除啟動音效",
+	  "theme_management": "導入/導出主題"
 	},
 	"tooltips": {
 	  "change_mods_dir": "您可以選擇模組檔案資料夾的位置。",
@@ -469,7 +470,18 @@
 	  "install_in_progress_title": "安裝進行中",
 	  "install_in_progress_body": "另一個安裝正在進行中。請等待其完成。",
 	  "local_mod_update_title": "本地模組已存在",
-	  "local_mod_update_body": "名為 '{mod_name}' 的本地模組已安裝。是否要用此版本替換其檔案？"
+	  "local_mod_update_body": "名為 '{mod_name}' 的本地模組已安裝。是否要用此版本替換其檔案？",
+	  "xdelta_disable_warning_title": "責任警告",
+	  "xdelta_disable_warning_body": "停用此選項意味著您的模組將直接替換遊戲檔案（例如 data.win）。此方法通常與盜版有關，我們強烈不建議使用。\n\n您將對分發遊戲檔案負全部責任。如果我們收到即便是輕微的投訴，您的模組將立即從平台下架。\n\n您確定要自行承擔風險並繼續嗎？",
+	  "file_replacement_warning_title": "安裝警告",
+	  "file_replacement_warning_body": "此模組直接替換核心遊戲檔案，而非使用推薦的、更安全的修補方法（xdelta）。\n\n通常不鼓勵使用此方法，因其可能與遊戲盜版有關並可能帶來風險。\n\n您仍要繼續安裝嗎？",
+	  "theme_choice": "您想如何處理主題？",
+	  "theme_exported_success": "主題已成功導出！",
+      "theme_imported_success": "主題已成功導入並應用！",
+      "theme_import_failed": "主題導入失敗：{error}",
+      "export_theme_title": "導出主題",
+      "import_theme_title": "導入主題",
+      "invalid_url_scheme": "無效的URL方案。應為deltahub://"
 	},
 	"errors": {
     "access_denied": "訪問被拒絕",
@@ -705,7 +717,9 @@
 	  "update_cancelled": "更新已被用戶取消。",
 	  "install_cancelled_by_user": "安裝已被用戶取消。",
 	  "unpacking_mod": "正在提取模組壓縮檔案：{mod_name}...",
-	  "install_complete_success": "成功安裝 '{mod_name}'！"
+	  "install_complete_success": "成功安裝 '{mod_name}'！",
+	  "downloading_theme": "正在下載主題...",
+      "applying_theme": "正在應用主題..."
 	},
 	"startup": {
 	  "launch_error": "啟動錯誤：{error}",
@@ -727,6 +741,7 @@
 	  "background_images": "背景圖片",
 	  "data_files": "Data檔案",
 	  "extended_archives": "壓縮檔案",
+	  "theme_files": "DELTAHUB 主題",
 	  "game_files": "遊戲檔案",
 	  "image_files": "圖片",
 	  "text_files": "文本檔案",
