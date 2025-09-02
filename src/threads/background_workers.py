@@ -174,8 +174,7 @@ class InstallModsThread(QThread):
             components_to_update: dict[str, dict] = {}
             chapter_data = mod.get_chapter_data(chapter_id) if chapter_id != -1 else None
             if chapter_data and chapter_data.data_file_url and remote_versions.get('data'):
-                is_piracy_protected = getattr(mod, 'is_piracy_protected', False)
-                is_xdelta_mod = getattr(mod, 'is_xdelta', is_piracy_protected)
+                is_xdelta_mod = getattr(mod, 'is_xdelta', False)
                 local_is_xdelta = False
                 try:
                     mod_path = os.path.join(self.main_window.mods_dir, existing_folder)
@@ -293,8 +292,7 @@ class InstallModsThread(QThread):
                     components_to_update = self._should_update_component(mod, chapter_id, existing_folder)
                     if not components_to_update:
                         if chapter_data.data_file_url:
-                            is_piracy_protected = getattr(mod, 'is_piracy_protected', False)
-                            is_xdelta_mod = getattr(mod, 'is_xdelta', is_piracy_protected)
+                            is_xdelta_mod = getattr(mod, 'is_xdelta', False)
                             tasks.append({'mod': mod, 'url': chapter_data.data_file_url, 'chapter_id': chapter_id, 'component': 'data', 'is_xdelta': is_xdelta_mod})
                         for extra_file in chapter_data.extra_files:
                             tasks.append({'mod': mod, 'url': extra_file.url, 'chapter_id': chapter_id, 'component': extra_file.key})
@@ -666,7 +664,6 @@ class UrlInstallThread(QThread):
         return archive_path
 
     def _extract_and_read_config(self, archive_path: str) -> dict | None:
-        import json
         archive_path_lower = archive_path.lower()
         config_content = None
 

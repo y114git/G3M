@@ -248,7 +248,7 @@
   "checkboxes": {
     "disable_background": "禁用背景",
     "disable_splash": "禁用启动画面",
-    "piracy_protection": "使用XDELTA代替data.win/.ios"
+    "xdelta_protection": "使用XDELTA代替data.win/.ios"
   },
   "tags": {
     "customization": "自定义",
@@ -291,7 +291,9 @@
     "select_background_music": "选择背景音乐",
     "remove_background_music": "移除背景音乐",
     "select_startup_sound": "更改启动音效",
-    "remove_startup_sound": "移除启动音效"
+    "remove_startup_sound": "移除启动音效",
+    "theme_management": "导入/导出主题",
+    "help_close": "关闭"
   },
   "tooltips": {
     "change_mods_dir": "您可以选择模组文件文件夹的位置。",
@@ -304,7 +306,8 @@
     "public_mod_unavailable": "公开模组（不可用）",
     "public_mod_update_available": "公开模组（有更新可用）",
     "search": "按名称和描述搜索",
-    "steam": "启用此选项可通过Steam运行游戏，以便所有成就、叠加层等都能正常工作。"
+    "steam": "启用此选项可通过Steam运行游戏，以便所有成就、叠加层等都能正常工作。",
+    "beta_updates": "获取实验性更新和功能，然后它们才正式发布。"
   },
   "dropdowns": {
     "all_mods": "所有模组",
@@ -469,7 +472,18 @@
     "install_in_progress_title": "安装进行中",
     "install_in_progress_body": "另一个安装正在进行中。请等待其完成。",
     "local_mod_update_title": "本地模组已存在",
-    "local_mod_update_body": "名为 '{mod_name}' 的本地模组已安装。是否要用此版本替换其文件？"
+    "local_mod_update_body": "名为 '{mod_name}' 的本地模组已安装。是否要用此版本替换其文件？",
+    "xdelta_disable_warning_title": "责任警告",
+    "xdelta_disable_warning_body": "禁用此选项意味着您的模组将直接替换游戏文件（如 data.win）。此方法通常与盗版有关，我们强烈不建议使用。\n\n您将对分发游戏文件承担全部责任。如果我们收到即便是轻微的投诉，您的模组将立即从平台下架。\n\n您确定要自行承担风险并继续吗？",
+    "file_replacement_warning_title": "安装警告",
+    "file_replacement_warning_body": "此模组直接替换核心游戏文件，而不是使用推荐的、更安全的补丁方法（xdelta）。\n\n通常不鼓励使用此方法，因为它可能与游戏盗版有关并可能带来风险。\n\n您仍要继续安装吗？",
+    "theme_choice": "您想如何处理主题？",
+    "theme_exported_success": "主题已成功导出！",
+    "theme_imported_success": "主题已成功导入并应用！",
+    "theme_import_failed": "主题导入失败：{error}",
+    "export_theme_title": "导出主题",
+    "import_theme_title": "导入主题",
+    "invalid_url_scheme": "无效的URL方案。应为deltahub://"
   },
   "errors": {
     "access_denied": "访问被拒绝",
@@ -705,7 +719,10 @@
     "update_cancelled": "更新已被用户取消。",
     "install_cancelled_by_user": "安装已被用户取消。",
     "unpacking_mod": "正在解压模组：{mod_name}...",
-    "install_complete_success": "成功安装 '{mod_name}'！"
+    "install_complete_success": "成功安装 '{mod_name}'！",
+    "downloading_theme": "正在下载主题...",
+    "applying_theme": "正在应用主题...",
+    "beta_updates_enabled": "测试版更新已启用"
   },
   "startup": {
     "launch_error": "启动错误：{error}",
@@ -727,6 +744,7 @@
     "background_images": "背景图片",
     "data_files": "Data文件",
     "extended_archives": "压缩文件",
+    "theme_files": "DELTAHUB 主题",
     "game_files": "游戏文件",
     "image_files": "图片",
     "text_files": "文本文件",

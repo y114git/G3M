@@ -60,8 +60,11 @@ class ModEditorDialog(QDialog):
         self.modgame_combo.currentIndexChanged.connect(self._update_file_tabs)
         modgame_layout.addWidget(self.modgame_combo)
         modgame_layout.addSpacing(12)
-        self.piracy_checkbox = QCheckBox(tr('checkboxes.piracy_protection'))
-        modgame_layout.addWidget(self.piracy_checkbox)
+        self.xdelta_checkbox = QCheckBox(tr('checkboxes.xdelta_protection'))
+        modgame_layout.addWidget(self.xdelta_checkbox)
+        if self.is_creating:
+            self.xdelta_checkbox.setChecked(True)
+        self.xdelta_checkbox.stateChanged.connect(self._on_xdelta_checkbox_changed)
         modgame_layout.addStretch()
         settings_layout.addLayout(modgame_layout)
         form_layout = QVBoxLayout()
@@ -73,6 +76,19 @@ class ModEditorDialog(QDialog):
         scroll_area.setWidget(scroll_widget)
         main_layout.addWidget(scroll_area)
         self._create_action_buttons(main_layout)
+
+    def _on_xdelta_checkbox_changed(self, state):
+        if self.is_creating and state == 0:
+            reply = QMessageBox.question(self,
+                                         tr('dialogs.xdelta_disable_warning_title'),
+                                         tr('dialogs.xdelta_disable_warning_body'),
+                                         QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                                         QMessageBox.StandardButton.No)
+            if reply != QMessageBox.StandardButton.Yes:
+                # Block signals to prevent recursion when setting state
+                self.xdelta_checkbox.blockSignals(True)
+                self.xdelta_checkbox.setChecked(True)
+                self.xdelta_checkbox.blockSignals(False)
 
     def _create_form_fields(self, form_layout):
         form_layout.addWidget(QLabel(tr('ui.mod_name_label')))
@@ -424,17 +440,17 @@ class ModEditorDialog(QDialog):
         self.file_tabs = NoScrollTabWidget()
         self.file_tabs.setStyleSheet('QTabWidget::tab-bar { alignment: center; } QTabBar::tab { padding: 4px 8px; }')
         self.modgame_combo.currentIndexChanged.connect(self._update_file_tabs)
-        self.piracy_checkbox.stateChanged.connect(self._update_data_file_labels)
-        self.piracy_checkbox.stateChanged.connect(self._recreate_data_frames)
-        self.piracy_checkbox.stateChanged.connect(self._update_data_add_button_texts)
+        self.xdelta_checkbox.stateChanged.connect(self._update_data_file_labels)
+        self.xdelta_checkbox.stateChanged.connect(self._recreate_data_frames)
+        self.xdelta_checkbox.stateChanged.connect(self._update_data_add_button_texts)
         if not self.is_public:
-            self.piracy_checkbox.stateChanged.connect(self._update_file_tabs)
+            self.xdelta_checkbox.stateChanged.connect(self._update_file_tabs)
         files_layout.addWidget(self.file_tabs)
         parent_layout.addWidget(files_frame)
         self._update_file_tabs()
 
     def _update_data_file_labels(self):
-        is_piracy_protected = self.piracy_checkbox.isChecked()
+        is_xdelta_protected = self.xdelta_checkbox.isChecked()
         for tab_index in range(self.file_tabs.count()):
             if not (tab := self.file_tabs.widget(tab_index)) or not (layout := tab.layout()):
                 continue
@@ -445,8 +461,8 @@ class ModEditorDialog(QDialog):
                     for j in range(frame_layout.count()):
                         if (frame_item := frame_layout.itemAt(j)) and (frame_widget := frame_item.widget()) and isinstance(frame_widget, QLabel):
                             if frame_widget.text().startswith(('DATA', 'PATCH')):
-                                frame_widget.setText(tr('files.patch_file') if is_piracy_protected else tr('files.data_file'))
-                                self._update_labels_in_frame(frame_layout, is_piracy_protected)
+                                frame_widget.setText(tr('files.patch_file') if is_xdelta_protected else tr('files.data_file'))
+                                self._update_labels_in_frame(frame_layout, is_xdelta_protected)
                                 break
 
     def _update_labels_in_frame(self, frame_layout, is_patch):
@@ -491,7 +507,7 @@ class ModEditorDialog(QDialog):
                 self._add_data_file(tab, layout)
 
     def _data_button_text(self) -> str:
-        return tr('ui.add_data_patch_file') if self.piracy_checkbox.isChecked() else tr('ui.add_data_file')
+        return tr('ui.add_data_patch_file') if self.xdelta_checkbox.isChecked() else tr('ui.add_data_file')
 
     def _update_data_add_button_texts(self):
         for ti in range(self.file_tabs.count()):
@@ -542,7 +558,7 @@ class ModEditorDialog(QDialog):
         self.file_tabs.addTab(tab, tab_name)
 
     def _create_file_frame(self, tab_layout, file_type, key_name=None):
-        is_local, is_patch = (not self.is_public, self.piracy_checkbox.isChecked())
+        is_local, is_patch = (not self.is_public, self.xdelta_checkbox.isChecked())
         if file_type == 'extra' and key_name is None:
             key_name, ok = QInputDialog.getText(self, tr('dialogs.file_group_name'), tr('dialogs.enter_file_group_key'))
             if not ok or not key_name.strip():
@@ -1063,7 +1079,7 @@ class ModEditorDialog(QDialog):
 
     def _load_default_icon(self):
         try:
-            logo_path = resource_path('icons/icon.ico')
+            logo_path = resource_path('resources/icons/icon.ico')
             if os.path.exists(logo_path) and (not (pixmap := QPixmap(logo_path)).isNull()):
                 self.icon_preview.setPixmap(pixmap.scaled(64, 64, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
                 self.icon_preview.setProperty('isDefaultIcon', True)
@@ -1390,7 +1406,7 @@ class ModEditorDialog(QDialog):
         return True
 
     def _browse_for_local_file(self, path_edit: QLineEdit):
-        is_patch = self.piracy_checkbox.isChecked()
+        is_patch = self.xdelta_checkbox.isChecked()
         title, filters = (tr('ui.select_patch_file_xdelta'), get_file_filter('xdelta_files')) if is_patch else (tr('ui.select_data_file'), get_file_filter('data_files'))
         if not (file_path := QFileDialog.getOpenFileName(self, title, '', filters)[0]):
             return
@@ -1682,7 +1698,7 @@ class ModEditorDialog(QDialog):
                 'gamebanana_url': self.gamebanana_url_edit.text().strip(),
                 'description_url': self.description_url_edit.text().strip(),
                 'icon_url': self.icon_edit.text().strip(), 'tags': tags, 'hide_mod': False,
-                'is_xdelta': self.piracy_checkbox.isChecked(), 'modgame': self.modgame_combo.currentData() or 'deltarune',
+                'is_xdelta': self.xdelta_checkbox.isChecked(), 'modgame': self.modgame_combo.currentData() or 'deltarune',
                 'game_version': self.game_version_combo.currentText() if self.is_public else self.game_version_edit.text().strip() or '1.04',
                 'files': files_data, 'screenshots_url': getattr(self, 'screenshots_urls', [])}
 
@@ -2064,7 +2080,7 @@ class ModEditorDialog(QDialog):
             if self.modgame_combo.itemData(i) == modgame:
                 self.modgame_combo.setCurrentIndex(i)
                 break
-        self.piracy_checkbox.setChecked(actual_mod_data.get('is_xdelta', actual_mod_data.get('is_piracy_protected', False)))
+        self.xdelta_checkbox.setChecked(actual_mod_data.get('is_xdelta', False))
         tags = actual_mod_data.get('tags', [])
         self.tag_translation.setChecked('translation' in tags)
         self.tag_customization.setChecked('customization' in tags)

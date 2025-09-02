@@ -212,6 +212,7 @@
     "deltarune_desc": "Этот мод предназначен для полной версии DELTARUNE.",
     "undertale_desc": "Этот мод предназначен для UNDERTALE.",
     "deltarunedemo_desc": "Этот мод предназначен для DELTARUNEdemo.",
+    "beta_updates": "Бета-обновления",
     "gamebanana_url_optional": "GameBanana URL (Необязательно)",
     "view_on_gamebanana": "Посмотреть на GameBanana"
   },
@@ -248,7 +249,7 @@
   "checkboxes": {
     "disable_background": "Отключить задний фон",
     "disable_splash": "Отключить заставку",
-    "piracy_protection": "XDELTA вместо data.win/.ios"
+    "xdelta_protection": "XDELTA вместо data.win/.ios"
   },
   "tags": {
     "customization": "Кастомизация",
@@ -291,7 +292,9 @@
     "remove_background_music": "Удалить фоновую музыку",
     "select_startup_sound": "Сменить звук заставки",
     "remove_startup_sound": "Удалить звук заставки",
-    "change_undertale_path": "Изменить папку UNDERTALE"
+    "change_undertale_path": "Изменить папку UNDERTALE",
+    "theme_management": "Им/Экспорт темы",
+    "help_close": "Закрыть"
   },
   "tooltips": {
     "change_mods_dir": "Вы сможете выбрать место, где будет находится папка с файлами модов.",
@@ -304,7 +307,8 @@
     "public_mod_unavailable": "Публичный мод (недоступен)",
     "public_mod_update_available": "Публичный мод (доступно обновление)",
     "search": "Поиск по названию и описанию",
-    "steam": "Включите эту опцию, чтобы игра запускалась через Steam, и все ваши достижения, оверлеи и так далее, работали как надо."
+    "steam": "Включите эту опцию, чтобы игра запускалась через Steam, и все ваши достижения, оверлеи и так далее, работали как надо.",
+    "beta_updates": "Получите экспериментальные обновления и функции до их официального выпуска."
   },
   "dropdowns": {
     "all_mods": "Все моды",
@@ -469,7 +473,18 @@
     "install_in_progress_title": "Идет установка",
     "install_in_progress_body": "Другая установка уже выполняется. Пожалуйста, дождитесь ее завершения.",
     "local_mod_update_title": "Локальный мод уже существует",
-    "local_mod_update_body": "Локальный мод с названием «{mod_name}» уже установлен. Хотите заменить его файлы этой версией?"
+    "local_mod_update_body": "Локальный мод с названием «{mod_name}» уже установлен. Хотите заменить его файлы этой версией?",
+    "xdelta_disable_warning_title": "Предупреждение об ответственности",
+    "xdelta_disable_warning_body": "Отключение этой опции означает, что ваш мод будет напрямую заменять игровые файлы (например, data.win). Этот метод часто ассоциируется с пиратством и крайне не рекомендуется.\n\nВы несёте полную ответственность за распространение игровых файлов. Если мы получим даже незначительные жалобы, ваш мод будет немедленно удалён с площадки.\n\nВы уверены, что хотите продолжить на свой страх и риск?",
+    "file_replacement_warning_title": "Предупреждение при установке",
+    "file_replacement_warning_body": "Этот мод напрямую заменяет основные файлы игры вместо использования рекомендуемого и более безопасного метода патчинга (xdelta).\n\nТакой способ установки не рекомендуется, так как он может быть связан с пиратством игры и нести потенциальные риски.\n\nВы всё равно хотите продолжить установку?",
+    "theme_choice": "Что вы хотите сделать с темой?",
+    "theme_exported_success": "Тема успешно экспортирована!",
+    "theme_imported_success": "Тема успешно импортирована и применена!",
+    "theme_import_failed": "Не удалось импортировать тему: {error}",
+    "export_theme_title": "Экспорт темы",
+    "import_theme_title": "Импорт темы",
+    "invalid_url_scheme": "Неверная схема URL. Ожидался deltahub://"
   },
   "errors": {
     "access_denied": "Ошибка прав доступа",
@@ -704,7 +719,10 @@
     "smart_install_starting": "Умная установка: «{mod_name}» будет установлен с серверов DELTAHUB.",
     "update_cancelled": "Обновление отменено пользователем.",
     "install_cancelled_by_user": "Установка отменена пользователем.",
-    "install_complete_success": "Мод «{mod_name}» успешно установлен!"
+    "install_complete_success": "Мод «{mod_name}» успешно установлен!",
+    "downloading_theme": "Загрузка темы...",
+    "applying_theme": "Применение темы...",
+    "beta_updates_enabled": "Бета-обновления включены"
   },
   "startup": {
     "launch_error": "Ошибка запуска: {error}",
@@ -726,6 +744,7 @@
     "background_images": "Изображения фона",
     "data_files": "Data файлы",
     "extended_archives": "Архивы",
+    "theme_files": "Темы DELTAHUB",
     "game_files": "Файлы игры",
     "image_files": "Изображения",
     "text_files": "Текстовые файлы",
