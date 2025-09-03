@@ -1,6 +1,6 @@
 # DELTAHUB - The ultimate Mod/Save/Other stuff manager
 
-![Stable](https://img.shields.io/github/v/release/y114git/DELTAHUB?label=Stable%20Release&style=for-the-badge) ![GitHub all releases](https://img.shields.io/github/downloads/y114git/DELTAHUB/total?style=for-the-badge) ![Discord](https://img.shields.io/discord/1389372598260858950?label=Discord&logo=discord&style=for-the-badge) [![Telegram Channel](https://img.shields.io/badge/Telegram-t.me/y_maintg-2EA3D2?style=for-the-badge&logo=Telegram&logoColor=white)](https://t.me/y_maintg)
+![GitHub release (latest by date)](https://img.shields.io/github/v/release/y114git/DELTAHUB?style=for-the-badge) ![GitHub all releases](https://img.shields.io/github/downloads/y114git/DELTAHUB/total?style=for-the-badge) ![Discord](https://img.shields.io/discord/1389372598260858950?label=Discord&logo=discord&style=for-the-badge) [![Telegram Channel](https://img.shields.io/badge/Telegram-t.me/y_maintg-2EA3D2?style=for-the-badge&logo=Telegram&logoColor=white)](https://t.me/y_maintg)
 
 ---
 
