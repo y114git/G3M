@@ -36,7 +36,6 @@ class LocalizationManager:
         self.available_languages = self._scan_lang_dir(self.external_lang_dir)
 
     def rescan_languages(self):
-        """Rescans language files, restores missing defaults, and reloads the list."""
         self.available_languages.clear()
         self._sync_internal_languages()
         self._load_available_languages()
@@ -45,7 +44,6 @@ class LocalizationManager:
         langs = {}
         if not os.path.isdir(directory):
             return langs
-
         for filename in os.listdir(directory):
             if filename.startswith('lang_') and filename.endswith('.json'):
                 lang_code = filename[5:-5]
@@ -54,10 +52,7 @@ class LocalizationManager:
                     with open(lang_path, 'r', encoding='utf-8') as f:
                         data = json.load(f)
                     metadata = data.get('metadata', {})
-                    langs[lang_code] = {'name': metadata.get('language_name', lang_code.upper()),
-                                        'qt_translation': metadata.get('qt_translation', f'qtbase_{lang_code}'),
-                                        'font': metadata.get('font'), # Can be None
-                                        'path': lang_path}
+                    langs[lang_code] = {'name': metadata.get('language_name', lang_code.upper()), 'qt_translation': metadata.get('qt_translation', f'qtbase_{lang_code}'), 'font': metadata.get('font'), 'path': lang_path}
                 except (json.JSONDecodeError, IOError) as e:
                     print(f'Error loading or parsing language file {filename}: {e}')
         return langs
@@ -69,11 +64,9 @@ class LocalizationManager:
         return self.available_languages.get(language_code, {}).get('qt_translation', 'qtbase_en')
 
     def get_font_path(self, language_code: str) -> Optional[str]:
-        """Returns the full path to the font file for a given language, if specified."""
         lang_info = self.available_languages.get(language_code)
         if not lang_info or not lang_info.get('font'):
             return None
-
         font_filename = lang_info['font']
         lang_file_path = lang_info['path']
         return os.path.join(os.path.dirname(lang_file_path), font_filename)
@@ -91,14 +84,11 @@ class LocalizationManager:
 
     def load_language(self, language_code: str) -> bool:
         lang_info = self.available_languages.get(language_code)
-
         if not lang_info:
-            # If the selected language is no longer available, try falling back to internal
             internal_path = os.path.join(self.internal_lang_dir, f'lang_{language_code}.json')
             if not os.path.exists(internal_path):
                 return False
             lang_info = {'path': internal_path}
-
         lang_file = lang_info['path']
         try:
             with open(lang_file, 'r', encoding='utf-8') as f:
@@ -141,21 +131,18 @@ class LocalizationManager:
     def get_current_language_name(self) -> str:
         return self.available_languages.get(self.current_language, {}).get('name', self.current_language.upper())
 localization_manager = LocalizationManager()
+
 def _fallback_tr(key: str, **kwargs) -> str:
-    """Internal fallback to English if a key is not found in the current language."""
     try:
         en_path = os.path.join(localization_manager.external_lang_dir, 'lang_en.json')
         if not os.path.exists(en_path):
             en_path = os.path.join(localization_manager.internal_lang_dir, 'lang_en.json')
-
         with open(en_path, 'r', encoding='utf-8') as f:
             en_translations = json.load(f)
-
         keys = key.split('.')
         value = en_translations
         for k in keys:
             value = value[k]
-
         if isinstance(value, str):
             return value.format(**kwargs) if kwargs else value
     except Exception:

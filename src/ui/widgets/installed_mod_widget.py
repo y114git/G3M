@@ -28,14 +28,13 @@ class InstalledModWidget(BaseModWidget):
 
     def _init_ui(self):
         super()._init_ui()
-        # Find the version label to append the banana emoji
-        version_label_item = self.title_layout.itemAt(1)  # version_label is the second item
+        version_label_item = self.title_layout.itemAt(1)
         if version_label_item:
             widget = version_label_item.widget()
             if isinstance(widget, QLabel):
                 original_text = widget.text()
                 if getattr(self.mod_data, 'gamebanana_url', None):
-                    widget.setText(f"{original_text} 🍌")
+                    widget.setText(f'{original_text} 🍌')
         self.title_layout.takeAt(self.title_layout.count() - 1)
         indicator = QLabel('●')
         indicator.setFixedSize(16, 16)

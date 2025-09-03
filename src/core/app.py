@@ -47,7 +47,6 @@ from core.startup import SingleInstanceServer
 _translator = QTranslator()
 _lock_file = None
 
-
 def get_xdelta_path():
     from utils.path_utils import resource_path
     system = platform.system()
@@ -57,7 +56,6 @@ def get_xdelta_path():
         exe_names = ['xdelta3_mac']
     else:
         exe_names = ['xdelta3']
-
     for exe_name in exe_names:
         xdelta_path = resource_path(f'resources/bin/{exe_name}')
         if os.path.exists(xdelta_path):
@@ -68,7 +66,6 @@ def get_xdelta_path():
                     logging.warning(f'Could not set executable permission on {xdelta_path}: {e}')
             return os.path.normpath(xdelta_path)
     return None
-
 
 class DeltaHubApp(QWidget):
     update_status_signal = pyqtSignal(str, str)
@@ -85,7 +82,7 @@ class DeltaHubApp(QWidget):
     url_received_signal = pyqtSignal(str)
     install_from_gb_signal = pyqtSignal(object)
 
-    def __init__(self, args: Optional[argparse.Namespace] = None, parent_for_dialogs: Optional[QWidget] = None, initial_url: str | None = None):
+    def __init__(self, args: Optional[argparse.Namespace]=None, parent_for_dialogs: Optional[QWidget]=None, initial_url: str | None=None):
         super().__init__()
         self.server: SingleInstanceServer | None = None
         self.is_shortcut_launch = args and args.shortcut_launch
@@ -179,28 +176,23 @@ class DeltaHubApp(QWidget):
             self.initialization_finished.connect(self._handle_first_launch_settings)
 
     def _handle_pending_install(self):
-        """Handles a URL passed at launch, after the app is initialized."""
         if self._pending_install_url:
             self.handle_one_click_install(self._pending_install_url)
             self._pending_install_url = None
 
     def handle_one_click_install(self, url: str):
-        """Starts the 1-click installation process from a URL."""
         if is_game_running():
             return
         self.activateWindow()
         self.raise_()
-
         if self.is_installing:
             QMessageBox.warning(self, tr('dialogs.install_in_progress_title'), tr('dialogs.install_in_progress_body'))
             return
-
         self.url_install_thread = UrlInstallThread(self, url)
         self.url_install_thread.status.connect(self._update_status)
         self.url_install_thread.progress.connect(self.progress_bar.setValue)
         self.url_install_thread.finished.connect(self._on_url_install_finished)
         self.url_install_thread.prompt_required.connect(self._handle_url_install_prompt)
-        
         self.is_installing = True
         self._set_install_buttons_enabled(False)
         self.progress_bar.setVisible(True)
@@ -217,7 +209,7 @@ class DeltaHubApp(QWidget):
 
     def _handle_url_install_prompt(self, title, message):
         reply = QMessageBox.question(self, title, message, QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-        self.url_install_thread.prompt_result = (reply == QMessageBox.StandardButton.Yes)
+        self.url_install_thread.prompt_result = reply == QMessageBox.StandardButton.Yes
         self.url_install_thread.prompt_event.set()
 
     def _read_mods_metadata(self) -> Dict:
@@ -254,7 +246,7 @@ class DeltaHubApp(QWidget):
             self._write_session_manifest(data)
         return data
 
-    def _update_session_manifest(self, backup_files: Optional[dict] = None, mod_files: Optional[list] = None, backup_temp_dir: Optional[str] = None, direct_launch: Optional[dict] = None, mod_dirs: Optional[list] = None):
+    def _update_session_manifest(self, backup_files: Optional[dict]=None, mod_files: Optional[list]=None, backup_temp_dir: Optional[str]=None, direct_launch: Optional[dict]=None, mod_dirs: Optional[list]=None):
         data = self._ensure_session_manifest()
         if backup_files:
             data.setdefault('backup_files', {}).update(backup_files)
@@ -449,13 +441,7 @@ class DeltaHubApp(QWidget):
             for mod_key, config_data in installed_mods.items():
                 if mod_key not in existing_keys and config_data.get('is_local_mod'):
                     try:
-                        safe_mod_info = {'key': mod_key, 'name': config_data.get('name', tr('defaults.local_mod')), 'version': config_data.get('version', '1.0.0'),
-                                         'author': config_data.get('author', tr('defaults.unknown')), 'tagline': config_data.get('tagline', tr('defaults.no_description')),
-                                         'game_version': config_data.get('game_version', tr('defaults.not_specified')), 'description_url': '', 'downloads': 0,
-                                         'modgame': config_data.get('modgame', 'deltarune'), 'is_verified': False, 'icon_url': '', 'tags': ['local'],
-                                         'hide_mod': False, 'is_xdelta': False, 'ban_status': False, 'demo_url': None, 'demo_version': '1.0.0',
-                                         'created_date': config_data.get('created_date', 'N/A'), 'last_updated': config_data.get('created_date', 'N/A'),
-                                         'gamebanana_url': config_data.get('gamebanana_url')}
+                        safe_mod_info = {'key': mod_key, 'name': config_data.get('name', tr('defaults.local_mod')), 'version': config_data.get('version', '1.0.0'), 'author': config_data.get('author', tr('defaults.unknown')), 'tagline': config_data.get('tagline', tr('defaults.no_description')), 'game_version': config_data.get('game_version', tr('defaults.not_specified')), 'description_url': '', 'downloads': 0, 'modgame': config_data.get('modgame', 'deltarune'), 'is_verified': False, 'icon_url': '', 'tags': ['local'], 'hide_mod': False, 'is_xdelta': False, 'ban_status': False, 'demo_url': None, 'demo_version': '1.0.0', 'created_date': config_data.get('created_date', 'N/A'), 'last_updated': config_data.get('created_date', 'N/A'), 'gamebanana_url': config_data.get('gamebanana_url')}
                         mod = ModInfo(**safe_mod_info)
                         files_data = config_data.get('files', {})
                         mod_folder_path = None
@@ -551,7 +537,7 @@ class DeltaHubApp(QWidget):
                     if isinstance(widget, InstalledModWidget) and hasattr(widget, 'use_button') and widget.use_button:
                         widget.use_button.setEnabled(enabled)
 
-    def _create_settings_nav_button(self, text: str, on_click: Callable, style_sheet: str = '', fixed_width: int = 400) -> QPushButton:
+    def _create_settings_nav_button(self, text: str, on_click: Callable, style_sheet: str='', fixed_width: int=400) -> QPushButton:
         button = QPushButton(text)
         button.setFixedWidth(fixed_width)
         base_style = f'width: {fixed_width}px;'
@@ -725,18 +711,14 @@ class DeltaHubApp(QWidget):
         self.change_mods_dir_button.setToolTip(tr('tooltips.change_mods_dir'))
         self.change_mods_dir_button.clicked.connect(self._prompt_for_mods_dir)
         settings_center_container.addWidget(self.change_mods_dir_button, alignment=Qt.AlignmentFlag.AlignHCenter)
-
         self.customization_button = self._create_settings_nav_button(tr('ui.launcher_customization'), lambda: self._switch_settings_page(self.settings_customization_page), fixed_width=200)
         self.reset_button = self._create_settings_nav_button(tr('buttons.reset_settings'), self._on_reset_settings_click, fixed_width=200)
-
         buttons_layout = QHBoxLayout()
         buttons_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         buttons_layout.setSpacing(10)
         buttons_layout.addWidget(self.customization_button)
         buttons_layout.addWidget(self.reset_button)
-
         settings_center_container.addLayout(buttons_layout)
-
         self.settings_customization_button = self.customization_button
         settings_menu_layout.addLayout(settings_center_container)
         settings_menu_layout.addStretch()
@@ -864,8 +846,6 @@ class DeltaHubApp(QWidget):
         self.help_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.help_button.setStyleSheet('min-width: 220px; max-width: 220px;')
         self.help_button.clicked.connect(self._toggle_help_view)
-
-        # Добавляем сброс фильтров
         self.sort_combo.setCurrentIndex(0)
         self.sort_order_btn.setText('▼')
         self.sort_ascending = False
@@ -1741,26 +1721,19 @@ class DeltaHubApp(QWidget):
 
     def _cleanup_missing_mods(self, installed_mods):
         installed_mod_keys = {mod.get('mod_key') for mod in installed_mods if mod.get('mod_key')}
-        
         mods_metadata = self._read_mods_metadata()
         metadata_updated = False
-        
         orphaned_keys = set(mods_metadata.keys()) - installed_mod_keys
         if orphaned_keys:
             for key in orphaned_keys:
                 del mods_metadata[key]
             metadata_updated = True
-            
         if metadata_updated:
             self._write_mods_metadata(mods_metadata)
-
-        # Clear orphaned mods from slots
         for orphaned_key in orphaned_keys:
-            # Create a dummy ModInfo object for removal logic
             dummy_mod_data = self._create_mod_object_from_info({'mod_key': orphaned_key, 'name': 'Orphaned Mod'})
             if not dummy_mod_data:
                 continue
-            
             self._remove_mod_from_all_slots(dummy_mod_data)
             config_keys = ['saved_slots_deltarune', 'saved_slots_deltarune_chapter', 'saved_slots_deltarunedemo', 'saved_slots_undertale']
             for config_key in config_keys:
@@ -1796,18 +1769,12 @@ class DeltaHubApp(QWidget):
                         mod_key = config_data.get('mod_key')
                         if not mod_key:
                             continue
-                        
                         found_mod_keys.add(mod_key)
                         mod_meta = mods_metadata.get(mod_key)
-
                         if not mod_meta:
-                            mods_metadata[mod_key] = {
-                                'installed_date': time.strftime('%Y-%m-%d %H:%M:%S'),
-                                'is_available_on_server': not config_data.get('is_local_mod', False)
-                            }
+                            mods_metadata[mod_key] = {'installed_date': time.strftime('%Y-%m-%d %H:%M:%S'), 'is_available_on_server': not config_data.get('is_local_mod', False)}
                             metadata_updated = True
                             mod_meta = mods_metadata[mod_key]
-                        
                         config_data['installed_date'] = mod_meta.get('installed_date')
                         config_data['is_available_on_server'] = mod_meta.get('is_available_on_server', False)
                         config_data['is_local_mod'] = config_data.get('is_local_mod', False)
@@ -1821,7 +1788,6 @@ class DeltaHubApp(QWidget):
             for key in list(orphaned_keys):
                 del mods_metadata[key]
             metadata_updated = True
-        
         if metadata_updated:
             self._write_mods_metadata(mods_metadata)
         return installed_mods
@@ -1845,9 +1811,9 @@ class DeltaHubApp(QWidget):
                         widget_mod_key = getattr(widget.mod_data, 'key', None)
                         mod_data_key = getattr(mod_data, 'key', None)
                         if widget_mod_key == mod_data_key:
-                             self._clear_all_installed_mod_selections()
-                             widget.set_selected(True)
-                             break
+                            self._clear_all_installed_mod_selections()
+                            widget.set_selected(True)
+                            break
             except Exception:
                 continue
 
@@ -2505,7 +2471,7 @@ class DeltaHubApp(QWidget):
 
     def _install_single_mod(self, mod, force=False):
         try:
-            if self.is_installing and not force:
+            if self.is_installing and (not force):
                 return
             available_chapters = []
             if mod.modgame == 'undertale':
@@ -2526,7 +2492,7 @@ class DeltaHubApp(QWidget):
                 return
             was_installed_before = self._is_mod_installed(mod.key)
             is_xdelta_mod = getattr(mod, 'is_xdelta', False)
-            if not is_xdelta_mod and not was_installed_before:
+            if not is_xdelta_mod and (not was_installed_before):
                 reply = QMessageBox.question(self, tr('dialogs.file_replacement_warning_title'), tr('dialogs.file_replacement_warning_body'), QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No)
                 if reply != QMessageBox.StandardButton.Yes:
                     self.update_status_signal.emit(tr('status.install_cancelled_by_user'), UI_COLORS['status_info'])
@@ -3144,7 +3110,7 @@ class DeltaHubApp(QWidget):
             QMessageBox.critical(self, tr('errors.error'), tr('errors.folder_creation_failed', error=str(e)))
             return False
 
-    def _prompt_collection_name(self, default: str = 'Collection') -> Optional[str]:
+    def _prompt_collection_name(self, default: str='Collection') -> Optional[str]:
         dlg = QDialog(self)
         dlg.setWindowTitle(tr('dialogs.new_collection'))
         v, e = (QVBoxLayout(dlg), QLineEdit())
@@ -3429,47 +3395,23 @@ class DeltaHubApp(QWidget):
         super().paintEvent(event)
 
     def _on_reset_settings_click(self):
-        reply = QMessageBox.question(self, tr('dialogs.reset_settings_confirm_title'),
-                                     tr('dialogs.reset_settings_confirm_text'),
-                                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                                     QMessageBox.StandardButton.No)
+        reply = QMessageBox.question(self, tr('dialogs.reset_settings_confirm_title'), tr('dialogs.reset_settings_confirm_text'), QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No)
         if reply == QMessageBox.StandardButton.Yes:
             self._stop_background_music()
             language = self.local_config.get('language', 'en')
-
-            # Удаляем кастомные файлы
-            custom_files = [
-                os.path.join(self.config_dir, 'custom_background_music.mp3'),
-                os.path.join(self.config_dir, 'custom_background_music.wav'),
-                os.path.join(self.config_dir, 'custom_startup_sound.mp3'),
-                os.path.join(self.config_dir, 'custom_startup_sound.wav')
-            ]
+            custom_files = [os.path.join(self.config_dir, 'custom_background_music.mp3'), os.path.join(self.config_dir, 'custom_background_music.wav'), os.path.join(self.config_dir, 'custom_startup_sound.mp3'), os.path.join(self.config_dir, 'custom_startup_sound.wav')]
             for file_path in custom_files:
                 if os.path.exists(file_path):
                     os.remove(file_path)
-
-            # Сохраняем только язык
             self.local_config.clear()
             self.local_config['language'] = language
-
-            # Сбрасываем все слоты
-            config_keys_to_clear = [
-                'saved_slots_deltarune',
-                'saved_slots_deltarune_chapter',
-                'saved_slots_deltarunedemo',
-                'saved_slots_undertale'
-            ]
+            config_keys_to_clear = ['saved_slots_deltarune', 'saved_slots_deltarune_chapter', 'saved_slots_deltarunedemo', 'saved_slots_undertale']
             for key in config_keys_to_clear:
                 if key in self.local_config:
                     del self.local_config[key]
-
             self._write_local_config()
-
-            # Обновляем UI после сброса
             self._load_local_data()
             self._migrate_config_if_needed()
-
-            # Сброс чекбоксов и связанных UI элементов
             self.launch_via_steam_checkbox.setChecked(False)
             self.use_custom_executable_checkbox.setChecked(False)
             self.chapter_mode_checkbox.setChecked(False)
@@ -3477,26 +3419,18 @@ class DeltaHubApp(QWidget):
             self.full_install_checkbox.setChecked(False)
             self.disable_background_checkbox.setChecked(False)
             self.disable_splash_checkbox.setChecked(False)
-
             self._update_custom_executable_ui()
             self._update_checkbox_visibility()
-
             self._clear_all_slots()
             self._save_slots_state()
             self._load_slots_state()
-
             self.apply_theme()
             self._update_settings_page_visibility()
             self._load_custom_style_settings()
             self._update_action_button_state()
-
-            # Обновление кнопок управления звуком
             self.background_music_button.setText(self._get_background_music_button_text())
             self.startup_sound_button.setText(self._get_startup_sound_button_text())
-
             QMessageBox.information(self, tr('dialogs.success'), tr('status.settings_reset_success'))
-
-            # Полное обновление UI
             self.update()
             self.repaint()
 
@@ -3895,7 +3829,7 @@ class DeltaHubApp(QWidget):
         self.launch_via_steam_checkbox.setEnabled(False)
 
     def _update_action_button_state(self):
-        if getattr(self, 'is_installing', False) and not getattr(self, '_operation_cancelled', False):
+        if getattr(self, 'is_installing', False) and (not getattr(self, '_operation_cancelled', False)):
             self.action_button.setText(tr('ui.cancel_button'))
             self.action_button.setEnabled(True)
             return
@@ -3926,7 +3860,7 @@ class DeltaHubApp(QWidget):
                 self._update_slot_visual_state(slot)
 
     def _initialize_mutual_exclusions(self):
-        is_direct_launch = (self.local_config.get('direct_launch_slot_id', -1) >= 0 and self.game_mode.direct_launch_allowed and (platform.system() != 'Darwin'))
+        is_direct_launch = self.local_config.get('direct_launch_slot_id', -1) >= 0 and self.game_mode.direct_launch_allowed and (platform.system() != 'Darwin')
         if not hasattr(self, 'launch_via_steam_checkbox'):
             return
         if is_direct_launch:
@@ -4238,8 +4172,6 @@ class DeltaHubApp(QWidget):
         self._launch_game_with_all_mods()
 
     def _on_refresh_clicked(self, is_initial=False):
-        """Handles the refresh button click, updating languages and mods."""
-        # --- Language Refresh Logic ---
         current_lang_code = localization_manager.get_current_language()
         localization_manager.rescan_languages()
         self.language_combo.blockSignals(True)
@@ -4251,8 +4183,6 @@ class DeltaHubApp(QWidget):
         if index != -1:
             self.language_combo.setCurrentIndex(index)
         self.language_combo.blockSignals(False)
-
-        # Re-apply translations, then refresh mod data
         if not is_initial:
             self._retranslate_ui()
         if is_game_running():
@@ -4269,7 +4199,7 @@ class DeltaHubApp(QWidget):
         self._safe_stop_thread(getattr(self, 'fetch_thread', None))
         self.fetch_thread = None
 
-    def _safe_stop_thread(self, thr: Optional[QThread], timeout: int = 2000):
+    def _safe_stop_thread(self, thr: Optional[QThread], timeout: int=2000):
         if isinstance(thr, QThread) and thr.isRunning():
             thr.requestInterruption()
             thr.quit()
@@ -4459,7 +4389,7 @@ class DeltaHubApp(QWidget):
             self.error_signal.emit(tr('errors.file_prep_error', error=str(e)))
             return False
 
-    def _is_xdelta_mod(self, mod_info, source_dir: str, chapter_id: Optional[int] = None) -> bool:
+    def _is_xdelta_mod(self, mod_info, source_dir: str, chapter_id: Optional[int]=None) -> bool:
         if mod_info and getattr(mod_info, 'is_xdelta', False):
             return True
         if chapter_id is not None:
@@ -4495,7 +4425,7 @@ class DeltaHubApp(QWidget):
                         return True
         return False
 
-    def _create_backup_and_copy_mod_files(self, source_dir: str, target_dir: str, chapter_id: Optional[int] = None, mod_info=None):
+    def _create_backup_and_copy_mod_files(self, source_dir: str, target_dir: str, chapter_id: Optional[int]=None, mod_info=None):
         if not os.path.isdir(source_dir):
             self.update_status_signal.emit(tr('errors.mod_folder_not_found_simple', path=source_dir), UI_COLORS['status_error'])
             return False
@@ -4885,7 +4815,7 @@ class DeltaHubApp(QWidget):
         self.update_status_signal.emit(tr('status.launching_game'), UI_COLORS['status_success'])
         self._execute_game(launch_config)
 
-    def _execute_game(self, launch_config: Dict[str, Any], vanilla_mode: bool = False):
+    def _execute_game(self, launch_config: Dict[str, Any], vanilla_mode: bool=False):
         target_path = launch_config.get('target')
         working_directory = launch_config.get('cwd')
         launch_type = launch_config.get('type')
@@ -4991,7 +4921,7 @@ class DeltaHubApp(QWidget):
             self._update_mod_display()
         self.updateGeometry()
 
-    def _update_status(self, message: str, color: str = 'white'):
+    def _update_status(self, message: str, color: str='white'):
         if not self.is_shortcut_launch:
             self.status_label.setText(message)
             self.status_label.setStyleSheet(f'color: {color};')
@@ -5068,25 +4998,18 @@ class DeltaHubApp(QWidget):
         self._check_for_launcher_updates()
 
     def _retranslate_texts(self):
-        # Top Panel
         self.settings_button.setText(tr('ui.back_button') if self.is_settings_view or self.is_save_manager_view else tr('ui.settings_title'))
         self.online_label.setToolTip(tr('tooltips.online_counter'))
         self.top_refresh_button.setToolTip(tr('ui.update_mod_list'))
         self.telegram_button.setText(tr('buttons.telegram'))
         self.beta_updates_checkbox.setToolTip(tr('tooltips.beta_updates'))
         self.discord_button.setText(tr('buttons.discord'))
-
-        # Bottom Panel
         self.shortcut_button.setText(tr('buttons.shortcut'))
         self.saves_button.setText(tr('ui.saves_button'))
-
-        # Main Tabs
         self.main_tab_widget.setTabText(0, tr('ui.search_tab'))
         self.main_tab_widget.setTabText(1, tr('ui.library_tab'))
         self.main_tab_widget.setTabText(2, tr('ui.mod_management'))
         self.main_tab_widget.setTabText(3, tr('ui.patching_tab'))
-
-        # Search Tab Filters & Pagination
         self.sort_combo.setItemText(0, tr('ui.sort_by_downloads'))
         self.sort_combo.setItemText(1, tr('ui.sort_by_update_date'))
         self.sort_combo.setItemText(2, tr('ui.sort_by_creation_date'))
@@ -5102,13 +5025,9 @@ class DeltaHubApp(QWidget):
         self.search_button.setToolTip(tr('tooltips.search'))
         self.prev_page_btn.setText(tr('ui.prev_page'))
         self.next_page_btn.setText(tr('ui.next_page'))
-
-        # Library Tab
         self.chapter_mode_checkbox.setText(tr('ui.chapter_mode'))
         self.full_install_checkbox.setText(tr('ui.full_install'))
         self.full_install_checkbox.setToolTip(self._full_install_tooltip())
-
-        # Settings View
         self.settings_title_label.setText(f"<h1>{tr('ui.settings_title')}</h1>")
         self.language_label.setText(tr('ui.language_label'))
         self.beta_updates_checkbox.setText(tr('ui.beta_updates'))
@@ -5122,8 +5041,6 @@ class DeltaHubApp(QWidget):
         self.change_mods_dir_button.setToolTip(tr('tooltips.change_mods_dir'))
         self.customization_button.setText(tr('ui.launcher_customization'))
         self.reset_button.setText(tr('buttons.reset_settings'))
-
-        # Customization Page
         self.back_button_cust.setText(tr('ui.back_button'))
         self._update_background_button_state()
         self.background_music_button.setText(self._get_background_music_button_text())
@@ -5136,14 +5053,11 @@ class DeltaHubApp(QWidget):
                 label_widget.setText(self.color_config[key])
             button_widget = widget.parent().findChild(QPushButton)
             if button_widget:
-                 button_widget.setText(tr('ui.select_color'))
-
-        # Changelog/Help Buttons
+                button_widget.setText(tr('ui.select_color'))
         self.changelog_button.setText(tr('buttons.changelog_close') if self.is_changelog_view else tr('buttons.changelog'))
         self.help_button.setText(tr('buttons.help_close') if self.is_help_view else tr('buttons.help'))
 
     def _retranslate_ui(self):
-        """Coordinates all UI updates after a language change or refresh."""
         language_code = self.local_config.get('language', 'en')
         localization_manager.load_language(language_code)
         self._update_qt_translations(language_code)
@@ -5589,31 +5503,27 @@ class DeltaHubApp(QWidget):
 
     def _load_local_data(self):
         self.local_config = self._read_json(self.config_path) or {}
-
         mods_metadata = self._read_mods_metadata()
         updated = False
         if not os.path.exists(self.mods_dir):
             return
-
         for folder_name in os.listdir(self.mods_dir):
             folder_path = os.path.join(self.mods_dir, folder_name)
             if not os.path.isdir(folder_path):
                 continue
-            
             config_path = os.path.join(folder_path, 'config.json')
             if not os.path.exists(config_path):
                 continue
-
             try:
                 config_data = self._read_json(config_path)
                 if not config_data or not isinstance(config_data, dict):
                     continue
-                
                 mod_key = config_data.get('mod_key')
-                if not mod_key: continue
-
+                if not mod_key:
+                    continue
                 if 'installed_date' in config_data or 'is_available_on_server' in config_data:
-                    if mod_key not in mods_metadata: mods_metadata[mod_key] = {}
+                    if mod_key not in mods_metadata:
+                        mods_metadata[mod_key] = {}
                     if 'installed_date' in config_data:
                         mods_metadata[mod_key]['installed_date'] = config_data.pop('installed_date')
                     if 'is_available_on_server' in config_data:
@@ -5621,7 +5531,7 @@ class DeltaHubApp(QWidget):
                     self._write_json(config_path, config_data)
                     updated = True
             except Exception as e:
-                logging.warning(f"Failed to migrate metadata for mod in {folder_name}: {e}")
+                logging.warning(f'Failed to migrate metadata for mod in {folder_name}: {e}')
         if updated:
             self._write_mods_metadata(mods_metadata)
         self.local_config['metadata_migrated_v2'] = True
@@ -5683,7 +5593,6 @@ class DeltaHubApp(QWidget):
 
     def _init_localization(self):
         saved_language = self.local_config.get('language')
-
         if not saved_language or saved_language not in localization_manager.get_available_languages():
             saved_language = localization_manager.detect_system_language()
             self.local_config['language'] = saved_language
@@ -5974,7 +5883,7 @@ class DeltaHubApp(QWidget):
                     return True
         return False
 
-    def _find_and_validate_game_path(self, selections: Optional[Dict[int, str]] = None, is_initial: bool = False):
+    def _find_and_validate_game_path(self, selections: Optional[Dict[int, str]]=None, is_initial: bool=False):
         path_from_config = self._get_current_game_path()
         skip_data_check = bool(selections and self._has_mods_with_data_files(selections))
         if isinstance(self.game_mode, DemoGameMode):
@@ -6002,6 +5911,7 @@ class DeltaHubApp(QWidget):
         if is_initial:
             self.update_status_signal.emit(tr('status.no_game_path'), UI_COLORS['status_error'])
         return False
+
     def _init_session(self):
         try:
             import requests
@@ -6074,7 +5984,6 @@ class DeltaHubApp(QWidget):
         export_btn = msg.addButton(tr('buttons.export'), QMessageBox.ButtonRole.AcceptRole)
         msg.setStandardButtons(QMessageBox.StandardButton.NoButton)
         msg.exec()
-
         if msg.clickedButton() == import_btn:
             self._import_theme()
         elif msg.clickedButton() == export_btn:
@@ -6082,82 +5991,54 @@ class DeltaHubApp(QWidget):
 
     def _export_theme(self):
         import zipfile
-
         theme_file_path, _ = QFileDialog.getSaveFileName(self, tr('dialogs.export_theme_title'), '', f"{tr('file_descriptions.theme_files')} (*.dhtheme)")
         if not theme_file_path:
             return
-
-        theme_settings = {
-            'custom_color_background': self.local_config.get('custom_color_background', ''),
-            'custom_color_button': self.local_config.get('custom_color_button', ''),
-            'custom_color_border': self.local_config.get('custom_color_border', ''),
-            'custom_color_button_hover': self.local_config.get('custom_color_button_hover', ''),
-            'custom_color_text': self.local_config.get('custom_color_text', ''),
-            'custom_color_version_text': self.local_config.get('custom_color_version_text', ''),
-            'background_disabled': self.local_config.get('background_disabled', False),
-            'disable_splash': self.local_config.get('disable_splash', False)
-        }
-
+        theme_settings = {'custom_color_background': self.local_config.get('custom_color_background', ''), 'custom_color_button': self.local_config.get('custom_color_button', ''), 'custom_color_border': self.local_config.get('custom_color_border', ''), 'custom_color_button_hover': self.local_config.get('custom_color_button_hover', ''), 'custom_color_text': self.local_config.get('custom_color_text', ''), 'custom_color_version_text': self.local_config.get('custom_color_version_text', ''), 'background_disabled': self.local_config.get('background_disabled', False), 'disable_splash': self.local_config.get('disable_splash', False)}
         with zipfile.ZipFile(theme_file_path, 'w') as zipf:
             zipf.writestr('theme.json', json.dumps(theme_settings, indent=2))
-
             bg_path = self.local_config.get('custom_background_path')
             if bg_path and os.path.exists(bg_path):
-                zipf.write(bg_path, f"background{os.path.splitext(bg_path)[1]}")
-
+                zipf.write(bg_path, f'background{os.path.splitext(bg_path)[1]}')
             music_path = self._get_background_music_path()
             if music_path and os.path.exists(music_path):
-                zipf.write(music_path, f"background_music{os.path.splitext(music_path)[1]}")
-
+                zipf.write(music_path, f'background_music{os.path.splitext(music_path)[1]}')
             sound_path = self._get_startup_sound_path()
             if sound_path and os.path.exists(sound_path):
-                zipf.write(sound_path, f"startup_sound{os.path.splitext(sound_path)[1]}")
-
+                zipf.write(sound_path, f'startup_sound{os.path.splitext(sound_path)[1]}')
         QMessageBox.information(self, tr('dialogs.success'), tr('dialogs.theme_exported_success'))
 
     def _import_theme(self):
         import zipfile
         import tempfile
-
         theme_file_path, _ = QFileDialog.getOpenFileName(self, tr('dialogs.import_theme_title'), '', f"{tr('file_descriptions.theme_files')} (*.dhtheme)")
         if not theme_file_path:
             return
-
         try:
             with zipfile.ZipFile(theme_file_path, 'r') as zipf:
                 if 'theme.json' not in zipf.namelist():
-                    raise ValueError("Missing theme.json")
-
+                    raise ValueError('Missing theme.json')
                 with tempfile.TemporaryDirectory() as temp_dir:
                     zipf.extractall(temp_dir)
-
                     with open(os.path.join(temp_dir, 'theme.json'), 'r') as f:
                         theme_settings = json.load(f)
-
-                    # Apply settings
                     for key, value in theme_settings.items():
                         self.local_config[key] = value
-
-                    # Clean up old theme files before copying new ones
                     for old_file in ['custom_background_music.mp3', 'custom_background_music.wav', 'custom_startup_sound.mp3', 'custom_startup_sound.wav']:
                         if os.path.exists(os.path.join(self.config_dir, old_file)):
                             os.remove(os.path.join(self.config_dir, old_file))
                     self.local_config['custom_background_path'] = ''
-
-                    # Copy new files
                     for filename in os.listdir(temp_dir):
                         src_path = os.path.join(temp_dir, filename)
                         if filename.startswith('background.'):
                             ext = os.path.splitext(filename)[1]
-                            dest_path = os.path.join(self.config_dir, f"custom_background{ext}")
+                            dest_path = os.path.join(self.config_dir, f'custom_background{ext}')
                             shutil.copy2(src_path, dest_path)
                             self.local_config['custom_background_path'] = dest_path
                         elif filename.startswith('background_music.'):
-                            shutil.copy2(src_path, os.path.join(self.config_dir, f"custom_background_music{os.path.splitext(filename)[1]}"))
+                            shutil.copy2(src_path, os.path.join(self.config_dir, f'custom_background_music{os.path.splitext(filename)[1]}'))
                         elif filename.startswith('startup_sound.'):
-                            shutil.copy2(src_path, os.path.join(self.config_dir, f"custom_startup_sound{os.path.splitext(filename)[1]}"))
-
-            # Persist and update UI
+                            shutil.copy2(src_path, os.path.join(self.config_dir, f'custom_startup_sound{os.path.splitext(filename)[1]}'))
             self._write_local_config()
             self._load_custom_style_settings()
             self.disable_background_checkbox.setChecked(self.local_config.get('background_disabled', False))
@@ -6168,7 +6049,6 @@ class DeltaHubApp(QWidget):
             self._maybe_start_background_music()
             self.apply_theme()
             QMessageBox.information(self, tr('dialogs.success'), tr('dialogs.theme_imported_success'))
-
         except Exception as e:
             QMessageBox.critical(self, tr('dialogs.error'), tr('dialogs.theme_import_failed', error=str(e)))
         self.local_config['first_launch_splash_shown'] = True
