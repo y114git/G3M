@@ -363,7 +363,7 @@ class InstallModsThread(QThread):
                         if os.path.exists(cache_dir):
                             for fname in os.listdir(cache_dir):
                                 fl = fname.lower()
-                                if fl.endswith(('.zip', '.rar', '.7z')):
+                                if fl.endswith(('.zip', '.rar', '.7z', '.tar.gz', '.lzma')):
                                     pass
                     except Exception:
                         pass
@@ -575,7 +575,7 @@ class UrlInstallThread(QThread):
         filename = unquote(os.path.basename(parsed_url.path))
         if not filename:
             filename = 'mod.zip'
-        if not any((filename.lower().endswith(ext) for ext in ['.zip', '.rar', '.7z'])):
+        if not any((filename.lower().endswith(ext) for ext in ['.zip', '.rar', '.7z', '.tar.gz', '.lzma'])):
             filename = 'mod.zip'
         archive_path = os.path.join(temp_dir, filename)
         response = requests.get(url, stream=True, timeout=30, headers=BROWSER_HEADERS)
@@ -613,6 +613,13 @@ class UrlInstallThread(QThread):
                         if os.path.exists(config_file_path):
                             with open(config_file_path, 'rb') as f:
                                 config_content = f.read()
+            elif archive_path_lower.endswith('.tar.gz'):
+                import tarfile
+                with tarfile.open(archive_path, 'r:gz') as tf:
+                    if 'config.json' in tf.getnames():
+                        extracted_file = tf.extractfile('config.json')
+                        if extracted_file:
+                            config_content = extracted_file.read()
             if config_content:
                 return json.loads(config_content)
         except Exception:
@@ -631,6 +638,10 @@ class UrlInstallThread(QThread):
             elif archive_path_lower.endswith('.7z'):
                 with py7zr.SevenZipFile(archive_path, mode='r') as zf:
                     return len(zf.getnames()) == 1 and zf.getnames()[0] == 'config.json'
+            elif archive_path_lower.endswith('.tar.gz'):
+                import tarfile
+                with tarfile.open(archive_path, 'r:gz') as tf:
+                    return len(tf.getnames()) == 1 and 'config.json' in tf.getnames()
         except Exception:
             return False
         return False
@@ -646,6 +657,16 @@ class UrlInstallThread(QThread):
         elif archive_path_lower.endswith('.7z'):
             with py7zr.SevenZipFile(archive_path, mode='r') as zf:
                 zf.extractall(path=target_dir)
+        elif archive_path_lower.endswith('.tar.gz'):
+            import tarfile
+            with tarfile.open(archive_path, 'r:gz') as tf:
+                tf.extractall(target_dir)
+        elif archive_path_lower.endswith('.lzma'):
+            import lzma
+            import shutil
+            output_path = os.path.join(target_dir, os.path.splitext(os.path.basename(archive_path))[0])
+            with lzma.open(archive_path) as f_in, open(output_path, 'wb') as f_out:
+                shutil.copyfileobj(f_in, f_out)
         else:
             raise ValueError(tr('errors.unsupported_archive_format'))
 
