@@ -2,7 +2,6 @@ import argparse
 import os
 import platform
 import sys
-import tempfile
 import subprocess
 import time
 import psutil
@@ -16,15 +15,20 @@ from utils.path_utils import get_user_data_root, get_launcher_dir
 if platform.system() == 'Windows':
     import winreg
 
+
 def create_app_reference():
     from core.app import DeltaHubApp
     return DeltaHubApp
+
+
 SINGLE_INSTANCE_KEY = 'deltahub.y.114.single-instance-lock'
 _translator = QTranslator()
 _splash_start_time = None
 
+
 def check_game_processes():
-    game_processes = {'DELTARUNE.exe', 'UNDERTALE.exe', 'DELTARUNEdemo.exe', 'DELTARUNE', 'UNDERTALE', 'DELTARUNEdemo'}
+    game_processes = {'DELTARUNE.exe', 'UNDERTALE.exe',
+                      'DELTARUNEdemo.exe', 'DELTARUNE', 'UNDERTALE', 'DELTARUNEdemo'}
     for proc in psutil.process_iter(['name']):
         try:
             if proc.info['name'] in game_processes:
@@ -33,18 +37,21 @@ def check_game_processes():
             pass
     return None
 
+
 def register_url_protocol():
     if getattr(sys, 'frozen', False):
         executable_path = f'"{sys.executable}"'
     else:
-        main_script_path = os.path.abspath(os.path.join(get_launcher_dir(), '..', 'src', 'main.py'))
+        main_script_path = os.path.abspath(os.path.join(
+            get_launcher_dir(), '..', 'src', 'main.py'))
         executable_path = f'"{sys.executable}" "{main_script_path}"'
     system = platform.system()
     try:
         if system == 'Windows':
             key_path = 'Software\\Classes\\deltahub'
             with winreg.CreateKey(winreg.HKEY_CURRENT_USER, key_path) as key:
-                winreg.SetValue(key, '', winreg.REG_SZ, 'URL:DELTAHUB Protocol')
+                winreg.SetValue(key, '', winreg.REG_SZ,
+                                'URL:DELTAHUB Protocol')
                 winreg.SetValueEx(key, 'URL Protocol', 0, winreg.REG_SZ, '')
                 command_key_path = f'{key_path}\\shell\\open\\command'
                 with winreg.CreateKey(winreg.HKEY_CURRENT_USER, command_key_path) as command_key:
@@ -57,9 +64,11 @@ def register_url_protocol():
             desktop_file_path = os.path.join(apps_dir, 'deltahub.desktop')
             with open(desktop_file_path, 'w', encoding='utf-8') as f:
                 f.write(desktop_file_content)
-            subprocess.run(['xdg-mime', 'default', 'deltahub.desktop', 'x-scheme-handler/deltahub'], check=False)
+            subprocess.run(['xdg-mime', 'default', 'deltahub.desktop',
+                           'x-scheme-handler/deltahub'], check=False)
     except Exception as e:
         print(f'Failed to register URL protocol: {e}')
+
 
 class SingleInstanceServer(QLocalServer):
 
@@ -81,14 +90,17 @@ class SingleInstanceServer(QLocalServer):
                 self.app_instance.url_received_signal.emit(url)
         socket.close()
 
+
 def setup_app():
     language_code = localization_manager.detect_system_language()
     localization_manager.load_language(language_code)
-    os.environ['QT_LOGGING_RULES'] = ';'.join(['qt.qpa.screen.warning=false', 'qt.qpa.window.warning=false', 'qt.multimedia.ffmpeg=false', 'qt.multimedia=false'])
+    os.environ['QT_LOGGING_RULES'] = ';'.join(
+        ['qt.qpa.screen.warning=false', 'qt.qpa.window.warning=false', 'qt.multimedia.ffmpeg=false', 'qt.multimedia=false'])
     if not getattr(sys, 'frozen', False):
         os.environ.setdefault('QT_MEDIA_BACKEND', 'ffmpeg')
     app = QApplication(sys.argv)
-    qt_translation_file = localization_manager.get_qt_translation_name(language_code)
+    qt_translation_file = localization_manager.get_qt_translation_name(
+        language_code)
     if qt_translation_file:
         path = QLibraryInfo.path(QLibraryInfo.LibraryPath.TranslationsPath)
         if _translator.load(qt_translation_file, path):
@@ -99,13 +111,16 @@ def setup_app():
     app.setOrganizationName('deltahub')
     return app
 
+
 def run_app():
     parser = argparse.ArgumentParser(description='DELTAHUB')
     parser.add_argument('--shortcut-launch', type=str)
     parser.add_argument('--shortcut-path', type=str)
-    parser.add_argument('--force-start', action='store_true', help='Force start even if another instance is detected')
+    parser.add_argument('--force-start', action='store_true',
+                        help='Force start even if another instance is detected')
     args, unknown_args = parser.parse_known_args()
-    url_arg = next((arg for arg in sys.argv[1:] if arg.startswith('deltahub://')), None)
+    url_arg = next(
+        (arg for arg in sys.argv[1:] if arg.startswith('deltahub://')), None)
     socket = QLocalSocket()
     socket.connectToServer(SINGLE_INSTANCE_KEY)
     if socket.waitForConnected(500):
@@ -120,7 +135,8 @@ def run_app():
         running_game = check_game_processes()
         if running_game:
             app = setup_app()
-            QMessageBox.critical(None, tr('errors.game_running_title'), tr('errors.game_running_message', game_name=running_game))
+            QMessageBox.critical(None, tr('errors.game_running_title'), tr(
+                'errors.game_running_message', game_name=running_game))
             sys.exit(1)
     if platform.system() == 'Linux' and (not args.shortcut_launch):
         os.environ.setdefault('NO_AT_BRIDGE', '1')
@@ -135,7 +151,8 @@ def run_app():
         return
     config = {}
     try:
-        config_path = os.path.join(get_user_data_root(), 'settings', 'config.json')
+        config_path = os.path.join(
+            get_user_data_root(), 'settings', 'config.json')
         if os.path.exists(config_path):
             import json
             with open(config_path, 'r', encoding='utf-8') as f:
@@ -161,30 +178,36 @@ def run_app():
                 ex.is_shown_to_user = True
                 ex.activateWindow()
                 ex.raise_()
-                ex.setWindowState(ex.windowState() & ~Qt.WindowState.WindowMinimized | Qt.WindowState.WindowActive)
+                ex.setWindowState(ex.windowState(
+                ) & ~Qt.WindowState.WindowMinimized | Qt.WindowState.WindowActive)
 
         def create_launcher_no_animation():
             try:
                 DeltaHubApp = create_app_reference()
-                launcher_app['instance'] = DeltaHubApp(parent_for_dialogs=splash, initial_url=url_arg)
+                launcher_app['instance'] = DeltaHubApp(
+                    parent_for_dialogs=splash, initial_url=url_arg)
                 server = SingleInstanceServer(launcher_app['instance'])
                 if not server.listen(SINGLE_INSTANCE_KEY):
-                    QMessageBox.critical(None, tr('errors.error'), tr('errors.single_instance_error'))
+                    QMessageBox.critical(None, tr('errors.error'), tr(
+                        'errors.single_instance_error'))
                     sys.exit(1)
                 launcher_app['instance'].server = server
                 launcher_app['instance']._post_show_initialization()
-                launcher_app['instance'].initialization_finished.connect(close_splash_and_show_launcher)
+                launcher_app['instance'].initialization_finished.connect(
+                    close_splash_and_show_launcher)
                 QTimer.singleShot(15000, close_splash_and_show_launcher)
             except Exception as e:
                 if hasattr(splash, 'movie'):
                     splash.stop_gif_animation()
                 splash.close()
-                QMessageBox.critical(None, tr('errors.startup_error_title'), tr('errors.startup_error_message', details=str(e)))
+                QMessageBox.critical(None, tr('errors.startup_error_title'), tr(
+                    'errors.startup_error_message', details=str(e)))
         QTimer.singleShot(100, create_launcher_no_animation)
         try:
             sys.exit(app.exec())
         except Exception as e:
-            QMessageBox.critical(None, tr('errors.startup_error_title'), tr('errors.startup_error_message', details=str(e)))
+            QMessageBox.critical(None, tr('errors.startup_error_title'), tr(
+                'errors.startup_error_message', details=str(e)))
         return
     global _splash_start_time
     _splash_start_time = time.time()
@@ -223,7 +246,8 @@ def run_app():
             show_launcher_window(ex)
         else:
             if _splash_start_time is not None:
-                remaining_time = int((11 - (time.time() - _splash_start_time)) * 1000)
+                remaining_time = int(
+                    (11 - (time.time() - _splash_start_time)) * 1000)
             else:
                 remaining_time = 0
 
@@ -239,25 +263,31 @@ def run_app():
             ex.is_shown_to_user = True
             ex.activateWindow()
             ex.raise_()
-            ex.setWindowState(ex.windowState() & ~Qt.WindowState.WindowMinimized | Qt.WindowState.WindowActive)
+            ex.setWindowState(ex.windowState(
+            ) & ~Qt.WindowState.WindowMinimized | Qt.WindowState.WindowActive)
 
     def create_launcher():
         try:
             DeltaHubApp = create_app_reference()
-            launcher_app['instance'] = DeltaHubApp(parent_for_dialogs=splash, initial_url=url_arg)
+            launcher_app['instance'] = DeltaHubApp(
+                parent_for_dialogs=splash, initial_url=url_arg)
             server = SingleInstanceServer(launcher_app['instance'])
             if not server.listen(SINGLE_INSTANCE_KEY):
-                QMessageBox.critical(None, tr('errors.error'), tr('errors.single_instance_error'))
+                QMessageBox.critical(None, tr('errors.error'), tr(
+                    'errors.single_instance_error'))
                 sys.exit(1)
             launcher_app['instance'].server = server
             launcher_app['instance']._post_show_initialization()
-            launcher_app['instance'].initialization_finished.connect(close_splash_when_ready)
+            launcher_app['instance'].initialization_finished.connect(
+                close_splash_when_ready)
             QTimer.singleShot(15000, close_splash_when_ready)
         except Exception as e:
             splash.close()
-            QMessageBox.critical(None, tr('errors.startup_error_title'), tr('errors.startup_error_message', details=str(e)))
+            QMessageBox.critical(None, tr('errors.startup_error_title'), tr(
+                'errors.startup_error_message', details=str(e)))
     QTimer.singleShot(100, create_launcher)
     try:
         sys.exit(app.exec())
     except Exception as e:
-        QMessageBox.critical(None, tr('errors.startup_error_title'), tr('errors.startup_error_message', details=str(e)))
+        QMessageBox.critical(None, tr('errors.startup_error_title'), tr(
+            'errors.startup_error_message', details=str(e)))

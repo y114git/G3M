@@ -1,12 +1,14 @@
 import platform
 import requests
 
+
 def check_internet_connection() -> bool:
     try:
         requests.get('https://www.google.com', timeout=5)
         return True
     except requests.RequestException:
         return False
+
 
 def increment_launch_counter() -> None:
     from config.constants import CLOUD_FUNCTIONS_BASE_URL

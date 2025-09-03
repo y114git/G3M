@@ -3,6 +3,7 @@ from PyQt6.QtCore import QThread, pyqtSignal
 from utils.game_utils import is_game_running
 from utils.network_utils import increment_launch_counter
 
+
 class GameMonitorThread(QThread):
     finished = pyqtSignal(bool)
 

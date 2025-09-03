@@ -7,35 +7,43 @@ from PyQt6.QtGui import QColor, QImage, QPixmap
 from PyQt6.QtWidgets import QLabel, QVBoxLayout, QPushButton, QGroupBox
 from localization.manager import tr
 
+
 def update_mod_widget_style(widget, frame_selector, parent_app=None):
     if parent_app and hasattr(parent_app, 'local_config'):
         config = parent_app.local_config
         plaque_bg_color = get_theme_color(config, 'button', 'black')
         border_color = get_theme_color(config, 'border', '#fff')
         hover_border_color = get_theme_color(config, 'button_hover', '#fff')
-        version_text_color = get_theme_color(config, 'version_text', 'rgba(255, 255, 255, 178)')
+        version_text_color = get_theme_color(
+            config, 'version_text', 'rgba(255, 255, 255, 178)')
     else:
         plaque_bg_color = 'black'
         border_color = '#fff'
         hover_border_color = '#fff'
         version_text_color = 'rgba(255, 255, 255, 178)'
     border_width = '3px' if getattr(widget, 'is_selected', False) else '1px'
-    current_border_color = hover_border_color if getattr(widget, 'is_selected', False) else border_color
+    current_border_color = hover_border_color if getattr(
+        widget, 'is_selected', False) else border_color
     widget.setStyleSheet(f'\n        QFrame#{frame_selector} {{\n            background-color: {plaque_bg_color};\n            border: {border_width} solid {current_border_color};\n        }}\n        QFrame#{frame_selector}:hover {{\n            border-color: {hover_border_color};\n        }}\n        QLabel#modIcon {{\n            border: 2px solid {border_color};\n        }}\n        QLabel#versionLabel {{\n            color: {version_text_color};\n        }}\n        QLabel#secondaryText {{\n            color: {version_text_color};\n            font-size: 12px;\n        }}\n        QLabel#primaryText {{\n            color: white;\n            font-size: 12px;\n        }}\n        QPushButton#plaqueButton, QPushButton#plaqueButtonInstall {{\n            min-width: 110px;\n            max-width: 110px;\n            min-height: 35px;\n            max-height: 35px;\n            font-size: 15px;\n            padding: 1px;\n        }}\n        QPushButton#plaqueButtonInstall {{\n            background-color: #4CAF50;\n            font-weight: bold;\n        }}\n        QPushButton#plaqueButtonInstall:hover {{\n            background-color: #5cb85c;\n        }}\n    ')
+
 
 def show_empty_message_in_layout(layout, text, local_config=None, font_size=16):
     empty_text_color = 'rgba(255, 255, 255, 178)'
     if local_config:
-        empty_text_color = get_theme_color(local_config, 'version_text', empty_text_color)
+        empty_text_color = get_theme_color(
+            local_config, 'version_text', empty_text_color)
     empty_label = QLabel(text)
     empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-    empty_label.setStyleSheet(f'\n        QLabel {{\n            color: {empty_text_color};\n            font-size: {font_size}px;\n            font-style: italic;\n            opacity: 0.75;\n            background-color: transparent;\n            padding: 40px;\n        }}\n    ')
+    empty_label.setStyleSheet(
+        f'\n        QLabel {{\n            color: {empty_text_color};\n            font-size: {font_size}px;\n            font-style: italic;\n            opacity: 0.75;\n            background-color: transparent;\n            padding: 40px;\n        }}\n    ')
     layout.insertWidget(layout.count() - 1, empty_label)
+
 
 def get_theme_color(config, color_key, default_color):
     if config and hasattr(config, 'get'):
         return config.get(f'custom_color_{color_key}') or default_color
     return default_color
+
 
 def create_file_group_universal(label_text, button_text, file_filter, line_edit, mode='open'):
     group_box = QGroupBox(label_text)
@@ -50,6 +58,7 @@ def create_file_group_universal(label_text, button_text, file_filter, line_edit,
     layout.addWidget(button)
     return (group_box, button)
 
+
 def clear_layout_widgets(layout, keep_last_n=1):
     if not layout:
         return
@@ -61,22 +70,26 @@ def clear_layout_widgets(layout, keep_last_n=1):
             if widget:
                 widget.setParent(None)
 
+
 def load_mod_icon_universal(icon_label, mod_data, size=80):
-    from utils.file_utils import resource_path
+    from utils.path_utils import resource_path
     assets_icon_path = resource_path('resources/icons/icon.ico')
-    fallback_icon_path = os.path.join(os.path.dirname(__file__), 'icon.ico')
     default_pixmap = None
     for default_icon_path in (assets_icon_path,):
         if os.path.exists(default_icon_path):
             try:
                 default_pixmap = QPixmap(default_icon_path)
                 if not default_pixmap.isNull():
-                    icon_size = min(default_pixmap.width(), default_pixmap.height())
+                    icon_size = min(default_pixmap.width(),
+                                    default_pixmap.height())
                     if icon_size > 0:
-                        cropped = default_pixmap.copy((default_pixmap.width() - icon_size) // 2, (default_pixmap.height() - icon_size) // 2, icon_size, icon_size)
-                        default_pixmap = cropped.scaled(size, size, Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                        cropped = default_pixmap.copy((default_pixmap.width(
+                        ) - icon_size) // 2, (default_pixmap.height() - icon_size) // 2, icon_size, icon_size)
+                        default_pixmap = cropped.scaled(
+                            size, size, Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation)
                     else:
-                        default_pixmap = default_pixmap.scaled(size, size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                        default_pixmap = default_pixmap.scaled(
+                            size, size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
                     break
             except Exception:
                 default_pixmap = None
@@ -91,8 +104,10 @@ def load_mod_icon_universal(icon_label, mod_data, size=80):
             pixmap = QPixmap(icon_path)
             if not pixmap.isNull():
                 icon_size = min(pixmap.width(), pixmap.height())
-                cropped = pixmap.copy((pixmap.width() - icon_size) // 2, (pixmap.height() - icon_size) // 2, icon_size, icon_size)
-                scaled_pixmap = cropped.scaled(size, size, Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                cropped = pixmap.copy((pixmap.width(
+                ) - icon_size) // 2, (pixmap.height() - icon_size) // 2, icon_size, icon_size)
+                scaled_pixmap = cropped.scaled(
+                    size, size, Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation)
                 icon_label.setPixmap(scaled_pixmap)
                 return
         elif getattr(mod_data, 'icon_url', None):
@@ -179,8 +194,10 @@ def load_mod_icon_universal(icon_label, mod_data, size=80):
                     try:
                         if pm and (not pm.isNull()):
                             icon_size = min(pm.width(), pm.height())
-                            cropped = pm.copy((pm.width() - icon_size) // 2, (pm.height() - icon_size) // 2, icon_size, icon_size)
-                            scaled_pixmap = cropped.scaled(size, size, Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                            cropped = pm.copy(
+                                (pm.width() - icon_size) // 2, (pm.height() - icon_size) // 2, icon_size, icon_size)
+                            scaled_pixmap = cropped.scaled(
+                                size, size, Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation)
                             icon_label.setPixmap(scaled_pixmap)
                     except Exception as e:
                         print(f'Error applying mod icon: {e}')

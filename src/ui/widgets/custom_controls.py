@@ -2,15 +2,18 @@ from typing import Callable, Optional
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import QComboBox, QTabWidget, QLabel, QFrame, QWidget
 
+
 class NoScrollComboBox(QComboBox):
 
     def wheelEvent(self, event):
         event.ignore()
 
+
 class NoScrollTabWidget(QTabWidget):
 
     def wheelEvent(self, event):
         event.ignore()
+
 
 class ClickableLabel(QLabel):
     clicked = pyqtSignal(int, int)
@@ -33,6 +36,7 @@ class ClickableLabel(QLabel):
         if ev and ev.button() == Qt.MouseButton.LeftButton:
             self.doubleClicked.emit(self._ch, self._sl)
         super().mouseDoubleClickEvent(ev)
+
 
 class SlotFrame(QFrame):
 

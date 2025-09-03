@@ -3,6 +3,7 @@ from PyQt6.QtWidgets import QLabel, QPushButton, QHBoxLayout, QVBoxLayout, QFram
 from .base_mod_widget import BaseModWidget
 from localization.manager import tr
 
+
 class InstalledModWidget(BaseModWidget):
     remove_requested = pyqtSignal(object)
     use_requested = pyqtSignal(object)
@@ -55,7 +56,8 @@ class InstalledModWidget(BaseModWidget):
         self.title_layout.addWidget(indicator)
         self.title_layout.addStretch()
         installed_date_text = self.installed_date or self.mod_data.created_date or 'N/A'
-        date_label_text = tr('ui.created_label') if self.is_local else tr('ui.installed_label')
+        date_label_text = tr('ui.created_label') if self.is_local else tr(
+            'ui.installed_label')
         installed_container = QWidget()
         installed_container_layout = QHBoxLayout(installed_container)
         installed_container_layout.setContentsMargins(0, 0, 0, 0)
@@ -66,7 +68,8 @@ class InstalledModWidget(BaseModWidget):
         installed_label_value.setObjectName('secondaryText')
         installed_container_layout.addWidget(installed_label_title)
         installed_container_layout.addWidget(installed_label_value)
-        containers = [self.author_container, self.game_version_container, installed_container]
+        containers = [self.author_container,
+                      self.game_version_container, installed_container]
         for i, container in enumerate(containers):
             self.metadata_layout.addWidget(container)
             if i < len(containers) - 1:
@@ -81,12 +84,15 @@ class InstalledModWidget(BaseModWidget):
         actions_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.use_button = QPushButton(tr('ui.use_button'))
         self.use_button.setObjectName('plaqueButtonInstall')
-        self.use_button.clicked.connect(lambda: self.use_requested.emit(self.mod_data))
+        self.use_button.clicked.connect(
+            lambda: self.use_requested.emit(self.mod_data))
         actions_layout.addWidget(self.use_button)
         self.remove_button = QPushButton(tr('ui.delete_button'))
         self.remove_button.setObjectName('plaqueButton')
-        self.remove_button.setStyleSheet('\n            QPushButton#plaqueButton {\n                background-color: #F44336;\n                color: white;\n            }\n            QPushButton#plaqueButton:hover {\n                background-color: #da190b;\n            }\n        ')
-        self.remove_button.clicked.connect(lambda: self.remove_requested.emit(self.mod_data))
+        self.remove_button.setStyleSheet(
+            '\n            QPushButton#plaqueButton {\n                background-color: #F44336;\n                color: white;\n            }\n            QPushButton#plaqueButton:hover {\n                background-color: #da190b;\n            }\n        ')
+        self.remove_button.clicked.connect(
+            lambda: self.remove_requested.emit(self.mod_data))
         actions_layout.addWidget(self.remove_button)
         self.actions_widget.setVisible(False)
         self.main_layout.addWidget(self.actions_widget)
@@ -94,7 +100,8 @@ class InstalledModWidget(BaseModWidget):
     def _mod_needs_update(self):
         if not self.parent_app or self.is_local:
             return False
-        needs_update = any((self.parent_app._mod_has_files_for_chapter(self.mod_data, i) and self.parent_app._get_mod_status_for_chapter(self.mod_data, i) == 'update' for i in range(5)))
+        needs_update = any((self.parent_app._mod_has_files_for_chapter(
+            self.mod_data, i) and self.parent_app._get_mod_status_for_chapter(self.mod_data, i) == 'update' for i in range(5)))
         return needs_update
 
     def _update_button_from_status(self):
@@ -102,13 +109,16 @@ class InstalledModWidget(BaseModWidget):
             return
         if self.status == 'in_slot':
             self.use_button.setText(tr('ui.remove_button'))
-            self.use_button.setStyleSheet('\n                QPushButton#plaqueButtonInstall {\n                    background-color: #FF9800;\n                    font-weight: bold;\n                }\n                QPushButton#plaqueButtonInstall:hover {\n                    background-color: #F57C00;\n                }\n            ')
+            self.use_button.setStyleSheet(
+                '\n                QPushButton#plaqueButtonInstall {\n                    background-color: #FF9800;\n                    font-weight: bold;\n                }\n                QPushButton#plaqueButtonInstall:hover {\n                    background-color: #F57C00;\n                }\n            ')
         elif self.status == 'needs_update':
             self.use_button.setText(tr('ui.update_button'))
-            self.use_button.setStyleSheet('\n                QPushButton#plaqueButtonInstall {\n                    background-color: #FF9800;\n                    font-weight: bold;\n                }\n                QPushButton#plaqueButtonInstall:hover {\n                    background-color: #F57C00;\n                }\n            ')
+            self.use_button.setStyleSheet(
+                '\n                QPushButton#plaqueButtonInstall {\n                    background-color: #FF9800;\n                    font-weight: bold;\n                }\n                QPushButton#plaqueButtonInstall:hover {\n                    background-color: #F57C00;\n                }\n            ')
         else:
             self.use_button.setText(tr('ui.use_button'))
-            self.use_button.setStyleSheet('\n                QPushButton#plaqueButtonInstall {\n                    background-color: #4CAF50;\n                    font-weight: bold;\n                }\n                QPushButton#plaqueButtonInstall:hover {\n                    background-color: #5cb85c;\n                }\n            ')
+            self.use_button.setStyleSheet(
+                '\n                QPushButton#plaqueButtonInstall {\n                    background-color: #4CAF50;\n                    font-weight: bold;\n                }\n                QPushButton#plaqueButtonInstall:hover {\n                    background-color: #5cb85c;\n                }\n            ')
 
     def set_in_slot(self, in_slot):
         self.is_in_slot = in_slot
