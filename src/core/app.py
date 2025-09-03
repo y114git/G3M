@@ -29,7 +29,7 @@ from models.mod_models import ModInfo, ModChapterData
 from models.game_modes import FullGameMode, DemoGameMode, UndertaleGameMode
 from utils.file_utils import autodetect_path, get_file_filter, sanitize_filename, ensure_writable, fix_macos_python_symlink
 from utils.game_utils import is_game_running, get_default_save_path, is_valid_save_path, is_valid_game_path
-from utils.path_utils import get_user_data_root, resource_path, get_launcher_dir, get_legacy_ylauncher_path
+from utils.path_utils import get_user_data_root, resource_path, get_launcher_dir, get_legacy_ylauncher_path, get_xdelta_path
 from utils.network_utils import check_internet_connection
 from threads.fetch_mods import FetchModsThread
 from threads.game_monitor import GameMonitorThread
@@ -46,28 +46,6 @@ from ui.dialogs.mod_editor import ModEditorDialog
 from core.startup import SingleInstanceServer
 _translator = QTranslator()
 _lock_file = None
-
-
-def get_xdelta_path():
-    from utils.path_utils import resource_path
-    system = platform.system()
-    if system == 'Windows':
-        exe_names = ['xdelta3.exe', 'xdelta.exe']
-    elif system == 'Darwin':
-        exe_names = ['xdelta3_mac']
-    else:
-        exe_names = ['xdelta3']
-    for exe_name in exe_names:
-        xdelta_path = resource_path(f'resources/bin/{exe_name}')
-        if os.path.exists(xdelta_path):
-            if system != 'Windows':
-                try:
-                    os.chmod(xdelta_path, 493)
-                except Exception as e:
-                    logging.warning(
-                        f'Could not set executable permission on {xdelta_path}: {e}')
-            return os.path.normpath(xdelta_path)
-    return None
 
 
 class DeltaHubApp(QWidget):
