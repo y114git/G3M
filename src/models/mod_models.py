@@ -1,11 +1,13 @@
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
+
 @dataclass
 class ModExtraFile:
     key: str
     version: str
     url: str
+
 
 @dataclass
 class ModChapterData:
@@ -16,6 +18,7 @@ class ModChapterData:
 
     def is_valid(self) -> bool:
         return bool(self.data_file_url or self.extra_files)
+
 
 @dataclass
 class ModInfo:

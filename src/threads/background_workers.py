@@ -13,6 +13,7 @@ from utils.file_utils import download_and_extract_archive
 from localization.manager import tr
 from utils.file_utils import get_unique_mod_dir
 
+
 class PresenceWorker(QObject):
     finished, update_online_count = (pyqtSignal(), pyqtSignal(int))
 
@@ -37,6 +38,7 @@ class PresenceWorker(QObject):
         finally:
             self.finished.emit()
 
+
 class BgLoader(QThread):
     loaded = pyqtSignal(object)
 
@@ -52,6 +54,7 @@ class BgLoader(QThread):
             img = QImage(self._path)
             self.loaded.emit(('img', img))
 
+
 class FetchChangelogThread(QThread):
     finished = pyqtSignal(str)
 
@@ -64,12 +67,14 @@ class FetchChangelogThread(QThread):
         try:
             if self.source.startswith(('http://', 'https://')):
                 params = {'ts': int(time.time())}
-                headers = {'Cache-Control': 'no-cache', 'Pragma': 'no-cache', 'User-Agent': 'DELTAHUB/1.0'}
+                headers = {'Cache-Control': 'no-cache',
+                           'Pragma': 'no-cache', 'User-Agent': 'DELTAHUB/1.0'}
                 with requests.get(self.source, params=params, headers=headers, timeout=10) as resp:
                     resp.raise_for_status()
                     text = resp.text
             elif os.path.exists(self.source) or os.path.exists(self.source.replace('.md', '.txt')):
-                path_to_read = self.source if os.path.exists(self.source) else self.source.replace('.md', '.txt')
+                path_to_read = self.source if os.path.exists(
+                    self.source) else self.source.replace('.md', '.txt')
                 with open(path_to_read, 'r', encoding='utf-8', errors='replace') as f:
                     text = f.read()
             else:
@@ -79,44 +84,56 @@ class FetchChangelogThread(QThread):
         finally:
             self.finished.emit(text)
 
+
 class FullInstallThread(QThread):
     progress = pyqtSignal(int)
     status = pyqtSignal(str, str)
     finished = pyqtSignal(bool, str)
 
-    def __init__(self, main_window, target_dir: str, make_shortcut: bool=False):
+    def __init__(self, main_window, target_dir: str, make_shortcut: bool = False):
         super().__init__(main_window)
         self.main_window = main_window
         self.target_dir = target_dir
 
     def run(self):
-        full_install_url = self.main_window.global_settings.get('full_install_url')
+        full_install_url = self.main_window.global_settings.get(
+            'full_install_url')
         if not full_install_url:
-            self.status.emit(tr('errors.files_not_found'), UI_COLORS['status_error'])
+            self.status.emit(tr('errors.files_not_found'),
+                             UI_COLORS['status_error'])
             self.finished.emit(False, self.target_dir)
             return
-        self.status.emit(tr('status.installing_game_files'), UI_COLORS['status_warning'])
+        self.status.emit(tr('status.installing_game_files'),
+                         UI_COLORS['status_warning'])
         try:
             from requests.adapters import HTTPAdapter
             from urllib3.util.retry import Retry
             session = requests.Session()
             session.headers.update(BROWSER_HEADERS)
-            retry_strategy = Retry(total=3, backoff_factor=0.3, status_forcelist=[429, 500, 502, 503, 504])
-            adapter = HTTPAdapter(max_retries=retry_strategy, pool_connections=1, pool_maxsize=10)
+            retry_strategy = Retry(total=3, backoff_factor=0.3, status_forcelist=[
+                                   429, 500, 502, 503, 504])
+            adapter = HTTPAdapter(max_retries=retry_strategy,
+                                  pool_connections=1, pool_maxsize=10)
             session.mount('http://', adapter)
             session.mount('https://', adapter)
-            resp = session.head(full_install_url, allow_redirects=True, timeout=15)
+            resp = session.head(
+                full_install_url, allow_redirects=True, timeout=15)
             total_size = int(resp.headers.get('content-length', 0))
             downloaded_ref = [0]
-            download_and_extract_archive(full_install_url, self.target_dir, self.progress, total_size, downloaded_ref, session, is_game_installation=True)
-            self.status.emit(tr('status.demo_installation_complete'), UI_COLORS['status_success'])
+            download_and_extract_archive(full_install_url, self.target_dir, self.progress,
+                                         total_size, downloaded_ref, session, is_game_installation=True)
+            self.status.emit(
+                tr('status.demo_installation_complete'), UI_COLORS['status_success'])
             self.finished.emit(True, self.target_dir)
         except Exception as e:
-            self.status.emit(tr('errors.full_installation_error').format(str(e)), UI_COLORS['status_error'])
+            self.status.emit(tr('errors.full_installation_error').format(
+                str(e)), UI_COLORS['status_error'])
             self.finished.emit(False, self.target_dir)
 
+
 class InstallModsThread(QThread):
-    progress, status, finished = (pyqtSignal(int), pyqtSignal(str, str), pyqtSignal(bool))
+    progress, status, finished = (pyqtSignal(
+        int), pyqtSignal(str, str), pyqtSignal(bool))
 
     def __init__(self, main_window, install_tasks, was_installed_before: bool):
         super().__init__(main_window)
@@ -129,13 +146,15 @@ class InstallModsThread(QThread):
 
     def cancel(self):
         self._cancelled = True
-        self.status.emit(tr('status.operation_cancelled'), UI_COLORS['status_error'])
+        self.status.emit(tr('status.operation_cancelled'),
+                         UI_COLORS['status_error'])
 
     def _find_existing_mod_folder(self, mod_key: str) -> str:
         if not os.path.exists(self.main_window.mods_dir):
             return ''
         for folder_name in os.listdir(self.main_window.mods_dir):
-            config_path = os.path.join(self.main_window.mods_dir, folder_name, 'config.json')
+            config_path = os.path.join(
+                self.main_window.mods_dir, folder_name, 'config.json')
             if os.path.exists(config_path):
                 try:
                     config_data = self.main_window._read_json(config_path)
@@ -164,21 +183,27 @@ class InstallModsThread(QThread):
     def _should_update_component(self, mod, chapter_id: int, existing_folder: str) -> dict:
         if not existing_folder:
             return {}
-        config_path = os.path.join(self.main_window.mods_dir, existing_folder, 'config.json')
+        config_path = os.path.join(
+            self.main_window.mods_dir, existing_folder, 'config.json')
         if not os.path.exists(config_path):
             return {}
         try:
             config_data = self.main_window._read_json(config_path)
-            local_versions = config_data.get('chapters', {}).get(str(chapter_id), {}).get('versions', {}) or {}
-            remote_versions = self._collect_remote_versions_for_chapter(mod, chapter_id)
+            local_versions = config_data.get('chapters', {}).get(
+                str(chapter_id), {}).get('versions', {}) or {}
+            remote_versions = self._collect_remote_versions_for_chapter(
+                mod, chapter_id)
             components_to_update: dict[str, dict] = {}
-            chapter_data = mod.get_chapter_data(chapter_id) if chapter_id != -1 else None
+            chapter_data = mod.get_chapter_data(
+                chapter_id) if chapter_id != -1 else None
             if chapter_data and chapter_data.data_file_url and remote_versions.get('data'):
                 is_xdelta_mod = getattr(mod, 'is_xdelta', False)
                 local_is_xdelta = False
                 try:
-                    mod_path = os.path.join(self.main_window.mods_dir, existing_folder)
-                    local_is_xdelta = any((f.lower().endswith('.xdelta') for f in os.listdir(mod_path) if os.path.isfile(os.path.join(mod_path, f))))
+                    mod_path = os.path.join(
+                        self.main_window.mods_dir, existing_folder)
+                    local_is_xdelta = any((f.lower().endswith('.xdelta') for f in os.listdir(
+                        mod_path) if os.path.isfile(os.path.join(mod_path, f))))
                 except Exception:
                     local_is_xdelta = False
                 type_changed = is_xdelta_mod != local_is_xdelta
@@ -186,13 +211,15 @@ class InstallModsThread(QThread):
                 remote_data_v = remote_versions.get('data')
                 from utils.file_utils import version_sort_key
                 if remote_data_v and (type_changed or version_sort_key(remote_data_v) > version_sort_key(local_data_v or '0.0.0')):
-                    components_to_update['data'] = {'url': chapter_data.data_file_url, 'local_version': local_data_v, 'remote_version': remote_data_v, 'is_xdelta': is_xdelta_mod, 'type_changed': type_changed}
+                    components_to_update['data'] = {'url': chapter_data.data_file_url, 'local_version': local_data_v,
+                                                    'remote_version': remote_data_v, 'is_xdelta': is_xdelta_mod, 'type_changed': type_changed}
             if chapter_data:
                 for extra_file in chapter_data.extra_files:
                     rv = remote_versions.get(extra_file.key)
                     lv = local_versions.get(extra_file.key)
                     if rv and version_sort_key(rv) > version_sort_key(lv or '0.0.0'):
-                        components_to_update[extra_file.key] = {'url': extra_file.url, 'local_version': lv, 'remote_version': rv}
+                        components_to_update[extra_file.key] = {
+                            'url': extra_file.url, 'local_version': lv, 'remote_version': rv}
                 remote_extra_keys = {ef.key for ef in chapter_data.extra_files}
                 for missing_key in [k for k in local_versions.keys() if k != 'data' and k not in remote_extra_keys]:
                     components_to_update[missing_key] = {'delete': True}
@@ -230,7 +257,8 @@ class InstallModsThread(QThread):
         target_path = os.path.join(target_dir, filename)
         try:
             from utils.file_utils import _download_file
-            _download_file(session, url, target_path, progress_signal, total_size, downloaded_ref)
+            _download_file(session, url, target_path,
+                           progress_signal, total_size, downloaded_ref)
         except Exception as e:
             if os.path.exists(target_path):
                 try:
@@ -257,7 +285,8 @@ class InstallModsThread(QThread):
         target_path = os.path.join(target_dir, filename)
         try:
             from utils.file_utils import _download_file
-            _download_file(session, url, target_path, progress_signal, total_size, downloaded_ref)
+            _download_file(session, url, target_path,
+                           progress_signal, total_size, downloaded_ref)
         except Exception as e:
             if os.path.exists(target_path):
                 try:
@@ -283,26 +312,35 @@ class InstallModsThread(QThread):
                     if existing_folder:
                         mod_folders[mod.key] = existing_folder
                     else:
-                        mod_folders[mod.key] = get_unique_mod_dir(self.main_window.mods_dir, mod.name)
+                        mod_folders[mod.key] = get_unique_mod_dir(
+                            self.main_window.mods_dir, mod.name)
                 existing_folder = mod_folders.get(mod.key, '')
-                chapter_data = mod.get_chapter_data(chapter_id) if chapter_id != -1 else None
+                chapter_data = mod.get_chapter_data(
+                    chapter_id) if chapter_id != -1 else None
                 if chapter_id == -1 and mod.is_valid_for_demo():
-                    tasks.append({'mod': mod, 'url': mod.demo_url, 'chapter_id': -1, 'component': 'demo'})
+                    tasks.append({'mod': mod, 'url': mod.demo_url,
+                                 'chapter_id': -1, 'component': 'demo'})
                 elif chapter_data:
-                    components_to_update = self._should_update_component(mod, chapter_id, existing_folder)
+                    components_to_update = self._should_update_component(
+                        mod, chapter_id, existing_folder)
                     if not components_to_update:
                         if chapter_data.data_file_url:
                             is_xdelta_mod = getattr(mod, 'is_xdelta', False)
-                            tasks.append({'mod': mod, 'url': chapter_data.data_file_url, 'chapter_id': chapter_id, 'component': 'data', 'is_xdelta': is_xdelta_mod})
+                            tasks.append({'mod': mod, 'url': chapter_data.data_file_url,
+                                         'chapter_id': chapter_id, 'component': 'data', 'is_xdelta': is_xdelta_mod})
                         for extra_file in chapter_data.extra_files:
-                            tasks.append({'mod': mod, 'url': extra_file.url, 'chapter_id': chapter_id, 'component': extra_file.key})
+                            tasks.append(
+                                {'mod': mod, 'url': extra_file.url, 'chapter_id': chapter_id, 'component': extra_file.key})
                     else:
                         for component, info in components_to_update.items():
                             if info.get('delete'):
-                                tasks.append({'mod': mod, 'chapter_id': chapter_id, 'component': component, 'delete': True})
+                                tasks.append(
+                                    {'mod': mod, 'chapter_id': chapter_id, 'component': component, 'delete': True})
                                 continue
-                            is_xdelta = info.get('is_xdelta', False) if component == 'data' else False
-                            t = {'mod': mod, 'url': info['url'], 'chapter_id': chapter_id, 'component': component, 'is_xdelta': is_xdelta}
+                            is_xdelta = info.get(
+                                'is_xdelta', False) if component == 'data' else False
+                            t = {'mod': mod, 'url': info['url'], 'chapter_id': chapter_id,
+                                 'component': component, 'is_xdelta': is_xdelta}
                             if component == 'data' and info.get('type_changed'):
                                 t['type_changed'] = True
                             tasks.append(t)
@@ -313,8 +351,10 @@ class InstallModsThread(QThread):
             from urllib3.util.retry import Retry
             session = requests.Session()
             session.headers.update(BROWSER_HEADERS)
-            retry_strategy = Retry(total=3, backoff_factor=0.3, status_forcelist=[429, 500, 502, 503, 504])
-            adapter = HTTPAdapter(max_retries=retry_strategy, pool_connections=1, pool_maxsize=10)
+            retry_strategy = Retry(total=3, backoff_factor=0.3, status_forcelist=[
+                                   429, 500, 502, 503, 504])
+            adapter = HTTPAdapter(max_retries=retry_strategy,
+                                  pool_connections=1, pool_maxsize=10)
             session.mount('http://', adapter)
             session.mount('https://', adapter)
             download_tasks = [t for t in tasks if t.get('url')]
@@ -333,7 +373,8 @@ class InstallModsThread(QThread):
             if self._cancelled:
                 self.finished.emit(False)
                 return
-            self.status.emit(tr('status.preparing_download'), UI_COLORS['status_warning'])
+            self.status.emit(tr('status.preparing_download'),
+                             UI_COLORS['status_warning'])
             if self._cancelled:
                 self.finished.emit(False)
                 return
@@ -374,22 +415,27 @@ class InstallModsThread(QThread):
                 file_size_bytes = file_sizes_cache.get(url, 0)
                 if file_size_bytes > 0:
                     size_mb = file_size_bytes / (1024 * 1024)
-                    file_size_mb = tr('status.unknown_size') if size_mb < 0.05 else f'{size_mb:.1f} MB'
+                    file_size_mb = tr(
+                        'status.unknown_size') if size_mb < 0.05 else f'{size_mb:.1f} MB'
                 status_text = f'{mod.name} {current_index}/{total_items} ({file_size_mb})'
                 self.status.emit(status_text, UI_COLORS['status_warning'])
                 self._installed_dirs.append(cache_dir)
                 chapter_data = mod.get_chapter_data(chapter_id)
-                is_data_file = chapter_data and url and (chapter_data.data_file_url == url)
+                is_data_file = chapter_data and url and (
+                    chapter_data.data_file_url == url)
                 is_xdelta = task.get('is_xdelta', False)
                 try:
                     if is_data_file:
                         if is_xdelta:
-                            self._download_xdelta_file(url, cache_dir, self.progress, total_bytes, downloaded_ref, session)
+                            self._download_xdelta_file(
+                                url, cache_dir, self.progress, total_bytes, downloaded_ref, session)
                         else:
                             from utils.file_utils import download_and_extract_archive
-                            download_and_extract_archive(url, cache_dir, self.progress, total_bytes, downloaded_ref, session)
+                            download_and_extract_archive(
+                                url, cache_dir, self.progress, total_bytes, downloaded_ref, session)
                     else:
-                        self._download_archive_file(url, cache_dir, self.progress, total_bytes, downloaded_ref, session)
+                        self._download_archive_file(
+                            url, cache_dir, self.progress, total_bytes, downloaded_ref, session)
                 except Exception:
                     raise
                 if mod.key not in installed_mods:
@@ -397,15 +443,18 @@ class InstallModsThread(QThread):
                 installed_mods[mod.key]['chapters'].add(chapter_id)
                 if url and total_bytes == 0:
                     done_files += 1
-                    progress = int(done_files / max(1, len(download_tasks)) * 100)
+                    progress = int(
+                        done_files / max(1, len(download_tasks)) * 100)
                     self.progress.emit(progress)
             for mod_key, mod_data in installed_mods.items():
                 mod = mod_data['mod']
                 mod_folder_name = mod_folders[mod.key]
-                mod_dir = os.path.join(self.main_window.mods_dir, mod_folder_name)
+                mod_dir = os.path.join(
+                    self.main_window.mods_dir, mod_folder_name)
                 files_data = {}
                 for chapter_id in mod_data['chapters']:
-                    chapter_data = mod.get_chapter_data(chapter_id) if chapter_id != -1 else None
+                    chapter_data = mod.get_chapter_data(
+                        chapter_id) if chapter_id != -1 else None
                     versions_dict = {}
                     file_info = {}
                     if chapter_data:
@@ -426,7 +475,8 @@ class InstallModsThread(QThread):
                             file_info['versions'] = versions_dict
                     elif chapter_id == -1 and mod.is_valid_for_demo():
                         file_info['data_file_version'] = mod.demo_version or '1.0.0'
-                        file_info['versions'] = {'demo': mod.demo_version or '1.0.0'}
+                        file_info['versions'] = {
+                            'demo': mod.demo_version or '1.0.0'}
                     if file_info:
                         if chapter_id == -1:
                             file_key = 'demo'
@@ -435,12 +485,14 @@ class InstallModsThread(QThread):
                         else:
                             file_key = str(chapter_id)
                         files_data[file_key] = file_info
-                config_data = {'is_local_mod': False, 'mod_key': mod.key, 'name': mod.name, 'author': mod.author, 'version': mod.version, 'game_version': mod.game_version, 'modgame': mod.modgame, 'files': files_data}
+                config_data = {'is_local_mod': False, 'mod_key': mod.key, 'name': mod.name, 'author': mod.author,
+                               'version': mod.version, 'game_version': mod.game_version, 'modgame': mod.modgame, 'files': files_data}
                 config_path = os.path.join(mod_dir, 'config.json')
                 self.main_window._write_json(config_path, config_data)
             metadata = self.main_window._read_mods_metadata()
             for mod_key in installed_mods.keys():
-                metadata[mod_key] = {'installed_date': time.strftime('%Y-%m-%d %H:%M:%S'), 'is_available_on_server': True}
+                metadata[mod_key] = {'installed_date': time.strftime(
+                    '%Y-%m-%d %H:%M:%S'), 'is_available_on_server': True}
             self.main_window._write_mods_metadata(metadata)
             self._increment_downloads_for_installed_mods(installed_mods.keys())
             try:
@@ -460,24 +512,30 @@ class InstallModsThread(QThread):
                                     target_root = os.path.join(dst, rel)
                                     os.makedirs(target_root, exist_ok=True)
                                     for d in dirs:
-                                        os.makedirs(os.path.join(target_root, d), exist_ok=True)
+                                        os.makedirs(os.path.join(
+                                            target_root, d), exist_ok=True)
                                     for f in files:
-                                        shutil.copy2(os.path.join(root, f), os.path.join(target_root, f))
+                                        shutil.copy2(os.path.join(
+                                            root, f), os.path.join(target_root, f))
                     else:
                         shutil.copy2(src, dst)
             except Exception:
                 pass
-            self.status.emit(tr('status.installation_complete'), UI_COLORS['status_success'])
+            self.status.emit(tr('status.installation_complete'),
+                             UI_COLORS['status_success'])
             self.finished.emit(True)
         except PermissionError as e:
             path = e.filename if e.filename else self.main_window.mods_dir
-            self.status.emit(tr('errors.permission_error_install'), UI_COLORS['status_error'])
+            self.status.emit(
+                tr('errors.permission_error_install'), UI_COLORS['status_error'])
             from PyQt6.QtWidgets import QMessageBox
             error_message = tr('dialogs.permission_error_message').format(path)
-            QMessageBox.critical(self.main_window, tr('dialogs.access_error'), error_message)
+            QMessageBox.critical(self.main_window, tr(
+                'dialogs.access_error'), error_message)
             self.finished.emit(False)
         except Exception as e:
-            self.status.emit(tr('errors.installation_error').format(str(e)), UI_COLORS['status_error'])
+            self.status.emit(tr('errors.installation_error').format(
+                str(e)), UI_COLORS['status_error'])
             self.finished.emit(False)
         finally:
             if not self._cancelled:
@@ -486,6 +544,7 @@ class InstallModsThread(QThread):
                         shutil.rmtree(self.temp_root, ignore_errors=True)
                 except Exception:
                     pass
+
 
 class UrlInstallThread(QThread):
     status = pyqtSignal(str, str)
@@ -506,93 +565,124 @@ class UrlInstallThread(QThread):
         try:
             if not self.url.startswith('deltahub://'):
                 raise ValueError('Invalid URL scheme')
-            content = self.url[len('deltahub://'):].split(',')[0].strip().rstrip('/')
+            content = self.url[len('deltahub://')                               :].split(',')[0].strip().rstrip('/')
             if not content.startswith(('http://', 'https://')):
-                content = content.replace('https//', 'https://').replace('http//', 'http://')
+                content = content.replace(
+                    'https//', 'https://').replace('http//', 'http://')
             if content.startswith(('http://', 'https://')):
                 with tempfile.TemporaryDirectory(prefix='gb-install-') as temp_dir:
                     download_url = content
-                    self.status.emit(tr('status.downloading_from_external'), UI_COLORS['status_warning'])
-                    archive_path = self._download_archive(download_url, temp_dir)
-                    config_data_from_archive = self._extract_and_read_config(archive_path)
+                    self.status.emit(
+                        tr('status.downloading_from_external'), UI_COLORS['status_warning'])
+                    archive_path = self._download_archive(
+                        download_url, temp_dir)
+                    config_data_from_archive = self._extract_and_read_config(
+                        archive_path)
                     if config_data_from_archive is None:
-                        raise ValueError(tr('errors.config_not_found_in_archive'))
-                    mod_name_from_archive = config_data_from_archive.get('name', 'Unknown Mod')
+                        raise ValueError(
+                            tr('errors.config_not_found_in_archive'))
+                    mod_name_from_archive = config_data_from_archive.get(
+                        'name', 'Unknown Mod')
                     mod_key = config_data_from_archive.get('mod_key')
-                    is_local = config_data_from_archive.get('is_local_mod', not bool(mod_key))
+                    is_local = config_data_from_archive.get(
+                        'is_local_mod', not bool(mod_key))
                     if mod_key and (not is_local):
-                        mod_info = next((m for m in self.main_window.all_mods if m.key == mod_key), None)
+                        mod_info = next(
+                            (m for m in self.main_window.all_mods if m.key == mod_key), None)
                         mod_name = mod_info.name if mod_info else mod_name_from_archive
                         if mod_info and mod_info.ban_status:
                             raise ValueError(tr('errors.mod_is_banned'))
                         if self._is_metadata_only(archive_path):
                             if not mod_info:
-                                raise ValueError(tr('errors.smart_install_mod_not_found'))
-                            self.status.emit(tr('status.smart_install_starting', mod_name=mod_name), UI_COLORS['status_info'])
-                            self.main_window.install_from_gb_signal.emit(mod_info)
+                                raise ValueError(
+                                    tr('errors.smart_install_mod_not_found'))
+                            self.status.emit(
+                                tr('status.smart_install_starting', mod_name=mod_name), UI_COLORS['status_info'])
+                            self.main_window.install_from_gb_signal.emit(
+                                mod_info)
                             return
                         if self.main_window._is_mod_installed(mod_key):
-                            result = self._ask_user(tr('dialogs.update_confirmation_title', mod_name=mod_name), tr('dialogs.update_confirmation_body', mod_name=mod_name))
+                            result = self._ask_user(tr('dialogs.update_confirmation_title', mod_name=mod_name), tr(
+                                'dialogs.update_confirmation_body', mod_name=mod_name))
                             if not result:
-                                self.finished.emit(False, tr('status.update_cancelled'))
+                                self.finished.emit(
+                                    False, tr('status.update_cancelled'))
                                 return
                     else:
                         mod_name = mod_name_from_archive
-                        result = self._ask_user(tr('dialogs.local_mod_warning_title'), tr('dialogs.local_mod_warning_body'))
+                        result = self._ask_user(tr('dialogs.local_mod_warning_title'), tr(
+                            'dialogs.local_mod_warning_body'))
                         if not result:
-                            self.finished.emit(False, tr('status.install_cancelled_by_user'))
+                            self.finished.emit(
+                                False, tr('status.install_cancelled_by_user'))
                             return
                         installed_mods = self.main_window._get_installed_mods_list()
-                        existing_local_mod = next((m for m in installed_mods if m.get('is_local_mod') and m.get('name') == mod_name), None)
+                        existing_local_mod = next((m for m in installed_mods if m.get(
+                            'is_local_mod') and m.get('name') == mod_name), None)
                         if existing_local_mod:
-                            update_result = self._ask_user(tr('dialogs.local_mod_update_title'), tr('dialogs.local_mod_update_body', mod_name=mod_name))
+                            update_result = self._ask_user(tr('dialogs.local_mod_update_title'), tr(
+                                'dialogs.local_mod_update_body', mod_name=mod_name))
                             if not update_result:
-                                self.finished.emit(False, tr('status.install_cancelled_by_user'))
+                                self.finished.emit(
+                                    False, tr('status.install_cancelled_by_user'))
                                 return
                     existing_folder_name = None
                     if 'existing_local_mod' in locals() and existing_local_mod:
-                        existing_folder_name = existing_local_mod.get('folder_name')
+                        existing_folder_name = existing_local_mod.get(
+                            'folder_name')
                     elif mod_key and self.main_window._is_mod_installed(mod_key):
                         installed_mods = self.main_window._get_installed_mods_list()
-                        existing_public_mod = next((m for m in installed_mods if m.get('mod_key') == mod_key), None)
+                        existing_public_mod = next(
+                            (m for m in installed_mods if m.get('mod_key') == mod_key), None)
                         if existing_public_mod:
-                            existing_folder_name = existing_public_mod.get('folder_name')
+                            existing_folder_name = existing_public_mod.get(
+                                'folder_name')
                     config_data = config_data_from_archive
-                    target_mod_dir = os.path.join(self.main_window.mods_dir, existing_folder_name or get_unique_mod_dir(self.main_window.mods_dir, mod_name))
+                    target_mod_dir = os.path.join(self.main_window.mods_dir, existing_folder_name or get_unique_mod_dir(
+                        self.main_window.mods_dir, mod_name))
                     if os.path.exists(target_mod_dir):
                         shutil.rmtree(target_mod_dir)
                     os.makedirs(target_mod_dir)
                     self._extract_full_archive(archive_path, target_mod_dir)
-                    final_config_path = os.path.join(target_mod_dir, 'config.json')
+                    final_config_path = os.path.join(
+                        target_mod_dir, 'config.json')
                     final_config_data = {}
                     if os.path.exists(final_config_path):
-                        final_config_data = self.main_window._read_json(final_config_path)
+                        final_config_data = self.main_window._read_json(
+                            final_config_path)
                     else:
                         final_config_data = config_data_from_archive
                     final_config_data.pop('installed_date', None)
                     final_config_data.pop('is_available_on_server', None)
-                    self.main_window._write_json(final_config_path, final_config_data)
+                    self.main_window._write_json(
+                        final_config_path, final_config_data)
                     mod_key_for_meta = final_config_data.get('mod_key')
                     if mod_key_for_meta:
                         metadata = self.main_window._read_mods_metadata()
-                        metadata[mod_key_for_meta] = {'installed_date': time.strftime('%Y-%m-%d %H:%M:%S'), 'is_available_on_server': not final_config_data.get('is_local_mod', False)}
+                        metadata[mod_key_for_meta] = {'installed_date': time.strftime(
+                            '%Y-%m-%d %H:%M:%S'), 'is_available_on_server': not final_config_data.get('is_local_mod', False)}
                         self.main_window._write_mods_metadata(metadata)
-                    self.finished.emit(True, tr('status.install_complete_success', mod_name=mod_name))
+                    self.finished.emit(
+                        True, tr('status.install_complete_success', mod_name=mod_name))
                 return
             elif len(content) == 64 and all((c in '0123456789abcdef' for c in content.lower())):
                 mod_key = content
-                mod_info = next((m for m in self.main_window.all_mods if m.key == mod_key), None)
+                mod_info = next(
+                    (m for m in self.main_window.all_mods if m.key == mod_key), None)
                 if not mod_info:
                     raise ValueError(tr('errors.smart_install_mod_not_found'))
                 if mod_info.ban_status:
                     raise ValueError(tr('errors.mod_is_banned'))
                 mod_name = mod_info.name
                 if self.main_window._is_mod_installed(mod_key):
-                    result = self._ask_user(tr('dialogs.update_confirmation_title', mod_name=mod_name), tr('dialogs.update_confirmation_body', mod_name=mod_name))
+                    result = self._ask_user(tr('dialogs.update_confirmation_title', mod_name=mod_name), tr(
+                        'dialogs.update_confirmation_body', mod_name=mod_name))
                     if not result:
-                        self.finished.emit(False, tr('status.update_cancelled'))
+                        self.finished.emit(
+                            False, tr('status.update_cancelled'))
                         return
-                self.status.emit(tr('status.smart_install_starting', mod_name=mod_name), UI_COLORS['status_info'])
+                self.status.emit(tr('status.smart_install_starting',
+                                 mod_name=mod_name), UI_COLORS['status_info'])
                 self.main_window.install_from_gb_signal.emit(mod_info)
                 return
             else:
@@ -613,7 +703,8 @@ class UrlInstallThread(QThread):
         if not filename:
             filename = 'mod.zip'
         archive_path = os.path.join(temp_dir, filename)
-        response = requests.get(url, stream=True, timeout=30, headers=BROWSER_HEADERS)
+        response = requests.get(
+            url, stream=True, timeout=30, headers=BROWSER_HEADERS)
         response.raise_for_status()
         total_size = int(response.headers.get('content-length', 0))
         downloaded_size = 0
@@ -642,9 +733,11 @@ class UrlInstallThread(QThread):
             elif archive_path_lower.endswith('.7z'):
                 with py7zr.SevenZipFile(archive_path, mode='r') as zf:
                     if 'config.json' in zf.getnames():
-                        extract_dir = os.path.join(os.path.dirname(archive_path), '7z_config')
+                        extract_dir = os.path.join(
+                            os.path.dirname(archive_path), '7z_config')
                         zf.extract(path=extract_dir, targets=['config.json'])
-                        config_file_path = os.path.join(extract_dir, 'config.json')
+                        config_file_path = os.path.join(
+                            extract_dir, 'config.json')
                         if os.path.exists(config_file_path):
                             with open(config_file_path, 'rb') as f:
                                 config_content = f.read()
@@ -684,6 +777,7 @@ class UrlInstallThread(QThread):
         else:
             raise ValueError(tr('errors.unsupported_archive_format'))
 
+
 class FetchHelpContentThread(QThread):
     finished = pyqtSignal(str)
 
@@ -699,8 +793,10 @@ class FetchHelpContentThread(QThread):
                 content = response.text
                 self.finished.emit(content)
             else:
-                error_msg = tr('errors.load_error_http', code=response.status_code)
+                error_msg = tr('errors.load_error_http',
+                               code=response.status_code)
                 self.finished.emit(f'<i>{error_msg}</i>')
         except Exception as e:
             print(f'Error loading help content: {e}')
-            self.finished.emit(f"<i>{tr('dialogs.help_content_load_failed')}</i>")
+            self.finished.emit(
+                f"<i>{tr('dialogs.help_content_load_failed')}</i>")

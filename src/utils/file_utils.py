@@ -9,26 +9,30 @@ import time
 import zipfile
 from pathlib import Path
 import requests
-from PyQt6.QtWidgets import QMessageBox
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from config.constants import BROWSER_HEADERS
-from utils.path_utils import resource_path
 
-def download_and_extract_archive(url: str, target_dir: str, progress_signal, total_size: int, downloaded_ref: list[int], session=None, is_game_installation=False):
+
+def download_and_extract_archive(url: str, target_dir: str, progress_signal,
+                                 total_size: int, downloaded_ref: list[int], session=None, is_game_installation=False):
     os.makedirs(target_dir, exist_ok=True)
     if session is None:
         session = requests.Session()
         session.headers.update(BROWSER_HEADERS)
-        retry_strategy = Retry(total=3, backoff_factor=0.3, status_forcelist=[429, 500, 502, 503, 504])
-        adapter = HTTPAdapter(max_retries=retry_strategy, pool_connections=1, pool_maxsize=10)
+        retry_strategy = Retry(total=3, backoff_factor=0.3, status_forcelist=[
+                               429, 500, 502, 503, 504])
+        adapter = HTTPAdapter(max_retries=retry_strategy,
+                              pool_connections=1, pool_maxsize=10)
         session.mount('http://', adapter)
         session.mount('https://', adapter)
     fname = _get_filename_from_url(session, url)
     with tempfile.TemporaryDirectory(prefix='deltahub-dl-') as tmp:
         tmp_path = os.path.join(tmp, fname)
-        _download_file(session, url, tmp_path, progress_signal, total_size, downloaded_ref)
+        _download_file(session, url, tmp_path, progress_signal,
+                       total_size, downloaded_ref)
         _extract_archive(tmp_path, target_dir, fname, is_game_installation)
+
 
 def _get_filename_from_url(session, url):
     try:
@@ -49,7 +53,8 @@ def _get_filename_from_url(session, url):
         pass
     return Path(url.split('?', 1)[0]).name or 'file.tmp'
 
-def _download_file(session, url, tmp_path, progress_signal, total_size, downloaded_ref, max_retries: int=5):
+
+def _download_file(session, url, tmp_path, progress_signal, total_size, downloaded_ref, max_retries: int = 5):
     expected_size = 0
     try:
         h = session.head(url, allow_redirects=True, timeout=15)
@@ -60,11 +65,13 @@ def _download_file(session, url, tmp_path, progress_signal, total_size, download
     while attempt < max_retries:
         attempt += 1
         try:
-            current_size = os.path.getsize(tmp_path) if os.path.exists(tmp_path) else 0
+            current_size = os.path.getsize(
+                tmp_path) if os.path.exists(tmp_path) else 0
             headers = {}
             if expected_size and 0 < current_size < expected_size:
                 headers['Range'] = f'bytes={current_size}-'
-            r = session.get(url, stream=True, timeout=60, allow_redirects=True, headers=headers)
+            r = session.get(url, stream=True, timeout=60,
+                            allow_redirects=True, headers=headers)
             r.raise_for_status()
             status_code = getattr(r, 'status_code', 200)
             duplicate_remaining = 0
@@ -99,11 +106,13 @@ def _download_file(session, url, tmp_path, progress_signal, total_size, download
                         downloaded_ref[0] += sz
                     if total_size > 0:
                         try:
-                            progress = int(min(100, max(0, downloaded_ref[0] / total_size * 100)))
+                            progress = int(
+                                min(100, max(0, downloaded_ref[0] / total_size * 100)))
                             progress_signal.emit(progress)
                         except Exception:
                             pass
-            final_size = os.path.getsize(tmp_path) if os.path.exists(tmp_path) else 0
+            final_size = os.path.getsize(
+                tmp_path) if os.path.exists(tmp_path) else 0
             if this_request_expected and written_this_request < this_request_expected:
                 raise IOError('connection dropped during download')
             if expected_size and final_size < expected_size:
@@ -117,13 +126,16 @@ def _download_file(session, url, tmp_path, progress_signal, total_size, download
             except Exception:
                 pass
 
+
 def _extract_archive(tmp_path, target_dir, fname, is_game_installation=False):
     import rarfile
     low = fname.lower()
-    extractors = {'zip': lambda: zipfile.ZipFile(tmp_path, 'r').extractall(target_dir), 'rar': lambda: rarfile.RarFile(tmp_path, 'r').extractall(target_dir)}
+    extractors = {'zip': lambda: zipfile.ZipFile(tmp_path, 'r').extractall(
+        target_dir), 'rar': lambda: rarfile.RarFile(tmp_path, 'r').extractall(target_dir)}
     try:
         import py7zr
-        extractors['7z'] = lambda: py7zr.SevenZipFile(tmp_path, mode='r').extractall(path=target_dir)
+        extractors['7z'] = lambda: py7zr.SevenZipFile(
+            tmp_path, mode='r').extractall(path=target_dir)
     except Exception:
         pass
     for ext, extractor in extractors.items():
@@ -133,7 +145,8 @@ def _extract_archive(tmp_path, target_dir, fname, is_game_installation=False):
             return
     shutil.copy2(tmp_path, os.path.join(target_dir, fname))
 
-def _cleanup_extracted_archive(target_dir: str, is_game_installation: bool=False):
+
+def _cleanup_extracted_archive(target_dir: str, is_game_installation: bool = False):
     if is_game_installation:
         cleanup_dir_pattern = re.compile('^chapter\\d+_(windows|mac)$', re.I)
         for root, dirs, _ in os.walk(target_dir, topdown=False):
@@ -147,8 +160,10 @@ def _cleanup_extracted_archive(target_dir: str, is_game_installation: bool=False
     else:
         return
 
+
 def sanitize_filename(name: str) -> str:
     return re.sub('[\\\\/*?:"<>|]', '', name).strip()
+
 
 def get_unique_mod_dir(mods_dir, mod_name):
     sanitized_name = sanitize_filename(mod_name)
@@ -163,6 +178,7 @@ def get_unique_mod_dir(mods_dir, mod_name):
             return unique_name
         counter += 1
 
+
 def ensure_writable(path: str) -> bool:
     try:
         mode = os.stat(path).st_mode
@@ -170,25 +186,32 @@ def ensure_writable(path: str) -> bool:
         if os.path.isdir(path):
             for root, dirs, files in os.walk(path):
                 for name in dirs + files:
-                    os.chmod(os.path.join(root, name), mode | stat.S_IWUSR | stat.S_IWGRP | stat.S_IWRITE)
+                    os.chmod(os.path.join(root, name), mode |
+                             stat.S_IWUSR | stat.S_IWGRP | stat.S_IWRITE)
         return True
     except (OSError, PermissionError):
         return False
+
 
 def autodetect_path(game_name: str) -> str | None:
     system = platform.system()
     paths = []
     if system == 'Windows':
-        program_files = [os.getenv('ProgramFiles(x86)'), os.getenv('ProgramFiles')]
-        steam_paths = [os.path.join(p, 'Steam', 'steamapps', 'common', game_name) for p in program_files if p]
-        drive_paths = [f'{d}:/{s}/{game_name}' for d in 'CDE' for s in ['Steam/steamapps/common', 'SteamLibrary/steamapps/common']]
+        program_files = [os.getenv('ProgramFiles(x86)'),
+                         os.getenv('ProgramFiles')]
+        steam_paths = [os.path.join(
+            p, 'Steam', 'steamapps', 'common', game_name) for p in program_files if p]
+        drive_paths = [f'{d}:/{s}/{game_name}' for d in 'CDE' for s in [
+            'Steam/steamapps/common', 'SteamLibrary/steamapps/common']]
         paths.extend(steam_paths + drive_paths)
     elif system == 'Linux':
         home = os.path.expanduser('~')
-        paths.extend([f'{home}/.steam/steam/steamapps/common/{game_name}', f'{home}/.local/share/Steam/steamapps/common/{game_name}', f'/run/media/mmcblk0p1/steamapps/common/{game_name}'])
+        paths.extend([f'{home}/.steam/steam/steamapps/common/{game_name}',
+                     f'{home}/.local/share/Steam/steamapps/common/{game_name}', f'/run/media/mmcblk0p1/steamapps/common/{game_name}'])
     elif system == 'Darwin':
         home = os.path.expanduser('~')
-        base_paths = [f'{home}/Library/Application Support/Steam/steamapps/common/{game_name}', f'/Applications/{game_name}']
+        base_paths = [
+            f'{home}/Library/Application Support/Steam/steamapps/common/{game_name}', f'/Applications/{game_name}']
         if game_name.endswith('demo'):
             for parent in filter(os.path.isdir, base_paths):
                 for app_name in [f'{game_name}.app', 'DELTARUNE.app']:
@@ -199,6 +222,7 @@ def autodetect_path(game_name: str) -> str | None:
             app_paths = [f'{p}/{game_name}.app' for p in base_paths]
             paths.extend(filter(os.path.isdir, app_paths))
     return next((p for p in paths if os.path.exists(p)), None)
+
 
 def fix_macos_python_symlink(app_dir: Path) -> None:
     try:
@@ -215,9 +239,11 @@ def fix_macos_python_symlink(app_dir: Path) -> None:
             p.unlink(missing_ok=True)
             os.symlink(target_rel, p)
             st = os.lstat(p)
-            os.chmod(p, stat.S_IMODE(st.st_mode) | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+            os.chmod(p, stat.S_IMODE(st.st_mode) |
+                     stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
     except Exception:
         pass
+
 
 def cleanup_old_updater_files():
     try:
@@ -226,7 +252,8 @@ def cleanup_old_updater_files():
         system = platform.system()
         current_exe_path = os.path.realpath(sys.executable)
         if system == 'Darwin':
-            replace_target = os.path.abspath(os.path.join(os.path.dirname(current_exe_path), '..', '..'))
+            replace_target = os.path.abspath(os.path.join(
+                os.path.dirname(current_exe_path), '..', '..'))
         else:
             replace_target = current_exe_path
         backup_path = f'{replace_target}.old'
@@ -235,10 +262,12 @@ def cleanup_old_updater_files():
     except Exception:
         pass
 
+
 def version_sort_key(version_string: str):
     try:
         s = (version_string or '').strip()
-        m = re.match('^(?P<major>\\d+)(?:\\.(?P<minor>\\d+))?(?:\\.(?P<patch>\\d+))?(?P<suffix>[A-Za-z0-9][A-Za-z0-9._-]*)?$', s)
+        m = re.match(
+            '^(?P<major>\\d+)(?:\\.(?P<minor>\\d+))?(?:\\.(?P<patch>\\d+))?(?P<suffix>[A-Za-z0-9][A-Za-z0-9._-]*)?$', s)
         if m:
             parts = m.groupdict()
             major = int(parts.get('major') or 0)
@@ -263,11 +292,13 @@ def version_sort_key(version_string: str):
     except Exception:
         return (0, 0, 0, 0, '')
 
+
 def game_version_sort_key(version_string: str):
     try:
         match = re.match('^(\\d+)\\.(\\d+)([A-Z]?)$', version_string.strip())
         if match:
-            major, minor, letter = (int(match.group(1)), int(match.group(2)), match.group(3))
+            major, minor, letter = (int(match.group(1)), int(
+                match.group(2)), match.group(3))
             letter_ord = 0 if letter == '' else ord(letter) - ord('A') + 1
             return (major, minor, letter_ord)
         else:
@@ -282,6 +313,7 @@ def game_version_sort_key(version_string: str):
     except Exception:
         return (0, 0, 0)
 
+
 def detect_field_type_by_text(text: str) -> str:
     text_lower = text.lower()
     if any((keyword in text_lower for keyword in ['ссылка', 'путь', 'url', 'link'])):
@@ -292,12 +324,15 @@ def detect_field_type_by_text(text: str) -> str:
         return 'extra_files'
     return 'unknown'
 
+
 def get_file_filter(filter_type: str) -> str:
-    FILTER_EXTENSIONS = {'image_files': '*.jpg *.png *.bmp *.gif', 'background_images': '*.jpg *.png *.bmp *.gif', 'xdelta_files': '*.xdelta', 'data_files': '*.win *.ios', 'archive_files': '*.zip *.rar *.7z', 'extended_archives': '*.zip *.rar *.7z *.tar.gz', 'game_files': '*.exe', 'text_files': '*.txt', 'all_files': '*'}
+    FILTER_EXTENSIONS = {'image_files': '*.jpg *.png *.bmp *.gif', 'background_images': '*.jpg *.png *.bmp *.gif', 'xdelta_files': '*.xdelta', 'data_files': '*.win *.ios',
+                         'archive_files': '*.zip *.rar *.7z', 'extended_archives': '*.zip *.rar *.7z *.tar.gz', 'game_files': '*.exe', 'text_files': '*.txt', 'all_files': '*'}
 
     def tr(key):
         return key.replace('file_descriptions.', '').replace('_', ' ').title()
-    FILTER_DESCRIPTIONS = {'image_files': tr('file_descriptions.image_files'), 'background_images': tr('file_descriptions.background_images'), 'xdelta_files': tr('file_descriptions.xdelta_files'), 'data_files': tr('file_descriptions.data_files'), 'archive_files': tr('file_descriptions.archive_files'), 'extended_archives': tr('file_descriptions.extended_archives'), 'game_files': tr('file_descriptions.game_files'), 'text_files': tr('file_descriptions.text_files'), 'all_files': tr('file_descriptions.all_files')}
+    FILTER_DESCRIPTIONS = {'image_files': tr('file_descriptions.image_files'), 'background_images': tr('file_descriptions.background_images'), 'xdelta_files': tr('file_descriptions.xdelta_files'), 'data_files': tr('file_descriptions.data_files'), 'archive_files': tr(
+        'file_descriptions.archive_files'), 'extended_archives': tr('file_descriptions.extended_archives'), 'game_files': tr('file_descriptions.game_files'), 'text_files': tr('file_descriptions.text_files'), 'all_files': tr('file_descriptions.all_files')}
     extensions = FILTER_EXTENSIONS.get(filter_type, '*')
     description = FILTER_DESCRIPTIONS.get(filter_type, filter_type)
     all_files_desc = FILTER_DESCRIPTIONS.get('all_files', 'All files')

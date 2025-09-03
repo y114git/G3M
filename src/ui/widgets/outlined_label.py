@@ -2,9 +2,10 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QColor, QPainter, QPen, QBrush, QPainterPath
 from PyQt6.QtWidgets import QLabel
 
+
 class OutlinedTextLabel(QLabel):
 
-    def __init__(self, text: str='', parent=None, outline_color=QColor('white'), fill_color=QColor('black'), outline_width: float=1.0):
+    def __init__(self, text: str = '', parent=None, outline_color=QColor('white'), fill_color=QColor('black'), outline_width: float = 1.0):
         super().__init__(text, parent)
         self._outline_color = QColor(outline_color)
         self._fill_color = QColor(fill_color)

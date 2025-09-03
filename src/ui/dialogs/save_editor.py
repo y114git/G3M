@@ -3,6 +3,7 @@ import shutil
 from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QMessageBox, QTableWidget, QTableWidgetItem, QHeaderView
 from localization.manager import tr
 
+
 class SaveEditorDialog(QDialog):
 
     def __init__(self, file_path: str, parent=None):
@@ -19,7 +20,8 @@ class SaveEditorDialog(QDialog):
         lay.addWidget(self.table)
         btn_bar = QHBoxLayout()
         btn_bar.addStretch()
-        buttons = [(tr('ui.cancel_button'), self._on_cancel), (tr('ui.save'), self._on_save)]
+        buttons = [(tr('ui.cancel_button'), self._on_cancel),
+                   (tr('ui.save'), self._on_save)]
         for text, slot in buttons:
             btn = QPushButton(text)
             btn.clicked.connect(slot)
@@ -44,7 +46,8 @@ class SaveEditorDialog(QDialog):
 
     def _on_cancel(self):
         if self._current_data() != self._original:
-            reply = QMessageBox.question(self, tr('dialogs.cancel_changes'), tr('dialogs.changes_will_be_lost'))
+            reply = QMessageBox.question(
+                self, tr('dialogs.cancel_changes'), tr('dialogs.changes_will_be_lost'))
             if reply != QMessageBox.StandardButton.Yes:
                 return
         self.reject()
@@ -52,7 +55,8 @@ class SaveEditorDialog(QDialog):
     def _on_save(self):
         new = self._current_data()
         if new != self._original:
-            reply = QMessageBox.question(self, tr('dialogs.save_changes'), tr('dialogs.original_save_overwrite'))
+            reply = QMessageBox.question(
+                self, tr('dialogs.save_changes'), tr('dialogs.original_save_overwrite'))
             if reply != QMessageBox.StandardButton.Yes:
                 return
         try:
@@ -63,6 +67,8 @@ class SaveEditorDialog(QDialog):
             self.accept()
         except PermissionError:
             path = os.path.dirname(self.file_path)
-            QMessageBox.critical(self, tr('dialogs.access_error'), tr('dialogs.no_write_permissions', path=path))
+            QMessageBox.critical(self, tr('dialogs.access_error'), tr(
+                'dialogs.no_write_permissions', path=path))
         except Exception:
-            QMessageBox.critical(self, tr('dialogs.error'), tr('dialogs.save_file_error'))
+            QMessageBox.critical(self, tr('dialogs.error'),
+                                 tr('dialogs.save_file_error'))
