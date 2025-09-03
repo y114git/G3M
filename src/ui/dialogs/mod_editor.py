@@ -1405,42 +1405,6 @@ class ModEditorDialog(QDialog):
                         return False
         return True
 
-    def _browse_for_local_file(self, path_edit: QLineEdit):
-        is_patch = self.xdelta_checkbox.isChecked()
-        title, filters = (tr('ui.select_patch_file_xdelta'), get_file_filter('xdelta_files')) if is_patch else (tr('ui.select_data_file'), get_file_filter('data_files'))
-        if not (file_path := QFileDialog.getOpenFileName(self, title, '', filters)[0]):
-            return
-        filename = os.path.basename(file_path).lower()
-        try:
-            with open(file_path, 'rb') as f:
-                is_vcd = f.read(3) == b'VCD'
-            if is_patch and (not filename.endswith('.xdelta') or not is_vcd):
-                QMessageBox.warning(self, tr('dialogs.error'), tr('dialogs.invalid_xdelta_file'))
-                return
-            if not is_patch and is_vcd:
-                QMessageBox.warning(self, tr('dialogs.error'), tr('dialogs.data_cannot_be_xdelta'))
-                return
-        except Exception as e:
-            QMessageBox.warning(self, tr('dialogs.error'), tr('dialogs.file_read_error', error=str(e)))
-            return
-        path_edit.setText(file_path)
-
-    def _show_file_info(self, tab_layout, title_text, url, version):
-        frame = QFrame()
-        frame.setFrameStyle(QFrame.Shape.Box)
-        layout = QVBoxLayout(frame)
-        title = QLabel(title_text)
-        title.setStyleSheet('font-weight: bold;')
-        layout.addWidget(title)
-        url_label = QLabel(f'URL: {url}')
-        url_label.setStyleSheet('color: gray; font-size: 10px; word-wrap: true;')
-        url_label.setWordWrap(True)
-        layout.addWidget(url_label)
-        version_label = QLabel(f"{tr('ui.version_colon')} {version}")
-        version_label.setStyleSheet('color: gray; font-size: 10px;')
-        layout.addWidget(version_label)
-        tab_layout.insertWidget(tab_layout.count() - 1, frame)
-
     def _select_local_extra_files(self, tab, tab_layout):
         # Показать диалог выбора типа
         msg = QMessageBox(self)
@@ -1486,11 +1450,6 @@ class ModEditorDialog(QDialog):
             delete_button.clicked.connect(lambda: self._remove_local_extra_files(tab_layout, extra_frame))
             extra_layout.addWidget(delete_button)
             tab_layout.insertWidget(tab_layout.count() - 1, extra_frame)
-
-    def _remove_local_data_file(self, tab, tab_layout, data_frame):
-        data_frame.hide()
-        tab_layout.removeWidget(data_frame)
-        data_frame.deleteLater()
 
     def _remove_local_extra_files(self, tab_layout, extra_frame):
         extra_frame.hide()

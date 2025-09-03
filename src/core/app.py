@@ -46,9 +46,6 @@ from ui.dialogs.mod_editor import ModEditorDialog
 from core.startup import SingleInstanceServer
 _translator = QTranslator()
 _lock_file = None
-_splash_start_time = None
-_player, _audio_output = (None, None)
-_sound_instance = None
 
 
 def get_xdelta_path():
@@ -168,7 +165,6 @@ class DeltaHubApp(QWidget):
         self.initialization_finished.connect(self._handle_pending_install)
         self._legacy_cleanup_done = False
         QTimer.singleShot(1000, self._maybe_run_legacy_cleanup)
-        self._migrate_metadata_if_needed()
         self.initialization_timer = QTimer()
         self.initialization_timer.setSingleShot(True)
         self.initialization_timer.timeout.connect(self._force_finish_initialization)
@@ -211,11 +207,6 @@ class DeltaHubApp(QWidget):
         self.progress_bar.setValue(0)
         self.url_install_thread.start()
 
-    def _handle_thread_prompt(self, title, message, event, result_list):
-        reply = QMessageBox.question(self, title, message, QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-        result_list.append(reply == QMessageBox.StandardButton.Yes)
-        event.set()
-
     def _on_url_install_finished(self, success: bool, message: str):
         self.is_installing = False
         self._set_install_buttons_enabled(True)
@@ -238,10 +229,6 @@ class DeltaHubApp(QWidget):
     def _write_mods_metadata(self, data: Dict):
         with self._mods_metadata_lock:
             self._write_json(self.mods_metadata_path, data)
-
-    def _migrate_metadata_if_needed(self):
-        if self.local_config.get('metadata_migrated_v2'):
-            return
 
     def _session_manifest_path(self):
         return os.path.join(self.config_dir, 'session.lock')
@@ -2306,18 +2293,6 @@ class DeltaHubApp(QWidget):
         if save_state:
             self._save_slots_state()
 
-    def _calculate_optimal_font_size(self, text, max_width, max_height):
-        from PyQt6.QtGui import QFontMetrics
-        for font_size in range(10, 6, -1):
-            font = QFont()
-            font.setPointSize(font_size)
-            font.setBold(True)
-            metrics = QFontMetrics(font)
-            text_rect = metrics.boundingRect(0, 0, max_width, max_height, Qt.TextFlag.TextWordWrap, text)
-            if text_rect.width() <= max_width and text_rect.height() <= max_height:
-                return font_size
-        return 7
-
     def _update_mod_widgets_slot_status(self):
         if not hasattr(self, 'installed_mods_layout') or self.installed_mods_layout is None:
             return
@@ -4342,15 +4317,6 @@ class DeltaHubApp(QWidget):
                         break
         self._refresh_all_slot_status_displays()
 
-    def _has_internet_connection(self) -> bool:
-        try:
-            requests.head('https://clients3.google.com/generate_204', timeout=3)
-            return True
-        except requests.RequestException:
-            return False
-        self._update_action_button_state()
-        self.install_thread.start()
-
     def _on_install_finished(self, success):
         self.progress_bar.setValue(0)
         self.progress_bar.setVisible(False)
@@ -4446,46 +4412,6 @@ class DeltaHubApp(QWidget):
         except (subprocess.CalledProcessError, FileNotFoundError):
             self.update_status_signal.emit(tr('status.permission_change_failed'), UI_COLORS['status_error'])
             return False
-
-    def _get_xdelta_chapters(self, source_dir: str, mod_info) -> List[int]:
-        available_chapters = []
-        if mod_info and getattr(mod_info, 'is_xdelta', False):
-            for chapter_id in range(-1, 5):
-                if chapter_id == -1:
-                    if mod_info.is_valid_for_demo():
-                        available_chapters.append(chapter_id)
-                elif mod_info.get_chapter_data(chapter_id):
-                    available_chapters.append(chapter_id)
-        else:
-            for file in os.listdir(source_dir):
-                if file.lower().endswith('.xdelta'):
-                    available_chapters.append(0)
-                    break
-            for chapter_id in range(-1, 5):
-                if chapter_id == -1:
-                    demo_dir = os.path.join(source_dir, 'demo')
-                    if os.path.isdir(demo_dir):
-                        for file in os.listdir(demo_dir):
-                            if file.lower().endswith('.xdelta'):
-                                available_chapters.append(chapter_id)
-                                break
-                elif chapter_id == 0:
-                    chapter_dir = os.path.join(source_dir, 'chapter_0')
-                    chapter_dir_alt = os.path.join(source_dir, 'menu')
-                    for chk in (chapter_dir, chapter_dir_alt):
-                        if os.path.isdir(chk):
-                            for file in os.listdir(chk):
-                                if file.lower().endswith('.xdelta'):
-                                    available_chapters.append(chapter_id)
-                                    break
-                else:
-                    chapter_dir = os.path.join(source_dir, f'chapter_{chapter_id}')
-                    if os.path.isdir(chapter_dir):
-                        for file in os.listdir(chapter_dir):
-                            if file.lower().endswith('.xdelta'):
-                                available_chapters.append(chapter_id)
-                                break
-        return list(set(available_chapters))
 
     def _prepare_game_files(self, selections: Dict[int, str]) -> bool:
         try:
@@ -5293,9 +5219,6 @@ class DeltaHubApp(QWidget):
         self._refresh_all_slot_status_displays()
 
     def _on_manage_mods_click(self):
-        if not check_internet_connection():
-            QMessageBox.critical(self, tr('errors.connection_error'), tr('errors.internet_required'))
-            return
         self._show_main_mod_management_dialog()
 
     def _on_xdelta_patch_click(self):
@@ -5306,6 +5229,7 @@ class DeltaHubApp(QWidget):
             QMessageBox.critical(self, tr('errors.error'), tr('errors.patching_window_failed', error=str(e)))
 
     def _show_main_mod_management_dialog(self):
+        has_internet = check_internet_connection()
         dialog = QDialog(self)
         dialog.setWindowTitle(tr('ui.mod_management'))
         dialog.setModal(True)
@@ -5321,10 +5245,10 @@ class DeltaHubApp(QWidget):
         buttons_layout.setSpacing(15)
         create_button = QPushButton(tr('ui.create_mod'))
         create_button.setFixedSize(180, 50)
-        create_button.clicked.connect(lambda: self._on_create_mod_choice(dialog))
+        create_button.clicked.connect(lambda: self._on_create_mod_choice(dialog, has_internet))
         edit_button = QPushButton(tr('ui.edit_mod'))
         edit_button.setFixedSize(180, 50)
-        edit_button.clicked.connect(lambda: self._on_edit_mod_choice(dialog))
+        edit_button.clicked.connect(lambda: self._on_edit_mod_choice(dialog, has_internet))
         buttons_layout.addWidget(create_button)
         buttons_layout.addWidget(edit_button)
         layout.addLayout(buttons_layout)
@@ -5334,7 +5258,7 @@ class DeltaHubApp(QWidget):
         layout.addWidget(cancel_button)
         dialog.exec()
 
-    def _on_create_mod_choice(self, parent_dialog):
+    def _on_create_mod_choice(self, parent_dialog, has_internet):
         parent_dialog.accept()
         dialog = QDialog(self)
         dialog.setWindowTitle(tr('ui.create_mod'))
@@ -5352,6 +5276,9 @@ class DeltaHubApp(QWidget):
         public_button = QPushButton(tr('buttons.public'))
         public_button.setFixedSize(130, 40)
         public_button.clicked.connect(lambda: self._create_mod(dialog, public=True))
+        public_button.setEnabled(has_internet)
+        if not has_internet:
+            public_button.setToolTip(tr('errors.internet_required'))
         local_button = QPushButton(tr('buttons.local'))
         local_button.setFixedSize(130, 40)
         local_button.clicked.connect(lambda: self._create_mod(dialog, public=False))
@@ -5363,7 +5290,7 @@ class DeltaHubApp(QWidget):
         layout.addWidget(cancel_button)
         dialog.exec()
 
-    def _on_edit_mod_choice(self, parent_dialog):
+    def _on_edit_mod_choice(self, parent_dialog, has_internet):
         parent_dialog.accept()
         dialog = QDialog(self)
         dialog.setWindowTitle(tr('ui.edit_mod'))
@@ -5381,6 +5308,9 @@ class DeltaHubApp(QWidget):
         public_button = QPushButton(tr('buttons.public_button'))
         public_button.setFixedSize(130, 40)
         public_button.clicked.connect(lambda: self._edit_public_mod(dialog))
+        public_button.setEnabled(has_internet)
+        if not has_internet:
+            public_button.setToolTip(tr('errors.internet_required'))
         local_button = QPushButton(tr('status.local'))
         local_button.setFixedSize(130, 40)
         local_button.clicked.connect(lambda: self._edit_local_mod(dialog))
