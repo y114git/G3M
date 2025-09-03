@@ -3,7 +3,6 @@ import platform
 import re
 import time
 from pathlib import Path
-
 import requests
 
 
@@ -38,13 +37,11 @@ def download_file(session, url, tmp_path, progress_signal, total_size, downloade
     while attempt < max_retries:
         attempt += 1
         try:
-            current_size = os.path.getsize(
-                tmp_path) if os.path.exists(tmp_path) else 0
+            current_size = os.path.getsize(tmp_path) if os.path.exists(tmp_path) else 0
             headers = {}
             if expected_size and 0 < current_size < expected_size:
                 headers['Range'] = f'bytes={current_size}-'
-            r = session.get(url, stream=True, timeout=60,
-                            allow_redirects=True, headers=headers)
+            r = session.get(url, stream=True, timeout=60, allow_redirects=True, headers=headers)
             r.raise_for_status()
             status_code = getattr(r, 'status_code', 200)
             duplicate_remaining = 0
@@ -79,13 +76,11 @@ def download_file(session, url, tmp_path, progress_signal, total_size, downloade
                         downloaded_ref[0] += sz
                     if total_size > 0:
                         try:
-                            progress = int(
-                                min(100, max(0, downloaded_ref[0] / total_size * 100)))
+                            progress = int(min(100, max(0, downloaded_ref[0] / total_size * 100)))
                             progress_signal.emit(progress)
                         except Exception:
                             pass
-            final_size = os.path.getsize(
-                tmp_path) if os.path.exists(tmp_path) else 0
+            final_size = os.path.getsize(tmp_path) if os.path.exists(tmp_path) else 0
             if this_request_expected and written_this_request < this_request_expected:
                 raise IOError('connection dropped during download')
             if expected_size and final_size < expected_size:

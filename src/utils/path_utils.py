@@ -44,8 +44,7 @@ def resource_path(relative_path: str) -> str:
     if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
         base_path = os.path.join(getattr(sys, '_MEIPASS'), 'src')
     else:
-        base_path = os.path.abspath(
-            os.path.join(os.path.dirname(__file__), '..'))
+        base_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
     return os.path.join(base_path, relative_path)
 
 
@@ -64,7 +63,6 @@ def get_xdelta_path():
                 try:
                     os.chmod(xdelta_path, 493)
                 except Exception as e:
-                    logging.warning(
-                        f'Could not set executable permission on {xdelta_path}: {e}')
+                    logging.warning(f'Could not set executable permission on {xdelta_path}: {e}')
             return os.path.normpath(xdelta_path)
     return None

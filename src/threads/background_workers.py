@@ -6,12 +6,10 @@ import tempfile
 import threading
 import time
 import zipfile
-
 import py7zr
 import requests
 from PyQt6.QtCore import QObject, QThread, pyqtSignal
 from PyQt6.QtGui import QImage
-
 from config.constants import BROWSER_HEADERS, CLOUD_FUNCTIONS_BASE_URL, UI_COLORS
 from localization.manager import tr
 from utils.file_utils import get_unique_mod_dir
@@ -72,14 +70,12 @@ class FetchChangelogThread(QThread):
         try:
             if self.source.startswith(('http://', 'https://')):
                 params = {'ts': int(time.time())}
-                headers = {'Cache-Control': 'no-cache',
-                           'Pragma': 'no-cache', 'User-Agent': 'DELTAHUB/1.0'}
+                headers = {'Cache-Control': 'no-cache', 'Pragma': 'no-cache', 'User-Agent': 'DELTAHUB/1.0'}
                 with requests.get(self.source, params=params, headers=headers, timeout=10) as resp:
                     resp.raise_for_status()
                     text = resp.text
             elif os.path.exists(self.source) or os.path.exists(self.source.replace('.md', '.txt')):
-                path_to_read = self.source if os.path.exists(
-                    self.source) else self.source.replace('.md', '.txt')
+                path_to_read = self.source if os.path.exists(self.source) else self.source.replace('.md', '.txt')
                 with open(path_to_read, 'r', encoding='utf-8', errors='replace') as f:
                     text = f.read()
             else:
@@ -101,45 +97,35 @@ class FullInstallThread(QThread):
         self.target_dir = target_dir
 
     def run(self):
-        full_install_url = self.main_window.global_settings.get(
-            'full_install_url')
+        full_install_url = self.main_window.global_settings.get('full_install_url')
         if not full_install_url:
-            self.status.emit(tr('errors.files_not_found'),
-                             UI_COLORS['status_error'])
+            self.status.emit(tr('errors.files_not_found'), UI_COLORS['status_error'])
             self.finished.emit(False, self.target_dir)
             return
-        self.status.emit(tr('status.installing_game_files'),
-                         UI_COLORS['status_warning'])
+        self.status.emit(tr('status.installing_game_files'), UI_COLORS['status_warning'])
         try:
             from requests.adapters import HTTPAdapter
             from urllib3.util.retry import Retry
             session = requests.Session()
             session.headers.update(BROWSER_HEADERS)
-            retry_strategy = Retry(total=3, backoff_factor=0.3, status_forcelist=[
-                                   429, 500, 502, 503, 504])
-            adapter = HTTPAdapter(max_retries=retry_strategy,
-                                  pool_connections=1, pool_maxsize=10)
+            retry_strategy = Retry(total=3, backoff_factor=0.3, status_forcelist=[429, 500, 502, 503, 504])
+            adapter = HTTPAdapter(max_retries=retry_strategy, pool_connections=1, pool_maxsize=10)
             session.mount('http://', adapter)
             session.mount('https://', adapter)
-            resp = session.head(
-                full_install_url, allow_redirects=True, timeout=15)
+            resp = session.head(full_install_url, allow_redirects=True, timeout=15)
             total_size = int(resp.headers.get('content-length', 0))
             downloaded_ref = [0]
             from utils.file_utils import download_and_extract_archive
-            download_and_extract_archive(full_install_url, self.target_dir, self.progress,
-                                         total_size, downloaded_ref, session, is_game_installation=True)
-            self.status.emit(
-                tr('status.demo_installation_complete'), UI_COLORS['status_success'])
+            download_and_extract_archive(full_install_url, self.target_dir, self.progress, total_size, downloaded_ref, session, is_game_installation=True)
+            self.status.emit(tr('status.demo_installation_complete'), UI_COLORS['status_success'])
             self.finished.emit(True, self.target_dir)
         except Exception as e:
-            self.status.emit(tr('errors.full_installation_error').format(
-                str(e)), UI_COLORS['status_error'])
+            self.status.emit(tr('errors.full_installation_error').format(str(e)), UI_COLORS['status_error'])
             self.finished.emit(False, self.target_dir)
 
 
 class InstallModsThread(QThread):
-    progress, status, finished = (pyqtSignal(
-        int), pyqtSignal(str, str), pyqtSignal(bool))
+    progress, status, finished = (pyqtSignal(int), pyqtSignal(str, str), pyqtSignal(bool))
 
     def __init__(self, main_window, install_tasks, was_installed_before: bool):
         super().__init__(main_window)
@@ -152,15 +138,13 @@ class InstallModsThread(QThread):
 
     def cancel(self):
         self._cancelled = True
-        self.status.emit(tr('status.operation_cancelled'),
-                         UI_COLORS['status_error'])
+        self.status.emit(tr('status.operation_cancelled'), UI_COLORS['status_error'])
 
     def _find_existing_mod_folder(self, mod_key: str) -> str:
         if not os.path.exists(self.main_window.mods_dir):
             return ''
         for folder_name in os.listdir(self.main_window.mods_dir):
-            config_path = os.path.join(
-                self.main_window.mods_dir, folder_name, 'config.json')
+            config_path = os.path.join(self.main_window.mods_dir, folder_name, 'config.json')
             if os.path.exists(config_path):
                 try:
                     config_data = self.main_window._read_json(config_path)
@@ -189,27 +173,21 @@ class InstallModsThread(QThread):
     def _should_update_component(self, mod, chapter_id: int, existing_folder: str) -> dict:
         if not existing_folder:
             return {}
-        config_path = os.path.join(
-            self.main_window.mods_dir, existing_folder, 'config.json')
+        config_path = os.path.join(self.main_window.mods_dir, existing_folder, 'config.json')
         if not os.path.exists(config_path):
             return {}
         try:
             config_data = self.main_window._read_json(config_path)
-            local_versions = config_data.get('chapters', {}).get(
-                str(chapter_id), {}).get('versions', {}) or {}
-            remote_versions = self._collect_remote_versions_for_chapter(
-                mod, chapter_id)
+            local_versions = config_data.get('chapters', {}).get(str(chapter_id), {}).get('versions', {}) or {}
+            remote_versions = self._collect_remote_versions_for_chapter(mod, chapter_id)
             components_to_update: dict[str, dict] = {}
-            chapter_data = mod.get_chapter_data(
-                chapter_id) if chapter_id != -1 else None
+            chapter_data = mod.get_chapter_data(chapter_id) if chapter_id != -1 else None
             if chapter_data and chapter_data.data_file_url and remote_versions.get('data'):
                 is_xdelta_mod = getattr(mod, 'is_xdelta', False)
                 local_is_xdelta = False
                 try:
-                    mod_path = os.path.join(
-                        self.main_window.mods_dir, existing_folder)
-                    local_is_xdelta = any((f.lower().endswith('.xdelta') for f in os.listdir(
-                        mod_path) if os.path.isfile(os.path.join(mod_path, f))))
+                    mod_path = os.path.join(self.main_window.mods_dir, existing_folder)
+                    local_is_xdelta = any((f.lower().endswith('.xdelta') for f in os.listdir(mod_path) if os.path.isfile(os.path.join(mod_path, f))))
                 except Exception:
                     local_is_xdelta = False
                 type_changed = is_xdelta_mod != local_is_xdelta
@@ -217,15 +195,13 @@ class InstallModsThread(QThread):
                 remote_data_v = remote_versions.get('data')
                 from utils.file_utils import version_sort_key
                 if remote_data_v and (type_changed or version_sort_key(remote_data_v) > version_sort_key(local_data_v or '0.0.0')):
-                    components_to_update['data'] = {'url': chapter_data.data_file_url, 'local_version': local_data_v,
-                                                    'remote_version': remote_data_v, 'is_xdelta': is_xdelta_mod, 'type_changed': type_changed}
+                    components_to_update['data'] = {'url': chapter_data.data_file_url, 'local_version': local_data_v, 'remote_version': remote_data_v, 'is_xdelta': is_xdelta_mod, 'type_changed': type_changed}
             if chapter_data:
                 for extra_file in chapter_data.extra_files:
                     rv = remote_versions.get(extra_file.key)
                     lv = local_versions.get(extra_file.key)
                     if rv and version_sort_key(rv) > version_sort_key(lv or '0.0.0'):
-                        components_to_update[extra_file.key] = {
-                            'url': extra_file.url, 'local_version': lv, 'remote_version': rv}
+                        components_to_update[extra_file.key] = {'url': extra_file.url, 'local_version': lv, 'remote_version': rv}
                 remote_extra_keys = {ef.key for ef in chapter_data.extra_files}
                 for missing_key in [k for k in local_versions.keys() if k != 'data' and k not in remote_extra_keys]:
                     components_to_update[missing_key] = {'delete': True}
@@ -262,8 +238,7 @@ class InstallModsThread(QThread):
         os.makedirs(target_dir, exist_ok=True)
         target_path = os.path.join(target_dir, filename)
         try:
-            download_file(session, url, target_path,
-                          progress_signal, total_size, downloaded_ref)
+            download_file(session, url, target_path, progress_signal, total_size, downloaded_ref)
         except Exception as e:
             if os.path.exists(target_path):
                 try:
@@ -289,8 +264,7 @@ class InstallModsThread(QThread):
         os.makedirs(target_dir, exist_ok=True)
         target_path = os.path.join(target_dir, filename)
         try:
-            download_file(session, url, target_path,
-                          progress_signal, total_size, downloaded_ref)
+            download_file(session, url, target_path, progress_signal, total_size, downloaded_ref)
         except Exception as e:
             if os.path.exists(target_path):
                 try:
@@ -311,35 +285,26 @@ class InstallModsThread(QThread):
                     if existing_folder:
                         mod_folders[mod.key] = existing_folder
                     else:
-                        mod_folders[mod.key] = get_unique_mod_dir(
-                            self.main_window.mods_dir, mod.name)
+                        mod_folders[mod.key] = get_unique_mod_dir(self.main_window.mods_dir, mod.name)
                 existing_folder = mod_folders.get(mod.key, '')
-                chapter_data = mod.get_chapter_data(
-                    chapter_id) if chapter_id != -1 else None
+                chapter_data = mod.get_chapter_data(chapter_id) if chapter_id != -1 else None
                 if chapter_id == -1 and mod.is_valid_for_demo():
-                    tasks.append({'mod': mod, 'url': mod.demo_url,
-                                 'chapter_id': -1, 'component': 'demo'})
+                    tasks.append({'mod': mod, 'url': mod.demo_url, 'chapter_id': -1, 'component': 'demo'})
                 elif chapter_data:
-                    components_to_update = self._should_update_component(
-                        mod, chapter_id, existing_folder)
+                    components_to_update = self._should_update_component(mod, chapter_id, existing_folder)
                     if not components_to_update:
                         if chapter_data.data_file_url:
                             is_xdelta_mod = getattr(mod, 'is_xdelta', False)
-                            tasks.append({'mod': mod, 'url': chapter_data.data_file_url,
-                                         'chapter_id': chapter_id, 'component': 'data', 'is_xdelta': is_xdelta_mod})
+                            tasks.append({'mod': mod, 'url': chapter_data.data_file_url, 'chapter_id': chapter_id, 'component': 'data', 'is_xdelta': is_xdelta_mod})
                         for extra_file in chapter_data.extra_files:
-                            tasks.append(
-                                {'mod': mod, 'url': extra_file.url, 'chapter_id': chapter_id, 'component': extra_file.key})
+                            tasks.append({'mod': mod, 'url': extra_file.url, 'chapter_id': chapter_id, 'component': extra_file.key})
                     else:
                         for component, info in components_to_update.items():
                             if info.get('delete'):
-                                tasks.append(
-                                    {'mod': mod, 'chapter_id': chapter_id, 'component': component, 'delete': True})
+                                tasks.append({'mod': mod, 'chapter_id': chapter_id, 'component': component, 'delete': True})
                                 continue
-                            is_xdelta = info.get(
-                                'is_xdelta', False) if component == 'data' else False
-                            t = {'mod': mod, 'url': info['url'], 'chapter_id': chapter_id,
-                                 'component': component, 'is_xdelta': is_xdelta}
+                            is_xdelta = info.get('is_xdelta', False) if component == 'data' else False
+                            t = {'mod': mod, 'url': info['url'], 'chapter_id': chapter_id, 'component': component, 'is_xdelta': is_xdelta}
                             if component == 'data' and info.get('type_changed'):
                                 t['type_changed'] = True
                             tasks.append(t)
@@ -350,10 +315,8 @@ class InstallModsThread(QThread):
             from urllib3.util.retry import Retry
             session = requests.Session()
             session.headers.update(BROWSER_HEADERS)
-            retry_strategy = Retry(total=3, backoff_factor=0.3, status_forcelist=[
-                                   429, 500, 502, 503, 504])
-            adapter = HTTPAdapter(max_retries=retry_strategy,
-                                  pool_connections=1, pool_maxsize=10)
+            retry_strategy = Retry(total=3, backoff_factor=0.3, status_forcelist=[429, 500, 502, 503, 504])
+            adapter = HTTPAdapter(max_retries=retry_strategy, pool_connections=1, pool_maxsize=10)
             session.mount('http://', adapter)
             session.mount('https://', adapter)
             download_tasks = [t for t in tasks if t.get('url')]
@@ -372,8 +335,7 @@ class InstallModsThread(QThread):
             if self._cancelled:
                 self.finished.emit(False)
                 return
-            self.status.emit(tr('status.preparing_download'),
-                             UI_COLORS['status_warning'])
+            self.status.emit(tr('status.preparing_download'), UI_COLORS['status_warning'])
             if self._cancelled:
                 self.finished.emit(False)
                 return
@@ -414,27 +376,22 @@ class InstallModsThread(QThread):
                 file_size_bytes = file_sizes_cache.get(url, 0)
                 if file_size_bytes > 0:
                     size_mb = file_size_bytes / (1024 * 1024)
-                    file_size_mb = tr(
-                        'status.unknown_size') if size_mb < 0.05 else f'{size_mb:.1f} MB'
+                    file_size_mb = tr('status.unknown_size') if size_mb < 0.05 else f'{size_mb:.1f} MB'
                 status_text = f'{mod.name} {current_index}/{total_items} ({file_size_mb})'
                 self.status.emit(status_text, UI_COLORS['status_warning'])
                 self._installed_dirs.append(cache_dir)
                 chapter_data = mod.get_chapter_data(chapter_id)
-                is_data_file = chapter_data and url and (
-                    chapter_data.data_file_url == url)
+                is_data_file = chapter_data and url and (chapter_data.data_file_url == url)
                 is_xdelta = task.get('is_xdelta', False)
                 try:
                     if is_data_file:
                         if is_xdelta:
-                            self._download_xdelta_file(
-                                url, cache_dir, self.progress, total_bytes, downloaded_ref, session)
+                            self._download_xdelta_file(url, cache_dir, self.progress, total_bytes, downloaded_ref, session)
                         else:
                             from utils.file_utils import download_and_extract_archive
-                            download_and_extract_archive(
-                                url, cache_dir, self.progress, total_bytes, downloaded_ref, session)
+                            download_and_extract_archive(url, cache_dir, self.progress, total_bytes, downloaded_ref, session)
                     else:
-                        self._download_archive_file(
-                            url, cache_dir, self.progress, total_bytes, downloaded_ref, session)
+                        self._download_archive_file(url, cache_dir, self.progress, total_bytes, downloaded_ref, session)
                 except Exception:
                     raise
                 if mod.key not in installed_mods:
@@ -442,18 +399,15 @@ class InstallModsThread(QThread):
                 installed_mods[mod.key]['chapters'].add(chapter_id)
                 if url and total_bytes == 0:
                     done_files += 1
-                    progress = int(
-                        done_files / max(1, len(download_tasks)) * 100)
+                    progress = int(done_files / max(1, len(download_tasks)) * 100)
                     self.progress.emit(progress)
             for mod_key, mod_data in installed_mods.items():
                 mod = mod_data['mod']
                 mod_folder_name = mod_folders[mod.key]
-                mod_dir = os.path.join(
-                    self.main_window.mods_dir, mod_folder_name)
+                mod_dir = os.path.join(self.main_window.mods_dir, mod_folder_name)
                 files_data = {}
                 for chapter_id in mod_data['chapters']:
-                    chapter_data = mod.get_chapter_data(
-                        chapter_id) if chapter_id != -1 else None
+                    chapter_data = mod.get_chapter_data(chapter_id) if chapter_id != -1 else None
                     versions_dict = {}
                     file_info = {}
                     if chapter_data:
@@ -474,8 +428,7 @@ class InstallModsThread(QThread):
                             file_info['versions'] = versions_dict
                     elif chapter_id == -1 and mod.is_valid_for_demo():
                         file_info['data_file_version'] = mod.demo_version or '1.0.0'
-                        file_info['versions'] = {
-                            'demo': mod.demo_version or '1.0.0'}
+                        file_info['versions'] = {'demo': mod.demo_version or '1.0.0'}
                     if file_info:
                         if chapter_id == -1:
                             file_key = 'demo'
@@ -484,14 +437,12 @@ class InstallModsThread(QThread):
                         else:
                             file_key = str(chapter_id)
                         files_data[file_key] = file_info
-                config_data = {'is_local_mod': False, 'mod_key': mod.key, 'name': mod.name, 'author': mod.author,
-                               'version': mod.version, 'game_version': mod.game_version, 'modgame': mod.modgame, 'files': files_data}
+                config_data = {'is_local_mod': False, 'mod_key': mod.key, 'name': mod.name, 'author': mod.author, 'version': mod.version, 'game_version': mod.game_version, 'modgame': mod.modgame, 'files': files_data}
                 config_path = os.path.join(mod_dir, 'config.json')
                 self.main_window._write_json(config_path, config_data)
             metadata = self.main_window._read_mods_metadata()
             for mod_key in installed_mods.keys():
-                metadata[mod_key] = {'installed_date': time.strftime(
-                    '%Y-%m-%d %H:%M:%S'), 'is_available_on_server': True}
+                metadata[mod_key] = {'installed_date': time.strftime('%Y-%m-%d %H:%M:%S'), 'is_available_on_server': True}
             self.main_window._write_mods_metadata(metadata)
             self._increment_downloads_for_installed_mods(installed_mods.keys())
             try:
@@ -511,30 +462,24 @@ class InstallModsThread(QThread):
                                     target_root = os.path.join(dst, rel)
                                     os.makedirs(target_root, exist_ok=True)
                                     for d in dirs:
-                                        os.makedirs(os.path.join(
-                                            target_root, d), exist_ok=True)
+                                        os.makedirs(os.path.join(target_root, d), exist_ok=True)
                                     for f in files:
-                                        shutil.copy2(os.path.join(
-                                            root, f), os.path.join(target_root, f))
+                                        shutil.copy2(os.path.join(root, f), os.path.join(target_root, f))
                     else:
                         shutil.copy2(src, dst)
             except Exception:
                 pass
-            self.status.emit(tr('status.installation_complete'),
-                             UI_COLORS['status_success'])
+            self.status.emit(tr('status.installation_complete'), UI_COLORS['status_success'])
             self.finished.emit(True)
         except PermissionError as e:
             path = e.filename if e.filename else self.main_window.mods_dir
-            self.status.emit(
-                tr('errors.permission_error_install'), UI_COLORS['status_error'])
+            self.status.emit(tr('errors.permission_error_install'), UI_COLORS['status_error'])
             from PyQt6.QtWidgets import QMessageBox
             error_message = tr('dialogs.permission_error_message').format(path)
-            QMessageBox.critical(self.main_window, tr(
-                'dialogs.access_error'), error_message)
+            QMessageBox.critical(self.main_window, tr('dialogs.access_error'), error_message)
             self.finished.emit(False)
         except Exception as e:
-            self.status.emit(tr('errors.installation_error').format(
-                str(e)), UI_COLORS['status_error'])
+            self.status.emit(tr('errors.installation_error').format(str(e)), UI_COLORS['status_error'])
             self.finished.emit(False)
         finally:
             if not self._cancelled:
@@ -565,37 +510,25 @@ class UrlInstallThread(QThread):
             content = self.url[len('deltahub://'):].split(',')[0].strip().rstrip('/')
             if not content.startswith(('http://', 'https://')):
                 content = content.replace('https//', 'https://').replace('http//', 'http://')
-
             download_url = content
             with tempfile.TemporaryDirectory(prefix='dh-url-install-') as temp_dir:
                 self.status.emit(tr('status.downloading_from_external'), UI_COLORS['status_warning'])
                 archive_path = self._download_archive(download_url, temp_dir)
-
-                # Unpack and inspect
                 with tempfile.TemporaryDirectory(prefix='dh-url-unpack-') as unpack_dir:
                     shutil.unpack_archive(archive_path, unpack_dir)
-
-                    # Check if the archive contains a single sub-directory
                     content_path = unpack_dir
                     unpacked_items = os.listdir(unpack_dir)
                     if len(unpacked_items) == 1 and os.path.isdir(os.path.join(unpack_dir, unpacked_items[0])):
                         content_path = os.path.join(unpack_dir, unpacked_items[0])
-
                     files_in_root = os.listdir(content_path)
-
-                    # Сценарий 1: Архив-редирект
                     if 'config.json' in files_in_root and len(files_in_root) == 1:
                         with open(os.path.join(content_path, 'config.json'), 'r', encoding='utf-8') as f:
                             redirect_config = json.load(f)
-
                         if 'dm_url' in redirect_config:
                             self.status.emit(tr('status.deltamod_redirect_found'), UI_COLORS['status_info'])
                             self.progress.emit(0)
-                            # Рекурсивно обрабатываем новую ссылку, но уже без редиректа
                             self._process_deltamod_archive(redirect_config['dm_url'])
                             return
-
-                    # Сценарий 2: Прямой архив Deltamod
                     if '_deltamodInfo.json' in files_in_root:
                         self.status.emit(tr('status.deltamod_archive_detected_url'), UI_COLORS['status_info'])
                         converter = DeltamodConverter(content_path, self.main_window.mods_dir)
@@ -606,14 +539,11 @@ class UrlInstallThread(QThread):
                         else:
                             raise ValueError(tr('errors.deltamod_conversion_failed_url'))
                         return
-
-                    # Если дошли сюда, формат не распознан
                     raise ValueError(tr('errors.unsupported_mod_format_url'))
         except Exception as e:
             self.finished.emit(False, str(e))
 
     def _process_deltamod_archive(self, url: str):
-        """Вспомогательный метод для скачивания, распаковки и конвертации архива Deltamod."""
         with tempfile.TemporaryDirectory(prefix='dh-redirect-dl-') as temp_dir:
             archive_path = self._download_archive(url, temp_dir)
             with tempfile.TemporaryDirectory(prefix='dh-redirect-unpack-') as unpack_dir:
@@ -622,7 +552,6 @@ class UrlInstallThread(QThread):
                 unpacked_items = os.listdir(unpack_dir)
                 if len(unpacked_items) == 1 and os.path.isdir(os.path.join(unpack_dir, unpacked_items[0])):
                     content_path = os.path.join(unpack_dir, unpacked_items[0])
-
                 if '_deltamodInfo.json' in os.listdir(content_path):
                     converter = DeltamodConverter(content_path, self.main_window.mods_dir)
                     new_mod_path = converter.convert()
@@ -646,11 +575,10 @@ class UrlInstallThread(QThread):
         filename = unquote(os.path.basename(parsed_url.path))
         if not filename:
             filename = 'mod.zip'
-        if not any(filename.lower().endswith(ext) for ext in ['.zip', '.rar', '.7z']):
+        if not any((filename.lower().endswith(ext) for ext in ['.zip', '.rar', '.7z'])):
             filename = 'mod.zip'
         archive_path = os.path.join(temp_dir, filename)
-        response = requests.get(
-            url, stream=True, timeout=30, headers=BROWSER_HEADERS)
+        response = requests.get(url, stream=True, timeout=30, headers=BROWSER_HEADERS)
         response.raise_for_status()
         total_size = int(response.headers.get('content-length', 0))
         downloaded_size = 0
@@ -679,11 +607,9 @@ class UrlInstallThread(QThread):
             elif archive_path_lower.endswith('.7z'):
                 with py7zr.SevenZipFile(archive_path, mode='r') as zf:
                     if 'config.json' in zf.getnames():
-                        extract_dir = os.path.join(
-                            os.path.dirname(archive_path), '7z_config')
+                        extract_dir = os.path.join(os.path.dirname(archive_path), '7z_config')
                         zf.extract(path=extract_dir, targets=['config.json'])
-                        config_file_path = os.path.join(
-                            extract_dir, 'config.json')
+                        config_file_path = os.path.join(extract_dir, 'config.json')
                         if os.path.exists(config_file_path):
                             with open(config_file_path, 'rb') as f:
                                 config_content = f.read()
@@ -739,10 +665,8 @@ class FetchHelpContentThread(QThread):
                 content = response.text
                 self.finished.emit(content)
             else:
-                error_msg = tr('errors.load_error_http',
-                               code=response.status_code)
+                error_msg = tr('errors.load_error_http', code=response.status_code)
                 self.finished.emit(f'<i>{error_msg}</i>')
         except Exception as e:
             print(f'Error loading help content: {e}')
-            self.finished.emit(
-                f"<i>{tr('dialogs.help_content_load_failed')}</i>")
+            self.finished.emit(f"<i>{tr('dialogs.help_content_load_failed')}</i>")

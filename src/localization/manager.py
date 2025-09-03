@@ -31,8 +31,7 @@ class LocalizationManager:
                     else:
                         shutil.copy2(internal_path, external_path)
                 except Exception as e:
-                    print(
-                        f"Could not copy internal file '{filename}' to external directory: {e}")
+                    print(f"Could not copy internal file '{filename}' to external directory: {e}")
 
     def _load_available_languages(self):
         self.available_languages = self._scan_lang_dir(self.external_lang_dir)
@@ -54,11 +53,9 @@ class LocalizationManager:
                     with open(lang_path, 'r', encoding='utf-8') as f:
                         data = json.load(f)
                     metadata = data.get('metadata', {})
-                    langs[lang_code] = {'name': metadata.get('language_name', lang_code.upper()), 'qt_translation': metadata.get(
-                        'qt_translation', f'qtbase_{lang_code}'), 'font': metadata.get('font'), 'path': lang_path}
+                    langs[lang_code] = {'name': metadata.get('language_name', lang_code.upper()), 'qt_translation': metadata.get('qt_translation', f'qtbase_{lang_code}'), 'font': metadata.get('font'), 'path': lang_path}
                 except (json.JSONDecodeError, IOError) as e:
-                    print(
-                        f'Error loading or parsing language file {filename}: {e}')
+                    print(f'Error loading or parsing language file {filename}: {e}')
         return langs
 
     def get_available_languages(self) -> Dict[str, str]:
@@ -89,8 +86,7 @@ class LocalizationManager:
     def load_language(self, language_code: str) -> bool:
         lang_info = self.available_languages.get(language_code)
         if not lang_info:
-            internal_path = os.path.join(
-                self.internal_lang_dir, f'lang_{language_code}.json')
+            internal_path = os.path.join(self.internal_lang_dir, f'lang_{language_code}.json')
             if not os.path.exists(internal_path):
                 return False
             lang_info = {'path': internal_path}
@@ -124,8 +120,7 @@ class LocalizationManager:
     def _process_escape_sequences(self, text: str) -> str:
         if not text:
             return text
-        escape_sequences = {'\\n': '\n', '\\t': '\t',
-                            '\\r': '\r', '\\"': '"', "\\'": "'", '\\\\': '\\'}
+        escape_sequences = {'\\n': '\n', '\\t': '\t', '\\r': '\r', '\\"': '"', "\\'": "'", '\\\\': '\\'}
         result = text
         for escape_seq, replacement in escape_sequences.items():
             result = result.replace(escape_seq, replacement)
@@ -143,11 +138,9 @@ localization_manager = LocalizationManager()
 
 def _fallback_tr(key: str, **kwargs) -> str:
     try:
-        en_path = os.path.join(
-            localization_manager.external_lang_dir, 'lang_en.json')
+        en_path = os.path.join(localization_manager.external_lang_dir, 'lang_en.json')
         if not os.path.exists(en_path):
-            en_path = os.path.join(
-                localization_manager.internal_lang_dir, 'lang_en.json')
+            en_path = os.path.join(localization_manager.internal_lang_dir, 'lang_en.json')
         with open(en_path, 'r', encoding='utf-8') as f:
             en_translations = json.load(f)
         keys = key.split('.')

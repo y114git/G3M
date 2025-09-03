@@ -93,8 +93,7 @@ class ModPlaqueWidget(BaseModWidget):
         updated_label_value.setObjectName('secondaryText')
         updated_container_layout.addWidget(updated_label_title)
         updated_container_layout.addWidget(updated_label_value)
-        containers = [self.author_container, self.game_version_container,
-                      updated_container, created_container]
+        containers = [self.author_container, self.game_version_container, updated_container, created_container]
         for i, container in enumerate(containers):
             self.metadata_layout.addWidget(container)
             if i < len(containers) - 1:
@@ -109,8 +108,7 @@ class ModPlaqueWidget(BaseModWidget):
         actions_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.details_button = QPushButton(tr('ui.details_button'))
         self.details_button.setObjectName('plaqueButton')
-        self.details_button.clicked.connect(
-            lambda: self.details_requested.emit(self.mod_data))
+        self.details_button.clicked.connect(lambda: self.details_requested.emit(self.mod_data))
         self.install_button = QPushButton(tr('ui.install_button'))
         self.install_button.setObjectName('plaqueButtonInstall')
         self.install_button.clicked.connect(self._on_install_button_clicked)
@@ -121,8 +119,7 @@ class ModPlaqueWidget(BaseModWidget):
 
     def _check_installation_status(self):
         if self.parent_app and hasattr(self.parent_app, '_is_mod_installed'):
-            self.is_installed = self.parent_app._is_mod_installed(
-                self.mod_data.key)
+            self.is_installed = self.parent_app._is_mod_installed(self.mod_data.key)
             self._update_install_button()
 
     def _update_install_button(self):

@@ -8,8 +8,7 @@ class ScreenshotsCarousel(QWidget):
 
     def __init__(self, urls: list[str], parent=None):
         super().__init__(parent)
-        self.urls = [u for u in urls if isinstance(
-            u, str) and u.startswith(('http://', 'https://'))][:10]
+        self.urls = [u for u in urls if isinstance(u, str) and u.startswith(('http://', 'https://'))][:10]
         self.index = 0
         self._images = [None] * len(self.urls)
         self._workers = {}
@@ -47,19 +46,16 @@ class ScreenshotsCarousel(QWidget):
         fixed_w, fixed_h = (500, 280)
         self.setMaximumWidth(fixed_w)
         self.image_label.setFixedSize(fixed_w, fixed_h)
-        self.image_label.setSizePolicy(
-            QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        self.image_label.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.image_label.setScaledContents(False)
-        self.image_label.setStyleSheet(
-            'background-color: black; border: 1px solid #444;')
+        self.image_label.setStyleSheet('background-color: black; border: 1px solid #444;')
         self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         nav_layout = QHBoxLayout()
         self.prev_btn = QPushButton('⮜')
         self.next_btn = QPushButton('⮞')
         self.prev_btn.setObjectName('carouselPrevButton')
         self.next_btn.setObjectName('carouselNextButton')
-        self.setStyleSheet(
-            '\n            QPushButton#carouselPrevButton, QPushButton#carouselNextButton {\n                min-width: 34px; max-width: 34px;\n                min-height: 28px; max-height: 28px;\n                padding: 0px; margin: 0px;\n                font-size: 12px;\n            }\n            ')
+        self.setStyleSheet('\n            QPushButton#carouselPrevButton, QPushButton#carouselNextButton {\n                min-width: 34px; max-width: 34px;\n                min-height: 28px; max-height: 28px;\n                padding: 0px; margin: 0px;\n                font-size: 12px;\n            }\n            ')
         self.prev_btn.clicked.connect(self._prev)
         self.next_btn.clicked.connect(self._next)
         nav_layout.addStretch()
@@ -150,8 +146,7 @@ class ScreenshotsCarousel(QWidget):
                             if _IMG_CACHE is not None and _IMG_CACHE_LOCK is not None:
                                 with _IMG_CACHE_LOCK:
                                     if self.url in _IMG_CACHE:
-                                        self.loaded.emit(
-                                            self.idx, _IMG_CACHE[self.url])
+                                        self.loaded.emit(self.idx, _IMG_CACHE[self.url])
                                         return
                             import requests
                             if _NET_SEM:
@@ -208,8 +203,7 @@ class ScreenshotsCarousel(QWidget):
                         try:
                             from PyQt6 import sip as _sip
                             if hasattr(self, 'image_label') and (not _sip.isdeleted(self.image_label)):
-                                self.image_label.setText(
-                                    tr('errors.file_not_available'))
+                                self.image_label.setText(tr('errors.file_not_available'))
                         except Exception:
                             pass
                 worker.loaded.connect(on_loaded)
@@ -309,8 +303,7 @@ class ScreenshotsCarousel(QWidget):
         label_w = self.image_label.width() or 760
         label_h = self.image_label.height() or 220
         pm = QPixmap.fromImage(qimg)
-        scaled = pm.scaled(label_w, label_h, Qt.AspectRatioMode.KeepAspectRatio,
-                           Qt.TransformationMode.SmoothTransformation)
+        scaled = pm.scaled(label_w, label_h, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
         canvas = QPixmap(label_w, label_h)
         canvas.fill(QColor('black'))
         painter = QPainter(canvas)

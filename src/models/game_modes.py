@@ -48,8 +48,7 @@ class FullGameMode(GameMode):
         self._custom_exec_key = 'custom_executable_path'
         self.steam_id = STEAM_APP_ID_FULL
         self._path_change_button_key = 'buttons.change_path'
-        self._tab_name_keys = ['tabs.main_menu', 'tabs.chapter_1',
-                               'tabs.chapter_2', 'tabs.chapter_3', 'tabs.chapter_4']
+        self._tab_name_keys = ['tabs.main_menu', 'tabs.chapter_1', 'tabs.chapter_2', 'tabs.chapter_3', 'tabs.chapter_4']
         self.direct_launch_allowed = True
 
     def get_chapter_id(self, ui_index: int) -> int:

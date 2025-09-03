@@ -26,8 +26,7 @@ class FetchModsThread(QThread):
                 self.status.emit('Cloud Functions URL not configured', 'red')
                 self.result.emit(False)
                 return
-            response = requests.get(
-                f'{CLOUD_FUNCTIONS_BASE_URL}/getMods', timeout=15)
+            response = requests.get(f'{CLOUD_FUNCTIONS_BASE_URL}/getMods', timeout=15)
             response.raise_for_status()
             mods_json = response.json() or {}
             all_mods = self._parse_mods(mods_json)
@@ -62,21 +61,10 @@ class FetchModsThread(QThread):
             modgame = 'deltarunedemo'
         screens_list = data.get('screenshots_url', [])
         if isinstance(screens_list, str):
-            screens_list = [s.strip()
-                            for s in screens_list.split(',') if s.strip()]
+            screens_list = [s.strip() for s in screens_list.split(',') if s.strip()]
         elif not isinstance(screens_list, list):
             screens_list = []
-        mod = ModInfo(key=key, name=data.get('name', tr('status.unknown_mod')), author=data.get('author', tr('status.unknown_author_status')),
-                      version=f'{base_version}|{composite_version}' if base_version else composite_version,
-                      tagline=data.get('tagline', tr('status.no_description_status')), game_version=data.get('game_version', tr('status.no_version')),
-                      description_url=data.get('description_url', ''), downloads=data.get('downloads', 0), modgame=modgame,
-                      is_verified=data.get('is_verified', False), icon_url=data.get('icon_url'), tags=data.get('tags', []),
-                      hide_mod=data.get('hide_mod', False), is_xdelta=data.get('is_xdelta', False),
-                      ban_status=data.get('ban_status', False), demo_url=files_data.get('demo', {}).get('url') if files_data else None,
-                      demo_version=files_data.get('demo', {}).get(
-                          'version', '1.0.0') if files_data else '1.0.0',
-                      created_date=data.get('created_date'), last_updated=data.get('last_updated'),
-                      gamebanana_url=data.get('gamebanana_url'), screenshots_url=screens_list)
+        mod = ModInfo(key=key, name=data.get('name', tr('status.unknown_mod')), author=data.get('author', tr('status.unknown_author_status')), version=f'{base_version}|{composite_version}' if base_version else composite_version, tagline=data.get('tagline', tr('status.no_description_status')), game_version=data.get('game_version', tr('status.no_version')), description_url=data.get('description_url', ''), downloads=data.get('downloads', 0), modgame=modgame, is_verified=data.get('is_verified', False), icon_url=data.get('icon_url'), tags=data.get('tags', []), hide_mod=data.get('hide_mod', False), is_xdelta=data.get('is_xdelta', False), ban_status=data.get('ban_status', False), demo_url=files_data.get('demo', {}).get('url') if files_data else None, demo_version=files_data.get('demo', {}).get('version', '1.0.0') if files_data else '1.0.0', created_date=data.get('created_date'), last_updated=data.get('last_updated'), gamebanana_url=data.get('gamebanana_url'), screenshots_url=screens_list)
         if self._process_mod_chapters(mod, files_data):
             return mod
         return None
@@ -85,8 +73,7 @@ class FetchModsThread(QThread):
         files_data = {}
         raw_data = data.get('files', data.get('chapters', {}))
         if isinstance(raw_data, list):
-            items = [(str(i), chapter_data) for i, chapter_data in enumerate(
-                raw_data) if chapter_data is not None]
+            items = [(str(i), chapter_data) for i, chapter_data in enumerate(raw_data) if chapter_data is not None]
         elif isinstance(raw_data, dict):
             items = list(raw_data.items())
         else:
@@ -124,21 +111,17 @@ class FetchModsThread(QThread):
     def _create_file_entry(self, chapter_data: Dict[str, Any]) -> Dict[str, Any]:
         entry = {}
         data_url = chapter_data.get('data_file_url')
-        data_version = chapter_data.get('data_file_version') or chapter_data.get(
-            'data_win_version') or '1.0.0'
+        data_version = chapter_data.get('data_file_version') or chapter_data.get('data_win_version') or '1.0.0'
         if data_url:
-            entry.update({'data_file_url': data_url,
-                         'data_file_version': data_version})
+            entry.update({'data_file_url': data_url, 'data_file_version': data_version})
         extra_files = chapter_data.get('extra_files', [])
         if isinstance(extra_files, list):
-            entry['extra'] = {str(ef.get('key', 'unknown')): {'url': ef.get('url', ''), 'version': ef.get(
-                'version', '1.0.0')} for ef in extra_files if isinstance(ef, dict)}
+            entry['extra'] = {str(ef.get('key', 'unknown')): {'url': ef.get('url', ''), 'version': ef.get('version', '1.0.0')} for ef in extra_files if isinstance(ef, dict)}
         elif isinstance(chapter_data.get('extra'), dict):
             extra_map = {}
             for k, v in chapter_data.get('extra', {}).items():
                 if isinstance(v, dict) and (url := v.get('url')):
-                    version = v.get('version') or v.get(
-                        'data_file_version') or '1.0.0'
+                    version = v.get('version') or v.get('data_file_version') or '1.0.0'
                     extra_map[str(k)] = {'url': url, 'version': version}
             if extra_map:
                 entry['extra'] = extra_map
@@ -189,17 +172,14 @@ class FetchModsThread(QThread):
         for file_key, chapter_data in files_data.items():
             if not isinstance(chapter_data, dict):
                 continue
-            has_df_version = not chapter_data.get('data_file_url') or bool(
-                chapter_data.get('data_file_version'))
+            has_df_version = not chapter_data.get('data_file_url') or bool(chapter_data.get('data_file_version'))
             extra_files = chapter_data.get('extra', {}).items()
             if not has_df_version:
                 return False
             if extra_files and (not all((v.get('version') for _, v in extra_files))):
                 return False
-            extra_files_list = [ModExtraFile(key=k, **v)
-                                for k, v in extra_files]
-            mod_chapter = ModChapterData(data_file_url=chapter_data.get(
-                'data_file_url'), data_file_version=chapter_data.get('data_file_version'), extra_files=extra_files_list)
+            extra_files_list = [ModExtraFile(key=k, **v) for k, v in extra_files]
+            mod_chapter = ModChapterData(data_file_url=chapter_data.get('data_file_url'), data_file_version=chapter_data.get('data_file_version'), extra_files=extra_files_list)
             if chapter_data.get('description_url'):
                 pass
             if mod_chapter.is_valid():
@@ -214,8 +194,7 @@ class FetchModsThread(QThread):
             mods_metadata = self.main_window._read_mods_metadata()
             metadata_updated = False
             for folder_name in os.listdir(self.main_window.mods_dir):
-                folder_path = os.path.join(
-                    self.main_window.mods_dir, folder_name)
+                folder_path = os.path.join(self.main_window.mods_dir, folder_name)
                 if not os.path.isdir(folder_path):
                     continue
                 config_path = os.path.join(folder_path, 'config.json')
@@ -239,5 +218,4 @@ class FetchModsThread(QThread):
             if metadata_updated:
                 self.main_window._write_mods_metadata(mods_metadata)
         except Exception as e:
-            logging.warning(
-                f'Failed to update remote exists flags in metadata: {e}')
+            logging.warning(f'Failed to update remote exists flags in metadata: {e}')
