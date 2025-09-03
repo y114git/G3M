@@ -388,13 +388,34 @@ class DeltaHubApp(QWidget):
         try:
             for item_name in os.listdir(self.mods_dir):
                 item_path = os.path.join(self.mods_dir, item_name)
-                if os.path.isfile(item_path) and item_name.lower().endswith(('.zip', '.7z', '.rar')):
+                if os.path.isfile(item_path) and item_name.lower().endswith(('.zip', '.7z', '.rar', '.tar.gz', '.lzma')):
                     try:
                         is_deltamod_archive = False
-                        if item_name.lower().endswith('.zip'):
+                        item_name_lower = item_name.lower()
+                        if item_name_lower.endswith('.zip'):
                             with zipfile.ZipFile(item_path, 'r') as zf:
                                 if '_deltamodInfo.json' in zf.namelist():
                                     is_deltamod_archive = True
+                        elif item_name_lower.endswith('.tar.gz'):
+                            import tarfile
+                            with tarfile.open(item_path, 'r:gz') as tf:
+                                if '_deltamodInfo.json' in tf.getnames():
+                                    is_deltamod_archive = True
+                        elif item_name_lower.endswith('.rar'):
+                            try:
+                                with rarfile.RarFile(item_path, 'r') as rf:
+                                    if '_deltamodInfo.json' in rf.namelist():
+                                        is_deltamod_archive = True
+                            except Exception:
+                                pass
+                        elif item_name_lower.endswith('.7z'):
+                            import py7zr
+                            try:
+                                with py7zr.SevenZipFile(item_path, mode='r') as zf:
+                                    if '_deltamodInfo.json' in zf.getnames():
+                                        is_deltamod_archive = True
+                            except Exception:
+                                pass
                         if is_deltamod_archive:
                             self.update_status_signal.emit(tr('status.deltamod_archive_detected', name=item_name), UI_COLORS['status_info'])
                             QApplication.processEvents()
@@ -4551,7 +4572,7 @@ class DeltaHubApp(QWidget):
                         shutil.move(game_file_path, backup_file_path)
                         self._backup_files[game_file_path] = backup_file_path
                         self._update_session_manifest(backup_files={game_file_path: backup_file_path})
-                    if file_lower.endswith(('.zip', '.rar', '.7z')) and (not is_core_data_file):
+                    if file_lower.endswith(('.zip', '.rar', '.7z', '.tar.gz', '.lzma')) and (not is_core_data_file):
                         extracted_files = self._extract_archive_to_target(cache_file_path, target_dir)
                         if extracted_files:
                             self._mod_files_to_cleanup.extend(extracted_files)
@@ -4645,15 +4666,20 @@ class DeltaHubApp(QWidget):
                     with rarfile.RarFile(archive_path, 'r') as rf:
                         rf.extractall(temp_dir)
                 elif file_lower.endswith('.7z'):
-                    try:
-                        import py7zr
-                        with py7zr.SevenZipFile(archive_path, mode='r') as zf:
-                            zf.extractall(path=temp_dir)
-                    except Exception:
-                        raise
+                    import py7zr
+                    with py7zr.SevenZipFile(archive_path, mode='r') as zf:
+                        zf.extractall(path=temp_dir)
+                elif file_lower.endswith('.tar.gz'):
+                    import tarfile
+                    with tarfile.open(archive_path, 'r:gz') as tf:
+                        tf.extractall(temp_dir)
+                elif file_lower.endswith('.lzma'):
+                    import lzma
+                    output_path = os.path.join(temp_dir, os.path.splitext(os.path.basename(archive_path))[0])
+                    with lzma.open(archive_path) as f_in, open(output_path, 'wb') as f_out:
+                        shutil.copyfileobj(f_in, f_out)
                 else:
-                    with zipfile.ZipFile(archive_path, 'r') as zf:
-                        zf.extractall(temp_dir)
+                    raise ValueError(f"Unsupported archive format for extraction: {archive_path}")
                 from utils.file_utils import _cleanup_extracted_archive
                 _cleanup_extracted_archive(temp_dir)
                 for root, dirs, files in os.walk(temp_dir):

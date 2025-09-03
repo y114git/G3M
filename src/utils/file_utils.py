@@ -6,6 +6,8 @@ import stat
 import sys
 import tempfile
 import zipfile
+import tarfile
+import lzma
 from pathlib import Path
 import requests
 from requests.adapters import HTTPAdapter
@@ -33,7 +35,12 @@ def download_and_extract_archive(url: str, target_dir: str, progress_signal, tot
 def _extract_archive(tmp_path, target_dir, fname, is_game_installation=False):
     import rarfile
     low = fname.lower()
-    extractors = {'zip': lambda: zipfile.ZipFile(tmp_path, 'r').extractall(target_dir), 'rar': lambda: rarfile.RarFile(tmp_path, 'r').extractall(target_dir)}
+    extractors = {
+        'zip': lambda: zipfile.ZipFile(tmp_path, 'r').extractall(target_dir),
+        'rar': lambda: rarfile.RarFile(tmp_path, 'r').extractall(target_dir),
+        'tar.gz': lambda: tarfile.open(tmp_path, 'r:gz').extractall(target_dir),
+        'lzma': lambda: _extract_lzma(tmp_path, target_dir, fname)
+    }
     try:
         import py7zr
         extractors['7z'] = lambda: py7zr.SevenZipFile(tmp_path, mode='r').extractall(path=target_dir)
@@ -45,6 +52,12 @@ def _extract_archive(tmp_path, target_dir, fname, is_game_installation=False):
             _cleanup_extracted_archive(target_dir, is_game_installation)
             return
     shutil.copy2(tmp_path, os.path.join(target_dir, fname))
+
+
+def _extract_lzma(tmp_path, target_dir, fname):
+    output_path = os.path.join(target_dir, os.path.splitext(fname)[0])
+    with lzma.open(tmp_path) as f_in, open(output_path, 'wb') as f_out:
+        shutil.copyfileobj(f_in, f_out)
 
 
 def _cleanup_extracted_archive(target_dir: str, is_game_installation: bool = False):
@@ -217,7 +230,7 @@ def detect_field_type_by_text(text: str) -> str:
 
 
 def get_file_filter(filter_type: str) -> str:
-    FILTER_EXTENSIONS = {'image_files': '*.jpg *.png *.bmp *.gif', 'background_images': '*.jpg *.png *.bmp *.gif', 'xdelta_files': '*.xdelta', 'data_files': '*.win *.ios', 'archive_files': '*.zip *.rar *.7z', 'extended_archives': '*.zip *.rar *.7z *.tar.gz', 'game_files': '*.exe', 'text_files': '*.txt', 'all_files': '*'}
+    FILTER_EXTENSIONS = {'image_files': '*.jpg *.png *.bmp *.gif', 'background_images': '*.jpg *.png *.bmp *.gif', 'xdelta_files': '*.xdelta', 'data_files': '*.win *.ios', 'archive_files': '*.zip *.rar *.7z *.tar.gz *.lzma', 'extended_archives': '*.zip *.rar *.7z *.tar.gz *.lzma', 'game_files': '*.exe', 'text_files': '*.txt', 'all_files': '*'}
 
     def tr(key):
         return key.replace('file_descriptions.', '').replace('_', ' ').title()

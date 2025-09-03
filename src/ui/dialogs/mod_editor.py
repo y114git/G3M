@@ -813,7 +813,7 @@ class ModEditorDialog(QDialog):
                         if potential_name:
                             filename = potential_name
                 data_extensions = ['.xdelta'] if is_patch or 'PATCH' in base_title else ['.win', '.ios']
-                format_checks = {'icon': (None, 2), 'extra': (['.zip', '.rar', '.7z'], float('inf')), 'description': (['.md', '.txt'], 1), 'data': (data_extensions, 200)}
+                format_checks = {'icon': (None, 2), 'extra': (['.zip', '.rar', '.7z', '.tar.gz', '.lzma'], float('inf')), 'description': (['.md', '.txt'], 1), 'data': (data_extensions, 200)}
                 if file_type in format_checks:
                     valid_exts, max_size = format_checks[file_type]
                     if file_type == 'icon':
@@ -846,7 +846,8 @@ class ModEditorDialog(QDialog):
                         is_zip = first_bytes.startswith(b'PK\x03\x04')
                         is_rar = first_bytes.startswith(b'Rar!')
                         is_7z = first_bytes.startswith(b"7z\xbc\xaf'\x1c")
-                        if is_zip or is_rar or is_7z:
+                        is_gz = first_bytes.startswith(b'\x1f\x8b')
+                        if is_zip or is_rar or is_7z or is_gz:
                             final_text = f"{base_title}<span style='color: #44AA44;'> ({filename}, {size_text})</span>"
                             is_valid = True
                         else:
@@ -1287,8 +1288,8 @@ class ModEditorDialog(QDialog):
                                 QMessageBox.warning(self, tr('dialogs.validation_error'), '.xdelta ' + tr('errors.not_a_valid_file'))
                                 return False
                         elif is_extra:
-                            sig_ok = first_bytes.startswith(b'PK\x03\x04') or first_bytes.startswith(b'Rar!') or first_bytes.startswith(b"7z\xbc\xaf'\x1c")
-                            by_ext = fext in ['.zip', '.rar', '.7z']
+                            sig_ok = first_bytes.startswith(b'PK\x03\x04') or first_bytes.startswith(b'Rar!') or first_bytes.startswith(b"7z\xbc\xaf'\x1c") or first_bytes.startswith(b'\x1f\x8b')
+                            by_ext = fext in ['.zip', '.rar', '.7z', '.tar.gz', '.lzma']
                             by_ct = any((x in content_type for x in ['zip', 'x-zip', 'rar', '7z'])) or content_type == 'application/octet-stream'
                             if not (sig_ok or by_ext or by_ct):
                                 pass
