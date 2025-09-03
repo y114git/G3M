@@ -1,6 +1,7 @@
+import logging
 import os
-import sys
 import platform
+import sys
 
 
 def get_legacy_ylauncher_path() -> str:
@@ -46,3 +47,24 @@ def resource_path(relative_path: str) -> str:
         base_path = os.path.abspath(
             os.path.join(os.path.dirname(__file__), '..'))
     return os.path.join(base_path, relative_path)
+
+
+def get_xdelta_path():
+    system = platform.system()
+    if system == 'Windows':
+        exe_names = ['xdelta3.exe', 'xdelta.exe']
+    elif system == 'Darwin':
+        exe_names = ['xdelta3_mac']
+    else:
+        exe_names = ['xdelta3']
+    for exe_name in exe_names:
+        xdelta_path = resource_path(f'resources/bin/{exe_name}')
+        if os.path.exists(xdelta_path):
+            if system != 'Windows':
+                try:
+                    os.chmod(xdelta_path, 493)
+                except Exception as e:
+                    logging.warning(
+                        f'Could not set executable permission on {xdelta_path}: {e}')
+            return os.path.normpath(xdelta_path)
+    return None

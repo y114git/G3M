@@ -1,17 +1,21 @@
+import json
 import os
+import rarfile
+import shutil
+import tempfile
 import threading
 import time
-import requests
 import zipfile
-import json
-import rarfile
+
 import py7zr
+import requests
 from PyQt6.QtCore import QObject, QThread, pyqtSignal
 from PyQt6.QtGui import QImage
-from config.constants import CLOUD_FUNCTIONS_BASE_URL, BROWSER_HEADERS, UI_COLORS
-from utils.file_utils import download_and_extract_archive
+
+from config.constants import BROWSER_HEADERS, CLOUD_FUNCTIONS_BASE_URL, UI_COLORS
 from localization.manager import tr
 from utils.file_utils import get_unique_mod_dir
+from utils.network_utils import download_file
 
 
 class PresenceWorker(QObject):
@@ -120,6 +124,7 @@ class FullInstallThread(QThread):
                 full_install_url, allow_redirects=True, timeout=15)
             total_size = int(resp.headers.get('content-length', 0))
             downloaded_ref = [0]
+            from utils.file_utils import download_and_extract_archive
             download_and_extract_archive(full_install_url, self.target_dir, self.progress,
                                          total_size, downloaded_ref, session, is_game_installation=True)
             self.status.emit(
@@ -256,9 +261,8 @@ class InstallModsThread(QThread):
         os.makedirs(target_dir, exist_ok=True)
         target_path = os.path.join(target_dir, filename)
         try:
-            from utils.file_utils import _download_file
-            _download_file(session, url, target_path,
-                           progress_signal, total_size, downloaded_ref)
+            download_file(session, url, target_path,
+                          progress_signal, total_size, downloaded_ref)
         except Exception as e:
             if os.path.exists(target_path):
                 try:
@@ -284,9 +288,8 @@ class InstallModsThread(QThread):
         os.makedirs(target_dir, exist_ok=True)
         target_path = os.path.join(target_dir, filename)
         try:
-            from utils.file_utils import _download_file
-            _download_file(session, url, target_path,
-                           progress_signal, total_size, downloaded_ref)
+            download_file(session, url, target_path,
+                          progress_signal, total_size, downloaded_ref)
         except Exception as e:
             if os.path.exists(target_path):
                 try:
@@ -296,10 +299,6 @@ class InstallModsThread(QThread):
             raise e
 
     def run(self):
-        import os
-        import shutil
-        import tempfile
-        import time
         try:
             self.temp_root = tempfile.mkdtemp(prefix='deltahub-install-')
             tasks = []
@@ -560,12 +559,10 @@ class UrlInstallThread(QThread):
         self.prompt_result = False
 
     def run(self):
-        import tempfile
-        import shutil
         try:
             if not self.url.startswith('deltahub://'):
                 raise ValueError('Invalid URL scheme')
-            content = self.url[len('deltahub://')                               :].split(',')[0].strip().rstrip('/')
+            content = self.url[len('deltahub://'):].split(',')[0].strip().rstrip('/')
             if not content.startswith(('http://', 'https://')):
                 content = content.replace(
                     'https//', 'https://').replace('http//', 'http://')
