@@ -98,10 +98,19 @@ def load_mod_icon_universal(icon_label, mod_data, size=80):
         default_pixmap.fill(QColor('#333'))
     icon_label.setPixmap(default_pixmap)
     try:
-        pixmap = None
         icon_path = getattr(mod_data, 'icon_path', None)
-        if icon_path and os.path.exists(icon_path):
-            pixmap = QPixmap(icon_path)
+        icon_url = getattr(mod_data, 'icon_url', None)
+
+        local_icon_to_load = None
+        if icon_url and not icon_url.startswith(('http://', 'https://')):
+            # Это локальный путь, хранящийся в поле URL
+            local_icon_to_load = icon_url
+        elif icon_path:
+            # Фолбэк на старое поле icon_path
+            local_icon_to_load = icon_path
+
+        if local_icon_to_load and os.path.exists(local_icon_to_load):
+            pixmap = QPixmap(local_icon_to_load)
             if not pixmap.isNull():
                 icon_size = min(pixmap.width(), pixmap.height())
                 cropped = pixmap.copy((pixmap.width(
@@ -110,8 +119,7 @@ def load_mod_icon_universal(icon_label, mod_data, size=80):
                     size, size, Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation)
                 icon_label.setPixmap(scaled_pixmap)
                 return
-        elif getattr(mod_data, 'icon_url', None):
-            icon_url = mod_data.icon_url
+        if icon_url:
             if isinstance(icon_url, str) and icon_url.startswith(('http://', 'https://')):
                 from PyQt6.QtCore import QThread, pyqtSignal
 

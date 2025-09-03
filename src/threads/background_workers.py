@@ -15,6 +15,7 @@ from PyQt6.QtGui import QImage
 from config.constants import BROWSER_HEADERS, CLOUD_FUNCTIONS_BASE_URL, UI_COLORS
 from localization.manager import tr
 from utils.file_utils import get_unique_mod_dir
+from utils.deltamod_converter import DeltamodConverter
 from utils.network_utils import download_file
 
 
@@ -304,7 +305,6 @@ class InstallModsThread(QThread):
             tasks = []
             total_bytes = 0
             mod_folders = {}
-            from utils.file_utils import get_unique_mod_dir
             for mod, chapter_id in self.install_tasks:
                 if mod.key not in mod_folders:
                     existing_folder = self._find_existing_mod_folder(mod.key)
@@ -561,131 +561,78 @@ class UrlInstallThread(QThread):
     def run(self):
         try:
             if not self.url.startswith('deltahub://'):
-                raise ValueError('Invalid URL scheme')
+                raise ValueError(tr('errors.invalid_url_scheme'))
             content = self.url[len('deltahub://'):].split(',')[0].strip().rstrip('/')
             if not content.startswith(('http://', 'https://')):
-                content = content.replace(
-                    'https//', 'https://').replace('http//', 'http://')
-            if content.startswith(('http://', 'https://')):
-                with tempfile.TemporaryDirectory(prefix='gb-install-') as temp_dir:
-                    download_url = content
-                    self.status.emit(
-                        tr('status.downloading_from_external'), UI_COLORS['status_warning'])
-                    archive_path = self._download_archive(
-                        download_url, temp_dir)
-                    config_data_from_archive = self._extract_and_read_config(
-                        archive_path)
-                    if config_data_from_archive is None:
-                        raise ValueError(
-                            tr('errors.config_not_found_in_archive'))
-                    mod_name_from_archive = config_data_from_archive.get(
-                        'name', 'Unknown Mod')
-                    mod_key = config_data_from_archive.get('mod_key')
-                    is_local = config_data_from_archive.get(
-                        'is_local_mod', not bool(mod_key))
-                    if mod_key and (not is_local):
-                        mod_info = next(
-                            (m for m in self.main_window.all_mods if m.key == mod_key), None)
-                        mod_name = mod_info.name if mod_info else mod_name_from_archive
-                        if mod_info and mod_info.ban_status:
-                            raise ValueError(tr('errors.mod_is_banned'))
-                        if self._is_metadata_only(archive_path):
-                            if not mod_info:
-                                raise ValueError(
-                                    tr('errors.smart_install_mod_not_found'))
-                            self.status.emit(
-                                tr('status.smart_install_starting', mod_name=mod_name), UI_COLORS['status_info'])
-                            self.main_window.install_from_gb_signal.emit(
-                                mod_info)
+                content = content.replace('https//', 'https://').replace('http//', 'http://')
+
+            download_url = content
+            with tempfile.TemporaryDirectory(prefix='dh-url-install-') as temp_dir:
+                self.status.emit(tr('status.downloading_from_external'), UI_COLORS['status_warning'])
+                archive_path = self._download_archive(download_url, temp_dir)
+
+                # Unpack and inspect
+                with tempfile.TemporaryDirectory(prefix='dh-url-unpack-') as unpack_dir:
+                    shutil.unpack_archive(archive_path, unpack_dir)
+
+                    # Check if the archive contains a single sub-directory
+                    content_path = unpack_dir
+                    unpacked_items = os.listdir(unpack_dir)
+                    if len(unpacked_items) == 1 and os.path.isdir(os.path.join(unpack_dir, unpacked_items[0])):
+                        content_path = os.path.join(unpack_dir, unpacked_items[0])
+
+                    files_in_root = os.listdir(content_path)
+
+                    # Сценарий 1: Архив-редирект
+                    if 'config.json' in files_in_root and len(files_in_root) == 1:
+                        with open(os.path.join(content_path, 'config.json'), 'r', encoding='utf-8') as f:
+                            redirect_config = json.load(f)
+
+                        if 'dm_url' in redirect_config:
+                            self.status.emit(tr('status.deltamod_redirect_found'), UI_COLORS['status_info'])
+                            self.progress.emit(0)
+                            # Рекурсивно обрабатываем новую ссылку, но уже без редиректа
+                            self._process_deltamod_archive(redirect_config['dm_url'])
                             return
-                        if self.main_window._is_mod_installed(mod_key):
-                            result = self._ask_user(tr('dialogs.update_confirmation_title', mod_name=mod_name), tr(
-                                'dialogs.update_confirmation_body', mod_name=mod_name))
-                            if not result:
-                                self.finished.emit(
-                                    False, tr('status.update_cancelled'))
-                                return
-                    else:
-                        mod_name = mod_name_from_archive
-                        result = self._ask_user(tr('dialogs.local_mod_warning_title'), tr(
-                            'dialogs.local_mod_warning_body'))
-                        if not result:
-                            self.finished.emit(
-                                False, tr('status.install_cancelled_by_user'))
-                            return
-                        installed_mods = self.main_window._get_installed_mods_list()
-                        existing_local_mod = next((m for m in installed_mods if m.get(
-                            'is_local_mod') and m.get('name') == mod_name), None)
-                        if existing_local_mod:
-                            update_result = self._ask_user(tr('dialogs.local_mod_update_title'), tr(
-                                'dialogs.local_mod_update_body', mod_name=mod_name))
-                            if not update_result:
-                                self.finished.emit(
-                                    False, tr('status.install_cancelled_by_user'))
-                                return
-                    existing_folder_name = None
-                    if 'existing_local_mod' in locals() and existing_local_mod:
-                        existing_folder_name = existing_local_mod.get(
-                            'folder_name')
-                    elif mod_key and self.main_window._is_mod_installed(mod_key):
-                        installed_mods = self.main_window._get_installed_mods_list()
-                        existing_public_mod = next(
-                            (m for m in installed_mods if m.get('mod_key') == mod_key), None)
-                        if existing_public_mod:
-                            existing_folder_name = existing_public_mod.get(
-                                'folder_name')
-                    config_data = config_data_from_archive
-                    target_mod_dir = os.path.join(self.main_window.mods_dir, existing_folder_name or get_unique_mod_dir(
-                        self.main_window.mods_dir, mod_name))
-                    if os.path.exists(target_mod_dir):
-                        shutil.rmtree(target_mod_dir)
-                    os.makedirs(target_mod_dir)
-                    self._extract_full_archive(archive_path, target_mod_dir)
-                    final_config_path = os.path.join(
-                        target_mod_dir, 'config.json')
-                    final_config_data = {}
-                    if os.path.exists(final_config_path):
-                        final_config_data = self.main_window._read_json(
-                            final_config_path)
-                    else:
-                        final_config_data = config_data_from_archive
-                    final_config_data.pop('installed_date', None)
-                    final_config_data.pop('is_available_on_server', None)
-                    self.main_window._write_json(
-                        final_config_path, final_config_data)
-                    mod_key_for_meta = final_config_data.get('mod_key')
-                    if mod_key_for_meta:
-                        metadata = self.main_window._read_mods_metadata()
-                        metadata[mod_key_for_meta] = {'installed_date': time.strftime(
-                            '%Y-%m-%d %H:%M:%S'), 'is_available_on_server': not final_config_data.get('is_local_mod', False)}
-                        self.main_window._write_mods_metadata(metadata)
-                    self.finished.emit(
-                        True, tr('status.install_complete_success', mod_name=mod_name))
-                return
-            elif len(content) == 64 and all((c in '0123456789abcdef' for c in content.lower())):
-                mod_key = content
-                mod_info = next(
-                    (m for m in self.main_window.all_mods if m.key == mod_key), None)
-                if not mod_info:
-                    raise ValueError(tr('errors.smart_install_mod_not_found'))
-                if mod_info.ban_status:
-                    raise ValueError(tr('errors.mod_is_banned'))
-                mod_name = mod_info.name
-                if self.main_window._is_mod_installed(mod_key):
-                    result = self._ask_user(tr('dialogs.update_confirmation_title', mod_name=mod_name), tr(
-                        'dialogs.update_confirmation_body', mod_name=mod_name))
-                    if not result:
-                        self.finished.emit(
-                            False, tr('status.update_cancelled'))
+
+                    # Сценарий 2: Прямой архив Deltamod
+                    if '_deltamodInfo.json' in files_in_root:
+                        self.status.emit(tr('status.deltamod_archive_detected_url'), UI_COLORS['status_info'])
+                        converter = DeltamodConverter(content_path, self.main_window.mods_dir)
+                        new_mod_path = converter.convert()
+                        if new_mod_path:
+                            mod_name = os.path.basename(new_mod_path)
+                            self.finished.emit(True, tr('status.install_complete_success', mod_name=mod_name))
+                        else:
+                            raise ValueError(tr('errors.deltamod_conversion_failed_url'))
                         return
-                self.status.emit(tr('status.smart_install_starting',
-                                 mod_name=mod_name), UI_COLORS['status_info'])
-                self.main_window.install_from_gb_signal.emit(mod_info)
-                return
-            else:
-                raise ValueError(tr('errors.no_valid_url_found'))
+
+                    # Если дошли сюда, формат не распознан
+                    raise ValueError(tr('errors.unsupported_mod_format_url'))
         except Exception as e:
             self.finished.emit(False, str(e))
+
+    def _process_deltamod_archive(self, url: str):
+        """Вспомогательный метод для скачивания, распаковки и конвертации архива Deltamod."""
+        with tempfile.TemporaryDirectory(prefix='dh-redirect-dl-') as temp_dir:
+            archive_path = self._download_archive(url, temp_dir)
+            with tempfile.TemporaryDirectory(prefix='dh-redirect-unpack-') as unpack_dir:
+                shutil.unpack_archive(archive_path, unpack_dir)
+                content_path = unpack_dir
+                unpacked_items = os.listdir(unpack_dir)
+                if len(unpacked_items) == 1 and os.path.isdir(os.path.join(unpack_dir, unpacked_items[0])):
+                    content_path = os.path.join(unpack_dir, unpacked_items[0])
+
+                if '_deltamodInfo.json' in os.listdir(content_path):
+                    converter = DeltamodConverter(content_path, self.main_window.mods_dir)
+                    new_mod_path = converter.convert()
+                    if new_mod_path:
+                        mod_name = os.path.basename(new_mod_path)
+                        self.finished.emit(True, tr('status.install_complete_success', mod_name=mod_name))
+                    else:
+                        raise ValueError(tr('errors.deltamod_conversion_failed_url'))
+                else:
+                    raise ValueError(tr('errors.deltamod_archive_invalid_redirect'))
 
     def _ask_user(self, title: str, message: str) -> bool:
         self.prompt_event.clear()
@@ -698,6 +645,8 @@ class UrlInstallThread(QThread):
         parsed_url = urlparse(url)
         filename = unquote(os.path.basename(parsed_url.path))
         if not filename:
+            filename = 'mod.zip'
+        if not any(filename.lower().endswith(ext) for ext in ['.zip', '.rar', '.7z']):
             filename = 'mod.zip'
         archive_path = os.path.join(temp_dir, filename)
         response = requests.get(

@@ -7,6 +7,7 @@ import shutil
 import sys
 import tempfile
 import threading
+import zipfile
 import time
 import uuid
 import ctypes
@@ -422,14 +423,57 @@ class DeltaHubApp(QWidget):
 
     def _load_local_mods_from_folders(self):
         if not os.path.exists(self.mods_dir):
+            os.makedirs(self.mods_dir, exist_ok=True)
             return False
         installed_mods = {}
         try:
-            for folder_name in os.listdir(self.mods_dir):
-                folder_path = os.path.join(self.mods_dir, folder_name)
-                if not os.path.isdir(folder_path):
+            for item_name in os.listdir(self.mods_dir):
+                item_path = os.path.join(self.mods_dir, item_name)
+
+                # HOOK: Проверка и конвертация архивов Deltamod
+                if os.path.isfile(item_path) and item_name.lower().endswith(('.zip', '.7z', '.rar')):
+                    try:
+                        is_deltamod_archive = False
+                        if item_name.lower().endswith('.zip'):
+                            with zipfile.ZipFile(item_path, 'r') as zf:
+                                if '_deltamodInfo.json' in zf.namelist():
+                                    is_deltamod_archive = True
+
+                        if is_deltamod_archive:
+                            self.update_status_signal.emit(tr('status.deltamod_archive_detected', name=item_name), UI_COLORS['status_info'])
+                            QApplication.processEvents()
+                            with tempfile.TemporaryDirectory() as temp_dir:
+                                shutil.unpack_archive(item_path, temp_dir)
+                                content_path = temp_dir
+                                contents = os.listdir(temp_dir)
+                                if len(contents) == 1 and os.path.isdir(os.path.join(temp_dir, contents[0])):
+                                    content_path = os.path.join(temp_dir, contents[0])
+
+                                from utils.deltamod_converter import DeltamodConverter
+                                converter = DeltamodConverter(content_path, self.mods_dir)
+                                new_mod_path = converter.convert()
+                                if new_mod_path:
+                                    self.update_status_signal.emit(tr('status.deltamod_converted', name=os.path.basename(new_mod_path)), UI_COLORS['status_success'])
+                                    os.remove(item_path)
+                                else:
+                                    self.update_status_signal.emit(tr('errors.deltamod_conversion_failed', name=item_name), UI_COLORS['status_error'])
+                            continue  # Архив обработан, переходим к следующему элементу
+                    except Exception as e:
+                        logging.error(f"Failed to process Deltamod archive {item_name}: {e}")
+
+                if not os.path.isdir(item_path):
                     continue
-                config_path = os.path.join(folder_path, 'config.json')
+                # HOOK: Проверка и конвертация папок Deltamod
+                if '_deltamodInfo.json' in os.listdir(item_path) and 'config.json' not in os.listdir(item_path):
+                    self.update_status_signal.emit(tr('status.deltamod_detected', name=item_name), UI_COLORS['status_info'])
+                    QApplication.processEvents()
+                    from utils.deltamod_converter import DeltamodConverter
+                    converter = DeltamodConverter(item_path, self.mods_dir)
+                    if converter.convert():
+                        shutil.rmtree(item_path)  # Удаляем исходную папку после успеха
+                    continue  # Папка обработана, переходим к следующему элементу
+
+                config_path = os.path.join(item_path, 'config.json')
                 if not os.path.exists(config_path):
                     continue
                 try:
@@ -440,13 +484,20 @@ class DeltaHubApp(QWidget):
                     if mod_key:
                         installed_mods[mod_key] = config_data
                 except Exception:
-                    continue
+                    pass
             for mod in self.all_mods:
                 if mod.key in installed_mods:
                     config_data = installed_mods[mod.key]
+                    mod_folder_path = self._get_mod_folder_path_by_key(mod.key)
+                    if mod_folder_path:
+                        for ext in ['.png', '.jpg', '.jpeg', '.gif']:
+                            potential_icon = os.path.join(mod_folder_path, f'_icon{ext}')
+                            if os.path.exists(potential_icon):
+                                mod.icon_url = potential_icon
+                                break
                     config_path = None
-                    for folder_name in os.listdir(self.mods_dir):
-                        folder_path = os.path.join(self.mods_dir, folder_name)
+                    for item_name in os.listdir(self.mods_dir):
+                        folder_path = os.path.join(self.mods_dir, item_name)
                         test_config_path = os.path.join(
                             folder_path, 'config.json')
                         if os.path.isfile(test_config_path):
@@ -465,8 +516,17 @@ class DeltaHubApp(QWidget):
             for mod_key, config_data in installed_mods.items():
                 if mod_key not in existing_keys and config_data.get('is_local_mod'):
                     try:
+                        mod_folder_for_icon = self._get_mod_folder_path_by_key(mod_key)
+                        icon_path = ''
+                        if mod_folder_for_icon:
+                            for ext in ['.png', '.jpg', '.jpeg', '.gif']:
+                                potential_icon = os.path.join(mod_folder_for_icon, f'_icon{ext}')
+                                if os.path.exists(potential_icon):
+                                    icon_path = potential_icon
+                                    break
+
                         safe_mod_info = {'key': mod_key, 'name': config_data.get('name', tr('defaults.local_mod')), 'version': config_data.get('version', '1.0.0'), 'author': config_data.get('author', tr('defaults.unknown')), 'tagline': config_data.get('tagline', tr('defaults.no_description')), 'game_version': config_data.get('game_version', tr('defaults.not_specified')), 'description_url': '', 'downloads': 0, 'modgame': config_data.get(
-                            'modgame', 'deltarune'), 'is_verified': False, 'icon_url': '', 'tags': ['local'], 'hide_mod': False, 'is_xdelta': False, 'ban_status': False, 'demo_url': None, 'demo_version': '1.0.0', 'created_date': config_data.get('created_date', 'N/A'), 'last_updated': config_data.get('created_date', 'N/A'), 'gamebanana_url': config_data.get('gamebanana_url')}
+                            'modgame', 'deltarune'), 'is_verified': False, 'icon_url': icon_path, 'tags': ['local'], 'hide_mod': False, 'is_xdelta': config_data.get('is_xdelta', False), 'ban_status': False, 'demo_url': None, 'demo_version': '1.0.0', 'created_date': config_data.get('created_date', 'N/A'), 'last_updated': config_data.get('created_date', 'N/A'), 'gamebanana_url': config_data.get('gamebanana_url')}
                         mod = ModInfo(**safe_mod_info)
                         files_data = config_data.get('files', {})
                         mod_folder_path = None
@@ -537,10 +597,10 @@ class DeltaHubApp(QWidget):
                     except Exception as e:
                         logging.warning(f'Failed to build local ModInfo: {e}')
                         continue
-            return True
         except Exception as e:
             logging.error(f'_load_local_mods_from_folders failed: {e}')
             return False
+        return True
 
     def _get_mod_config_by_key(self, mod_key: str) -> dict:
         if not os.path.exists(self.mods_dir):
@@ -561,6 +621,24 @@ class DeltaHubApp(QWidget):
                     f'Failed to read mod config {config_path}: {e}')
                 continue
         return {}
+
+    def _get_mod_folder_path_by_key(self, mod_key: str) -> str:
+        if not os.path.exists(self.mods_dir):
+            return ''
+        for folder_name in os.listdir(self.mods_dir):
+            folder_path = os.path.join(self.mods_dir, folder_name)
+            if not os.path.isdir(folder_path):
+                continue
+            config_path = os.path.join(folder_path, 'config.json')
+            if not os.path.exists(config_path):
+                continue
+            try:
+                config_data = self._read_json(config_path)
+                if config_data and config_data.get('mod_key') == mod_key:
+                    return folder_path
+            except Exception:
+                continue
+        return ''
 
     def _set_install_buttons_enabled(self, enabled: bool):
         if hasattr(self, 'mod_list_layout'):
@@ -708,7 +786,6 @@ class DeltaHubApp(QWidget):
             f"<h1>{tr('ui.settings_title')}</h1>")
         self.settings_title_label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
         settings_menu_layout.addWidget(self.settings_title_label)
-        settings_menu_layout.addStretch()
         settings_center_container = QVBoxLayout()
         settings_center_container.setAlignment(Qt.AlignmentFlag.AlignCenter)
         settings_center_container.setSpacing(20)
@@ -741,6 +818,12 @@ class DeltaHubApp(QWidget):
             self._on_toggle_beta_updates)
         settings_center_container.addWidget(
             self.beta_updates_checkbox, alignment=Qt.AlignmentFlag.AlignHCenter)
+        self.fullscreen_checkbox = QCheckBox(tr('ui.fullscreen'))
+        self.fullscreen_checkbox.setToolTip(tr('tooltips.fullscreen_tooltip'))
+        self.fullscreen_checkbox.stateChanged.connect(
+            self._on_toggle_fullscreen)
+        settings_center_container.addWidget(
+            self.fullscreen_checkbox, alignment=Qt.AlignmentFlag.AlignHCenter)
         settings_center_container.addSpacing(30)
         self.launch_via_steam_checkbox = QCheckBox(tr('ui.steam_launch'))
         self.launch_via_steam_checkbox.setToolTip(
@@ -3771,6 +3854,7 @@ class DeltaHubApp(QWidget):
             self.use_custom_executable_checkbox.setChecked(False)
             self.chapter_mode_checkbox.setChecked(False)
             self.beta_updates_checkbox.setChecked(False)
+            self.fullscreen_checkbox.setChecked(False)
             self.full_install_checkbox.setChecked(False)
             self.disable_background_checkbox.setChecked(False)
             self.disable_splash_checkbox.setChecked(False)
@@ -4312,6 +4396,8 @@ class DeltaHubApp(QWidget):
             self.local_config.get('disable_splash', False))
         self.beta_updates_checkbox.setChecked(
             self.local_config.get('beta_updates_enabled', False))
+        self.fullscreen_checkbox.setChecked(
+            self.local_config.get('fullscreen_enabled', False))
         self.disable_splash_checkbox.blockSignals(False)
         self._update_change_path_button_text()
         self._update_background_button_state()
@@ -5106,7 +5192,6 @@ class DeltaHubApp(QWidget):
 
     def _extract_archive_to_target(self, archive_path: str, target_dir: str):
         import tempfile
-        import zipfile
         file_lower = archive_path.lower()
         extracted_files = []
         try:
@@ -5557,6 +5642,15 @@ class DeltaHubApp(QWidget):
         self._write_local_config()
         self._check_for_launcher_updates()
 
+    def _on_toggle_fullscreen(self):
+        fullscreen_enabled = self.fullscreen_checkbox.isChecked()
+        self.local_config['fullscreen_enabled'] = fullscreen_enabled
+        self._write_local_config()
+        if fullscreen_enabled:
+            self.showFullScreen()
+        else:
+            self.showNormal()
+
     def _retranslate_texts(self):
         self.settings_button.setText(
             tr('ui.back_button') if self.is_settings_view or self.is_save_manager_view else tr('ui.settings_title'))
@@ -5593,6 +5687,8 @@ class DeltaHubApp(QWidget):
             f"<h1>{tr('ui.settings_title')}</h1>")
         self.language_label.setText(tr('ui.language_label'))
         self.beta_updates_checkbox.setText(tr('ui.beta_updates'))
+        self.fullscreen_checkbox.setText(tr('ui.fullscreen'))
+        self.fullscreen_checkbox.setToolTip(tr('tooltips.fullscreen_tooltip'))
         self.launch_via_steam_checkbox.setText(tr('ui.steam_launch'))
         self.launch_via_steam_checkbox.setToolTip(
             "<html><body style='white-space: normal;'>" + tr('tooltips.steam') + '</body></html>')
@@ -6646,7 +6742,6 @@ class DeltaHubApp(QWidget):
             self._export_theme()
 
     def _export_theme(self):
-        import zipfile
         theme_file_path, _ = QFileDialog.getSaveFileName(self, tr(
             'dialogs.export_theme_title'), '', f"{tr('file_descriptions.theme_files')} (*.dhtheme)")
         if not theme_file_path:
@@ -6671,7 +6766,6 @@ class DeltaHubApp(QWidget):
             'dialogs.theme_exported_success'))
 
     def _import_theme(self):
-        import zipfile
         import tempfile
         theme_file_path, _ = QFileDialog.getOpenFileName(self, tr(
             'dialogs.import_theme_title'), '', f"{tr('file_descriptions.theme_files')} (*.dhtheme)")
