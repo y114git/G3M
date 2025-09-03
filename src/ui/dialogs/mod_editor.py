@@ -649,8 +649,8 @@ class ModEditorDialog(QDialog):
                 input_edit.setProperty('extra_key', key_name)
             container.addWidget(input_edit)
             browse_btn = QPushButton(tr('ui.browse_button'))
-            browse_btn.clicked.connect(lambda: self._browse_file(
-                input_edit, browse_title, file_filter))
+            browse_btn.clicked.connect(lambda checked=False, file_type=file_type: self._browse_file(
+                input_edit, browse_title, file_filter, file_type))
             container.addWidget(browse_btn)
             layout.addLayout(container)
         else:
@@ -971,23 +971,34 @@ class ModEditorDialog(QDialog):
         if line_edit and (not sip.isdeleted(line_edit)):
             line_edit.setProperty('isValid', is_valid)
 
-    def _browse_file(self, line_edit, title, file_filter):
-        msg = QMessageBox(self)
-        msg.setWindowTitle(tr('ui.choice_title'))
-        msg.setText(tr('ui.select_file_or_folder'))
-        archive_button = msg.addButton(
-            tr('ui.archive'), QMessageBox.ButtonRole.AcceptRole)
-        msg.setDefaultButton(archive_button)
-        msg.exec()
-        if msg.clickedButton() == archive_button:
+    def _browse_file(self, line_edit, title, file_filter, file_type=None):
+        if file_type == 'data':
             file_path, _ = QFileDialog.getOpenFileName(
                 self, title, '', file_filter)
             if file_path:
                 line_edit.setText(file_path)
         else:
-            folder_path = QFileDialog.getExistingDirectory(self, title, '')
-            if folder_path:
-                line_edit.setText(folder_path)
+            msg = QMessageBox(self)
+            msg.setWindowTitle(tr('ui.choice_title'))
+            msg.setText(tr('ui.select_file_or_folder'))
+            archive_button = msg.addButton(
+                tr('ui.archive'), QMessageBox.ButtonRole.AcceptRole)
+            folder_button = msg.addButton(
+                tr('ui.folder'), QMessageBox.ButtonRole.ActionRole)
+            msg.addButton(QMessageBox.StandardButton.Cancel)
+            msg.setDefaultButton(archive_button)
+            msg.exec()
+            clicked_button = msg.clickedButton()
+            if clicked_button == archive_button:
+                file_path, _ = QFileDialog.getOpenFileName(
+                    self, title, '', file_filter)
+                if file_path:
+                    line_edit.setText(file_path)
+            elif clicked_button == folder_button:
+                folder_path = QFileDialog.getExistingDirectory(
+                    self, title, '')
+                if folder_path:
+                    line_edit.setText(folder_path)
 
     def _add_extra_files_with_data(self, tab, tab_layout, key_name, url, version):
         self._create_file_frame(tab_layout, 'extra', key_name)
@@ -1867,9 +1878,7 @@ class ModEditorDialog(QDialog):
             os.makedirs(mod_dir)
             icon_path = self.icon_edit.text().strip()
             if icon_path and os.path.exists(icon_path):
-                icon_filename = os.path.basename(icon_path)
-                shutil.copy2(icon_path, os.path.join(mod_dir, icon_filename))
-                mod_data['icon_url'] = icon_filename
+                shutil.copy2(icon_path, os.path.join(mod_dir, '_icon.png'))
             processed_files_data = {}
             for file_key, original_file_data in mod_data.get('files', {}).items():
                 new_file_data = {}
