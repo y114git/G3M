@@ -2,8 +2,6 @@
 
 **DELTAHUB (DH)** is a cross-platform, universal, and extremely convenient Mod Manager, Saves Manager, and multi-functional manager for games such as **DELTARUNE**, **DELTARUNEdemo**, and **UNDERTALE**. In the future, it will support other games made with GameMaker.
 
-While DH doesn't plan to be completely dependent on GameBanana, it fully supports compatibility with it!
-
 ---
 
 ## 🌟 DELTAHUB FEATURES
@@ -15,6 +13,8 @@ While DH doesn't plan to be completely dependent on GameBanana, it fully support
 - **Mod Library:** All your installed mods are here! Select any mod to launch the game with it. After exiting, all original files are restored, so DH will never damage your game files.
 
 - **Chapter-by-Chapter Mode:** For the full version of DELTARUNE, you can select a mod for each chapter separately, allowing you to play with multiple mods simultaneously.
+
+- **Deltamod compatibility:** DH features built-in compatibility with the Deltamod format. More about this you can read from [Wiki](https://github.com/y114git/DELTAHUB/wiki/Deltamod-compatibility).
 
 - **Play with Multiple Mods at Once! (WIP):** This feature, which is almost complete, will allow you to play with multiple mods at once and configure their priority. It will also work in chapter-by-chapter mode.
 
@@ -28,7 +28,7 @@ While DH doesn't plan to be completely dependent on GameBanana, it fully support
 
 ### Creation & Customization
 
-- **Localization:** DH supports any language! Currently, only two are available. If you want to translate DH into your language, all the necessary files and instructions are on src/localization and Wiki.
+- **Localization:** DH supports any language! If you want to translate DH into your language (or just edit langs for fun), all the necessary files and instructions are in `src/localization` and the [project Wiki](https://github.com/y114git/DELTAHUB/wiki/Localization-and-Lang-system-Guide).
 
 - **Create Mods:** You can create and modify your own mods. DH has its own very simple structure for mods.
   - **Public Mods:** After verification, a public mod will appear on the mods page for anyone to download.
@@ -42,7 +42,7 @@ While DH doesn't plan to be completely dependent on GameBanana, it fully support
 
 - **Create SHORTCUTS:** Create a shortcut for your game with desired settings and mods. Launching it will immediately start the game with your chosen configuration, even without running DH first.
 
-- **Customize DH as you wish:** Change game and mods folders, create your own themes, add background music, or even change the intro sound!
+- **Customize DH as you wish:** Change game and mods folders, create your own themes, add background music, or even change the intro sound! And if you want - share with your themes with friends!
 
 - **Steam Integration:** Enable an option to launch the game through Steam, ensuring all your achievements and other Steam features work. You can also select a separate game executable file if needed.
 
@@ -55,9 +55,3 @@ While DH doesn't plan to be completely dependent on GameBanana, it fully support
 - **Bugs & Issues:** DH will be updated many more times with new games and features. Please report all bugs and other issues [on this page](https://github.com/y114git/DELTAHUB/issues).
 
 - **Wiki:** For detailed info on "How to properly create mods," "How to verify a mod," etc., please visit the [Wiki](https://github.com/y114git/DELTAHUB/wiki).
-
----
-
-### ⚠️ WARNING
-
-In some cases and with certain system settings, the launch of DELTAHUB can be quite long. I advise you to go to `Settings > Customization` and **Disable splash after the first launch** to fix this.
