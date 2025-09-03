@@ -44,8 +44,7 @@ class BaseModWidget(QFrame):
         info_layout.addLayout(title_layout)
         metadata_layout = QHBoxLayout()
         metadata_layout.setSpacing(10)
-        author_text = self.mod_data.author or localization.manager.tr(
-            'ui.unknown_author')
+        author_text = self.mod_data.author or localization.manager.tr('ui.unknown_author')
         author_container = QWidget()
         author_container_layout = QHBoxLayout(author_container)
         author_container_layout.setContentsMargins(0, 0, 0, 0)
@@ -61,8 +60,7 @@ class BaseModWidget(QFrame):
         game_version_container_layout = QHBoxLayout(game_version_container)
         game_version_container_layout.setContentsMargins(0, 0, 0, 0)
         game_version_container_layout.setSpacing(0)
-        game_version_label_title = QLabel(
-            localization.manager.tr('ui.game_version_label'))
+        game_version_label_title = QLabel(localization.manager.tr('ui.game_version_label'))
         game_version_label_title.setObjectName('primaryText')
         game_version_label_value = QLabel(f' {game_version_text}')
         game_version_label_value.setObjectName('secondaryText')
@@ -72,8 +70,7 @@ class BaseModWidget(QFrame):
         self.game_version_container = game_version_container
         self.metadata_layout = metadata_layout
         info_layout.addLayout(metadata_layout)
-        tagline_text = self.mod_data.tagline or localization.manager.tr(
-            'ui.no_description')
+        tagline_text = self.mod_data.tagline or localization.manager.tr('ui.no_description')
         if len(tagline_text) > 200:
             tagline_text = tagline_text[:197] + '...'
         tagline_label = QLabel(tagline_text)
