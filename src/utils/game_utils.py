@@ -43,8 +43,7 @@ def is_valid_mac_game_path(path: str, skip_data_check: bool, game_type: str) -> 
         return False
     if skip_data_check:
         return has_executable
-    has_data = (res_dir / 'game.ios').is_file() or (res_dir /
-                                                    'data.win').is_file()
+    has_data = (res_dir / 'game.ios').is_file() or (res_dir / 'data.win').is_file()
     return has_executable and has_data
 
 

@@ -186,8 +186,7 @@ def ensure_writable(path: str) -> bool:
         if os.path.isdir(path):
             for root, dirs, files in os.walk(path):
                 for name in dirs + files:
-                    os.chmod(os.path.join(root, name), mode |
-                             stat.S_IWUSR | stat.S_IWGRP | stat.S_IWRITE)
+                    os.chmod(os.path.join(root, name), mode | stat.S_IWUSR | stat.S_IWGRP | stat.S_IWRITE)
         return True
     except (OSError, PermissionError):
         return False
@@ -239,8 +238,7 @@ def fix_macos_python_symlink(app_dir: Path) -> None:
             p.unlink(missing_ok=True)
             os.symlink(target_rel, p)
             st = os.lstat(p)
-            os.chmod(p, stat.S_IMODE(st.st_mode) |
-                     stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+            os.chmod(p, stat.S_IMODE(st.st_mode) | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
     except Exception:
         pass
 
