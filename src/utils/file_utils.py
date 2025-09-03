@@ -235,15 +235,6 @@ def cleanup_old_updater_files():
     except Exception:
         pass
 
-def show_error(parent, title, message):
-    QMessageBox.critical(parent, title, message)
-
-def show_info(parent, title, message):
-    QMessageBox.information(parent, title, message)
-
-def confirm_action(parent, title, message):
-    return QMessageBox.question(parent, title, message) == QMessageBox.StandardButton.Yes
-
 def version_sort_key(version_string: str):
     try:
         s = (version_string or '').strip()

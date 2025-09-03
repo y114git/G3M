@@ -22,10 +22,7 @@ def create_app_reference():
     return DeltaHubApp
 SINGLE_INSTANCE_KEY = "deltahub.y.114.single-instance-lock"
 _translator = QTranslator()
-_lock_file = None
 _splash_start_time = None
-_player, _audio_output = (None, None)
-_sound_instance = None
 
 def check_game_processes():
     game_processes = {'DELTARUNE.exe', 'UNDERTALE.exe', 'DELTARUNEdemo.exe', 'DELTARUNE', 'UNDERTALE', 'DELTARUNEdemo'}

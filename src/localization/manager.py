@@ -164,9 +164,3 @@ def _fallback_tr(key: str, **kwargs) -> str:
 
 def tr(key: str, **kwargs) -> str:
     return localization_manager.get_text(key, **kwargs)
-
-def init_localization(language_code: Optional[str]=None) -> bool:
-    manager = localization_manager
-    if language_code is None:
-        language_code = 'en'
-    return manager.load_language(language_code)
