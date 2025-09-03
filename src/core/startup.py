@@ -13,14 +13,13 @@ from localization.manager import localization_manager, tr
 from utils.audio_utils import play_deltahub_sound
 from core.splash import create_splash, create_png_splash
 from utils.path_utils import get_user_data_root, get_launcher_dir
-
-if platform.system() == "Windows":
+if platform.system() == 'Windows':
     import winreg
 
 def create_app_reference():
     from core.app import DeltaHubApp
     return DeltaHubApp
-SINGLE_INSTANCE_KEY = "deltahub.y.114.single-instance-lock"
+SINGLE_INSTANCE_KEY = 'deltahub.y.114.single-instance-lock'
 _translator = QTranslator()
 _splash_start_time = None
 
@@ -35,51 +34,38 @@ def check_game_processes():
     return None
 
 def register_url_protocol():
-    """Registers the deltahub:// URL protocol."""
     if getattr(sys, 'frozen', False):
         executable_path = f'"{sys.executable}"'
     else:
-        # In dev mode, construct the command to run the main script
         main_script_path = os.path.abspath(os.path.join(get_launcher_dir(), '..', 'src', 'main.py'))
         executable_path = f'"{sys.executable}" "{main_script_path}"'
-
     system = platform.system()
     try:
-        if system == "Windows":
-            key_path = r"Software\Classes\deltahub"
+        if system == 'Windows':
+            key_path = 'Software\\Classes\\deltahub'
             with winreg.CreateKey(winreg.HKEY_CURRENT_USER, key_path) as key:
-                winreg.SetValue(key, "", winreg.REG_SZ, "URL:DELTAHUB Protocol")
-                winreg.SetValueEx(key, "URL Protocol", 0, winreg.REG_SZ, "")
-                
-                command_key_path = fr"{key_path}\shell\open\command"
+                winreg.SetValue(key, '', winreg.REG_SZ, 'URL:DELTAHUB Protocol')
+                winreg.SetValueEx(key, 'URL Protocol', 0, winreg.REG_SZ, '')
+                command_key_path = f'{key_path}\\shell\\open\\command'
                 with winreg.CreateKey(winreg.HKEY_CURRENT_USER, command_key_path) as command_key:
-                    # The "%1" is crucial for passing the URL to the application
                     command = f'{executable_path} "%1"'
-                    winreg.SetValue(command_key, "", winreg.REG_SZ, command)
-        elif system == "Linux":
-            desktop_file_content = f"""[Desktop Entry]
-Name=DELTAHUB Launcher
-Exec={executable_path} %u
-Type=Application
-Terminal=false
-MimeType=x-scheme-handler/deltahub;
-"""
-            apps_dir = os.path.expanduser("~/.local/share/applications")
+                    winreg.SetValue(command_key, '', winreg.REG_SZ, command)
+        elif system == 'Linux':
+            desktop_file_content = f'[Desktop Entry]\nName=DELTAHUB Launcher\nExec={executable_path} %u\nType=Application\nTerminal=false\nMimeType=x-scheme-handler/deltahub;\n'
+            apps_dir = os.path.expanduser('~/.local/share/applications')
             os.makedirs(apps_dir, exist_ok=True)
-            desktop_file_path = os.path.join(apps_dir, "deltahub.desktop")
-            with open(desktop_file_path, "w", encoding="utf-8") as f:
+            desktop_file_path = os.path.join(apps_dir, 'deltahub.desktop')
+            with open(desktop_file_path, 'w', encoding='utf-8') as f:
                 f.write(desktop_file_content)
-            
-            # Register the handler
-            subprocess.run(["xdg-mime", "default", "deltahub.desktop", "x-scheme-handler/deltahub"], check=False)
+            subprocess.run(['xdg-mime', 'default', 'deltahub.desktop', 'x-scheme-handler/deltahub'], check=False)
     except Exception as e:
-        print(f"Failed to register URL protocol: {e}")
+        print(f'Failed to register URL protocol: {e}')
 
 class SingleInstanceServer(QLocalServer):
+
     def __init__(self, app_instance):
         super().__init__()
         self.app_instance = app_instance
-
         self.newConnection.connect(self.handle_new_connection)
 
     def handle_new_connection(self):
@@ -91,7 +77,7 @@ class SingleInstanceServer(QLocalServer):
         data = socket.readAll().data()
         if data:
             url = data.decode('utf-8')
-            if url.startswith("deltahub://"):
+            if url.startswith('deltahub://'):
                 self.app_instance.url_received_signal.emit(url)
         socket.close()
 
@@ -120,23 +106,15 @@ def run_app():
     parser.add_argument('--force-start', action='store_true', help='Force start even if another instance is detected')
     args, unknown_args = parser.parse_known_args()
     url_arg = next((arg for arg in sys.argv[1:] if arg.startswith('deltahub://')), None)
-
     socket = QLocalSocket()
     socket.connectToServer(SINGLE_INSTANCE_KEY)
-
-    # waitForConnected(500) дает полсекунды на установку соединения.
-    # Этого более чем достаточно и решает проблему гонки состояний.
     if socket.waitForConnected(500):
         if url_arg:
             socket.writeData(url_arg.encode('utf-8'))
             socket.flush()
             socket.waitForBytesWritten(1000)
-        # Второй экземпляр успешно передал информацию и должен завершиться.
         socket.disconnectFromServer()
         sys.exit(0)
-    
-    # Если подключиться не удалось, значит, это первый экземпляр.
-    # Удаляем старый файл сокета, если он остался от аварийного завершения.
     QLocalServer.removeServer(SINGLE_INSTANCE_KEY)
     if not args.force_start:
         running_game = check_game_processes()
@@ -150,7 +128,7 @@ def run_app():
     try:
         register_url_protocol()
     except Exception as e:
-        print(f"Could not register protocol handler: {e}")
+        print(f'Could not register protocol handler: {e}')
     if args.shortcut_launch:
         DeltaHubApp = create_app_reference()
         DeltaHubApp(args=args)
@@ -164,11 +142,9 @@ def run_app():
                 config = json.load(f)
     except Exception:
         pass
-
     is_first_launch = not config.get('first_launch_splash_shown', False)
     splash_disabled_by_user = config.get('disable_splash', False)
     show_animated_splash = is_first_launch or not splash_disabled_by_user
-
     if not show_animated_splash:
         splash = create_png_splash()
         splash.show()
@@ -213,11 +189,11 @@ def run_app():
     global _splash_start_time
     _splash_start_time = time.time()
     splash = create_splash()
+
     def start_splash_and_sound():
         play_deltahub_sound()
         if hasattr(splash, 'movie'):
             splash.start_gif_animation()
-
     if hasattr(splash, 'movie'):
         for _ in range(50):
             app.processEvents()

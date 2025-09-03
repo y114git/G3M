@@ -79,13 +79,8 @@ class ModEditorDialog(QDialog):
 
     def _on_xdelta_checkbox_changed(self, state):
         if self.is_creating and state == 0:
-            reply = QMessageBox.question(self,
-                                         tr('dialogs.xdelta_disable_warning_title'),
-                                         tr('dialogs.xdelta_disable_warning_body'),
-                                         QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                                         QMessageBox.StandardButton.No)
+            reply = QMessageBox.question(self, tr('dialogs.xdelta_disable_warning_title'), tr('dialogs.xdelta_disable_warning_body'), QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No)
             if reply != QMessageBox.StandardButton.Yes:
-                # Block signals to prevent recursion when setting state
                 self.xdelta_checkbox.blockSignals(True)
                 self.xdelta_checkbox.setChecked(True)
                 self.xdelta_checkbox.blockSignals(False)
@@ -901,9 +896,7 @@ class ModEditorDialog(QDialog):
         if line_edit and (not sip.isdeleted(line_edit)):
             line_edit.setProperty('isValid', is_valid)
 
-
     def _browse_file(self, line_edit, title, file_filter):
-        # Показать диалог выбора типа
         msg = QMessageBox(self)
         msg.setWindowTitle(tr('ui.choice_title'))
         msg.setText(tr('ui.select_file_or_folder'))
@@ -911,14 +904,11 @@ class ModEditorDialog(QDialog):
         folder_button = msg.addButton(tr('ui.folder'), QMessageBox.ButtonRole.AcceptRole)
         msg.setDefaultButton(archive_button)
         msg.exec()
-
         if msg.clickedButton() == archive_button:
-            # Выбор файла (архив)
             file_path, _ = QFileDialog.getOpenFileName(self, title, '', file_filter)
             if file_path:
                 line_edit.setText(file_path)
         else:
-            # Выбор папки
             folder_path = QFileDialog.getExistingDirectory(self, title, '')
             if folder_path:
                 line_edit.setText(folder_path)
@@ -1155,7 +1145,7 @@ class ModEditorDialog(QDialog):
             QMessageBox.warning(self, tr('dialogs.error'), tr('dialogs.mod_author_empty'))
             return False
         gamebanana_url = self.gamebanana_url_edit.text().strip()
-        if gamebanana_url and not gamebanana_url.startswith('https://gamebanana.com/mods/'):
+        if gamebanana_url and (not gamebanana_url.startswith('https://gamebanana.com/mods/')):
             QMessageBox.warning(self, tr('dialogs.error'), tr('dialogs.invalid_gamebanana_url'))
             return False
         if len(self.version_edit.text().strip()) > 10:
@@ -1406,7 +1396,6 @@ class ModEditorDialog(QDialog):
         return True
 
     def _select_local_extra_files(self, tab, tab_layout):
-        # Показать диалог выбора типа
         msg = QMessageBox(self)
         msg.setWindowTitle(tr('ui.choice_title'))
         msg.setText(tr('ui.select_file_or_folder'))
@@ -1414,16 +1403,12 @@ class ModEditorDialog(QDialog):
         folder_button = msg.addButton(tr('ui.folder'), QMessageBox.ButtonRole.AcceptRole)
         msg.setDefaultButton(archive_button)
         msg.exec()
-
         if msg.clickedButton() == archive_button:
-            # Выбор нескольких файлов
             file_paths, _ = QFileDialog.getOpenFileNames(self, tr('ui.select_additional_files'), '', get_file_filter('extended_archives'))
         else:
-            # Выбор одной папки
             folder_path = QFileDialog.getExistingDirectory(self, tr('ui.select_additional_files'), '')
             if folder_path:
                 file_paths = [folder_path]
-
         if file_paths:
             key_name, ok = QInputDialog.getText(self, tr('dialogs.file_group_name'), tr('dialogs.enter_file_group_key'))
             if not ok or not key_name.strip():
@@ -1502,11 +1487,7 @@ class ModEditorDialog(QDialog):
                         elif frame_data['type'] == 'extra':
                             if 'extra_files' not in tab_files:
                                 tab_files['extra_files'] = []
-                            tab_files['extra_files'].append({
-                                'key': frame_data['key'],
-                                'url': frame_data['url'],
-                                'version': frame_data['version']
-                            })
+                            tab_files['extra_files'].append({'key': frame_data['key'], 'url': frame_data['url'], 'version': frame_data['version']})
                 else:
                     local_data = self._extract_local_frame_data(frame_layout)
                     if not local_data:
@@ -1517,10 +1498,7 @@ class ModEditorDialog(QDialog):
                     elif local_data['type'] == 'extra' and local_data.get('paths'):
                         if 'extra_files' not in tab_files:
                             tab_files['extra_files'] = []
-                        tab_files['extra_files'].append({
-                            'key': local_data['key'],
-                            'paths': local_data['paths']
-                        })
+                        tab_files['extra_files'].append({'key': local_data['key'], 'paths': local_data['paths']})
             if tab_files:
                 files_data[tab_key] = tab_files
         return files_data
@@ -1590,16 +1568,14 @@ class ModEditorDialog(QDialog):
     def _extract_local_frame_data(self, frame_layout):
         if frame_layout.count() == 0:
             return None
-
         title_item = frame_layout.itemAt(0)
         if not title_item:
             return None
-
         title_widget = title_item.widget()
         if not isinstance(title_widget, QLabel):
             return None
         title_text = title_widget.text()
-        if any(keyword in title_text for keyword in ['DATA', 'PATCH', tr('files.patch_file'), tr('files.data_file')]):
+        if any((keyword in title_text for keyword in ['DATA', 'PATCH', tr('files.patch_file'), tr('files.data_file')])):
             frame_type = 'data'
         elif detect_field_type_by_text(title_text) == 'extra_files' or tr('files.extra_files_title', key_name='').split(':')[0] in title_text:
             frame_type = 'extra'
@@ -1622,7 +1598,7 @@ class ModEditorDialog(QDialog):
             for i in range(frame_layout.count()):
                 item = frame_layout.itemAt(i)
                 widget = item.widget() if item else None
-                if isinstance(widget, QLineEdit) and not widget.isReadOnly():
+                if isinstance(widget, QLineEdit) and (not widget.isReadOnly()):
                     version_edit = widget
             if path_edit and path_edit.text():
                 return {'type': 'data', 'path': path_edit.text(), 'version': version_edit.text() if version_edit else '1.0.0'}
@@ -1653,13 +1629,7 @@ class ModEditorDialog(QDialog):
             author = tr('defaults.local_author')
         version = self.version_edit.text().strip() or '1.0.0'
         tagline = self.tagline_edit.text().strip() or tr('defaults.no_short_description')
-        return {'name': self.name_edit.text().strip(), 'version': version, 'author': author, 'tagline': tagline,
-                'gamebanana_url': self.gamebanana_url_edit.text().strip(),
-                'description_url': self.description_url_edit.text().strip(),
-                'icon_url': self.icon_edit.text().strip(), 'tags': tags, 'hide_mod': False,
-                'is_xdelta': self.xdelta_checkbox.isChecked(), 'modgame': self.modgame_combo.currentData() or 'deltarune',
-                'game_version': self.game_version_combo.currentText() if self.is_public else self.game_version_edit.text().strip() or '1.04',
-                'files': files_data, 'screenshots_url': getattr(self, 'screenshots_urls', [])}
+        return {'name': self.name_edit.text().strip(), 'version': version, 'author': author, 'tagline': tagline, 'gamebanana_url': self.gamebanana_url_edit.text().strip(), 'description_url': self.description_url_edit.text().strip(), 'icon_url': self.icon_edit.text().strip(), 'tags': tags, 'hide_mod': False, 'is_xdelta': self.xdelta_checkbox.isChecked(), 'modgame': self.modgame_combo.currentData() or 'deltarune', 'game_version': self.game_version_combo.currentText() if self.is_public else self.game_version_edit.text().strip() or '1.04', 'files': files_data, 'screenshots_url': getattr(self, 'screenshots_urls', [])}
 
     def _save_public_mod(self):
         QMessageBox.information(self, tr('errors.save_secret_key_title'), tr('dialogs.save_secret_key_instruction'))
@@ -1731,9 +1701,7 @@ class ModEditorDialog(QDialog):
             if icon_path and os.path.exists(icon_path):
                 icon_filename = os.path.basename(icon_path)
                 shutil.copy2(icon_path, os.path.join(mod_dir, icon_filename))
-                mod_data['icon_url'] = icon_filename # This will be saved in the config
-
-            # This is the new, corrected file processing logic
+                mod_data['icon_url'] = icon_filename
             processed_files_data = {}
             for file_key, original_file_data in mod_data.get('files', {}).items():
                 new_file_data = {}
@@ -1745,7 +1713,6 @@ class ModEditorDialog(QDialog):
                     file_folder = os.path.join(mod_dir, 'chapter_0')
                 else:
                     file_folder = os.path.join(mod_dir, f'chapter_{file_key}')
-
                 os.makedirs(file_folder, exist_ok=True)
                 data_path = original_file_data.get('data_file_url')
                 if data_path and os.path.exists(data_path):
@@ -1757,8 +1724,6 @@ class ModEditorDialog(QDialog):
                         shutil.copy2(data_path, destination)
                     new_file_data['data_file_url'] = data_filename
                     new_file_data['data_file_version'] = original_file_data.get('data_file_version', '1.0.0')
-
-                # Process extra files
                 if 'extra_files' in original_file_data:
                     new_file_data['extra_files'] = {}
                     for group in original_file_data['extra_files']:
@@ -1777,11 +1742,7 @@ class ModEditorDialog(QDialog):
                                     new_file_data['extra_files'][group_key].append(filename)
                 if new_file_data:
                     processed_files_data[file_key] = new_file_data
-            config_data = {'is_local_mod': True, 'mod_key': mod_key, 'created_date': time.strftime('%d.%m.%y %H:%M'),
-                           'is_available_on_server': False, 'name': mod_data.get('name', ''), 'version': mod_data.get('version', '1.0.0'),
-                           'author': mod_data.get('author', ''), 'tagline': mod_data.get('tagline', tr('defaults.no_short_description')),
-                           'gamebanana_url': mod_data.get('gamebanana_url', ''), 'game_version': mod_data.get('game_version', tr('defaults.not_specified')), 'modgame': mod_data.get('modgame', 'deltarune'),
-                           'files': processed_files_data}
+            config_data = {'is_local_mod': True, 'mod_key': mod_key, 'created_date': time.strftime('%d.%m.%y %H:%M'), 'is_available_on_server': False, 'name': mod_data.get('name', ''), 'version': mod_data.get('version', '1.0.0'), 'author': mod_data.get('author', ''), 'tagline': mod_data.get('tagline', tr('defaults.no_short_description')), 'gamebanana_url': mod_data.get('gamebanana_url', ''), 'game_version': mod_data.get('game_version', tr('defaults.not_specified')), 'modgame': mod_data.get('modgame', 'deltarune'), 'files': processed_files_data}
             config_path = os.path.join(mod_dir, 'config.json')
             self.parent_app._write_json(config_path, config_data)
             self.parent_app._load_local_mods_from_folders()
@@ -1940,11 +1901,7 @@ class ModEditorDialog(QDialog):
                                 copied_paths.append(filename)
                         if copied_paths:
                             files_data[file_key]['extra_files'][group_key] = copied_paths
-            config_data.update({'name': updated_data.get('name', ''), 'version': updated_data.get('version', '1.0.0'),
-                                'author': updated_data.get('author', ''), 'tagline': updated_data.get('tagline', ''),
-                                'gamebanana_url': updated_data.get('gamebanana_url', ''),
-                                'game_version': updated_data.get('game_version', tr('defaults.not_specified')),
-                                'modgame': updated_data.get('modgame', 'deltarune'), 'files': files_data})
+            config_data.update({'name': updated_data.get('name', ''), 'version': updated_data.get('version', '1.0.0'), 'author': updated_data.get('author', ''), 'tagline': updated_data.get('tagline', ''), 'gamebanana_url': updated_data.get('gamebanana_url', ''), 'game_version': updated_data.get('game_version', tr('defaults.not_specified')), 'modgame': updated_data.get('modgame', 'deltarune'), 'files': files_data})
             self.parent_app._write_json(config_path, config_data)
             self.parent_app._load_local_mods_from_folders()
             self.parent_app._update_installed_mods_display()

@@ -440,10 +440,7 @@ class InstallModsThread(QThread):
                 self.main_window._write_json(config_path, config_data)
             metadata = self.main_window._read_mods_metadata()
             for mod_key in installed_mods.keys():
-                metadata[mod_key] = {
-                    'installed_date': time.strftime('%Y-%m-%d %H:%M:%S'),
-                    'is_available_on_server': True
-                }
+                metadata[mod_key] = {'installed_date': time.strftime('%Y-%m-%d %H:%M:%S'), 'is_available_on_server': True}
             self.main_window._write_mods_metadata(metadata)
             self._increment_downloads_for_installed_mods(installed_mods.keys())
             try:
@@ -507,43 +504,33 @@ class UrlInstallThread(QThread):
         import tempfile
         import shutil
         try:
-            if not self.url.startswith("deltahub://"):
-                raise ValueError("Invalid URL scheme")
-
-            content = self.url[len("deltahub://"):].split(',')[0].strip().rstrip('/')
-
+            if not self.url.startswith('deltahub://'):
+                raise ValueError('Invalid URL scheme')
+            content = self.url[len('deltahub://'):].split(',')[0].strip().rstrip('/')
             if not content.startswith(('http://', 'https://')):
-                 content = content.replace('https//', 'https://').replace('http//', 'http://')
-
+                content = content.replace('https//', 'https://').replace('http//', 'http://')
             if content.startswith(('http://', 'https://')):
                 with tempfile.TemporaryDirectory(prefix='gb-install-') as temp_dir:
                     download_url = content
-
                     self.status.emit(tr('status.downloading_from_external'), UI_COLORS['status_warning'])
                     archive_path = self._download_archive(download_url, temp_dir)
-
                     config_data_from_archive = self._extract_and_read_config(archive_path)
                     if config_data_from_archive is None:
                         raise ValueError(tr('errors.config_not_found_in_archive'))
-
                     mod_name_from_archive = config_data_from_archive.get('name', 'Unknown Mod')
-
                     mod_key = config_data_from_archive.get('mod_key')
                     is_local = config_data_from_archive.get('is_local_mod', not bool(mod_key))
-
-                    if mod_key and not is_local:
+                    if mod_key and (not is_local):
                         mod_info = next((m for m in self.main_window.all_mods if m.key == mod_key), None)
                         mod_name = mod_info.name if mod_info else mod_name_from_archive
-                        if mod_info and mod_info.ban_status: 
+                        if mod_info and mod_info.ban_status:
                             raise ValueError(tr('errors.mod_is_banned'))
-
                         if self._is_metadata_only(archive_path):
                             if not mod_info:
                                 raise ValueError(tr('errors.smart_install_mod_not_found'))
                             self.status.emit(tr('status.smart_install_starting', mod_name=mod_name), UI_COLORS['status_info'])
                             self.main_window.install_from_gb_signal.emit(mod_info)
                             return
-                        
                         if self.main_window._is_mod_installed(mod_key):
                             result = self._ask_user(tr('dialogs.update_confirmation_title', mod_name=mod_name), tr('dialogs.update_confirmation_body', mod_name=mod_name))
                             if not result:
@@ -555,7 +542,6 @@ class UrlInstallThread(QThread):
                         if not result:
                             self.finished.emit(False, tr('status.install_cancelled_by_user'))
                             return
-                        
                         installed_mods = self.main_window._get_installed_mods_list()
                         existing_local_mod = next((m for m in installed_mods if m.get('is_local_mod') and m.get('name') == mod_name), None)
                         if existing_local_mod:
@@ -563,7 +549,6 @@ class UrlInstallThread(QThread):
                             if not update_result:
                                 self.finished.emit(False, tr('status.install_cancelled_by_user'))
                                 return
-                    
                     existing_folder_name = None
                     if 'existing_local_mod' in locals() and existing_local_mod:
                         existing_folder_name = existing_local_mod.get('folder_name')
@@ -572,86 +557,66 @@ class UrlInstallThread(QThread):
                         existing_public_mod = next((m for m in installed_mods if m.get('mod_key') == mod_key), None)
                         if existing_public_mod:
                             existing_folder_name = existing_public_mod.get('folder_name')
-
                     config_data = config_data_from_archive
                     target_mod_dir = os.path.join(self.main_window.mods_dir, existing_folder_name or get_unique_mod_dir(self.main_window.mods_dir, mod_name))
-                    
                     if os.path.exists(target_mod_dir):
                         shutil.rmtree(target_mod_dir)
                     os.makedirs(target_mod_dir)
-
                     self._extract_full_archive(archive_path, target_mod_dir)
-
                     final_config_path = os.path.join(target_mod_dir, 'config.json')
                     final_config_data = {}
                     if os.path.exists(final_config_path):
                         final_config_data = self.main_window._read_json(final_config_path)
                     else:
                         final_config_data = config_data_from_archive
-                    
                     final_config_data.pop('installed_date', None)
                     final_config_data.pop('is_available_on_server', None)
                     self.main_window._write_json(final_config_path, final_config_data)
-
                     mod_key_for_meta = final_config_data.get('mod_key')
                     if mod_key_for_meta:
                         metadata = self.main_window._read_mods_metadata()
-                        metadata[mod_key_for_meta] = {
-                            'installed_date': time.strftime('%Y-%m-%d %H:%M:%S'),
-                            'is_available_on_server': not final_config_data.get('is_local_mod', False)
-                        }
+                        metadata[mod_key_for_meta] = {'installed_date': time.strftime('%Y-%m-%d %H:%M:%S'), 'is_available_on_server': not final_config_data.get('is_local_mod', False)}
                         self.main_window._write_mods_metadata(metadata)
-
                     self.finished.emit(True, tr('status.install_complete_success', mod_name=mod_name))
                 return
-            elif len(content) == 64 and all(c in '0123456789abcdef' for c in content.lower()):
-                # --- New Logic: Handle direct hash install ---
+            elif len(content) == 64 and all((c in '0123456789abcdef' for c in content.lower())):
                 mod_key = content
                 mod_info = next((m for m in self.main_window.all_mods if m.key == mod_key), None)
-
                 if not mod_info:
                     raise ValueError(tr('errors.smart_install_mod_not_found'))
                 if mod_info.ban_status:
                     raise ValueError(tr('errors.mod_is_banned'))
-
                 mod_name = mod_info.name
                 if self.main_window._is_mod_installed(mod_key):
                     result = self._ask_user(tr('dialogs.update_confirmation_title', mod_name=mod_name), tr('dialogs.update_confirmation_body', mod_name=mod_name))
                     if not result:
                         self.finished.emit(False, tr('status.update_cancelled'))
                         return
-
                 self.status.emit(tr('status.smart_install_starting', mod_name=mod_name), UI_COLORS['status_info'])
                 self.main_window.install_from_gb_signal.emit(mod_info)
-                return # Handoff complete, this thread's job is done.
+                return
             else:
                 raise ValueError(tr('errors.no_valid_url_found'))
-
         except Exception as e:
             self.finished.emit(False, str(e))
-    
+
     def _ask_user(self, title: str, message: str) -> bool:
         self.prompt_event.clear()
         self.prompt_required.emit(title, message)
-        self.prompt_event.wait() # Block until the main thread sets the event
+        self.prompt_event.wait()
         return self.prompt_result
 
     def _download_archive(self, url: str, temp_dir: str) -> str:
         from urllib.parse import urlparse, unquote
-
         parsed_url = urlparse(url)
         filename = unquote(os.path.basename(parsed_url.path))
         if not filename:
-            filename = "mod.zip"
-
+            filename = 'mod.zip'
         archive_path = os.path.join(temp_dir, filename)
-        
         response = requests.get(url, stream=True, timeout=30, headers=BROWSER_HEADERS)
         response.raise_for_status()
-
         total_size = int(response.headers.get('content-length', 0))
         downloaded_size = 0
-
         with open(archive_path, 'wb') as f:
             for chunk in response.iter_content(chunk_size=8192):
                 f.write(chunk)
@@ -659,14 +624,12 @@ class UrlInstallThread(QThread):
                 if total_size > 0:
                     progress = int(downloaded_size * 100 / total_size)
                     self.progress.emit(progress)
-        
         self.progress.emit(100)
         return archive_path
 
     def _extract_and_read_config(self, archive_path: str) -> dict | None:
         archive_path_lower = archive_path.lower()
         config_content = None
-
         try:
             if archive_path_lower.endswith('.zip'):
                 with zipfile.ZipFile(archive_path, 'r') as zf:
@@ -679,14 +642,12 @@ class UrlInstallThread(QThread):
             elif archive_path_lower.endswith('.7z'):
                 with py7zr.SevenZipFile(archive_path, mode='r') as zf:
                     if 'config.json' in zf.getnames():
-                        # Extract just the config to a temp location to read it, avoiding memory read issues
-                        extract_dir = os.path.join(os.path.dirname(archive_path), "7z_config")
+                        extract_dir = os.path.join(os.path.dirname(archive_path), '7z_config')
                         zf.extract(path=extract_dir, targets=['config.json'])
                         config_file_path = os.path.join(extract_dir, 'config.json')
                         if os.path.exists(config_file_path):
                             with open(config_file_path, 'rb') as f:
                                 config_content = f.read()
-            
             if config_content:
                 return json.loads(config_content)
         except Exception:
@@ -708,10 +669,9 @@ class UrlInstallThread(QThread):
         except Exception:
             return False
         return False
-    
+
     def _extract_full_archive(self, archive_path: str, target_dir: str):
         archive_path_lower = archive_path.lower()
-
         if archive_path_lower.endswith('.zip'):
             with zipfile.ZipFile(archive_path, 'r') as zf:
                 zf.extractall(target_dir)
@@ -723,6 +683,7 @@ class UrlInstallThread(QThread):
                 zf.extractall(path=target_dir)
         else:
             raise ValueError(tr('errors.unsupported_archive_format'))
+
 class FetchHelpContentThread(QThread):
     finished = pyqtSignal(str)
 

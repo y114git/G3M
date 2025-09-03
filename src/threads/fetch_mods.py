@@ -201,7 +201,6 @@ class FetchModsThread(QThread):
         try:
             mods_metadata = self.main_window._read_mods_metadata()
             metadata_updated = False
-
             for folder_name in os.listdir(self.main_window.mods_dir):
                 folder_path = os.path.join(self.main_window.mods_dir, folder_name)
                 if not os.path.isdir(folder_path):
@@ -209,10 +208,10 @@ class FetchModsThread(QThread):
                 config_path = os.path.join(folder_path, 'config.json')
                 if not os.path.exists(config_path):
                     continue
-                
                 try:
                     config_data = self.main_window._read_json(config_path)
-                    if not config_data: continue
+                    if not config_data:
+                        continue
                     mod_key = config_data.get('mod_key')
                     if not mod_key or config_data.get('is_local_mod', False):
                         continue
@@ -224,8 +223,7 @@ class FetchModsThread(QThread):
                         metadata_updated = True
                 except (IOError, json.JSONDecodeError):
                     continue
-            
             if metadata_updated:
                 self.main_window._write_mods_metadata(mods_metadata)
         except Exception as e:
-            logging.warning(f"Failed to update remote exists flags in metadata: {e}")
+            logging.warning(f'Failed to update remote exists flags in metadata: {e}')
