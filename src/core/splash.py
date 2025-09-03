@@ -12,8 +12,7 @@ class CustomSplashScreen(QSplashScreen):
             super().__init__(pixmap)
         else:
             super().__init__()
-        self.setWindowFlags(Qt.WindowType.WindowStaysOnTopHint |
-                            Qt.WindowType.FramelessWindowHint)
+        self.setWindowFlags(Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.FramelessWindowHint)
         self.animation = None
         if gif_path:
             self.setup_gif_animation(gif_path)
@@ -92,8 +91,7 @@ def create_png_splash():
         600, 600, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
     splash = CustomSplashScreen(scaled_pixmap)
     splash.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-    splash.setWindowFlags(Qt.WindowType.FramelessWindowHint |
-                          Qt.WindowType.WindowStaysOnTopHint)
+    splash.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint)
     return splash
 
 

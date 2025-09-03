@@ -1142,8 +1142,7 @@ class ModEditorDialog(QDialog):
         except Exception:
             pass
         size = min(pixmap.width(), pixmap.height())
-        cropped = pixmap.copy((pixmap.width() - size) //
-                              2, (pixmap.height() - size) // 2, size, size)
+        cropped = pixmap.copy((pixmap.width() - size) // 2, (pixmap.height() - size) // 2, size, size)
         self.icon_preview.setPixmap(cropped.scaled(
             64, 64, Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation))
 

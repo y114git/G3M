@@ -436,8 +436,7 @@ class DeltaHubApp(QWidget):
         msg.setStandardButtons(
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         msg.setTextFormat(Qt.TextFormat.RichText)
-        msg.setText('<br>'.join(description_lines) +
-                    f"<br><br><p>{tr('dialogs.shortcut_create_description')}</p>")
+        msg.setText('<br>'.join(description_lines) + f"<br><br><p>{tr('dialogs.shortcut_create_description')}</p>")
         msg.exec()
         reply = msg.standardButton(msg.clickedButton())
         if reply == QMessageBox.StandardButton.Yes:
@@ -976,14 +975,6 @@ class DeltaHubApp(QWidget):
             QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.help_button.setStyleSheet('min-width: 220px; max-width: 220px;')
         self.help_button.clicked.connect(self._toggle_help_view)
-        self.sort_combo.setCurrentIndex(0)
-        self.sort_order_btn.setText('▼')
-        self.sort_ascending = False
-        self.modgame_combo.setCurrentIndex(0)
-        for tag_checkbox in [self.tag_translation, self.tag_customization, self.tag_gameplay, self.tag_other]:
-            tag_checkbox.setChecked(False)
-        self.search_text = ''
-        self.search_button.setText('🔍')
         self._update_filtered_mods()
         settings_layout.addWidget(self.settings_pages_container)
         self.changelog_widget.setVisible(False)
@@ -1007,8 +998,6 @@ class DeltaHubApp(QWidget):
         self.current_settings_page = self.settings_menu_page
         self.tab_widget = self.main_tab_widget
         self.tabs = {}
-        self.chapter_btn_widget = QWidget()
-        self.chapter_btn_widget.hide()
         self.setWindowIcon(QIcon(resource_path('resources/icons/icon.ico')))
 
     def _on_tab_changed(self, index):
@@ -2751,8 +2740,7 @@ class DeltaHubApp(QWidget):
         if not hasattr(self, 'page_label') or not hasattr(self, 'prev_page_btn') or (not hasattr(self, 'next_page_btn')):
             return
         total_mods = len(self.filtered_mods)
-        total_pages = max(1, (total_mods - 1) //
-                          self.mods_per_page + 1) if total_mods > 0 else 1
+        total_pages = max(1, (total_mods - 1) // self.mods_per_page + 1) if total_mods > 0 else 1
         self.page_label.setText(
             tr('ui.page_label', current=self.current_page, total=total_pages))
         self.prev_page_btn.setEnabled(self.current_page > 1)
@@ -3118,8 +3106,7 @@ class DeltaHubApp(QWidget):
 
     def _init_save_manager_ui(self):
         lay = QVBoxLayout(self.save_manager_widget)
-        lay.setAlignment(Qt.AlignmentFlag.AlignTop |
-                         Qt.AlignmentFlag.AlignHCenter)
+        lay.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
         top = QHBoxLayout()
         top.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.save_back_btn = QPushButton(tr('ui.back_button'))
@@ -3161,8 +3148,7 @@ class DeltaHubApp(QWidget):
             btn.setMinimumWidth(80)
             if ch == 1:
                 btn.setChecked(True)
-            btn.clicked.connect(lambda _checked, idx=ch -
-                                1: self.save_tabs.setCurrentIndex(idx))
+            btn.clicked.connect(lambda _checked, idx=ch - 1: self.save_tabs.setCurrentIndex(idx))
             self._chapter_buttons.append(btn)
             chapter_bar.addWidget(btn)
         lay.addLayout(chapter_bar)
@@ -3861,7 +3847,6 @@ class DeltaHubApp(QWidget):
         if self.is_settings_view:
             self._lock_window_size()
             self.settings_button.setText(tr('ui.back_button'))
-            self.chapter_btn_widget.setVisible(False)
             self.tab_widget.setVisible(False)
             self.bottom_widget.setVisible(False)
             self.settings_widget.setVisible(True)
@@ -3922,15 +3907,6 @@ class DeltaHubApp(QWidget):
             tr('buttons.changelog_close') if is_changelog else tr('buttons.changelog'))
         self.help_button.setText(
             tr('buttons.changelog_close') if is_help else tr('buttons.help'))
-        if is_changelog:
-            self._update_status(tr('status.changelog'),
-                                UI_COLORS['status_info'])
-        elif is_help:
-            self._update_status(tr('dialogs.help_title'),
-                                UI_COLORS['status_info'])
-        else:
-            self._update_status(
-                tr('status.launcher_settings'), UI_COLORS['status_info'])
 
     def _on_toggle_disable_background(self, state):
         is_disabled = bool(state)
