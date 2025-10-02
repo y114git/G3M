@@ -24,7 +24,15 @@ class LocalizationManager:
         for filename in os.listdir(self.internal_lang_dir):
             internal_path = os.path.join(self.internal_lang_dir, filename)
             external_path = os.path.join(self.external_lang_dir, filename)
-            if not os.path.exists(external_path):
+            if filename.startswith('lang_') and filename.endswith('.json'):
+                internal_version = self._get_lang_version(internal_path)
+                external_version = self._get_lang_version(external_path)
+                if not external_version or (internal_version and internal_version >= external_version):
+                    try:
+                        shutil.copy2(internal_path, external_path)
+                    except Exception as e:
+                        print(f"Could not copy internal file '{filename}' to external directory: {e}")
+            elif not os.path.exists(external_path):
                 try:
                     if os.path.isdir(internal_path):
                         shutil.copytree(internal_path, external_path)
@@ -32,6 +40,16 @@ class LocalizationManager:
                         shutil.copy2(internal_path, external_path)
                 except Exception as e:
                     print(f"Could not copy internal file '{filename}' to external directory: {e}")
+
+    def _get_lang_version(self, file_path: str) -> Optional[str]:
+        if not os.path.exists(file_path):
+            return None
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            return data.get('metadata', {}).get('version')
+        except (json.JSONDecodeError, IOError):
+            return None
 
     def _load_available_languages(self):
         self.available_languages = self._scan_lang_dir(self.external_lang_dir)

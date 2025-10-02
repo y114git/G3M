@@ -59,13 +59,6 @@ class ModPlaqueWidget(BaseModWidget):
 
     def _init_ui(self):
         super()._init_ui()
-        version_label_item = self.title_layout.itemAt(1)
-        if version_label_item:
-            widget = version_label_item.widget()
-            if isinstance(widget, QLabel):
-                original_text = widget.text()
-                if getattr(self.mod_data, 'gamebanana_url', None):
-                    widget.setText(f'{original_text} 🍌')
         downloads_label = QLabel(f'⤓ {self.mod_data.downloads}')
         downloads_label.setObjectName('secondaryText')
         downloads_label.setToolTip(tr('ui.downloads_tooltip'))

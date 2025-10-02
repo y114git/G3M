@@ -103,10 +103,10 @@ class ModEditorDialog(QDialog):
         self.tagline_edit.setMaxLength(200)
         self.tagline_edit.setPlaceholderText(tr('ui.short_description_placeholder'))
         form_layout.addWidget(self.tagline_edit)
-        form_layout.addWidget(QLabel(tr('ui.gamebanana_url_optional')))
-        self.gamebanana_url_edit = QLineEdit()
-        self.gamebanana_url_edit.setPlaceholderText('https://gamebanana.com/mods/...')
-        form_layout.addWidget(self.gamebanana_url_edit)
+        form_layout.addWidget(QLabel(tr('ui.external_url_optional')))
+        self.external_url_edit = QLineEdit()
+        self.external_url_edit.setPlaceholderText('https://example.com/mod-page')
+        form_layout.addWidget(self.external_url_edit)
         self._create_icon_section(form_layout)
         self._create_tags_section(form_layout)
         form_layout.addWidget(QLabel(tr('ui.overall_mod_version')))
@@ -1154,10 +1154,20 @@ class ModEditorDialog(QDialog):
         if self.is_public and (not self.author_edit.text().strip()):
             QMessageBox.warning(self, tr('dialogs.error'), tr('dialogs.mod_author_empty'))
             return False
-        gamebanana_url = self.gamebanana_url_edit.text().strip()
-        if gamebanana_url and (not gamebanana_url.startswith('https://gamebanana.com/mods/')):
-            QMessageBox.warning(self, tr('dialogs.error'), tr('dialogs.invalid_gamebanana_url'))
-            return False
+        external_url = self.external_url_edit.text().strip()
+        if external_url:
+            from urllib.parse import urlparse
+            try:
+                result = urlparse(external_url)
+                if not all([result.scheme in ['http', 'https'], result.netloc]):
+                    raise ValueError("Invalid URL scheme or network location")
+                path = result.path.lower()
+                if any(path.endswith(ext) for ext in ['.zip', '.rar', '.7z', '.exe', '.xdelta', '.win', '.ios', '.data', '.patch', '.tar', '.gz', '.pkg', '.dmg']):
+                    QMessageBox.warning(self, tr('dialogs.error'), tr('dialogs.invalid_external_url_direct_download'))
+                    return False
+            except Exception:
+                QMessageBox.warning(self, tr('dialogs.error'), tr('dialogs.invalid_external_url'))
+                return False
         if len(self.version_edit.text().strip()) > 10:
             QMessageBox.warning(self, tr('dialogs.error'), tr('dialogs.mod_version_too_long'))
             return False
@@ -1638,7 +1648,7 @@ class ModEditorDialog(QDialog):
             author = tr('defaults.local_author')
         version = self.version_edit.text().strip() or '1.0.0'
         tagline = self.tagline_edit.text().strip() or tr('defaults.no_short_description')
-        return {'name': self.name_edit.text().strip(), 'version': version, 'author': author, 'tagline': tagline, 'gamebanana_url': self.gamebanana_url_edit.text().strip(), 'description_url': self.description_url_edit.text().strip(), 'icon_url': self.icon_edit.text().strip(), 'tags': tags, 'hide_mod': False, 'is_xdelta': self.xdelta_checkbox.isChecked(), 'modgame': self.modgame_combo.currentData() or 'deltarune', 'game_version': self.game_version_combo.currentText() if self.is_public else self.game_version_edit.text().strip() or '1.04', 'files': files_data, 'screenshots_url': getattr(self, 'screenshots_urls', [])}
+        return {'name': self.name_edit.text().strip(), 'version': version, 'author': author, 'tagline': tagline, 'external_url': self.external_url_edit.text().strip(), 'description_url': self.description_url_edit.text().strip(), 'icon_url': self.icon_edit.text().strip(), 'tags': tags, 'hide_mod': False, 'is_xdelta': self.xdelta_checkbox.isChecked(), 'modgame': self.modgame_combo.currentData() or 'deltarune', 'game_version': self.game_version_combo.currentText() if self.is_public else self.game_version_edit.text().strip() or '1.04', 'files': files_data, 'screenshots_url': getattr(self, 'screenshots_urls', [])}
 
     def _save_public_mod(self):
         QMessageBox.information(self, tr('errors.save_secret_key_title'), tr('dialogs.save_secret_key_instruction'))
@@ -1749,7 +1759,7 @@ class ModEditorDialog(QDialog):
                                     new_file_data['extra_files'][group_key].append(filename)
                 if new_file_data:
                     processed_files_data[file_key] = new_file_data
-            config_data = {'is_local_mod': True, 'mod_key': mod_key, 'created_date': time.strftime('%d.%m.%y %H:%M'), 'is_available_on_server': False, 'name': mod_data.get('name', ''), 'version': mod_data.get('version', '1.0.0'), 'author': mod_data.get('author', ''), 'tagline': mod_data.get('tagline', tr('defaults.no_short_description')), 'gamebanana_url': mod_data.get('gamebanana_url', ''), 'game_version': mod_data.get('game_version', tr('defaults.not_specified')), 'modgame': mod_data.get('modgame', 'deltarune'), 'files': processed_files_data}
+            config_data = {'is_local_mod': True, 'mod_key': mod_key, 'created_date': time.strftime('%d.%m.%y %H:%M'), 'is_available_on_server': False, 'name': mod_data.get('name', ''), 'version': mod_data.get('version', '1.0.0'), 'author': mod_data.get('author', ''), 'tagline': mod_data.get('tagline', tr('defaults.no_short_description')), 'external_url': mod_data.get('external_url', ''), 'game_version': mod_data.get('game_version', tr('defaults.not_specified')), 'modgame': mod_data.get('modgame', 'deltarune'), 'files': processed_files_data}
             config_path = os.path.join(mod_dir, 'config.json')
             self.parent_app._write_json(config_path, config_data)
             self.parent_app._load_local_mods_from_folders()
@@ -1828,7 +1838,7 @@ class ModEditorDialog(QDialog):
         if not hasattr(self, 'original_mod_data') or not self.original_mod_data:
             return True
         current_data, original_data = (self._collect_mod_data(), self.original_mod_data)
-        fields_to_compare = ['name', 'version', 'author', 'tagline', 'gamebanana_url', 'description_url', 'icon_url', 'tags', 'is_xdelta', 'modgame', 'game_version', 'files', 'screenshots_url']
+        fields_to_compare = ['name', 'version', 'author', 'tagline', 'external_url', 'description_url', 'icon_url', 'tags', 'is_xdelta', 'modgame', 'game_version', 'files', 'screenshots_url']
         return any((current_data.get(field) != original_data.get(field) for field in fields_to_compare))
 
     def _update_local_mod(self):
@@ -1908,7 +1918,7 @@ class ModEditorDialog(QDialog):
                                 copied_paths.append(filename)
                         if copied_paths:
                             files_data[file_key]['extra_files'][group_key] = copied_paths
-            config_data.update({'name': updated_data.get('name', ''), 'version': updated_data.get('version', '1.0.0'), 'author': updated_data.get('author', ''), 'tagline': updated_data.get('tagline', ''), 'gamebanana_url': updated_data.get('gamebanana_url', ''), 'game_version': updated_data.get('game_version', tr('defaults.not_specified')), 'modgame': updated_data.get('modgame', 'deltarune'), 'files': files_data})
+            config_data.update({'name': updated_data.get('name', ''), 'version': updated_data.get('version', '1.0.0'), 'author': updated_data.get('author', ''), 'tagline': updated_data.get('tagline', ''), 'external_url': updated_data.get('external_url', ''), 'game_version': updated_data.get('game_version', tr('defaults.not_specified')), 'modgame': updated_data.get('modgame', 'deltarune'), 'files': files_data})
             self.parent_app._write_json(config_path, config_data)
             self.parent_app._load_local_mods_from_folders()
             self.parent_app._update_installed_mods_display()
@@ -1985,7 +1995,7 @@ class ModEditorDialog(QDialog):
         self.name_edit.setText(actual_mod_data.get('name', ''))
         self.author_edit.setText(actual_mod_data.get('author', ''))
         self.tagline_edit.setText(actual_mod_data.get('tagline', ''))
-        self.gamebanana_url_edit.setText(actual_mod_data.get('gamebanana_url', ''))
+        self.external_url_edit.setText(actual_mod_data.get('external_url', ''))
         icon_value = actual_mod_data.get('icon_url', '')
         self.icon_edit.setText(icon_value)
         if icon_value:
