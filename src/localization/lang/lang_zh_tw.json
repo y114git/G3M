@@ -3,7 +3,8 @@
 	  "language": "chinese_traditional",
 	  "language_name": "繁體中文",
 	  "font": "Dtm_x_FZBitmap Regular.otf",
-	  "qt_translation": "qtbase_zh_tw"
+	  "qt_translation": "qtbase_zh_tw",
+    "version": "1.0.0"
 	},
 	"ui": {
 	  "add_data_file": "添加DATA檔案",
@@ -209,8 +210,8 @@
 	  "deltarune_desc": "此模組適用於DELTARUNE。",
 	  "undertale_desc": "此模組適用於UNDERTALE。",
 	  "deltarunedemo_desc": "此模組適用於DELTARUNE Demo。",
-	  "gamebanana_url_optional": "GameBanana URL（可選）",
-	  "view_on_gamebanana": "在GameBanana上查看",
+	  "external_url_optional": "外部連結 (可選)",
+	  "view_on_external_site": "在外部網站上查看",
 	  "beta_updates": "測試版更新",
       "fullscreen": "全螢幕"
 	},
@@ -464,7 +465,8 @@
 	  "reset_settings_confirm_title": "重置設置",
 	  "reset_settings_confirm_text": "您確定要將所有設置重置為預設值嗎？\\n\\n此操作將影響：\\n- 遊戲路徑\\n- 自訂設置（背景、顏色、音樂、啟動音效）\\n- 庫槽位（已安裝的模組將保留，但您需要重新分配它們）\\n\\n不受影響：\\n- 選擇的語言\\n- 已安裝的模組",
 	  "permission_error_message": "權限錯誤：{error}",
-	  "invalid_gamebanana_url": "無效的URL。連結必須以https://gamebanana.com/mods/開頭",
+	  "invalid_external_url": "無效的URL。連結必須是有效的網頁URL。",
+    "invalid_external_url_direct_download": "無效的URL。不允許直接下載連結。",
 	  "update_confirmation_title": "模組已安裝",
 	  "update_confirmation_body": "模組 '{mod_name}' 已安裝。是否要用此版本更新它？",
 	  "local_mod_warning_title": "安全警告",

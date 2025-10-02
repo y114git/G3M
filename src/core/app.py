@@ -495,7 +495,7 @@ class DeltaHubApp(QWidget):
                                 if os.path.exists(potential_icon):
                                     icon_path = potential_icon
                                     break
-                        safe_mod_info = {'key': mod_key, 'name': config_data.get('name', tr('defaults.local_mod')), 'version': config_data.get('version', '1.0.0'), 'author': config_data.get('author', tr('defaults.unknown')), 'tagline': config_data.get('tagline', tr('defaults.no_description')), 'game_version': config_data.get('game_version', tr('defaults.not_specified')), 'description_url': '', 'downloads': 0, 'modgame': config_data.get('modgame', 'deltarune'), 'is_verified': False, 'icon_url': icon_path, 'tags': ['local'], 'hide_mod': False, 'is_xdelta': config_data.get('is_xdelta', False), 'ban_status': False, 'demo_url': None, 'demo_version': '1.0.0', 'created_date': config_data.get('created_date', 'N/A'), 'last_updated': config_data.get('created_date', 'N/A'), 'gamebanana_url': config_data.get('gamebanana_url')}
+                        safe_mod_info = {'key': mod_key, 'name': config_data.get('name', tr('defaults.local_mod')), 'version': config_data.get('version', '1.0.0'), 'author': config_data.get('author', tr('defaults.unknown')), 'tagline': config_data.get('tagline', tr('defaults.no_description')), 'game_version': config_data.get('game_version', tr('defaults.not_specified')), 'description_url': '', 'downloads': 0, 'modgame': config_data.get('modgame', 'deltarune'), 'is_verified': False, 'icon_url': icon_path, 'tags': ['local'], 'hide_mod': False, 'is_xdelta': config_data.get('is_xdelta', False), 'ban_status': False, 'demo_url': None, 'demo_version': '1.0.0', 'created_date': config_data.get('created_date', 'N/A'), 'last_updated': config_data.get('created_date', 'N/A'), 'external_url': config_data.get('external_url')}
                         mod = ModInfo(**safe_mod_info)
                         files_data = config_data.get('files', {})
                         mod_folder_path = None
@@ -2091,11 +2091,11 @@ class DeltaHubApp(QWidget):
         left_layout.addStretch()
         header_layout.addWidget(left_container)
         right_layout = QVBoxLayout()
-        if hasattr(mod_data, 'gamebanana_url') and mod_data.gamebanana_url:
-            gb_button = QPushButton(tr('ui.view_on_gamebanana'))
-            gb_button.clicked.connect(lambda: webbrowser.open(mod_data.gamebanana_url))
-            gb_button.setStyleSheet('color: #FFD700; font-weight: bold;')
-            right_layout.addWidget(gb_button)
+        if hasattr(mod_data, 'external_url') and mod_data.external_url:
+            external_url_button = QPushButton(tr('ui.view_on_external_site'))
+            external_url_button.clicked.connect(lambda: webbrowser.open(mod_data.external_url))
+            external_url_button.setStyleSheet('color: #FFD700; font-weight: bold;')
+            right_layout.addWidget(external_url_button)
         title_label = QLabel(f'<h2>{mod_data.name}</h2>')
         title_label.setWordWrap(True)
         right_layout.addWidget(title_label)

@@ -3,7 +3,8 @@
     "language": "english",
     "language_name": "English",
     "font": "main.ttf",
-    "qt_translation": "qtbase_en"
+    "qt_translation": "qtbase_en",
+    "version": "1.0.0"
   },
   "ui": {
     "add_data_file": "Add DATA file",
@@ -209,8 +210,8 @@
     "deltarune_desc": "This mod is for DELTARUNE.",
     "undertale_desc": "This mod is for UNDERTALE.",
     "deltarunedemo_desc": "This mod is for DELTARUNEdemo.",
-    "gamebanana_url_optional": "GameBanana URL (Optional)",
-    "view_on_gamebanana": "View on GameBanana",
+    "external_url_optional": "External URL (Optional)",
+    "view_on_external_site": "View on External Site",
     "beta_updates": "Beta Updates",
     "fullscreen": "Fullscreen"
   },
@@ -464,7 +465,8 @@
     "reset_settings_confirm_title": "Reset Settings",
     "reset_settings_confirm_text": "Are you sure you want to reset all settings to their default values?\\n\\nThis action will affect:\\n- Game paths\\n- Customization settings (background, colors, music, startup sound)\\n- Library slots (installed mods will remain, but you will need to reassign them)\\n\\nUnaffected:\\n- Selected language\\n- Installed mods",
     "permission_error_message": "Permission error: {error}",
-    "invalid_gamebanana_url": "Invalid URL. The link must start with https://gamebanana.com/mods/",
+    "invalid_external_url": "Invalid URL. The link must be a valid web page URL.",
+    "invalid_external_url_direct_download": "Invalid URL. Direct download links are not allowed.",
     "update_confirmation_title": "Mod Already Installed",
     "update_confirmation_body": "Mod '{mod_name}' is already installed. Do you want to update it with this version?",
     "local_mod_warning_title": "Security Warning",

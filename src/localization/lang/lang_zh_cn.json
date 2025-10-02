@@ -3,7 +3,8 @@
     "language": "chinese_simplified",
     "language_name": "简体中文",
     "font": "Dtm_x_FZBitmap Regular.otf",
-    "qt_translation": "qtbase_zh_cn"
+    "qt_translation": "qtbase_zh_cn",
+    "version": "1.0.0"
   },
   "ui": {
     "add_data_file": "添加DATA文件",
@@ -209,8 +210,8 @@
     "deltarune_desc": "此模组适用于DELTARUNE。",
     "undertale_desc": "此模组适用于UNDERTALE。",
     "deltarunedemo_desc": "此模组适用于DELTARUNE Demo。",
-    "gamebanana_url_optional": "GameBanana URL（可选）",
-    "view_on_gamebanana": "在GameBanana上查看",
+    "external_url_optional": "外部链接 (可选)",
+    "view_on_external_site": "在外部网站上查看",
     "beta_updates": "测试版更新",
     "fullscreen": "全屏"
   },
@@ -464,7 +465,8 @@
     "reset_settings_confirm_title": "重置设置",
     "reset_settings_confirm_text": "您确定要将所有设置重置为默认值吗？\\n\\n此操作将影响：\\n- 游戏路径\\n- 自定义设置（背景、颜色、音乐、启动音效）\\n- 库槽位（已安装的模组将保留，但您需要重新分配它们）\\n\\n不受影响：\\n- 选择的语言\\n- 已安装的模组",
     "permission_error_message": "权限错误：{error}",
-    "invalid_gamebanana_url": "无效的URL。链接必须以https://gamebanana.com/mods/开头",
+    "invalid_external_url": "无效的URL。链接必须是有效的网页URL。",
+    "invalid_external_url_direct_download": "无效的URL。不允许直接下载链接。",
     "update_confirmation_title": "模组已安装",
     "update_confirmation_body": "模组 '{mod_name}' 已安装。是否要用此版本更新它？",
     "local_mod_warning_title": "安全警告",

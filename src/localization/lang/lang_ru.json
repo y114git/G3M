@@ -3,7 +3,8 @@
     "language": "russian",
     "language_name": "Русский",
     "font": "main.ttf",
-    "qt_translation": "qtbase_ru"
+    "qt_translation": "qtbase_ru",
+    "version": "1.0.0"
   },
   "ui": {
     "add_data_file": "Добавить DATA файл",
@@ -210,8 +211,8 @@
     "undertale_desc": "Этот мод предназначен для UNDERTALE.",
     "deltarunedemo_desc": "Этот мод предназначен для DELTARUNEdemo.",
     "beta_updates": "Бета-обновления",
-    "gamebanana_url_optional": "GameBanana URL (Необязательно)",
-    "view_on_gamebanana": "Посмотреть на GameBanana",
+    "external_url_optional": "Внешняя ссылка (Необязательно)",
+    "view_on_external_site": "Посмотреть на сайте",
     "fullscreen": "Полноэкранный режим"
   },
   "files": {
@@ -464,7 +465,8 @@
     "reset_settings_confirm_title": "Сброс настроек",
     "reset_settings_confirm_text": "Вы уверены, что хотите сбросить все настройки до значений по умолчанию?\n\nЭто действие затронет:\n- Пути к игре\n- Настройки кастомизации (фон, цвета, музыка, звук заставки)\n- Слоты в библиотеке (установленные моды останутся, но их нужно будет заново назначить)\n\nНе будут затронуты:\n- Выбранный язык\n- Установленные моды",
     "permission_error_message": "Ошибка прав доступа: {error}",
-    "invalid_gamebanana_url": "Неверный URL. Ссылка должна начинаться с https://gamebanana.com/mods/",
+    "invalid_external_url": "Неверный URL. Ссылка должна быть действительной ссылкой на веб-страницу.",
+    "invalid_external_url_direct_download": "Неверный URL. Прямые ссылки на скачивание запрещены.",
     "update_confirmation_title": "Мод уже установлен",
     "update_confirmation_body": "Мод «{mod_name}» уже установлен. Хотите обновить его этой версией?",
     "local_mod_warning_title": "Предупреждение о безопасности",
