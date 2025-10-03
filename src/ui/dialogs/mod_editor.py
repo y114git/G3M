@@ -163,21 +163,17 @@ class ModEditorDialog(QDialog):
         form_layout.addLayout(icon_container)
 
     def _create_tags_section(self, form_layout):
-        if self.is_public:
-            form_layout.addWidget(QLabel(tr('ui.mod_tags_label')))
-            tags_layout = QHBoxLayout()
-            self.tag_translation = QCheckBox(tr('tags.translation_text'))
-            self.tag_customization = QCheckBox(tr('tags.customization'))
-            self.tag_gameplay = QCheckBox(tr('tags.gameplay'))
-            self.tag_other = QCheckBox(tr('tags.other'))
-            for tag in [self.tag_translation, self.tag_customization, self.tag_gameplay, self.tag_other]:
-                tags_layout.addWidget(tag)
-            form_layout.addLayout(tags_layout)
-        else:
-            for attr, checked in [('tag_translation', False), ('tag_customization', False), ('tag_gameplay', False), ('tag_other', True)]:
-                setattr(self, attr, QCheckBox())
-                if checked:
-                    getattr(self, attr).setChecked(True)
+        form_layout.addWidget(QLabel(tr('ui.mod_tags_label')))
+        tags_layout = QHBoxLayout()
+        self.tag_translation = QCheckBox(tr('tags.translation_text'))
+        self.tag_customization = QCheckBox(tr('tags.customization'))
+        self.tag_gameplay = QCheckBox(tr('tags.gameplay'))
+        self.tag_other = QCheckBox(tr('tags.other'))
+        for tag in [self.tag_translation, self.tag_customization, self.tag_gameplay, self.tag_other]:
+            tags_layout.addWidget(tag)
+        form_layout.addLayout(tags_layout)
+        if not self.is_public and self.is_creating:
+            self.tag_other.setChecked(True)
 
     def _load_game_versions(self):
         try:
@@ -1759,7 +1755,7 @@ class ModEditorDialog(QDialog):
                                     new_file_data['extra_files'][group_key].append(filename)
                 if new_file_data:
                     processed_files_data[file_key] = new_file_data
-            config_data = {'is_local_mod': True, 'mod_key': mod_key, 'created_date': time.strftime('%d.%m.%y %H:%M'), 'is_available_on_server': False, 'name': mod_data.get('name', ''), 'version': mod_data.get('version', '1.0.0'), 'author': mod_data.get('author', ''), 'tagline': mod_data.get('tagline', tr('defaults.no_short_description')), 'external_url': mod_data.get('external_url', ''), 'game_version': mod_data.get('game_version', tr('defaults.not_specified')), 'modgame': mod_data.get('modgame', 'deltarune'), 'files': processed_files_data}
+            config_data = {'is_local_mod': True, 'mod_key': mod_key, 'created_date': time.strftime('%d.%m.%y %H:%M'), 'is_available_on_server': False, 'name': mod_data.get('name', ''), 'version': mod_data.get('version', '1.0.0'), 'author': mod_data.get('author', ''), 'tagline': mod_data.get('tagline', tr('defaults.no_short_description')), 'external_url': mod_data.get('external_url', ''), 'game_version': mod_data.get('game_version', tr('defaults.not_specified')), 'modgame': mod_data.get('modgame', 'deltarune'), 'files': processed_files_data, 'tags': mod_data.get('tags', [])}
             config_path = os.path.join(mod_dir, 'config.json')
             self.parent_app._write_json(config_path, config_data)
             self.parent_app._load_local_mods_from_folders()
@@ -1918,7 +1914,7 @@ class ModEditorDialog(QDialog):
                                 copied_paths.append(filename)
                         if copied_paths:
                             files_data[file_key]['extra_files'][group_key] = copied_paths
-            config_data.update({'name': updated_data.get('name', ''), 'version': updated_data.get('version', '1.0.0'), 'author': updated_data.get('author', ''), 'tagline': updated_data.get('tagline', ''), 'external_url': updated_data.get('external_url', ''), 'game_version': updated_data.get('game_version', tr('defaults.not_specified')), 'modgame': updated_data.get('modgame', 'deltarune'), 'files': files_data})
+            config_data.update({'name': updated_data.get('name', ''), 'version': updated_data.get('version', '1.0.0'), 'author': updated_data.get('author', ''), 'tagline': updated_data.get('tagline', ''), 'external_url': updated_data.get('external_url', ''), 'game_version': updated_data.get('game_version', tr('defaults.not_specified')), 'modgame': updated_data.get('modgame', 'deltarune'), 'files': files_data, 'tags': updated_data.get('tags', [])})
             self.parent_app._write_json(config_path, config_data)
             self.parent_app._load_local_mods_from_folders()
             self.parent_app._update_installed_mods_display()

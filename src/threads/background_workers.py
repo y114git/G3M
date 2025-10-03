@@ -437,7 +437,7 @@ class InstallModsThread(QThread):
                         else:
                             file_key = str(chapter_id)
                         files_data[file_key] = file_info
-                config_data = {'is_local_mod': False, 'mod_key': mod.key, 'name': mod.name, 'author': mod.author, 'version': mod.version, 'game_version': mod.game_version, 'modgame': mod.modgame, 'files': files_data}
+                config_data = {'is_local_mod': False, 'mod_key': mod.key, 'name': mod.name, 'author': mod.author, 'version': mod.version, 'game_version': mod.game_version, 'modgame': mod.modgame, 'files': files_data, 'tags': mod.tags}
                 config_path = os.path.join(mod_dir, 'config.json')
                 self.main_window._write_json(config_path, config_data)
             metadata = self.main_window._read_mods_metadata()

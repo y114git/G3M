@@ -756,7 +756,10 @@ class DeltaHubApp(QWidget):
         self.fullscreen_checkbox.setToolTip(tr('tooltips.fullscreen_tooltip'))
         self.fullscreen_checkbox.stateChanged.connect(self._on_toggle_fullscreen)
         settings_center_container.addWidget(self.fullscreen_checkbox, alignment=Qt.AlignmentFlag.AlignHCenter)
-        settings_center_container.addSpacing(30)
+        self.hide_library_filters_checkbox = QCheckBox(tr('ui.hide_library_filters'))
+        self.hide_library_filters_checkbox.setToolTip(tr('tooltips.hide_library_filters'))
+        self.hide_library_filters_checkbox.stateChanged.connect(self._on_toggle_hide_library_filters)
+        settings_center_container.addWidget(self.hide_library_filters_checkbox, alignment=Qt.AlignmentFlag.AlignHCenter)
         self.launch_via_steam_checkbox = QCheckBox(tr('ui.steam_launch'))
         self.launch_via_steam_checkbox.setToolTip("<html><body style='white-space: normal;'>" + tr('tooltips.steam') + '</body></html>')
         self.launch_via_steam_checkbox.stateChanged.connect(self._on_toggle_steam_launch)
@@ -1011,6 +1014,13 @@ class DeltaHubApp(QWidget):
     def _create_library_tab(self):
         widget = QWidget()
         layout = QVBoxLayout(widget)
+
+        # Filters for the library
+        self.library_filters_widget = self._create_library_filters_widget()
+        hide_filters = self.local_config.get('hide_library_filters', False)
+        self.library_filters_widget.setVisible(not hide_filters)
+        layout.addWidget(self.library_filters_widget)
+
         controls_layout = QHBoxLayout()
         controls_layout.addStretch()
         self.game_type_combo = QComboBox()
@@ -1108,6 +1118,94 @@ class DeltaHubApp(QWidget):
         self._update_slots_display()
         QTimer.singleShot(400, self._load_slots_state)
         return widget
+
+    def _create_library_filters_widget(self):
+        filters_widget = QFrame()
+        filters_widget.setObjectName('filters')
+        filters_widget.setFixedHeight(55)
+        filters_layout = QHBoxLayout(filters_widget)
+        filters_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        filters_layout.setContentsMargins(0, 0, 0, 0)
+
+        self.library_sort_combo = NoScrollComboBox()
+        self.library_sort_combo.addItems([tr('ui.sort_by_name'), tr('ui.sort_by_date')])
+        self.library_sort_combo.currentIndexChanged.connect(self._on_library_filter_changed)
+        filters_layout.addWidget(self.library_sort_combo)
+
+        self.library_sort_order_btn = QPushButton('▼')
+        self.library_sort_order_btn.setObjectName('sortOrderBtn')
+        self.library_sort_order_btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        self.library_sort_order_btn.setToolTip(tr('ui.sort_direction_tooltip'))
+        self.library_sort_ascending = False
+        self.library_sort_order_btn.clicked.connect(self._toggle_library_sort_order)
+        filters_layout.addWidget(self.library_sort_order_btn)
+
+        filters_layout.addSpacing(20)
+
+        self.library_tags_label = QLabel(tr('ui.tags_label'))
+        filters_layout.addWidget(self.library_tags_label)
+        self.library_tag_translation = QCheckBox(tr('tags.translation'))
+        self.library_tag_customization = QCheckBox(tr('tags.customization'))
+        self.library_tag_gameplay = QCheckBox(tr('tags.gameplay'))
+        self.library_tag_other = QCheckBox(tr('tags.other'))
+        self.library_tag_local = QCheckBox(tr('tags.local'))
+
+        tag_style = '''
+            QCheckBox {
+                color: white;
+                font-size: 12px;
+                spacing: 5px;
+            }
+            QCheckBox::indicator {
+                width: 16px;
+                height: 16px;
+            }
+        '''
+        self.library_tag_widgets = [self.library_tag_translation, self.library_tag_customization, self.library_tag_gameplay, self.library_tag_other, self.library_tag_local]
+        for tag in self.library_tag_widgets:
+            tag.setStyleSheet(tag_style)
+            tag.stateChanged.connect(self._on_library_filter_changed)
+            filters_layout.addWidget(tag)
+
+        filters_layout.addStretch()
+
+        self.library_search_text = ''
+        self.library_search_button = QPushButton('🔍')
+        self.library_search_button.setObjectName('searchBtn')
+        self.library_search_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        self.library_search_button.setFixedSize(35, 35)
+        self.library_search_button.setToolTip(tr('tooltips.search'))
+        self.library_search_button.clicked.connect(self._show_library_search_dialog)
+        filters_layout.addWidget(self.library_search_button)
+
+        return filters_widget
+
+    def _on_library_filter_changed(self):
+        self._update_installed_mods_display()
+
+    def _show_library_search_dialog(self):
+        if self.library_search_text:
+            self.library_search_text = ''
+            self.library_search_button.setText('🔍')
+            self.library_search_button.setToolTip(tr('ui.search_mods_placeholder'))
+            self._update_installed_mods_display()
+        else:
+            text, ok = QInputDialog.getText(self, tr('ui.search_mods'), tr('ui.search_in_name_description'))
+            if ok and text.strip():
+                self.library_search_text = text.strip()
+                self.library_search_button.setText('↻')
+                self.library_search_button.setToolTip(tr('ui.clear_search_tooltip', search_text=self.library_search_text))
+                self._update_installed_mods_display()
+
+    def _toggle_library_sort_order(self):
+        self.library_sort_ascending = not self.library_sort_ascending
+        if self.library_sort_ascending:
+            self.library_sort_order_btn.setText('▲')
+            self.library_sort_order_btn.setToolTip(tr('ui.ascending'))
+        else:
+            self.library_sort_order_btn.setText('▼')
+            self.library_sort_order_btn.setToolTip(tr('ui.descending'))
+        self._on_library_filter_changed()
 
     def _create_filters_widget(self):
         filters_widget = QFrame()
@@ -1698,6 +1796,32 @@ class DeltaHubApp(QWidget):
         self.installed_mods_container.setUpdatesEnabled(False)
         clear_layout_widgets(self.installed_mods_layout, keep_last_n=1)
         self._cleanup_missing_mods(installed_mods)
+
+        # Sorting
+        if hasattr(self, 'library_sort_combo'):
+            sort_type = self.library_sort_combo.currentIndex()
+            reverse = not self.library_sort_ascending
+            if sort_type == 0:  # By name
+                installed_mods.sort(key=lambda mod: mod.get('name', '').lower(), reverse=reverse)
+            elif sort_type == 1:  # By date
+                installed_mods.sort(key=lambda mod: mod.get('installed_date', '0'), reverse=reverse)
+
+        # Library filters
+        selected_tags = []
+        if hasattr(self, 'library_tag_widgets'):
+            tag_map = {
+                self.library_tag_translation: 'translation',
+                self.library_tag_customization: 'customization',
+                self.library_tag_gameplay: 'gameplay',
+                self.library_tag_other: 'other',
+                self.library_tag_local: 'local'
+            }
+            for checkbox, tag in tag_map.items():
+                if checkbox.isChecked():
+                    selected_tags.append(tag)
+
+        search_text = getattr(self, 'library_search_text', '').lower()
+
         current_game_type = 'deltarune'
         if hasattr(self, 'game_type_combo'):
             current_game_type = self.game_type_combo.currentData() or 'deltarune'
@@ -1708,6 +1832,22 @@ class DeltaHubApp(QWidget):
             mod_modgame = mod_info.get('modgame', 'deltarune')
             if mod_modgame != current_game_type:
                 continue
+
+            # Apply library filters
+            mod_tags = mod_info.get('tags', [])
+            if mod_info.get('is_local_mod'):
+                if 'local' not in mod_tags:
+                    mod_tags.append('local')
+
+            if selected_tags and not all(tag in mod_tags for tag in selected_tags):
+                continue
+
+            if search_text:
+                mod_name = mod_info.get('name', '').lower()
+                mod_tagline = mod_info.get('tagline', '').lower()
+                if search_text not in mod_name and search_text not in mod_tagline:
+                    continue
+
             is_local = mod_info.get('is_local_mod', False)
             is_available = mod_info.get('is_available_on_server', True)
             has_update = False
@@ -3482,6 +3622,7 @@ class DeltaHubApp(QWidget):
             self.chapter_mode_checkbox.setChecked(False)
             self.beta_updates_checkbox.setChecked(False)
             self.fullscreen_checkbox.setChecked(False)
+            self.hide_library_filters_checkbox.setChecked(False)
             self.full_install_checkbox.setChecked(False)
             self.disable_background_checkbox.setChecked(False)
             self.disable_splash_checkbox.setChecked(False)
@@ -3596,6 +3737,13 @@ class DeltaHubApp(QWidget):
         is_disabled = bool(state)
         self.local_config['disable_splash'] = is_disabled
         self._write_local_config()
+
+    def _on_toggle_hide_library_filters(self, state):
+        is_hidden = bool(state)
+        self.local_config['hide_library_filters'] = is_hidden
+        self._write_local_config()
+        if hasattr(self, 'library_filters_widget'):
+            self.library_filters_widget.setVisible(not is_hidden)
 
     def _is_valid_hex_color(self, s: str) -> bool:
         return bool(re.fullmatch('#[0-9a-fA-F]{6}', s or ''))
@@ -3972,6 +4120,8 @@ class DeltaHubApp(QWidget):
         self.disable_splash_checkbox.setChecked(self.local_config.get('disable_splash', False))
         self.beta_updates_checkbox.setChecked(self.local_config.get('beta_updates_enabled', False))
         self.fullscreen_checkbox.setChecked(self.local_config.get('fullscreen_enabled', False))
+        if hasattr(self, 'hide_library_filters_checkbox'):
+            self.hide_library_filters_checkbox.setChecked(self.local_config.get('hide_library_filters', False))
         self.disable_splash_checkbox.blockSignals(False)
         self._update_change_path_button_text()
         self._update_background_button_state()
@@ -4916,14 +5066,6 @@ class DeltaHubApp(QWidget):
                     process = subprocess.Popen(['open', '-W', target_path])
             else:
                 command = [target_path]
-                if platform.system() == 'Linux' and target_path.lower().endswith('.exe'):
-                    runner = shutil.which('wine') or shutil.which('proton')
-                    if runner:
-                        command.insert(0, runner)
-                    else:
-                        self.error_signal.emit(tr('errors.wine_not_found'))
-                        self.restore_window_signal.emit()
-                        return
                 creationflags = 0
                 if system == 'Windows':
                     creationflags = 8
@@ -5858,12 +6000,6 @@ class DeltaHubApp(QWidget):
                     elif direct_launch_slot_id == 2:
                         args.extend(['-chapter', '2'])
                 command = [executable_path] + args
-                if platform.system() == 'Linux' and executable_path.lower().endswith('.exe'):
-                    runner = shutil.which('wine') or shutil.which('proton')
-                    if runner:
-                        command.insert(0, runner)
-                    else:
-                        raise Exception(tr('errors.wine_not_found'))
                 subprocess.Popen(command, cwd=current_game_path)
         except Exception as e:
             raise Exception(tr('errors.launch_error_details', error=str(e)))
