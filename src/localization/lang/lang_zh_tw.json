@@ -213,7 +213,10 @@
 	  "external_url_optional": "外部連結 (可選)",
 	  "view_on_external_site": "在外部網站上查看",
 	  "beta_updates": "測試版更新",
-      "fullscreen": "全螢幕"
+      "fullscreen": "全螢幕",
+	  "sort_by_name": "按名稱",
+	  "sort_by_date": "按日期",
+	  "hide_library_filters": "在庫中隱藏過濾器"
 	},
 	"files": {
 	  "archive_link": "壓縮檔案連結",
@@ -255,8 +258,9 @@
 	  "gameplay": "遊戲玩法",
 	  "other": "其他",
 	  "translation": "翻譯",
-	  "translation_text": "翻譯/文本"
-	},
+    "translation_text": "翻譯/文本",
+    "local": "本地"
+  },
 	"buttons": {
 	  "additional_slots": "附加槽位",
 	  "change_background": "更改背景",
@@ -629,7 +633,6 @@
 	  "game_running_message": "請在啟動DELTAHUB之前關閉{game_name}。",
 	  "installation_error": "安裝錯誤：{error}",
 	  "permission_error_install": "安裝時權限錯誤：{error}",
-	  "wine_not_found": "未找到WINE/Proton。請安裝它以執行.exe檔案。",
 	  "xdelta_not_found": "在 {path} 未找到xdelta可執行檔案",
 	  "config_not_found_in_archive": "無效的模組壓縮檔案：未找到config.json。",
 	  "mod_is_banned": "此模組已被屏蔽，無法安裝。",

@@ -213,7 +213,10 @@
     "beta_updates": "Бета-обновления",
     "external_url_optional": "Внешняя ссылка (Необязательно)",
     "view_on_external_site": "Посмотреть на сайте",
-    "fullscreen": "Полноэкранный режим"
+    "fullscreen": "Полноэкранный режим",
+    "hide_library_filters": "Скрыть фильтры в библиотеке",
+    "sort_by_name": "По имени",
+    "sort_by_date": "По дате"
   },
   "files": {
     "archive_link": "Ссылка на архив",
@@ -255,7 +258,8 @@
     "gameplay": "Геймплей",
     "other": "Другое",
     "translation": "Перевод",
-    "translation_text": "Перевод/Текст"
+    "translation_text": "Перевод/Текст",
+    "local": "Локальный"
   },
   "buttons": {
     "additional_slots": "Дополнительные слоты",
@@ -629,7 +633,6 @@
     "game_running_message": "Пожалуйста, закройте {game_name} перед запуском DELTAHUB.",
     "installation_error": "Ошибка установки: {error}",
     "permission_error_install": "Ошибка прав доступа при установке: {error}",
-    "wine_not_found": "WINE/Proton не найден. Пожалуйста, установите его для запуска .exe файлов.",
     "xdelta_not_found": "Исполняемый файл xdelta не найден по пути: {path}",
     "config_not_found_in_archive": "Неверный архив мода: файл config.json не найден.",
     "mod_is_banned": "Этот мод был заблокирован и не может быть установлен.",

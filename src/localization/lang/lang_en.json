@@ -213,7 +213,10 @@
     "external_url_optional": "External URL (Optional)",
     "view_on_external_site": "View on External Site",
     "beta_updates": "Beta Updates",
-    "fullscreen": "Fullscreen"
+    "fullscreen": "Fullscreen",
+    "sort_by_name": "By name",
+    "sort_by_date": "By date",
+    "hide_library_filters": "Hide filters in library"
   },
   "files": {
     "archive_link": "Archive link",
@@ -255,7 +258,8 @@
     "gameplay": "Gameplay",
     "other": "Other",
     "translation": "Translation",
-    "translation_text": "Translation/Text"
+    "translation_text": "Translation/Text",
+    "local": "Local"
   },
   "buttons": {
     "additional_slots": "Additional slots",
@@ -629,7 +633,6 @@
     "game_running_message": "Please close {game_name} before launching DELTAHUB.",
     "installation_error": "Installation error: {error}",
     "permission_error_install": "Permission error during installation: {error}",
-    "wine_not_found": "WINE/Proton not found. Please install it to run .exe files.",
     "xdelta_not_found": "xdelta executable not found at: {path}",
     "config_not_found_in_archive": "Invalid mod archive: config.json not found.",
     "mod_is_banned": "This mod has been blocked and cannot be installed.",
