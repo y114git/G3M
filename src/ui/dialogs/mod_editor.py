@@ -1111,7 +1111,7 @@ class ModEditorDialog(QDialog):
             self.icon_preview.setText(tr('status.loading_error'))
 
     def _show_verification_details(self):
-        details_url = 'https://example.com/verification-details'
+        details_url = "https://github.com/y114git/DELTAHUB/wiki/Modder's-Guide"
         webbrowser.open(details_url)
 
     def _toggle_mod_visibility(self):

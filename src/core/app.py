@@ -5066,6 +5066,11 @@ class DeltaHubApp(QWidget):
                     process = subprocess.Popen(['open', '-W', target_path])
             else:
                 command = [target_path]
+                if system == 'Linux' and target_path.lower().endswith('.exe'):
+                    # Check if Steam launch is enabled, if so, Steam will handle Proton/Wine
+                    is_steam_launch = self.local_config.get('launch_via_steam', False)
+                    if not is_steam_launch:
+                        command.insert(0, 'wine')
                 creationflags = 0
                 if system == 'Windows':
                     creationflags = 8
@@ -5852,12 +5857,12 @@ class DeltaHubApp(QWidget):
             if os.path.isfile(exe_path):
                 return exe_path
         elif system == 'Linux':
+            native_path = os.path.join(current_game_path, base_exe_name)
+            if os.path.isfile(native_path) and os.access(native_path, os.X_OK):
+                return native_path
             exe_path = os.path.join(current_game_path, f'{base_exe_name}.exe')
             if os.path.isfile(exe_path):
                 return exe_path
-            native_path = os.path.join(current_game_path, base_exe_name)
-            if os.path.isfile(native_path):
-                return native_path
         elif system == 'Darwin':
             if current_game_path.endswith('.app') and os.path.isdir(current_game_path):
                 app_path = current_game_path
