@@ -4,7 +4,7 @@
 	  "language_name": "繁體中文",
 	  "font": "Dtm_x_FZBitmap Regular.otf",
 	  "qt_translation": "qtbase_zh_tw",
-    "version": "1.0.0"
+    "version": "1.0.1"
 	},
 	"ui": {
 	  "add_data_file": "添加DATA檔案",
@@ -489,7 +489,9 @@
       "theme_import_failed": "主題導入失敗：{error}",
       "export_theme_title": "導出主題",
       "import_theme_title": "導入主題",
-      "invalid_url_scheme": "無效的URL方案。應為deltahub://"
+      "invalid_url_scheme": "無效的URL方案。應為deltahub://",
+      "select_save_collection_title": "選擇存檔集合",
+      "select_save_collection_body": "選擇要使用的存檔集合："
 	},
 	"errors": {
     "access_denied": "訪問被拒絕",

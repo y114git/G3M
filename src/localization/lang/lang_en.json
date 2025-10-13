@@ -4,7 +4,7 @@
     "language_name": "English",
     "font": "main.ttf",
     "qt_translation": "qtbase_en",
-    "version": "1.0.0"
+    "version": "1.0.1"
   },
   "ui": {
     "add_data_file": "Add DATA file",
@@ -489,7 +489,9 @@
     "theme_import_failed": "Theme import failed: {error}",
     "export_theme_title": "Export Theme",
     "import_theme_title": "Import Theme",
-    "invalid_url_scheme": "Invalid URL scheme. Expected deltahub://"
+    "invalid_url_scheme": "Invalid URL scheme. Expected deltahub://",
+    "select_save_collection_title": "Select Save Collection",
+    "select_save_collection_body": "Select a save collection to use:"
   },
   "errors": {
     "access_denied": "Access Denied",
