@@ -22,7 +22,7 @@ from pathlib import Path
 import requests
 from PyQt6.QtCore import QTranslator, Qt, QEvent, QThread, QTimer, QUrl, pyqtSignal
 from PyQt6.QtGui import QColor, QDesktopServices, QFont, QFontDatabase, QIcon, QMovie, QPainter, QPixmap
-from PyQt6.QtWidgets import QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFrame, QLabel, QLineEdit, QMessageBox, QProgressBar, QPushButton, QTabWidget, QTextBrowser, QVBoxLayout, QWidget, QHBoxLayout, QSizePolicy, QInputDialog, QColorDialog, QListWidget, QScrollArea
+from PyQt6.QtWidgets import QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFrame, QLabel, QLineEdit, QMessageBox, QProgressBar, QPushButton, QTabWidget, QTextBrowser, QVBoxLayout, QWidget, QHBoxLayout, QSizePolicy, QInputDialog, QColorDialog, QListWidget, QScrollArea, QListWidgetItem
 from localization import localization_manager, tr
 from models.game_modes import GameMode
 from config.constants import LAUNCHER_VERSION, UI_COLORS, SOCIAL_LINKS, THEMES, SAVE_SLOT_FINISH_MAP, ARCH
@@ -1011,6 +1011,10 @@ class DeltaHubApp(QWidget):
         layout.addWidget(self.search_container)
         return widget
 
+    def _update_saves_button_state(self):
+        game_type = self.game_type_combo.currentData()
+        self.saves_button.setEnabled(game_type != 'undertale')
+
     def _create_library_tab(self):
         widget = QWidget()
         layout = QVBoxLayout(widget)
@@ -1061,6 +1065,7 @@ class DeltaHubApp(QWidget):
         self.current_mode = 'chapter' if saved_chapter_mode else 'normal'
         self._previous_mode = self.current_mode
         self._update_checkbox_visibility()
+        self._update_saves_button_state()
         controls_layout.addStretch()
         layout.addLayout(controls_layout)
         self.selected_chapter_id = None
@@ -1344,6 +1349,7 @@ class DeltaHubApp(QWidget):
         self._load_slots_state()
         self._update_installed_mods_display()
         self._update_change_path_button_text()
+        self._update_saves_button_state()
         self.local_config['selected_game_type'] = game_type
         self._write_local_config()
 
@@ -4911,6 +4917,30 @@ class DeltaHubApp(QWidget):
 
     def _cleanup_direct_launch_files(self):
         try:
+            session_data = self._load_session_manifest()
+            cleanup_info = session_data.get('direct_launch')
+            if cleanup_info and cleanup_info.get('save_collection_swap'):
+                collection_path = cleanup_info.get('collection_path')
+                backup_path = cleanup_info.get('backup_path')
+                current_save_path = self.save_path
+                if not is_valid_save_path(current_save_path):
+                    current_save_path = self.local_config.get('save_path') or get_default_save_path()
+                if collection_path and backup_path and is_valid_save_path(current_save_path):
+                    if os.path.exists(collection_path):
+                        shutil.rmtree(collection_path)
+                    os.makedirs(collection_path)
+                    ignore_pattern = shutil.ignore_patterns('*_*_*')
+                    shutil.copytree(current_save_path, collection_path, dirs_exist_ok=True, ignore=ignore_pattern)
+                    for item in os.listdir(current_save_path):
+                        item_path = os.path.join(current_save_path, item)
+                        if not (os.path.isdir(item_path) and re.match('(.+?)_(\\d+)_(\\d+)$', item)):
+                            if os.path.isdir(item_path):
+                                shutil.rmtree(item_path)
+                            else:
+                                os.remove(item_path)
+                    if os.path.exists(backup_path):
+                        shutil.copytree(backup_path, current_save_path, dirs_exist_ok=True)
+                        shutil.rmtree(backup_path)
             backed_up_targets = set(self._backup_files.keys()) if hasattr(self, '_backup_files') and self._backup_files else set()
             if hasattr(self, '_backup_files') and self._backup_files:
                 for original_path, backup_path in self._backup_files.items():
@@ -4958,7 +4988,8 @@ class DeltaHubApp(QWidget):
                 self._mod_dirs_to_cleanup = []
             except Exception:
                 pass
-            cleanup_info = getattr(self, '_direct_launch_cleanup_info', None)
+            if not cleanup_info:
+                cleanup_info = getattr(self, '_direct_launch_cleanup_info', None)
             if cleanup_info:
                 if 'target_exe' in cleanup_info and os.path.exists(cleanup_info['target_exe']):
                     os.remove(cleanup_info['target_exe'])
@@ -5017,6 +5048,65 @@ class DeltaHubApp(QWidget):
         def restore_and_return():
             self.restore_window_signal.emit()
             self._update_action_button_state()
+        selected_collection_path = None
+        game_type = self.game_type_combo.currentData()
+        if game_type in ['deltarune', 'deltarunedemo']:
+            if self._find_and_validate_save_path():
+                all_collections = []
+                for ch in range(1, 5):
+                    all_collections.extend(self._list_collections(ch))
+                unique_collections = sorted(list(set(all_collections)))
+                if unique_collections:
+                    dialog = QDialog(self)
+                    dialog.setWindowTitle(tr('dialogs.select_save_collection_title'))
+                    layout = QVBoxLayout(dialog)
+                    layout.addWidget(QLabel(tr('dialogs.select_save_collection_body')))
+                    list_widget = QListWidget()
+                    list_widget.addItem('Main')
+                    for collection in unique_collections:
+                        try:
+                            name_parts = collection.rsplit('_', 2)
+                            collection_name = f'{name_parts[0]} (Chapter {name_parts[2]})'
+                            item = QListWidgetItem(collection_name)
+                            item.setData(Qt.ItemDataRole.UserRole, collection)
+                            list_widget.addItem(item)
+                        except IndexError:
+                            list_widget.addItem(collection)
+                    list_widget.setCurrentRow(0)
+                    layout.addWidget(list_widget)
+                    buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+                    buttons.accepted.connect(dialog.accept)
+                    buttons.rejected.connect(dialog.reject)
+                    layout.addWidget(buttons)
+                    if dialog.exec() == QDialog.DialogCode.Accepted:
+                        selected_item = list_widget.currentItem()
+                        if selected_item and selected_item.text() != 'Main':
+                            collection_folder_name = selected_item.data(Qt.ItemDataRole.UserRole)
+                            if collection_folder_name:
+                                selected_collection_path = os.path.join(self.save_path, collection_folder_name)
+                    else:
+                        restore_and_return()
+                        return
+        if selected_collection_path:
+            if not hasattr(self, '_backup_temp_dir') or not self._backup_temp_dir:
+                self._backup_temp_dir = tempfile.mkdtemp(prefix='deltahub_backup_')
+            main_saves_backup_path = os.path.join(self._backup_temp_dir, 'main_saves_backup')
+            if os.path.exists(main_saves_backup_path):
+                shutil.rmtree(main_saves_backup_path)
+            ignore_pattern = shutil.ignore_patterns('*_*_*')
+            shutil.copytree(self.save_path, main_saves_backup_path, dirs_exist_ok=True, ignore=ignore_pattern)
+            for item in os.listdir(self.save_path):
+                item_path = os.path.join(self.save_path, item)
+                if not (os.path.isdir(item_path) and re.match('(.+?)_(\\d+)_(\\d+)$', item)):
+                    if os.path.isdir(item_path):
+                        shutil.rmtree(item_path)
+                    else:
+                        os.remove(item_path)
+            shutil.copytree(selected_collection_path, self.save_path, dirs_exist_ok=True)
+            session_data = self._load_session_manifest()
+            direct_launch_info = session_data.get('direct_launch', {}) or {}
+            direct_launch_info.update({'save_collection_swap': True, 'collection_path': selected_collection_path, 'backup_path': main_saves_backup_path})
+            self._update_session_manifest(direct_launch=direct_launch_info)
         if not self._find_and_validate_game_path(selections):
             restore_and_return()
             return
