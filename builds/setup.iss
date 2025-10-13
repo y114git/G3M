@@ -1,5 +1,5 @@
 #define AppName        "DELTAHUB"
-#define AppVersion     "2.1.2"
+#define AppVersion     "2.1.3"
 #define AppExeName     "DELTAHUB.exe"
 #define AppIcon        "..\\src\\resources\\icons\\icon.ico"
 #define AppSmallIcon   "..\\src\\resources\\icons\\icon_small.bmp"

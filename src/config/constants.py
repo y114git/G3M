@@ -2,7 +2,7 @@ import os
 import sys
 import platform
 from dotenv import load_dotenv
-LAUNCHER_VERSION = '2.1.2stable'
+LAUNCHER_VERSION = '2.1.3stable'
 APP_ID = 'deltahub.y.114'
 
 
