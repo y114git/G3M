@@ -4,7 +4,7 @@
     "language_name": "Русский",
     "font": "main.ttf",
     "qt_translation": "qtbase_ru",
-    "version": "1.0.0"
+    "version": "1.0.1"
   },
   "ui": {
     "add_data_file": "Добавить DATA файл",
@@ -643,7 +643,9 @@
     "deltamod_conversion_failed": "Ошибка конвертации DeltaMod.",
     "deltamod_conversion_failed_url": "Ошибка конвертации DeltaMod по URL.",
     "unsupported_mod_format_url": "Неподдерживаемый формат мода по URL.",
-    "invalid_url_scheme": "Неверная схема URL. Ожидалось deltahub://"
+    "invalid_url_scheme": "Неверная схема URL. Ожидалось deltahub://",
+    "select_save_collection_title": "Выбор коллекции сохранений",
+    "select_save_collection_body": "Выберите коллекцию сохранений для использования:"
   },
   "status": {
     "vanilla": "Без изменений",
