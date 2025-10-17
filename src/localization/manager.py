@@ -118,6 +118,16 @@ class LocalizationManager:
             print(f'Error loading language {language_code}: {e}')
             return False
 
+    def merge_translations(self, new_translations: dict):
+        def _update_dict(d, u):
+            for k, v in u.items():
+                if isinstance(v, dict):
+                    d[k] = _update_dict(d.get(k, {}), v)
+                else:
+                    d[k] = v
+            return d
+        _update_dict(self.translations, new_translations)
+
     def get_text(self, key: str, **kwargs) -> str:
         keys = key.split('.')
         value = self.translations
