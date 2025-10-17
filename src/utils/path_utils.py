@@ -40,6 +40,10 @@ def get_user_lang_dir() -> str:
     return os.path.join(get_user_data_root(), 'lang')
 
 
+def get_user_plugins_dir() -> str:
+    return os.path.join(get_user_data_root(), 'plugins')
+
+
 def resource_path(relative_path: str) -> str:
     if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
         base_path = os.path.join(getattr(sys, '_MEIPASS'), 'src')
