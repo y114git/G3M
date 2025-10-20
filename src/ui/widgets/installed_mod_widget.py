@@ -3,7 +3,6 @@ from PyQt6.QtWidgets import QLabel, QPushButton, QHBoxLayout, QVBoxLayout, QFram
 from .base_mod_widget import BaseModWidget
 from localization.manager import tr
 
-
 class InstalledModWidget(BaseModWidget):
     remove_requested = pyqtSignal(object)
     use_requested = pyqtSignal(object)
@@ -30,23 +29,11 @@ class InstalledModWidget(BaseModWidget):
     def _init_ui(self):
         super()._init_ui()
         self.title_layout.takeAt(self.title_layout.count() - 1)
-        indicator = QLabel('●')
-        indicator.setFixedSize(16, 16)
-        indicator.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        style = 'font-size: 14px; font-weight: bold; margin-left: 5px;'
-        if self.is_local:
-            indicator.setStyleSheet(f'color: #FFD700; {style}')
-            indicator.setToolTip(tr('tooltips.local_mod'))
-        elif self.is_available and self.has_update:
-            indicator.setStyleSheet(f'color: #FFA500; {style}')
-            indicator.setToolTip(tr('tooltips.public_mod_update_available'))
-        elif self.is_available:
-            indicator.setStyleSheet(f'color: #4CAF50; {style}')
-            indicator.setToolTip(tr('tooltips.public_mod_available'))
-        else:
-            indicator.setStyleSheet(f'color: #F44336; {style}')
-            indicator.setToolTip(tr('tooltips.public_mod_unavailable'))
-        self.title_layout.addWidget(indicator)
+        self.status_indicator = QLabel('●')
+        self.status_indicator.setFixedSize(16, 16)
+        self.status_indicator.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._update_indicator()
+        self.title_layout.addWidget(self.status_indicator)
         self.title_layout.addStretch()
         installed_date_text = self.installed_date or self.mod_data.created_date or 'N/A'
         date_label_text = tr('ui.created_label') if self.is_local else tr('ui.installed_label')
@@ -85,6 +72,27 @@ class InstalledModWidget(BaseModWidget):
         self.actions_widget.setVisible(False)
         self.main_layout.addWidget(self.actions_widget)
 
+    def _update_indicator(self):
+        style = 'font-size: 14px; font-weight: bold; margin-left: 5px;'
+        if self.is_local:
+            self.status_indicator.setStyleSheet(f'color: #FFD700; {style}')
+            self.status_indicator.setToolTip(tr('tooltips.local_mod'))
+            return
+        has_update_now = False
+        try:
+            has_update_now = self.has_update or self._mod_needs_update()
+        except Exception:
+            has_update_now = self.has_update
+        if self.is_available and has_update_now:
+            self.status_indicator.setStyleSheet(f'color: #FFA500; {style}')
+            self.status_indicator.setToolTip(tr('tooltips.public_mod_update_available'))
+        elif self.is_available:
+            self.status_indicator.setStyleSheet(f'color: #4CAF50; {style}')
+            self.status_indicator.setToolTip(tr('tooltips.public_mod_available'))
+        else:
+            self.status_indicator.setStyleSheet(f'color: #F44336; {style}')
+            self.status_indicator.setToolTip(tr('tooltips.public_mod_unavailable'))
+
     def _mod_needs_update(self):
         if not self.parent_app or self.is_local:
             return False
@@ -113,6 +121,7 @@ class InstalledModWidget(BaseModWidget):
         else:
             self.status = 'ready'
         self._update_button_from_status()
+        self._update_indicator()
 
     def update_status(self):
         if self.is_in_slot:
@@ -122,3 +131,4 @@ class InstalledModWidget(BaseModWidget):
         else:
             self.status = 'ready'
         self._update_button_from_status()
+        self._update_indicator()
