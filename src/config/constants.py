@@ -1,40 +1,9 @@
-import os
-import sys
 import platform
-from dotenv import load_dotenv
+from .loader import get_config_value
 LAUNCHER_VERSION = '2.1.3stable'
 APP_ID = 'deltahub.y.114'
-
-
-def _load_config_sources():
-    root_env = os.path.join(os.path.dirname(__file__), '..', '..', '.env')
-    if os.path.exists(root_env):
-        load_dotenv(root_env)
-    else:
-        load_dotenv()
-    try:
-        if getattr(sys, 'frozen', False):
-            exe_dir = os.path.dirname(sys.executable)
-        else:
-            exe_dir = os.path.abspath('.')
-        cfg_path = os.path.join(exe_dir, 'config.env')
-        if os.path.exists(cfg_path):
-            load_dotenv(cfg_path)
-    except Exception:
-        pass
-    try:
-        import importlib
-        _se = importlib.import_module('secrets_embed')
-        for k in ('DATA_FIREBASE_URL', 'CLOUD_FUNCTIONS_BASE_URL', 'INTERNAL_SALT'):
-            if not os.getenv(k, '') and hasattr(_se, k):
-                os.environ[k] = getattr(_se, k)
-    except Exception:
-        pass
-
-
-_load_config_sources()
-DATA_FIREBASE_URL = os.getenv('DATA_FIREBASE_URL', '')
-CLOUD_FUNCTIONS_BASE_URL = os.getenv('CLOUD_FUNCTIONS_BASE_URL', '')
+DATA_FIREBASE_URL = get_config_value('DATA_FIREBASE_URL', '')
+CLOUD_FUNCTIONS_BASE_URL = get_config_value('CLOUD_FUNCTIONS_BASE_URL', '')
 STEAM_APP_ID_FULL, STEAM_APP_ID_DEMO, STEAM_APP_ID_UNDERTALE = ('1671210', '1690940', '391540')
 GAME_PROCESS_NAMES = ['DELTARUNE.exe', 'DELTARUNE', 'UNDERTALE.exe', 'UNDERTALE', 'runner']
 SAVE_SLOT_FINISH_MAP = {0: 3, 1: 4, 2: 5}
