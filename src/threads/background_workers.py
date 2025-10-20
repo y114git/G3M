@@ -116,7 +116,8 @@ class FullInstallThread(QThread):
             total_size = int(resp.headers.get('content-length', 0))
             downloaded_ref = [0]
             from utils.file_utils import download_and_extract_archive
-            download_and_extract_archive(full_install_url, self.target_dir, self.progress, total_size, downloaded_ref, session, is_game_installation=True)
+            def progress_callback(progress): return self.progress.emit(progress)
+            download_and_extract_archive(full_install_url, self.target_dir, progress_callback, total_size, downloaded_ref, session, is_game_installation=True)
             self.status.emit(tr('status.demo_installation_complete'), UI_COLORS['status_success'])
             self.finished.emit(True, self.target_dir)
         except Exception as e:
@@ -225,7 +226,7 @@ class InstallModsThread(QThread):
         except Exception:
             return False
 
-    def _download_archive_file(self, url: str, target_dir: str, progress_signal, total_size: int, downloaded_ref: list[int], session=None):
+    def _download_archive_file(self, url: str, target_dir: str, progress_callback, total_size: int, downloaded_ref: list[int], session=None):
         import os
         from urllib.parse import urlparse, unquote
         if session is None:
@@ -238,7 +239,7 @@ class InstallModsThread(QThread):
         os.makedirs(target_dir, exist_ok=True)
         target_path = os.path.join(target_dir, filename)
         try:
-            download_file(session, url, target_path, progress_signal, total_size, downloaded_ref)
+            download_file(session, url, target_path, progress_callback, total_size, downloaded_ref)
         except Exception as e:
             if os.path.exists(target_path):
                 try:
@@ -247,7 +248,7 @@ class InstallModsThread(QThread):
                     pass
             raise e
 
-    def _download_xdelta_file(self, url: str, target_dir: str, progress_signal, total_size: int, downloaded_ref: list[int], session=None):
+    def _download_xdelta_file(self, url: str, target_dir: str, progress_callback, total_size: int, downloaded_ref: list[int], session=None):
         import os
         from urllib.parse import urlparse, unquote
         if session is None:
@@ -264,7 +265,7 @@ class InstallModsThread(QThread):
         os.makedirs(target_dir, exist_ok=True)
         target_path = os.path.join(target_dir, filename)
         try:
-            download_file(session, url, target_path, progress_signal, total_size, downloaded_ref)
+            download_file(session, url, target_path, progress_callback, total_size, downloaded_ref)
         except Exception as e:
             if os.path.exists(target_path):
                 try:
@@ -386,12 +387,15 @@ class InstallModsThread(QThread):
                 try:
                     if is_data_file:
                         if is_xdelta:
-                            self._download_xdelta_file(url, cache_dir, self.progress, total_bytes, downloaded_ref, session)
+                            def progress_callback(progress): return self.progress.emit(progress)
+                            self._download_xdelta_file(url, cache_dir, progress_callback, total_bytes, downloaded_ref, session)
                         else:
                             from utils.file_utils import download_and_extract_archive
-                            download_and_extract_archive(url, cache_dir, self.progress, total_bytes, downloaded_ref, session)
+                            def progress_callback(progress): return self.progress.emit(progress)
+                            download_and_extract_archive(url, cache_dir, progress_callback, total_bytes, downloaded_ref, session)
                     else:
-                        self._download_archive_file(url, cache_dir, self.progress, total_bytes, downloaded_ref, session)
+                        def progress_callback(progress): return self.progress.emit(progress)
+                        self._download_archive_file(url, cache_dir, progress_callback, total_bytes, downloaded_ref, session)
                 except Exception:
                     raise
                 if mod.key not in installed_mods:

@@ -26,7 +26,9 @@ def get_filename_from_url(session, url):
     return Path(url.split('?', 1)[0]).name or 'file.tmp'
 
 
-def download_file(session, url, tmp_path, progress_signal, total_size, downloaded_ref, max_retries: int = 5):
+def download_file(session, url, tmp_path, progress_callback=None, total_size: int = 0, downloaded_ref: list[int] | None = None, max_retries: int = 5):
+    if downloaded_ref is None:
+        downloaded_ref = [0]
     expected_size = 0
     try:
         h = session.head(url, allow_redirects=True, timeout=15)
@@ -74,10 +76,10 @@ def download_file(session, url, tmp_path, progress_signal, total_size, downloade
                             duplicate_remaining = 0
                     else:
                         downloaded_ref[0] += sz
-                    if total_size > 0:
+                    if total_size > 0 and progress_callback:
                         try:
                             progress = int(min(100, max(0, downloaded_ref[0] / total_size * 100)))
-                            progress_signal.emit(progress)
+                            progress_callback(progress)
                         except Exception:
                             pass
             final_size = os.path.getsize(tmp_path) if os.path.exists(tmp_path) else 0
