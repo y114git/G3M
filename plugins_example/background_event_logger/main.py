@@ -35,11 +35,11 @@ def log_event(message):
 
 def on_after_game_launch(main_app_instance):
     """Called after the game is launched."""
-    from localization import tr  # type: ignore
+    tr = main_app_instance.lang_manager.get_text
     log_event(tr("log_game_launch"))
 
 
 def on_before_game_exit(main_app_instance):
     """Called before the game exits."""
-    from localization import tr  # type: ignore
+    tr = main_app_instance.lang_manager.get_text
     log_event(tr("log_game_exit"))

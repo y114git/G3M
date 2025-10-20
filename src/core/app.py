@@ -50,7 +50,6 @@ from core.startup import SingleInstanceServer
 _translator = QTranslator()
 _lock_file = None
 
-
 class DeltaHubApp(QWidget):
     update_status_signal = pyqtSignal(str, str)
     set_progress_signal = pyqtSignal(int)
@@ -66,7 +65,7 @@ class DeltaHubApp(QWidget):
     url_received_signal = pyqtSignal(str)
     install_from_gb_signal = pyqtSignal(object)
 
-    def __init__(self, args: Optional[argparse.Namespace] = None, parent_for_dialogs: Optional[QWidget] = None, initial_url: str | None = None):
+    def __init__(self, args: Optional[argparse.Namespace]=None, parent_for_dialogs: Optional[QWidget]=None, initial_url: str | None=None):
         super().__init__()
         self.server: SingleInstanceServer | None = None
         self.is_shortcut_launch = args and args.shortcut_launch
@@ -133,6 +132,10 @@ class DeltaHubApp(QWidget):
         self._bg_music_thread = None
         self.game_mode: GameMode = FullGameMode()
         self.plugins = []
+        self._suppress_tab_handlers = False
+        self._handling_plugin_tab = False
+        self._plugin_tab_map = {}
+        self._last_online_count = 0
         self.init_ui()
         self.load_font()
         self.update_status_signal.connect(self._update_status)
@@ -234,7 +237,7 @@ class DeltaHubApp(QWidget):
             self._write_session_manifest(data)
         return data
 
-    def _update_session_manifest(self, backup_files: Optional[dict] = None, mod_files: Optional[list] = None, backup_temp_dir: Optional[str] = None, direct_launch: Optional[dict] = None, mod_dirs: Optional[list] = None):
+    def _update_session_manifest(self, backup_files: Optional[dict]=None, mod_files: Optional[list]=None, backup_temp_dir: Optional[str]=None, direct_launch: Optional[dict]=None, mod_dirs: Optional[list]=None):
         data = self._ensure_session_manifest()
         if backup_files:
             data.setdefault('backup_files', {}).update(backup_files)
@@ -615,7 +618,7 @@ class DeltaHubApp(QWidget):
                     if isinstance(widget, InstalledModWidget) and hasattr(widget, 'use_button') and widget.use_button:
                         widget.use_button.setEnabled(enabled)
 
-    def _create_settings_nav_button(self, text: str, on_click: Callable, style_sheet: str = '', fixed_width: int = 400) -> QPushButton:
+    def _create_settings_nav_button(self, text: str, on_click: Callable, style_sheet: str='', fixed_width: int=400) -> QPushButton:
         button = QPushButton(text)
         button.setFixedWidth(fixed_width)
         base_style = f'width: {fixed_width}px;'
@@ -958,16 +961,41 @@ class DeltaHubApp(QWidget):
 
     def _on_tab_changed(self, index):
         num_original_tabs = 4
+        if getattr(self, '_suppress_tab_handlers', False):
+            self.previous_tab_index = index
+            return
         if index >= num_original_tabs:
             visible_plugins = [p for p in self.plugins if not p.get('tab_hide', False)]
             plugin_index = index - num_original_tabs
             if 0 <= plugin_index < len(visible_plugins):
-                plugin = visible_plugins[plugin_index]
+                plugin = self._plugin_tab_map.get(index) or visible_plugins[plugin_index]
                 current_widget = self.main_tab_widget.widget(index)
                 is_placeholder = type(current_widget) is QWidget and current_widget.layout() is None
-                if is_placeholder and 'on_tab_open' in plugin and callable(plugin['on_tab_open']):
+                if is_placeholder:
+                    if self._handling_plugin_tab:
+                        return
+                    self._handling_plugin_tab = True
                     try:
-                        new_widget = plugin['on_tab_open'](self)
+                        bound = getattr(current_widget, '_plugin_info', None)
+                        if isinstance(bound, dict):
+                            plugin = bound
+                    except Exception:
+                        pass
+                    try:
+                        if current_widget is not None and hasattr(current_widget, 'property'):
+                            name_key = current_widget.property('plugin_name_key')
+                            if name_key:
+                                for p in visible_plugins:
+                                    if p.get('name_key') == name_key:
+                                        plugin = p
+                                        break
+                    except Exception:
+                        pass
+                    try:
+                        new_widget = None
+                        handler = plugin.get('page_init') if callable(plugin.get('page_init')) else plugin.get('on_tab_open')
+                        if callable(handler):
+                            new_widget = handler(self)
                         if isinstance(new_widget, QWidget):
                             self.main_tab_widget.removeTab(index)
                             self.main_tab_widget.insertTab(index, new_widget, tr(plugin['name_key']))
@@ -977,8 +1005,10 @@ class DeltaHubApp(QWidget):
                             self.main_tab_widget.setCurrentIndex(self.previous_tab_index)
                     except Exception as e:
                         logging.error(f"Error running plugin '{plugin['name_key']}': {e}")
-                        QMessageBox.critical(self, "Plugin Error", f"Failed to run plugin '{tr(plugin['name_key'])}':\n{e}")
+                        QMessageBox.critical(self, 'Plugin Error', f"Failed to run plugin '{tr(plugin['name_key'])}':\n{e}")
                         self.main_tab_widget.setCurrentIndex(self.previous_tab_index)
+                    finally:
+                        self._handling_plugin_tab = False
                     return
             self.previous_tab_index = index
             return
@@ -1002,11 +1032,23 @@ class DeltaHubApp(QWidget):
             if plugin_name.startswith('plugins.'):
                 del sys.modules[plugin_name]
         self._load_plugins()
+        self._plugin_tab_map = {}
         for plugin in self.plugins:
             if not plugin.get('tab_hide', False):
                 plugin_tab = QWidget()
+                try:
+                    setattr(plugin_tab, '_plugin_info', plugin)
+                    plugin_tab.setProperty('plugin_name_key', plugin.get('name_key'))
+                except Exception:
+                    pass
                 tab_name = tr(plugin['name_key'])
                 self.main_tab_widget.addTab(plugin_tab, tab_name)
+                try:
+                    tab_idx = self.main_tab_widget.indexOf(plugin_tab)
+                    if tab_idx >= 0:
+                        self._plugin_tab_map[tab_idx] = plugin
+                except Exception:
+                    pass
 
     def _load_plugins(self):
         self.plugins = []
@@ -1017,13 +1059,14 @@ class DeltaHubApp(QWidget):
             main_py_path = os.path.join(plugin_path, 'main.py')
             if os.path.isdir(plugin_path) and os.path.isfile(main_py_path):
                 try:
-                    spec = importlib.util.spec_from_file_location(f"plugins.{plugin_name}", main_py_path)
+                    spec = importlib.util.spec_from_file_location(f'plugins.{plugin_name}', main_py_path)
                     if spec and spec.loader:
                         plugin_module = importlib.util.module_from_spec(spec)
-                        sys.modules[f"plugins.{plugin_name}"] = plugin_module
+                        sys.modules[f'plugins.{plugin_name}'] = plugin_module
                         spec.loader.exec_module(plugin_module)
                         plugin_display_name_key = getattr(plugin_module, 'PLUGIN_NAME', None)
                         on_tab_open_function = getattr(plugin_module, 'on_tab_open', None)
+                        page_init_function = getattr(plugin_module, 'page_init', None)
                         tab_hide = getattr(plugin_module, 'TAB_HIDE', False)
                         hooks = {'on_before_game_launch': getattr(plugin_module, 'on_before_game_launch', None), 'on_after_game_launch': getattr(plugin_module, 'on_after_game_launch', None), 'on_before_game_exit': getattr(plugin_module, 'on_before_game_exit', None), 'on_after_game_exit': getattr(plugin_module, 'on_after_game_exit', None)}
                         if hasattr(plugin_module, 'on_game_launch') and callable(getattr(plugin_module, 'on_game_launch')) and (not hooks['on_after_game_launch']):
@@ -1031,7 +1074,7 @@ class DeltaHubApp(QWidget):
                         if hasattr(plugin_module, 'on_game_exit') and callable(getattr(plugin_module, 'on_game_exit')) and (not hooks['on_before_game_exit']):
                             hooks['on_before_game_exit'] = getattr(plugin_module, 'on_game_exit')
                         is_background_plugin = any((callable(h) for h in hooks.values()))
-                        is_ui_plugin = not tab_hide and plugin_display_name_key
+                        is_ui_plugin = not tab_hide and plugin_display_name_key and (callable(on_tab_open_function) or callable(page_init_function))
                         if not is_background_plugin and (not is_ui_plugin):
                             logging.warning(f"Plugin '{plugin_name}' is invalid. It must have at least one hook function or be a UI plugin with PLUGIN_NAME.")
                             continue
@@ -1044,9 +1087,9 @@ class DeltaHubApp(QWidget):
                             en_translations = getattr(plugin_module, 'LANG_EN', None)
                             if isinstance(en_translations, dict):
                                 localization_manager.merge_translations(en_translations)
-                        plugin_info = {'name_key': plugin_display_name_key, 'module': plugin_module, 'on_tab_open': on_tab_open_function, 'tab_hide': tab_hide, 'path': plugin_path, **hooks}
+                        plugin_info = {'name_key': plugin_display_name_key, 'module': plugin_module, 'on_tab_open': on_tab_open_function, 'page_init': page_init_function, 'tab_hide': tab_hide, 'path': plugin_path, **hooks}
                         self.plugins.append(plugin_info)
-                        logging.info(f"Successfully loaded plugin: {plugin_name}")
+                        logging.info(f'Successfully loaded plugin: {plugin_name}')
                 except Exception as e:
                     logging.error(f"Failed to load plugin '{plugin_name}': {e}")
 
@@ -1106,13 +1149,10 @@ class DeltaHubApp(QWidget):
     def _create_library_tab(self):
         widget = QWidget()
         layout = QVBoxLayout(widget)
-
-        # Filters for the library
         self.library_filters_widget = self._create_library_filters_widget()
         hide_filters = self.local_config.get('hide_library_filters', False)
         self.library_filters_widget.setVisible(not hide_filters)
         layout.addWidget(self.library_filters_widget)
-
         controls_layout = QHBoxLayout()
         controls_layout.addStretch()
         self.game_type_combo = QComboBox()
@@ -1219,12 +1259,10 @@ class DeltaHubApp(QWidget):
         filters_layout = QHBoxLayout(filters_widget)
         filters_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         filters_layout.setContentsMargins(0, 0, 0, 0)
-
         self.library_sort_combo = NoScrollComboBox()
         self.library_sort_combo.addItems([tr('ui.sort_by_name'), tr('ui.sort_by_date')])
         self.library_sort_combo.currentIndexChanged.connect(self._on_library_filter_changed)
         filters_layout.addWidget(self.library_sort_combo)
-
         self.library_sort_order_btn = QPushButton('▼')
         self.library_sort_order_btn.setObjectName('sortOrderBtn')
         self.library_sort_order_btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
@@ -1232,9 +1270,7 @@ class DeltaHubApp(QWidget):
         self.library_sort_ascending = False
         self.library_sort_order_btn.clicked.connect(self._toggle_library_sort_order)
         filters_layout.addWidget(self.library_sort_order_btn)
-
         filters_layout.addSpacing(20)
-
         self.library_tags_label = QLabel(tr('ui.tags_label'))
         filters_layout.addWidget(self.library_tags_label)
         self.library_tag_translation = QCheckBox(tr('tags.translation'))
@@ -1242,26 +1278,13 @@ class DeltaHubApp(QWidget):
         self.library_tag_gameplay = QCheckBox(tr('tags.gameplay'))
         self.library_tag_other = QCheckBox(tr('tags.other'))
         self.library_tag_local = QCheckBox(tr('tags.local'))
-
-        tag_style = '''
-            QCheckBox {
-                color: white;
-                font-size: 12px;
-                spacing: 5px;
-            }
-            QCheckBox::indicator {
-                width: 16px;
-                height: 16px;
-            }
-        '''
+        tag_style = '\n            QCheckBox {\n                color: white;\n                font-size: 12px;\n                spacing: 5px;\n            }\n            QCheckBox::indicator {\n                width: 16px;\n                height: 16px;\n            }\n        '
         self.library_tag_widgets = [self.library_tag_translation, self.library_tag_customization, self.library_tag_gameplay, self.library_tag_other, self.library_tag_local]
         for tag in self.library_tag_widgets:
             tag.setStyleSheet(tag_style)
             tag.stateChanged.connect(self._on_library_filter_changed)
             filters_layout.addWidget(tag)
-
         filters_layout.addStretch()
-
         self.library_search_text = ''
         self.library_search_button = QPushButton('🔍')
         self.library_search_button.setObjectName('searchBtn')
@@ -1270,7 +1293,6 @@ class DeltaHubApp(QWidget):
         self.library_search_button.setToolTip(tr('tooltips.search'))
         self.library_search_button.clicked.connect(self._show_library_search_dialog)
         filters_layout.addWidget(self.library_search_button)
-
         return filters_widget
 
     def _on_library_filter_changed(self):
@@ -1890,32 +1912,20 @@ class DeltaHubApp(QWidget):
         self.installed_mods_container.setUpdatesEnabled(False)
         clear_layout_widgets(self.installed_mods_layout, keep_last_n=1)
         self._cleanup_missing_mods(installed_mods)
-
-        # Sorting
         if hasattr(self, 'library_sort_combo'):
             sort_type = self.library_sort_combo.currentIndex()
             reverse = not self.library_sort_ascending
-            if sort_type == 0:  # By name
+            if sort_type == 0:
                 installed_mods.sort(key=lambda mod: mod.get('name', '').lower(), reverse=reverse)
-            elif sort_type == 1:  # By date
+            elif sort_type == 1:
                 installed_mods.sort(key=lambda mod: mod.get('installed_date', '0'), reverse=reverse)
-
-        # Library filters
         selected_tags = []
         if hasattr(self, 'library_tag_widgets'):
-            tag_map = {
-                self.library_tag_translation: 'translation',
-                self.library_tag_customization: 'customization',
-                self.library_tag_gameplay: 'gameplay',
-                self.library_tag_other: 'other',
-                self.library_tag_local: 'local'
-            }
+            tag_map = {self.library_tag_translation: 'translation', self.library_tag_customization: 'customization', self.library_tag_gameplay: 'gameplay', self.library_tag_other: 'other', self.library_tag_local: 'local'}
             for checkbox, tag in tag_map.items():
                 if checkbox.isChecked():
                     selected_tags.append(tag)
-
         search_text = getattr(self, 'library_search_text', '').lower()
-
         current_game_type = 'deltarune'
         if hasattr(self, 'game_type_combo'):
             current_game_type = self.game_type_combo.currentData() or 'deltarune'
@@ -1926,22 +1936,17 @@ class DeltaHubApp(QWidget):
             mod_modgame = mod_info.get('modgame', 'deltarune')
             if mod_modgame != current_game_type:
                 continue
-
-            # Apply library filters
             mod_tags = mod_info.get('tags', [])
             if mod_info.get('is_local_mod'):
                 if 'local' not in mod_tags:
                     mod_tags.append('local')
-
-            if selected_tags and not all(tag in mod_tags for tag in selected_tags):
+            if selected_tags and (not all((tag in mod_tags for tag in selected_tags))):
                 continue
-
             if search_text:
                 mod_name = mod_info.get('name', '').lower()
                 mod_tagline = mod_info.get('tagline', '').lower()
                 if search_text not in mod_name and search_text not in mod_tagline:
                     continue
-
             is_local = mod_info.get('is_local_mod', False)
             is_available = mod_info.get('is_available_on_server', True)
             has_update = False
@@ -3409,7 +3414,7 @@ class DeltaHubApp(QWidget):
             QMessageBox.critical(self, tr('errors.error'), tr('errors.folder_creation_failed', error=str(e)))
             return False
 
-    def _prompt_collection_name(self, default: str = 'Collection') -> Optional[str]:
+    def _prompt_collection_name(self, default: str='Collection') -> Optional[str]:
         dlg = QDialog(self)
         dlg.setWindowTitle(tr('dialogs.new_collection'))
         v, e = (QVBoxLayout(dlg), QLineEdit())
@@ -4503,7 +4508,7 @@ class DeltaHubApp(QWidget):
         self._safe_stop_thread(getattr(self, 'fetch_thread', None))
         self.fetch_thread = None
 
-    def _safe_stop_thread(self, thr: Optional[QThread], timeout: int = 2000):
+    def _safe_stop_thread(self, thr: Optional[QThread], timeout: int=2000):
         if isinstance(thr, QThread) and thr.isRunning():
             thr.requestInterruption()
             thr.quit()
@@ -4693,7 +4698,7 @@ class DeltaHubApp(QWidget):
             self.error_signal.emit(tr('errors.file_prep_error', error=str(e)))
             return False
 
-    def _is_xdelta_mod(self, mod_info, source_dir: str, chapter_id: Optional[int] = None) -> bool:
+    def _is_xdelta_mod(self, mod_info, source_dir: str, chapter_id: Optional[int]=None) -> bool:
         if mod_info and getattr(mod_info, 'is_xdelta', False):
             return True
         if chapter_id is not None:
@@ -4729,7 +4734,7 @@ class DeltaHubApp(QWidget):
                         return True
         return False
 
-    def _create_backup_and_copy_mod_files(self, source_dir: str, target_dir: str, chapter_id: Optional[int] = None, mod_info=None):
+    def _create_backup_and_copy_mod_files(self, source_dir: str, target_dir: str, chapter_id: Optional[int]=None, mod_info=None):
         if not os.path.isdir(source_dir):
             self.update_status_signal.emit(tr('errors.mod_folder_not_found_simple', path=source_dir), UI_COLORS['status_error'])
             return False
@@ -4923,7 +4928,7 @@ class DeltaHubApp(QWidget):
                     with lzma.open(archive_path) as f_in, open(output_path, 'wb') as f_out:
                         shutil.copyfileobj(f_in, f_out)
                 else:
-                    raise ValueError(f"Unsupported archive format for extraction: {archive_path}")
+                    raise ValueError(f'Unsupported archive format for extraction: {archive_path}')
                 from utils.file_utils import _cleanup_extracted_archive
                 _cleanup_extracted_archive(temp_dir)
                 for root, dirs, files in os.walk(temp_dir):
@@ -5219,7 +5224,7 @@ class DeltaHubApp(QWidget):
         self._execute_game(launch_config)
         self._execute_plugin_hooks('on_after_game_launch')
 
-    def _execute_game(self, launch_config: Dict[str, Any], vanilla_mode: bool = False):
+    def _execute_game(self, launch_config: Dict[str, Any], vanilla_mode: bool=False):
         target_path = launch_config.get('target')
         working_directory = launch_config.get('cwd')
         launch_type = launch_config.get('type')
@@ -5257,7 +5262,6 @@ class DeltaHubApp(QWidget):
             else:
                 command = [target_path]
                 if system == 'Linux' and target_path.lower().endswith('.exe'):
-                    # Check if Steam launch is enabled, if so, Steam will handle Proton/Wine
                     is_steam_launch = self.local_config.get('launch_via_steam', False)
                     if not is_steam_launch:
                         command.insert(0, 'wine')
@@ -5324,7 +5328,7 @@ class DeltaHubApp(QWidget):
             self._update_mod_display()
         self.updateGeometry()
 
-    def _update_status(self, message: str, color: str = 'white'):
+    def _update_status(self, message: str, color: str='white'):
         if not self.is_shortcut_launch:
             self.status_label.setText(message)
             self.status_label.setStyleSheet(f'color: {color};')
@@ -5352,6 +5356,7 @@ class DeltaHubApp(QWidget):
 
     def _update_online_label(self, count: int):
         if not self.is_shortcut_launch:
+            self._last_online_count = count
             self.online_label.setText(f"<span style='color:{UI_COLORS['status_ready']};'>●</span> {tr('status.online_count', count=count)}")
 
     def _on_toggle_custom_executable(self):
@@ -5472,21 +5477,63 @@ class DeltaHubApp(QWidget):
         self.help_button.setText(tr('buttons.help_close') if self.is_help_view else tr('buttons.help'))
 
     def _retranslate_ui(self):
-        language_code = self.local_config.get('language', 'en')
-        localization_manager.load_language(language_code)
-        self._update_qt_translations(language_code)
-        self.load_font()
-        self._update_plugin_tabs()
-        self._retranslate_texts()
-        self.apply_theme()
-        self._update_filtered_mods()
-        self._update_installed_mods_display()
-        self._update_slots_display()
-        self._update_pagination_controls()
-        if self.is_save_manager_view:
-            self._refresh_save_slots()
-        self._update_action_button_state()
-        self.update()
+        self._suppress_tab_handlers = True
+        try:
+            current_index = self.main_tab_widget.currentIndex() if hasattr(self, 'main_tab_widget') else -1
+            current_widget = None
+            current_plugin = None
+            try:
+                if current_index >= 0:
+                    current_widget = self.main_tab_widget.widget(current_index)
+                    if isinstance(current_widget, QWidget) and current_index in getattr(self, '_plugin_tab_map', {}):
+                        current_plugin = self._plugin_tab_map.get(current_index)
+            except Exception:
+                pass
+            language_code = self.local_config.get('language', 'en')
+            localization_manager.load_language(language_code)
+            self._update_qt_translations(language_code)
+            self.load_font()
+            self._update_plugin_tabs()
+            try:
+                if hasattr(self, 'main_tab_widget') and current_index >= 0 and (current_index < self.main_tab_widget.count()):
+                    self.main_tab_widget.setCurrentIndex(current_index)
+                    if current_plugin:
+                        w = self.main_tab_widget.widget(current_index)
+                        if isinstance(w, QWidget) and w.layout() is None:
+                            handler = current_plugin.get('page_init') if callable(current_plugin.get('page_init')) else current_plugin.get('on_tab_open')
+                            try:
+                                new_widget = handler(self) if callable(handler) else None
+                                if isinstance(new_widget, QWidget):
+                                    self.main_tab_widget.removeTab(current_index)
+                                    self.main_tab_widget.insertTab(current_index, new_widget, tr(current_plugin['name_key']))
+                                    self.main_tab_widget.setCurrentIndex(current_index)
+                            except Exception:
+                                pass
+            except Exception:
+                pass
+            self._retranslate_texts()
+            try:
+                if hasattr(self, 'hide_library_filters_checkbox'):
+                    self.hide_library_filters_checkbox.setText(tr('ui.hide_library_filters'))
+                    self.hide_library_filters_checkbox.setToolTip(tr('tooltips.hide_library_filters'))
+            except Exception:
+                pass
+            self.apply_theme()
+            try:
+                if hasattr(self, 'online_label'):
+                    self._update_online_label(getattr(self, '_last_online_count', 0))
+            except Exception:
+                pass
+            self._update_filtered_mods()
+            self._update_installed_mods_display()
+            self._update_slots_display()
+            self._update_pagination_controls()
+            if self.is_save_manager_view:
+                self._refresh_save_slots()
+            self._update_action_button_state()
+            self.update()
+        finally:
+            self._suppress_tab_handlers = False
 
     def _check_active_slots_need_updates(self):
         if not self.all_mods:
@@ -6292,7 +6339,7 @@ class DeltaHubApp(QWidget):
                     return True
         return False
 
-    def _find_and_validate_game_path(self, selections: Optional[Dict[int, str]] = None, is_initial: bool = False):
+    def _find_and_validate_game_path(self, selections: Optional[Dict[int, str]]=None, is_initial: bool=False):
         path_from_config = self._get_current_game_path()
         skip_data_check = bool(selections and self._has_mods_with_data_files(selections))
         if isinstance(self.game_mode, DemoGameMode):

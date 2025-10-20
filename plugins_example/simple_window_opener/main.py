@@ -23,9 +23,10 @@ def on_tab_open(main_app_instance):
     """
     Called when the plugin's tab is clicked.
     This function opens a new window and returns None,
-    so the tab will not be persistently displayed.
+    so the user will be returned to the previous tab.
     """
-    from localization import tr  # type: ignore
+    # Get localization function from main app
+    tr = main_app_instance.lang_manager.get_text
     title = tr("window_opener_title")
     message = tr("window_opener_message")
     QMessageBox.information(main_app_instance, title, message)
