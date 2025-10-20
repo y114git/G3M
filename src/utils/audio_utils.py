@@ -13,7 +13,35 @@ class SoundInstance(Protocol):
         ...
 
 
-_sound_instance: Optional[SoundInstance] = None
+class AudioManager:
+    def __init__(self):
+        self._sound_instance: Optional[SoundInstance] = None
+
+    def play_deltahub_sound(self) -> None:
+        app_support_path = os.path.join(get_user_data_root(), 'settings')
+        config_mp3 = os.path.join(app_support_path, 'custom_startup_sound.mp3')
+        config_wav = os.path.join(app_support_path, 'custom_startup_sound.wav')
+        asset_wav = os.path.join(os.path.dirname(__file__), '..', 'resources', 'audio', 'deltahub.wav')
+        sound_candidates = [config_mp3, config_wav, asset_wav]
+        sound_path = next((p for p in sound_candidates if os.path.exists(p)), None)
+        if not sound_path:
+            return
+        try:
+            from playsound3 import playsound
+            self._sound_instance = playsound(os.path.abspath(sound_path), block=False)
+        except Exception:
+            pass
+
+    def stop_deltahub_sound(self) -> None:
+        if self._sound_instance and self._sound_instance.is_alive():
+            try:
+                self._sound_instance.stop()
+            except Exception:
+                pass
+        self._sound_instance = None
+
+
+_audio_manager = AudioManager()
 
 
 def get_launcher_volume() -> int:
@@ -26,31 +54,3 @@ def get_launcher_volume() -> int:
     except (IOError, json.JSONDecodeError):
         pass
     return 100
-
-
-def play_deltahub_sound() -> None:
-    global _sound_instance
-    app_support_path = os.path.join(get_user_data_root(), 'settings')
-    config_mp3 = os.path.join(app_support_path, 'custom_startup_sound.mp3')
-    config_wav = os.path.join(app_support_path, 'custom_startup_sound.wav')
-    config_wav = os.path.join(app_support_path, 'custom_startup_sound.wav')
-    asset_wav = os.path.join(os.path.dirname(__file__), '..', 'resources', 'audio', 'deltahub.wav')
-    sound_candidates = [config_mp3, config_wav, asset_wav]
-    sound_path = next((p for p in sound_candidates if os.path.exists(p)), None)
-    if not sound_path:
-        return
-    try:
-        from playsound3 import playsound
-        _sound_instance = playsound(os.path.abspath(sound_path), block=False)
-    except Exception:
-        pass
-
-
-def stop_deltahub_sound() -> None:
-    global _sound_instance
-    if _sound_instance and _sound_instance.is_alive():
-        try:
-            _sound_instance.stop()
-        except Exception:
-            pass
-    _sound_instance = None

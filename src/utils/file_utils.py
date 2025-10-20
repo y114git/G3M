@@ -16,7 +16,9 @@ from config.constants import BROWSER_HEADERS
 from utils.network_utils import download_file, get_filename_from_url
 
 
-def download_and_extract_archive(url: str, target_dir: str, progress_signal, total_size: int, downloaded_ref: list[int], session=None, is_game_installation=False):
+def download_and_extract_archive(url: str, target_dir: str, progress_callback=None, total_size: int = 0, downloaded_ref: list[int] | None = None, session=None, is_game_installation=False):
+    if downloaded_ref is None:
+        downloaded_ref = [0]
     os.makedirs(target_dir, exist_ok=True)
     if session is None:
         session = requests.Session()
@@ -28,7 +30,7 @@ def download_and_extract_archive(url: str, target_dir: str, progress_signal, tot
     fname = get_filename_from_url(session, url)
     with tempfile.TemporaryDirectory(prefix='deltahub-dl-') as tmp:
         tmp_path = os.path.join(tmp, fname)
-        download_file(session, url, tmp_path, progress_signal, total_size, downloaded_ref)
+        download_file(session, url, tmp_path, progress_callback, total_size, downloaded_ref)
         _extract_archive(tmp_path, target_dir, fname, is_game_installation)
 
 

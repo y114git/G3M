@@ -9,7 +9,7 @@ from PyQt6.QtCore import QLibraryInfo, Qt, QTranslator, QTimer
 from PyQt6.QtNetwork import QLocalServer, QLocalSocket
 from PyQt6.QtWidgets import QApplication, QMessageBox
 from localization.manager import localization_manager, tr
-from utils.audio_utils import play_deltahub_sound
+from utils.audio_utils import _audio_manager
 from core.splash import create_splash, create_png_splash
 from utils.path_utils import get_user_data_root, get_launcher_dir
 if platform.system() == 'Windows':
@@ -198,7 +198,7 @@ def run_app():
     splash = create_splash()
 
     def start_splash_and_sound():
-        play_deltahub_sound()
+        _audio_manager.play_deltahub_sound()
         if hasattr(splash, 'movie'):
             splash.start_gif_animation()
     if hasattr(splash, 'movie'):
