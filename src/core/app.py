@@ -203,8 +203,8 @@ class DeltaHubApp(QWidget):
         self._update_status(message, status_color)
 
     def _handle_url_install_prompt(self, title, message):
-        reply = QMessageBox.question(self, title, message, QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-        self.url_install_thread.prompt_result = reply == QMessageBox.StandardButton.Yes
+        reply = self.feedback_manager.ask_question(title, message)
+        self.url_install_thread.prompt_result = reply
         self.url_install_thread.prompt_event.set()
 
     def _read_mods_metadata(self) -> Dict:
@@ -276,7 +276,7 @@ class DeltaHubApp(QWidget):
             self._mod_files_to_cleanup = data.get('mod_files_to_cleanup', [])
             self._backup_temp_dir = data.get('backup_temp_dir')
             self._direct_launch_cleanup_info = data.get('direct_launch')
-            self.update_status_signal.emit(tr('status.recovering_previous_session'), UI_COLORS['status_warning'])
+            self.feedback_manager.update_status('status.recovering_previous_session', UI_COLORS['status_warning'])
             self._cleanup_direct_launch_files()
             self._clear_session_manifest()
         except Exception:
@@ -382,15 +382,8 @@ class DeltaHubApp(QWidget):
             description_lines.append(f"✓ {tr('status.custom_executable_launch', exe_name=exe_name)}")
         else:
             description_lines.append(f"✓ {tr('status.normal_launch')}")
-        msg = QMessageBox(self)
-        msg.setWindowTitle(tr('dialogs.create_shortcut_question'))
-        msg.setIcon(QMessageBox.Icon.Question)
-        msg.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-        msg.setTextFormat(Qt.TextFormat.RichText)
-        msg.setText('<br>'.join(description_lines) + f"<br><br><p>{tr('dialogs.shortcut_create_description')}</p>")
-        msg.exec()
-        reply = msg.standardButton(msg.clickedButton())
-        if reply == QMessageBox.StandardButton.Yes:
+        description_text = '<br>'.join(description_lines) + f"<br><br><p>{tr('dialogs.shortcut_create_description')}</p>"
+        if self.feedback_manager.ask_question('dialogs.create_shortcut_question', 'dialogs.shortcut_create_description', description_text):
             self._save_shortcut(settings)
 
     def _load_local_mods_from_folders(self):
@@ -430,7 +423,7 @@ class DeltaHubApp(QWidget):
                             except Exception:
                                 pass
                         if is_deltamod_archive:
-                            self.update_status_signal.emit(tr('status.deltamod_archive_detected', name=item_name), UI_COLORS['status_info'])
+                            self.feedback_manager.update_status(tr('status.deltamod_archive_detected', name=item_name), UI_COLORS['status_info'])
                             QApplication.processEvents()
                             with tempfile.TemporaryDirectory() as temp_dir:
                                 shutil.unpack_archive(item_path, temp_dir)
@@ -442,17 +435,17 @@ class DeltaHubApp(QWidget):
                                 converter = DeltamodConverter(content_path, self.mods_dir)
                                 new_mod_path = converter.convert()
                                 if new_mod_path:
-                                    self.update_status_signal.emit(tr('status.deltamod_converted', name=os.path.basename(new_mod_path)), UI_COLORS['status_success'])
+                                    self.feedback_manager.update_status(tr('status.deltamod_converted', name=os.path.basename(new_mod_path)), UI_COLORS['status_success'])
                                     os.remove(item_path)
                                 else:
-                                    self.update_status_signal.emit(tr('errors.deltamod_conversion_failed', name=item_name), UI_COLORS['status_error'])
+                                    self.feedback_manager.update_status(tr('errors.deltamod_conversion_failed', name=item_name), UI_COLORS['status_error'])
                             continue
                     except Exception as e:
                         logging.error(f'Failed to process Deltamod archive {item_name}: {e}')
                 if not os.path.isdir(item_path):
                     continue
                 if '_deltamodInfo.json' in os.listdir(item_path) and 'config.json' not in os.listdir(item_path):
-                    self.update_status_signal.emit(tr('status.deltamod_detected', name=item_name), UI_COLORS['status_info'])
+                    self.feedback_manager.update_status(tr('status.deltamod_detected', name=item_name), UI_COLORS['status_info'])
                     QApplication.processEvents()
                     from utils.deltamod_converter import DeltamodConverter
                     converter = DeltamodConverter(item_path, self.mods_dir)
@@ -1666,11 +1659,7 @@ class DeltaHubApp(QWidget):
         is_chapter_mode = self.chapter_mode_checkbox.isChecked()
         if not is_chapter_mode:
             if slot_frame.assigned_mod:
-                msg_box = QMessageBox(self)
-                msg_box.setWindowTitle(tr('ui.remove_mod_from_slot'))
-                msg_box.setText(tr('ui.remove_mod_question', mod_name=slot_frame.assigned_mod.name))
-                msg_box.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-                if msg_box.exec() == QMessageBox.StandardButton.Yes:
+                if self.feedback_manager.ask_question('ui.remove_mod_from_slot', 'ui.remove_mod_question', '', False):
                     self._remove_mod_from_slot(slot_frame, slot_frame.assigned_mod)
                     self._save_slots_state()
             else:
@@ -1696,19 +1685,11 @@ class DeltaHubApp(QWidget):
             return
         current_direct_launch_slot = self.local_config.get('direct_launch_slot_id', -1)
         is_direct_launch_active = current_direct_launch_slot == slot_frame.chapter_id
-        msg_box = QMessageBox(self)
-        msg_box.setWindowTitle(tr('ui.direct_launch'))
         if is_direct_launch_active:
-            msg_box.setText(tr('ui.disable_direct_launch', chapter=slot_frame.chapter_id))
-            msg_box.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-            msg_box.setDefaultButton(QMessageBox.StandardButton.No)
-            if msg_box.exec() == QMessageBox.StandardButton.Yes:
+            if self.feedback_manager.ask_question('ui.direct_launch', 'ui.disable_direct_launch', '', False):
                 self._disable_direct_launch()
         else:
-            msg_box.setText(tr('ui.enable_direct_launch', chapter=slot_frame.chapter_id))
-            msg_box.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-            msg_box.setDefaultButton(QMessageBox.StandardButton.No)
-            if msg_box.exec() == QMessageBox.StandardButton.Yes:
+            if self.feedback_manager.ask_question('ui.direct_launch', 'ui.enable_direct_launch', '', False):
                 self._on_toggle_direct_launch_for_slot(slot_frame.chapter_id)
 
     def _update_installed_mods_for_chapter_mode(self, selected_chapter_id):
@@ -2135,12 +2116,7 @@ class DeltaHubApp(QWidget):
 
     def _on_installed_mod_remove(self, mod_data):
         try:
-            msg_box = QMessageBox(self)
-            msg_box.setWindowTitle(tr('dialogs.delete_confirmation'))
-            msg_box.setText(tr('dialogs.delete_mod_confirmation', mod_name=mod_data.name))
-            msg_box.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-            msg_box.setDefaultButton(QMessageBox.StandardButton.No)
-            if msg_box.exec() == QMessageBox.StandardButton.Yes:
+            if self.feedback_manager.ask_question('dialogs.delete_confirmation', 'dialogs.delete_mod_confirmation', '', False):
                 self._delete_mod_files(mod_data)
                 self._remove_mod_from_all_slots(mod_data)
                 self._update_installed_mods_display()
@@ -2801,9 +2777,8 @@ class DeltaHubApp(QWidget):
             was_installed_before = self._is_mod_installed(mod.key)
             is_xdelta_mod = getattr(mod, 'is_xdelta', False)
             if not is_xdelta_mod and (not was_installed_before):
-                reply = QMessageBox.question(self, tr('dialogs.file_replacement_warning_title'), tr('dialogs.file_replacement_warning_body'), QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No)
-                if reply != QMessageBox.StandardButton.Yes:
-                    self.update_status_signal.emit(tr('status.install_cancelled_by_user'), UI_COLORS['status_info'])
+                if not self.feedback_manager.ask_question('dialogs.file_replacement_warning_title', 'dialogs.file_replacement_warning_body', '', False):
+                    self.feedback_manager.update_status(tr('status.install_cancelled_by_user'), UI_COLORS['status_info'])
                     return
             install_tasks = [(mod, chapter_id) for chapter_id in available_chapters]
             self.is_installing = True
@@ -2819,7 +2794,7 @@ class DeltaHubApp(QWidget):
             self.progress_bar.setVisible(True)
             self.progress_bar.setValue(0)
             try:
-                self.update_status_signal.emit(tr('status.preparing_download'), UI_COLORS['status_warning'])
+                self.feedback_manager.update_status(tr('status.preparing_download'), UI_COLORS['status_warning'])
             except Exception:
                 pass
             self._update_action_button_state()
@@ -2848,7 +2823,7 @@ class DeltaHubApp(QWidget):
         self.progress_bar.setValue(0)
         self.progress_bar.setVisible(False)
         if success:
-            self.update_status_signal.emit(tr('status.mod_installed_success'), UI_COLORS['status_success'])
+            self.feedback_manager.update_status(tr('status.mod_installed_success'), UI_COLORS['status_success'])
         else:
             if getattr(self, '_operation_cancelled', False):
                 try:
@@ -2856,7 +2831,7 @@ class DeltaHubApp(QWidget):
                 except Exception:
                     pass
             else:
-                self.update_status_signal.emit(tr('status.mod_install_error'), UI_COLORS['status_error'])
+                self.feedback_manager.update_status(tr('status.mod_install_error'), UI_COLORS['status_error'])
             try:
                 thr = self.current_install_thread
                 temp_root = getattr(thr, 'temp_root', None)
@@ -2875,7 +2850,7 @@ class DeltaHubApp(QWidget):
             QTimer.singleShot(100, self._refresh_specific_mod_widget_after_update)
             if not was_installed_before:
                 self.feedback_manager.show_info('dialogs.mod_installed_title', tr('dialogs.mod_installed_apply_info'))
-            self.update_status_signal.emit(tr('status.mod_installed_success'), UI_COLORS['status_success'])
+            self.feedback_manager.update_status(tr('status.mod_installed_success'), UI_COLORS['status_success'])
         self._update_action_button_state()
 
     def _refresh_specific_mod_widget_after_update(self):
@@ -2903,9 +2878,7 @@ class DeltaHubApp(QWidget):
     def _on_mod_uninstall_requested(self, mod):
         if self.is_installing:
             return
-        from PyQt6.QtWidgets import QMessageBox
-        reply = QMessageBox.question(self, tr('dialogs.delete_confirmation'), tr('dialogs.delete_mod_confirmation', mod_name=mod.name), QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No)
-        if reply == QMessageBox.StandardButton.Yes:
+        if self.feedback_manager.ask_question('dialogs.delete_confirmation', 'dialogs.delete_mod_confirmation', '', False):
             self._uninstall_single_mod(mod)
 
     def _uninstall_single_mod(self, mod):
@@ -2960,17 +2933,17 @@ class DeltaHubApp(QWidget):
         self.progress_bar.setVisible(False)
         self._update_action_button_state()
         if success:
-            self.update_status_signal.emit(tr('status.mod_installed_success'), UI_COLORS['status_success'])
+            self.feedback_manager.update_status(tr('status.mod_installed_success'), UI_COLORS['status_success'])
             self._update_installed_mods_display()
             self._update_mod_widgets_slot_status()
             self._update_action_button_state()
             self._refresh_slots_content()
             if hasattr(self, 'pending_updates') and self.pending_updates:
                 next_mod = self.pending_updates.pop(0)
-                self.update_status_signal.emit(tr('status.updating_mod', mod_name=next_mod.name), UI_COLORS['status_warning'])
+                self.feedback_manager.update_status(tr('status.updating_mod', mod_name=next_mod.name), UI_COLORS['status_warning'])
                 self._update_mod(next_mod)
         else:
-            self.update_status_signal.emit(tr('status.mod_install_error'), UI_COLORS['status_error'])
+            self.feedback_manager.update_status(tr('status.mod_install_error'), UI_COLORS['status_error'])
             if hasattr(self, 'pending_updates'):
                 self.pending_updates = []
 
@@ -2984,18 +2957,18 @@ class DeltaHubApp(QWidget):
             self.feedback_manager.show_error('errors.error', tr('errors.mods_folder_exists', dir=new_parent_dir))
             return
         try:
-            self.update_status_signal.emit(tr('status.moving_mods_folder'), UI_COLORS['status_warning'])
+            self.feedback_manager.update_status(tr('status.moving_mods_folder'), UI_COLORS['status_warning'])
             QApplication.processEvents()
             shutil.move(current_mods_dir, new_mods_dir)
             self.mods_dir = new_mods_dir
             self.local_config['mods_dir_path'] = new_parent_dir
             self._write_local_config()
             self.feedback_manager.show_info('dialogs.success', tr('dialogs.mods_folder_moved', path=new_mods_dir))
-            self.update_status_signal.emit(tr('status.mods_folder_location_changed'), UI_COLORS['status_success'])
+            self.feedback_manager.update_status(tr('status.mods_folder_location_changed'), UI_COLORS['status_success'])
         except Exception as e:
             self.feedback_manager.show_error('dialogs.move_error', tr('dialogs.mods_folder_move_failed', error=str(e)))
             self.mods_dir = current_mods_dir
-            self.update_status_signal.emit(tr('status.mods_folder_change_error'), UI_COLORS['status_error'])
+            self.feedback_manager.update_status(tr('status.mods_folder_change_error'), UI_COLORS['status_error'])
 
     def _update_change_path_button_text(self):
         self.change_path_button.setText(self.game_mode.path_change_button_text)
@@ -3310,7 +3283,7 @@ class DeltaHubApp(QWidget):
         self.save_manager_widget.setVisible(True)
         self.selected_slot = None
         self._refresh_save_slots()
-        self.update_status_signal.emit(tr('status.save_path_info', save_path=self.save_path), UI_COLORS['status_info'])
+        self.feedback_manager.update_status(tr('status.save_path_info', save_path=self.save_path), UI_COLORS['status_info'])
         self.settings_button.setText(tr('ui.back_button'))
         try:
             self.settings_button.clicked.disconnect(self._toggle_settings_view)
@@ -3484,7 +3457,7 @@ class DeltaHubApp(QWidget):
             return
         cols = self._list_collections(chapter)
         folder = cols[idx]
-        if QMessageBox.question(self, tr('dialogs.delete_collection'), tr('dialogs.delete_collection_confirmation')) != QMessageBox.StandardButton.Yes:
+        if not self.feedback_manager.ask_question('dialogs.delete_collection', 'dialogs.delete_collection_confirmation', '', False):
             return
         try:
             shutil.rmtree(os.path.join(self.save_path, folder))
@@ -3514,8 +3487,7 @@ class DeltaHubApp(QWidget):
         if not src_dir or not dst_dir:
             return
         prompt = (tr('dialogs.overwrite_all_3_slots_collection') if to_collection else tr('dialogs.overwrite_all_3_main_slots')) if self.selected_slot is None else tr('dialogs.overwrite_selected_slot_collection') if to_collection else tr('dialogs.overwrite_selected_main_slot')
-        reply = QMessageBox.question(self, tr('dialogs.copy_confirmation'), prompt, QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-        if reply != QMessageBox.StandardButton.Yes:
+        if not self.feedback_manager.ask_question('dialogs.copy_confirmation', 'dialogs.copy_confirmation', prompt, False):
             return
         try:
             for slot_idx in slot_indices:
@@ -3529,10 +3501,10 @@ class DeltaHubApp(QWidget):
                     elif os.path.exists(dst):
                         os.remove(dst)
             self._refresh_save_slots()
-            self.update_status_signal.emit(tr('status.copying_completed'), UI_COLORS['status_success'])
+            self.feedback_manager.update_status(tr('status.copying_completed'), UI_COLORS['status_success'])
         except Exception as e:
             self.feedback_manager.show_error('errors.error', tr('errors.copy_failed', error=str(e)))
-            self.update_status_signal.emit(tr('status.copying_error'), UI_COLORS['status_error'])
+            self.feedback_manager.update_status(tr('status.copying_error'), UI_COLORS['status_error'])
 
     def _action_show_save(self):
         if not self.selected_slot:
@@ -3551,7 +3523,7 @@ class DeltaHubApp(QWidget):
         fp = os.path.join(base, f'filech{ch}_{s}')
         if not os.path.exists(fp):
             return
-        if QMessageBox.question(self, tr('dialogs.delete_save'), tr('dialogs.delete_save_confirmation')) != QMessageBox.StandardButton.Yes:
+        if not self.feedback_manager.ask_question('dialogs.delete_save', 'dialogs.delete_save_confirmation', '', False):
             return
         try:
             os.remove(fp)
@@ -3600,7 +3572,7 @@ class DeltaHubApp(QWidget):
             if idx == -1:
                 cols = self._list_collections(ch)
                 if not cols:
-                    if QMessageBox.question(self, tr('dialogs.no_collections'), tr('dialogs.create_new_collection_question')) != QMessageBox.StandardButton.Yes:
+                    if not self.feedback_manager.ask_question('dialogs.no_collections', 'dialogs.create_new_collection_question', '', False):
                         return
                     if not self._create_new_collection(ch):
                         return
@@ -3703,8 +3675,7 @@ class DeltaHubApp(QWidget):
         super().paintEvent(event)
 
     def _on_reset_settings_click(self):
-        reply = QMessageBox.question(self, tr('dialogs.reset_settings_confirm_title'), tr('dialogs.reset_settings_confirm_text'), QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No)
-        if reply == QMessageBox.StandardButton.Yes:
+        if self.feedback_manager.ask_question('dialogs.reset_settings_confirm_title', 'dialogs.reset_settings_confirm_text', '', False):
             self._stop_background_music()
             language = self.local_config.get('language', 'en')
             custom_files = [os.path.join(self.config_dir, 'custom_background_music.mp3'), os.path.join(self.config_dir, 'custom_background_music.wav'), os.path.join(self.config_dir, 'custom_startup_sound.mp3'), os.path.join(self.config_dir, 'custom_startup_sound.wav')]
@@ -4185,7 +4156,7 @@ class DeltaHubApp(QWidget):
             if response.status_code == 200:
                 self.global_settings = response.json() or {}
         except requests.RequestException:
-            self.update_status_signal.emit(tr('status.global_settings_load_failed'), UI_COLORS['status_warning'])
+            self.feedback_manager.update_status(tr('status.global_settings_load_failed'), UI_COLORS['status_warning'])
         if localization_manager.get_current_language() == 'ru':
             changelog_url = self.global_settings.get('changelog_ru_url', self.global_settings.get('changelog_url'))
         else:
@@ -4198,7 +4169,7 @@ class DeltaHubApp(QWidget):
             self.changelog_text_edit.setMarkdown(tr('status.changelog_load_failed'))
         self._check_and_manage_steam_deck_saves()
         if is_game_running():
-            self.update_status_signal.emit(tr('status.deltarune_already_running'), UI_COLORS['status_error'])
+            self.feedback_manager.update_status(tr('status.deltarune_already_running'), UI_COLORS['status_error'])
             return
         self._load_local_data()
         self.game_path = self.local_config.get('game_path', '')
@@ -4283,17 +4254,17 @@ class DeltaHubApp(QWidget):
     def _check_for_launcher_updates(self):
         beta_enabled = self.local_config.get('beta_updates_enabled', False)
         if beta_enabled:
-            self.update_status_signal.emit(tr('status.beta_updates_enabled'), UI_COLORS['status_warning'])
+            self.feedback_manager.update_status(tr('status.beta_updates_enabled'), UI_COLORS['status_warning'])
         try:
             launcher_files_key = 'launcher_beta_files' if beta_enabled else 'launcher_files'
             launcher_files = self.global_settings.get(launcher_files_key)
             if not isinstance(launcher_files, dict):
-                self.update_status_signal.emit(tr('status.update_info_not_found'), UI_COLORS['status_warning'])
+                self.feedback_manager.update_status(tr('status.update_info_not_found'), UI_COLORS['status_warning'])
                 return
             remote_version = launcher_files.get('version')
             from utils.file_utils import version_sort_key as _vkey
             if not remote_version or _vkey(remote_version) <= _vkey(LAUNCHER_VERSION):
-                self.update_status_signal.emit(tr('status.launcher_version_up_to_date'), UI_COLORS['status_success'])
+                self.feedback_manager.update_status(tr('status.launcher_version_up_to_date'), UI_COLORS['status_success'])
                 return
             platform_key_map = {'Windows': 'windows', 'Linux': 'linux', 'Darwin': f'macos-{ARCH}'}
             current_platform_key = platform_key_map.get(platform.system())
@@ -4302,14 +4273,14 @@ class DeltaHubApp(QWidget):
             update_message_ru = launcher_files.get('message_ru')
             update_message_en = launcher_files.get('message_en')
             if not download_url:
-                self.update_status_signal.emit(tr('errors.no_build_for_os', platform=current_platform_key), UI_COLORS['status_warning'])
+                self.feedback_manager.update_status(tr('errors.no_build_for_os', platform=current_platform_key), UI_COLORS['status_warning'])
                 return
             update_info = {'version': remote_version, 'url': download_url, 'message': update_message, 'message_ru': update_message_ru, 'message_en': update_message_en}
             self.update_info_ready.emit(update_info)
         except requests.RequestException as e:
-            self.update_status_signal.emit(tr('errors.update_check_network_error', error=str(e)), UI_COLORS['status_error'])
+            self.feedback_manager.update_status(tr('errors.update_check_network_error', error=str(e)), UI_COLORS['status_error'])
         except Exception as e:
-            self.update_status_signal.emit(tr('errors.update_check_general_error', error=str(e)), UI_COLORS['status_error'])
+            self.feedback_manager.update_status(tr('errors.update_check_general_error', error=str(e)), UI_COLORS['status_error'])
 
     def _handle_update_info(self, update_info):
         if self.initialization_completed and getattr(self, 'is_shown_to_user', False):
@@ -4349,12 +4320,11 @@ class DeltaHubApp(QWidget):
             message_text = update_info.get('message_en') or update_info.get('message', '')
         update_message += f"<b>{tr('dialogs.whats_new')}</b><br>{message_text}<br><br>"
         update_message += tr('dialogs.want_download_install_now') + tr('dialogs.app_will_restart')
-        reply = QMessageBox.question(self, tr('status.update_available'), update_message)
-        if reply == QMessageBox.StandardButton.Yes:
+        if self.feedback_manager.ask_question('status.update_available', 'status.update_available', update_message, True):
             self._perform_update(update_info)
         else:
             self.update_in_progress = False
-            self.update_status_signal.emit(tr('status.update_rejected'), UI_COLORS['status_info'])
+            self.feedback_manager.update_status(tr('status.update_rejected'), UI_COLORS['status_info'])
 
     def _perform_update(self, update_info):
         for widget in [self.action_button, self.saves_button, self.shortcut_button, self.change_path_button, self.change_background_button]:
@@ -4396,7 +4366,7 @@ class DeltaHubApp(QWidget):
         try:
             with tempfile.TemporaryDirectory(prefix='deltahub-update-') as tmp_dir:
                 archive_path = os.path.join(tmp_dir, 'update' + os.path.splitext(update_info['url'].split('?')[0])[1])
-                self.update_status_signal.emit(tr('status.downloading_version', version=update_info['version']), UI_COLORS['status_warning'])
+                self.feedback_manager.update_status(tr('status.downloading_version', version=update_info['version']), UI_COLORS['status_warning'])
                 response = requests.get(update_info['url'], stream=True, timeout=60)
                 response.raise_for_status()
                 total_size = int(response.headers.get('content-length', 0))
@@ -4407,7 +4377,7 @@ class DeltaHubApp(QWidget):
                         downloaded_size += len(data)
                         if total_size > 0:
                             self.set_progress_signal.emit(int(downloaded_size / total_size * 100))
-                self.update_status_signal.emit(tr('status.unpacking_and_installing'), UI_COLORS['status_warning'])
+                self.feedback_manager.update_status(tr('status.unpacking_and_installing'), UI_COLORS['status_warning'])
                 system = platform.system()
                 extraction_dir = os.path.join(tmp_dir, 'extracted')
                 os.makedirs(extraction_dir, exist_ok=True)
@@ -4419,7 +4389,7 @@ class DeltaHubApp(QWidget):
                     if not new_exe_path:
                         raise RuntimeError(tr('errors.exe_not_found_in_archive'))
                     ctypes.windll.shell32.ShellExecuteW(None, 'runas', new_exe_path, None, None, 1)
-                    self.update_status_signal.emit(tr('status.installer_launched_closing'), UI_COLORS['status_success'])
+                    self.feedback_manager.update_status(tr('status.installer_launched_closing'), UI_COLORS['status_success'])
                     self.quit_signal.emit()
                     return
                 current_exe_path = os.path.realpath(sys.executable)
@@ -4444,13 +4414,13 @@ class DeltaHubApp(QWidget):
                     shutil.copytree(new_content_path, replace_target)
                 else:
                     shutil.move(new_content_path, replace_target)
-                self.update_status_signal.emit(tr('status.restarting'), UI_COLORS['status_success'])
+                self.feedback_manager.update_status(tr('status.restarting'), UI_COLORS['status_success'])
                 os.execv(current_exe_path, sys.argv)
         except PermissionError:
-            self.update_status_signal.emit(tr('errors.update_permission_error'), UI_COLORS['status_error'])
+            self.feedback_manager.update_status(tr('errors.update_permission_error'), UI_COLORS['status_error'])
             self.error_signal.emit(tr('dialogs.update_permission_error_details'))
         except Exception as e:
-            self.update_status_signal.emit(tr('errors.update_failed', error=str(e)), UI_COLORS['status_error'])
+            self.feedback_manager.update_status(tr('errors.update_failed', error=str(e)), UI_COLORS['status_error'])
             self.error_signal.emit(tr('errors.update_could_not_complete', error=str(e)))
         finally:
             self.update_cleanup.emit()
@@ -4458,7 +4428,7 @@ class DeltaHubApp(QWidget):
     def _on_action_button_click(self):
         if self.is_installing and self.current_install_thread:
             self._operation_cancelled = True
-            self.update_status_signal.emit(tr('status.operation_cancelled'), UI_COLORS['status_error'])
+            self.feedback_manager.update_status(tr('status.operation_cancelled'), UI_COLORS['status_error'])
             try:
                 self.progress_bar.setValue(0)
                 self.progress_bar.setVisible(False)
@@ -4499,7 +4469,7 @@ class DeltaHubApp(QWidget):
         if not is_initial:
             self._retranslate_ui()
         if is_game_running():
-            self.update_status_signal.emit(tr('status.cant_update_while_running'), UI_COLORS['status_warning'])
+            self.feedback_manager.update_status(tr('status.cant_update_while_running'), UI_COLORS['status_warning'])
             return
         self._stop_fetch_thread()
         threading.Thread(target=self._check_for_launcher_updates, daemon=True).start()
@@ -4539,12 +4509,12 @@ class DeltaHubApp(QWidget):
             self._refresh_slots_content()
             self._update_action_button_state()
             if success:
-                self.update_status_signal.emit(tr('status.mod_list_updated'), UI_COLORS['status_success'])
+                self.feedback_manager.update_status(tr('status.mod_list_updated'), UI_COLORS['status_success'])
             else:
                 fallback_msg = tr('ui.network_fallback_message') if self.all_mods else tr('ui.network_update_failed')
-                self.update_status_signal.emit(fallback_msg, UI_COLORS['status_error'])
+                self.feedback_manager.update_status(fallback_msg, UI_COLORS['status_error'])
         except Exception as e:
-            self.update_status_signal.emit(tr('errors.mod_list_processing_error', error=str(e)), UI_COLORS['status_error'])
+            self.feedback_manager.update_status(tr('errors.mod_list_processing_error', error=str(e)), UI_COLORS['status_error'])
 
     def _refresh_mods_in_slots(self):
         if not hasattr(self, 'slots') or not self.all_mods:
@@ -4576,7 +4546,7 @@ class DeltaHubApp(QWidget):
         self.current_install_thread = None
         if success:
             self._load_local_mods_from_folders()
-            self.update_status_signal.emit(tr('status.installation_complete'), UI_COLORS['status_success'])
+            self.feedback_manager.update_status(tr('status.installation_complete'), UI_COLORS['status_success'])
             self._update_installed_mods_display()
         self._update_action_button_state()
         if hasattr(self, 'full_install_checkbox') and self.full_install_checkbox is not None and isinstance(self.game_mode, DemoGameMode):
@@ -4638,11 +4608,11 @@ class DeltaHubApp(QWidget):
                 self.game_path = target_dir
                 self.local_config['game_path'] = target_dir
             self._write_local_config()
-            self.update_status_signal.emit(tr('status.game_files_install_complete'), UI_COLORS['status_success'])
+            self.feedback_manager.update_status(tr('status.game_files_install_complete'), UI_COLORS['status_success'])
             self._update_action_button_state()
             return
         else:
-            self.update_status_signal.emit(tr('status.game_files_install_failed'), UI_COLORS['status_error'])
+            self.feedback_manager.update_status(tr('status.game_files_install_failed'), UI_COLORS['status_error'])
         self._write_local_config()
         self._update_action_button_state()
 
@@ -4653,7 +4623,7 @@ class DeltaHubApp(QWidget):
             subprocess.run(['powershell', '-Command', command], check=True, capture_output=True)
             return True
         except (subprocess.CalledProcessError, FileNotFoundError):
-            self.update_status_signal.emit(tr('status.permission_change_failed'), UI_COLORS['status_error'])
+            self.feedback_manager.update_status(tr('status.permission_change_failed'), UI_COLORS['status_error'])
             return False
 
     def _prepare_game_files(self, selections: Dict[int, str]) -> bool:
@@ -4670,10 +4640,10 @@ class DeltaHubApp(QWidget):
                 folder_name = sanitize_filename(mod.name)
                 source_dir = os.path.join(self.mods_dir, folder_name)
                 if not os.path.isdir(source_dir):
-                    self.update_status_signal.emit(tr('errors.mod_folder_not_found', mod_name=mod.name, path=source_dir), UI_COLORS['status_warning'])
+                    self.feedback_manager.update_status(tr('errors.mod_folder_not_found', mod_name=mod.name, path=source_dir), UI_COLORS['status_warning'])
                     continue
                 mod_type_str = tr('ui.mod_type_local') if is_local else tr('ui.mod_type_public')
-                self.update_status_signal.emit(tr('status.applying_mod', mod_name=mod.name, mod_type=mod_type_str), UI_COLORS['status_warning'])
+                self.feedback_manager.update_status(tr('status.applying_mod', mod_name=mod.name, mod_type=mod_type_str), UI_COLORS['status_warning'])
                 print(f'[XDELTA-DEBUG] UI index={ui_index}, chapter_id={chapter_id}, mod_key={mod_key}, mod_name={mod.name}')
                 print(f'[XDELTA-DEBUG] source_dir={source_dir}')
                 if chapter_id in applied_chapters:
@@ -4740,7 +4710,7 @@ class DeltaHubApp(QWidget):
 
     def _create_backup_and_copy_mod_files(self, source_dir: str, target_dir: str, chapter_id: Optional[int] = None, mod_info=None):
         if not os.path.isdir(source_dir):
-            self.update_status_signal.emit(tr('errors.mod_folder_not_found_simple', path=source_dir), UI_COLORS['status_error'])
+            self.feedback_manager.update_status(tr('errors.mod_folder_not_found_simple', path=source_dir), UI_COLORS['status_error'])
             return False
         if not hasattr(self, '_mod_files_to_cleanup'):
             self._mod_files_to_cleanup = []
@@ -4767,7 +4737,7 @@ class DeltaHubApp(QWidget):
         else:
             mod_source_dir = source_dir
         if not mod_source_dir or not os.path.isdir(mod_source_dir):
-            self.update_status_signal.emit(tr('status.no_files_to_copy'), UI_COLORS['status_warning'])
+            self.feedback_manager.update_status(tr('status.no_files_to_copy'), UI_COLORS['status_warning'])
             return True
         if not hasattr(self, '_backup_temp_dir') or not self._backup_temp_dir:
             self._backup_temp_dir = tempfile.mkdtemp(prefix='deltahub_backup_')
@@ -4810,7 +4780,7 @@ class DeltaHubApp(QWidget):
                             continue
                         print(f"[XDELTA-DEBUG] Chapter {chapter_id}: applying xdelta '{cache_file_path}' -> original in '{target_dir}' (computed game_file_path={game_file_path})")
                         if not self._apply_xdelta_patch(cache_file_path, game_file_path, target_dir):
-                            self.update_status_signal.emit(tr('errors.xdelta_apply_error', file=file), UI_COLORS['status_error'])
+                            self.feedback_manager.update_status(tr('errors.xdelta_apply_error', file=file), UI_COLORS['status_error'])
                             return False
                         files_copied += 1
                         applied_xdelta_for_this_chapter = True
@@ -4837,11 +4807,11 @@ class DeltaHubApp(QWidget):
                         self._mod_files_to_cleanup.append(game_file_path)
                         self._update_session_manifest(mod_files=[game_file_path])
                 except Exception as e:
-                    self.update_status_signal.emit(tr('errors.file_copy_error', file=file, error=str(e)), UI_COLORS['status_error'])
+                    self.feedback_manager.update_status(tr('errors.file_copy_error', file=file, error=str(e)), UI_COLORS['status_error'])
         if files_copied > 0:
-            self.update_status_signal.emit(tr('status.files_copied_count', count=files_copied), UI_COLORS['status_info'])
+            self.feedback_manager.update_status(tr('status.files_copied_count', count=files_copied), UI_COLORS['status_info'])
         else:
-            self.update_status_signal.emit(tr('status.no_files_to_copy'), UI_COLORS['status_warning'])
+            self.feedback_manager.update_status(tr('status.no_files_to_copy'), UI_COLORS['status_warning'])
         return True
 
     def _apply_xdelta_patch(self, xdelta_file_path: str, target_game_file_path: str, target_dir: str) -> bool:
@@ -4887,7 +4857,7 @@ class DeltaHubApp(QWidget):
             process = subprocess.run(command_to_run, capture_output=True, text=True, check=False, startupinfo=startupinfo, encoding='utf-8', errors='replace')
             if process.returncode == 0:
                 self._mod_files_to_cleanup.append(original_data_file)
-                self.update_status_signal.emit(tr('status.xdelta_patch_applied', patch_name=os.path.basename(xdelta_file_path)), UI_COLORS['status_success'])
+                self.feedback_manager.update_status(tr('status.xdelta_patch_applied', patch_name=os.path.basename(xdelta_file_path)), UI_COLORS['status_success'])
                 return True
             else:
                 shutil.copy2(self._backup_files[original_data_file], original_data_file)
@@ -4971,7 +4941,7 @@ class DeltaHubApp(QWidget):
                         shutil.copy2(source_file, target_file)
                         extracted_files.append(target_file)
         except Exception as e:
-            self.update_status_signal.emit(tr('errors.archive_unpack_error', archive_name=os.path.basename(archive_path), error=str(e)), UI_COLORS['status_error'])
+            self.feedback_manager.update_status(tr('errors.archive_unpack_error', archive_name=os.path.basename(archive_path), error=str(e)), UI_COLORS['status_error'])
         return extracted_files
 
     def _determine_launch_config(self, selections: Dict[int, str]) -> Optional[Dict[str, Any]]:
@@ -4984,7 +4954,7 @@ class DeltaHubApp(QWidget):
             return self._handle_direct_launch(direct_launch_slot_id)
         launch_target = self._get_executable_path()
         if not launch_target:
-            self.update_status_signal.emit(tr('errors.executable_not_found'), UI_COLORS['status_error'])
+            self.feedback_manager.update_status(tr('errors.executable_not_found'), UI_COLORS['status_error'])
             return None
         return {'target': launch_target, 'cwd': self._get_current_game_path(), 'type': 'subprocess'}
 
@@ -4993,7 +4963,7 @@ class DeltaHubApp(QWidget):
         source_exe = self._get_source_executable_path()
         use_custom_exe = self.local_config.get('use_custom_executable', False)
         if not chapter_folder or not source_exe:
-            self.update_status_signal.emit(tr('errors.direct_launch_error'), UI_COLORS['status_error'])
+            self.feedback_manager.update_status(tr('errors.direct_launch_error'), UI_COLORS['status_error'])
             return None
         try:
             if not ensure_writable(chapter_folder):
@@ -5091,10 +5061,10 @@ class DeltaHubApp(QWidget):
                 if 'target_exe' in cleanup_info and os.path.exists(cleanup_info['target_exe']):
                     os.remove(cleanup_info['target_exe'])
                 self._direct_launch_cleanup_info = None
-            self.update_status_signal.emit(tr('status.files_restored'), UI_COLORS['status_success'])
+            self.feedback_manager.update_status(tr('status.files_restored'), UI_COLORS['status_success'])
             self._clear_session_manifest()
         except Exception as e:
-            self.update_status_signal.emit(tr('errors.files_restore_error', error=str(e)), UI_COLORS['status_error'])
+            self.feedback_manager.update_status(tr('errors.files_restore_error', error=str(e)), UI_COLORS['status_error'])
 
     def _launch_game_with_all_mods(self):
         selections = self._get_slot_selections()
@@ -5224,7 +5194,7 @@ class DeltaHubApp(QWidget):
         if not (launch_config := self._determine_launch_config(selections)):
             restore_and_return()
             return
-        self.update_status_signal.emit(tr('status.launching_game'), UI_COLORS['status_success'])
+        self.feedback_manager.update_status(tr('status.launching_game'), UI_COLORS['status_success'])
         self._execute_game(launch_config)
         self._execute_plugin_hooks('on_after_game_launch')
 
@@ -5233,7 +5203,7 @@ class DeltaHubApp(QWidget):
         working_directory = launch_config.get('cwd')
         launch_type = launch_config.get('type')
         if not target_path:
-            self.update_status_signal.emit(tr('errors.launch_target_not_defined'), 'red')
+            self.feedback_manager.update_status(tr('errors.launch_target_not_defined'), 'red')
             self.restore_window_signal.emit()
             return
         try:
@@ -5242,11 +5212,11 @@ class DeltaHubApp(QWidget):
                 self.monitor_thread.finished.connect(self._on_game_process_finished)
                 self.monitor_thread.start()
                 webbrowser.open(target_path)
-                self.update_status_signal.emit(tr('status.launching_via_steam'), UI_COLORS['status_steam'])
+                self.feedback_manager.update_status(tr('status.launching_via_steam'), UI_COLORS['status_steam'])
                 return
             if not working_directory or not os.path.isdir(working_directory):
                 msg = tr('errors.working_directory_not_found', path=working_directory)
-                self.update_status_signal.emit(msg, 'red')
+                self.feedback_manager.update_status(msg, 'red')
                 self.error_signal.emit(msg)
                 self.restore_window_signal.emit()
                 return
@@ -5255,7 +5225,7 @@ class DeltaHubApp(QWidget):
                 use_custom_exe = self.local_config.get('use_custom_executable', False)
                 if use_custom_exe:
                     subprocess.Popen(['open', target_path])
-                    self.update_status_signal.emit(tr('status.macos_file_opened'), UI_COLORS['status_steam'])
+                    self.feedback_manager.update_status(tr('status.macos_file_opened'), UI_COLORS['status_steam'])
                     if self.is_shortcut_launch:
                         sys.exit(0)
                     else:
@@ -5273,12 +5243,12 @@ class DeltaHubApp(QWidget):
                 if system == 'Windows':
                     creationflags = 8
                 process = subprocess.Popen(command, cwd=working_directory, creationflags=creationflags)
-            self.update_status_signal.emit(tr('status.game_launched_waiting_for_exit'), UI_COLORS['status_steam'])
+            self.feedback_manager.update_status(tr('status.game_launched_waiting_for_exit'), UI_COLORS['status_steam'])
             self.monitor_thread = GameMonitorThread(process, vanilla_mode, self)
             self.monitor_thread.finished.connect(self._on_game_process_finished)
             self.monitor_thread.start()
         except Exception as e:
-            self.update_status_signal.emit(tr('errors.game_launch_error', error=str(e)), 'red')
+            self.feedback_manager.update_status(tr('errors.game_launch_error', error=str(e)), 'red')
             self.error_signal.emit(tr('errors.game_launch_failed', error=str(e)))
             self.restore_window_signal.emit()
 
@@ -5299,7 +5269,7 @@ class DeltaHubApp(QWidget):
         if is_game_running():
             QTimer.singleShot(2000, lambda: self._check_game_running(vanilla_mode))
         else:
-            self.update_status_signal.emit(tr('status.game_closed_restoring_files'), UI_COLORS['status_info'])
+            self.feedback_manager.update_status(tr('status.game_closed_restoring_files'), UI_COLORS['status_info'])
             self._cleanup_direct_launch_files()
             self.restore_window_signal.emit()
 
@@ -5757,14 +5727,17 @@ class DeltaHubApp(QWidget):
             self.feedback_manager.show_error('dialogs.mod_blocked_title', tr('dialogs.mod_blocked_message', ban_reason=ban_reason, error_message=tr('dialogs.error_occurred')))
             return
         if found_in_pending:
-            msg_box = QMessageBox(self)
-            msg_box.setWindowTitle(tr('dialogs.mod_on_moderation'))
-            msg_box.setText(tr('dialogs.mod_on_moderation_message'))
-            withdraw_btn = msg_box.addButton(tr('buttons.withdraw_request'), QMessageBox.ButtonRole.DestructiveRole)
-            ok_btn = msg_box.addButton(tr('buttons.ok'), QMessageBox.ButtonRole.AcceptRole)
-            msg_box.setDefaultButton(ok_btn)
-            msg_box.exec()
-            if msg_box.clickedButton() == withdraw_btn:
+            result = self.feedback_manager.ask_custom_question(
+                QMessageBox.Icon.Information,
+                'dialogs.mod_on_moderation',
+                'dialogs.mod_on_moderation_message',
+                [
+                    ('buttons.withdraw_request', QMessageBox.ButtonRole.DestructiveRole, 'withdraw'),
+                    ('buttons.ok', QMessageBox.ButtonRole.AcceptRole, 'ok')
+                ],
+                'ok'
+            )
+            if result == 'withdraw':
                 try:
                     from config.constants import CLOUD_FUNCTIONS_BASE_URL
                     requests.post(f'{CLOUD_FUNCTIONS_BASE_URL}/withdrawPendingMod', json={'hashedKey': hashed_key}, timeout=10)
@@ -5776,14 +5749,15 @@ class DeltaHubApp(QWidget):
             from config.constants import CLOUD_FUNCTIONS_BASE_URL
             pending_changes_response = requests.get(f'{CLOUD_FUNCTIONS_BASE_URL}/getPendingChangeData?modId={hashed_key}', timeout=10)
             if pending_changes_response.status_code == 200 and pending_changes_response.json():
-                msg_box = QMessageBox(self)
-                msg_box.setWindowTitle(tr('dialogs.changes_under_review'))
-                msg_box.setText(tr('dialogs.request_pending'))
-                msg_box.setIcon(QMessageBox.Icon.Information)
-                withdraw_button = msg_box.addButton(tr('buttons.withdraw_request'), QMessageBox.ButtonRole.DestructiveRole)
-                msg_box.exec()
-                reply = msg_box.clickedButton()
-                if reply == withdraw_button:
+                result = self.feedback_manager.ask_custom_question(
+                    QMessageBox.Icon.Information,
+                    'dialogs.changes_under_review',
+                    'dialogs.request_pending',
+                    [
+                        ('buttons.withdraw_request', QMessageBox.ButtonRole.DestructiveRole, 'withdraw')
+                    ]
+                )
+                if result == 'withdraw':
                     try:
                         from config.constants import CLOUD_FUNCTIONS_BASE_URL
                         delete_response = requests.post(f'{CLOUD_FUNCTIONS_BASE_URL}/withdrawPendingChange', json={'hashedKey': hashed_key}, timeout=10)
@@ -6024,7 +5998,7 @@ class DeltaHubApp(QWidget):
         except (PermissionError, OSError):
             self._handle_permission_error(os.path.dirname(path))
         except Exception as e:
-            self.update_status_signal.emit(tr('errors.file_write_error', error=str(e)), UI_COLORS['status_error'])
+            self.feedback_manager.update_status(tr('errors.file_write_error', error=str(e)), UI_COLORS['status_error'])
 
     def _read_json(self, path: str):
         try:
@@ -6054,7 +6028,7 @@ class DeltaHubApp(QWidget):
                 os.replace(path, backup_path)
             except OSError:
                 pass
-            self.update_status_signal.emit(tr('dialogs.corrupted_files_found'), UI_COLORS['status_warning'])
+            self.feedback_manager.update_status(tr('dialogs.corrupted_files_found'), UI_COLORS['status_warning'])
             return {}
 
     def _init_localization(self):
@@ -6124,7 +6098,7 @@ class DeltaHubApp(QWidget):
             if app_path:
                 return app_path
         if not self.is_shortcut_launch:
-            self.update_status_signal.emit(tr('errors.executable_not_found_deltarune'), UI_COLORS['status_error'])
+            self.feedback_manager.update_status(tr('errors.executable_not_found_deltarune'), UI_COLORS['status_error'])
         return None
 
     def _gather_shortcut_settings(self) -> Optional[Dict[str, Any]]:
@@ -6292,7 +6266,7 @@ class DeltaHubApp(QWidget):
                 os.chmod(shortcut_path, 493)
             self.feedback_manager.show_info('dialogs.success', tr('dialogs.shortcut_created_successfully', path=shortcut_path))
         except Exception as e:
-            self.update_status_signal.emit(tr('status.shortcut_creation_error', error=str(e)), UI_COLORS['status_error'])
+            self.feedback_manager.update_status(tr('status.shortcut_creation_error', error=str(e)), UI_COLORS['status_error'])
             self.feedback_manager.show_error('errors.error', tr('errors.shortcut_creation_failed', error=str(e)))
 
     def _get_target_dir(self, chapter_id):
@@ -6320,7 +6294,7 @@ class DeltaHubApp(QWidget):
                     return os.path.join(target_base, entry)
             return None
         except Exception as e:
-            self.update_status_signal.emit(tr('errors.chapter_folder_search_error', error=str(e)), UI_COLORS['status_error'])
+            self.feedback_manager.update_status(tr('errors.chapter_folder_search_error', error=str(e)), UI_COLORS['status_error'])
             return None
 
     def _has_mods_with_data_files(self, selections: Dict[int, str]) -> bool:
@@ -6353,9 +6327,9 @@ class DeltaHubApp(QWidget):
         else:
             game_type = 'deltarune'
         if is_valid_game_path(path_from_config, skip_data_check, game_type):
-            self.update_status_signal.emit(tr('status.game_path', path=path_from_config), UI_COLORS['status_info'])
+            self.feedback_manager.update_status(tr('status.game_path', path=path_from_config), UI_COLORS['status_info'])
             return True
-        self.update_status_signal.emit(tr('status.autodetecting_path'), UI_COLORS['status_info'])
+        self.feedback_manager.update_status(tr('status.autodetecting_path'), UI_COLORS['status_info'])
         if isinstance(self.game_mode, DemoGameMode):
             game_name = 'DELTARUNEdemo'
         elif isinstance(self.game_mode, UndertaleGameMode):
@@ -6365,11 +6339,11 @@ class DeltaHubApp(QWidget):
         autodetected_path = autodetect_path(game_name)
         if autodetected_path and is_valid_game_path(autodetected_path, skip_data_check, game_type):
             self.game_mode.set_game_path(self.local_config, autodetected_path)
-            self.update_status_signal.emit(tr('status.game_folder_found', path=autodetected_path), UI_COLORS['status_success'])
+            self.feedback_manager.update_status(tr('status.game_folder_found', path=autodetected_path), UI_COLORS['status_success'])
             self._write_local_config()
             return True
         if is_initial:
-            self.update_status_signal.emit(tr('status.no_game_path'), UI_COLORS['status_error'])
+            self.feedback_manager.update_status(tr('status.no_game_path'), UI_COLORS['status_error'])
         return False
 
     def _init_session(self):
@@ -6417,7 +6391,7 @@ class DeltaHubApp(QWidget):
             if is_valid_game_path(corrected_path, False, game_type):
                 self.game_mode.set_game_path(self.local_config, corrected_path)
                 self._write_local_config()
-                self.update_status_signal.emit(tr('status.game_path_set', path=corrected_path), UI_COLORS['status_success'])
+                self.feedback_manager.update_status(tr('status.game_path_set', path=corrected_path), UI_COLORS['status_success'])
                 self._update_action_button_state()
                 return True
             else:
@@ -6425,7 +6399,7 @@ class DeltaHubApp(QWidget):
         if is_initial:
             self._start_background_music()
             self.initialization_finished.emit()
-            self.update_status_signal.emit(tr('status.no_game_path'), UI_COLORS['status_error'])
+            self.feedback_manager.update_status(tr('status.no_game_path'), UI_COLORS['status_error'])
 
     def _handle_first_launch_settings(self):
         self.local_config['first_launch_splash_shown'] = True
@@ -6437,16 +6411,18 @@ class DeltaHubApp(QWidget):
             pass
 
     def _on_theme_button_click(self):
-        msg = QMessageBox(self)
-        msg.setWindowTitle(tr('buttons.theme_management'))
-        msg.setText(tr('dialogs.theme_choice'))
-        import_btn = msg.addButton(tr('buttons.import'), QMessageBox.ButtonRole.AcceptRole)
-        export_btn = msg.addButton(tr('buttons.export'), QMessageBox.ButtonRole.AcceptRole)
-        msg.setStandardButtons(QMessageBox.StandardButton.NoButton)
-        msg.exec()
-        if msg.clickedButton() == import_btn:
+        result = self.feedback_manager.ask_custom_question(
+            QMessageBox.Icon.Information,
+            'buttons.theme_management',
+            'dialogs.theme_choice',
+            [
+                ('buttons.import', QMessageBox.ButtonRole.AcceptRole, 'import'),
+                ('buttons.export', QMessageBox.ButtonRole.AcceptRole, 'export')
+            ]
+        )
+        if result == 'import':
             self._import_theme()
-        elif msg.clickedButton() == export_btn:
+        elif result == 'export':
             self._export_theme()
 
     def _export_theme(self):
