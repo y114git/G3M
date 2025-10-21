@@ -17,10 +17,14 @@ class FeedbackManager(QObject):
         msg_box = QMessageBox(self.parent_widget)
         msg_box.setIcon(QMessageBox.Icon.Critical)
         msg_box.setWindowTitle(title)
-        msg_box.setText(message)
 
+        # Combine message and details in the main text with HTML support
         if details:
-            msg_box.setDetailedText(details)
+            full_message = f"{message}<br><br>{details}"
+        else:
+            full_message = message
+
+        msg_box.setText(full_message)
 
         msg_box.exec()
 
@@ -31,10 +35,14 @@ class FeedbackManager(QObject):
         msg_box = QMessageBox(self.parent_widget)
         msg_box.setIcon(QMessageBox.Icon.Warning)
         msg_box.setWindowTitle(title)
-        msg_box.setText(message)
 
+        # Combine message and details in the main text with HTML support
         if details:
-            msg_box.setDetailedText(details)
+            full_message = f"{message}<br><br>{details}"
+        else:
+            full_message = message
+
+        msg_box.setText(full_message)
 
         msg_box.exec()
 
@@ -45,10 +53,14 @@ class FeedbackManager(QObject):
         msg_box = QMessageBox(self.parent_widget)
         msg_box.setIcon(QMessageBox.Icon.Information)
         msg_box.setWindowTitle(title)
-        msg_box.setText(message)
 
+        # Combine message and details in the main text with HTML support
         if details:
-            msg_box.setDetailedText(details)
+            full_message = f"{message}<br><br>{details}"
+        else:
+            full_message = message
+
+        msg_box.setText(full_message)
 
         msg_box.exec()
 
@@ -59,10 +71,14 @@ class FeedbackManager(QObject):
         msg_box = QMessageBox(self.parent_widget)
         msg_box.setIcon(QMessageBox.Icon.Information)
         msg_box.setWindowTitle(title)
-        msg_box.setText(message)
 
+        # Combine message and details in the main text with HTML support
         if details:
-            msg_box.setDetailedText(details)
+            full_message = f"{message}<br><br>{details}"
+        else:
+            full_message = message
+
+        msg_box.setText(full_message)
 
         msg_box.exec()
 
@@ -73,10 +89,14 @@ class FeedbackManager(QObject):
         msg_box = QMessageBox(self.parent_widget)
         msg_box.setIcon(QMessageBox.Icon.Question)
         msg_box.setWindowTitle(title)
-        msg_box.setText(message)
 
+        # Use only details if provided, otherwise use the message
         if details:
-            msg_box.setDetailedText(details)
+            full_message = details
+        else:
+            full_message = message
+
+        msg_box.setText(full_message)
 
         msg_box.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
 
