@@ -127,7 +127,9 @@ def run_app():
         running_game = check_game_processes()
         if running_game:
             app = setup_app()
-            QMessageBox.critical(None, tr('errors.game_running_title'), tr('errors.game_running_message', game_name=running_game))
+            error_msg = tr('errors.game_running_message', game_name=running_game)
+            print(f"STARTUP ERROR: {error_msg}")
+            QMessageBox.critical(None, tr('errors.game_running_title'), error_msg)
             sys.exit(1)
     if platform.system() == 'Linux' and (not args.shortcut_launch):
         os.environ.setdefault('NO_AT_BRIDGE', '1')
@@ -176,7 +178,9 @@ def run_app():
                 launcher_app['instance'] = DeltaHubApp(parent_for_dialogs=splash, initial_url=url_arg)
                 server = SingleInstanceServer(launcher_app['instance'])
                 if not server.listen(SINGLE_INSTANCE_KEY):
-                    QMessageBox.critical(None, tr('errors.error'), tr('errors.single_instance_error'))
+                    error_msg = tr('errors.single_instance_error')
+                    print(f"STARTUP ERROR: {error_msg}")
+                    QMessageBox.critical(None, tr('errors.error'), error_msg)
                     sys.exit(1)
                 launcher_app['instance'].server = server
                 launcher_app['instance']._post_show_initialization()
@@ -186,12 +190,16 @@ def run_app():
                 if hasattr(splash, 'movie'):
                     splash.stop_gif_animation()
                 splash.close()
-                QMessageBox.critical(None, tr('errors.startup_error_title'), tr('errors.startup_error_message', details=str(e)))
+                error_msg = tr('errors.startup_error_message', details=str(e))
+                print(f"STARTUP ERROR: {error_msg}")
+                QMessageBox.critical(None, tr('errors.startup_error_title'), error_msg)
         QTimer.singleShot(100, create_launcher_no_animation)
         try:
             sys.exit(app.exec())
         except Exception as e:
-            QMessageBox.critical(None, tr('errors.startup_error_title'), tr('errors.startup_error_message', details=str(e)))
+            error_msg = tr('errors.startup_error_message', details=str(e))
+            print(f"STARTUP ERROR: {error_msg}")
+            QMessageBox.critical(None, tr('errors.startup_error_title'), error_msg)
         return
     global _splash_start_time
     _splash_start_time = time.time()
@@ -254,7 +262,9 @@ def run_app():
             launcher_app['instance'] = DeltaHubApp(parent_for_dialogs=splash, initial_url=url_arg)
             server = SingleInstanceServer(launcher_app['instance'])
             if not server.listen(SINGLE_INSTANCE_KEY):
-                QMessageBox.critical(None, tr('errors.error'), tr('errors.single_instance_error'))
+                error_msg = tr('errors.single_instance_error')
+                print(f"STARTUP ERROR: {error_msg}")
+                QMessageBox.critical(None, tr('errors.error'), error_msg)
                 sys.exit(1)
             launcher_app['instance'].server = server
             launcher_app['instance']._post_show_initialization()
@@ -262,9 +272,13 @@ def run_app():
             QTimer.singleShot(15000, close_splash_when_ready)
         except Exception as e:
             splash.close()
-            QMessageBox.critical(None, tr('errors.startup_error_title'), tr('errors.startup_error_message', details=str(e)))
+            error_msg = tr('errors.startup_error_message', details=str(e))
+            print(f"STARTUP ERROR: {error_msg}")
+            QMessageBox.critical(None, tr('errors.startup_error_title'), error_msg)
     QTimer.singleShot(100, create_launcher)
     try:
         sys.exit(app.exec())
     except Exception as e:
-        QMessageBox.critical(None, tr('errors.startup_error_title'), tr('errors.startup_error_message', details=str(e)))
+        error_msg = tr('errors.startup_error_message', details=str(e))
+        print(f"STARTUP ERROR: {error_msg}")
+        QMessageBox.critical(None, tr('errors.startup_error_title'), error_msg)
