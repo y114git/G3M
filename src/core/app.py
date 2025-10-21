@@ -4313,13 +4313,19 @@ class DeltaHubApp(QWidget):
         if self.update_in_progress:
             return
         self.update_in_progress = True
-        update_message = tr('dialogs.new_version_banner', version=update_info['version']) + '<br>' + tr('dialogs.current_version_banner', current_version=LAUNCHER_VERSION)
+
+        # Build the update message with proper formatting like in the old version
+        update_message = f"<b>{tr('dialogs.new_version_banner', version=update_info['version']).replace('<br>', '')}</b><br>"
+        update_message += tr('dialogs.current_version_banner', current_version=LAUNCHER_VERSION).replace('<br><br>', '') + '<br><br>'
+
         if localization_manager.get_current_language() == 'ru':
             message_text = update_info.get('message_ru') or update_info.get('message', '')
         else:
             message_text = update_info.get('message_en') or update_info.get('message', '')
+
         update_message += f"<b>{tr('dialogs.whats_new')}</b><br>{message_text}<br><br>"
         update_message += tr('dialogs.want_download_install_now') + tr('dialogs.app_will_restart')
+
         if self.feedback_manager.ask_question('status.update_available', 'status.update_available', update_message, True):
             self._perform_update(update_info)
         else:
