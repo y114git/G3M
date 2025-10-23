@@ -10,9 +10,9 @@ class FeedbackManager(QObject):
         super().__init__()
         self.parent_widget = parent_widget
 
-    def show_error(self, message_key: str, details: str = ""):
+    def show_error(self, message_key: str, details: str = "", **kwargs):
         title = tr("errors.error")
-        message = tr(message_key)
+        message = tr(message_key, **kwargs)
 
         msg_box = QMessageBox(self.parent_widget)
         msg_box.setIcon(QMessageBox.Icon.Critical)
@@ -20,17 +20,20 @@ class FeedbackManager(QObject):
 
         # Combine message and details in the main text with HTML support
         if details:
-            full_message = f"{message}<br><br>{details}"
+            # Replace \n with <br> for proper line breaks in QMessageBox
+            details_html = details.replace('\\n', '<br>').replace('\n', '<br>')
+            full_message = f"{message}<br><br>{details_html}"
         else:
-            full_message = message
+            # Replace \n with <br> for proper line breaks in QMessageBox
+            full_message = message.replace('\\n', '<br>').replace('\n', '<br>')
 
         msg_box.setText(full_message)
 
         msg_box.exec()
 
-    def show_warning(self, message_key: str, details: str = ""):
+    def show_warning(self, message_key: str, details: str = "", **kwargs):
         title = tr("errors.error")
-        message = tr(message_key)
+        message = tr(message_key, **kwargs)
 
         msg_box = QMessageBox(self.parent_widget)
         msg_box.setIcon(QMessageBox.Icon.Warning)
@@ -38,17 +41,41 @@ class FeedbackManager(QObject):
 
         # Combine message and details in the main text with HTML support
         if details:
-            full_message = f"{message}<br><br>{details}"
+            # Replace \n with <br> for proper line breaks in QMessageBox
+            details_html = details.replace('\\n', '<br>').replace('\n', '<br>')
+            full_message = f"{message}<br><br>{details_html}"
         else:
-            full_message = message
+            # Replace \n with <br> for proper line breaks in QMessageBox
+            full_message = message.replace('\\n', '<br>').replace('\n', '<br>')
 
         msg_box.setText(full_message)
 
         msg_box.exec()
 
-    def show_info(self, message_key: str, details: str = ""):
+    def show_info(self, message_key: str, details: str = "", **kwargs):
         title = tr("dialogs.success")
-        message = tr(message_key)
+        message = tr(message_key, **kwargs)
+
+        msg_box = QMessageBox(self.parent_widget)
+        msg_box.setIcon(QMessageBox.Icon.Information)
+        msg_box.setWindowTitle(title)
+
+        # Combine message and details in the main text with HTML support
+        if details:
+            # Replace \n with <br> for proper line breaks in QMessageBox
+            details_html = details.replace('\\n', '<br>').replace('\n', '<br>')
+            full_message = f"{message}<br><br>{details_html}"
+        else:
+            # Replace \n with <br> for proper line breaks in QMessageBox
+            full_message = message.replace('\\n', '<br>').replace('\n', '<br>')
+
+        msg_box.setText(full_message)
+
+        msg_box.exec()
+
+    def show_success(self, message_key: str, details: str = "", **kwargs):
+        title = tr("dialogs.success")
+        message = tr(message_key, **kwargs)
 
         msg_box = QMessageBox(self.parent_widget)
         msg_box.setIcon(QMessageBox.Icon.Information)
@@ -64,27 +91,9 @@ class FeedbackManager(QObject):
 
         msg_box.exec()
 
-    def show_success(self, message_key: str, details: str = ""):
-        title = tr("dialogs.success")
-        message = tr(message_key)
-
-        msg_box = QMessageBox(self.parent_widget)
-        msg_box.setIcon(QMessageBox.Icon.Information)
-        msg_box.setWindowTitle(title)
-
-        # Combine message and details in the main text with HTML support
-        if details:
-            full_message = f"{message}<br><br>{details}"
-        else:
-            full_message = message
-
-        msg_box.setText(full_message)
-
-        msg_box.exec()
-
-    def ask_question(self, title_key: str, message_key: str, details: str = "", default_yes: bool = False) -> bool:
+    def ask_question(self, title_key: str, message_key: str, details: str = "", default_yes: bool = False, **kwargs) -> bool:
         title = tr(title_key)
-        message = tr(message_key)
+        message = tr(message_key, **kwargs)
 
         msg_box = QMessageBox(self.parent_widget)
         msg_box.setIcon(QMessageBox.Icon.Question)
@@ -108,9 +117,9 @@ class FeedbackManager(QObject):
         reply = msg_box.exec()
         return reply == QMessageBox.StandardButton.Yes
 
-    def ask_custom_question(self, icon: QMessageBox.Icon, title_key: str, message_key: str, buttons: list[tuple[str, QMessageBox.ButtonRole, str]], default_button_key: str | None = None) -> str | None:
+    def ask_custom_question(self, icon: QMessageBox.Icon, title_key: str, message_key: str, buttons: list[tuple[str, QMessageBox.ButtonRole, str]], default_button_key: str | None = None, **kwargs) -> str | None:
         title = tr(title_key)
-        message = tr(message_key)
+        message = tr(message_key, **kwargs)
 
         msg_box = QMessageBox(self.parent_widget)
         msg_box.setIcon(icon)

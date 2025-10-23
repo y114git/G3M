@@ -973,7 +973,7 @@ class ModEditorDialog(QDialog):
                                     container_widget = container_item.widget()
                                     if container_widget.property('is_local_path'):
                                         folder_name = self.mod_data.get('folder_name', '')
-                                        full_path = os.path.join(self.parent_app.mods_dir, folder_name, file_path) if folder_name and (not os.path.isabs(file_path)) else file_path
+                                        full_path = os.path.join(self.parent_app.app_state.mods_dir, folder_name, file_path) if folder_name and (not os.path.isabs(file_path)) else file_path
                                         container_widget.setText(full_path)
                                         for version_idx in range(j + 1, frame_layout.count()):
                                             if (version_item := frame_layout.itemAt(version_idx)) and version_item.widget() and isinstance(version_item.widget(), QLineEdit) and (not version_item.widget().isReadOnly()):
@@ -1708,8 +1708,8 @@ class ModEditorDialog(QDialog):
         mod_data = self._collect_mod_data()
         mod_key = f'local_{uuid.uuid4().hex[:12]}'
         from utils.file_utils import get_unique_mod_dir
-        unique_mod_folder = get_unique_mod_dir(self.parent_app.mods_dir, mod_data['name'])
-        mod_dir = os.path.join(self.parent_app.mods_dir, unique_mod_folder)
+        unique_mod_folder = get_unique_mod_dir(self.parent_app.app_state.mods_dir, mod_data['name'])
+        mod_dir = os.path.join(self.parent_app.app_state.mods_dir, unique_mod_folder)
         try:
             os.makedirs(mod_dir)
             icon_path = self.icon_edit.text().strip()
@@ -1731,10 +1731,14 @@ class ModEditorDialog(QDialog):
                 if data_path and os.path.exists(data_path):
                     data_filename = os.path.basename(data_path)
                     destination = os.path.join(file_folder, data_filename)
-                    if os.path.isdir(data_path):
-                        shutil.copytree(data_path, destination)
-                    else:
-                        shutil.copy2(data_path, destination)
+
+                    # Если файл уже находится в папке мода, не копируем его
+                    if os.path.abspath(data_path) != os.path.abspath(destination):
+                        if os.path.isdir(data_path):
+                            shutil.copytree(data_path, destination)
+                        else:
+                            shutil.copy2(data_path, destination)
+
                     new_file_data['data_file_url'] = data_filename
                     new_file_data['data_file_version'] = original_file_data.get('data_file_version', '1.0.0')
                 if 'extra_files' in original_file_data:
@@ -1748,10 +1752,14 @@ class ModEditorDialog(QDialog):
                                 if os.path.exists(path):
                                     filename = os.path.basename(path)
                                     destination = os.path.join(file_folder, filename)
-                                    if os.path.isdir(path):
-                                        shutil.copytree(path, destination)
-                                    else:
-                                        shutil.copy2(path, destination)
+
+                                    # Если файл уже находится в папке мода, не копируем его
+                                    if os.path.abspath(path) != os.path.abspath(destination):
+                                        if os.path.isdir(path):
+                                            shutil.copytree(path, destination)
+                                        else:
+                                            shutil.copy2(path, destination)
+
                                     new_file_data['extra_files'][group_key].append(filename)
                 if new_file_data:
                     processed_files_data[file_key] = new_file_data
@@ -1844,9 +1852,9 @@ class ModEditorDialog(QDialog):
             QMessageBox.critical(self, tr('errors.error'), tr('errors.mod_key_not_found_update'))
             return
         mod_folder_path = None
-        if os.path.exists(self.parent_app.mods_dir):
-            for folder_name in os.listdir(self.parent_app.mods_dir):
-                folder_path = os.path.join(self.parent_app.mods_dir, folder_name)
+        if os.path.exists(self.parent_app.app_state.mods_dir):
+            for folder_name in os.listdir(self.parent_app.app_state.mods_dir):
+                folder_path = os.path.join(self.parent_app.app_state.mods_dir, folder_name)
                 if not os.path.isdir(folder_path):
                     continue
                 config_path = os.path.join(folder_path, 'config.json')
@@ -1892,10 +1900,14 @@ class ModEditorDialog(QDialog):
                 if data_path and os.path.exists(data_path):
                     data_filename = os.path.basename(data_path)
                     destination = os.path.join(file_folder, data_filename)
-                    if os.path.isdir(data_path):
-                        shutil.copytree(data_path, destination)
-                    else:
-                        shutil.copy2(data_path, destination)
+
+                    # Если файл уже находится в папке мода, не копируем его
+                    if os.path.abspath(data_path) != os.path.abspath(destination):
+                        if os.path.isdir(data_path):
+                            shutil.copytree(data_path, destination)
+                        else:
+                            shutil.copy2(data_path, destination)
+
                     files_data[file_key]['data_file_url'] = data_filename
                     files_data[file_key]['data_file_version'] = file_data.get('data_file_version', '1.0.0')
                 extra_files = file_data.get('extra_files', {})
@@ -1907,10 +1919,14 @@ class ModEditorDialog(QDialog):
                             if os.path.exists(path):
                                 filename = os.path.basename(path)
                                 destination = os.path.join(file_folder, filename)
-                                if os.path.isdir(path):
-                                    shutil.copytree(path, destination)
-                                else:
-                                    shutil.copy2(path, destination)
+
+                                # Если файл уже находится в папке мода, не копируем его
+                                if os.path.abspath(path) != os.path.abspath(destination):
+                                    if os.path.isdir(path):
+                                        shutil.copytree(path, destination)
+                                    else:
+                                        shutil.copy2(path, destination)
+
                                 copied_paths.append(filename)
                         if copied_paths:
                             files_data[file_key]['extra_files'][group_key] = copied_paths
@@ -1957,9 +1973,9 @@ class ModEditorDialog(QDialog):
             return
         try:
             mod_folder_path = None
-            if os.path.exists(self.parent_app.mods_dir):
-                for folder_name in os.listdir(self.parent_app.mods_dir):
-                    folder_path = os.path.join(self.parent_app.mods_dir, folder_name)
+            if os.path.exists(self.parent_app.app_state.mods_dir):
+                for folder_name in os.listdir(self.parent_app.app_state.mods_dir):
+                    folder_path = os.path.join(self.parent_app.app_state.mods_dir, folder_name)
                     if not os.path.isdir(folder_path):
                         continue
                     config_path = os.path.join(folder_path, 'config.json')

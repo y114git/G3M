@@ -18,7 +18,7 @@ import argparse
 import hashlib
 import importlib.util
 import importlib.machinery
-from typing import Callable, Optional, List, Dict, Any
+from typing import Callable, Optional, Dict, Any
 import logging
 from pathlib import Path
 import requests
@@ -26,17 +26,16 @@ from PyQt6.QtCore import QTranslator, Qt, QEvent, QThread, QTimer, QUrl, pyqtSig
 from PyQt6.QtGui import QColor, QDesktopServices, QFont, QFontDatabase, QIcon, QMovie, QPainter, QPixmap
 from PyQt6.QtWidgets import QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFrame, QLabel, QLineEdit, QMessageBox, QProgressBar, QPushButton, QTabWidget, QTextBrowser, QVBoxLayout, QWidget, QHBoxLayout, QSizePolicy, QInputDialog, QColorDialog, QListWidget, QScrollArea, QListWidgetItem
 from localization import localization_manager, tr
-from models.game_modes import GameMode
+from models.game_modes import FullGameMode, DemoGameMode, UndertaleGameMode
 from config.constants import LAUNCHER_VERSION, UI_COLORS, SOCIAL_LINKS, THEMES, SAVE_SLOT_FINISH_MAP, ARCH
 from models.mod_models import ModInfo, ModChapterData
-from models.game_modes import FullGameMode, DemoGameMode, UndertaleGameMode
 from utils.file_utils import autodetect_path, get_file_filter, sanitize_filename, ensure_writable, fix_macos_python_symlink
 from utils.game_utils import is_game_running, get_default_save_path, is_valid_save_path, is_valid_game_path
 from utils.path_utils import get_user_data_root, resource_path, get_launcher_dir, get_legacy_ylauncher_path, get_xdelta_path, get_user_plugins_dir
 from utils.network_utils import check_internet_connection
 from threads.fetch_mods import FetchModsThread
 from threads.game_monitor import GameMonitorThread
-from threads.background_workers import PresenceWorker, FetchChangelogThread, BgLoader, FullInstallThread, InstallModsThread, UrlInstallThread, FetchHelpContentThread
+from threads.background_workers import PresenceWorker, FetchChangelogThread, BgLoader, FullInstallThread, InstallModsThread, FetchHelpContentThread
 from ui.styling import get_theme_color, clear_layout_widgets, load_mod_icon_universal, show_empty_message_in_layout
 from ui.widgets.custom_controls import NoScrollComboBox, NoScrollTabWidget, ClickableLabel, SlotFrame
 from ui.widgets.outlined_label import OutlinedTextLabel
@@ -48,6 +47,8 @@ from ui.dialogs.save_editor import SaveEditorDialog
 from ui.dialogs.mod_editor import ModEditorDialog
 from ui.feedback import FeedbackManager
 from core.startup import SingleInstanceServer
+from core.app_state import AppState
+from core.managers.mod_manager import ModManager
 _translator = QTranslator()
 _lock_file = None
 
@@ -69,21 +70,21 @@ class DeltaHubApp(QWidget):
 
     def __init__(self, args: Optional[argparse.Namespace] = None, parent_for_dialogs: Optional[QWidget] = None, initial_url: str | None = None):
         super().__init__()
+        self.app_state = AppState()
         self.server: SingleInstanceServer | None = None
         self.is_shortcut_launch = args and args.shortcut_launch
-        self.all_mods: List[ModInfo] = []
-        self.config_dir = os.path.join(get_user_data_root(), 'settings')
+        self.app_state.config_dir = os.path.join(get_user_data_root(), 'settings')
         self.launcher_dir = get_launcher_dir()
         from utils.path_utils import get_user_mods_dir
-        self.mods_dir = get_user_mods_dir()
-        self.plugins_dir = get_user_plugins_dir()
-        self.mods_metadata_path = os.path.join(self.mods_dir, 'metadata.json')
+        self.app_state.mods_dir = get_user_mods_dir()
+        self.app_state.plugins_dir = get_user_plugins_dir()
+        self.app_state.mods_metadata_path = os.path.join(self.app_state.mods_dir, 'metadata.json')
         self._mods_metadata_lock = threading.Lock()
-        os.makedirs(self.config_dir, exist_ok=True)
-        os.makedirs(self.mods_dir, exist_ok=True)
-        os.makedirs(self.plugins_dir, exist_ok=True)
+        os.makedirs(self.app_state.config_dir, exist_ok=True)
+        os.makedirs(self.app_state.mods_dir, exist_ok=True)
+        os.makedirs(self.app_state.plugins_dir, exist_ok=True)
         self.lang_manager = localization_manager
-        self.config_path = os.path.join(self.config_dir, 'config.json')
+        self.app_state.config_path = os.path.join(self.app_state.config_dir, 'config.json')
         self.presence_thread = None
         self.presence_worker = None
         self._direct_launch_cleanup_info = None
@@ -100,46 +101,33 @@ class DeltaHubApp(QWidget):
         self.setWindowTitle('DELTAHUB')
         self._supports_volume = platform.system() == 'Windows'
         self._initial_size = None
-        self.local_config = self._read_json(self.config_path) or {}
+        self.app_state.local_config = self._read_json(self.app_state.config_path) or {}
         self._recover_previous_session()
         self._init_localization()
-        self.save_path: str = ''
-        self.is_save_manager_view: bool = False
-        self.current_collection_idx: Dict[int, int] = {}
-        self.selected_slot: Optional[tuple[int, int]] = None
+        self.app_state.save_path = ''
         self.resize(875, 750)
         self._initial_size = self.size()
         self.background_movie = None
         self.background_pixmap: Optional[QPixmap] = None
         self.custom_font_family = None
-        self.game_path = ''
-        self.demo_game_path = ''
-        self.translations_by_chapter = {i: [] for i in range(5)}
-        self.is_settings_view = False
-        self.current_mode = 'normal'
-        self.slots = {}
-        self.update_in_progress = False
-        self.is_changelog_view = False
-        self.is_help_view = False
+        self.app_state.game_path = ''
+        self.app_state.demo_game_path = ''
         self.monitor_thread: Optional[GameMonitorThread] = None
-        self.is_full_install = False
-        self.global_settings: Dict[str, Any] = {}
-        self.current_settings_page: Optional[QWidget] = None
-        self.settings_nav_stack: list[QWidget] = []
-        self.mods_loaded = False
         self.initialization_timer = None
-        self.initialization_completed = False
-        self.is_shown_to_user = False
         self._bg_music_running = False
         self._bg_music_thread = None
-        self.game_mode: GameMode = FullGameMode()
-        self.plugins = []
         self._suppress_tab_handlers = False
         self._handling_plugin_tab = False
         self._plugin_tab_map = {}
         self._last_online_count = 0
         self.feedback_manager = FeedbackManager(self)
         self.feedback_manager.status_updated.connect(self.update_status_signal.emit)
+        self.mod_manager = ModManager(self.app_state, self.feedback_manager, self)
+        self.mod_manager.progress_updated.connect(self.set_progress_signal.emit)
+        self.mod_manager.status_changed.connect(self.update_status_signal.emit)
+        self.mod_manager.mod_list_updated.connect(self._update_installed_mods_display)
+        self.mod_manager.installation_finished.connect(self._on_mod_installation_finished)
+        self.mod_manager.url_prompt_required.connect(self._handle_url_install_prompt)
         self.init_ui()
         self.load_font()
         self.update_status_signal.connect(self._update_status)
@@ -161,13 +149,13 @@ class DeltaHubApp(QWidget):
         self.initialization_timer.setSingleShot(True)
         self.initialization_timer.timeout.connect(self._force_finish_initialization)
         self.initialization_timer.start(5000)
-        if (saved := self.local_config.get('window_geometry')):
+        if (saved := self.app_state.local_config.get('window_geometry')):
             from PyQt6.QtCore import QByteArray
             try:
                 self.restoreGeometry(QByteArray.fromHex(saved.encode()))
             except Exception:
                 pass
-        if not self.local_config.get('first_launch_splash_shown', False):
+        if not self.app_state.local_config.get('first_launch_splash_shown', False):
             self.initialization_finished.connect(self._handle_first_launch_settings)
 
     def _handle_pending_install(self):
@@ -180,22 +168,13 @@ class DeltaHubApp(QWidget):
             return
         self.activateWindow()
         self.raise_()
-        if self.is_installing:
+        if self.app_state.is_installing:
             self.feedback_manager.show_warning('dialogs.install_in_progress_title', tr('dialogs.install_in_progress_body'))
             return
-        self.url_install_thread = UrlInstallThread(self, url)
-        self.url_install_thread.status.connect(self._update_status)
-        self.url_install_thread.progress.connect(self.progress_bar.setValue)
-        self.url_install_thread.finished.connect(self._on_url_install_finished)
-        self.url_install_thread.prompt_required.connect(self._handle_url_install_prompt)
-        self.is_installing = True
-        self._set_install_buttons_enabled(False)
-        self.progress_bar.setVisible(True)
-        self.progress_bar.setValue(0)
-        self.url_install_thread.start()
+        self.mod_manager.install_from_url(url)
 
     def _on_url_install_finished(self, success: bool, message: str):
-        self.is_installing = False
+        self.app_state.is_installing = False
         self._set_install_buttons_enabled(True)
         self.progress_bar.setVisible(False)
         self._update_installed_mods_display()
@@ -204,21 +183,16 @@ class DeltaHubApp(QWidget):
 
     def _handle_url_install_prompt(self, title, message):
         reply = self.feedback_manager.ask_question(title, message)
-        self.url_install_thread.prompt_result = reply
-        self.url_install_thread.prompt_event.set()
+        self.mod_manager.handle_url_prompt_response(reply)
 
     def _read_mods_metadata(self) -> Dict:
-        with self._mods_metadata_lock:
-            if not os.path.exists(self.mods_metadata_path):
-                return {}
-            return self._read_json(self.mods_metadata_path) or {}
+        return self.mod_manager._read_metadata()
 
     def _write_mods_metadata(self, data: Dict):
-        with self._mods_metadata_lock:
-            self._write_json(self.mods_metadata_path, data)
+        self.mod_manager._write_metadata(data)
 
     def _session_manifest_path(self):
-        return os.path.join(self.config_dir, 'session.lock')
+        return os.path.join(self.app_state.config_dir, 'session.lock')
 
     def _load_session_manifest(self) -> dict:
         try:
@@ -293,11 +267,11 @@ class DeltaHubApp(QWidget):
         self._load_local_mods_from_folders()
         try:
             if settings.get('is_undertale_mode', False):
-                self.game_mode = UndertaleGameMode()
+                self.app_state.game_mode = UndertaleGameMode()
             else:
-                self.game_mode = DemoGameMode() if settings.get('is_demo_mode', False) else FullGameMode()
-            self.game_path = settings.get('game_path', '')
-            self.demo_game_path = settings.get('demo_game_path', '')
+                self.app_state.game_mode = DemoGameMode() if settings.get('is_demo_mode', False) else FullGameMode()
+            self.app_state.game_path = settings.get('game_path', '')
+            self.app_state.demo_game_path = settings.get('demo_game_path', '')
             launch_via_steam = settings.get('launch_via_steam', False)
             use_custom_executable = settings.get('use_custom_executable', False)
             custom_exec_path = settings.get('custom_executable_path', '')
@@ -387,13 +361,13 @@ class DeltaHubApp(QWidget):
             self._save_shortcut(settings)
 
     def _load_local_mods_from_folders(self):
-        if not os.path.exists(self.mods_dir):
-            os.makedirs(self.mods_dir, exist_ok=True)
+        if not os.path.exists(self.app_state.mods_dir):
+            os.makedirs(self.app_state.mods_dir, exist_ok=True)
             return False
         installed_mods = {}
         try:
-            for item_name in os.listdir(self.mods_dir):
-                item_path = os.path.join(self.mods_dir, item_name)
+            for item_name in os.listdir(self.app_state.mods_dir):
+                item_path = os.path.join(self.app_state.mods_dir, item_name)
                 if os.path.isfile(item_path) and item_name.lower().endswith(('.zip', '.7z', '.rar', '.tar.gz', '.lzma')):
                     try:
                         is_deltamod_archive = False
@@ -432,7 +406,7 @@ class DeltaHubApp(QWidget):
                                 if len(contents) == 1 and os.path.isdir(os.path.join(temp_dir, contents[0])):
                                     content_path = os.path.join(temp_dir, contents[0])
                                 from utils.deltamod_converter import DeltamodConverter
-                                converter = DeltamodConverter(content_path, self.mods_dir)
+                                converter = DeltamodConverter(content_path, self.app_state.mods_dir)
                                 new_mod_path = converter.convert()
                                 if new_mod_path:
                                     self.feedback_manager.update_status(tr('status.deltamod_converted', name=os.path.basename(new_mod_path)), UI_COLORS['status_success'])
@@ -448,7 +422,7 @@ class DeltaHubApp(QWidget):
                     self.feedback_manager.update_status(tr('status.deltamod_detected', name=item_name), UI_COLORS['status_info'])
                     QApplication.processEvents()
                     from utils.deltamod_converter import DeltamodConverter
-                    converter = DeltamodConverter(item_path, self.mods_dir)
+                    converter = DeltamodConverter(item_path, self.app_state.mods_dir)
                     if converter.convert():
                         shutil.rmtree(item_path)
                     continue
@@ -464,7 +438,7 @@ class DeltaHubApp(QWidget):
                         installed_mods[mod_key] = config_data
                 except Exception:
                     pass
-            for mod in self.all_mods:
+            for mod in self.app_state.all_mods:
                 if mod.key in installed_mods:
                     config_data = installed_mods[mod.key]
                     mod_folder_path = self._get_mod_folder_path_by_key(mod.key)
@@ -475,8 +449,8 @@ class DeltaHubApp(QWidget):
                                 mod.icon_url = potential_icon
                                 break
                     config_path = None
-                    for item_name in os.listdir(self.mods_dir):
-                        folder_path = os.path.join(self.mods_dir, item_name)
+                    for item_name in os.listdir(self.app_state.mods_dir):
+                        folder_path = os.path.join(self.app_state.mods_dir, item_name)
                         test_config_path = os.path.join(folder_path, 'config.json')
                         if os.path.isfile(test_config_path):
                             try:
@@ -489,7 +463,7 @@ class DeltaHubApp(QWidget):
                                 continue
                     if config_path:
                         config_data.get('is_available_on_server', False)
-            existing_keys = {mod.key for mod in self.all_mods}
+            existing_keys = {mod.key for mod in self.app_state.all_mods}
             for mod_key, config_data in installed_mods.items():
                 if mod_key not in existing_keys and config_data.get('is_local_mod'):
                     try:
@@ -505,8 +479,8 @@ class DeltaHubApp(QWidget):
                         mod = ModInfo(**safe_mod_info)
                         files_data = config_data.get('files', {})
                         mod_folder_path = None
-                        for folder_name in os.listdir(self.mods_dir):
-                            folder_path = os.path.join(self.mods_dir, folder_name)
+                        for folder_name in os.listdir(self.app_state.mods_dir):
+                            folder_path = os.path.join(self.app_state.mods_dir, folder_name)
                             test_config_path = os.path.join(folder_path, 'config.json')
                             if os.path.isfile(test_config_path):
                                 try:
@@ -553,7 +527,7 @@ class DeltaHubApp(QWidget):
                             mod_chapter = ModChapterData(description=config_data.get('tagline', ''), data_file_url=data_file_url, data_file_version=chapter_files.get('data_file_version', (ch_info.get('versions', {}) or {}).get('data', '1.0.0')), extra_files=extra_files)
                             mod.files[file_key] = mod_chapter
                         if mod.files:
-                            self.all_mods.append(mod)
+                            self.app_state.all_mods.append(mod)
                     except Exception as e:
                         logging.warning(f'Failed to build local ModInfo: {e}')
                         continue
@@ -563,41 +537,10 @@ class DeltaHubApp(QWidget):
         return True
 
     def _get_mod_config_by_key(self, mod_key: str) -> dict:
-        if not os.path.exists(self.mods_dir):
-            return {}
-        for folder_name in os.listdir(self.mods_dir):
-            folder_path = os.path.join(self.mods_dir, folder_name)
-            if not os.path.isdir(folder_path):
-                continue
-            config_path = os.path.join(folder_path, 'config.json')
-            if not os.path.exists(config_path):
-                continue
-            try:
-                config_data = self._read_json(config_path)
-                if config_data and config_data.get('mod_key') == mod_key:
-                    return config_data
-            except Exception as e:
-                logging.warning(f'Failed to read mod config {config_path}: {e}')
-                continue
-        return {}
+        return self.mod_manager.get_mod_config(mod_key)
 
     def _get_mod_folder_path_by_key(self, mod_key: str) -> str:
-        if not os.path.exists(self.mods_dir):
-            return ''
-        for folder_name in os.listdir(self.mods_dir):
-            folder_path = os.path.join(self.mods_dir, folder_name)
-            if not os.path.isdir(folder_path):
-                continue
-            config_path = os.path.join(folder_path, 'config.json')
-            if not os.path.exists(config_path):
-                continue
-            try:
-                config_data = self._read_json(config_path)
-                if config_data and config_data.get('mod_key') == mod_key:
-                    return folder_path
-            except Exception:
-                continue
-        return ''
+        return self.mod_manager.get_mod_folder_path(mod_key)
 
     def _set_install_buttons_enabled(self, enabled: bool):
         if hasattr(self, 'mod_list_layout'):
@@ -629,10 +572,10 @@ class DeltaHubApp(QWidget):
         self.feedback_manager.show_error('errors.access_denied', detailed_message)
 
     def _get_current_game_path(self) -> str:
-        return self.game_mode.get_game_path(self.local_config) or ''
+        return self.app_state.game_mode.get_game_path(self.app_state.local_config) or ''
 
     def _current_tab_names(self):
-        return self.game_mode.tab_names
+        return self.app_state.game_mode.tab_names
 
     def init_ui(self):
         self.full_install_checkbox = QCheckBox(tr('ui.install_game_files_first'))
@@ -664,11 +607,11 @@ class DeltaHubApp(QWidget):
         self.top_frame.addWidget(logo_placeholder)
         self.top_frame.addStretch()
         self.telegram_button = QPushButton(tr('buttons.telegram'))
-        self.telegram_button.clicked.connect(lambda: webbrowser.open(self.global_settings.get('telegram_url', SOCIAL_LINKS['telegram'])))
+        self.telegram_button.clicked.connect(lambda: webbrowser.open(self.app_state.global_settings.get('telegram_url', SOCIAL_LINKS['telegram'])))
         self.telegram_button.setStyleSheet(f"color: {UI_COLORS['link']};")
         self.top_frame.addWidget(self.telegram_button)
         self.discord_button = QPushButton(tr('buttons.discord'))
-        self.discord_button.clicked.connect(lambda: webbrowser.open(self.global_settings.get('discord_url', SOCIAL_LINKS['discord'])))
+        self.discord_button.clicked.connect(lambda: webbrowser.open(self.app_state.global_settings.get('discord_url', SOCIAL_LINKS['discord'])))
         self.discord_button.setStyleSheet(f"color: {UI_COLORS['social_discord']};")
         self.top_frame.addWidget(self.discord_button)
         self.main_layout.addWidget(self.top_panel_widget)
@@ -690,7 +633,7 @@ class DeltaHubApp(QWidget):
         self.action_button.setEnabled(False)
         self.action_button.setMinimumWidth(200)
         self.action_button.clicked.connect(self._on_action_button_click)
-        self.is_installing = False
+        self.app_state.is_installing = False
         self.current_install_thread = None
         self.pending_updates = []
         self.saves_button = QPushButton(tr('ui.saves_button'))
@@ -951,7 +894,7 @@ class DeltaHubApp(QWidget):
         self._init_save_manager_ui()
         self.save_manager_widget.setVisible(False)
         self.main_layout.addWidget(self.save_manager_widget)
-        self.current_settings_page = self.settings_menu_page
+        self.app_state.current_settings_page = self.settings_menu_page
         self.tab_widget = self.main_tab_widget
         self.tabs = {}
         self.setWindowIcon(QIcon(resource_path('resources/icons/icon.ico')))
@@ -962,7 +905,7 @@ class DeltaHubApp(QWidget):
             self.previous_tab_index = index
             return
         if index >= num_original_tabs:
-            visible_plugins = [p for p in self.plugins if not p.get('tab_hide', False)]
+            visible_plugins = [p for p in self.app_state.plugins if not p.get('tab_hide', False)]
             plugin_index = index - num_original_tabs
             if 0 <= plugin_index < len(visible_plugins):
                 plugin = self._plugin_tab_map.get(index) or visible_plugins[plugin_index]
@@ -1030,7 +973,7 @@ class DeltaHubApp(QWidget):
                 del sys.modules[plugin_name]
         self._load_plugins()
         self._plugin_tab_map = {}
-        for plugin in self.plugins:
+        for plugin in self.app_state.plugins:
             if not plugin.get('tab_hide', False):
                 plugin_tab = QWidget()
                 try:
@@ -1048,11 +991,10 @@ class DeltaHubApp(QWidget):
                     pass
 
     def _load_plugins(self):
-        self.plugins = []
-        if not os.path.isdir(self.plugins_dir):
+        if not os.path.isdir(self.app_state.plugins_dir):
             return
-        for plugin_name in os.listdir(self.plugins_dir):
-            plugin_path = os.path.join(self.plugins_dir, plugin_name)
+        for plugin_name in os.listdir(self.app_state.plugins_dir):
+            plugin_path = os.path.join(self.app_state.plugins_dir, plugin_name)
             main_py_path = os.path.join(plugin_path, 'main.py')
             if os.path.isdir(plugin_path) and os.path.isfile(main_py_path):
                 try:
@@ -1085,7 +1027,7 @@ class DeltaHubApp(QWidget):
                             if isinstance(en_translations, dict):
                                 localization_manager.merge_translations(en_translations)
                         plugin_info = {'name_key': plugin_display_name_key, 'module': plugin_module, 'on_tab_open': on_tab_open_function, 'page_init': page_init_function, 'tab_hide': tab_hide, 'path': plugin_path, **hooks}
-                        self.plugins.append(plugin_info)
+                        self.app_state.plugins.append(plugin_info)
                         logging.info(f'Successfully loaded plugin: {plugin_name}')
                 except Exception as e:
                     logging.error(f"Failed to load plugin '{plugin_name}': {e}")
@@ -1093,15 +1035,15 @@ class DeltaHubApp(QWidget):
     def _on_mods_loaded(self):
         if self.initialization_timer and self.initialization_timer.isActive():
             self.initialization_timer.stop()
-        self.initialization_completed = True
+        self.app_state.initialization_completed = True
         self.initialization_finished.emit()
         self._maybe_start_background_music()
 
     def _force_finish_initialization(self):
-        if self.initialization_completed:
+        if self.app_state.initialization_completed:
             return
-        self.mods_loaded = True
-        self.initialization_completed = True
+        self.app_state.mods_loaded = True
+        self.app_state.initialization_completed = True
         self.initialization_finished.emit()
         if not is_game_running():
             self._maybe_start_background_music()
@@ -1132,7 +1074,7 @@ class DeltaHubApp(QWidget):
         search_container_layout.addWidget(self.search_mods_scroll)
         pagination_widget = self._create_pagination_widget()
         search_container_layout.addWidget(pagination_widget)
-        search_bg_color = get_theme_color(self.local_config, 'background', '#000000')
+        search_bg_color = get_theme_color(self.app_state.local_config, 'background', '#000000')
         r, g, b = (int(search_bg_color[1:3], 16), int(search_bg_color[3:5], 16), int(search_bg_color[5:7], 16)) if search_bg_color.startswith('#') else (0, 0, 0)
         search_bg_rgba = f'rgba({r}, {g}, {b}, 128)'
         self.search_container.setStyleSheet(f'\n            QWidget#search_mods_background {{\n                background-color: {search_bg_rgba};\n                border-radius: 10px;\n                margin: 5px;\n            }}\n        ')
@@ -1147,7 +1089,7 @@ class DeltaHubApp(QWidget):
         widget = QWidget()
         layout = QVBoxLayout(widget)
         self.library_filters_widget = self._create_library_filters_widget()
-        hide_filters = self.local_config.get('hide_library_filters', False)
+        hide_filters = self.app_state.local_config.get('hide_library_filters', False)
         self.library_filters_widget.setVisible(not hide_filters)
         layout.addWidget(self.library_filters_widget)
         controls_layout = QHBoxLayout()
@@ -1165,9 +1107,9 @@ class DeltaHubApp(QWidget):
         self.full_install_checkbox = QCheckBox(tr('ui.full_install'))
         self.full_install_checkbox.stateChanged.connect(self._on_toggle_full_install)
         controls_layout.addWidget(self.full_install_checkbox)
-        saved_game_type = self.local_config.get('selected_game_type', 'deltarune')
-        saved_chapter_mode = self.local_config.get('chapter_mode_enabled', False)
-        saved_full_install = self.local_config.get('full_install_enabled', False)
+        saved_game_type = self.app_state.local_config.get('selected_game_type', 'deltarune')
+        saved_chapter_mode = self.app_state.local_config.get('chapter_mode_enabled', False)
+        saved_full_install = self.app_state.local_config.get('full_install_enabled', False)
         self.game_type_combo.blockSignals(True)
         for i in range(self.game_type_combo.count()):
             if self.game_type_combo.itemData(i) == saved_game_type:
@@ -1182,18 +1124,18 @@ class DeltaHubApp(QWidget):
         self.full_install_checkbox.setChecked(saved_full_install)
         self.full_install_checkbox.blockSignals(False)
         if saved_game_type == 'deltarunedemo':
-            self.game_mode = DemoGameMode()
+            self.app_state.game_mode = DemoGameMode()
         elif saved_game_type == 'undertale':
-            self.game_mode = UndertaleGameMode()
+            self.app_state.game_mode = UndertaleGameMode()
         else:
-            self.game_mode = FullGameMode()
-        self.current_mode = 'chapter' if saved_chapter_mode else 'normal'
-        self._previous_mode = self.current_mode
+            self.app_state.game_mode = FullGameMode()
+        self.app_state.current_mode = 'chapter' if saved_chapter_mode else 'normal'
+        self._previous_mode = self.app_state.current_mode
         self._update_checkbox_visibility()
         self._update_saves_button_state()
         controls_layout.addStretch()
         layout.addLayout(controls_layout)
-        self.selected_chapter_id = None
+        self.app_state.selected_chapter_id = None
         self.slots_container = QWidget()
         self.slots_layout = QVBoxLayout(self.slots_container)
         self.active_slots_widget = QWidget()
@@ -1202,7 +1144,7 @@ class DeltaHubApp(QWidget):
         self.active_slots_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.active_slots_layout.setContentsMargins(20, 15, 20, 15)
         self.active_slots_layout.setSpacing(0)
-        slots_bg_color = get_theme_color(self.local_config, 'background', '#000000')
+        slots_bg_color = get_theme_color(self.app_state.local_config, 'background', '#000000')
         if slots_bg_color.startswith('#'):
             r = int(slots_bg_color[1:3], 16)
             g = int(slots_bg_color[3:5], 16)
@@ -1232,7 +1174,7 @@ class DeltaHubApp(QWidget):
         self.installed_mods_layout.setContentsMargins(0, 0, 0, 0)
         self.installed_mods_scroll.setWidget(self.installed_mods_widget)
         mods_container_layout.addWidget(self.installed_mods_scroll)
-        mods_bg_color = get_theme_color(self.local_config, 'background', '#000000')
+        mods_bg_color = get_theme_color(self.app_state.local_config, 'background', '#000000')
         if mods_bg_color.startswith('#'):
             r = int(mods_bg_color[1:3], 16)
             g = int(mods_bg_color[3:5], 16)
@@ -1244,7 +1186,6 @@ class DeltaHubApp(QWidget):
         layout.addWidget(self.installed_mods_container)
         QTimer.singleShot(500, self._update_installed_mods_display)
         QTimer.singleShot(700, self._update_mod_widgets_slot_status)
-        self.slots = {}
         self._update_slots_display()
         QTimer.singleShot(400, self._load_slots_state)
         return widget
@@ -1437,7 +1378,6 @@ class DeltaHubApp(QWidget):
             self._update_mod_display()
 
     def _init_slots_system(self):
-        self.slots = {}
         self._update_slots_display()
 
     def _on_game_type_changed(self, index):
@@ -1446,18 +1386,18 @@ class DeltaHubApp(QWidget):
             return
         self._save_slots_state()
         if game_type == 'deltarunedemo':
-            self.game_mode = DemoGameMode()
+            self.app_state.game_mode = DemoGameMode()
         elif game_type == 'undertale':
-            self.game_mode = UndertaleGameMode()
+            self.app_state.game_mode = UndertaleGameMode()
         else:
-            self.game_mode = FullGameMode()
+            self.app_state.game_mode = FullGameMode()
         self._update_checkbox_visibility()
         self._update_slots_display()
         self._load_slots_state()
         self._update_installed_mods_display()
         self._update_change_path_button_text()
         self._update_saves_button_state()
-        self.local_config['selected_game_type'] = game_type
+        self.app_state.local_config['selected_game_type'] = game_type
         self._write_local_config()
 
     def _update_checkbox_visibility(self):
@@ -1486,23 +1426,23 @@ class DeltaHubApp(QWidget):
         old_mode = getattr(self, 'current_mode', 'normal')
         self._previous_mode = old_mode
         is_chapter = bool(state)
-        self.current_mode = 'chapter' if is_chapter else 'normal'
+        self.app_state.current_mode = 'chapter' if is_chapter else 'normal'
         self.game_type_combo.setEnabled(not is_chapter)
         self._save_slots_state()
         self._update_slots_display()
         self._update_mod_widgets_slot_status()
         self._update_action_button_state()
         if is_chapter:
-            for slot_frame in self.slots.values():
+            for slot_frame in self.app_state.slots.values():
                 slot_frame.is_selected = False
                 self._update_slot_visual_state(slot_frame)
-            self.selected_chapter_id = None
+            self.app_state.selected_chapter_id = None
             self._show_chapter_mode_instruction()
         else:
-            self.selected_chapter_id = None
+            self.app_state.selected_chapter_id = None
             self._update_installed_mods_display()
         self._update_change_path_button_text()
-        self.local_config['chapter_mode_enabled'] = is_chapter
+        self.app_state.local_config['chapter_mode_enabled'] = is_chapter
         self._write_local_config()
 
     def _show_chapter_mode_instruction(self):
@@ -1519,27 +1459,27 @@ class DeltaHubApp(QWidget):
     def _update_slots_display(self):
         if hasattr(self, 'active_slots_layout'):
             clear_layout_widgets(self.active_slots_layout, keep_last_n=0)
-        if not hasattr(self, 'slots'):
-            self.slots = {}
+        if not hasattr(self.app_state, 'slots'):
+            self.app_state.slots = {}
         else:
-            self.slots.clear()
-        is_demo_mode = isinstance(self.game_mode, DemoGameMode)
-        if self.current_mode == 'normal':
+            self.app_state.slots.clear()
+        is_demo_mode = isinstance(self.app_state.game_mode, DemoGameMode)
+        if self.app_state.current_mode == 'normal':
             if is_demo_mode:
                 slot = self._create_slot_widget(tr('ui.demo_slot'), -10)
                 if hasattr(self, 'active_slots_layout'):
                     self.active_slots_layout.addWidget(slot)
-                self.slots[-10] = slot
-            elif isinstance(self.game_mode, UndertaleGameMode):
+                self.app_state.slots[-10] = slot
+            elif isinstance(self.app_state.game_mode, UndertaleGameMode):
                 slot = self._create_slot_widget(tr('ui.universal_slot'), -20)
                 if hasattr(self, 'active_slots_layout'):
                     self.active_slots_layout.addWidget(slot)
-                self.slots[-20] = slot
+                self.app_state.slots[-20] = slot
             else:
                 slot = self._create_slot_widget(tr('ui.mod_slot'), -1)
                 if hasattr(self, 'active_slots_layout'):
                     self.active_slots_layout.addWidget(slot)
-                self.slots[-1] = slot
+                self.app_state.slots[-1] = slot
                 self._create_chapter_indicators()
         else:
             slot_names = [tr('chapters.menu'), tr('tabs.chapter_1'), tr('tabs.chapter_2'), tr('tabs.chapter_3'), tr('tabs.chapter_4')]
@@ -1547,7 +1487,7 @@ class DeltaHubApp(QWidget):
                 slot = self._create_slot_widget(name, i)
                 if hasattr(self, 'active_slots_layout'):
                     self.active_slots_layout.addWidget(slot)
-                self.slots[i] = slot
+                self.app_state.slots[i] = slot
         self._load_slots_state()
 
     def _get_slots_config_key(self, game_mode_instance, is_chapter_mode):
@@ -1561,7 +1501,7 @@ class DeltaHubApp(QWidget):
     def _create_chapter_indicators(self):
         chapter_names = [tr('ui.menu_label'), tr('ui.chapter_1_label'), tr('ui.chapter_2_label'), tr('ui.chapter_3_label'), tr('ui.chapter_4_label')]
         self.chapter_indicators = {}
-        main_text_color = get_theme_color(self.local_config, 'text', 'white')
+        main_text_color = get_theme_color(self.app_state.local_config, 'text', 'white')
         for i, chapter_name in enumerate(chapter_names):
             indicator_frame = QFrame()
             indicator_layout = QVBoxLayout(indicator_frame)
@@ -1600,7 +1540,7 @@ class DeltaHubApp(QWidget):
 
     def _update_chapter_indicators_style(self):
         if hasattr(self, 'chapter_indicators'):
-            main_text_color = get_theme_color(self.local_config, 'text', 'white')
+            main_text_color = get_theme_color(self.app_state.local_config, 'text', 'white')
             for indicator_data in self.chapter_indicators.values():
                 if 'chapter_label' in indicator_data:
                     indicator_data['chapter_label'].setStyleSheet(f'color: {main_text_color}; font-size: 14px; font-weight: bold;')
@@ -1638,13 +1578,13 @@ class DeltaHubApp(QWidget):
         return slot_frame
 
     def _update_slot_visual_state(self, slot_frame):
-        user_bg_hex = get_theme_color(self.local_config, 'background', None)
+        user_bg_hex = get_theme_color(self.app_state.local_config, 'background', None)
         if user_bg_hex and self._is_valid_hex_color(user_bg_hex):
             slot_bg_color = f"#C0{user_bg_hex.lstrip('#')}"
         else:
             slot_bg_color = 'rgba(0, 0, 0, 150)'
-        slot_border_color = get_theme_color(self.local_config, 'border', 'white')
-        direct_launch_slot_id = self.local_config.get('direct_launch_slot_id', -1)
+        slot_border_color = get_theme_color(self.app_state.local_config, 'border', 'white')
+        direct_launch_slot_id = self.app_state.local_config.get('direct_launch_slot_id', -1)
         is_direct_launch_slot = direct_launch_slot_id >= 0 and slot_frame.chapter_id >= 0 and (slot_frame.chapter_id == direct_launch_slot_id)
         border_style = '3px dashed' if is_direct_launch_slot else '3px solid'
         if getattr(slot_frame, 'is_selected', False):
@@ -1665,7 +1605,7 @@ class DeltaHubApp(QWidget):
             else:
                 self._show_mod_selection_for_slot(slot_frame)
         else:
-            for other_slot in self.slots.values():
+            for other_slot in self.app_state.slots.values():
                 if other_slot != slot_frame:
                     other_slot.is_selected = False
                     self._update_slot_visual_state(other_slot)
@@ -1673,17 +1613,17 @@ class DeltaHubApp(QWidget):
             self._update_slot_visual_state(slot_frame)
             if slot_frame.is_selected:
                 selected_chapter = slot_frame.chapter_id
-                self.selected_chapter_id = selected_chapter
+                self.app_state.selected_chapter_id = selected_chapter
                 self._update_installed_mods_for_chapter_mode(selected_chapter)
             else:
-                self.selected_chapter_id = None
+                self.app_state.selected_chapter_id = None
                 self._show_chapter_mode_instruction()
 
     def _on_slot_frame_double_clicked(self, slot_frame):
         is_chapter_mode = self.chapter_mode_checkbox.isChecked()
         if not is_chapter_mode or slot_frame.chapter_id < 0:
             return
-        current_direct_launch_slot = self.local_config.get('direct_launch_slot_id', -1)
+        current_direct_launch_slot = self.app_state.local_config.get('direct_launch_slot_id', -1)
         is_direct_launch_active = current_direct_launch_slot == slot_frame.chapter_id
         if is_direct_launch_active:
             if self.feedback_manager.ask_question('ui.direct_launch', 'ui.disable_direct_launch', '', False):
@@ -1738,9 +1678,9 @@ class DeltaHubApp(QWidget):
             mod_key = getattr(mod_data, 'key', None) or getattr(mod_data, 'mod_key', None)
             if not mod_key:
                 return True
-            mod_folder = os.path.join(self.mods_dir, mod_key)
+            mod_folder = os.path.join(self.app_state.mods_dir, mod_key)
             if not os.path.exists(mod_folder):
-                mod_folder_by_name = os.path.join(self.mods_dir, mod_data.name)
+                mod_folder_by_name = os.path.join(self.app_state.mods_dir, mod_data.name)
                 if os.path.exists(mod_folder_by_name):
                     mod_folder = mod_folder_by_name
                 else:
@@ -1797,7 +1737,7 @@ class DeltaHubApp(QWidget):
             self._update_mod(mod_data)
             return
         target_slot = None
-        for slot_frame in self.slots.values():
+        for slot_frame in self.app_state.slots.values():
             if slot_frame.chapter_id == chapter_id:
                 target_slot = slot_frame
                 break
@@ -1809,7 +1749,7 @@ class DeltaHubApp(QWidget):
                 self._update_installed_mods_for_chapter_mode(chapter_id)
                 return
         target_slot = None
-        for slot_frame in self.slots.values():
+        for slot_frame in self.app_state.slots.values():
             if slot_frame.chapter_id == chapter_id:
                 target_slot = slot_frame
                 break
@@ -1872,8 +1812,8 @@ class DeltaHubApp(QWidget):
             return
         is_chapter_mode = hasattr(self, 'chapter_mode_checkbox') and self.chapter_mode_checkbox.isChecked()
         if is_chapter_mode:
-            if hasattr(self, 'selected_chapter_id') and self.selected_chapter_id is not None:
-                self._update_installed_mods_for_chapter_mode(self.selected_chapter_id)
+            if hasattr(self, 'selected_chapter_id') and self.app_state.selected_chapter_id is not None:
+                self._update_installed_mods_for_chapter_mode(self.app_state.selected_chapter_id)
                 return
             else:
                 self._show_chapter_mode_instruction()
@@ -1936,7 +1876,7 @@ class DeltaHubApp(QWidget):
             is_available = mod_info.get('is_available_on_server', True)
             has_update = False
             if not is_local and is_available:
-                public_mod = next((mod for mod in self.all_mods if mod.key == mod_info.get('key')), None)
+                public_mod = next((mod for mod in self.app_state.all_mods if mod.key == mod_info.get('key')), None)
                 if public_mod:
                     has_update = any((self._mod_has_files_for_chapter(public_mod, i) and self._get_mod_status_for_chapter(public_mod, i) == 'update' for i in range(5)))
             mod_data = self._create_mod_object_from_info(mod_info)
@@ -1990,23 +1930,13 @@ class DeltaHubApp(QWidget):
             self._update_installed_mods_display_from_list(mods)
 
     def _show_empty_mods_message(self):
-        show_empty_message_in_layout(self.installed_mods_layout, tr('ui.empty'), self.local_config, font_size=18)
+        show_empty_message_in_layout(self.installed_mods_layout, tr('ui.empty'), self.app_state.local_config, font_size=18)
 
     def _show_empty_chapter_message(self, chapter_name):
-        show_empty_message_in_layout(self.installed_mods_layout, tr('ui.no_mods_for_chapter', chapter_name=chapter_name), self.local_config, font_size=16)
+        show_empty_message_in_layout(self.installed_mods_layout, tr('ui.no_mods_for_chapter', chapter_name=chapter_name), self.app_state.local_config, font_size=16)
 
     def _check_mod_exists(self, mod_info):
-        mod_key = mod_info.get('mod_key', '')
-        mod_name = mod_info.get('name', '')
-        if mod_key:
-            mod_folder_by_key = os.path.join(self.mods_dir, mod_key)
-            if os.path.exists(mod_folder_by_key):
-                return True
-        if mod_name:
-            mod_folder_by_name = os.path.join(self.mods_dir, mod_name)
-            if os.path.exists(mod_folder_by_name):
-                return True
-        return False
+        return self.mod_manager.check_mod_exists(mod_info)
 
     def _cleanup_missing_mods(self, installed_mods):
         installed_mod_keys = {mod.get('mod_key') for mod in installed_mods if mod.get('mod_key')}
@@ -2026,7 +1956,7 @@ class DeltaHubApp(QWidget):
             self._remove_mod_from_all_slots(dummy_mod_data)
             config_keys = ['saved_slots_deltarune', 'saved_slots_deltarune_chapter', 'saved_slots_deltarunedemo', 'saved_slots_undertale']
             for config_key in config_keys:
-                slots_data = self.local_config.get(config_key, {})
+                slots_data = self.app_state.local_config.get(config_key, {})
                 slots_to_clear = []
                 for slot_id_str, slot_info in list(slots_data.items()):
                     if isinstance(slot_info, dict):
@@ -2036,18 +1966,18 @@ class DeltaHubApp(QWidget):
                 for slot_id_str in slots_to_clear:
                     del slots_data[slot_id_str]
                 if slots_to_clear:
-                    self.local_config[config_key] = slots_data
+                    self.app_state.local_config[config_key] = slots_data
                     self._write_local_config()
 
     def _get_installed_mods_list(self):
         installed_mods = []
-        if not hasattr(self, 'mods_dir') or not os.path.exists(self.mods_dir):
+        if not hasattr(self, 'app_state') or not os.path.exists(self.app_state.mods_dir):
             return installed_mods
         mods_metadata = self._read_mods_metadata()
         metadata_updated = False
         found_mod_keys = set()
-        for folder_name in os.listdir(self.mods_dir):
-            folder_path = os.path.join(self.mods_dir, folder_name)
+        for folder_name in os.listdir(self.app_state.mods_dir):
+            folder_path = os.path.join(self.app_state.mods_dir, folder_name)
             if not os.path.isdir(folder_path):
                 continue
             config_path = os.path.join(folder_path, 'config.json')
@@ -2083,8 +2013,8 @@ class DeltaHubApp(QWidget):
 
     def _create_mod_object_from_info(self, mod_info):
         mod_key = mod_info.get('mod_key', '')
-        if hasattr(self, 'all_mods') and self.all_mods:
-            for mod in self.all_mods:
+        if hasattr(self.app_state, 'all_mods') and self.app_state.all_mods:
+            for mod in self.app_state.all_mods:
                 if hasattr(mod, 'key') and mod.key == mod_key:
                     return mod
         from models.mod_models import ModInfo
@@ -2116,7 +2046,7 @@ class DeltaHubApp(QWidget):
 
     def _on_installed_mod_remove(self, mod_data):
         try:
-            if self.feedback_manager.ask_question('dialogs.delete_confirmation', 'dialogs.delete_mod_confirmation', '', False):
+            if self.feedback_manager.ask_question('dialogs.delete_confirmation', 'dialogs.delete_mod_confirmation', '', False, mod_name=getattr(mod_data, 'name', getattr(mod_data, 'key', 'Unknown'))):
                 self._delete_mod_files(mod_data)
                 self._remove_mod_from_all_slots(mod_data)
                 self._update_installed_mods_display()
@@ -2135,7 +2065,7 @@ class DeltaHubApp(QWidget):
             self._save_slots_state()
         else:
             is_chapter_mode = self.chapter_mode_checkbox.isChecked()
-            is_demo_mode = isinstance(self.game_mode, DemoGameMode)
+            is_demo_mode = isinstance(self.app_state.game_mode, DemoGameMode)
             mod_widget = None
             for i in range(self.installed_mods_layout.count()):
                 item = self.installed_mods_layout.itemAt(i)
@@ -2161,7 +2091,7 @@ class DeltaHubApp(QWidget):
                     target_slot_id = -20
                 else:
                     target_slot_id = -1
-                for key, slot_frame in self.slots.items():
+                for key, slot_frame in self.app_state.slots.items():
                     if slot_frame.chapter_id == target_slot_id:
                         target_slot = slot_frame
                         break
@@ -2176,7 +2106,7 @@ class DeltaHubApp(QWidget):
         mod_key = getattr(mod_data, 'key', None) or getattr(mod_data, 'mod_key', None) or getattr(mod_data, 'name', None)
         if not mod_key:
             return None
-        for slot_frame in self.slots.values():
+        for slot_frame in self.app_state.slots.values():
             if exclude_chapter_id is not None and slot_frame.chapter_id == exclude_chapter_id:
                 continue
             if slot_frame.assigned_mod:
@@ -2225,7 +2155,7 @@ class DeltaHubApp(QWidget):
         layout.addWidget(label)
         slot_list = QListWidget()
         available_slots = []
-        for key, slot_frame in self.slots.items():
+        for key, slot_frame in self.app_state.slots.items():
             if slot_frame.assigned_mod is None:
                 if slot_frame.chapter_id == -1:
                     slot_name = tr('ui.mod_slot')
@@ -2254,7 +2184,7 @@ class DeltaHubApp(QWidget):
         dialog.setWindowTitle(tr('ui.mod_details_title', mod_name=mod_data.name))
         dialog.setMinimumSize(700, 700)
         dialog.resize(800, 750)
-        secondary_text_color = get_theme_color(self.local_config, 'version_text', 'rgba(255, 255, 255, 178)')
+        secondary_text_color = get_theme_color(self.app_state.local_config, 'version_text', 'rgba(255, 255, 255, 178)')
         layout = QVBoxLayout(dialog)
         layout.setSpacing(15)
         scroll_area = QScrollArea()
@@ -2488,7 +2418,7 @@ class DeltaHubApp(QWidget):
         new_content_layout.setAlignment(Qt.AlignmentFlag.AlignVCenter)
         mod_icon = QLabel()
         mod_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        border_color = self.local_config.get('custom_color_border') or 'white'
+        border_color = self.app_state.local_config.get('custom_color_border') or 'white'
         mod_icon.setStyleSheet(f'border: 1px solid {border_color};')
         text_vbox = QVBoxLayout()
         text_vbox.setAlignment(Qt.AlignmentFlag.AlignVCenter)
@@ -2555,7 +2485,7 @@ class DeltaHubApp(QWidget):
                     widget.set_in_slot(is_in_slot)
 
     def _refresh_all_slot_status_displays(self):
-        for slot_frame in self.slots.values():
+        for slot_frame in self.app_state.slots.values():
             if slot_frame.assigned_mod and slot_frame.content_widget:
                 self._refresh_slot_status_display(slot_frame)
                 if hasattr(slot_frame, 'mod_icon') and slot_frame.mod_icon:
@@ -2598,32 +2528,7 @@ class DeltaHubApp(QWidget):
             version_label.setText(status_text)
 
     def _delete_mod_files(self, mod_data):
-        try:
-            if not hasattr(self, 'mods_dir') or not os.path.exists(self.mods_dir):
-                print('Mods directory not found')
-                return
-            mod_folder_found = None
-            for folder_name in os.listdir(self.mods_dir):
-                folder_path = os.path.join(self.mods_dir, folder_name)
-                if not os.path.isdir(folder_path):
-                    continue
-                config_path = os.path.join(folder_path, 'config.json')
-                if os.path.exists(config_path):
-                    try:
-                        config_data = self._read_json(config_path)
-                        if config_data and config_data.get('mod_key') == mod_data.key:
-                            mod_folder_found = folder_path
-                            break
-                    except Exception as e:
-                        logging.warning(f'Failed to read installed mod config {config_path}: {e}')
-                        continue
-            if mod_folder_found and os.path.exists(mod_folder_found):
-                shutil.rmtree(mod_folder_found)
-            else:
-                print(f'Mod folder not found for mod: {mod_data.name}')
-        except Exception as e:
-            print(f'Error deleting mod files: {e}')
-            raise
+        self.mod_manager.delete_mod_files(mod_data)
 
     def _remove_mod_from_all_slots(self, mod_data):
         if not mod_data:
@@ -2631,7 +2536,7 @@ class DeltaHubApp(QWidget):
         mod_key = getattr(mod_data, 'key', None) or getattr(mod_data, 'mod_key', None) or getattr(mod_data, 'name', None)
         if not mod_key:
             return
-        for slot_frame in self.slots.values():
+        for slot_frame in self.app_state.slots.values():
             if slot_frame.assigned_mod:
                 assigned_mod_key = getattr(slot_frame.assigned_mod, 'key', None) or getattr(slot_frame.assigned_mod, 'mod_key', None) or getattr(slot_frame.assigned_mod, 'name', None)
                 if assigned_mod_key == mod_key:
@@ -2642,7 +2547,7 @@ class DeltaHubApp(QWidget):
         self._update_filtered_mods()
 
     def _update_filtered_mods(self):
-        if not hasattr(self, 'all_mods') or not self.all_mods:
+        if not hasattr(self.app_state, 'all_mods') or not self.app_state.all_mods:
             self.filtered_mods = []
             self._update_mod_display()
             return
@@ -2659,7 +2564,7 @@ class DeltaHubApp(QWidget):
         if hasattr(self, 'modgame_combo'):
             selected_modgame = self.modgame_combo.currentData() or ''
         self.filtered_mods = []
-        for mod in self.all_mods:
+        for mod in self.app_state.all_mods:
             if getattr(mod, 'hide_mod', False) in [True, 'true', 'True', 1]:
                 continue
             if getattr(mod, 'ban_status', False) in [True, 'true', 'True', 1]:
@@ -2733,7 +2638,7 @@ class DeltaHubApp(QWidget):
                 plaque.uninstall_requested.connect(self._on_mod_uninstall_requested)
                 plaque.clicked.connect(self._on_mod_clicked)
                 plaque.details_requested.connect(self._on_mod_details_requested)
-                plaque.install_button.setEnabled(not self.is_installing)
+                plaque.install_button.setEnabled(not self.app_state.is_installing)
                 self.mod_list_layout.insertWidget(self.mod_list_layout.count() - 1, plaque)
         finally:
             self.mod_list_widget.setUpdatesEnabled(True)
@@ -2749,13 +2654,13 @@ class DeltaHubApp(QWidget):
         self.next_page_btn.setEnabled(self.current_page < total_pages)
 
     def _on_mod_install_requested(self, mod):
-        if self.is_installing:
+        if self.app_state.is_installing:
             return
         self._install_single_mod(mod)
 
     def _install_single_mod(self, mod, force=False):
         try:
-            if self.is_installing and (not force):
+            if self.app_state.is_installing and (not force):
                 return
             available_chapters = []
             if mod.modgame == 'undertale':
@@ -2781,7 +2686,7 @@ class DeltaHubApp(QWidget):
                     self.feedback_manager.update_status(tr('status.install_cancelled_by_user'), UI_COLORS['status_info'])
                     return
             install_tasks = [(mod, chapter_id) for chapter_id in available_chapters]
-            self.is_installing = True
+            self.app_state.is_installing = True
             self._set_install_buttons_enabled(False)
             self.action_button.setText(tr('ui.cancel_button'))
             self._install_op_id = getattr(self, '_install_op_id', 0) + 1
@@ -2804,11 +2709,11 @@ class DeltaHubApp(QWidget):
             self.feedback_manager.show_error('errors.error', tr('errors.mod_install_failed', error=str(e)))
 
     def _on_install_progress_token(self, value: int, op_id: int):
-        if getattr(self, '_install_op_id', 0) == op_id and self.is_installing:
+        if getattr(self, '_install_op_id', 0) == op_id and self.app_state.is_installing:
             self.progress_bar.setValue(value)
 
     def _on_install_status_token(self, message: str, color: str, op_id: int):
-        if getattr(self, '_install_op_id', 0) == op_id and self.is_installing:
+        if getattr(self, '_install_op_id', 0) == op_id and self.app_state.is_installing:
             self._update_status(message, color)
 
     def _on_install_finished_token(self, success: bool, op_id: int):
@@ -2839,7 +2744,7 @@ class DeltaHubApp(QWidget):
                     shutil.rmtree(temp_root, ignore_errors=True)
             except Exception:
                 pass
-        self.is_installing = False
+        self.app_state.is_installing = False
         self._set_install_buttons_enabled(True)
         self.current_install_thread = None
         if success:
@@ -2876,21 +2781,13 @@ class DeltaHubApp(QWidget):
                             break
 
     def _on_mod_uninstall_requested(self, mod):
-        if self.is_installing:
+        if self.app_state.is_installing:
             return
-        if self.feedback_manager.ask_question('dialogs.delete_confirmation', 'dialogs.delete_mod_confirmation', '', False):
+        if self.feedback_manager.ask_question('dialogs.delete_confirmation', 'dialogs.delete_mod_confirmation', '', False, mod_name=mod.name):
             self._uninstall_single_mod(mod)
 
     def _uninstall_single_mod(self, mod):
-        try:
-            self._delete_mod_files(mod)
-            self._remove_mod_from_all_slots(mod)
-            self._update_search_mod_plaques()
-            if hasattr(self, '_update_installed_mods_display'):
-                self._update_installed_mods_display()
-        except Exception as e:
-            print(f'Error uninstalling mod {mod.name}: {e}')
-            self.feedback_manager.show_error('errors.error', tr('errors.mod_delete_failed', error=str(e)))
+        self.mod_manager.uninstall_mod(mod)
 
     def _update_search_mod_plaques(self):
         for i in range(self.mod_list_layout.count() - 1):
@@ -2922,33 +2819,25 @@ class DeltaHubApp(QWidget):
                     widget.set_selected(False)
 
     def _update_mod(self, mod_data):
-        if self.is_installing:
-            return
-        self._install_single_mod(mod_data)
+        self.mod_manager.update_mod(mod_data)
 
     def _on_mod_install_finished(self, success, from_gb=False):
-        self.is_installing = False
+        self.app_state.is_installing = False
         self._set_install_buttons_enabled(True)
         self.current_install_thread = None
         self.progress_bar.setVisible(False)
         self._update_action_button_state()
-        if success:
-            self.feedback_manager.update_status(tr('status.mod_installed_success'), UI_COLORS['status_success'])
+
+    def _on_mod_installation_finished(self, success: bool, message: str):
+        self.app_state.is_installing = False
+        self._set_install_buttons_enabled(True)
+        self.progress_bar.setVisible(False)
+        self._update_action_button_state()
+        if hasattr(self, '_update_installed_mods_display'):
             self._update_installed_mods_display()
-            self._update_mod_widgets_slot_status()
-            self._update_action_button_state()
-            self._refresh_slots_content()
-            if hasattr(self, 'pending_updates') and self.pending_updates:
-                next_mod = self.pending_updates.pop(0)
-                self.feedback_manager.update_status(tr('status.updating_mod', mod_name=next_mod.name), UI_COLORS['status_warning'])
-                self._update_mod(next_mod)
-        else:
-            self.feedback_manager.update_status(tr('status.mod_install_error'), UI_COLORS['status_error'])
-            if hasattr(self, 'pending_updates'):
-                self.pending_updates = []
 
     def _prompt_for_mods_dir(self):
-        current_mods_dir = self.mods_dir
+        current_mods_dir = self.app_state.mods_dir
         new_parent_dir = QFileDialog.getExistingDirectory(self, tr('ui.select_new_mods_folder'), os.path.dirname(current_mods_dir))
         if not new_parent_dir or os.path.dirname(current_mods_dir) == new_parent_dir:
             return
@@ -2960,18 +2849,18 @@ class DeltaHubApp(QWidget):
             self.feedback_manager.update_status(tr('status.moving_mods_folder'), UI_COLORS['status_warning'])
             QApplication.processEvents()
             shutil.move(current_mods_dir, new_mods_dir)
-            self.mods_dir = new_mods_dir
-            self.local_config['mods_dir_path'] = new_parent_dir
+            self.app_state.mods_dir = new_mods_dir
+            self.app_state.local_config['mods_dir_path'] = new_parent_dir
             self._write_local_config()
             self.feedback_manager.show_info('dialogs.success', tr('dialogs.mods_folder_moved', path=new_mods_dir))
             self.feedback_manager.update_status(tr('status.mods_folder_location_changed'), UI_COLORS['status_success'])
         except Exception as e:
             self.feedback_manager.show_error('dialogs.move_error', tr('dialogs.mods_folder_move_failed', error=str(e)))
-            self.mods_dir = current_mods_dir
+            self.app_state.mods_dir = current_mods_dir
             self.feedback_manager.update_status(tr('status.mods_folder_change_error'), UI_COLORS['status_error'])
 
     def _update_change_path_button_text(self):
-        self.change_path_button.setText(self.game_mode.path_change_button_text)
+        self.change_path_button.setText(self.app_state.game_mode.path_change_button_text)
 
     def _full_install_tooltip(self) -> str:
         if platform.system() == 'Darwin':
@@ -2979,8 +2868,8 @@ class DeltaHubApp(QWidget):
         return tr('tooltips.full_install_instructions')
 
     def _on_toggle_full_install(self, state):
-        self.is_full_install = bool(state)
-        if platform.system() == 'Darwin' and self.is_full_install:
+        self.app_state.is_full_install = bool(state)
+        if platform.system() == 'Darwin' and self.app_state.is_full_install:
             self.feedback_manager.show_info('dialogs.unavailable', tr('dialogs.macos_install_unavailable'))
             self.full_install_checkbox.blockSignals(True)
             self.full_install_checkbox.setChecked(False)
@@ -2990,7 +2879,7 @@ class DeltaHubApp(QWidget):
 
     def _save_window_geometry(self):
         geom_ba = self.saveGeometry()
-        self.local_config['window_geometry'] = geom_ba.toHex().data().decode()
+        self.app_state.local_config['window_geometry'] = geom_ba.toHex().data().decode()
         self._write_local_config()
 
     def load_font(self):
@@ -3007,27 +2896,27 @@ class DeltaHubApp(QWidget):
     def apply_theme(self):
         theme = THEMES['default']
         background_path = None
-        background_disabled = self.local_config.get('background_disabled', False)
+        background_disabled = self.app_state.local_config.get('background_disabled', False)
         if self.background_movie is not None:
             self.background_movie.stop()
             self.background_movie.deleteLater()
             self.background_movie = None
         self.background_pixmap = None
         if not background_disabled:
-            background_path = self.local_config.get('custom_background_path') or resource_path(f"resources/{theme.get('background', '')}")
+            background_path = self.app_state.local_config.get('custom_background_path') or resource_path(f"resources/{theme.get('background', '')}")
             if background_path:
                 self._bg_loader = BgLoader(background_path, self.size())
                 self._bg_loader.loaded.connect(self._on_bg_ready)
                 self._bg_loader.start()
-        user_bg_hex = self.local_config.get('custom_color_background')
+        user_bg_hex = self.app_state.local_config.get('custom_color_background')
         if user_bg_hex and self._is_valid_hex_color(user_bg_hex):
             frame_bg_color = f"#C0{user_bg_hex.lstrip('#')}"
         else:
             frame_bg_color = 'rgba(0, 0, 0, 150)'
-        button_color = self.local_config.get('custom_color_button') or theme['colors']['button']
-        border_color = self.local_config.get('custom_color_border') or theme['colors']['border']
-        button_hover_color = self.local_config.get('custom_color_button_hover') or theme['colors']['button_hover']
-        main_text_color = self.local_config.get('custom_color_text') or theme['colors']['text']
+        button_color = self.app_state.local_config.get('custom_color_button') or theme['colors']['button']
+        border_color = self.app_state.local_config.get('custom_color_border') or theme['colors']['border']
+        button_hover_color = self.app_state.local_config.get('custom_color_button_hover') or theme['colors']['button_hover']
+        main_text_color = self.app_state.local_config.get('custom_color_text') or theme['colors']['text']
         base_family = self.custom_font_family or theme['font_family']
         font_family_main = base_family
         font_size_main = theme['font_size_main']
@@ -3040,7 +2929,7 @@ class DeltaHubApp(QWidget):
             if widget is not None:
                 widget.setStyleSheet(f'color: {color};')
         style_sheet = f'''\n                    QFrame#bottom_widget, QFrame#settings_widget {{ background-color: {frame_bg_color}; }}\n                    QWidget {{ font-family: "{font_family_main}", sans-serif; outline: none; font-size: {font_size_main}pt; color: {main_text_color}; background-color: transparent; }}\n                    QDialog, QMessageBox {{ font-family: "{font_family_main}", sans-serif; font-size: {font_size_small}pt; color: {main_text_color}; background-color: {frame_bg_color}; border: 3px solid {border_color}; }}\n                    QDialog > QLabel, QMessageBox > QLabel {{ background: transparent; font-size: {font_size_small}pt; }}\n                    QDialog QPushButton, QMessageBox QPushButton {{ font-size: {font_size_small}pt; }}\n                    QPushButton {{ background-color: {button_color}; border: 2px solid {border_color}; color: {theme['colors']['button_text']}; padding: 5px; min-height: 30px; min-width: 100px; }}\n                    QPushButton:hover {{ background-color: {button_hover_color}; }}\n                    QPushButton:disabled, QComboBox:disabled {{ background-color: #333333; color: #888888; border: 2px solid #555555; }}\n                    QPushButton#addTranslationButton {{ min-width: 33px; min-height: 33px; padding: 2px; }}\n                    QComboBox {{ background-color: {button_color}; color: {theme['colors']['button_text']}; border: 2px solid {border_color}; padding: 4px; min-height: 30px; }}\n                    QComboBox QAbstractItemView {{ background-color: {button_color}; border: 2px solid {border_color}; color: {theme['colors']['button_text']}; selection-background-color: {button_hover_color}; }}\n                    QTextEdit, QTextBrowser {{ background-color: {frame_bg_color}; border: 2px solid {border_color}; }}\n                    QFrame#filters {{\n                        background-color: {frame_bg_color};\n                        border: 2px solid {border_color};\n                        padding: 4px 8px;\n                    }}\n                    QPushButton#sortOrderBtn {{\n                        min-width: 35px;\n                        max-width: 35px;\n                        padding-left: 0px;\n                        padding-right: 0px;\n                        background-color: {button_color};\n                        border: 2px solid {border_color};\n                        color: {theme['colors']['button_text']};\n                        font-weight: bold;\n                        font-size: 12px;\n                    }}\n                    QPushButton#sortOrderBtn:hover {{\n                        background-color: {button_hover_color};\n                    }}\n                    QPushButton#searchBtn {{\n                        min-width: 35px;\n                        max-width: 35px;\n                        min-height: 30px;\n                        max-height: 30px;\n                        padding-left: 0px;\n                        padding-right: 0px;\n                        background-color: {button_color};\n                        border: 2px solid {border_color};\n                        color: {theme['colors']['button_text']};\n                        font-weight: bold;\n                        font-size: 16px;\n                    }}\n                    QPushButton#searchBtn:hover {{\n                        background-color: {button_hover_color};\n                    }}\n                    QTextEdit, QTextBrowser {{ background-color: {frame_bg_color}; color: {main_text_color}; border: 2px solid {border_color}; min-height: 100px; }}\n                    QTabBar::tab {{ background-color: {button_color}; color: {theme['colors']['button_text']}; border: 2px solid {border_color}; padding: 5px; min-height: 25px; min-width: 80px; }}\n                    QTabBar::tab:selected, QTabBar::tab:hover {{ background-color: {button_hover_color}; }}\n                    QTabBar::tab:disabled {{ background-color: #333333; color: #888888; border: 2px solid #555555; }}\n                    QTabWidget::pane {{ background: transparent; border: 0px; }}\n                    QCheckBox:disabled {{ color: #888888; }}\n                    QCheckBox::indicator {{ width: 15px; height: 15px; background-color: {button_color}; border: 2px solid {border_color}; }}\n                    QCheckBox::indicator:checked {{ background-color: {('#ffffff' if not self.color_widgets['button_hover'].text() else button_hover_color)}; }}\n                    QCheckBox::indicator:disabled {{ background-color: #333333; border: 2px solid #555555; }}\n                    QPushButton:checked {{ background-color: {button_hover_color}; border: 2px solid {main_text_color}; }}\n            '''
-        scroll_handle_color = self.local_config.get('custom_color_button') or 'white'
+        scroll_handle_color = self.app_state.local_config.get('custom_color_button') or 'white'
         scroll_groove_color = 'rgba(0, 0, 0, 40)'
         scroll_bar_qss = f'\n                QScrollBar:vertical {{\n                    border: none;\n                    background: {scroll_groove_color};\n                    width: 14px;\n                    margin: 0;\n                }}\n                QScrollBar::handle:vertical {{\n                    background-color: {scroll_handle_color};\n                    min-height: 25px;\n                }}\n                QScrollBar:horizontal {{\n                    border: none;\n                    background: {scroll_groove_color};\n                    height: 14px;\n                    margin: 0;\n                }}\n                QScrollBar::handle:horizontal {{\n                    background-color: {scroll_handle_color};\n                    min-width: 25px;\n                }}\n            '
         style_sheet += scroll_bar_qss
@@ -3170,8 +3059,8 @@ class DeltaHubApp(QWidget):
 
     def _hide_save_manager(self):
         self.save_manager_widget.setVisible(False)
-        self.is_save_manager_view = False
-        if self.is_settings_view:
+        self.app_state.is_save_manager_view = False
+        if self.app_state.is_settings_view:
             self.settings_widget.setVisible(True)
         else:
             self.main_tab_widget.setVisible(True)
@@ -3181,7 +3070,7 @@ class DeltaHubApp(QWidget):
         return tr('ui.placeholder_format') if active else tr('status.empty_save_slot')
 
     def _clear_selected_slot(self):
-        self.selected_slot = None
+        self.app_state.selected_slot = None
         self._update_slot_highlight()
         self._update_slot_action_bar()
 
@@ -3194,14 +3083,14 @@ class DeltaHubApp(QWidget):
         return super().eventFilter(obj, ev)
 
     def _update_slot_action_bar(self):
-        in_main = self.current_collection_idx.get(self.save_tabs.currentIndex() + 1, -1) == -1
-        visible = self.selected_slot is not None
+        in_main = self.app_state.current_collection_idx.get(self.save_tabs.currentIndex() + 1, -1) == -1
+        visible = self.app_state.selected_slot is not None
         for b in (self.show_btn, self.import_btn, self.erase_btn, self.export_btn):
             b.setVisible(visible)
         has_data = False
-        if self.selected_slot:
-            ch, s = self.selected_slot
-            idx = self.current_collection_idx.get(ch, -1)
+        if self.app_state.selected_slot:
+            ch, s = self.app_state.selected_slot
+            idx = self.app_state.current_collection_idx.get(ch, -1)
             base = self._get_collection_path(ch, idx)
             fp = os.path.join(base, f'filech{ch}_{s}')
             has_data = os.path.exists(fp) and os.path.getsize(fp) > 0
@@ -3211,7 +3100,7 @@ class DeltaHubApp(QWidget):
         self.copy_to_main_btn.setEnabled(not in_main)
 
     def _on_slot_double_clicked(self, chapter: int, slot: int):
-        idx = self.current_collection_idx.get(chapter, -1)
+        idx = self.app_state.current_collection_idx.get(chapter, -1)
         base = self._get_collection_path(chapter, idx)
         fp = os.path.join(base, f'filech{chapter}_{slot}')
         if not (os.path.exists(fp) and os.path.getsize(fp) > 0):
@@ -3221,18 +3110,18 @@ class DeltaHubApp(QWidget):
             self._refresh_save_slots()
 
     def _on_save_manager_slot_clicked(self, chapter: int, slot: int):
-        self.selected_slot = (chapter, slot)
+        self.app_state.selected_slot = (chapter, slot)
         self._update_slot_highlight()
         self._update_slot_action_bar()
 
     def _update_slot_highlight(self):
-        user_bg = self.local_config.get('custom_color_background')
+        user_bg = self.app_state.local_config.get('custom_color_background')
         if user_bg and self._is_valid_hex_color(user_bg):
             slot_bg = f"#80{user_bg.lstrip('#')}"
         else:
             slot_bg = '#80000000'
         for (ch, sl), lbl in self._slot_labels.items():
-            if self.selected_slot == (ch, sl):
+            if self.app_state.selected_slot == (ch, sl):
                 lbl.setStyleSheet(f'border:2px solid white; background-color: {slot_bg}; padding:4px;')
             else:
                 lbl.setStyleSheet(f'border:1px solid white; background-color: {slot_bg}; padding:4px;')
@@ -3243,11 +3132,11 @@ class DeltaHubApp(QWidget):
     def _list_collections(self, chapter: int) -> list[str]:
         cols = []
         rx = self._collection_regex(chapter)
-        if not (self.save_path and os.path.isdir(self.save_path)):
+        if not (self.app_state.save_path and os.path.isdir(self.app_state.save_path)):
             return cols
-        for entry in os.listdir(self.save_path):
+        for entry in os.listdir(self.app_state.save_path):
             m = rx.match(entry)
-            if m and os.path.isdir(os.path.join(self.save_path, entry)):
+            if m and os.path.isdir(os.path.join(self.app_state.save_path, entry)):
                 cols.append(entry)
 
         def _index(name: str) -> int:
@@ -3258,10 +3147,10 @@ class DeltaHubApp(QWidget):
 
     def _get_collection_path(self, chapter: int, idx: int) -> str:
         if idx == -1:
-            return self.save_path
+            return self.app_state.save_path
         cols = self._list_collections(chapter)
         if 0 <= idx < len(cols):
-            return os.path.join(self.save_path, cols[idx])
+            return os.path.join(self.app_state.save_path, cols[idx])
         return ''
 
     def _return_from_save_manager(self):
@@ -3276,14 +3165,14 @@ class DeltaHubApp(QWidget):
     def _on_configure_saves_click(self):
         if not self._find_and_validate_save_path():
             return
-        self.is_save_manager_view = True
+        self.app_state.is_save_manager_view = True
         self.main_tab_widget.setVisible(False)
         self.bottom_widget.setVisible(False)
         self.settings_widget.setVisible(False)
         self.save_manager_widget.setVisible(True)
-        self.selected_slot = None
+        self.app_state.selected_slot = None
         self._refresh_save_slots()
-        self.feedback_manager.update_status(tr('status.save_path_info', save_path=self.save_path), UI_COLORS['status_info'])
+        self.feedback_manager.update_status(tr('status.save_path_info', save_path=self.app_state.save_path), UI_COLORS['status_info'])
         self.settings_button.setText(tr('ui.back_button'))
         try:
             self.settings_button.clicked.disconnect(self._toggle_settings_view)
@@ -3292,11 +3181,11 @@ class DeltaHubApp(QWidget):
         self.settings_button.clicked.connect(self._return_from_save_manager)
 
     def _refresh_save_slots(self):
-        if not (self.save_path and os.path.isdir(self.save_path)):
+        if not (self.app_state.save_path and os.path.isdir(self.app_state.save_path)):
             return
         chapter = self.save_tabs.currentIndex() + 1
-        idx = self.current_collection_idx.get(chapter, -1)
-        base_path = self._get_collection_path(chapter, idx) or self.save_path
+        idx = self.app_state.current_collection_idx.get(chapter, -1)
+        base_path = self._get_collection_path(chapter, idx) or self.app_state.save_path
         for s in range(3):
             fp = os.path.join(base_path, f'filech{chapter}_{s}')
             active = os.path.exists(fp) and os.path.getsize(fp) > 0
@@ -3321,12 +3210,12 @@ class DeltaHubApp(QWidget):
         self._update_slot_action_bar()
 
     def _find_and_validate_save_path(self) -> bool:
-        if is_valid_save_path(self.save_path):
+        if is_valid_save_path(self.app_state.save_path):
             return True
         default_path = get_default_save_path()
         if is_valid_save_path(default_path):
-            self.save_path = default_path
-            self.local_config['save_path'] = self.save_path
+            self.app_state.save_path = default_path
+            self.app_state.local_config['save_path'] = self.app_state.save_path
             self._write_local_config()
             return True
         return self._prompt_for_save_path()
@@ -3337,21 +3226,21 @@ class DeltaHubApp(QWidget):
         if not is_valid_save_path(path):
             self.feedback_manager.show_warning('errors.empty_folder_title', tr('errors.empty_folder_message'))
             return False
-        self.save_path = path
-        self.local_config['save_path'] = self.save_path
+        self.app_state.save_path = path
+        self.app_state.local_config['save_path'] = self.app_state.save_path
         self._write_local_config()
         return True
 
     def _toggle_collection_view(self):
         chapter = self.save_tabs.currentIndex() + 1
-        idx = self.current_collection_idx.get(chapter, -1)
+        idx = self.app_state.current_collection_idx.get(chapter, -1)
         if idx == -1:
             cols = self._list_collections(chapter)
             if not cols and (not self._create_new_collection(chapter)):
                 return
-            self.current_collection_idx[chapter] = 0
+            self.app_state.current_collection_idx[chapter] = 0
         else:
-            self.current_collection_idx[chapter] = -1
+            self.app_state.current_collection_idx[chapter] = -1
         self._refresh_save_slots()
 
     def _navigate_collection(self, direction: int):
@@ -3363,7 +3252,7 @@ class DeltaHubApp(QWidget):
             cols = self._list_collections(chapter)
         if not cols:
             return
-        idx = self.current_collection_idx.get(chapter, -1)
+        idx = self.app_state.current_collection_idx.get(chapter, -1)
         if idx == -1:
             idx = 0
         else:
@@ -3375,8 +3264,8 @@ class DeltaHubApp(QWidget):
                 idx = len(cols)
             else:
                 idx = len(cols) - 1
-        self.current_collection_idx[chapter] = idx
-        self.selected_slot = None
+        self.app_state.current_collection_idx[chapter] = idx
+        self.app_state.selected_slot = None
         self._refresh_save_slots()
 
     def _create_new_collection(self, chapter: int) -> bool:
@@ -3385,7 +3274,7 @@ class DeltaHubApp(QWidget):
         idx = len(self._list_collections(chapter))
         folder = f'{name}_{idx}_{chapter}'
         try:
-            os.makedirs(os.path.join(self.save_path, folder), exist_ok=False)
+            os.makedirs(os.path.join(self.app_state.save_path, folder), exist_ok=False)
             return True
         except Exception as e:
             self.feedback_manager.show_error('errors.error', tr('errors.folder_creation_failed', error=str(e)))
@@ -3408,7 +3297,7 @@ class DeltaHubApp(QWidget):
 
     def _update_collection_ui(self):
         chapter = self.save_tabs.currentIndex() + 1
-        idx = self.current_collection_idx.get(chapter, -1)
+        idx = self.app_state.current_collection_idx.get(chapter, -1)
         in_col = idx != -1
         cols = self._list_collections(chapter)
         self.switch_collection_btn.setText(tr('buttons.main_slots') if in_col else tr('buttons.additional_slots'))
@@ -3427,14 +3316,14 @@ class DeltaHubApp(QWidget):
 
     def _on_chapter_tab_changed(self):
         ch = self.save_tabs.currentIndex() + 1
-        if ch not in self.current_collection_idx:
-            self.current_collection_idx[ch] = -1
-        self.selected_slot = None
+        if ch not in self.app_state.current_collection_idx:
+            self.app_state.current_collection_idx[ch] = -1
+        self.app_state.selected_slot = None
         self._refresh_save_slots()
 
     def _rename_current_collection(self):
         chapter = self.save_tabs.currentIndex() + 1
-        idx = self.current_collection_idx.get(chapter, -1)
+        idx = self.app_state.current_collection_idx.get(chapter, -1)
         if idx == -1:
             return
         cols = self._list_collections(chapter)
@@ -3445,14 +3334,14 @@ class DeltaHubApp(QWidget):
             return
         new_folder = f'{new_name.strip()}_{idx}_{chapter}'
         try:
-            os.rename(os.path.join(self.save_path, old_folder), os.path.join(self.save_path, new_folder))
+            os.rename(os.path.join(self.app_state.save_path, old_folder), os.path.join(self.app_state.save_path, new_folder))
             self._refresh_save_slots()
         except Exception as e:
             self.feedback_manager.show_error('errors.error', tr('errors.rename_failed', error=str(e)))
 
     def _delete_current_collection(self):
         chapter = self.save_tabs.currentIndex() + 1
-        idx = self.current_collection_idx.get(chapter, -1)
+        idx = self.app_state.current_collection_idx.get(chapter, -1)
         if idx == -1:
             return
         cols = self._list_collections(chapter)
@@ -3460,33 +3349,33 @@ class DeltaHubApp(QWidget):
         if not self.feedback_manager.ask_question('dialogs.delete_collection', 'dialogs.delete_collection_confirmation', '', False):
             return
         try:
-            shutil.rmtree(os.path.join(self.save_path, folder))
+            shutil.rmtree(os.path.join(self.app_state.save_path, folder))
             remaining = self._list_collections(chapter)
             for new_idx, f in enumerate(remaining):
                 parts = f.rsplit('_', 2)
                 cur_idx = int(parts[1])
                 if cur_idx != new_idx:
                     new_folder = f'{parts[0]}_{new_idx}_{chapter}'
-                    os.rename(os.path.join(self.save_path, f), os.path.join(self.save_path, new_folder))
-            self.current_collection_idx[chapter] = -1
+                    os.rename(os.path.join(self.app_state.save_path, f), os.path.join(self.app_state.save_path, new_folder))
+            self.app_state.current_collection_idx[chapter] = -1
             self._refresh_save_slots()
         except Exception as e:
             self.feedback_manager.show_error('errors.error', tr('errors.deletion_failed', error=str(e)))
 
     def _copy_between_storages(self, to_collection: bool):
         chapter = self.save_tabs.currentIndex() + 1
-        if self.selected_slot is None or self.selected_slot[0] != chapter:
+        if self.app_state.selected_slot is None or self.app_state.selected_slot[0] != chapter:
             slot_indices = range(3)
         else:
-            slot_indices = [self.selected_slot[1]]
-        idx = self.current_collection_idx.get(chapter, -1)
+            slot_indices = [self.app_state.selected_slot[1]]
+        idx = self.app_state.current_collection_idx.get(chapter, -1)
         if idx == -1:
             return
-        src_dir = self.save_path if to_collection else self._get_collection_path(chapter, idx)
-        dst_dir = self._get_collection_path(chapter, idx) if to_collection else self.save_path
+        src_dir = self.app_state.save_path if to_collection else self._get_collection_path(chapter, idx)
+        dst_dir = self._get_collection_path(chapter, idx) if to_collection else self.app_state.save_path
         if not src_dir or not dst_dir:
             return
-        prompt = (tr('dialogs.overwrite_all_3_slots_collection') if to_collection else tr('dialogs.overwrite_all_3_main_slots')) if self.selected_slot is None else tr('dialogs.overwrite_selected_slot_collection') if to_collection else tr('dialogs.overwrite_selected_main_slot')
+        prompt = (tr('dialogs.overwrite_all_3_slots_collection') if to_collection else tr('dialogs.overwrite_all_3_main_slots')) if self.app_state.selected_slot is None else tr('dialogs.overwrite_selected_slot_collection') if to_collection else tr('dialogs.overwrite_selected_main_slot')
         if not self.feedback_manager.ask_question('dialogs.copy_confirmation', 'dialogs.copy_confirmation', prompt, False):
             return
         try:
@@ -3507,18 +3396,18 @@ class DeltaHubApp(QWidget):
             self.feedback_manager.update_status(tr('status.copying_error'), UI_COLORS['status_error'])
 
     def _action_show_save(self):
-        if not self.selected_slot:
+        if not self.app_state.selected_slot:
             return
-        ch, s = self.selected_slot
-        idx = self.current_collection_idx.get(ch, -1)
+        ch, s = self.app_state.selected_slot
+        idx = self.app_state.current_collection_idx.get(ch, -1)
         path = self._get_collection_path(ch, idx)
         QDesktopServices.openUrl(QUrl.fromLocalFile(path))
 
     def _action_delete_save(self):
-        if not self.selected_slot:
+        if not self.app_state.selected_slot:
             return
-        ch, s = self.selected_slot
-        idx = self.current_collection_idx.get(ch, -1)
+        ch, s = self.app_state.selected_slot
+        idx = self.app_state.current_collection_idx.get(ch, -1)
         base = self._get_collection_path(ch, idx)
         fp = os.path.join(base, f'filech{ch}_{s}')
         if not os.path.exists(fp):
@@ -3532,10 +3421,10 @@ class DeltaHubApp(QWidget):
             self.feedback_manager.show_error('errors.error', str(e))
 
     def _action_import_export(self, is_import: bool):
-        if not self.selected_slot:
+        if not self.app_state.selected_slot:
             return
-        ch, s = self.selected_slot
-        idx = self.current_collection_idx.get(ch, -1)
+        ch, s = self.app_state.selected_slot
+        idx = self.app_state.current_collection_idx.get(ch, -1)
         base_cur = self._get_collection_path(ch, idx)
         src_fp = os.path.join(base_cur, f'filech{ch}_{s}')
         choice, ok = QInputDialog.getItem(self, tr('dialogs.where_to') if not is_import else tr('dialogs.where_from'), tr('ui.select_storage'), [tr('dialogs.external_file') if is_import else tr('dialogs.external_folder'), tr('dialogs.additional_collection') if idx == -1 else tr('dialogs.main_slots')], 0, False)
@@ -3580,9 +3469,9 @@ class DeltaHubApp(QWidget):
                 sel, ok = QInputDialog.getItem(self, tr('ui.collections'), tr('ui.select'), cols, 0, False)
                 if not ok:
                     return
-                target_base = os.path.join(self.save_path, sel)
+                target_base = os.path.join(self.app_state.save_path, sel)
             else:
-                target_base = self.save_path
+                target_base = self.app_state.save_path
             src_main_fp = os.path.join(base_cur, f'filech{ch}_{s}')
             target_main_fp = os.path.join(target_base, f'filech{ch}_{s}')
             fin_idx = SAVE_SLOT_FINISH_MAP.get(s, -1)
@@ -3625,13 +3514,13 @@ class DeltaHubApp(QWidget):
             self.update()
 
     def _switch_settings_page(self, page: QWidget):
-        if self.current_settings_page and self.current_settings_page is not page:
-            self.settings_nav_stack.append(self.current_settings_page)
-            if len(self.settings_nav_stack) > 20:
-                self.settings_nav_stack.pop(0)
-            self.current_settings_page.setVisible(False)
+        if self.app_state.current_settings_page and self.app_state.current_settings_page is not page:
+            self.app_state.settings_nav_stack.append(self.app_state.current_settings_page)
+            if len(self.app_state.settings_nav_stack) > 20:
+                self.app_state.settings_nav_stack.pop(0)
+            self.app_state.current_settings_page.setVisible(False)
         page.setVisible(True)
-        self.current_settings_page = page
+        self.app_state.current_settings_page = page
 
     def _lock_window_size(self):
         try:
@@ -3651,12 +3540,12 @@ class DeltaHubApp(QWidget):
             pass
 
     def _go_back(self):
-        if hasattr(self, 'settings_nav_stack') and self.settings_nav_stack:
-            prev = self.settings_nav_stack.pop()
-            if self.current_settings_page:
-                self.current_settings_page.setVisible(False)
+        if hasattr(self, 'settings_nav_stack') and self.app_state.settings_nav_stack:
+            prev = self.app_state.settings_nav_stack.pop()
+            if self.app_state.current_settings_page:
+                self.app_state.current_settings_page.setVisible(False)
             prev.setVisible(True)
-            self.current_settings_page = prev
+            self.app_state.current_settings_page = prev
         else:
             self._toggle_settings_view()
 
@@ -3667,7 +3556,7 @@ class DeltaHubApp(QWidget):
         elif self.background_pixmap:
             painter.drawPixmap(self.rect(), self.background_pixmap)
         else:
-            bg_color_str = self.local_config.get('custom_color_background') or 'rgba(0, 0, 0, 200)'
+            bg_color_str = self.app_state.local_config.get('custom_color_background') or 'rgba(0, 0, 0, 200)'
             try:
                 painter.fillRect(self.rect(), QColor(bg_color_str))
             except Exception:
@@ -3677,17 +3566,17 @@ class DeltaHubApp(QWidget):
     def _on_reset_settings_click(self):
         if self.feedback_manager.ask_question('dialogs.reset_settings_confirm_title', 'dialogs.reset_settings_confirm_text', '', False):
             self._stop_background_music()
-            language = self.local_config.get('language', 'en')
-            custom_files = [os.path.join(self.config_dir, 'custom_background_music.mp3'), os.path.join(self.config_dir, 'custom_background_music.wav'), os.path.join(self.config_dir, 'custom_startup_sound.mp3'), os.path.join(self.config_dir, 'custom_startup_sound.wav')]
+            language = self.app_state.local_config.get('language', 'en')
+            custom_files = [os.path.join(self.app_state.config_dir, 'custom_background_music.mp3'), os.path.join(self.app_state.config_dir, 'custom_background_music.wav'), os.path.join(self.app_state.config_dir, 'custom_startup_sound.mp3'), os.path.join(self.app_state.config_dir, 'custom_startup_sound.wav')]
             for file_path in custom_files:
                 if os.path.exists(file_path):
                     os.remove(file_path)
-            self.local_config.clear()
-            self.local_config['language'] = language
+            self.app_state.local_config.clear()
+            self.app_state.local_config['language'] = language
             config_keys_to_clear = ['saved_slots_deltarune', 'saved_slots_deltarune_chapter', 'saved_slots_deltarunedemo', 'saved_slots_undertale']
             for key in config_keys_to_clear:
-                if key in self.local_config:
-                    del self.local_config[key]
+                if key in self.app_state.local_config:
+                    del self.app_state.local_config[key]
             self._write_local_config()
             self._load_local_data()
             self._migrate_config_if_needed()
@@ -3716,33 +3605,33 @@ class DeltaHubApp(QWidget):
             self.repaint()
 
     def _on_background_button_click(self):
-        if self.local_config.get('custom_background_path'):
-            self.local_config['custom_background_path'] = ''
+        if self.app_state.local_config.get('custom_background_path'):
+            self.app_state.local_config['custom_background_path'] = ''
         else:
             filepath, _ = QFileDialog.getOpenFileName(self, tr('ui.select_background_image'), '', get_file_filter('background_images'))
             if not filepath:
                 return
-            self.local_config['custom_background_path'] = filepath
+            self.app_state.local_config['custom_background_path'] = filepath
         self._write_local_config()
         self.apply_theme()
         self._update_background_button_state()
 
     def _update_background_button_state(self):
-        background_disabled = self.local_config.get('background_disabled', False)
+        background_disabled = self.app_state.local_config.get('background_disabled', False)
         self.change_background_button.setEnabled(not background_disabled)
-        self.change_background_button.setText(tr('buttons.remove_background') if self.local_config.get('custom_background_path') else tr('buttons.change_background'))
+        self.change_background_button.setText(tr('buttons.remove_background') if self.app_state.local_config.get('custom_background_path') else tr('buttons.change_background'))
 
     def _toggle_settings_view(self, show_changelog=False):
         if show_changelog:
-            self.is_changelog_view = not self.is_changelog_view
+            self.app_state.is_changelog_view = not self.app_state.is_changelog_view
         else:
-            self.is_settings_view = not self.is_settings_view
-            if not self.is_settings_view:
-                if self.is_save_manager_view:
+            self.app_state.is_settings_view = not self.app_state.is_settings_view
+            if not self.app_state.is_settings_view:
+                if self.app_state.is_save_manager_view:
                     self._on_configure_saves_click()
-                if self.is_changelog_view:
-                    self.is_changelog_view = False
-        if self.is_settings_view:
+                if self.app_state.is_changelog_view:
+                    self.app_state.is_changelog_view = False
+        if self.app_state.is_settings_view:
             self._lock_window_size()
             self.settings_button.setText(tr('ui.back_button'))
             self.tab_widget.setVisible(False)
@@ -3767,18 +3656,18 @@ class DeltaHubApp(QWidget):
         self._toggle_settings_view(show_changelog=True)
 
     def _toggle_help_view(self):
-        self.is_help_view = not self.is_help_view
-        if self.is_help_view and self.is_changelog_view:
-            self.is_changelog_view = False
-        if self.is_help_view:
+        self.app_state.is_help_view = not self.app_state.is_help_view
+        if self.app_state.is_help_view and self.app_state.is_changelog_view:
+            self.app_state.is_changelog_view = False
+        if self.app_state.is_help_view:
             self._load_help_content()
         self._update_settings_page_visibility()
 
     def _load_help_content(self):
         if localization_manager.get_current_language() == 'ru':
-            help_url = self.global_settings.get('help_ru_url', self.global_settings.get('help_url', ''))
+            help_url = self.app_state.global_settings.get('help_ru_url', self.app_state.global_settings.get('help_url', ''))
         else:
-            help_url = self.global_settings.get('help_en_url', self.global_settings.get('help_url', ''))
+            help_url = self.app_state.global_settings.get('help_en_url', self.app_state.global_settings.get('help_url', ''))
         if not help_url:
             self.help_text_edit.setMarkdown(f"<i>{tr('dialogs.help_not_available')}</i>")
             return
@@ -3791,8 +3680,8 @@ class DeltaHubApp(QWidget):
         self.help_text_edit.setMarkdown(content)
 
     def _update_settings_page_visibility(self):
-        is_changelog = self.is_changelog_view
-        is_help = self.is_help_view
+        is_changelog = self.app_state.is_changelog_view
+        is_help = self.app_state.is_help_view
         self.settings_pages_container.setVisible(not is_changelog and (not is_help))
         self.changelog_widget.setVisible(is_changelog)
         self.help_widget.setVisible(is_help)
@@ -3801,7 +3690,7 @@ class DeltaHubApp(QWidget):
 
     def _on_toggle_disable_background(self, state):
         is_disabled = bool(state)
-        self.local_config['background_disabled'] = is_disabled
+        self.app_state.local_config['background_disabled'] = is_disabled
         self._write_local_config()
         self._update_background_button_state()
         self.apply_theme()
@@ -3809,12 +3698,12 @@ class DeltaHubApp(QWidget):
 
     def _on_toggle_disable_splash(self, state):
         is_disabled = bool(state)
-        self.local_config['disable_splash'] = is_disabled
+        self.app_state.local_config['disable_splash'] = is_disabled
         self._write_local_config()
 
     def _on_toggle_hide_library_filters(self, state):
         is_hidden = bool(state)
-        self.local_config['hide_library_filters'] = is_hidden
+        self.app_state.local_config['hide_library_filters'] = is_hidden
         self._write_local_config()
         if hasattr(self, 'library_filters_widget'):
             self.library_filters_widget.setVisible(not is_hidden)
@@ -3826,13 +3715,13 @@ class DeltaHubApp(QWidget):
         for key, widget in self.color_widgets.items():
             color = widget.text()
             config_key = f'custom_color_{key}'
-            self.local_config[config_key] = color if self._is_valid_hex_color(color) else ''
+            self.app_state.local_config[config_key] = color if self._is_valid_hex_color(color) else ''
         self._write_local_config()
         self.apply_theme()
         self._update_dynamic_elements()
 
     def _update_dynamic_elements(self):
-        if hasattr(self, 'slots'):
+        if hasattr(self.app_state, 'slots'):
             self._update_slots_display()
         self._update_chapter_indicators_style()
         if hasattr(self, 'sort_combo') and hasattr(self, 'sort_order_btn'):
@@ -3847,8 +3736,8 @@ class DeltaHubApp(QWidget):
                     item0 = layout.itemAt(0)
                     filters = item0.widget() if item0 is not None else None
                     if filters and filters.objectName() == 'filters':
-                        filter_bg_color = self.local_config.get('custom_color_background') or 'rgba(0, 0, 0, 150)'
-                        filter_border_color = self.local_config.get('custom_color_border') or 'white'
+                        filter_bg_color = self.app_state.local_config.get('custom_color_background') or 'rgba(0, 0, 0, 150)'
+                        filter_border_color = self.app_state.local_config.get('custom_color_border') or 'white'
                         filters.setStyleSheet(f'QFrame#filters {{ background-color: {filter_bg_color}; border: 2px solid {filter_border_color}; padding: 8px; }}')
                 elif layout:
                     new_filters = self._create_filters_widget()
@@ -3880,7 +3769,7 @@ class DeltaHubApp(QWidget):
         for key, widget in self.color_widgets.items():
             config_key = f'custom_color_{key}'
             placeholder = theme_defaults['colors'].get(key, '#000000')
-            widget.setText(self.local_config.get(config_key, ''))
+            widget.setText(self.app_state.local_config.get(config_key, ''))
             widget.setPlaceholderText(placeholder)
         self.apply_theme()
 
@@ -3909,8 +3798,8 @@ class DeltaHubApp(QWidget):
         self.launcher_icon_label.setPixmap(fallback_pixmap)
 
     def _get_background_music_path(self):
-        mp3_path = os.path.join(self.config_dir, 'custom_background_music.mp3')
-        wav_path = os.path.join(self.config_dir, 'custom_background_music.wav')
+        mp3_path = os.path.join(self.app_state.config_dir, 'custom_background_music.mp3')
+        wav_path = os.path.join(self.app_state.config_dir, 'custom_background_music.wav')
         if os.path.exists(mp3_path):
             return mp3_path
         if os.path.exists(wav_path):
@@ -3918,8 +3807,8 @@ class DeltaHubApp(QWidget):
         return ''
 
     def _get_startup_sound_path(self):
-        mp3 = os.path.join(self.config_dir, 'custom_startup_sound.mp3')
-        wav = os.path.join(self.config_dir, 'custom_startup_sound.wav')
+        mp3 = os.path.join(self.app_state.config_dir, 'custom_startup_sound.mp3')
+        wav = os.path.join(self.app_state.config_dir, 'custom_startup_sound.wav')
         if os.path.exists(mp3):
             return mp3
         if os.path.exists(wav):
@@ -3927,8 +3816,8 @@ class DeltaHubApp(QWidget):
         return ''
 
     def _get_background_music_button_text(self):
-        mp3 = os.path.join(self.config_dir, 'custom_background_music.mp3')
-        wav = os.path.join(self.config_dir, 'custom_background_music.wav')
+        mp3 = os.path.join(self.app_state.config_dir, 'custom_background_music.mp3')
+        wav = os.path.join(self.app_state.config_dir, 'custom_background_music.wav')
         custom_exists = os.path.exists(mp3) or os.path.exists(wav)
         return tr('buttons.remove_background_music') if custom_exists else tr('buttons.select_background_music')
 
@@ -3938,8 +3827,8 @@ class DeltaHubApp(QWidget):
         return tr('buttons.select_startup_sound')
 
     def _on_background_music_button_click(self):
-        mp3 = os.path.join(self.config_dir, 'custom_background_music.mp3')
-        wav = os.path.join(self.config_dir, 'custom_background_music.wav')
+        mp3 = os.path.join(self.app_state.config_dir, 'custom_background_music.mp3')
+        wav = os.path.join(self.app_state.config_dir, 'custom_background_music.wav')
         custom_exists = os.path.exists(mp3) or os.path.exists(wav)
         if custom_exists:
             try:
@@ -3964,9 +3853,9 @@ class DeltaHubApp(QWidget):
                     return
                 try:
                     self._stop_background_music()
-                    os.makedirs(self.config_dir, exist_ok=True)
+                    os.makedirs(self.app_state.config_dir, exist_ok=True)
                     ext = '.mp3' if lower.endswith('.mp3') else '.wav'
-                    dest_path = os.path.join(self.config_dir, f'custom_background_music{ext}')
+                    dest_path = os.path.join(self.app_state.config_dir, f'custom_background_music{ext}')
                     shutil.copy2(file_path, dest_path)
                     self.background_music_button.setText(self._get_background_music_button_text())
                     self._maybe_start_background_music()
@@ -3976,8 +3865,8 @@ class DeltaHubApp(QWidget):
                     self.feedback_manager.show_warning('errors.error', tr('errors.copy_background_music_failed'))
 
     def _on_startup_sound_button_click(self):
-        mp3 = os.path.join(self.config_dir, 'custom_startup_sound.mp3')
-        wav = os.path.join(self.config_dir, 'custom_startup_sound.wav')
+        mp3 = os.path.join(self.app_state.config_dir, 'custom_startup_sound.mp3')
+        wav = os.path.join(self.app_state.config_dir, 'custom_startup_sound.wav')
         existing = self._get_startup_sound_path()
         if existing:
             try:
@@ -4000,9 +3889,9 @@ class DeltaHubApp(QWidget):
                     self.feedback_manager.show_warning('errors.error', 'Можно выбрать только MP3 или WAV файл')
                     return
                 try:
-                    os.makedirs(self.config_dir, exist_ok=True)
+                    os.makedirs(self.app_state.config_dir, exist_ok=True)
                     ext = '.mp3' if lower.endswith('.mp3') else '.wav'
-                    dest = os.path.join(self.config_dir, f'custom_startup_sound{ext}')
+                    dest = os.path.join(self.app_state.config_dir, f'custom_startup_sound{ext}')
                     shutil.copy2(file_path, dest)
                     self.startup_sound_button.setText(self._get_startup_sound_button_text())
                     self.feedback_manager.show_info('dialogs.success', tr('dialogs.startup_sound_selected'))
@@ -4088,7 +3977,7 @@ class DeltaHubApp(QWidget):
             music_path = self._get_background_music_path()
             if not music_path or not os.path.exists(music_path):
                 return
-            if self.initialization_completed and getattr(self, 'is_shown_to_user', False) and self.isVisible():
+            if self.app_state.initialization_completed and getattr(self, 'is_shown_to_user', False) and self.isVisible():
                 self._start_background_music()
             else:
                 QTimer.singleShot(500, self._maybe_start_background_music)
@@ -4096,15 +3985,15 @@ class DeltaHubApp(QWidget):
             pass
 
     def _on_toggle_direct_launch_for_slot(self, slot_id):
-        if not self.game_mode.direct_launch_allowed:
+        if not self.app_state.game_mode.direct_launch_allowed:
             return
-        if self.local_config.get('launch_via_steam', False):
+        if self.app_state.local_config.get('launch_via_steam', False):
             self.feedback_manager.show_warning('dialogs.incompatibility', tr('dialogs.direct_launch_steam_incompatible'))
             return
         if platform.system() == 'Darwin':
             self.feedback_manager.show_warning('dialogs.incompatibility', tr('dialogs.direct_launch_macos_incompatible'))
             return
-        self.local_config['direct_launch_slot_id'] = slot_id
+        self.app_state.local_config['direct_launch_slot_id'] = slot_id
         self._write_local_config()
         self._update_all_slots_visual_state()
         self.launch_via_steam_checkbox.setEnabled(False)
@@ -4114,11 +4003,11 @@ class DeltaHubApp(QWidget):
             self.action_button.setText(tr('ui.cancel_button'))
             self.action_button.setEnabled(True)
             return
-        if not self.initialization_completed:
+        if not self.app_state.initialization_completed:
             self.action_button.setText(tr('status.please_wait'))
             self.action_button.setEnabled(False)
             return
-        is_demo_mode = isinstance(self.game_mode, DemoGameMode)
+        is_demo_mode = isinstance(self.app_state.game_mode, DemoGameMode)
         is_full_install_enabled = is_demo_mode and hasattr(self, 'full_install_checkbox') and self.full_install_checkbox.isChecked()
         if is_full_install_enabled:
             action_text = tr('buttons.install')
@@ -4130,18 +4019,18 @@ class DeltaHubApp(QWidget):
         self.action_button.setEnabled(True)
 
     def _disable_direct_launch(self):
-        self.local_config['direct_launch_slot_id'] = -1
+        self.app_state.local_config['direct_launch_slot_id'] = -1
         self._write_local_config()
         self._update_all_slots_visual_state()
         self.launch_via_steam_checkbox.setEnabled(True)
 
     def _update_all_slots_visual_state(self):
-        if hasattr(self, 'slots'):
-            for slot in self.slots.values():
+        if hasattr(self.app_state, 'slots'):
+            for slot in self.app_state.slots.values():
                 self._update_slot_visual_state(slot)
 
     def _initialize_mutual_exclusions(self):
-        is_direct_launch = self.local_config.get('direct_launch_slot_id', -1) >= 0 and self.game_mode.direct_launch_allowed and (platform.system() != 'Darwin')
+        is_direct_launch = self.app_state.local_config.get('direct_launch_slot_id', -1) >= 0 and self.app_state.game_mode.direct_launch_allowed and (platform.system() != 'Darwin')
         if not hasattr(self, 'launch_via_steam_checkbox'):
             return
         if is_direct_launch:
@@ -4154,13 +4043,13 @@ class DeltaHubApp(QWidget):
             from config.constants import CLOUD_FUNCTIONS_BASE_URL
             response = requests.get(f'{CLOUD_FUNCTIONS_BASE_URL}/getGlobalSettings', timeout=5)
             if response.status_code == 200:
-                self.global_settings = response.json() or {}
+                self.app_state.global_settings = response.json() or {}
         except requests.RequestException:
             self.feedback_manager.update_status(tr('status.global_settings_load_failed'), UI_COLORS['status_warning'])
         if localization_manager.get_current_language() == 'ru':
-            changelog_url = self.global_settings.get('changelog_ru_url', self.global_settings.get('changelog_url'))
+            changelog_url = self.app_state.global_settings.get('changelog_ru_url', self.app_state.global_settings.get('changelog_url'))
         else:
-            changelog_url = self.global_settings.get('changelog_en_url', self.global_settings.get('changelog_url'))
+            changelog_url = self.app_state.global_settings.get('changelog_en_url', self.app_state.global_settings.get('changelog_url'))
         if changelog_url:
             changelog_thread = FetchChangelogThread(changelog_url.strip(), self)
             changelog_thread.finished.connect(self.changelog_text_edit.setMarkdown)
@@ -4172,10 +4061,10 @@ class DeltaHubApp(QWidget):
             self.feedback_manager.update_status(tr('status.deltarune_already_running'), UI_COLORS['status_error'])
             return
         self._load_local_data()
-        self.game_path = self.local_config.get('game_path', '')
-        self.demo_game_path = self.local_config.get('demo_game_path', '')
-        saved_demo_mode = self.local_config.get('demo_mode_enabled', False)
-        saved_chapter_mode = self.local_config.get('chapter_mode_enabled', False)
+        self.app_state.game_path = self.app_state.local_config.get('game_path', '')
+        self.app_state.demo_game_path = self.app_state.local_config.get('demo_game_path', '')
+        saved_demo_mode = self.app_state.local_config.get('demo_mode_enabled', False)
+        saved_chapter_mode = self.app_state.local_config.get('chapter_mode_enabled', False)
         if hasattr(self, 'game_type_combo') and saved_demo_mode:
             self.game_type_combo.blockSignals(True)
             for i in range(self.game_type_combo.count()):
@@ -4188,20 +4077,20 @@ class DeltaHubApp(QWidget):
             self.chapter_mode_checkbox.setChecked(saved_chapter_mode)
             self.chapter_mode_checkbox.blockSignals(False)
         self.disable_background_checkbox.blockSignals(True)
-        self.disable_background_checkbox.setChecked(self.local_config.get('background_disabled', False))
+        self.disable_background_checkbox.setChecked(self.app_state.local_config.get('background_disabled', False))
         self.disable_background_checkbox.blockSignals(False)
         self.disable_splash_checkbox.blockSignals(True)
-        self.disable_splash_checkbox.setChecked(self.local_config.get('disable_splash', False))
-        self.beta_updates_checkbox.setChecked(self.local_config.get('beta_updates_enabled', False))
-        self.fullscreen_checkbox.setChecked(self.local_config.get('fullscreen_enabled', False))
+        self.disable_splash_checkbox.setChecked(self.app_state.local_config.get('disable_splash', False))
+        self.beta_updates_checkbox.setChecked(self.app_state.local_config.get('beta_updates_enabled', False))
+        self.fullscreen_checkbox.setChecked(self.app_state.local_config.get('fullscreen_enabled', False))
         if hasattr(self, 'hide_library_filters_checkbox'):
-            self.hide_library_filters_checkbox.setChecked(self.local_config.get('hide_library_filters', False))
+            self.hide_library_filters_checkbox.setChecked(self.app_state.local_config.get('hide_library_filters', False))
         self.disable_splash_checkbox.blockSignals(False)
         self._update_change_path_button_text()
         self._update_background_button_state()
         self._migrate_config_if_needed()
-        self.use_custom_executable_checkbox.setChecked(self.local_config.get('use_custom_executable', False))
-        self.launch_via_steam_checkbox.setChecked(self.local_config.get('launch_via_steam', False))
+        self.use_custom_executable_checkbox.setChecked(self.app_state.local_config.get('use_custom_executable', False))
+        self.launch_via_steam_checkbox.setChecked(self.app_state.local_config.get('launch_via_steam', False))
         self._initialize_mutual_exclusions()
         self._on_toggle_steam_launch()
         self._update_all_slots_visual_state()
@@ -4219,11 +4108,11 @@ class DeltaHubApp(QWidget):
             return
         try:
             home_dir = os.path.expanduser('~')
-            if isinstance(self.game_mode, UndertaleGameMode):
+            if isinstance(self.app_state.game_mode, UndertaleGameMode):
                 game_name = 'UNDERTALE'
             else:
                 game_name = 'DELTARUNE'
-            steam_app_id = self.game_mode.steam_id
+            steam_app_id = self.app_state.game_mode.steam_id
             native_save_path = os.path.join(home_dir, '.config', game_name)
             proton_save_path = os.path.join(home_dir, '.steam', 'steam', 'steamapps', 'compatdata', steam_app_id, 'pfx', 'drive_c', 'users', 'steamuser', 'AppData', 'Local', game_name)
             if not os.path.isdir(proton_save_path):
@@ -4252,12 +4141,12 @@ class DeltaHubApp(QWidget):
             return 'Linux'
 
     def _check_for_launcher_updates(self):
-        beta_enabled = self.local_config.get('beta_updates_enabled', False)
+        beta_enabled = self.app_state.local_config.get('beta_updates_enabled', False)
         if beta_enabled:
             self.feedback_manager.update_status(tr('status.beta_updates_enabled'), UI_COLORS['status_warning'])
         try:
             launcher_files_key = 'launcher_beta_files' if beta_enabled else 'launcher_files'
-            launcher_files = self.global_settings.get(launcher_files_key)
+            launcher_files = self.app_state.global_settings.get(launcher_files_key)
             if not isinstance(launcher_files, dict):
                 self.feedback_manager.update_status(tr('status.update_info_not_found'), UI_COLORS['status_warning'])
                 return
@@ -4283,7 +4172,7 @@ class DeltaHubApp(QWidget):
             self.feedback_manager.update_status(tr('errors.update_check_general_error', error=str(e)), UI_COLORS['status_error'])
 
     def _handle_update_info(self, update_info):
-        if self.initialization_completed and getattr(self, 'is_shown_to_user', False):
+        if self.app_state.initialization_completed and getattr(self, 'is_shown_to_user', False):
             self.show_update_prompt.emit(update_info)
         else:
             QTimer.singleShot(1000, lambda: self._handle_update_info(update_info))
@@ -4291,7 +4180,7 @@ class DeltaHubApp(QWidget):
     def _maybe_run_legacy_cleanup(self):
         if self._legacy_cleanup_done:
             return
-        if self.initialization_completed and getattr(self, 'is_shown_to_user', False):
+        if self.app_state.initialization_completed and getattr(self, 'is_shown_to_user', False):
             self._cleanup_legacy_ylauncher_folder()
             self._legacy_cleanup_done = True
         else:
@@ -4310,9 +4199,9 @@ class DeltaHubApp(QWidget):
             pass
 
     def _prompt_for_update(self, update_info):
-        if self.update_in_progress:
+        if self.app_state.update_in_progress:
             return
-        self.update_in_progress = True
+        self.app_state.update_in_progress = True
 
         # Build the update message with proper formatting like in the old version
         update_message = f"<b>{tr('dialogs.new_version_banner', version=update_info['version']).replace('<br>', '')}</b><br>"
@@ -4329,7 +4218,7 @@ class DeltaHubApp(QWidget):
         if self.feedback_manager.ask_question('status.update_available', 'status.update_available', update_message, True):
             self._perform_update(update_info)
         else:
-            self.update_in_progress = False
+            self.app_state.update_in_progress = False
             self.feedback_manager.update_status(tr('status.update_rejected'), UI_COLORS['status_info'])
 
     def _perform_update(self, update_info):
@@ -4341,7 +4230,7 @@ class DeltaHubApp(QWidget):
         except Exception:
             pass
         self.settings_button.setEnabled(False)
-        if not self.is_settings_view:
+        if not self.app_state.is_settings_view:
             self.tab_widget.setEnabled(False)
         self.progress_bar.setVisible(True)
         self.progress_bar.setValue(0)
@@ -4352,9 +4241,9 @@ class DeltaHubApp(QWidget):
             self.progress_bar.setVisible(False)
         except Exception:
             pass
-        self.update_in_progress = False
+        self.app_state.update_in_progress = False
         try:
-            if not self.is_settings_view:
+            if not self.app_state.is_settings_view:
                 self.tab_widget.setEnabled(True)
             for w in [self.action_button, self.saves_button, self.shortcut_button, self.change_path_button, self.change_background_button]:
                 w.setEnabled(True)
@@ -4432,7 +4321,7 @@ class DeltaHubApp(QWidget):
             self.update_cleanup.emit()
 
     def _on_action_button_click(self):
-        if self.is_installing and self.current_install_thread:
+        if self.app_state.is_installing and self.current_install_thread:
             self._operation_cancelled = True
             self.feedback_manager.update_status(tr('status.operation_cancelled'), UI_COLORS['status_error'])
             try:
@@ -4445,10 +4334,10 @@ class DeltaHubApp(QWidget):
             except Exception:
                 pass
             return
-        if isinstance(self.game_mode, DemoGameMode) and getattr(self, 'full_install_checkbox', None) is not None and self.full_install_checkbox.isChecked():
+        if isinstance(self.app_state.game_mode, DemoGameMode) and getattr(self, 'full_install_checkbox', None) is not None and self.full_install_checkbox.isChecked():
             self._perform_full_install()
             return
-        if self.is_installing:
+        if self.app_state.is_installing:
             return
         if self._check_active_slots_need_updates():
             self._update_mods_in_active_slots()
@@ -4506,8 +4395,8 @@ class DeltaHubApp(QWidget):
             self._load_local_mods_from_folders()
             if hasattr(self, 'mod_list_layout'):
                 self._populate_search_mods()
-                if not self.mods_loaded:
-                    self.mods_loaded = True
+                if not self.app_state.mods_loaded:
+                    self.app_state.mods_loaded = True
                     self.mods_loaded_signal.emit()
             if hasattr(self, 'installed_mods_layout'):
                 self._update_installed_mods_display()
@@ -4517,19 +4406,19 @@ class DeltaHubApp(QWidget):
             if success:
                 self.feedback_manager.update_status(tr('status.mod_list_updated'), UI_COLORS['status_success'])
             else:
-                fallback_msg = tr('ui.network_fallback_message') if self.all_mods else tr('ui.network_update_failed')
+                fallback_msg = tr('ui.network_fallback_message') if self.app_state.all_mods else tr('ui.network_update_failed')
                 self.feedback_manager.update_status(fallback_msg, UI_COLORS['status_error'])
         except Exception as e:
             self.feedback_manager.update_status(tr('errors.mod_list_processing_error', error=str(e)), UI_COLORS['status_error'])
 
     def _refresh_mods_in_slots(self):
-        if not hasattr(self, 'slots') or not self.all_mods:
+        if not hasattr(self, 'slots') or not self.app_state.all_mods:
             return
-        for slot_frame in self.slots.values():
+        for slot_frame in self.app_state.slots.values():
             if slot_frame.assigned_mod:
                 old_mod = slot_frame.assigned_mod
                 mod_key = getattr(old_mod, 'key', None) or getattr(old_mod, 'mod_key', None)
-                for updated_mod in self.all_mods:
+                for updated_mod in self.app_state.all_mods:
                     updated_mod_key = getattr(updated_mod, 'key', None) or getattr(updated_mod, 'mod_key', None)
                     if updated_mod_key == mod_key:
                         slot_frame.assigned_mod = updated_mod
@@ -4547,7 +4436,7 @@ class DeltaHubApp(QWidget):
                     shutil.rmtree(temp_root, ignore_errors=True)
             except Exception:
                 pass
-        self.is_installing = False
+        self.app_state.is_installing = False
         self._set_install_buttons_enabled(True)
         self.current_install_thread = None
         if success:
@@ -4555,12 +4444,12 @@ class DeltaHubApp(QWidget):
             self.feedback_manager.update_status(tr('status.installation_complete'), UI_COLORS['status_success'])
             self._update_installed_mods_display()
         self._update_action_button_state()
-        if hasattr(self, 'full_install_checkbox') and self.full_install_checkbox is not None and isinstance(self.game_mode, DemoGameMode):
+        if hasattr(self, 'full_install_checkbox') and self.full_install_checkbox is not None and isinstance(self.app_state.game_mode, DemoGameMode):
             self.full_install_checkbox.setEnabled(True)
         self._update_action_button_state()
 
     def _perform_full_install(self):
-        if self.is_installing:
+        if self.app_state.is_installing:
             return
         if hasattr(self, 'full_install_thread') and self.full_install_thread and self.full_install_thread.isRunning():
             return
@@ -4607,12 +4496,12 @@ class DeltaHubApp(QWidget):
         self.full_install_checkbox.setChecked(False)
         self.full_install_checkbox.blockSignals(False)
         if success:
-            if isinstance(self.game_mode, DemoGameMode):
-                self.demo_game_path = target_dir
-                self.local_config['demo_game_path'] = target_dir
+            if isinstance(self.app_state.game_mode, DemoGameMode):
+                self.app_state.demo_game_path = target_dir
+                self.app_state.local_config['demo_game_path'] = target_dir
             else:
-                self.game_path = target_dir
-                self.local_config['game_path'] = target_dir
+                self.app_state.game_path = target_dir
+                self.app_state.local_config['game_path'] = target_dir
             self._write_local_config()
             self.feedback_manager.update_status(tr('status.game_files_install_complete'), UI_COLORS['status_success'])
             self._update_action_button_state()
@@ -4638,13 +4527,13 @@ class DeltaHubApp(QWidget):
             for ui_index, mod_key in selections.items():
                 if mod_key == 'no_change':
                     continue
-                chapter_id = self.game_mode.get_chapter_id(ui_index)
-                mod = next((m for m in self.all_mods if m.key == mod_key), None)
+                chapter_id = self.app_state.game_mode.get_chapter_id(ui_index)
+                mod = next((m for m in self.app_state.all_mods if m.key == mod_key), None)
                 if not mod:
                     continue
                 is_local = mod_key.startswith('local_')
                 folder_name = sanitize_filename(mod.name)
-                source_dir = os.path.join(self.mods_dir, folder_name)
+                source_dir = os.path.join(self.app_state.mods_dir, folder_name)
                 if not os.path.isdir(source_dir):
                     self.feedback_manager.update_status(tr('errors.mod_folder_not_found', mod_name=mod.name, path=source_dir), UI_COLORS['status_warning'])
                     continue
@@ -4951,11 +4840,11 @@ class DeltaHubApp(QWidget):
         return extracted_files
 
     def _determine_launch_config(self, selections: Dict[int, str]) -> Optional[Dict[str, Any]]:
-        use_steam = self.local_config.get('launch_via_steam', False)
-        direct_launch_slot_id = self.local_config.get('direct_launch_slot_id', -1)
-        direct_launch = direct_launch_slot_id > 0 and self.game_mode.direct_launch_allowed and (platform.system() != 'Darwin')
+        use_steam = self.app_state.local_config.get('launch_via_steam', False)
+        direct_launch_slot_id = self.app_state.local_config.get('direct_launch_slot_id', -1)
+        direct_launch = direct_launch_slot_id > 0 and self.app_state.game_mode.direct_launch_allowed and (platform.system() != 'Darwin')
         if use_steam:
-            return {'target': f'steam://rungameid/{self.game_mode.steam_id}', 'cwd': None, 'type': 'webbrowser'}
+            return {'target': f'steam://rungameid/{self.app_state.game_mode.steam_id}', 'cwd': None, 'type': 'webbrowser'}
         if direct_launch:
             return self._handle_direct_launch(direct_launch_slot_id)
         launch_target = self._get_executable_path()
@@ -4965,9 +4854,9 @@ class DeltaHubApp(QWidget):
         return {'target': launch_target, 'cwd': self._get_current_game_path(), 'type': 'subprocess'}
 
     def _handle_direct_launch(self, selected_tab_index: int) -> Optional[Dict[str, Any]]:
-        chapter_folder = self._get_target_dir(self.game_mode.get_chapter_id(selected_tab_index))
+        chapter_folder = self._get_target_dir(self.app_state.game_mode.get_chapter_id(selected_tab_index))
         source_exe = self._get_source_executable_path()
-        use_custom_exe = self.local_config.get('use_custom_executable', False)
+        use_custom_exe = self.app_state.local_config.get('use_custom_executable', False)
         if not chapter_folder or not source_exe:
             self.feedback_manager.update_status(tr('errors.direct_launch_error'), UI_COLORS['status_error'])
             return None
@@ -4977,7 +4866,7 @@ class DeltaHubApp(QWidget):
             if use_custom_exe:
                 target_exe = os.path.join(chapter_folder, os.path.basename(source_exe))
             else:
-                exe_name = 'UNDERTALE.exe' if isinstance(self.game_mode, UndertaleGameMode) else 'DELTARUNE.exe'
+                exe_name = 'UNDERTALE.exe' if isinstance(self.app_state.game_mode, UndertaleGameMode) else 'DELTARUNE.exe'
                 target_exe = os.path.join(chapter_folder, exe_name)
             shutil.copy2(source_exe, target_exe)
             self._direct_launch_cleanup_info = {'target_exe': target_exe, 'source_exe': source_exe, 'chapter_folder': chapter_folder, 'use_custom_exe': use_custom_exe}
@@ -4995,9 +4884,9 @@ class DeltaHubApp(QWidget):
             if cleanup_info and cleanup_info.get('save_collection_swap'):
                 collection_path = cleanup_info.get('collection_path')
                 backup_path = cleanup_info.get('backup_path')
-                current_save_path = self.save_path
+                current_save_path = self.app_state.save_path
                 if not is_valid_save_path(current_save_path):
-                    current_save_path = self.local_config.get('save_path') or get_default_save_path()
+                    current_save_path = self.app_state.local_config.get('save_path') or get_default_save_path()
                 if collection_path and backup_path and is_valid_save_path(current_save_path):
                     if os.path.exists(collection_path):
                         shutil.rmtree(collection_path)
@@ -5078,24 +4967,24 @@ class DeltaHubApp(QWidget):
 
     def _get_slot_selections(self):
         selections = {}
-        if not hasattr(self, 'slots'):
+        if not hasattr(self.app_state, 'slots'):
             return selections
-        is_demo_mode = isinstance(self.game_mode, DemoGameMode)
-        is_undertale_mode = isinstance(self.game_mode, UndertaleGameMode)
+        is_demo_mode = isinstance(self.app_state.game_mode, DemoGameMode)
+        is_undertale_mode = isinstance(self.app_state.game_mode, UndertaleGameMode)
         if is_demo_mode:
-            demo_slot = self.slots.get(-10)
+            demo_slot = self.app_state.slots.get(-10)
             if demo_slot and demo_slot.assigned_mod:
                 selections[-1] = demo_slot.assigned_mod.key
             else:
                 selections[-1] = 'no_change'
         elif is_undertale_mode:
-            undertale_slot = self.slots.get(-20)
+            undertale_slot = self.app_state.slots.get(-20)
             if undertale_slot and undertale_slot.assigned_mod:
                 selections[-1] = undertale_slot.assigned_mod.key
             else:
                 selections[-1] = 'no_change'
-        elif self.current_mode == 'normal':
-            universal_slot = self.slots.get(-1)
+        elif self.app_state.current_mode == 'normal':
+            universal_slot = self.app_state.slots.get(-1)
             if universal_slot and universal_slot.assigned_mod:
                 mod = universal_slot.assigned_mod
                 for chapter_id in range(5):
@@ -5106,9 +4995,9 @@ class DeltaHubApp(QWidget):
             else:
                 for chapter_id in range(5):
                     selections[chapter_id] = 'no_change'
-        elif self.current_mode == 'chapter':
+        elif self.app_state.current_mode == 'chapter':
             for chapter_id in range(5):
-                slot = self.slots.get(chapter_id)
+                slot = self.app_state.slots.get(chapter_id)
                 if slot and slot.assigned_mod:
                     selections[chapter_id] = slot.assigned_mod.key
                 else:
@@ -5116,7 +5005,7 @@ class DeltaHubApp(QWidget):
         return selections
 
     def _execute_plugin_hooks(self, hook_name: str):
-        for plugin in self.plugins:
+        for plugin in self.app_state.plugins:
             hook_func = plugin.get(hook_name)
             if callable(hook_func):
                 try:
@@ -5167,7 +5056,7 @@ class DeltaHubApp(QWidget):
                         if selected_item and selected_item.text() != 'Main':
                             collection_folder_name = selected_item.data(Qt.ItemDataRole.UserRole)
                             if collection_folder_name:
-                                selected_collection_path = os.path.join(self.save_path, collection_folder_name)
+                                selected_collection_path = os.path.join(self.app_state.save_path, collection_folder_name)
                     else:
                         restore_and_return()
                         return
@@ -5178,15 +5067,15 @@ class DeltaHubApp(QWidget):
             if os.path.exists(main_saves_backup_path):
                 shutil.rmtree(main_saves_backup_path)
             ignore_pattern = shutil.ignore_patterns('*_*_*')
-            shutil.copytree(self.save_path, main_saves_backup_path, dirs_exist_ok=True, ignore=ignore_pattern)
-            for item in os.listdir(self.save_path):
-                item_path = os.path.join(self.save_path, item)
+            shutil.copytree(self.app_state.save_path, main_saves_backup_path, dirs_exist_ok=True, ignore=ignore_pattern)
+            for item in os.listdir(self.app_state.save_path):
+                item_path = os.path.join(self.app_state.save_path, item)
                 if not (os.path.isdir(item_path) and re.match('(.+?)_(\\d+)_(\\d+)$', item)):
                     if os.path.isdir(item_path):
                         shutil.rmtree(item_path)
                     else:
                         os.remove(item_path)
-            shutil.copytree(selected_collection_path, self.save_path, dirs_exist_ok=True)
+            shutil.copytree(selected_collection_path, self.app_state.save_path, dirs_exist_ok=True)
             session_data = self._load_session_manifest()
             direct_launch_info = session_data.get('direct_launch', {}) or {}
             direct_launch_info.update({'save_collection_swap': True, 'collection_path': selected_collection_path, 'backup_path': main_saves_backup_path})
@@ -5228,7 +5117,7 @@ class DeltaHubApp(QWidget):
                 return
             system = platform.system()
             if system == 'Darwin':
-                use_custom_exe = self.local_config.get('use_custom_executable', False)
+                use_custom_exe = self.app_state.local_config.get('use_custom_executable', False)
                 if use_custom_exe:
                     subprocess.Popen(['open', target_path])
                     self.feedback_manager.update_status(tr('status.macos_file_opened'), UI_COLORS['status_steam'])
@@ -5242,7 +5131,7 @@ class DeltaHubApp(QWidget):
             else:
                 command = [target_path]
                 if system == 'Linux' and target_path.lower().endswith('.exe'):
-                    is_steam_launch = self.local_config.get('launch_via_steam', False)
+                    is_steam_launch = self.app_state.local_config.get('launch_via_steam', False)
                     if not is_steam_launch:
                         command.insert(0, 'wine')
                 creationflags = 0
@@ -5259,9 +5148,9 @@ class DeltaHubApp(QWidget):
             self.restore_window_signal.emit()
 
     def _get_source_executable_path(self):
-        if self.local_config.get('use_custom_executable', False):
-            cfg_key = self.game_mode.get_custom_exec_config_key()
-            return self.local_config.get(cfg_key, '')
+        if self.app_state.local_config.get('use_custom_executable', False):
+            cfg_key = self.app_state.game_mode.get_custom_exec_config_key()
+            return self.app_state.local_config.get(cfg_key, '')
         return self._get_executable_path()
 
     def _on_game_process_finished(self, vanilla_mode: bool):
@@ -5341,9 +5230,9 @@ class DeltaHubApp(QWidget):
 
     def _on_toggle_custom_executable(self):
         use_custom = self.use_custom_executable_checkbox.isChecked()
-        self.local_config['use_custom_executable'] = use_custom
+        self.app_state.local_config['use_custom_executable'] = use_custom
         if not use_custom:
-            self.local_config[self.game_mode.get_custom_exec_config_key()] = ''
+            self.app_state.local_config[self.app_state.game_mode.get_custom_exec_config_key()] = ''
         self._write_local_config()
         self._update_custom_executable_ui()
 
@@ -5351,20 +5240,20 @@ class DeltaHubApp(QWidget):
         dlg_title = tr('ui.select_launch_file')
         filepath = QFileDialog.getOpenFileName(self, dlg_title)[0]
         if filepath:
-            self.local_config[self.game_mode.get_custom_exec_config_key()] = filepath
+            self.app_state.local_config[self.app_state.game_mode.get_custom_exec_config_key()] = filepath
             self._write_local_config()
             self._update_custom_executable_ui()
 
     def _update_custom_executable_ui(self):
-        use_custom = self.local_config.get('use_custom_executable', False)
-        path = self.local_config.get(self.game_mode.get_custom_exec_config_key(), '')
+        use_custom = self.app_state.local_config.get('use_custom_executable', False)
+        path = self.app_state.local_config.get(self.app_state.game_mode.get_custom_exec_config_key(), '')
         self.custom_exe_frame.setVisible(use_custom and self.use_custom_executable_checkbox.isEnabled())
         if self.custom_exe_frame.isVisible():
             self.custom_executable_path_label.setText(tr('ui.currently_selected', filename=os.path.basename(path)) if path else tr('ui.file_not_selected'))
 
     def _on_toggle_steam_launch(self, state=None):
         is_steam_launch = self.launch_via_steam_checkbox.isChecked()
-        self.local_config['launch_via_steam'] = is_steam_launch
+        self.app_state.local_config['launch_via_steam'] = is_steam_launch
         self._write_local_config()
         self._update_custom_executable_ui()
 
@@ -5372,22 +5261,22 @@ class DeltaHubApp(QWidget):
         selected_data = self.language_combo.currentData()
         if not selected_data:
             return
-        current_language = self.local_config.get('language', 'en')
+        current_language = self.app_state.local_config.get('language', 'en')
         if selected_data == current_language:
             return
-        self.local_config['language'] = selected_data
-        self._write_json(self.config_path, self.local_config)
+        self.app_state.local_config['language'] = selected_data
+        self._write_json(self.app_state.config_path, self.app_state.local_config)
         self._retranslate_ui()
 
     def _on_toggle_beta_updates(self):
         beta_enabled = self.beta_updates_checkbox.isChecked()
-        self.local_config['beta_updates_enabled'] = beta_enabled
+        self.app_state.local_config['beta_updates_enabled'] = beta_enabled
         self._write_local_config()
         self._check_for_launcher_updates()
 
     def _on_toggle_fullscreen(self):
         fullscreen_enabled = self.fullscreen_checkbox.isChecked()
-        self.local_config['fullscreen_enabled'] = fullscreen_enabled
+        self.app_state.local_config['fullscreen_enabled'] = fullscreen_enabled
         self._write_local_config()
         if fullscreen_enabled:
             self.showFullScreen()
@@ -5395,7 +5284,7 @@ class DeltaHubApp(QWidget):
             self.showNormal()
 
     def _retranslate_texts(self):
-        self.settings_button.setText(tr('ui.back_button') if self.is_settings_view or self.is_save_manager_view else tr('ui.settings_title'))
+        self.settings_button.setText(tr('ui.back_button') if self.app_state.is_settings_view or self.app_state.is_save_manager_view else tr('ui.settings_title'))
         self.online_label.setToolTip(tr('tooltips.online_counter'))
         self.top_refresh_button.setToolTip(tr('ui.update_mod_list'))
         self.telegram_button.setText(tr('buttons.telegram'))
@@ -5453,8 +5342,8 @@ class DeltaHubApp(QWidget):
             button_widget = widget.parent().findChild(QPushButton)
             if button_widget:
                 button_widget.setText(tr('ui.select_color'))
-        self.changelog_button.setText(tr('buttons.changelog_close') if self.is_changelog_view else tr('buttons.changelog'))
-        self.help_button.setText(tr('buttons.help_close') if self.is_help_view else tr('buttons.help'))
+        self.changelog_button.setText(tr('buttons.changelog_close') if self.app_state.is_changelog_view else tr('buttons.changelog'))
+        self.help_button.setText(tr('buttons.help_close') if self.app_state.is_help_view else tr('buttons.help'))
 
     def _retranslate_ui(self):
         self._suppress_tab_handlers = True
@@ -5469,7 +5358,7 @@ class DeltaHubApp(QWidget):
                         current_plugin = self._plugin_tab_map.get(current_index)
             except Exception:
                 pass
-            language_code = self.local_config.get('language', 'en')
+            language_code = self.app_state.local_config.get('language', 'en')
             localization_manager.load_language(language_code)
             self._update_qt_translations(language_code)
             self.load_font()
@@ -5508,7 +5397,7 @@ class DeltaHubApp(QWidget):
             self._update_installed_mods_display()
             self._update_slots_display()
             self._update_pagination_controls()
-            if self.is_save_manager_view:
+            if self.app_state.is_save_manager_view:
                 self._refresh_save_slots()
             self._update_action_button_state()
             self.update()
@@ -5516,20 +5405,20 @@ class DeltaHubApp(QWidget):
             self._suppress_tab_handlers = False
 
     def _check_active_slots_need_updates(self):
-        if not self.all_mods:
+        if not self.app_state.all_mods:
             return False
         is_chapter_mode = self.chapter_mode_checkbox.isChecked()
-        is_demo_mode = isinstance(self.game_mode, DemoGameMode)
+        is_demo_mode = isinstance(self.app_state.game_mode, DemoGameMode)
         if is_demo_mode:
             active_slot_ids = [-10]
-        elif isinstance(self.game_mode, UndertaleGameMode):
+        elif isinstance(self.app_state.game_mode, UndertaleGameMode):
             active_slot_ids = [-20]
         elif not is_chapter_mode:
             active_slot_ids = [-1]
         else:
             active_slot_ids = [0, 1, 2, 3, 4]
         for slot_id in active_slot_ids:
-            for slot_frame in self.slots.values():
+            for slot_frame in self.app_state.slots.values():
                 if slot_frame.chapter_id == slot_id and slot_frame.assigned_mod:
                     mod_data = slot_frame.assigned_mod
                     mod_key = getattr(mod_data, 'key', None) or getattr(mod_data, 'mod_key', None)
@@ -5544,13 +5433,13 @@ class DeltaHubApp(QWidget):
         return False
 
     def _update_mods_in_active_slots(self):
-        if self.is_installing:
+        if self.app_state.is_installing:
             return
         is_chapter_mode = self.chapter_mode_checkbox.isChecked()
-        is_demo_mode = isinstance(self.game_mode, DemoGameMode)
+        is_demo_mode = isinstance(self.app_state.game_mode, DemoGameMode)
         if is_demo_mode:
             active_slot_ids = [-10]
-        elif isinstance(self.game_mode, UndertaleGameMode):
+        elif isinstance(self.app_state.game_mode, UndertaleGameMode):
             active_slot_ids = [-20]
         elif not is_chapter_mode:
             active_slot_ids = [-1]
@@ -5558,7 +5447,7 @@ class DeltaHubApp(QWidget):
             active_slot_ids = [0, 1, 2, 3, 4]
         mods_to_update = []
         for slot_id in active_slot_ids:
-            for slot_frame in self.slots.values():
+            for slot_frame in self.app_state.slots.values():
                 if slot_frame.chapter_id == slot_id and slot_frame.assigned_mod:
                     mod_data = slot_frame.assigned_mod
                     mod_key = getattr(mod_data, 'key', None) or getattr(mod_data, 'mod_key', None)
@@ -5788,9 +5677,9 @@ class DeltaHubApp(QWidget):
     def _edit_local_mod(self, parent_dialog):
         parent_dialog.accept()
         local_mods = []
-        if os.path.exists(self.mods_dir):
-            for folder_name in os.listdir(self.mods_dir):
-                folder_path = os.path.join(self.mods_dir, folder_name)
+        if os.path.exists(self.app_state.mods_dir):
+            for folder_name in os.listdir(self.app_state.mods_dir):
+                folder_path = os.path.join(self.app_state.mods_dir, folder_name)
                 if not os.path.isdir(folder_path):
                     continue
                 config_path = os.path.join(folder_path, 'config.json')
@@ -5833,7 +5722,7 @@ class DeltaHubApp(QWidget):
     def _get_mod_status_for_chapter(self, mod: ModInfo, chapter_id: int) -> str:
         if mod.key.startswith('local_'):
             return 'ready'
-        if not os.path.exists(self.mods_dir):
+        if not os.path.exists(self.app_state.mods_dir):
             return 'install'
 
         def _collect_remote_versions(m: ModInfo, ch_id: int) -> dict:
@@ -5851,8 +5740,8 @@ class DeltaHubApp(QWidget):
         remote_versions = _collect_remote_versions(mod, chapter_id)
         if not remote_versions:
             return 'n/a'
-        for mod_folder in os.listdir(self.mods_dir):
-            mod_cache_dir = os.path.join(self.mods_dir, mod_folder)
+        for mod_folder in os.listdir(self.app_state.mods_dir):
+            mod_cache_dir = os.path.join(self.app_state.mods_dir, mod_folder)
             config_path = os.path.join(mod_cache_dir, 'config.json')
             if not os.path.isfile(config_path):
                 continue
@@ -5893,20 +5782,7 @@ class DeltaHubApp(QWidget):
         return 'install'
 
     def _is_mod_installed(self, mod_key: str) -> bool:
-        if not os.path.exists(self.mods_dir):
-            return False
-        for mod_folder in os.listdir(self.mods_dir):
-            config_path = os.path.join(self.mods_dir, mod_folder, 'config.json')
-            if os.path.isfile(config_path):
-                try:
-                    config_data = self._read_json(config_path)
-                    stored_key = config_data.get('mod_key') or config_data.get('key')
-                    if stored_key == mod_key:
-                        return True
-                except Exception as e:
-                    logging.warning(f'Failed to parse local config {config_path}: {e}')
-                    continue
-        return False
+        return self.mod_manager.is_mod_installed(mod_key)
 
     def closeEvent(self, event):
         self._stop_background_music()
@@ -5948,13 +5824,13 @@ class DeltaHubApp(QWidget):
         self._schedule_geometry_save()
 
     def _load_local_data(self):
-        self.local_config = self._read_json(self.config_path) or {}
+        self.app_state.local_config = self._read_json(self.app_state.config_path) or {}
         mods_metadata = self._read_mods_metadata()
         updated = False
-        if not os.path.exists(self.mods_dir):
+        if not os.path.exists(self.app_state.mods_dir):
             return
-        for folder_name in os.listdir(self.mods_dir):
-            folder_path = os.path.join(self.mods_dir, folder_name)
+        for folder_name in os.listdir(self.app_state.mods_dir):
+            folder_path = os.path.join(self.app_state.mods_dir, folder_name)
             if not os.path.isdir(folder_path):
                 continue
             config_path = os.path.join(folder_path, 'config.json')
@@ -5980,18 +5856,18 @@ class DeltaHubApp(QWidget):
                 logging.warning(f'Failed to migrate metadata for mod in {folder_name}: {e}')
         if updated:
             self._write_mods_metadata(mods_metadata)
-        self.local_config['metadata_migrated_v2'] = True
+        self.app_state.local_config['metadata_migrated_v2'] = True
         self._write_local_config()
 
     def _migrate_config_if_needed(self):
-        self.local_config['cache_format_version'] = LAUNCHER_VERSION
+        self.app_state.local_config['cache_format_version'] = LAUNCHER_VERSION
         defaults = {'game_path': '', 'last_selected': {}, 'use_custom_executable': False, 'demo_game_path': '', 'launch_via_steam': False, 'direct_launch_slot_id': -1, 'demo_mode_enabled': False, 'chapter_mode_enabled': False, 'custom_background_path': '', 'custom_executable_path': '', 'background_disabled': False, 'custom_color_background': '', 'custom_color_button': '', 'custom_color_border': '', 'custom_color_button_hover': '', 'custom_color_text': '', 'mods_dir_path': '', 'custom_color_version_text': '', 'beta_updates_enabled': False}
         for key, value in defaults.items():
-            self.local_config.setdefault(key, value)
+            self.app_state.local_config.setdefault(key, value)
         self._write_local_config()
 
     def _write_local_config(self):
-        self._write_json(self.config_path, self.local_config)
+        self._write_json(self.app_state.config_path, self.app_state.local_config)
 
     def _write_json(self, path: str, data):
         try:
@@ -6038,15 +5914,15 @@ class DeltaHubApp(QWidget):
             return {}
 
     def _init_localization(self):
-        saved_language = self.local_config.get('language')
+        saved_language = self.app_state.local_config.get('language')
         if not saved_language or saved_language not in localization_manager.get_available_languages():
             saved_language = localization_manager.detect_system_language()
-            self.local_config['language'] = saved_language
-            self._write_json(self.config_path, self.local_config)
+            self.app_state.local_config['language'] = saved_language
+            self._write_json(self.app_state.config_path, self.app_state.local_config)
         if not localization_manager.load_language(saved_language):
             saved_language = localization_manager.detect_system_language()
             localization_manager.load_language(saved_language)
-            self.local_config['language'] = saved_language
+            self.app_state.local_config['language'] = saved_language
             self._write_local_config()
         self._update_qt_translations(saved_language)
 
@@ -6065,16 +5941,16 @@ class DeltaHubApp(QWidget):
             app.installTranslator(self._qt_translator)
 
     def _get_executable_path(self):
-        use_custom_exe = self.local_config.get('use_custom_executable', False)
+        use_custom_exe = self.app_state.local_config.get('use_custom_executable', False)
         if use_custom_exe:
-            custom_path = self.local_config.get(self.game_mode.get_custom_exec_config_key(), '')
+            custom_path = self.app_state.local_config.get(self.app_state.game_mode.get_custom_exec_config_key(), '')
             if custom_path and os.path.isfile(custom_path):
                 return custom_path
         current_game_path = self._get_current_game_path()
         if not current_game_path or not os.path.isdir(current_game_path):
             return None
         system = platform.system()
-        is_undertale = isinstance(self.game_mode, UndertaleGameMode)
+        is_undertale = isinstance(self.app_state.game_mode, UndertaleGameMode)
         base_exe_name = 'UNDERTALE' if is_undertale else 'DELTARUNE'
         if system == 'Windows':
             exe_path = os.path.join(current_game_path, f'{base_exe_name}.exe')
@@ -6111,14 +5987,14 @@ class DeltaHubApp(QWidget):
         current_path = self._get_current_game_path()
         if not current_path:
             return None
-        is_demo_mode = isinstance(self.game_mode, DemoGameMode)
+        is_demo_mode = isinstance(self.app_state.game_mode, DemoGameMode)
         is_chapter_mode = hasattr(self, 'chapter_mode_checkbox') and self.chapter_mode_checkbox.isChecked()
-        is_undertale_mode = isinstance(self.game_mode, UndertaleGameMode)
-        settings = {'launcher_version': LAUNCHER_VERSION, 'game_path': self.game_path, 'demo_game_path': self.demo_game_path, 'is_demo_mode': is_demo_mode, 'is_chapter_mode': is_chapter_mode, 'is_undertale_mode': is_undertale_mode, 'launch_via_steam': self.launch_via_steam_checkbox.isChecked(), 'use_custom_executable': self.use_custom_executable_checkbox.isChecked(), 'custom_executable_path': self.local_config.get(FullGameMode().get_custom_exec_config_key(), ''), 'demo_custom_executable_path': self.local_config.get(DemoGameMode().get_custom_exec_config_key(), ''), 'direct_launch_slot_id': self.local_config.get('direct_launch_slot_id', -1), 'mods': {}}
+        is_undertale_mode = isinstance(self.app_state.game_mode, UndertaleGameMode)
+        settings = {'launcher_version': LAUNCHER_VERSION, 'game_path': self.app_state.game_path, 'demo_game_path': self.app_state.demo_game_path, 'is_demo_mode': is_demo_mode, 'is_chapter_mode': is_chapter_mode, 'is_undertale_mode': is_undertale_mode, 'launch_via_steam': self.launch_via_steam_checkbox.isChecked(), 'use_custom_executable': self.use_custom_executable_checkbox.isChecked(), 'custom_executable_path': self.app_state.local_config.get(FullGameMode().get_custom_exec_config_key(), ''), 'demo_custom_executable_path': self.app_state.local_config.get(DemoGameMode().get_custom_exec_config_key(), ''), 'direct_launch_slot_id': self.app_state.local_config.get('direct_launch_slot_id', -1), 'mods': {}}
         if is_demo_mode:
             demo_mod_key = None
             try:
-                demo_slot = self.slots.get(-10) if hasattr(self, 'slots') else None
+                demo_slot = self.app_state.slots.get(-10) if hasattr(self.app_state, 'slots') else None
                 if demo_slot and getattr(demo_slot, 'assigned_mod', None):
                     demo_mod_key = getattr(demo_slot.assigned_mod, 'key', None) or getattr(demo_slot.assigned_mod, 'mod_key', None)
             except Exception:
@@ -6127,14 +6003,14 @@ class DeltaHubApp(QWidget):
         elif is_undertale_mode:
             undertale_mod_key = None
             try:
-                undertale_slot = self.slots.get(-20) if hasattr(self, 'slots') else None
+                undertale_slot = self.app_state.slots.get(-20) if hasattr(self.app_state, 'slots') else None
                 if undertale_slot and getattr(undertale_slot, 'assigned_mod', None):
                     undertale_mod_key = getattr(undertale_slot.assigned_mod, 'key', None) or getattr(undertale_slot.assigned_mod, 'mod_key', None)
             except Exception:
                 undertale_mod_key = None
             settings['mods']['undertale'] = undertale_mod_key
         elif is_chapter_mode:
-            for slot_frame in self.slots.values():
+            for slot_frame in self.app_state.slots.values():
                 chapter_id = slot_frame.chapter_id
                 if chapter_id >= 0:
                     mod_key = None
@@ -6144,7 +6020,7 @@ class DeltaHubApp(QWidget):
         else:
             universal_mod_key = None
             try:
-                universal_slot = self.slots.get(-1) if hasattr(self, 'slots') else None
+                universal_slot = self.app_state.slots.get(-1) if hasattr(self.app_state, 'slots') else None
                 if universal_slot and getattr(universal_slot, 'assigned_mod', None):
                     universal_mod_key = getattr(universal_slot.assigned_mod, 'key', None) or getattr(universal_slot.assigned_mod, 'mod_key', None)
             except Exception:
@@ -6156,8 +6032,8 @@ class DeltaHubApp(QWidget):
         try:
             if not mods_settings:
                 return
-            is_demo_mode = isinstance(self.game_mode, DemoGameMode)
-            is_undertale_mode = isinstance(self.game_mode, UndertaleGameMode)
+            is_demo_mode = isinstance(self.app_state.game_mode, DemoGameMode)
+            is_undertale_mode = isinstance(self.app_state.game_mode, UndertaleGameMode)
             if is_demo_mode:
                 mod_key = mods_settings.get('demo')
                 if mod_key and mod_key != 'no_change':
@@ -6187,15 +6063,15 @@ class DeltaHubApp(QWidget):
         mod_config = self._get_mod_config_by_key(mod_key)
         if not mod_config:
             raise Exception(tr('errors.mod_not_found_by_key', mod_key=mod_key))
-        mod_folder = os.path.join(self.mods_dir, mod_key)
+        mod_folder = os.path.join(self.app_state.mods_dir, mod_key)
         if not os.path.exists(mod_folder):
-            mod_folder = os.path.join(self.mods_dir, mod_config.get('name', ''))
+            mod_folder = os.path.join(self.app_state.mods_dir, mod_config.get('name', ''))
             if not os.path.exists(mod_folder):
                 raise Exception(tr('errors.mod_files_not_found_by_key', mod_key=mod_key))
 
     def _launch_game_from_shortcut(self, launch_via_steam=False, use_custom_executable=False, custom_exec_path='', demo_custom_exec_path='', direct_launch_slot_id=-1):
         try:
-            is_demo_mode = isinstance(self.game_mode, DemoGameMode)
+            is_demo_mode = isinstance(self.app_state.game_mode, DemoGameMode)
             current_game_path = self._get_current_game_path()
             if not current_game_path or not os.path.exists(current_game_path):
                 raise Exception(tr('errors.game_files_not_found'))
@@ -6207,7 +6083,7 @@ class DeltaHubApp(QWidget):
                 else:
                     raise Exception(tr('errors.specified_executable_not_found'))
             else:
-                if isinstance(self.game_mode, UndertaleGameMode):
+                if isinstance(self.app_state.game_mode, UndertaleGameMode):
                     possible_names = ['UNDERTALE.exe', 'undertale.exe']
                 else:
                     possible_names = ['DELTARUNE.exe', 'deltarune.exe', 'SURVEY_PROGRAM.exe', 'survey_program.exe']
@@ -6219,7 +6095,7 @@ class DeltaHubApp(QWidget):
                 if not executable_path:
                     raise Exception(tr('errors.executable_not_found_simple'))
             if launch_via_steam:
-                steam_app_id = self.game_mode.steam_id
+                steam_app_id = self.app_state.game_mode.steam_id
                 webbrowser.open(f'steam://run/{steam_app_id}')
             else:
                 args = []
@@ -6307,10 +6183,10 @@ class DeltaHubApp(QWidget):
         for ui_index, mod_key in selections.items():
             if mod_key == 'no_change':
                 continue
-            mod = next((m for m in self.all_mods if m.key == mod_key), None)
+            mod = next((m for m in self.app_state.all_mods if m.key == mod_key), None)
             if not mod:
                 continue
-            chapter_id = self.game_mode.get_chapter_id(ui_index)
+            chapter_id = self.app_state.game_mode.get_chapter_id(ui_index)
             if mod_key.startswith('local_'):
                 mod_config = self._get_mod_config_by_key(mod_key)
                 if mod_config:
@@ -6326,9 +6202,9 @@ class DeltaHubApp(QWidget):
     def _find_and_validate_game_path(self, selections: Optional[Dict[int, str]] = None, is_initial: bool = False):
         path_from_config = self._get_current_game_path()
         skip_data_check = bool(selections and self._has_mods_with_data_files(selections))
-        if isinstance(self.game_mode, DemoGameMode):
+        if isinstance(self.app_state.game_mode, DemoGameMode):
             game_type = 'deltarune'
-        elif isinstance(self.game_mode, UndertaleGameMode):
+        elif isinstance(self.app_state.game_mode, UndertaleGameMode):
             game_type = 'undertale'
         else:
             game_type = 'deltarune'
@@ -6336,15 +6212,15 @@ class DeltaHubApp(QWidget):
             self.feedback_manager.update_status(tr('status.game_path', path=path_from_config), UI_COLORS['status_info'])
             return True
         self.feedback_manager.update_status(tr('status.autodetecting_path'), UI_COLORS['status_info'])
-        if isinstance(self.game_mode, DemoGameMode):
+        if isinstance(self.app_state.game_mode, DemoGameMode):
             game_name = 'DELTARUNEdemo'
-        elif isinstance(self.game_mode, UndertaleGameMode):
+        elif isinstance(self.app_state.game_mode, UndertaleGameMode):
             game_name = 'UNDERTALE'
         else:
             game_name = 'DELTARUNE'
         autodetected_path = autodetect_path(game_name)
         if autodetected_path and is_valid_game_path(autodetected_path, skip_data_check, game_type):
-            self.game_mode.set_game_path(self.local_config, autodetected_path)
+            self.app_state.game_mode.set_game_path(self.app_state.local_config, autodetected_path)
             self.feedback_manager.update_status(tr('status.game_folder_found', path=autodetected_path), UI_COLORS['status_success'])
             self._write_local_config()
             return True
@@ -6361,10 +6237,10 @@ class DeltaHubApp(QWidget):
             pass
 
     def _prompt_for_game_path(self, is_initial=False):
-        if isinstance(self.game_mode, DemoGameMode):
+        if isinstance(self.app_state.game_mode, DemoGameMode):
             title = tr('dialogs.select_demo_folder')
             message = tr('dialogs.demo_not_found')
-        elif isinstance(self.game_mode, UndertaleGameMode):
+        elif isinstance(self.app_state.game_mode, UndertaleGameMode):
             title = tr('dialogs.select_undertale_folder')
             message = tr('dialogs.undertale_not_found')
         else:
@@ -6381,7 +6257,7 @@ class DeltaHubApp(QWidget):
         if path:
             corrected_path = path
             if platform.system() == 'Darwin' and (not path.endswith('.app')):
-                if isinstance(self.game_mode, UndertaleGameMode):
+                if isinstance(self.app_state.game_mode, UndertaleGameMode):
                     app_names = ('UNDERTALE.app',)
                 else:
                     app_names = ('DELTARUNE.app', 'DELTARUNEdemo.app')
@@ -6390,12 +6266,12 @@ class DeltaHubApp(QWidget):
                     if os.path.isdir(candidate):
                         corrected_path = candidate
                         break
-            if isinstance(self.game_mode, UndertaleGameMode):
+            if isinstance(self.app_state.game_mode, UndertaleGameMode):
                 game_type = 'undertale'
             else:
                 game_type = 'deltarune'
             if is_valid_game_path(corrected_path, False, game_type):
-                self.game_mode.set_game_path(self.local_config, corrected_path)
+                self.app_state.game_mode.set_game_path(self.app_state.local_config, corrected_path)
                 self._write_local_config()
                 self.feedback_manager.update_status(tr('status.game_path_set', path=corrected_path), UI_COLORS['status_success'])
                 self._update_action_button_state()
@@ -6408,8 +6284,8 @@ class DeltaHubApp(QWidget):
             self.feedback_manager.update_status(tr('status.no_game_path'), UI_COLORS['status_error'])
 
     def _handle_first_launch_settings(self):
-        self.local_config['first_launch_splash_shown'] = True
-        self.local_config['disable_splash'] = True
+        self.app_state.local_config['first_launch_splash_shown'] = True
+        self.app_state.local_config['disable_splash'] = True
         self._write_local_config()
         try:
             self.initialization_finished.disconnect(self._handle_first_launch_settings)
@@ -6435,10 +6311,10 @@ class DeltaHubApp(QWidget):
         theme_file_path, _ = QFileDialog.getSaveFileName(self, tr('dialogs.export_theme_title'), '', f"{tr('file_descriptions.theme_files')} (*.dhtheme)")
         if not theme_file_path:
             return
-        theme_settings = {'custom_color_background': self.local_config.get('custom_color_background', ''), 'custom_color_button': self.local_config.get('custom_color_button', ''), 'custom_color_border': self.local_config.get('custom_color_border', ''), 'custom_color_button_hover': self.local_config.get('custom_color_button_hover', ''), 'custom_color_text': self.local_config.get('custom_color_text', ''), 'custom_color_version_text': self.local_config.get('custom_color_version_text', ''), 'background_disabled': self.local_config.get('background_disabled', False), 'disable_splash': self.local_config.get('disable_splash', False)}
+        theme_settings = {'custom_color_background': self.app_state.local_config.get('custom_color_background', ''), 'custom_color_button': self.app_state.local_config.get('custom_color_button', ''), 'custom_color_border': self.app_state.local_config.get('custom_color_border', ''), 'custom_color_button_hover': self.app_state.local_config.get('custom_color_button_hover', ''), 'custom_color_text': self.app_state.local_config.get('custom_color_text', ''), 'custom_color_version_text': self.app_state.local_config.get('custom_color_version_text', ''), 'background_disabled': self.app_state.local_config.get('background_disabled', False), 'disable_splash': self.app_state.local_config.get('disable_splash', False)}
         with zipfile.ZipFile(theme_file_path, 'w') as zipf:
             zipf.writestr('theme.json', json.dumps(theme_settings, indent=2))
-            bg_path = self.local_config.get('custom_background_path')
+            bg_path = self.app_state.local_config.get('custom_background_path')
             if bg_path and os.path.exists(bg_path):
                 zipf.write(bg_path, f'background{os.path.splitext(bg_path)[1]}')
             music_path = self._get_background_music_path()
@@ -6463,26 +6339,26 @@ class DeltaHubApp(QWidget):
                     with open(os.path.join(temp_dir, 'theme.json'), 'r') as f:
                         theme_settings = json.load(f)
                     for key, value in theme_settings.items():
-                        self.local_config[key] = value
+                        self.app_state.local_config[key] = value
                     for old_file in ['custom_background_music.mp3', 'custom_background_music.wav', 'custom_startup_sound.mp3', 'custom_startup_sound.wav']:
-                        if os.path.exists(os.path.join(self.config_dir, old_file)):
-                            os.remove(os.path.join(self.config_dir, old_file))
-                    self.local_config['custom_background_path'] = ''
+                        if os.path.exists(os.path.join(self.app_state.config_dir, old_file)):
+                            os.remove(os.path.join(self.app_state.config_dir, old_file))
+                    self.app_state.local_config['custom_background_path'] = ''
                     for filename in os.listdir(temp_dir):
                         src_path = os.path.join(temp_dir, filename)
                         if filename.startswith('background.'):
                             ext = os.path.splitext(filename)[1]
-                            dest_path = os.path.join(self.config_dir, f'custom_background{ext}')
+                            dest_path = os.path.join(self.app_state.config_dir, f'custom_background{ext}')
                             shutil.copy2(src_path, dest_path)
-                            self.local_config['custom_background_path'] = dest_path
+                            self.app_state.local_config['custom_background_path'] = dest_path
                         elif filename.startswith('background_music.'):
-                            shutil.copy2(src_path, os.path.join(self.config_dir, f'custom_background_music{os.path.splitext(filename)[1]}'))
+                            shutil.copy2(src_path, os.path.join(self.app_state.config_dir, f'custom_background_music{os.path.splitext(filename)[1]}'))
                         elif filename.startswith('startup_sound.'):
-                            shutil.copy2(src_path, os.path.join(self.config_dir, f'custom_startup_sound{os.path.splitext(filename)[1]}'))
+                            shutil.copy2(src_path, os.path.join(self.app_state.config_dir, f'custom_startup_sound{os.path.splitext(filename)[1]}'))
             self._write_local_config()
             self._load_custom_style_settings()
-            self.disable_background_checkbox.setChecked(self.local_config.get('background_disabled', False))
-            self.disable_splash_checkbox.setChecked(self.local_config.get('disable_splash', False))
+            self.disable_background_checkbox.setChecked(self.app_state.local_config.get('background_disabled', False))
+            self.disable_splash_checkbox.setChecked(self.app_state.local_config.get('disable_splash', False))
             self.background_music_button.setText(self._get_background_music_button_text())
             self.startup_sound_button.setText(self._get_startup_sound_button_text())
             self._stop_background_music()
@@ -6491,8 +6367,8 @@ class DeltaHubApp(QWidget):
             self.feedback_manager.show_info('dialogs.success', tr('dialogs.theme_imported_success'))
         except Exception as e:
             self.feedback_manager.show_error('dialogs.error', tr('dialogs.theme_import_failed', error=str(e)))
-        self.local_config['first_launch_splash_shown'] = True
-        self.local_config['disable_splash'] = True
+        self.app_state.local_config['first_launch_splash_shown'] = True
+        self.app_state.local_config['disable_splash'] = True
         self._write_local_config()
         try:
             self.initialization_finished.disconnect(self._handle_first_launch_settings)
@@ -6500,34 +6376,34 @@ class DeltaHubApp(QWidget):
             pass
 
     def _save_slots_state(self):
-        if not hasattr(self, 'slots'):
+        if not hasattr(self.app_state, 'slots'):
             return
         is_chapter_mode = hasattr(self, 'chapter_mode_checkbox') and self.chapter_mode_checkbox.isChecked()
-        config_key = self._get_slots_config_key(self.game_mode, is_chapter_mode)
+        config_key = self._get_slots_config_key(self.app_state.game_mode, is_chapter_mode)
         slots_data = {}
-        for slot_id, slot_frame in self.slots.items():
+        for slot_id, slot_frame in self.app_state.slots.items():
             if slot_frame.assigned_mod:
                 mod_key = getattr(slot_frame.assigned_mod, 'key', None) or getattr(slot_frame.assigned_mod, 'mod_key', None) or getattr(slot_frame.assigned_mod, 'name', None)
                 if mod_key:
                     slots_data[str(slot_id)] = {'mod_key': mod_key, 'mod_name': slot_frame.assigned_mod.name}
-        self.local_config[config_key] = slots_data
+        self.app_state.local_config[config_key] = slots_data
         self._write_local_config()
 
     def _load_slots_state(self, mode=None):
         is_chapter_mode = hasattr(self, 'chapter_mode_checkbox') and self.chapter_mode_checkbox.isChecked()
-        config_key = self._get_slots_config_key(self.game_mode, is_chapter_mode)
-        slots_data = self.local_config.get(config_key, {})
-        for slot in self.slots.values():
+        config_key = self._get_slots_config_key(self.app_state.game_mode, is_chapter_mode)
+        slots_data = self.app_state.local_config.get(config_key, {})
+        for slot in self.app_state.slots.values():
             if slot.assigned_mod:
                 self._remove_mod_from_slot(slot, slot.assigned_mod)
-        if isinstance(self.game_mode, DemoGameMode):
+        if isinstance(self.app_state.game_mode, DemoGameMode):
             config_key = 'saved_slots_deltarunedemo'
-        elif isinstance(self.game_mode, UndertaleGameMode):
+        elif isinstance(self.app_state.game_mode, UndertaleGameMode):
             config_key = 'saved_slots_undertale'
         else:
             is_chapter_mode = getattr(self, 'chapter_mode_checkbox', None) and self.chapter_mode_checkbox.isChecked()
             config_key = 'saved_slots_deltarune_chapter' if is_chapter_mode else 'saved_slots_deltarune'
-        slots_data = self.local_config.get(config_key, {})
+        slots_data = self.app_state.local_config.get(config_key, {})
         if not slots_data:
             return
         for slot_id, slot_data in slots_data.items():
@@ -6536,10 +6412,10 @@ class DeltaHubApp(QWidget):
             except ValueError:
                 continue
             is_chapter_mode = getattr(self, 'chapter_mode_checkbox', None) and self.chapter_mode_checkbox.isChecked()
-            if isinstance(self.game_mode, DemoGameMode):
+            if isinstance(self.app_state.game_mode, DemoGameMode):
                 if numeric_slot_id != -10:
                     continue
-            elif isinstance(self.game_mode, UndertaleGameMode):
+            elif isinstance(self.app_state.game_mode, UndertaleGameMode):
                 if numeric_slot_id != -20:
                     continue
             elif is_chapter_mode:
@@ -6547,15 +6423,15 @@ class DeltaHubApp(QWidget):
                     continue
             elif numeric_slot_id != -1:
                 continue
-            if numeric_slot_id not in self.slots:
+            if numeric_slot_id not in self.app_state.slots:
                 continue
-            slot_frame = self.slots[numeric_slot_id]
+            slot_frame = self.app_state.slots[numeric_slot_id]
             mod_key = slot_data.get('mod_key')
             if not mod_key:
                 continue
             mod_data = None
-            if hasattr(self, 'all_mods') and self.all_mods:
-                for mod in self.all_mods:
+            if hasattr(self.app_state, 'all_mods') and self.app_state.all_mods:
+                for mod in self.app_state.all_mods:
                     if getattr(mod, 'key', None) == mod_key:
                         mod_data = mod
                         break
@@ -6581,7 +6457,7 @@ class DeltaHubApp(QWidget):
         mod_key = getattr(mod_data, 'key', None) or getattr(mod_data, 'mod_key', None) or getattr(mod_data, 'name', None)
         if not mod_key:
             return False
-        for slot_frame in self.slots.values():
+        for slot_frame in self.app_state.slots.values():
             if slot_frame.chapter_id == chapter_id and slot_frame.assigned_mod:
                 assigned_mod_key = getattr(slot_frame.assigned_mod, 'key', None) or getattr(slot_frame.assigned_mod, 'mod_key', None) or getattr(slot_frame.assigned_mod, 'name', None)
                 if assigned_mod_key == mod_key:
