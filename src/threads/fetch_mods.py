@@ -31,7 +31,7 @@ class FetchModsThread(QThread):
             mods_json = response.json() or {}
             all_mods = self._parse_mods(mods_json)
             local_mods = self._get_local_mods()
-            self.main_window.all_mods = all_mods + local_mods
+            self.main_window.app_state.all_mods = all_mods + local_mods
             self._update_remote_exists_flags(all_mods)
             self.result.emit(True)
         except requests.RequestException as e:
@@ -131,11 +131,11 @@ class FetchModsThread(QThread):
 
     def _get_local_mods(self) -> List[ModInfo]:
         local_mods = []
-        if not hasattr(self.main_window, 'mods_dir') or not os.path.exists(self.main_window.mods_dir):
+        if not hasattr(self.main_window.app_state, 'mods_dir') or not os.path.exists(self.main_window.app_state.mods_dir):
             return local_mods
         existing_local_keys = set()
-        for folder_name in os.listdir(self.main_window.mods_dir):
-            folder_path = os.path.join(self.main_window.mods_dir, folder_name)
+        for folder_name in os.listdir(self.main_window.app_state.mods_dir):
+            folder_path = os.path.join(self.main_window.app_state.mods_dir, folder_name)
             if not os.path.isdir(folder_path):
                 continue
             config_path = os.path.join(folder_path, 'config.json')
@@ -148,7 +148,7 @@ class FetchModsThread(QThread):
                             existing_local_keys.add(key)
                 except (IOError, json.JSONDecodeError):
                     continue
-        for mod in self.main_window.all_mods:
+        for mod in self.main_window.app_state.all_mods:
             if hasattr(mod, 'key') and mod.key.startswith('local_') and (mod.key in existing_local_keys):
                 local_mods.append(mod)
         return local_mods
@@ -188,13 +188,13 @@ class FetchModsThread(QThread):
 
     def _update_remote_exists_flags(self, all_mods: List[ModInfo]):
         remote_mod_keys = {mod.key for mod in all_mods}
-        if not hasattr(self.main_window, 'mods_dir') or not os.path.exists(self.main_window.mods_dir):
+        if not hasattr(self.main_window.app_state, 'mods_dir') or not os.path.exists(self.main_window.app_state.mods_dir):
             return
         try:
             mods_metadata = self.main_window._read_mods_metadata()
             metadata_updated = False
-            for folder_name in os.listdir(self.main_window.mods_dir):
-                folder_path = os.path.join(self.main_window.mods_dir, folder_name)
+            for folder_name in os.listdir(self.main_window.app_state.mods_dir):
+                folder_path = os.path.join(self.main_window.app_state.mods_dir, folder_name)
                 if not os.path.isdir(folder_path):
                     continue
                 config_path = os.path.join(folder_path, 'config.json')

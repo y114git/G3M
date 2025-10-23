@@ -142,10 +142,10 @@ class InstallModsThread(QThread):
         self.status.emit(tr('status.operation_cancelled'), UI_COLORS['status_error'])
 
     def _find_existing_mod_folder(self, mod_key: str) -> str:
-        if not os.path.exists(self.main_window.mods_dir):
+        if not os.path.exists(self.main_window.app_state.mods_dir):
             return ''
-        for folder_name in os.listdir(self.main_window.mods_dir):
-            config_path = os.path.join(self.main_window.mods_dir, folder_name, 'config.json')
+        for folder_name in os.listdir(self.main_window.app_state.mods_dir):
+            config_path = os.path.join(self.main_window.app_state.mods_dir, folder_name, 'config.json')
             if os.path.exists(config_path):
                 try:
                     config_data = self.main_window._read_json(config_path)
@@ -174,7 +174,7 @@ class InstallModsThread(QThread):
     def _should_update_component(self, mod, chapter_id: int, existing_folder: str) -> dict:
         if not existing_folder:
             return {}
-        config_path = os.path.join(self.main_window.mods_dir, existing_folder, 'config.json')
+        config_path = os.path.join(self.main_window.app_state.mods_dir, existing_folder, 'config.json')
         if not os.path.exists(config_path):
             return {}
         try:
@@ -187,7 +187,7 @@ class InstallModsThread(QThread):
                 is_xdelta_mod = getattr(mod, 'is_xdelta', False)
                 local_is_xdelta = False
                 try:
-                    mod_path = os.path.join(self.main_window.mods_dir, existing_folder)
+                    mod_path = os.path.join(self.main_window.app_state.mods_dir, existing_folder)
                     local_is_xdelta = any((f.lower().endswith('.xdelta') for f in os.listdir(mod_path) if os.path.isfile(os.path.join(mod_path, f))))
                 except Exception:
                     local_is_xdelta = False
@@ -286,7 +286,7 @@ class InstallModsThread(QThread):
                     if existing_folder:
                         mod_folders[mod.key] = existing_folder
                     else:
-                        mod_folders[mod.key] = get_unique_mod_dir(self.main_window.mods_dir, mod.name)
+                        mod_folders[mod.key] = get_unique_mod_dir(self.main_window.app_state.mods_dir, mod.name)
                 existing_folder = mod_folders.get(mod.key, '')
                 chapter_data = mod.get_chapter_data(chapter_id) if chapter_id != -1 else None
                 if chapter_id == -1 and mod.is_valid_for_demo():
@@ -408,7 +408,7 @@ class InstallModsThread(QThread):
             for mod_key, mod_data in installed_mods.items():
                 mod = mod_data['mod']
                 mod_folder_name = mod_folders[mod.key]
-                mod_dir = os.path.join(self.main_window.mods_dir, mod_folder_name)
+                mod_dir = os.path.join(self.main_window.app_state.mods_dir, mod_folder_name)
                 files_data = {}
                 for chapter_id in mod_data['chapters']:
                     chapter_data = mod.get_chapter_data(chapter_id) if chapter_id != -1 else None
@@ -450,10 +450,10 @@ class InstallModsThread(QThread):
             self.main_window._write_mods_metadata(metadata)
             self._increment_downloads_for_installed_mods(installed_mods.keys())
             try:
-                os.makedirs(self.main_window.mods_dir, exist_ok=True)
+                os.makedirs(self.main_window.app_state.mods_dir, exist_ok=True)
                 for entry in os.listdir(self.temp_root or ''):
                     src = os.path.join(self.temp_root, entry)
-                    dst = os.path.join(self.main_window.mods_dir, entry)
+                    dst = os.path.join(self.main_window.app_state.mods_dir, entry)
                     if os.path.isdir(src):
                         try:
                             shutil.copytree(src, dst, dirs_exist_ok=True)
@@ -476,14 +476,14 @@ class InstallModsThread(QThread):
             self.status.emit(tr('status.installation_complete'), UI_COLORS['status_success'])
             self.finished.emit(True)
         except PermissionError as e:
-            path = e.filename if e.filename else self.main_window.mods_dir
+            path = e.filename if e.filename else self.main_window.app_state.mods_dir
             self.status.emit(tr('errors.permission_error_install'), UI_COLORS['status_error'])
             from PyQt6.QtWidgets import QMessageBox
             error_message = tr('dialogs.permission_error_message').format(path)
             QMessageBox.critical(self.main_window, tr('dialogs.access_error'), error_message)
             self.finished.emit(False)
         except Exception as e:
-            self.status.emit(tr('errors.installation_error').format(str(e)), UI_COLORS['status_error'])
+            self.status.emit(tr('errors.installation_error', error=str(e)), UI_COLORS['status_error'])
             self.finished.emit(False)
         finally:
             if not self._cancelled:
@@ -535,7 +535,7 @@ class UrlInstallThread(QThread):
                             return
                     if '_deltamodInfo.json' in files_in_root:
                         self.status.emit(tr('status.deltamod_archive_detected_url'), UI_COLORS['status_info'])
-                        converter = DeltamodConverter(content_path, self.main_window.mods_dir)
+                        converter = DeltamodConverter(content_path, self.main_window.app_state.mods_dir)
                         new_mod_path = converter.convert()
                         if new_mod_path:
                             mod_name = os.path.basename(new_mod_path)
@@ -557,7 +557,7 @@ class UrlInstallThread(QThread):
                 if len(unpacked_items) == 1 and os.path.isdir(os.path.join(unpack_dir, unpacked_items[0])):
                     content_path = os.path.join(unpack_dir, unpacked_items[0])
                 if '_deltamodInfo.json' in os.listdir(content_path):
-                    converter = DeltamodConverter(content_path, self.main_window.mods_dir)
+                    converter = DeltamodConverter(content_path, self.main_window.app_state.mods_dir)
                     new_mod_path = converter.convert()
                     if new_mod_path:
                         mod_name = os.path.basename(new_mod_path)
