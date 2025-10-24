@@ -169,7 +169,7 @@ class DeltaHubApp(QWidget):
         self.activateWindow()
         self.raise_()
         if self.app_state.is_installing:
-            self.feedback_manager.show_warning('dialogs.install_in_progress_title', tr('dialogs.install_in_progress_body'))
+            self.feedback_manager.show_warning('dialogs.install_in_progress_title', 'dialogs.install_in_progress_body')
             return
         self.mod_manager.install_from_url(url)
 
@@ -293,7 +293,7 @@ class DeltaHubApp(QWidget):
     def _create_shortcut_flow(self):
         settings = self._gather_shortcut_settings()
         if not settings:
-            self.feedback_manager.show_warning('dialogs.cannot_create_shortcut_title', tr('dialogs.path_not_specified'))
+            self.feedback_manager.show_warning('dialogs.cannot_create_shortcut_title', 'dialogs.path_not_specified')
             return
         description_lines = [tr('dialogs.shortcut_description'), '', tr('dialogs.current_shortcut_settings'), '']
         game_name = tr('ui.undertale_label') if settings.get('is_undertale_mode', False) else tr('ui.deltarunedemo_label') if settings.get('is_demo_mode', False) else tr('ui.deltarune_label')
@@ -568,8 +568,7 @@ class DeltaHubApp(QWidget):
         return button
 
     def _handle_permission_error(self, path: str):
-        detailed_message = tr('dialogs.access_denied_detailed', path=path)
-        self.feedback_manager.show_error('errors.access_denied', detailed_message)
+        self.feedback_manager.show_error('errors.access_denied', path=path)
 
     def _get_current_game_path(self) -> str:
         return self.app_state.game_mode.get_game_path(self.app_state.local_config) or ''
@@ -1599,7 +1598,7 @@ class DeltaHubApp(QWidget):
         is_chapter_mode = self.chapter_mode_checkbox.isChecked()
         if not is_chapter_mode:
             if slot_frame.assigned_mod:
-                if self.feedback_manager.ask_question('ui.remove_mod_from_slot', 'ui.remove_mod_question', '', False):
+                if self.feedback_manager.ask_question('ui.remove_mod_from_slot', 'ui.remove_mod_question', '', False, mod_name=getattr(slot_frame.assigned_mod, 'name', getattr(slot_frame.assigned_mod, 'key', 'Unknown'))):
                     self._remove_mod_from_slot(slot_frame, slot_frame.assigned_mod)
                     self._save_slots_state()
             else:
@@ -1757,7 +1756,7 @@ class DeltaHubApp(QWidget):
             self._assign_mod_to_slot(target_slot, mod_data)
             self._update_installed_mods_for_chapter_mode(chapter_id)
         else:
-            self.feedback_manager.show_warning('errors.error', tr('errors.target_slot_not_found'))
+            self.feedback_manager.show_warning('errors.target_slot_not_found')
 
     def _show_mod_selection_for_slot(self, slot_frame):
         installed_mods = self._get_installed_mods_list()
@@ -1784,7 +1783,7 @@ class DeltaHubApp(QWidget):
                 if mod_data and (not self._find_mod_in_slots(mod_data)):
                     available_mods.append(mod_data)
         if not available_mods:
-            self.feedback_manager.show_info('ui.no_available_mods', tr('ui.no_mods_to_insert'))
+            self.feedback_manager.show_info('ui.no_available_mods', 'ui.no_mods_to_insert')
             return
         dialog = QDialog(self)
         dialog.setWindowTitle(tr('ui.select_mod'))
@@ -2056,7 +2055,7 @@ class DeltaHubApp(QWidget):
                     pass
         except Exception as e:
             print(f'Error removing mod {mod_data.name}: {e}')
-            self.feedback_manager.show_error('errors.error', tr('errors.mod_removal_failed', error=str(e)))
+            self.feedback_manager.show_error('errors.mod_removal_failed', error=str(e))
 
     def _on_installed_mod_use(self, mod_data):
         current_slot = self._find_mod_in_slots(mod_data)
@@ -2165,7 +2164,7 @@ class DeltaHubApp(QWidget):
                 slot_list.addItem(slot_name)
                 available_slots.append(slot_frame)
         if not available_slots:
-            self.feedback_manager.show_info('dialogs.no_free_slots', tr('dialogs.all_slots_occupied'))
+            self.feedback_manager.show_info('dialogs.no_free_slots', 'dialogs.all_slots_occupied')
             return
         layout.addWidget(slot_list)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
@@ -2677,7 +2676,7 @@ class DeltaHubApp(QWidget):
             if not available_chapters:
                 debug_info = f'Mod type: {mod.modgame}, Files keys: {list(mod.files.keys())}'
                 print(f'Debug: {debug_info}')
-                self.feedback_manager.show_warning('errors.error', tr('errors.mod_no_files', mod_name=mod.name) + f'\n\nDebug: {debug_info}')
+                self.feedback_manager.show_warning('errors.mod_no_files', mod_name=mod.name)
                 return
             was_installed_before = self._is_mod_installed(mod.key)
             is_xdelta_mod = getattr(mod, 'is_xdelta', False)
@@ -2706,7 +2705,7 @@ class DeltaHubApp(QWidget):
             self.install_thread.start()
         except Exception as e:
             print(f'Error installing mod {mod.name}: {e}')
-            self.feedback_manager.show_error('errors.error', tr('errors.mod_install_failed', error=str(e)))
+            self.feedback_manager.show_error('errors.mod_install_failed', error=str(e))
 
     def _on_install_progress_token(self, value: int, op_id: int):
         if getattr(self, '_install_op_id', 0) == op_id and self.app_state.is_installing:
@@ -2754,7 +2753,7 @@ class DeltaHubApp(QWidget):
                 self._update_installed_mods_display()
             QTimer.singleShot(100, self._refresh_specific_mod_widget_after_update)
             if not was_installed_before:
-                self.feedback_manager.show_info('dialogs.mod_installed_title', tr('dialogs.mod_installed_apply_info'))
+                self.feedback_manager.show_info('dialogs.mod_installed_title', 'dialogs.mod_installed_apply_info')
             self.feedback_manager.update_status(tr('status.mod_installed_success'), UI_COLORS['status_success'])
         self._update_action_button_state()
 
@@ -2843,7 +2842,7 @@ class DeltaHubApp(QWidget):
             return
         new_mods_dir = os.path.join(new_parent_dir, 'mods')
         if os.path.exists(new_mods_dir):
-            self.feedback_manager.show_error('errors.error', tr('errors.mods_folder_exists', dir=new_parent_dir))
+            self.feedback_manager.show_error('errors.mods_folder_exists', dir=new_parent_dir)
             return
         try:
             self.feedback_manager.update_status(tr('status.moving_mods_folder'), UI_COLORS['status_warning'])
@@ -2852,10 +2851,10 @@ class DeltaHubApp(QWidget):
             self.app_state.mods_dir = new_mods_dir
             self.app_state.local_config['mods_dir_path'] = new_parent_dir
             self._write_local_config()
-            self.feedback_manager.show_info('dialogs.success', tr('dialogs.mods_folder_moved', path=new_mods_dir))
+            self.feedback_manager.show_info('dialogs.success', 'dialogs.mods_folder_moved', path=new_mods_dir)
             self.feedback_manager.update_status(tr('status.mods_folder_location_changed'), UI_COLORS['status_success'])
         except Exception as e:
-            self.feedback_manager.show_error('dialogs.move_error', tr('dialogs.mods_folder_move_failed', error=str(e)))
+            self.feedback_manager.show_error('dialogs.mods_folder_move_failed', error=str(e))
             self.app_state.mods_dir = current_mods_dir
             self.feedback_manager.update_status(tr('status.mods_folder_change_error'), UI_COLORS['status_error'])
 
@@ -2870,7 +2869,7 @@ class DeltaHubApp(QWidget):
     def _on_toggle_full_install(self, state):
         self.app_state.is_full_install = bool(state)
         if platform.system() == 'Darwin' and self.app_state.is_full_install:
-            self.feedback_manager.show_info('dialogs.unavailable', tr('dialogs.macos_install_unavailable'))
+            self.feedback_manager.show_info('dialogs.unavailable', 'dialogs.macos_install_unavailable')
             self.full_install_checkbox.blockSignals(True)
             self.full_install_checkbox.setChecked(False)
             self.full_install_checkbox.blockSignals(False)
@@ -3224,7 +3223,7 @@ class DeltaHubApp(QWidget):
         if not (path := QFileDialog.getExistingDirectory(self, tr('ui.select_deltarune_saves_folder'))):
             return False
         if not is_valid_save_path(path):
-            self.feedback_manager.show_warning('errors.empty_folder_title', tr('errors.empty_folder_message'))
+            self.feedback_manager.show_warning('errors.empty_folder_title', 'errors.empty_folder_message')
             return False
         self.app_state.save_path = path
         self.app_state.local_config['save_path'] = self.app_state.save_path
@@ -3277,7 +3276,7 @@ class DeltaHubApp(QWidget):
             os.makedirs(os.path.join(self.app_state.save_path, folder), exist_ok=False)
             return True
         except Exception as e:
-            self.feedback_manager.show_error('errors.error', tr('errors.folder_creation_failed', error=str(e)))
+            self.feedback_manager.show_error('errors.folder_creation_failed', error=str(e))
             return False
 
     def _prompt_collection_name(self, default: str = 'Collection') -> Optional[str]:
@@ -3337,7 +3336,7 @@ class DeltaHubApp(QWidget):
             os.rename(os.path.join(self.app_state.save_path, old_folder), os.path.join(self.app_state.save_path, new_folder))
             self._refresh_save_slots()
         except Exception as e:
-            self.feedback_manager.show_error('errors.error', tr('errors.rename_failed', error=str(e)))
+            self.feedback_manager.show_error('errors.rename_failed', error=str(e))
 
     def _delete_current_collection(self):
         chapter = self.save_tabs.currentIndex() + 1
@@ -3360,7 +3359,7 @@ class DeltaHubApp(QWidget):
             self.app_state.current_collection_idx[chapter] = -1
             self._refresh_save_slots()
         except Exception as e:
-            self.feedback_manager.show_error('errors.error', tr('errors.deletion_failed', error=str(e)))
+            self.feedback_manager.show_error('errors.deletion_failed', error=str(e))
 
     def _copy_between_storages(self, to_collection: bool):
         chapter = self.save_tabs.currentIndex() + 1
@@ -3392,7 +3391,7 @@ class DeltaHubApp(QWidget):
             self._refresh_save_slots()
             self.feedback_manager.update_status(tr('status.copying_completed'), UI_COLORS['status_success'])
         except Exception as e:
-            self.feedback_manager.show_error('errors.error', tr('errors.copy_failed', error=str(e)))
+            self.feedback_manager.show_error('errors.copy_failed', error=str(e))
             self.feedback_manager.update_status(tr('status.copying_error'), UI_COLORS['status_error'])
 
     def _action_show_save(self):
@@ -4408,6 +4407,7 @@ class DeltaHubApp(QWidget):
             else:
                 fallback_msg = tr('ui.network_fallback_message') if self.app_state.all_mods else tr('ui.network_update_failed')
                 self.feedback_manager.update_status(fallback_msg, UI_COLORS['status_error'])
+            QTimer.singleShot(100, self._load_slots_state)
         except Exception as e:
             self.feedback_manager.update_status(tr('errors.mod_list_processing_error', error=str(e)), UI_COLORS['status_error'])
 
@@ -4418,11 +4418,20 @@ class DeltaHubApp(QWidget):
             if slot_frame.assigned_mod:
                 old_mod = slot_frame.assigned_mod
                 mod_key = getattr(old_mod, 'key', None) or getattr(old_mod, 'mod_key', None)
-                for updated_mod in self.app_state.all_mods:
-                    updated_mod_key = getattr(updated_mod, 'key', None) or getattr(updated_mod, 'mod_key', None)
+                if not mod_key:
+                    continue
+                updated_mod = None
+                for mod in self.app_state.all_mods:
+                    updated_mod_key = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
                     if updated_mod_key == mod_key:
-                        slot_frame.assigned_mod = updated_mod
+                        updated_mod = mod
                         break
+                if not updated_mod:
+                    mod_config = self.mod_manager.get_mod_config(mod_key)
+                    if mod_config:
+                        updated_mod = self._create_mod_object_from_info(mod_config)
+                if updated_mod:
+                    slot_frame.assigned_mod = updated_mod
         self._refresh_all_slot_status_displays()
 
     def _on_install_finished(self, success):
@@ -4758,13 +4767,13 @@ class DeltaHubApp(QWidget):
                 shutil.copy2(self._backup_files[original_data_file], original_data_file)
                 error_message = process.stderr.strip() or process.stdout.strip()
                 logging.error(f'Xdelta error: {error_message}')
-                self.feedback_manager.show_error('errors.xdelta_patch_failed', tr('errors.patch_incompatible_details', error=error_message))
+                self.feedback_manager.show_error('errors.patch_incompatible_details', error=error_message)
                 return False
         except FileNotFoundError:
             self.feedback_manager.show_error('errors.xdelta_error', tr('errors.xdelta_not_found', path=xdelta_exe))
             return False
         except Exception as e:
-            self.feedback_manager.show_error('errors.xdelta_critical_error', tr('errors.xdelta_patch_critical_error', error=str(e)))
+            self.feedback_manager.show_error('errors.xdelta_patch_critical_error', error=str(e))
             try:
                 shutil.copy2(self._backup_files[original_data_file], original_data_file)
             except Exception as restore_e:
@@ -6442,6 +6451,10 @@ class DeltaHubApp(QWidget):
                     if installed_mod_key == mod_key:
                         mod_data = self._create_mod_object_from_info(installed_mod)
                         break
+            if not mod_data:
+                mod_config = self.mod_manager.get_mod_config(mod_key)
+                if mod_config:
+                    mod_data = self._create_mod_object_from_info(mod_config)
             if mod_data:
                 current_slot = self._find_mod_in_slots(mod_data)
                 if not current_slot:
