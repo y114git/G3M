@@ -693,6 +693,7 @@
 	  "mod_for_chapter_label": "第{chapter_name}章的模組：",
 	  "mod_install_error": "模組安裝錯誤",
 	  "mod_installed_success": "模組安裝成功！",
+	  "mod_uninstalled": "模組已成功卸載！",
 	  "mod_label": "模組：",
 	  "mod_list_updated": "模組列表已更新。",
 	  "mods_folder_change_error": "更改模組資料夾時出錯。",

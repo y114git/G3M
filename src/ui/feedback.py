@@ -83,9 +83,12 @@ class FeedbackManager(QObject):
 
         # Combine message and details in the main text with HTML support
         if details:
-            full_message = f"{message}<br><br>{details}"
+            # Replace \n with <br> for proper line breaks in QMessageBox
+            details_html = details.replace('\\n', '<br>').replace('\n', '<br>')
+            full_message = f"{message}<br><br>{details_html}"
         else:
-            full_message = message
+            # Replace \n with <br> for proper line breaks in QMessageBox
+            full_message = message.replace('\\n', '<br>').replace('\n', '<br>')
 
         msg_box.setText(full_message)
 
