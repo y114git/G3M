@@ -625,6 +625,7 @@
     "patch_apply_failed_details": "Применение патча завершилось с ошибкой:\\n{error}",
     "copy_background_music_failed": "Не удалось скопировать файл фоновой музыки",
     "remove_background_music_failed": "Не удалось удалить файл фоновой музыки",
+    "can_select_only_mp3_wav": "Можно выбрать только MP3 или WAV файл",
     "copy_startup_sound_failed": "Не удалось скопировать файл звука заставки",
     "remove_startup_sound_failed": "Не удалось удалить файл звука заставки",
     "startup_error_message": "Произошла ошибка при запуске: {details}",

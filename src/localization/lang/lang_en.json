@@ -622,6 +622,7 @@
     "patch_apply_failed_details": "Patch application failed with an error:\\n{error}",
     "copy_background_music_failed": "Failed to copy background music file",
     "remove_background_music_failed": "Failed to remove background music file",
+    "can_select_only_mp3_wav": "You can only select MP3 or WAV files",
     "copy_startup_sound_failed": "Failed to copy startup sound file",
     "remove_startup_sound_failed": "Failed to remove startup sound file",
     "description_md_txt_required": "Full description must be a direct link to a .md or .txt file.",
