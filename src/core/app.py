@@ -3631,7 +3631,6 @@ class DeltaHubApp(QWidget):
                 if self.app_state.is_changelog_view:
                     self.app_state.is_changelog_view = False
         if self.app_state.is_settings_view:
-            self._lock_window_size()
             self.settings_button.setText(tr('ui.back_button'))
             self.tab_widget.setVisible(False)
             self.bottom_widget.setVisible(False)
@@ -3641,7 +3640,6 @@ class DeltaHubApp(QWidget):
             self._load_custom_style_settings()
             self._update_status(tr('status.launcher_settings'), UI_COLORS['status_info'])
         else:
-            self._unlock_window_size()
             self.settings_button.setText(tr('ui.settings_title'))
             self.apply_theme()
             self.settings_widget.setVisible(False)
