@@ -622,6 +622,7 @@
 	  "patch_apply_failed_details": "補丁套用失敗，錯誤：\\n{error}",
 	  "copy_background_music_failed": "拷貝背景音樂檔案失敗",
 	  "remove_background_music_failed": "移除背景音樂檔案失敗",
+	  "can_select_only_mp3_wav": "您只能選擇 MP3 或 WAV 檔案",
 	  "copy_startup_sound_failed": "拷貝啟動音效檔案失敗",
 	  "remove_startup_sound_failed": "移除啟動音效檔案失敗",
 	  "description_md_txt_required": "完整描述必須是.md或.txt檔案的直接連結。",

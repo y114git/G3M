@@ -169,7 +169,7 @@ class DeltaHubApp(QWidget):
         self.activateWindow()
         self.raise_()
         if self.app_state.is_installing:
-            self.feedback_manager.show_warning('dialogs.install_in_progress_title', 'dialogs.install_in_progress_body')
+            self.feedback_manager.show_warning('dialogs.install_in_progress_title', tr('dialogs.install_in_progress_body'))
             return
         self.mod_manager.install_from_url(url)
 
@@ -293,7 +293,7 @@ class DeltaHubApp(QWidget):
     def _create_shortcut_flow(self):
         settings = self._gather_shortcut_settings()
         if not settings:
-            self.feedback_manager.show_warning('dialogs.cannot_create_shortcut_title', 'dialogs.path_not_specified')
+            self.feedback_manager.show_warning('dialogs.cannot_create_shortcut_title', tr('dialogs.path_not_specified'))
             return
         description_lines = [tr('dialogs.shortcut_description'), '', tr('dialogs.current_shortcut_settings'), '']
         game_name = tr('ui.undertale_label') if settings.get('is_undertale_mode', False) else tr('ui.deltarunedemo_label') if settings.get('is_demo_mode', False) else tr('ui.deltarune_label')
@@ -3225,7 +3225,7 @@ class DeltaHubApp(QWidget):
         if not (path := QFileDialog.getExistingDirectory(self, tr('ui.select_deltarune_saves_folder'))):
             return False
         if not is_valid_save_path(path):
-            self.feedback_manager.show_warning('errors.empty_folder_title', 'errors.empty_folder_message')
+            self.feedback_manager.show_warning('errors.empty_folder_title', tr('errors.empty_folder_message'))
             return False
         self.app_state.save_path = path
         self.app_state.local_config['save_path'] = self.app_state.save_path
@@ -3848,7 +3848,7 @@ class DeltaHubApp(QWidget):
             if file_path:
                 lower = file_path.lower()
                 if not (lower.endswith('.mp3') or lower.endswith('.wav')):
-                    self.feedback_manager.show_warning('errors.error', 'Можно выбрать только MP3 или WAV файл')
+                    self.feedback_manager.show_warning('errors.error', tr('errors.can_select_only_mp3_wav'))
                     return
                 try:
                     self._stop_background_music()
@@ -3885,7 +3885,7 @@ class DeltaHubApp(QWidget):
             if file_path:
                 lower = file_path.lower()
                 if not (lower.endswith('.mp3') or lower.endswith('.wav')):
-                    self.feedback_manager.show_warning('errors.error', 'Можно выбрать только MP3 или WAV файл')
+                    self.feedback_manager.show_warning('errors.error', tr('errors.can_select_only_mp3_wav'))
                     return
                 try:
                     os.makedirs(self.app_state.config_dir, exist_ok=True)

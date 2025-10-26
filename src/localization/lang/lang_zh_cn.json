@@ -622,6 +622,7 @@
     "patch_apply_failed_details": "补丁应用失败，错误：\\n{error}",
     "copy_background_music_failed": "复制背景音乐文件失败",
     "remove_background_music_failed": "移除背景音乐文件失败",
+    "can_select_only_mp3_wav": "您只能选择 MP3 或 WAV 文件",
     "copy_startup_sound_failed": "复制启动音效文件失败",
     "remove_startup_sound_failed": "移除启动音效文件失败",
     "description_md_txt_required": "完整描述必须是.md或.txt文件的直接链接。",
