@@ -693,6 +693,7 @@
     "mod_for_chapter_label": "Мод для {chapter_name}:",
     "mod_install_error": "Ошибка установки мода",
     "mod_installed_success": "Мод успешно установлен!",
+    "mod_uninstalled": "Мод успешно удалён!",
     "mod_label": "Мод:",
     "mod_list_updated": "Список модов обновлён.",
     "mods_folder_change_error": "Ошибка при смене папки модов.",

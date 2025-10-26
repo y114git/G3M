@@ -693,6 +693,7 @@
     "mod_for_chapter_label": "Mod for {chapter_name}:",
     "mod_install_error": "Mod installation error",
     "mod_installed_success": "Mod installed successfully!",
+    "mod_uninstalled": "Mod successfully uninstalled!",
     "mod_label": "Mod:",
     "mod_list_updated": "Mod list updated.",
     "mods_folder_change_error": "Error changing mods folder.",

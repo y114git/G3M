@@ -1783,7 +1783,7 @@ class DeltaHubApp(QWidget):
                 if mod_data and (not self._find_mod_in_slots(mod_data)):
                     available_mods.append(mod_data)
         if not available_mods:
-            self.feedback_manager.show_info('ui.no_available_mods', 'ui.no_mods_to_insert')
+            self.feedback_manager.show_info('ui.no_available_mods', tr('ui.no_mods_to_insert'))
             return
         dialog = QDialog(self)
         dialog.setWindowTitle(tr('ui.select_mod'))
@@ -2164,7 +2164,7 @@ class DeltaHubApp(QWidget):
                 slot_list.addItem(slot_name)
                 available_slots.append(slot_frame)
         if not available_slots:
-            self.feedback_manager.show_info('dialogs.no_free_slots', 'dialogs.all_slots_occupied')
+            self.feedback_manager.show_info('dialogs.no_free_slots', tr('dialogs.all_slots_occupied'))
             return
         layout.addWidget(slot_list)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
@@ -2753,7 +2753,7 @@ class DeltaHubApp(QWidget):
                 self._update_installed_mods_display()
             QTimer.singleShot(100, self._refresh_specific_mod_widget_after_update)
             if not was_installed_before:
-                self.feedback_manager.show_info('dialogs.mod_installed_title', 'dialogs.mod_installed_apply_info')
+                self.feedback_manager.show_info('dialogs.mod_installed_title', tr('dialogs.mod_installed_apply_info'))
             self.feedback_manager.update_status(tr('status.mod_installed_success'), UI_COLORS['status_success'])
         self._update_action_button_state()
 
@@ -2787,6 +2787,8 @@ class DeltaHubApp(QWidget):
 
     def _uninstall_single_mod(self, mod):
         self.mod_manager.uninstall_mod(mod)
+        # Update search mod plaques to reflect the uninstallation
+        self._update_search_mod_plaques()
 
     def _update_search_mod_plaques(self):
         for i in range(self.mod_list_layout.count() - 1):
@@ -2851,7 +2853,7 @@ class DeltaHubApp(QWidget):
             self.app_state.mods_dir = new_mods_dir
             self.app_state.local_config['mods_dir_path'] = new_parent_dir
             self._write_local_config()
-            self.feedback_manager.show_info('dialogs.success', 'dialogs.mods_folder_moved', path=new_mods_dir)
+            self.feedback_manager.show_info('dialogs.success', tr('dialogs.mods_folder_moved', path=new_mods_dir))
             self.feedback_manager.update_status(tr('status.mods_folder_location_changed'), UI_COLORS['status_success'])
         except Exception as e:
             self.feedback_manager.show_error('dialogs.mods_folder_move_failed', error=str(e))
@@ -2869,7 +2871,7 @@ class DeltaHubApp(QWidget):
     def _on_toggle_full_install(self, state):
         self.app_state.is_full_install = bool(state)
         if platform.system() == 'Darwin' and self.app_state.is_full_install:
-            self.feedback_manager.show_info('dialogs.unavailable', 'dialogs.macos_install_unavailable')
+            self.feedback_manager.show_info('dialogs.unavailable', tr('dialogs.macos_install_unavailable'))
             self.full_install_checkbox.blockSignals(True)
             self.full_install_checkbox.setChecked(False)
             self.full_install_checkbox.blockSignals(False)
