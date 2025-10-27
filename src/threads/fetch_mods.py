@@ -114,9 +114,15 @@ class FetchModsThread(QThread):
         data_version = chapter_data.get('data_file_version') or chapter_data.get('data_win_version') or '1.0.0'
         if data_url:
             entry.update({'data_file_url': data_url, 'data_file_version': data_version})
-        extra_files = chapter_data.get('extra_files', [])
+        extra_files = chapter_data.get('extra_files', chapter_data.get('extra', []))
         if isinstance(extra_files, list):
-            entry['extra'] = {str(ef.get('key', 'unknown')): {'url': ef.get('url', ''), 'version': ef.get('version', '1.0.0')} for ef in extra_files if isinstance(ef, dict)}
+            extra_map = {}
+            for idx, ef in enumerate(extra_files):
+                if isinstance(ef, dict) and ef.get('url'):
+                    key = ef.get('key', str(idx))
+                    extra_map[str(key)] = {'url': ef['url'], 'version': ef.get('version', '1.0.0')}
+            if extra_map:
+                entry['extra'] = extra_map
         elif isinstance(chapter_data.get('extra'), dict):
             extra_map = {}
             for k, v in chapter_data.get('extra', {}).items():

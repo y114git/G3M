@@ -4,7 +4,7 @@
     "language_name": "简体中文",
     "font": "Dtm_x_FZBitmap Regular.otf",
     "qt_translation": "qtbase_zh_cn",
-    "version": "1.0.1"
+    "version": "1.0.2"
   },
   "ui": {
     "add_data_file": "添加DATA文件",
@@ -680,7 +680,10 @@
     "global_settings_load_failed": "加载全局设置失败",
     "incomplete_save": "未完成存档",
     "installation_complete": "安装完成。",
+    "installation_failed": "安装模组失败",
     "installing_game_files": "正在安装游戏文件...",
+    "installing_mod": "正在安装模组...",
+    "downloading_mod": "正在下载模组...",
     "launcher_settings": "启动器设置",
     "launcher_version_up_to_date": "您的启动器版本是最新的。",
     "launching_game": "正在启动游戏...",
@@ -693,8 +696,10 @@
     "macos_file_opened": "文件已通过macOS打开。正在恢复启动器窗口。",
     "mod_for_chapter_label": "第{chapter_name}章的模组：",
     "mod_install_error": "模组安装错误",
+    "mod_installed": "模组已安装",
     "mod_installed_success": "模组安装成功！",
     "mod_uninstalled": "模组已成功卸载！",
+    "mod_updated": "模组已更新",
     "mod_label": "模组：",
     "mod_list_updated": "模组列表已更新。",
     "mods_folder_change_error": "更改模组文件夹时出错。",

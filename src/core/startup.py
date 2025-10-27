@@ -15,16 +15,12 @@ from utils.path_utils import get_user_data_root, get_launcher_dir
 if platform.system() == 'Windows':
     import winreg
 
-
 def create_app_reference():
     from core.app import DeltaHubApp
     return DeltaHubApp
-
-
 SINGLE_INSTANCE_KEY = 'deltahub.y.114.single-instance-lock'
 _translator = QTranslator()
 _splash_start_time = None
-
 
 def check_game_processes():
     game_processes = {'DELTARUNE.exe', 'UNDERTALE.exe', 'DELTARUNEdemo.exe', 'DELTARUNE', 'UNDERTALE', 'DELTARUNEdemo'}
@@ -35,7 +31,6 @@ def check_game_processes():
         except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
             pass
     return None
-
 
 def register_url_protocol():
     if getattr(sys, 'frozen', False):
@@ -65,7 +60,6 @@ def register_url_protocol():
     except Exception as e:
         print(f'Failed to register URL protocol: {e}')
 
-
 class SingleInstanceServer(QLocalServer):
 
     def __init__(self, app_instance):
@@ -86,7 +80,6 @@ class SingleInstanceServer(QLocalServer):
                 self.app_instance.url_received_signal.emit(url)
         socket.close()
 
-
 def setup_app():
     language_code = localization_manager.detect_system_language()
     localization_manager.load_language(language_code)
@@ -104,7 +97,6 @@ def setup_app():
     app.setApplicationVersion(LAUNCHER_VERSION)
     app.setOrganizationName('deltahub')
     return app
-
 
 def run_app():
     parser = argparse.ArgumentParser(description='DELTAHUB')
@@ -128,7 +120,7 @@ def run_app():
         if running_game:
             app = setup_app()
             error_msg = tr('errors.game_running_message', game_name=running_game)
-            print(f"STARTUP ERROR: {error_msg}")
+            print(f'STARTUP ERROR: {error_msg}')
             QMessageBox.critical(None, tr('errors.game_running_title'), error_msg)
             sys.exit(1)
     if platform.system() == 'Linux' and (not args.shortcut_launch):
@@ -166,6 +158,8 @@ def run_app():
             splash.close()
             ex = launcher_app.get('instance')
             if ex:
+                if hasattr(ex, 'app_state') and getattr(ex.app_state, 'game_is_running', False):
+                    return
                 ex.show()
                 ex.is_shown_to_user = True
                 ex.activateWindow()
@@ -179,7 +173,7 @@ def run_app():
                 server = SingleInstanceServer(launcher_app['instance'])
                 if not server.listen(SINGLE_INSTANCE_KEY):
                     error_msg = tr('errors.single_instance_error')
-                    print(f"STARTUP ERROR: {error_msg}")
+                    print(f'STARTUP ERROR: {error_msg}')
                     QMessageBox.critical(None, tr('errors.error'), error_msg)
                     sys.exit(1)
                 launcher_app['instance'].server = server
@@ -191,14 +185,14 @@ def run_app():
                     splash.stop_gif_animation()
                 splash.close()
                 error_msg = tr('errors.startup_error_message', details=str(e))
-                print(f"STARTUP ERROR: {error_msg}")
+                print(f'STARTUP ERROR: {error_msg}')
                 QMessageBox.critical(None, tr('errors.startup_error_title'), error_msg)
         QTimer.singleShot(100, create_launcher_no_animation)
         try:
             sys.exit(app.exec())
         except Exception as e:
             error_msg = tr('errors.startup_error_message', details=str(e))
-            print(f"STARTUP ERROR: {error_msg}")
+            print(f'STARTUP ERROR: {error_msg}')
             QMessageBox.critical(None, tr('errors.startup_error_title'), error_msg)
         return
     global _splash_start_time
@@ -250,6 +244,8 @@ def run_app():
 
     def show_launcher_window(ex):
         if ex:
+            if hasattr(ex, 'app_state') and getattr(ex.app_state, 'game_is_running', False):
+                return
             ex.show()
             ex.is_shown_to_user = True
             ex.activateWindow()
@@ -263,7 +259,7 @@ def run_app():
             server = SingleInstanceServer(launcher_app['instance'])
             if not server.listen(SINGLE_INSTANCE_KEY):
                 error_msg = tr('errors.single_instance_error')
-                print(f"STARTUP ERROR: {error_msg}")
+                print(f'STARTUP ERROR: {error_msg}')
                 QMessageBox.critical(None, tr('errors.error'), error_msg)
                 sys.exit(1)
             launcher_app['instance'].server = server
@@ -273,12 +269,12 @@ def run_app():
         except Exception as e:
             splash.close()
             error_msg = tr('errors.startup_error_message', details=str(e))
-            print(f"STARTUP ERROR: {error_msg}")
+            print(f'STARTUP ERROR: {error_msg}')
             QMessageBox.critical(None, tr('errors.startup_error_title'), error_msg)
     QTimer.singleShot(100, create_launcher)
     try:
         sys.exit(app.exec())
     except Exception as e:
         error_msg = tr('errors.startup_error_message', details=str(e))
-        print(f"STARTUP ERROR: {error_msg}")
+        print(f'STARTUP ERROR: {error_msg}')
         QMessageBox.critical(None, tr('errors.startup_error_title'), error_msg)
