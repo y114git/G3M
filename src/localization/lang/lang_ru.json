@@ -4,7 +4,7 @@
     "language_name": "Русский",
     "font": "main.ttf",
     "qt_translation": "qtbase_ru",
-    "version": "1.0.1"
+    "version": "1.0.2"
   },
   "ui": {
     "add_data_file": "Добавить DATA файл",
@@ -680,7 +680,10 @@
     "global_settings_load_failed": "Не удалось загрузить глобальные настройки",
     "incomplete_save": "НЕЗАВЕРШЁННОЕ СОХРАНЕНИЕ",
     "installation_complete": "Установка завершена.",
+    "installation_failed": "Не удалось установить мод",
     "installing_game_files": "Установка файлов игры...",
+    "installing_mod": "Установка мода...",
+    "downloading_mod": "Скачивание мода...",
     "launcher_settings": "Настройки лаунчера",
     "launcher_version_up_to_date": "Ваша версия лаунчера актуальна.",
     "launching_game": "Запуск игры...",
@@ -693,8 +696,10 @@
     "macos_file_opened": "Файл открыт через macOS. Возвращаю окно лаунчера.",
     "mod_for_chapter_label": "Мод для {chapter_name}:",
     "mod_install_error": "Ошибка установки мода",
+    "mod_installed": "Мод установлен",
     "mod_installed_success": "Мод успешно установлен!",
     "mod_uninstalled": "Мод успешно удалён!",
+    "mod_updated": "Мод обновлен",
     "mod_label": "Мод:",
     "mod_list_updated": "Список модов обновлён.",
     "mods_folder_change_error": "Ошибка при смене папки модов.",

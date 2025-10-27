@@ -963,6 +963,13 @@ class ModEditorDialog(QDialog):
                         return
 
     def _fill_local_data_file_in_tab(self, tab, file_path, version):
+        # Определяем индекс вкладки для формирования правильного пути к chapter_*
+        tab_index = -1
+        for i in range(self.file_tabs.count()):
+            if self.file_tabs.widget(i) == tab:
+                tab_index = i
+                break
+
         for i in range(tab.layout().count() - 1, -1, -1):
             if (item := tab.layout().itemAt(i)) and item.widget() and hasattr(item.widget(), 'layout'):
                 if (frame_layout := item.widget().layout()):
@@ -973,7 +980,21 @@ class ModEditorDialog(QDialog):
                                     container_widget = container_item.widget()
                                     if container_widget.property('is_local_path'):
                                         folder_name = self.mod_data.get('folder_name', '')
-                                        full_path = os.path.join(self.parent_app.app_state.mods_dir, folder_name, file_path) if folder_name and (not os.path.isabs(file_path)) else file_path
+                                        if folder_name and not os.path.isabs(file_path):
+                                            # Определяем подпапку главы
+                                            modgame = self.mod_data.get('modgame', 'deltarune')
+                                            if modgame == 'deltarunedemo':
+                                                chapter_folder = 'demo'
+                                            elif modgame == 'undertale':
+                                                chapter_folder = 'undertale'
+                                            else:
+                                                # Для deltarune: вкладка 0 = chapter_0, вкладка 1 = chapter_1, etc.
+                                                chapter_folder = f'chapter_{tab_index}'
+
+                                            full_path = os.path.join(self.parent_app.app_state.mods_dir, folder_name, chapter_folder, file_path)
+                                        else:
+                                            full_path = file_path
+
                                         container_widget.setText(full_path)
                                         for version_idx in range(j + 1, frame_layout.count()):
                                             if (version_item := frame_layout.itemAt(version_idx)) and version_item.widget() and isinstance(version_item.widget(), QLineEdit) and (not version_item.widget().isReadOnly()):
@@ -1872,11 +1893,9 @@ class ModEditorDialog(QDialog):
         try:
             config_path = os.path.join(mod_folder_path, 'config.json')
             config_data = self.parent_app._read_json(config_path)
-            for item in os.listdir(mod_folder_path):
-                if item not in ['config.json'] and (not item.endswith(('.png', '.jpg', '.jpeg', '.gif'))):
-                    item_path = os.path.join(mod_folder_path, item)
-                    if os.path.isdir(item_path):
-                        shutil.rmtree(item_path)
+
+            # НЕ удаляем chapter_* папки! Просто обновляем файлы
+
             new_icon_path = self.icon_edit.text().strip()
             if new_icon_path and os.path.exists(new_icon_path):
                 icon_filename = os.path.basename(new_icon_path)
@@ -1897,17 +1916,18 @@ class ModEditorDialog(QDialog):
                 os.makedirs(file_folder, exist_ok=True)
                 files_data[file_key] = {}
                 data_path = file_data.get('data_file_url')
-                if data_path and os.path.exists(data_path):
+                if data_path:
                     data_filename = os.path.basename(data_path)
                     destination = os.path.join(file_folder, data_filename)
 
-                    # Если файл уже находится в папке мода, не копируем его
-                    if os.path.abspath(data_path) != os.path.abspath(destination):
+                    # Копируем файл только если он существует и еще не в папке мода
+                    if os.path.exists(data_path) and os.path.abspath(data_path) != os.path.abspath(destination):
                         if os.path.isdir(data_path):
                             shutil.copytree(data_path, destination)
                         else:
                             shutil.copy2(data_path, destination)
 
+                    # Сохраняем информацию о файле в любом случае
                     files_data[file_key]['data_file_url'] = data_filename
                     files_data[file_key]['data_file_version'] = file_data.get('data_file_version', '1.0.0')
                 extra_files = file_data.get('extra_files', {})
@@ -1916,18 +1936,18 @@ class ModEditorDialog(QDialog):
                     for group_key, paths in extra_files.items():
                         copied_paths = []
                         for path in paths:
-                            if os.path.exists(path):
-                                filename = os.path.basename(path)
-                                destination = os.path.join(file_folder, filename)
+                            filename = os.path.basename(path)
+                            destination = os.path.join(file_folder, filename)
 
-                                # Если файл уже находится в папке мода, не копируем его
-                                if os.path.abspath(path) != os.path.abspath(destination):
-                                    if os.path.isdir(path):
-                                        shutil.copytree(path, destination)
-                                    else:
-                                        shutil.copy2(path, destination)
+                            # Копируем файл только если он существует и еще не в папке мода
+                            if os.path.exists(path) and os.path.abspath(path) != os.path.abspath(destination):
+                                if os.path.isdir(path):
+                                    shutil.copytree(path, destination)
+                                else:
+                                    shutil.copy2(path, destination)
 
-                                copied_paths.append(filename)
+                            # Добавляем файл в список в любом случае
+                            copied_paths.append(filename)
                         if copied_paths:
                             files_data[file_key]['extra_files'][group_key] = copied_paths
             config_data.update({'name': updated_data.get('name', ''), 'version': updated_data.get('version', '1.0.0'), 'author': updated_data.get('author', ''), 'tagline': updated_data.get('tagline', ''), 'external_url': updated_data.get('external_url', ''), 'game_version': updated_data.get('game_version', tr('defaults.not_specified')), 'modgame': updated_data.get('modgame', 'deltarune'), 'files': files_data, 'tags': updated_data.get('tags', [])})

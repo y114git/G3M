@@ -15,7 +15,6 @@ import subprocess
 import webbrowser
 import rarfile
 import argparse
-import hashlib
 import importlib.util
 import importlib.machinery
 from typing import Callable, Optional, Dict, Any
@@ -24,17 +23,16 @@ from pathlib import Path
 import requests
 from PyQt6.QtCore import QTranslator, Qt, QEvent, QThread, QTimer, QUrl, pyqtSignal
 from PyQt6.QtGui import QColor, QDesktopServices, QFont, QFontDatabase, QIcon, QMovie, QPainter, QPixmap
-from PyQt6.QtWidgets import QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFrame, QLabel, QLineEdit, QMessageBox, QProgressBar, QPushButton, QTabWidget, QTextBrowser, QVBoxLayout, QWidget, QHBoxLayout, QSizePolicy, QInputDialog, QColorDialog, QListWidget, QScrollArea, QListWidgetItem
+from PyQt6.QtWidgets import QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFrame, QLabel, QLineEdit, QMessageBox, QProgressBar, QPushButton, QTabWidget, QTextBrowser, QVBoxLayout, QWidget, QHBoxLayout, QSizePolicy, QInputDialog, QColorDialog, QListWidget, QScrollArea
 from localization import localization_manager, tr
 from models.game_modes import FullGameMode, DemoGameMode, UndertaleGameMode
 from config.constants import LAUNCHER_VERSION, UI_COLORS, SOCIAL_LINKS, THEMES, SAVE_SLOT_FINISH_MAP, ARCH
 from models.mod_models import ModInfo, ModChapterData
-from utils.file_utils import autodetect_path, get_file_filter, sanitize_filename, ensure_writable, fix_macos_python_symlink
+from utils.file_utils import autodetect_path, get_file_filter, fix_macos_python_symlink
 from utils.game_utils import is_game_running, get_default_save_path, is_valid_save_path, is_valid_game_path
-from utils.path_utils import get_user_data_root, resource_path, get_launcher_dir, get_legacy_ylauncher_path, get_xdelta_path, get_user_plugins_dir
+from utils.path_utils import get_user_data_root, resource_path, get_launcher_dir, get_legacy_ylauncher_path, get_user_plugins_dir
 from utils.network_utils import check_internet_connection
 from threads.fetch_mods import FetchModsThread
-from threads.game_monitor import GameMonitorThread
 from threads.background_workers import PresenceWorker, FetchChangelogThread, BgLoader, FullInstallThread, InstallModsThread, FetchHelpContentThread
 from ui.styling import get_theme_color, clear_layout_widgets, load_mod_icon_universal, show_empty_message_in_layout
 from ui.widgets.custom_controls import NoScrollComboBox, NoScrollTabWidget, ClickableLabel, SlotFrame
@@ -49,9 +47,9 @@ from ui.feedback import FeedbackManager
 from core.startup import SingleInstanceServer
 from core.app_state import AppState
 from core.managers.mod_manager import ModManager
+from core.managers.launch_manager import GameLauncher
 _translator = QTranslator()
 _lock_file = None
-
 
 class DeltaHubApp(QWidget):
     update_status_signal = pyqtSignal(str, str)
@@ -68,7 +66,7 @@ class DeltaHubApp(QWidget):
     url_received_signal = pyqtSignal(str)
     install_from_gb_signal = pyqtSignal(object)
 
-    def __init__(self, args: Optional[argparse.Namespace] = None, parent_for_dialogs: Optional[QWidget] = None, initial_url: str | None = None):
+    def __init__(self, args: Optional[argparse.Namespace]=None, parent_for_dialogs: Optional[QWidget]=None, initial_url: str | None=None):
         super().__init__()
         self.app_state = AppState()
         self.server: SingleInstanceServer | None = None
@@ -87,7 +85,6 @@ class DeltaHubApp(QWidget):
         self.app_state.config_path = os.path.join(self.app_state.config_dir, 'config.json')
         self.presence_thread = None
         self.presence_worker = None
-        self._direct_launch_cleanup_info = None
         self._online_timer = QTimer(self)
         self._online_timer.timeout.connect(self._run_presence_tick)
         self._online_timer.start(30000)
@@ -102,7 +99,6 @@ class DeltaHubApp(QWidget):
         self._supports_volume = platform.system() == 'Windows'
         self._initial_size = None
         self.app_state.local_config = self._read_json(self.app_state.config_path) or {}
-        self._recover_previous_session()
         self._init_localization()
         self.app_state.save_path = ''
         self.resize(875, 750)
@@ -112,7 +108,6 @@ class DeltaHubApp(QWidget):
         self.custom_font_family = None
         self.app_state.game_path = ''
         self.app_state.demo_game_path = ''
-        self.monitor_thread: Optional[GameMonitorThread] = None
         self.initialization_timer = None
         self._bg_music_running = False
         self._bg_music_thread = None
@@ -121,6 +116,7 @@ class DeltaHubApp(QWidget):
         self._plugin_tab_map = {}
         self._last_online_count = 0
         self.feedback_manager = FeedbackManager(self)
+        self.feedback_manager.app_state = self.app_state
         self.feedback_manager.status_updated.connect(self.update_status_signal.emit)
         self.mod_manager = ModManager(self.app_state, self.feedback_manager, self)
         self.mod_manager.progress_updated.connect(self.set_progress_signal.emit)
@@ -128,12 +124,18 @@ class DeltaHubApp(QWidget):
         self.mod_manager.mod_list_updated.connect(self._update_installed_mods_display)
         self.mod_manager.installation_finished.connect(self._on_mod_installation_finished)
         self.mod_manager.url_prompt_required.connect(self._handle_url_install_prompt)
+        self.game_launcher = GameLauncher(self.app_state, self.feedback_manager, self.mod_manager, self)
+        self.game_launcher.status_changed.connect(self.update_status_signal.emit)
+        self.game_launcher.progress_updated.connect(self.set_progress_signal.emit)
+        self.game_launcher.game_launch_started.connect(self.hide_window_signal.emit)
+        self.game_launcher.game_launch_finished.connect(self._on_game_launch_finished)
+        self.game_launcher.recover_previous_session()
         self.init_ui()
         self.load_font()
         self.update_status_signal.connect(self._update_status)
         self.hide_window_signal.connect(self._hide_window_for_game)
         self.restore_window_signal.connect(self._restore_window_after_game)
-        self.set_progress_signal.connect(self.progress_bar.setValue)
+        self.set_progress_signal.connect(self._on_progress_update)
         self.show_update_prompt.connect(self._prompt_for_update)
         self.error_signal.connect(lambda msg: self.feedback_manager.show_error('errors.error', msg))
         self.quit_signal.connect(QApplication.quit)
@@ -190,71 +192,6 @@ class DeltaHubApp(QWidget):
 
     def _write_mods_metadata(self, data: Dict):
         self.mod_manager._write_metadata(data)
-
-    def _session_manifest_path(self):
-        return os.path.join(self.app_state.config_dir, 'session.lock')
-
-    def _load_session_manifest(self) -> dict:
-        try:
-            with open(self._session_manifest_path(), 'r', encoding='utf-8') as f:
-                return json.load(f) or {}
-        except Exception:
-            return {}
-
-    def _write_session_manifest(self, data: dict):
-        try:
-            with open(self._session_manifest_path(), 'w', encoding='utf-8') as f:
-                json.dump(data, f, ensure_ascii=False)
-        except Exception:
-            pass
-
-    def _ensure_session_manifest(self) -> dict:
-        data = self._load_session_manifest()
-        if not data:
-            data = {'backup_files': {}, 'mod_files_to_cleanup': [], 'mod_dirs_to_cleanup': [], 'backup_temp_dir': None, 'direct_launch': None}
-            self._write_session_manifest(data)
-        return data
-
-    def _update_session_manifest(self, backup_files: Optional[dict] = None, mod_files: Optional[list] = None, backup_temp_dir: Optional[str] = None, direct_launch: Optional[dict] = None, mod_dirs: Optional[list] = None):
-        data = self._ensure_session_manifest()
-        if backup_files:
-            data.setdefault('backup_files', {}).update(backup_files)
-        if mod_files:
-            existing = set(data.get('mod_files_to_cleanup', []))
-            for p in mod_files:
-                if p not in existing:
-                    data.setdefault('mod_files_to_cleanup', []).append(p)
-        if mod_dirs:
-            existing_dirs = set(data.get('mod_dirs_to_cleanup', []))
-            for d in mod_dirs:
-                if d not in existing_dirs:
-                    data.setdefault('mod_dirs_to_cleanup', []).append(d)
-        if backup_temp_dir is not None:
-            data['backup_temp_dir'] = backup_temp_dir
-        if direct_launch is not None:
-            data['direct_launch'] = direct_launch
-        self._write_session_manifest(data)
-
-    def _clear_session_manifest(self):
-        try:
-            os.remove(self._session_manifest_path())
-        except Exception:
-            pass
-
-    def _recover_previous_session(self):
-        try:
-            data = self._load_session_manifest()
-            if not data:
-                return
-            self._backup_files = data.get('backup_files', {})
-            self._mod_files_to_cleanup = data.get('mod_files_to_cleanup', [])
-            self._backup_temp_dir = data.get('backup_temp_dir')
-            self._direct_launch_cleanup_info = data.get('direct_launch')
-            self.feedback_manager.update_status('status.recovering_previous_session', UI_COLORS['status_warning'])
-            self._cleanup_direct_launch_files()
-            self._clear_session_manifest()
-        except Exception:
-            pass
 
     def _shortcut_launch(self, args):
         try:
@@ -463,9 +400,9 @@ class DeltaHubApp(QWidget):
                                 continue
                     if config_path:
                         config_data.get('is_available_on_server', False)
-            existing_keys = {mod.key for mod in self.app_state.all_mods}
+            self.app_state.all_mods = [mod for mod in self.app_state.all_mods if not hasattr(mod, 'tags') or 'local' not in mod.tags]
             for mod_key, config_data in installed_mods.items():
-                if mod_key not in existing_keys and config_data.get('is_local_mod'):
+                if config_data.get('is_local_mod'):
                     try:
                         mod_folder_for_icon = self._get_mod_folder_path_by_key(mod_key)
                         icon_path = ''
@@ -558,7 +495,7 @@ class DeltaHubApp(QWidget):
                     if isinstance(widget, InstalledModWidget) and hasattr(widget, 'use_button') and widget.use_button:
                         widget.use_button.setEnabled(enabled)
 
-    def _create_settings_nav_button(self, text: str, on_click: Callable, style_sheet: str = '', fixed_width: int = 400) -> QPushButton:
+    def _create_settings_nav_button(self, text: str, on_click: Callable, style_sheet: str='', fixed_width: int=400) -> QPushButton:
         button = QPushButton(text)
         button.setFixedWidth(fixed_width)
         base_style = f'width: {fixed_width}px;'
@@ -1425,9 +1362,20 @@ class DeltaHubApp(QWidget):
         old_mode = getattr(self, 'current_mode', 'normal')
         self._previous_mode = old_mode
         is_chapter = bool(state)
+        old_is_chapter = self.app_state.current_mode == 'chapter'
+        if old_is_chapter != is_chapter:
+            old_config_key = self._get_slots_config_key(self.app_state.game_mode, old_is_chapter)
+            slots_data = {}
+            if hasattr(self.app_state, 'slots'):
+                for slot_id, slot_frame in self.app_state.slots.items():
+                    if slot_frame.assigned_mod:
+                        mod_key = getattr(slot_frame.assigned_mod, 'key', None) or getattr(slot_frame.assigned_mod, 'mod_key', None) or getattr(slot_frame.assigned_mod, 'name', None)
+                        if mod_key:
+                            slots_data[str(slot_id)] = {'mod_key': mod_key, 'mod_name': slot_frame.assigned_mod.name}
+            self.app_state.local_config[old_config_key] = slots_data
+            self._write_local_config()
         self.app_state.current_mode = 'chapter' if is_chapter else 'normal'
         self.game_type_combo.setEnabled(not is_chapter)
-        self._save_slots_state()
         self._update_slots_display()
         self._update_mod_widgets_slot_status()
         self._update_action_button_state()
@@ -1440,6 +1388,8 @@ class DeltaHubApp(QWidget):
         else:
             self.app_state.selected_chapter_id = None
             self._update_installed_mods_display()
+            if self.app_state.local_config.get('direct_launch_slot_id', -1) >= 0:
+                self.app_state.local_config['direct_launch_slot_id'] = -1
         self._update_change_path_button_text()
         self.app_state.local_config['chapter_mode_enabled'] = is_chapter
         self._write_local_config()
@@ -1625,11 +1575,10 @@ class DeltaHubApp(QWidget):
         current_direct_launch_slot = self.app_state.local_config.get('direct_launch_slot_id', -1)
         is_direct_launch_active = current_direct_launch_slot == slot_frame.chapter_id
         if is_direct_launch_active:
-            if self.feedback_manager.ask_question('ui.direct_launch', 'ui.disable_direct_launch', '', False):
+            if self.feedback_manager.ask_question('ui.direct_launch', 'ui.disable_direct_launch', '', False, chapter=slot_frame.chapter_id):
                 self._disable_direct_launch()
-        else:
-            if self.feedback_manager.ask_question('ui.direct_launch', 'ui.enable_direct_launch', '', False):
-                self._on_toggle_direct_launch_for_slot(slot_frame.chapter_id)
+        elif self.feedback_manager.ask_question('ui.direct_launch', 'ui.enable_direct_launch', '', False, chapter=slot_frame.chapter_id):
+            self._on_toggle_direct_launch_for_slot(slot_frame.chapter_id)
 
     def _update_installed_mods_for_chapter_mode(self, selected_chapter_id):
         if not hasattr(self, 'installed_mods_layout'):
@@ -1677,13 +1626,19 @@ class DeltaHubApp(QWidget):
             mod_key = getattr(mod_data, 'key', None) or getattr(mod_data, 'mod_key', None)
             if not mod_key:
                 return True
-            mod_folder = os.path.join(self.app_state.mods_dir, mod_key)
-            if not os.path.exists(mod_folder):
-                mod_folder_by_name = os.path.join(self.app_state.mods_dir, mod_data.name)
-                if os.path.exists(mod_folder_by_name):
-                    mod_folder = mod_folder_by_name
-                else:
+            is_local = mod_key.startswith('local_')
+            if is_local:
+                mod_folder = self._get_mod_folder_path_by_key(mod_key)
+                if not mod_folder:
                     return False
+            else:
+                mod_folder = os.path.join(self.app_state.mods_dir, mod_key)
+                if not os.path.exists(mod_folder):
+                    mod_folder_by_name = os.path.join(self.app_state.mods_dir, mod_data.name)
+                    if os.path.exists(mod_folder_by_name):
+                        mod_folder = mod_folder_by_name
+                    else:
+                        return False
             config_path = os.path.join(mod_folder, 'config.json')
             if os.path.exists(config_path):
                 try:
@@ -1820,76 +1775,80 @@ class DeltaHubApp(QWidget):
         self._refresh_installed_mods_async()
 
     def _update_installed_mods_display_from_list(self, installed_mods):
-        is_chapter_mode = hasattr(self, 'chapter_mode_checkbox') and self.chapter_mode_checkbox.isChecked()
-        if is_chapter_mode:
-            selected_id = getattr(self, 'selected_chapter_id', None)
-            if selected_id is None:
-                if hasattr(self, 'installed_mods_container') and hasattr(self, 'installed_mods_layout'):
-                    self.installed_mods_container.setUpdatesEnabled(False)
-                    clear_layout_widgets(self.installed_mods_layout, keep_last_n=1)
-                    self._show_chapter_mode_instruction()
-                    self.installed_mods_container.setUpdatesEnabled(True)
-                return
-            else:
-                self._update_installed_mods_for_chapter_mode(selected_id)
-                return
-        self.installed_mods_container.setUpdatesEnabled(False)
-        clear_layout_widgets(self.installed_mods_layout, keep_last_n=1)
-        self._cleanup_missing_mods(installed_mods)
-        if hasattr(self, 'library_sort_combo'):
-            sort_type = self.library_sort_combo.currentIndex()
-            reverse = not self.library_sort_ascending
-            if sort_type == 0:
-                installed_mods.sort(key=lambda mod: mod.get('name', '').lower(), reverse=reverse)
-            elif sort_type == 1:
-                installed_mods.sort(key=lambda mod: mod.get('installed_date', '0'), reverse=reverse)
-        selected_tags = []
-        if hasattr(self, 'library_tag_widgets'):
-            tag_map = {self.library_tag_translation: 'translation', self.library_tag_customization: 'customization', self.library_tag_gameplay: 'gameplay', self.library_tag_other: 'other', self.library_tag_local: 'local'}
-            for checkbox, tag in tag_map.items():
-                if checkbox.isChecked():
-                    selected_tags.append(tag)
-        search_text = getattr(self, 'library_search_text', '').lower()
-        current_game_type = 'deltarune'
-        if hasattr(self, 'game_type_combo'):
-            current_game_type = self.game_type_combo.currentData() or 'deltarune'
-        for mod_info in installed_mods:
-            mod_exists = self._check_mod_exists(mod_info)
-            if not mod_exists:
-                continue
-            mod_modgame = mod_info.get('modgame', 'deltarune')
-            if mod_modgame != current_game_type:
-                continue
-            mod_tags = mod_info.get('tags', [])
-            if mod_info.get('is_local_mod'):
-                if 'local' not in mod_tags:
-                    mod_tags.append('local')
-            if selected_tags and (not all((tag in mod_tags for tag in selected_tags))):
-                continue
-            if search_text:
-                mod_name = mod_info.get('name', '').lower()
-                mod_tagline = mod_info.get('tagline', '').lower()
-                if search_text not in mod_name and search_text not in mod_tagline:
+        try:
+            is_chapter_mode = hasattr(self, 'chapter_mode_checkbox') and self.chapter_mode_checkbox.isChecked()
+            if is_chapter_mode:
+                selected_id = getattr(self, 'selected_chapter_id', None)
+                if selected_id is None:
+                    if hasattr(self, 'installed_mods_container') and hasattr(self, 'installed_mods_layout'):
+                        self.installed_mods_container.setUpdatesEnabled(False)
+                        clear_layout_widgets(self.installed_mods_layout, keep_last_n=1)
+                        self._show_chapter_mode_instruction()
+                        self.installed_mods_container.setUpdatesEnabled(True)
+                    return
+                else:
+                    self._update_installed_mods_for_chapter_mode(selected_id)
+                    return
+            self.installed_mods_container.setUpdatesEnabled(False)
+            clear_layout_widgets(self.installed_mods_layout, keep_last_n=1)
+            self._cleanup_missing_mods(installed_mods)
+            if hasattr(self, 'library_sort_combo'):
+                sort_type = self.library_sort_combo.currentIndex()
+                reverse = not self.library_sort_ascending
+                if sort_type == 0:
+                    installed_mods.sort(key=lambda mod: mod.get('name', '').lower(), reverse=reverse)
+                elif sort_type == 1:
+                    installed_mods.sort(key=lambda mod: mod.get('installed_date', '0'), reverse=reverse)
+            selected_tags = []
+            if hasattr(self, 'library_tag_widgets'):
+                tag_map = {self.library_tag_translation: 'translation', self.library_tag_customization: 'customization', self.library_tag_gameplay: 'gameplay', self.library_tag_other: 'other', self.library_tag_local: 'local'}
+                for checkbox, tag in tag_map.items():
+                    if checkbox.isChecked():
+                        selected_tags.append(tag)
+            search_text = getattr(self, 'library_search_text', '').lower()
+            current_game_type = 'deltarune'
+            if hasattr(self, 'game_type_combo'):
+                current_game_type = self.game_type_combo.currentData() or 'deltarune'
+            for idx, mod_info in enumerate(installed_mods):
+                mod_exists = self._check_mod_exists(mod_info)
+                if not mod_exists:
                     continue
-            is_local = mod_info.get('is_local_mod', False)
-            is_available = mod_info.get('is_available_on_server', True)
-            has_update = False
-            if not is_local and is_available:
-                public_mod = next((mod for mod in self.app_state.all_mods if mod.key == mod_info.get('key')), None)
-                if public_mod:
-                    has_update = any((self._mod_has_files_for_chapter(public_mod, i) and self._get_mod_status_for_chapter(public_mod, i) == 'update' for i in range(5)))
-            mod_data = self._create_mod_object_from_info(mod_info)
-            if mod_data:
-                mod_widget = InstalledModWidget(mod_data, is_local, is_available, has_update, parent=self)
-                mod_widget.clicked.connect(self._on_installed_mod_clicked)
-                mod_widget.remove_requested.connect(self._on_installed_mod_remove)
-                mod_widget.use_requested.connect(self._on_installed_mod_use)
-                self.installed_mods_layout.insertWidget(self.installed_mods_layout.count() - 1, mod_widget)
-        if self.installed_mods_layout.count() <= 1:
-            self._show_empty_mods_message()
-        self._update_mod_widgets_slot_status()
-        self._update_action_button_state()
-        self.installed_mods_container.setUpdatesEnabled(True)
+                mod_modgame = mod_info.get('modgame', 'deltarune')
+                if mod_modgame != current_game_type:
+                    continue
+                mod_tags = mod_info.get('tags', [])
+                if mod_info.get('is_local_mod'):
+                    if 'local' not in mod_tags:
+                        mod_tags.append('local')
+                if selected_tags and (not all((tag in mod_tags for tag in selected_tags))):
+                    continue
+                if search_text:
+                    mod_name_lower = mod_info.get('name', '').lower()
+                    mod_tagline = mod_info.get('tagline', '').lower()
+                    if search_text not in mod_name_lower and search_text not in mod_tagline:
+                        continue
+                is_local = mod_info.get('is_local_mod', False)
+                is_available = mod_info.get('is_available_on_server', True)
+                has_update = False
+                if not is_local and is_available:
+                    public_mod = next((mod for mod in self.app_state.all_mods if mod.key == mod_info.get('key')), None)
+                    if public_mod:
+                        has_update = any((self._mod_has_files_for_chapter(public_mod, i) and self._get_mod_status_for_chapter(public_mod, i) == 'update' for i in range(5)))
+                mod_data = self._create_mod_object_from_info(mod_info)
+                if mod_data:
+                    mod_widget = InstalledModWidget(mod_data, is_local, is_available, has_update, parent=self)
+                    mod_widget.clicked.connect(self._on_installed_mod_clicked)
+                    mod_widget.remove_requested.connect(self._on_installed_mod_remove)
+                    mod_widget.use_requested.connect(self._on_installed_mod_use)
+                    self.installed_mods_layout.insertWidget(self.installed_mods_layout.count() - 1, mod_widget)
+            if self.installed_mods_layout.count() <= 1:
+                self._show_empty_mods_message()
+            self._update_mod_widgets_slot_status()
+            self._update_action_button_state()
+            self.installed_mods_container.setUpdatesEnabled(True)
+        except Exception:
+            if hasattr(self, 'installed_mods_container'):
+                self.installed_mods_container.setUpdatesEnabled(True)
 
     def _refresh_installed_mods_async(self):
         is_chapter_mode = hasattr(self, 'chapter_mode_checkbox') and self.chapter_mode_checkbox.isChecked()
@@ -2674,8 +2633,6 @@ class DeltaHubApp(QWidget):
                     if chapter_data:
                         available_chapters.append(chapter_id)
             if not available_chapters:
-                debug_info = f'Mod type: {mod.modgame}, Files keys: {list(mod.files.keys())}'
-                print(f'Debug: {debug_info}')
                 self.feedback_manager.show_warning('errors.mod_no_files', mod_name=mod.name)
                 return
             was_installed_before = self._is_mod_installed(mod.key)
@@ -2787,7 +2744,6 @@ class DeltaHubApp(QWidget):
 
     def _uninstall_single_mod(self, mod):
         self.mod_manager.uninstall_mod(mod)
-        # Update search mod plaques to reflect the uninstallation
         self._update_search_mod_plaques()
 
     def _update_search_mod_plaques(self):
@@ -2834,8 +2790,6 @@ class DeltaHubApp(QWidget):
         self._set_install_buttons_enabled(True)
         self.progress_bar.setVisible(False)
         self._update_action_button_state()
-        if hasattr(self, '_update_installed_mods_display'):
-            self._update_installed_mods_display()
 
     def _prompt_for_mods_dir(self):
         current_mods_dir = self.app_state.mods_dir
@@ -2942,7 +2896,24 @@ class DeltaHubApp(QWidget):
                 style.unpolish(widget)
                 style.polish(widget)
         self._update_mod_plaques_styles()
+        self._update_translucent_backgrounds()
         self.update()
+
+    def _update_translucent_backgrounds(self):
+        bg_color = get_theme_color(self.app_state.local_config, 'background', '#000000')
+        if bg_color.startswith('#'):
+            r = int(bg_color[1:3], 16)
+            g = int(bg_color[3:5], 16)
+            b = int(bg_color[5:7], 16)
+            bg_rgba = f'rgba({r}, {g}, {b}, 128)'
+        else:
+            bg_rgba = 'rgba(0, 0, 0, 128)'
+        if hasattr(self, 'search_container'):
+            self.search_container.setStyleSheet(f'\n            QWidget#search_mods_background {{\n                background-color: {bg_rgba};\n                border-radius: 10px;\n                margin: 5px;\n            }}\n        ')
+        if hasattr(self, 'active_slots_widget'):
+            self.active_slots_widget.setStyleSheet(f'\n            QWidget#slots_background {{\n                background-color: {bg_rgba};\n                border-radius: 10px;\n                margin: 5px;\n            }}\n        ')
+        if hasattr(self, 'installed_mods_container'):
+            self.installed_mods_container.setStyleSheet(f'\n            QWidget#mods_background {{\n                background-color: {bg_rgba};\n                border-radius: 10px;\n                margin: 5px;\n            }}\n        ')
 
     def _configure_hidden_tab_bar(self, tab_widget: QTabWidget):
         bar = tab_widget.tabBar()
@@ -3281,7 +3252,7 @@ class DeltaHubApp(QWidget):
             self.feedback_manager.show_error('errors.folder_creation_failed', error=str(e))
             return False
 
-    def _prompt_collection_name(self, default: str = 'Collection') -> Optional[str]:
+    def _prompt_collection_name(self, default: str='Collection') -> Optional[str]:
         dlg = QDialog(self)
         dlg.setWindowTitle(tr('dialogs.new_collection'))
         v, e = (QVBoxLayout(dlg), QLineEdit())
@@ -4200,20 +4171,18 @@ class DeltaHubApp(QWidget):
     def _prompt_for_update(self, update_info):
         if self.app_state.update_in_progress:
             return
+        if self.app_state.game_is_running:
+            self.app_state.pending_dialogs.append(('update', update_info))
+            return
         self.app_state.update_in_progress = True
-
-        # Build the update message with proper formatting like in the old version
         update_message = f"<b>{tr('dialogs.new_version_banner', version=update_info['version']).replace('<br>', '')}</b><br>"
         update_message += tr('dialogs.current_version_banner', current_version=LAUNCHER_VERSION).replace('<br><br>', '') + '<br><br>'
-
         if localization_manager.get_current_language() == 'ru':
             message_text = update_info.get('message_ru') or update_info.get('message', '')
         else:
             message_text = update_info.get('message_en') or update_info.get('message', '')
-
         update_message += f"<b>{tr('dialogs.whats_new')}</b><br>{message_text}<br><br>"
         update_message += tr('dialogs.want_download_install_now') + tr('dialogs.app_will_restart')
-
         if self.feedback_manager.ask_question('status.update_available', 'status.update_available', update_message, True):
             self._perform_update(update_info)
         else:
@@ -4376,7 +4345,7 @@ class DeltaHubApp(QWidget):
         self._safe_stop_thread(getattr(self, 'fetch_thread', None))
         self.fetch_thread = None
 
-    def _safe_stop_thread(self, thr: Optional[QThread], timeout: int = 2000):
+    def _safe_stop_thread(self, thr: Optional[QThread], timeout: int=2000):
         if isinstance(thr, QThread) and thr.isRunning():
             thr.requestInterruption()
             thr.quit()
@@ -4530,488 +4499,11 @@ class DeltaHubApp(QWidget):
             self.feedback_manager.update_status(tr('status.permission_change_failed'), UI_COLORS['status_error'])
             return False
 
-    def _prepare_game_files(self, selections: Dict[int, str]) -> bool:
-        try:
-            applied_chapters = set()
-            for ui_index, mod_key in selections.items():
-                if mod_key == 'no_change':
-                    continue
-                chapter_id = self.app_state.game_mode.get_chapter_id(ui_index)
-                mod = next((m for m in self.app_state.all_mods if m.key == mod_key), None)
-                if not mod:
-                    continue
-                is_local = mod_key.startswith('local_')
-                folder_name = sanitize_filename(mod.name)
-                source_dir = os.path.join(self.app_state.mods_dir, folder_name)
-                if not os.path.isdir(source_dir):
-                    self.feedback_manager.update_status(tr('errors.mod_folder_not_found', mod_name=mod.name, path=source_dir), UI_COLORS['status_warning'])
-                    continue
-                mod_type_str = tr('ui.mod_type_local') if is_local else tr('ui.mod_type_public')
-                self.feedback_manager.update_status(tr('status.applying_mod', mod_name=mod.name, mod_type=mod_type_str), UI_COLORS['status_warning'])
-                print(f'[XDELTA-DEBUG] UI index={ui_index}, chapter_id={chapter_id}, mod_key={mod_key}, mod_name={mod.name}')
-                print(f'[XDELTA-DEBUG] source_dir={source_dir}')
-                if chapter_id in applied_chapters:
-                    continue
-                is_xdelta_mod = self._is_xdelta_mod(mod, source_dir, chapter_id)
-                print(f'[XDELTA-DEBUG] is_xdelta_mod={is_xdelta_mod}')
-                if not is_xdelta_mod and (not mod.get_chapter_data(chapter_id)) and (not is_local):
-                    continue
-                target_dir = self._get_target_dir(chapter_id)
-                if not target_dir:
-                    print(f'[XDELTA-DEBUG] target_dir not found for chapter_id={chapter_id}')
-                    continue
-                print(f'[XDELTA-DEBUG] target_dir={target_dir}')
-                if not ensure_writable(target_dir):
-                    raise PermissionError(tr('errors.no_write_permission_for', path=target_dir))
-                if not self._create_backup_and_copy_mod_files(source_dir, target_dir, chapter_id, mod):
-                    return False
-                applied_chapters.add(chapter_id)
-            return True
-        except PermissionError as e:
-            path = e.filename or (e.args[0] if e.args else tr('errors.unknown_path'))
-            if not self.is_shortcut_launch:
-                self._handle_permission_error(path)
-            return False
-        except Exception as e:
-            self.error_signal.emit(tr('errors.file_prep_error', error=str(e)))
-            return False
-
-    def _is_xdelta_mod(self, mod_info, source_dir: str, chapter_id: Optional[int] = None) -> bool:
-        if mod_info and getattr(mod_info, 'is_xdelta', False):
-            return True
-        if chapter_id is not None:
-            search_dir = None
-            if chapter_id == -1:
-                demo_dir = os.path.join(source_dir, 'demo')
-                if os.path.isdir(demo_dir):
-                    search_dir = demo_dir
-                else:
-                    search_dir = source_dir
-            elif chapter_id == 0:
-                chapter0_dir = os.path.join(source_dir, 'chapter_0')
-                menu_dir_alt = os.path.join(source_dir, 'menu')
-                if os.path.isdir(chapter0_dir):
-                    search_dir = chapter0_dir
-                elif os.path.isdir(menu_dir_alt):
-                    search_dir = menu_dir_alt
-                else:
-                    search_dir = source_dir
-            else:
-                chapter_dir = os.path.join(source_dir, f'chapter_{chapter_id}')
-                if os.path.isdir(chapter_dir):
-                    search_dir = chapter_dir
-            if not search_dir:
-                return False
-        else:
-            search_dir = source_dir
-        print(f'[XDELTA-DEBUG] _is_xdelta_mod: chapter_id={chapter_id}, search_dir={search_dir}')
-        if os.path.exists(search_dir):
-            for root, _, files in os.walk(search_dir):
-                for file in files:
-                    if file.lower().endswith('.xdelta'):
-                        return True
-        return False
-
-    def _create_backup_and_copy_mod_files(self, source_dir: str, target_dir: str, chapter_id: Optional[int] = None, mod_info=None):
-        if not os.path.isdir(source_dir):
-            self.feedback_manager.update_status(tr('errors.mod_folder_not_found_simple', path=source_dir), UI_COLORS['status_error'])
-            return False
-        if not hasattr(self, '_mod_files_to_cleanup'):
-            self._mod_files_to_cleanup = []
-        if not hasattr(self, '_backup_files'):
-            self._backup_files = {}
-        self._ensure_session_manifest()
-        is_xdelta_mod = self._is_xdelta_mod(mod_info, source_dir, chapter_id)
-        applied_xdelta_for_this_chapter = False
-        files_copied = 0
-        if chapter_id is not None:
-            chapter_folder_name = {-1: 'demo', 0: 'chapter_0'}.get(chapter_id, f'chapter_{chapter_id}')
-            mod_source_dir = os.path.join(source_dir, chapter_folder_name)
-            if not os.path.isdir(mod_source_dir):
-                if chapter_id == 0:
-                    alt_menu_dir = os.path.join(source_dir, 'menu')
-                    if os.path.isdir(alt_menu_dir):
-                        mod_source_dir = alt_menu_dir
-                    else:
-                        mod_source_dir = source_dir
-                elif chapter_id == -1:
-                    mod_source_dir = source_dir
-                else:
-                    mod_source_dir = None
-        else:
-            mod_source_dir = source_dir
-        if not mod_source_dir or not os.path.isdir(mod_source_dir):
-            self.feedback_manager.update_status(tr('status.no_files_to_copy'), UI_COLORS['status_warning'])
-            return True
-        if not hasattr(self, '_backup_temp_dir') or not self._backup_temp_dir:
-            self._backup_temp_dir = tempfile.mkdtemp(prefix='deltahub_backup_')
-            self._update_session_manifest(backup_temp_dir=self._backup_temp_dir)
-        print(f'[XDELTA-DEBUG] _create_backup_and_copy_mod_files: chapter_id={chapter_id}, mod_source_dir={mod_source_dir}, target_dir={target_dir}, is_xdelta_mod={is_xdelta_mod}')
-        for root, _, files in os.walk(mod_source_dir):
-            for file in files:
-                if file.lower() == 'config.json' or file.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp', '.ico')):
-                    continue
-                cache_file_path = os.path.join(root, file)
-                rel_path = os.path.relpath(cache_file_path, mod_source_dir)
-                file_lower = file.lower()
-                target_rel_path = rel_path
-                is_core_data_file = file_lower in ('data.win', 'data.ios', 'game.ios') or (file_lower.endswith('.win') and 'data' in file_lower) or (file_lower.endswith('.ios') and 'game' in file_lower) or (is_xdelta_mod and file_lower.endswith('.xdelta'))
-                if platform.system() == 'Darwin':
-                    if is_core_data_file:
-                        target_rel_path = os.path.join(os.path.dirname(rel_path), 'game.ios')
-                    elif file_lower.endswith('.win'):
-                        name_without_ext = os.path.splitext(file)[0]
-                        target_rel_path = os.path.join(os.path.dirname(rel_path), name_without_ext + '.ios')
-                elif is_core_data_file:
-                    target_rel_path = os.path.join(os.path.dirname(rel_path), 'data.win')
-                elif file_lower.endswith('.ios'):
-                    name_without_ext = os.path.splitext(file)[0]
-                    target_rel_path = os.path.join(os.path.dirname(rel_path), name_without_ext + '.win')
-                game_file_path = os.path.join(target_dir, target_rel_path)
-                try:
-                    target_dirname = os.path.dirname(game_file_path)
-                    os.makedirs(target_dirname, exist_ok=True)
-                    try:
-                        if not hasattr(self, '_mod_dirs_to_cleanup'):
-                            self._mod_dirs_to_cleanup = []
-                        if target_dirname not in self._mod_dirs_to_cleanup:
-                            self._mod_dirs_to_cleanup.append(target_dirname)
-                            self._update_session_manifest(mod_dirs=[target_dirname])
-                    except Exception:
-                        pass
-                    if is_xdelta_mod and file_lower.endswith('.xdelta') and is_core_data_file:
-                        if applied_xdelta_for_this_chapter:
-                            continue
-                        print(f"[XDELTA-DEBUG] Chapter {chapter_id}: applying xdelta '{cache_file_path}' -> original in '{target_dir}' (computed game_file_path={game_file_path})")
-                        if not self._apply_xdelta_patch(cache_file_path, game_file_path, target_dir):
-                            self.feedback_manager.update_status(tr('errors.xdelta_apply_error', file=file), UI_COLORS['status_error'])
-                            return False
-                        files_copied += 1
-                        applied_xdelta_for_this_chapter = True
-                        continue
-                    if file_lower.endswith('.xdelta'):
-                        continue
-                    if os.path.exists(game_file_path) and game_file_path not in self._backup_files:
-                        unique_hash = hashlib.md5(game_file_path.encode('utf-8')).hexdigest()
-                        backup_filename = f'{unique_hash}_{os.path.basename(game_file_path)}'
-                        backup_file_path = os.path.join(self._backup_temp_dir, backup_filename)
-                        os.makedirs(os.path.dirname(backup_file_path), exist_ok=True)
-                        shutil.move(game_file_path, backup_file_path)
-                        self._backup_files[game_file_path] = backup_file_path
-                        self._update_session_manifest(backup_files={game_file_path: backup_file_path})
-                    if file_lower.endswith(('.zip', '.rar', '.7z', '.tar.gz', '.lzma')) and (not is_core_data_file):
-                        extracted_files = self._extract_archive_to_target(cache_file_path, target_dir)
-                        if extracted_files:
-                            self._mod_files_to_cleanup.extend(extracted_files)
-                            self._update_session_manifest(mod_files=extracted_files)
-                        files_copied += 1
-                    else:
-                        shutil.copy2(cache_file_path, game_file_path)
-                        files_copied += 1
-                        self._mod_files_to_cleanup.append(game_file_path)
-                        self._update_session_manifest(mod_files=[game_file_path])
-                except Exception as e:
-                    self.feedback_manager.update_status(tr('errors.file_copy_error', file=file, error=str(e)), UI_COLORS['status_error'])
-        if files_copied > 0:
-            self.feedback_manager.update_status(tr('status.files_copied_count', count=files_copied), UI_COLORS['status_info'])
-        else:
-            self.feedback_manager.update_status(tr('status.no_files_to_copy'), UI_COLORS['status_warning'])
-        return True
-
-    def _apply_xdelta_patch(self, xdelta_file_path: str, target_game_file_path: str, target_dir: str) -> bool:
-        xdelta_exe = get_xdelta_path()
-        if not xdelta_exe:
-            self.feedback_manager.show_error('errors.xdelta_error', tr('errors.xdelta_not_found', path='xdelta'))
-            return False
-        data_win = os.path.join(target_dir, 'data.win')
-        game_ios = os.path.join(target_dir, 'game.ios')
-        if platform.system() == 'Darwin':
-            primary_file = game_ios
-            secondary_file = data_win
-        else:
-            primary_file = data_win
-            secondary_file = game_ios
-        original_data_file = None
-        if os.path.exists(primary_file):
-            original_data_file = primary_file
-        elif os.path.exists(secondary_file):
-            original_data_file = secondary_file
-        if not original_data_file:
-            self.feedback_manager.show_error('errors.xdelta_error', tr('errors.original_data_file_not_found', target_dir=target_dir))
-            return False
-        if not hasattr(self, '_backup_files'):
-            self._backup_files = {}
-        if original_data_file not in self._backup_files:
-            if not hasattr(self, '_backup_temp_dir') or not self._backup_temp_dir:
-                self._backup_temp_dir = tempfile.mkdtemp(prefix='deltahub_backup_')
-                self._update_session_manifest(backup_temp_dir=self._backup_temp_dir)
-            unique_hash = hashlib.md5(original_data_file.encode('utf-8')).hexdigest()
-            backup_filename = f'xdelta_{unique_hash}_{os.path.basename(original_data_file)}'
-            backup_file_path = os.path.join(self._backup_temp_dir, backup_filename)
-            shutil.copy2(original_data_file, backup_file_path)
-            self._backup_files[original_data_file] = backup_file_path
-            self._update_session_manifest(backup_files={original_data_file: backup_file_path})
-        command = ['-d', '-f', '-s', self._backup_files[original_data_file], xdelta_file_path, original_data_file]
-        try:
-            command_to_run = [xdelta_exe] + command
-            startupinfo = None
-            if os.name == 'nt':
-                startupinfo = subprocess.STARTUPINFO()
-                startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-            process = subprocess.run(command_to_run, capture_output=True, text=True, check=False, startupinfo=startupinfo, encoding='utf-8', errors='replace')
-            if process.returncode == 0:
-                self._mod_files_to_cleanup.append(original_data_file)
-                self.feedback_manager.update_status(tr('status.xdelta_patch_applied', patch_name=os.path.basename(xdelta_file_path)), UI_COLORS['status_success'])
-                return True
-            else:
-                shutil.copy2(self._backup_files[original_data_file], original_data_file)
-                error_message = process.stderr.strip() or process.stdout.strip()
-                logging.error(f'Xdelta error: {error_message}')
-                self.feedback_manager.show_error('errors.patch_incompatible_details', error=error_message)
-                return False
-        except FileNotFoundError:
-            self.feedback_manager.show_error('errors.xdelta_error', tr('errors.xdelta_not_found', path=xdelta_exe))
-            return False
-        except Exception as e:
-            self.feedback_manager.show_error('errors.xdelta_patch_critical_error', error=str(e))
-            try:
-                shutil.copy2(self._backup_files[original_data_file], original_data_file)
-            except Exception as restore_e:
-                logging.error(f'Failed to restore from backup: {restore_e}')
-            return False
-
-    def _extract_archive_to_target(self, archive_path: str, target_dir: str):
-        import tempfile
-        file_lower = archive_path.lower()
-        extracted_files = []
-        try:
-            with tempfile.TemporaryDirectory(prefix='deltahub-extract-') as temp_dir:
-                if file_lower.endswith('.zip'):
-                    with zipfile.ZipFile(archive_path, 'r') as zf:
-                        zf.extractall(temp_dir)
-                elif file_lower.endswith('.rar'):
-                    with rarfile.RarFile(archive_path, 'r') as rf:
-                        rf.extractall(temp_dir)
-                elif file_lower.endswith('.7z'):
-                    import py7zr
-                    with py7zr.SevenZipFile(archive_path, mode='r') as zf:
-                        zf.extractall(path=temp_dir)
-                elif file_lower.endswith('.tar.gz'):
-                    import tarfile
-                    with tarfile.open(archive_path, 'r:gz') as tf:
-                        tf.extractall(temp_dir)
-                elif file_lower.endswith('.lzma'):
-                    import lzma
-                    output_path = os.path.join(temp_dir, os.path.splitext(os.path.basename(archive_path))[0])
-                    with lzma.open(archive_path) as f_in, open(output_path, 'wb') as f_out:
-                        shutil.copyfileobj(f_in, f_out)
-                else:
-                    raise ValueError(f'Unsupported archive format for extraction: {archive_path}')
-                from utils.file_utils import _cleanup_extracted_archive
-                _cleanup_extracted_archive(temp_dir)
-                for root, dirs, files in os.walk(temp_dir):
-                    for file in files:
-                        source_file = os.path.join(root, file)
-                        rel_path = os.path.relpath(source_file, temp_dir)
-                        target_file = os.path.join(target_dir, rel_path)
-                        file_lower = file.lower()
-                        if platform.system() == 'Darwin':
-                            if file_lower.endswith('.win'):
-                                name_without_ext = os.path.splitext(file)[0]
-                                target_file = os.path.join(os.path.dirname(target_file), name_without_ext + '.ios')
-                        elif file_lower.endswith('.ios'):
-                            name_without_ext = os.path.splitext(file)[0]
-                            target_file = os.path.join(os.path.dirname(target_file), name_without_ext + '.win')
-                        target_dirname = os.path.dirname(target_file)
-                        os.makedirs(target_dirname, exist_ok=True)
-                        try:
-                            if not hasattr(self, '_mod_dirs_to_cleanup'):
-                                self._mod_dirs_to_cleanup = []
-                            if target_dirname not in self._mod_dirs_to_cleanup:
-                                self._mod_dirs_to_cleanup.append(target_dirname)
-                                self._update_session_manifest(mod_dirs=[target_dirname])
-                        except Exception:
-                            pass
-                        if os.path.exists(target_file):
-                            backup_rel_path = os.path.relpath(target_file, target_dir)
-                            if hasattr(self, '_backup_temp_dir') and self._backup_temp_dir:
-                                backup_file_path = os.path.join(self._backup_temp_dir, backup_rel_path)
-                                os.makedirs(os.path.dirname(backup_file_path), exist_ok=True)
-                                shutil.move(target_file, backup_file_path)
-                                if not hasattr(self, '_backup_files'):
-                                    self._backup_files = {}
-                                self._backup_files[target_file] = backup_file_path
-                                self._update_session_manifest(backup_files={target_file: backup_file_path})
-                        shutil.copy2(source_file, target_file)
-                        extracted_files.append(target_file)
-        except Exception as e:
-            self.feedback_manager.update_status(tr('errors.archive_unpack_error', archive_name=os.path.basename(archive_path), error=str(e)), UI_COLORS['status_error'])
-        return extracted_files
-
-    def _determine_launch_config(self, selections: Dict[int, str]) -> Optional[Dict[str, Any]]:
-        use_steam = self.app_state.local_config.get('launch_via_steam', False)
-        direct_launch_slot_id = self.app_state.local_config.get('direct_launch_slot_id', -1)
-        direct_launch = direct_launch_slot_id > 0 and self.app_state.game_mode.direct_launch_allowed and (platform.system() != 'Darwin')
-        if use_steam:
-            return {'target': f'steam://rungameid/{self.app_state.game_mode.steam_id}', 'cwd': None, 'type': 'webbrowser'}
-        if direct_launch:
-            return self._handle_direct_launch(direct_launch_slot_id)
-        launch_target = self._get_executable_path()
-        if not launch_target:
-            self.feedback_manager.update_status(tr('errors.executable_not_found'), UI_COLORS['status_error'])
-            return None
-        return {'target': launch_target, 'cwd': self._get_current_game_path(), 'type': 'subprocess'}
-
-    def _handle_direct_launch(self, selected_tab_index: int) -> Optional[Dict[str, Any]]:
-        chapter_folder = self._get_target_dir(self.app_state.game_mode.get_chapter_id(selected_tab_index))
-        source_exe = self._get_source_executable_path()
-        use_custom_exe = self.app_state.local_config.get('use_custom_executable', False)
-        if not chapter_folder or not source_exe:
-            self.feedback_manager.update_status(tr('errors.direct_launch_error'), UI_COLORS['status_error'])
-            return None
-        try:
-            if not ensure_writable(chapter_folder):
-                raise PermissionError(tr('errors.no_write_permission_for', path=chapter_folder))
-            if use_custom_exe:
-                target_exe = os.path.join(chapter_folder, os.path.basename(source_exe))
-            else:
-                exe_name = 'UNDERTALE.exe' if isinstance(self.app_state.game_mode, UndertaleGameMode) else 'DELTARUNE.exe'
-                target_exe = os.path.join(chapter_folder, exe_name)
-            shutil.copy2(source_exe, target_exe)
-            self._direct_launch_cleanup_info = {'target_exe': target_exe, 'source_exe': source_exe, 'chapter_folder': chapter_folder, 'use_custom_exe': use_custom_exe}
-            self._update_session_manifest(direct_launch=self._direct_launch_cleanup_info)
-            return {'target': target_exe, 'cwd': chapter_folder, 'type': 'subprocess'}
-        except PermissionError as e:
-            if not self.is_shortcut_launch:
-                self._handle_permission_error(e.filename or chapter_folder)
-            return None
-
     def _cleanup_direct_launch_files(self):
-        try:
-            session_data = self._load_session_manifest()
-            cleanup_info = session_data.get('direct_launch')
-            if cleanup_info and cleanup_info.get('save_collection_swap'):
-                collection_path = cleanup_info.get('collection_path')
-                backup_path = cleanup_info.get('backup_path')
-                current_save_path = self.app_state.save_path
-                if not is_valid_save_path(current_save_path):
-                    current_save_path = self.app_state.local_config.get('save_path') or get_default_save_path()
-                if collection_path and backup_path and is_valid_save_path(current_save_path):
-                    if os.path.exists(collection_path):
-                        shutil.rmtree(collection_path)
-                    os.makedirs(collection_path)
-                    ignore_pattern = shutil.ignore_patterns('*_*_*')
-                    shutil.copytree(current_save_path, collection_path, dirs_exist_ok=True, ignore=ignore_pattern)
-                    for item in os.listdir(current_save_path):
-                        item_path = os.path.join(current_save_path, item)
-                        if not (os.path.isdir(item_path) and re.match('(.+?)_(\\d+)_(\\d+)$', item)):
-                            if os.path.isdir(item_path):
-                                shutil.rmtree(item_path)
-                            else:
-                                os.remove(item_path)
-                    if os.path.exists(backup_path):
-                        shutil.copytree(backup_path, current_save_path, dirs_exist_ok=True)
-                        shutil.rmtree(backup_path)
-            backed_up_targets = set(self._backup_files.keys()) if hasattr(self, '_backup_files') and self._backup_files else set()
-            if hasattr(self, '_backup_files') and self._backup_files:
-                for original_path, backup_path in self._backup_files.items():
-                    try:
-                        if os.path.exists(backup_path):
-                            if os.path.exists(original_path):
-                                os.remove(original_path)
-                            os.makedirs(os.path.dirname(original_path), exist_ok=True)
-                            shutil.move(backup_path, original_path)
-                    except Exception:
-                        continue
-                self._backup_files = {}
-            if hasattr(self, '_mod_files_to_cleanup') and self._mod_files_to_cleanup:
-                remaining_files = []
-                for file_path in self._mod_files_to_cleanup:
-                    if file_path in backed_up_targets:
-                        continue
-                    try:
-                        if os.path.exists(file_path):
-                            os.remove(file_path)
-                        else:
-                            remaining_files.append(file_path)
-                    except Exception:
-                        continue
-                self._mod_files_to_cleanup = []
-            if hasattr(self, '_backup_temp_dir') and self._backup_temp_dir and os.path.exists(self._backup_temp_dir):
-                try:
-                    shutil.rmtree(self._backup_temp_dir)
-                    self._backup_temp_dir = None
-                except Exception:
-                    pass
-            try:
-                dirs = []
-                if hasattr(self, '_mod_dirs_to_cleanup') and self._mod_dirs_to_cleanup:
-                    dirs = sorted(set(self._mod_dirs_to_cleanup), key=lambda p: len(p.split(os.sep)), reverse=True)
-                else:
-                    data = self._load_session_manifest() or {}
-                    dirs = sorted(set(data.get('mod_dirs_to_cleanup', [])), key=lambda p: len(p.split(os.sep)), reverse=True)
-                for d in dirs:
-                    try:
-                        if os.path.isdir(d) and (not os.listdir(d)):
-                            os.rmdir(d)
-                    except Exception:
-                        pass
-                self._mod_dirs_to_cleanup = []
-            except Exception:
-                pass
-            if not cleanup_info:
-                cleanup_info = getattr(self, '_direct_launch_cleanup_info', None)
-            if cleanup_info:
-                if 'target_exe' in cleanup_info and os.path.exists(cleanup_info['target_exe']):
-                    os.remove(cleanup_info['target_exe'])
-                self._direct_launch_cleanup_info = None
-            self.feedback_manager.update_status(tr('status.files_restored'), UI_COLORS['status_success'])
-            self._clear_session_manifest()
-        except Exception as e:
-            self.feedback_manager.update_status(tr('errors.files_restore_error', error=str(e)), UI_COLORS['status_error'])
+        self.game_launcher._cleanup_direct_launch_files()
 
     def _launch_game_with_all_mods(self):
-        selections = self._get_slot_selections()
-        self._launch_game_with_selections(selections)
-
-    def _get_slot_selections(self):
-        selections = {}
-        if not hasattr(self.app_state, 'slots'):
-            return selections
-        is_demo_mode = isinstance(self.app_state.game_mode, DemoGameMode)
-        is_undertale_mode = isinstance(self.app_state.game_mode, UndertaleGameMode)
-        if is_demo_mode:
-            demo_slot = self.app_state.slots.get(-10)
-            if demo_slot and demo_slot.assigned_mod:
-                selections[-1] = demo_slot.assigned_mod.key
-            else:
-                selections[-1] = 'no_change'
-        elif is_undertale_mode:
-            undertale_slot = self.app_state.slots.get(-20)
-            if undertale_slot and undertale_slot.assigned_mod:
-                selections[-1] = undertale_slot.assigned_mod.key
-            else:
-                selections[-1] = 'no_change'
-        elif self.app_state.current_mode == 'normal':
-            universal_slot = self.app_state.slots.get(-1)
-            if universal_slot and universal_slot.assigned_mod:
-                mod = universal_slot.assigned_mod
-                for chapter_id in range(5):
-                    if mod.get_chapter_data(chapter_id):
-                        selections[chapter_id] = mod.key
-                    else:
-                        selections[chapter_id] = 'no_change'
-            else:
-                for chapter_id in range(5):
-                    selections[chapter_id] = 'no_change'
-        elif self.app_state.current_mode == 'chapter':
-            for chapter_id in range(5):
-                slot = self.app_state.slots.get(chapter_id)
-                if slot and slot.assigned_mod:
-                    selections[chapter_id] = slot.assigned_mod.key
-                else:
-                    selections[chapter_id] = 'no_change'
-        return selections
+        self.game_launcher.launch_game_with_all_mods(execute_plugin_hooks=self._execute_plugin_hooks, restore_window_callback=self.restore_window_signal.emit)
 
     def _execute_plugin_hooks(self, hook_name: str):
         for plugin in self.app_state.plugins:
@@ -5023,168 +4515,19 @@ class DeltaHubApp(QWidget):
                 except Exception as e:
                     logging.error(f"Error executing {hook_name} hook for plugin '{plugin.get('name_key')}': {e}", exc_info=True)
 
-    def _launch_game_with_selections(self, selections: Dict[int, str]):
-        self._execute_plugin_hooks('on_before_game_launch')
-        self.hide_window_signal.emit()
-
-        def restore_and_return():
-            self.restore_window_signal.emit()
-            self._update_action_button_state()
-        selected_collection_path = None
-        game_type = self.game_type_combo.currentData()
-        if game_type in ['deltarune', 'deltarunedemo']:
-            if self._find_and_validate_save_path():
-                all_collections = []
-                for ch in range(1, 5):
-                    all_collections.extend(self._list_collections(ch))
-                unique_collections = sorted(list(set(all_collections)))
-                if unique_collections:
-                    dialog = QDialog(self)
-                    dialog.setWindowTitle(tr('dialogs.select_save_collection_title'))
-                    layout = QVBoxLayout(dialog)
-                    layout.addWidget(QLabel(tr('dialogs.select_save_collection_body')))
-                    list_widget = QListWidget()
-                    list_widget.addItem('Main')
-                    for collection in unique_collections:
-                        try:
-                            name_parts = collection.rsplit('_', 2)
-                            collection_name = f'{name_parts[0]} (Chapter {name_parts[2]})'
-                            item = QListWidgetItem(collection_name)
-                            item.setData(Qt.ItemDataRole.UserRole, collection)
-                            list_widget.addItem(item)
-                        except IndexError:
-                            list_widget.addItem(collection)
-                    list_widget.setCurrentRow(0)
-                    layout.addWidget(list_widget)
-                    buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
-                    buttons.accepted.connect(dialog.accept)
-                    buttons.rejected.connect(dialog.reject)
-                    layout.addWidget(buttons)
-                    if dialog.exec() == QDialog.DialogCode.Accepted:
-                        selected_item = list_widget.currentItem()
-                        if selected_item and selected_item.text() != 'Main':
-                            collection_folder_name = selected_item.data(Qt.ItemDataRole.UserRole)
-                            if collection_folder_name:
-                                selected_collection_path = os.path.join(self.app_state.save_path, collection_folder_name)
-                    else:
-                        restore_and_return()
-                        return
-        if selected_collection_path:
-            if not hasattr(self, '_backup_temp_dir') or not self._backup_temp_dir:
-                self._backup_temp_dir = tempfile.mkdtemp(prefix='deltahub_backup_')
-            main_saves_backup_path = os.path.join(self._backup_temp_dir, 'main_saves_backup')
-            if os.path.exists(main_saves_backup_path):
-                shutil.rmtree(main_saves_backup_path)
-            ignore_pattern = shutil.ignore_patterns('*_*_*')
-            shutil.copytree(self.app_state.save_path, main_saves_backup_path, dirs_exist_ok=True, ignore=ignore_pattern)
-            for item in os.listdir(self.app_state.save_path):
-                item_path = os.path.join(self.app_state.save_path, item)
-                if not (os.path.isdir(item_path) and re.match('(.+?)_(\\d+)_(\\d+)$', item)):
-                    if os.path.isdir(item_path):
-                        shutil.rmtree(item_path)
-                    else:
-                        os.remove(item_path)
-            shutil.copytree(selected_collection_path, self.app_state.save_path, dirs_exist_ok=True)
-            session_data = self._load_session_manifest()
-            direct_launch_info = session_data.get('direct_launch', {}) or {}
-            direct_launch_info.update({'save_collection_swap': True, 'collection_path': selected_collection_path, 'backup_path': main_saves_backup_path})
-            self._update_session_manifest(direct_launch=direct_launch_info)
-        if not self._find_and_validate_game_path(selections):
-            restore_and_return()
-            return
-        if not self._prepare_game_files(selections):
-            restore_and_return()
-            return
-        if not (launch_config := self._determine_launch_config(selections)):
-            restore_and_return()
-            return
-        self.feedback_manager.update_status(tr('status.launching_game'), UI_COLORS['status_success'])
-        self._execute_game(launch_config)
-        self._execute_plugin_hooks('on_after_game_launch')
-
-    def _execute_game(self, launch_config: Dict[str, Any], vanilla_mode: bool = False):
-        target_path = launch_config.get('target')
-        working_directory = launch_config.get('cwd')
-        launch_type = launch_config.get('type')
-        if not target_path:
-            self.feedback_manager.update_status(tr('errors.launch_target_not_defined'), 'red')
-            self.restore_window_signal.emit()
-            return
-        try:
-            if launch_type == 'webbrowser':
-                self.monitor_thread = GameMonitorThread(None, vanilla_mode, self)
-                self.monitor_thread.finished.connect(self._on_game_process_finished)
-                self.monitor_thread.start()
-                webbrowser.open(target_path)
-                self.feedback_manager.update_status(tr('status.launching_via_steam'), UI_COLORS['status_steam'])
-                return
-            if not working_directory or not os.path.isdir(working_directory):
-                msg = tr('errors.working_directory_not_found', path=working_directory)
-                self.feedback_manager.update_status(msg, 'red')
-                self.error_signal.emit(msg)
-                self.restore_window_signal.emit()
-                return
-            system = platform.system()
-            if system == 'Darwin':
-                use_custom_exe = self.app_state.local_config.get('use_custom_executable', False)
-                if use_custom_exe:
-                    subprocess.Popen(['open', target_path])
-                    self.feedback_manager.update_status(tr('status.macos_file_opened'), UI_COLORS['status_steam'])
-                    if self.is_shortcut_launch:
-                        sys.exit(0)
-                    else:
-                        QTimer.singleShot(2000, self.restore_window_signal.emit)
-                    return
-                if target_path.endswith('.app'):
-                    process = subprocess.Popen(['open', '-W', target_path])
-            else:
-                command = [target_path]
-                if system == 'Linux' and target_path.lower().endswith('.exe'):
-                    is_steam_launch = self.app_state.local_config.get('launch_via_steam', False)
-                    if not is_steam_launch:
-                        command.insert(0, 'wine')
-                creationflags = 0
-                if system == 'Windows':
-                    creationflags = 8
-                process = subprocess.Popen(command, cwd=working_directory, creationflags=creationflags)
-            self.feedback_manager.update_status(tr('status.game_launched_waiting_for_exit'), UI_COLORS['status_steam'])
-            self.monitor_thread = GameMonitorThread(process, vanilla_mode, self)
-            self.monitor_thread.finished.connect(self._on_game_process_finished)
-            self.monitor_thread.start()
-        except Exception as e:
-            self.feedback_manager.update_status(tr('errors.game_launch_error', error=str(e)), 'red')
-            self.error_signal.emit(tr('errors.game_launch_failed', error=str(e)))
-            self.restore_window_signal.emit()
-
-    def _get_source_executable_path(self):
-        if self.app_state.local_config.get('use_custom_executable', False):
-            cfg_key = self.app_state.game_mode.get_custom_exec_config_key()
-            return self.app_state.local_config.get(cfg_key, '')
-        return self._get_executable_path()
-
-    def _on_game_process_finished(self, vanilla_mode: bool):
-        self._execute_plugin_hooks('on_before_game_exit')
-        if self.is_shortcut_launch:
-            sys.exit(0)
-        else:
-            self._check_game_running(vanilla_mode)
-
-    def _check_game_running(self, vanilla_mode):
-        if is_game_running():
-            QTimer.singleShot(2000, lambda: self._check_game_running(vanilla_mode))
-        else:
-            self.feedback_manager.update_status(tr('status.game_closed_restoring_files'), UI_COLORS['status_info'])
-            self._cleanup_direct_launch_files()
-            self.restore_window_signal.emit()
+    def _on_game_launch_finished(self):
+        self.restore_window_signal.emit()
 
     def _hide_window_for_game(self):
         try:
             self._stop_background_music()
         except Exception:
             pass
+        self.app_state.game_is_running = True
         self.hide()
 
     def _restore_window_after_game(self):
+        self.app_state.game_is_running = False
         self.showNormal()
         self.activateWindow()
         self.raise_()
@@ -5197,7 +4540,17 @@ class DeltaHubApp(QWidget):
         if hasattr(self, '_update_mod_display'):
             self._update_mod_display()
         self._maybe_start_background_music()
+        self._show_pending_dialogs()
         self._execute_plugin_hooks('on_after_game_exit')
+
+    def _show_pending_dialogs(self):
+        if not self.app_state.pending_dialogs:
+            return
+        pending = self.app_state.pending_dialogs.copy()
+        self.app_state.pending_dialogs.clear()
+        for dialog_type, dialog_data in pending:
+            if dialog_type == 'update':
+                self._prompt_for_update(dialog_data)
 
     def _force_ui_update_after_restore(self):
         if hasattr(self, '_update_installed_mods_display'):
@@ -5206,10 +4559,17 @@ class DeltaHubApp(QWidget):
             self._update_mod_display()
         self.updateGeometry()
 
-    def _update_status(self, message: str, color: str = 'white'):
+    def _on_progress_update(self, value: int):
+        self.progress_bar.setValue(value)
+        if value > 0 and (not self.progress_bar.isVisible()):
+            self.progress_bar.setVisible(True)
+
+    def _update_status(self, message: str, color: str='white'):
         if not self.is_shortcut_launch:
+            from config.constants import UI_COLORS
+            actual_color = UI_COLORS.get(color, color)
             self.status_label.setText(message)
-            self.status_label.setStyleSheet(f'color: {color};')
+            self.status_label.setStyleSheet(f'color: {actual_color};')
 
     def _run_presence_tick(self):
         if self.is_shortcut_launch:
@@ -5221,6 +4581,13 @@ class DeltaHubApp(QWidget):
         except RuntimeError:
             self.presence_thread = None
             thr = None
+        if thr and (not thr.isRunning()):
+            try:
+                thr.deleteLater()
+            except RuntimeError:
+                pass
+            self.presence_thread = None
+            self.presence_worker = None
         self.presence_thread = QThread(self)
         self.presence_worker = PresenceWorker(self.session_id)
         self.presence_worker.moveToThread(self.presence_thread)
@@ -5631,16 +4998,7 @@ class DeltaHubApp(QWidget):
             self.feedback_manager.show_error('dialogs.mod_blocked_title', tr('dialogs.mod_blocked_message', ban_reason=ban_reason, error_message=tr('dialogs.error_occurred')))
             return
         if found_in_pending:
-            result = self.feedback_manager.ask_custom_question(
-                QMessageBox.Icon.Information,
-                'dialogs.mod_on_moderation',
-                'dialogs.mod_on_moderation_message',
-                [
-                    ('buttons.withdraw_request', QMessageBox.ButtonRole.DestructiveRole, 'withdraw'),
-                    ('buttons.ok', QMessageBox.ButtonRole.AcceptRole, 'ok')
-                ],
-                'ok'
-            )
+            result = self.feedback_manager.ask_custom_question(QMessageBox.Icon.Information, 'dialogs.mod_on_moderation', 'dialogs.mod_on_moderation_message', [('buttons.withdraw_request', QMessageBox.ButtonRole.DestructiveRole, 'withdraw'), ('buttons.ok', QMessageBox.ButtonRole.AcceptRole, 'ok')], 'ok')
             if result == 'withdraw':
                 try:
                     from config.constants import CLOUD_FUNCTIONS_BASE_URL
@@ -5653,14 +5011,7 @@ class DeltaHubApp(QWidget):
             from config.constants import CLOUD_FUNCTIONS_BASE_URL
             pending_changes_response = requests.get(f'{CLOUD_FUNCTIONS_BASE_URL}/getPendingChangeData?modId={hashed_key}', timeout=10)
             if pending_changes_response.status_code == 200 and pending_changes_response.json():
-                result = self.feedback_manager.ask_custom_question(
-                    QMessageBox.Icon.Information,
-                    'dialogs.changes_under_review',
-                    'dialogs.request_pending',
-                    [
-                        ('buttons.withdraw_request', QMessageBox.ButtonRole.DestructiveRole, 'withdraw')
-                    ]
-                )
+                result = self.feedback_manager.ask_custom_question(QMessageBox.Icon.Information, 'dialogs.changes_under_review', 'dialogs.request_pending', [('buttons.withdraw_request', QMessageBox.ButtonRole.DestructiveRole, 'withdraw')])
                 if result == 'withdraw':
                     try:
                         from config.constants import CLOUD_FUNCTIONS_BASE_URL
@@ -5803,7 +5154,9 @@ class DeltaHubApp(QWidget):
         self._save_window_geometry()
         self._stop_presence_thread()
         self._stop_fetch_thread()
-        for attr in ('install_thread', 'full_install_thread', '_bg_loader', 'monitor_thread'):
+        if hasattr(self, 'game_launcher') and hasattr(self.game_launcher, 'monitor_thread'):
+            self._safe_stop_thread(self.game_launcher.monitor_thread)
+        for attr in ('install_thread', 'full_install_thread', '_bg_loader'):
             self._safe_stop_thread(getattr(self, attr, None))
         super().closeEvent(event)
 
@@ -6208,7 +5561,7 @@ class DeltaHubApp(QWidget):
                     return True
         return False
 
-    def _find_and_validate_game_path(self, selections: Optional[Dict[int, str]] = None, is_initial: bool = False):
+    def _find_and_validate_game_path(self, selections: Optional[Dict[int, str]]=None, is_initial: bool=False):
         path_from_config = self._get_current_game_path()
         skip_data_check = bool(selections and self._has_mods_with_data_files(selections))
         if isinstance(self.app_state.game_mode, DemoGameMode):
@@ -6302,15 +5655,7 @@ class DeltaHubApp(QWidget):
             pass
 
     def _on_theme_button_click(self):
-        result = self.feedback_manager.ask_custom_question(
-            QMessageBox.Icon.Information,
-            'buttons.theme_management',
-            'dialogs.theme_choice',
-            [
-                ('buttons.import', QMessageBox.ButtonRole.AcceptRole, 'import'),
-                ('buttons.export', QMessageBox.ButtonRole.AcceptRole, 'export')
-            ]
-        )
+        result = self.feedback_manager.ask_custom_question(QMessageBox.Icon.Information, 'buttons.theme_management', 'dialogs.theme_choice', [('buttons.import', QMessageBox.ButtonRole.AcceptRole, 'import'), ('buttons.export', QMessageBox.ButtonRole.AcceptRole, 'export')])
         if result == 'import':
             self._import_theme()
         elif result == 'export':
@@ -6459,6 +5804,11 @@ class DeltaHubApp(QWidget):
                 current_slot = self._find_mod_in_slots(mod_data)
                 if not current_slot:
                     self._assign_mod_to_slot(slot_frame, mod_data, save_state=False)
+            elif slot_id in slots_data:
+                del slots_data[slot_id]
+        if slots_data != self.app_state.local_config.get(config_key, {}):
+            self.app_state.local_config[config_key] = slots_data
+            self._write_json(self.app_state.config_path, self.app_state.local_config)
         QTimer.singleShot(100, self._refresh_slots_content)
         QTimer.singleShot(200, self._update_mod_widgets_slot_status)
         QTimer.singleShot(300, self._refresh_all_slot_status_displays)

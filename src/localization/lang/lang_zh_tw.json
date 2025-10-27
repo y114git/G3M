@@ -4,7 +4,7 @@
 	  "language_name": "繁體中文",
 	  "font": "Dtm_x_FZBitmap Regular.otf",
 	  "qt_translation": "qtbase_zh_tw",
-    "version": "1.0.1"
+    "version": "1.0.2"
 	},
 	"ui": {
 	  "add_data_file": "添加DATA檔案",
@@ -680,7 +680,10 @@
 	  "global_settings_load_failed": "加載全局設置失敗",
 	  "incomplete_save": "未完成存檔",
 	  "installation_complete": "安裝完成。",
+	  "installation_failed": "安裝模組失敗",
 	  "installing_game_files": "正在安裝遊戲檔案...",
+	  "installing_mod": "正在安裝模組...",
+	  "downloading_mod": "正在下載模組...",
 	  "launcher_settings": "啟動器設置",
 	  "launcher_version_up_to_date": "您的啟動器版本是最新的。",
 	  "launching_game": "正在啟動遊戲...",
@@ -693,8 +696,10 @@
 	  "macos_file_opened": "檔案已透過macOS打開。正在恢復啟動器窗口。",
 	  "mod_for_chapter_label": "第{chapter_name}章的模組：",
 	  "mod_install_error": "模組安裝錯誤",
+	  "mod_installed": "模組已安裝",
 	  "mod_installed_success": "模組安裝成功！",
 	  "mod_uninstalled": "模組已成功卸載！",
+	  "mod_updated": "模組已更新",
 	  "mod_label": "模組：",
 	  "mod_list_updated": "模組列表已更新。",
 	  "mods_folder_change_error": "更改模組資料夾時出錯。",

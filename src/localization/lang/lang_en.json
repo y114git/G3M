@@ -4,7 +4,7 @@
     "language_name": "English",
     "font": "main.ttf",
     "qt_translation": "qtbase_en",
-    "version": "1.0.1"
+    "version": "1.0.2"
   },
   "ui": {
     "add_data_file": "Add DATA file",
@@ -680,7 +680,10 @@
     "global_settings_load_failed": "Failed to load global settings",
     "incomplete_save": "INCOMPLETE SAVE",
     "installation_complete": "Installation complete.",
+    "installation_failed": "Failed to install mod",
     "installing_game_files": "Installing game files...",
+    "installing_mod": "Installing mod...",
+    "downloading_mod": "Downloading mod...",
     "launcher_settings": "Launcher settings",
     "launcher_version_up_to_date": "Your launcher version is up to date.",
     "launching_game": "Launching game...",
@@ -693,8 +696,10 @@
     "macos_file_opened": "File opened via macOS. Restoring launcher window.",
     "mod_for_chapter_label": "Mod for {chapter_name}:",
     "mod_install_error": "Mod installation error",
+    "mod_installed": "Mod installed",
     "mod_installed_success": "Mod installed successfully!",
     "mod_uninstalled": "Mod successfully uninstalled!",
+    "mod_updated": "Mod updated",
     "mod_label": "Mod:",
     "mod_list_updated": "Mod list updated.",
     "mods_folder_change_error": "Error changing mods folder.",

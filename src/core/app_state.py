@@ -2,8 +2,8 @@ from typing import Dict, Any, List, Optional, Tuple
 from models.mod_models import ModInfo
 from models.game_modes import GameMode, FullGameMode
 
-
 class AppState:
+
     def __init__(self):
         self.local_config: Dict[str, Any] = {}
         self.game_path: str = ''
@@ -37,3 +37,5 @@ class AppState:
         self.plugins: List[Dict[str, Any]] = []
         self.translations_by_chapter: Dict[int, List] = {i: [] for i in range(5)}
         self.is_full_install: bool = False
+        self.game_is_running: bool = False
+        self.pending_dialogs: List[Any] = []
