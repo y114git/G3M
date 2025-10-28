@@ -181,6 +181,8 @@ def run_app():
                 launcher_app['instance'].initialization_finished.connect(close_splash_and_show_launcher)
                 QTimer.singleShot(15000, close_splash_and_show_launcher)
             except Exception as e:
+                import traceback
+                traceback.print_exc()
                 if hasattr(splash, 'movie'):
                     splash.stop_gif_animation()
                 splash.close()
@@ -191,6 +193,8 @@ def run_app():
         try:
             sys.exit(app.exec())
         except Exception as e:
+            import traceback
+            traceback.print_exc()
             error_msg = tr('errors.startup_error_message', details=str(e))
             print(f'STARTUP ERROR: {error_msg}')
             QMessageBox.critical(None, tr('errors.startup_error_title'), error_msg)
@@ -267,6 +271,8 @@ def run_app():
             launcher_app['instance'].initialization_finished.connect(close_splash_when_ready)
             QTimer.singleShot(15000, close_splash_when_ready)
         except Exception as e:
+            import traceback
+            traceback.print_exc()
             splash.close()
             error_msg = tr('errors.startup_error_message', details=str(e))
             print(f'STARTUP ERROR: {error_msg}')
@@ -275,6 +281,8 @@ def run_app():
     try:
         sys.exit(app.exec())
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         error_msg = tr('errors.startup_error_message', details=str(e))
         print(f'STARTUP ERROR: {error_msg}')
         QMessageBox.critical(None, tr('errors.startup_error_title'), error_msg)

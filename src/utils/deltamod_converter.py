@@ -33,6 +33,7 @@ class DeltamodConverter:
             config_path = os.path.join(target_mod_dir, 'config.json')
             with open(config_path, 'w', encoding='utf-8') as f:
                 json.dump(config_data, f, indent=4, ensure_ascii=False)
+            logging.info(f'Deltamod converted: {config_data.get("name")} → {target_mod_dir}')
             return target_mod_dir
         except Exception as e:
             logging.error(f'Deltamod conversion failed: {e}')
@@ -41,11 +42,36 @@ class DeltamodConverter:
     def _validate_source(self) -> bool:
         info_path = os.path.join(self.source_path, '_deltamodInfo.json')
         xml_path = os.path.join(self.source_path, 'modding.xml')
-        if not os.path.exists(info_path) or not os.path.exists(xml_path):
+        if not os.path.exists(info_path):
             return False
-        with open(info_path, 'r', encoding='utf-8') as f:
-            self.deltamod_info = json.load(f)
-        self.modding_xml = ET.parse(xml_path).getroot()
+        if not os.path.exists(xml_path):
+            return False
+
+        try:
+            with open(info_path, 'r', encoding='utf-8') as f:
+                self.deltamod_info = json.load(f)
+        except Exception:
+            return False
+
+        try:
+            self.modding_xml = ET.parse(xml_path).getroot()
+        except ET.ParseError:
+            try:
+                with open(xml_path, 'r', encoding='utf-8') as f:
+                    xml_content = f.read().strip()
+
+                if not xml_content.startswith('<?xml'):
+                    xml_content = '<?xml version="1.0" encoding="UTF-8"?>\n<patches>\n' + xml_content + '\n</patches>'
+                else:
+                    xml_lines = xml_content.split('\n', 1)
+                    xml_content = xml_lines[0] + '\n<patches>\n' + xml_lines[1] + '\n</patches>'
+
+                self.modding_xml = ET.fromstring(xml_content)
+            except Exception:
+                self.modding_xml = None
+        except Exception:
+            self.modding_xml = None
+
         return True
 
     def _generate_config_json(self) -> Optional[Dict[str, Any]]:
@@ -62,7 +88,28 @@ class DeltamodConverter:
             mod_key = package_id.replace('.', '_')
         else:
             mod_key = f"local_{meta.get('name', 'unnamed')}_{uuid.uuid4().hex[:8]}"
-        config = {'is_local_mod': True, 'mod_key': mod_key, 'name': meta.get('name', tr('defaults.local_mod')), 'version': meta.get('version', '1.0.0'), 'author': ', '.join(meta.get('author', [tr('defaults.unknown')])), 'tagline': meta.get('description', tr('defaults.no_description')), 'external_url': meta.get('url', ''), 'game_version': self.deltamod_info.get('deltaruneTargetVersion', tr('defaults.not_specified')), 'modgame': 'deltarunedemo' if meta.get('demoMod') else 'deltarune', 'files': self._generate_files_structure(patches), 'tags': meta.get('tags', [])}
+
+        from datetime import datetime
+        created_date = datetime.now().strftime('%d.%m.%y %H:%M')
+
+        has_xdelta = any(p.get('type') == 'xdelta' for p in patches)
+
+        config = {
+            'is_local_mod': True,
+            'mod_key': mod_key,
+            'created_date': created_date,
+            'is_available_on_server': False,
+            'name': meta.get('name', tr('defaults.local_mod')),
+            'version': meta.get('version', '1.0.0'),
+            'author': ', '.join(meta.get('author', [tr('defaults.unknown')])),
+            'tagline': meta.get('description', tr('defaults.no_description')),
+            'external_url': meta.get('url', ''),
+            'game_version': self.deltamod_info.get('deltaruneTargetVersion', tr('defaults.not_specified')),
+            'modgame': 'deltarunedemo' if meta.get('demoMod') else 'deltarune',
+            'is_xdelta': has_xdelta,
+            'files': self._generate_files_structure(patches),
+            'tags': meta.get('tags', [])
+        }
         return config
 
     def _generate_files_structure(self, patches: list) -> Dict[str, Any]:
@@ -77,15 +124,13 @@ class DeltamodConverter:
             if 'demo' in to_path:
                 chapter_key = 'demo'
             else:
-                match = re.search('chapter(\\d+)', to_path)
+                match = re.search('chapter(\\d+)', to_path, re.IGNORECASE)
                 if match:
                     chapter_num = int(match.group(1))
                     if chapter_num > 0:
                         chapter_key = str(chapter_num)
             if not chapter_key:
                 continue
-            if chapter_key not in files_structure:
-                files_structure[chapter_key] = {}
             if chapter_key not in files_structure:
                 files_structure[chapter_key] = {}
             if patch_type == 'xdelta':
@@ -121,7 +166,7 @@ class DeltamodConverter:
             if 'demo' in to_path:
                 chapter_key = 'demo'
             else:
-                match = re.search('chapter(\\d+)', to_path)
+                match = re.search('chapter(\\d+)', to_path, re.IGNORECASE)
                 if match:
                     chapter_num = int(match.group(1))
                     if chapter_num > 0:

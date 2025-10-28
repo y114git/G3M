@@ -36,6 +36,7 @@ class ModInfo:
     tags: List[str] = field(default_factory=list)
     hide_mod: bool = False
     is_xdelta: bool = False
+    is_local_mod: bool = False
     ban_status: bool = False
     files: Dict[str, ModChapterData] = field(default_factory=dict)
     demo_url: Optional[str] = None
@@ -55,6 +56,6 @@ class ModInfo:
     def is_valid_for_demo(self) -> bool:
         if self.modgame != 'deltarunedemo':
             return False
-        if self.key.startswith('local_'):
+        if self.is_local_mod:
             return bool(self.files and self.files.get('demo'))
         return bool(self.demo_url and self.demo_version)
