@@ -31,7 +31,7 @@ class AppState:
         self.is_shown_to_user: bool = False
         self.game_mode: GameMode = FullGameMode()
         self.slots: Dict[int, Any] = {}
-        self.current_collection_idx: Dict[int, int] = {}
+        self.current_collection_idx: int = -1
         self.selected_slot: Optional[Tuple[int, int]] = None
         self.global_settings: Dict[str, Any] = {}
         self.plugins: List[Dict[str, Any]] = []
