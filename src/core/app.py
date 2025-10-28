@@ -2,7 +2,6 @@ import base64
 import json
 import os
 import platform
-import re
 import shutil
 import sys
 import tempfile
@@ -19,15 +18,15 @@ import importlib.machinery
 from typing import Callable, Optional, Dict, Any
 import logging
 import requests
-from PyQt6.QtCore import QTranslator, Qt, QEvent, QThread, QTimer, QUrl, pyqtSignal
-from PyQt6.QtGui import QColor, QDesktopServices, QFont, QFontDatabase, QIcon, QMovie, QPainter, QPixmap
+from PyQt6.QtCore import QTranslator, Qt, QEvent, QThread, QTimer, pyqtSignal
+from PyQt6.QtGui import QColor, QFont, QFontDatabase, QIcon, QMovie, QPainter, QPixmap
 from PyQt6.QtWidgets import QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFrame, QLabel, QLineEdit, QMessageBox, QProgressBar, QPushButton, QTabWidget, QTextBrowser, QVBoxLayout, QWidget, QHBoxLayout, QSizePolicy, QInputDialog, QColorDialog, QListWidget, QScrollArea
 from localization import localization_manager, tr
 from models.game_modes import FullGameMode, DemoGameMode, UndertaleGameMode
-from config.constants import LAUNCHER_VERSION, UI_COLORS, SOCIAL_LINKS, THEMES, SAVE_SLOT_FINISH_MAP, ARCH
+from config.constants import LAUNCHER_VERSION, UI_COLORS, SOCIAL_LINKS, THEMES, ARCH
 from models.mod_models import ModInfo, ModChapterData
 from utils.file_utils import autodetect_path
-from utils.game_utils import is_game_running, get_default_save_path, is_valid_save_path, is_valid_game_path
+from utils.game_utils import is_game_running, is_valid_game_path
 from utils.path_utils import get_user_data_root, resource_path, get_launcher_dir, get_legacy_ylauncher_path, get_user_plugins_dir
 from utils.network_utils import check_internet_connection
 from threads.fetch_mods import FetchModsThread
@@ -48,8 +47,10 @@ from core.managers.mod_manager import ModManager
 from core.managers.launch_manager import GameLauncher
 from core.managers.updatecheck_manager import UpdateChecker
 from core.managers.settings_manager import SettingsManager
+from core.managers.save_manager import SaveManager
 _translator = QTranslator()
 _lock_file = None
+
 
 class DeltaHubApp(QWidget):
     update_status_signal = pyqtSignal(str, str)
@@ -62,7 +63,7 @@ class DeltaHubApp(QWidget):
     url_received_signal = pyqtSignal(str)
     install_from_gb_signal = pyqtSignal(object)
 
-    def __init__(self, args: Optional[argparse.Namespace]=None, parent_for_dialogs: Optional[QWidget]=None, initial_url: str | None=None):
+    def __init__(self, args: Optional[argparse.Namespace] = None, parent_for_dialogs: Optional[QWidget] = None, initial_url: str | None = None):
         super().__init__()
         self.app_state = AppState()
         self.server: SingleInstanceServer | None = None
@@ -82,6 +83,9 @@ class DeltaHubApp(QWidget):
         self.feedback_manager = FeedbackManager(self)
         self.feedback_manager.app_state = self.app_state
         self.settings_manager = SettingsManager(self.app_state, self.feedback_manager, self.lang_manager, self)
+        self.save_manager = SaveManager(self.app_state, self.feedback_manager, self.settings_manager, self)
+        self.save_manager.slots_updated.connect(self._on_slots_updated)
+        self.save_manager.status_changed.connect(lambda msg, color: self.feedback_manager.update_status(msg, color))
         self.presence_thread = None
         self.presence_worker = None
         self._online_timer = QTimer(self)
@@ -126,7 +130,7 @@ class DeltaHubApp(QWidget):
         self.mod_manager.mod_list_updated.connect(self._update_installed_mods_display)
         self.mod_manager.installation_finished.connect(self._on_mod_installation_finished)
         self.mod_manager.url_prompt_required.connect(self._handle_url_install_prompt)
-        self.game_launcher = GameLauncher(self.app_state, self.feedback_manager, self.mod_manager, self)
+        self.game_launcher = GameLauncher(self.app_state, self.feedback_manager, self.mod_manager, self.save_manager, self)
         self.game_launcher.status_changed.connect(self.update_status_signal.emit)
         self.game_launcher.progress_updated.connect(self.set_progress_signal.emit)
         self.game_launcher.game_launch_started.connect(self.hide_window_signal.emit)
@@ -500,7 +504,7 @@ class DeltaHubApp(QWidget):
                     if isinstance(widget, InstalledModWidget) and hasattr(widget, 'use_button') and widget.use_button:
                         widget.use_button.setEnabled(enabled)
 
-    def _create_settings_nav_button(self, text: str, on_click: Callable, style_sheet: str='', fixed_width: int=400) -> QPushButton:
+    def _create_settings_nav_button(self, text: str, on_click: Callable, style_sheet: str = '', fixed_width: int = 400) -> QPushButton:
         button = QPushButton(text)
         button.setFixedWidth(fixed_width)
         base_style = f'width: {fixed_width}px;'
@@ -2930,8 +2934,8 @@ class DeltaHubApp(QWidget):
             tab = QWidget()
             v = QVBoxLayout(tab)
             for s in range(3):
-                lbl = QLabel(self._slot_placeholder(False))
-                lbl = ClickableLabel(ch, s, self._slot_placeholder(False))
+                lbl = QLabel(tr('status.empty_save_slot'))
+                lbl = ClickableLabel(ch, s, tr('status.empty_save_slot'))
                 lbl.setObjectName(f'slot_{ch}_{s}')
                 lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
                 lbl.setMinimumWidth(300)
@@ -3026,9 +3030,6 @@ class DeltaHubApp(QWidget):
             self.main_tab_widget.setVisible(True)
             self.bottom_widget.setVisible(True)
 
-    def _slot_placeholder(self, active: bool) -> str:
-        return tr('ui.placeholder_format') if active else tr('status.empty_save_slot')
-
     def _clear_selected_slot(self):
         self.app_state.selected_slot = None
         self._update_slot_highlight()
@@ -3043,15 +3044,15 @@ class DeltaHubApp(QWidget):
         return super().eventFilter(obj, ev)
 
     def _update_slot_action_bar(self):
-        in_main = self.app_state.current_collection_idx.get(self.save_tabs.currentIndex() + 1, -1) == -1
+        in_main = self.app_state.current_collection_idx == -1
         visible = self.app_state.selected_slot is not None
         for b in (self.show_btn, self.import_btn, self.erase_btn, self.export_btn):
             b.setVisible(visible)
         has_data = False
         if self.app_state.selected_slot:
             ch, s = self.app_state.selected_slot
-            idx = self.app_state.current_collection_idx.get(ch, -1)
-            base = self._get_collection_path(ch, idx)
+            idx = self.app_state.current_collection_idx
+            base = self.save_manager.get_collection_path(idx)
             fp = os.path.join(base, f'filech{ch}_{s}')
             has_data = os.path.exists(fp) and os.path.getsize(fp) > 0
         self.erase_btn.setEnabled(has_data)
@@ -3060,8 +3061,8 @@ class DeltaHubApp(QWidget):
         self.copy_to_main_btn.setEnabled(not in_main)
 
     def _on_slot_double_clicked(self, chapter: int, slot: int):
-        idx = self.app_state.current_collection_idx.get(chapter, -1)
-        base = self._get_collection_path(chapter, idx)
+        idx = self.app_state.current_collection_idx
+        base = self.save_manager.get_collection_path(idx)
         fp = os.path.join(base, f'filech{chapter}_{slot}')
         if not (os.path.exists(fp) and os.path.getsize(fp) > 0):
             return
@@ -3085,33 +3086,6 @@ class DeltaHubApp(QWidget):
                 lbl.setStyleSheet(f'border:2px solid white; background-color: {slot_bg}; padding:4px;')
             else:
                 lbl.setStyleSheet(f'border:1px solid white; background-color: {slot_bg}; padding:4px;')
-
-    def _collection_regex(self, chapter: int):
-        return re.compile(f'(.+?)_(\\d+)_{chapter}$')
-
-    def _list_collections(self, chapter: int) -> list[str]:
-        cols = []
-        rx = self._collection_regex(chapter)
-        if not (self.app_state.save_path and os.path.isdir(self.app_state.save_path)):
-            return cols
-        for entry in os.listdir(self.app_state.save_path):
-            m = rx.match(entry)
-            if m and os.path.isdir(os.path.join(self.app_state.save_path, entry)):
-                cols.append(entry)
-
-        def _index(name: str) -> int:
-            m = rx.match(name)
-            return int(m.group(2)) if m else 10000
-        cols.sort(key=_index)
-        return cols
-
-    def _get_collection_path(self, chapter: int, idx: int) -> str:
-        if idx == -1:
-            return self.app_state.save_path
-        cols = self._list_collections(chapter)
-        if 0 <= idx < len(cols):
-            return os.path.join(self.app_state.save_path, cols[idx])
-        return ''
 
     def _return_from_save_manager(self):
         self._hide_save_manager()
@@ -3144,319 +3118,81 @@ class DeltaHubApp(QWidget):
         if not (self.app_state.save_path and os.path.isdir(self.app_state.save_path)):
             return
         chapter = self.save_tabs.currentIndex() + 1
-        idx = self.app_state.current_collection_idx.get(chapter, -1)
-        base_path = self._get_collection_path(chapter, idx) or self.app_state.save_path
-        for s in range(3):
-            fp = os.path.join(base_path, f'filech{chapter}_{s}')
-            active = os.path.exists(fp) and os.path.getsize(fp) > 0
-            if active:
-                try:
-                    with open(fp, 'r', encoding='utf-8', errors='replace') as f:
-                        lines = f.read().splitlines()
-                    nickname = lines[0] if len(lines) > 0 else '???'
-                    currency = lines[10] if len(lines) > 10 else '0'
-                except Exception:
-                    nickname, currency = ('???', '0')
-                fin_idx = SAVE_SLOT_FINISH_MAP.get(s, -1)
-                fin_fp = os.path.join(base_path, f'filech{chapter}_{fin_idx}')
-                finished = os.path.exists(fin_fp) and os.path.getsize(fin_fp) > 0
-                status = tr('status.completed_save') if finished else tr('status.incomplete_save')
-                text = tr('ui.save_info', nickname=nickname, currency=currency, status=status)
-            else:
-                text = self._slot_placeholder(False)
+        slots_data = self.save_manager.refresh_save_slots_data(chapter)
+        for s, (active, text) in slots_data.items():
             self._slot_labels[chapter, s].setText(text)
         self._update_collection_ui()
         self._update_slot_highlight()
         self._update_slot_action_bar()
 
     def _find_and_validate_save_path(self) -> bool:
-        if is_valid_save_path(self.app_state.save_path):
-            return True
-        default_path = get_default_save_path()
-        if is_valid_save_path(default_path):
-            self.app_state.save_path = default_path
-            self.app_state.local_config['save_path'] = self.app_state.save_path
-            self._write_local_config()
-            return True
-        return self._prompt_for_save_path()
+        return self.save_manager.find_and_validate_save_path()
 
     def _prompt_for_save_path(self) -> bool:
-        if not (path := QFileDialog.getExistingDirectory(self, tr('ui.select_deltarune_saves_folder'))):
-            return False
-        if not is_valid_save_path(path):
-            self.feedback_manager.show_warning('errors.empty_folder_title', tr('errors.empty_folder_message'))
-            return False
-        self.app_state.save_path = path
-        self.app_state.local_config['save_path'] = self.app_state.save_path
-        self._write_local_config()
-        return True
+        return self.save_manager.prompt_for_save_path()
 
     def _toggle_collection_view(self):
-        chapter = self.save_tabs.currentIndex() + 1
-        idx = self.app_state.current_collection_idx.get(chapter, -1)
-        if idx == -1:
-            cols = self._list_collections(chapter)
-            if not cols and (not self._create_new_collection(chapter)):
-                return
-            self.app_state.current_collection_idx[chapter] = 0
-        else:
-            self.app_state.current_collection_idx[chapter] = -1
-        self._refresh_save_slots()
+        self.save_manager.toggle_collection_view()
 
     def _navigate_collection(self, direction: int):
-        chapter = self.save_tabs.currentIndex() + 1
-        cols = self._list_collections(chapter)
-        if not cols and direction > 0:
-            if not self._create_new_collection(chapter):
-                return
-            cols = self._list_collections(chapter)
-        if not cols:
-            return
-        idx = self.app_state.current_collection_idx.get(chapter, -1)
-        if idx == -1:
-            idx = 0
-        else:
-            idx += direction
-        if idx < 0:
-            idx = 0
-        elif idx >= len(cols):
-            if direction > 0 and self._create_new_collection(chapter):
-                idx = len(cols)
-            else:
-                idx = len(cols) - 1
-        self.app_state.current_collection_idx[chapter] = idx
-        self.app_state.selected_slot = None
-        self._refresh_save_slots()
+        self.save_manager.navigate_collection(direction)
 
-    def _create_new_collection(self, chapter: int) -> bool:
-        if (name := self._prompt_collection_name()) is None:
-            return False
-        idx = len(self._list_collections(chapter))
-        folder = f'{name}_{idx}_{chapter}'
-        try:
-            os.makedirs(os.path.join(self.app_state.save_path, folder), exist_ok=False)
-            return True
-        except Exception as e:
-            self.feedback_manager.show_error('errors.folder_creation_failed', error=str(e))
-            return False
+    def _create_new_collection(self) -> bool:
+        return self.save_manager.create_new_collection()
 
-    def _prompt_collection_name(self, default: str='Collection') -> Optional[str]:
-        dlg = QDialog(self)
-        dlg.setWindowTitle(tr('dialogs.new_collection'))
-        v, e = (QVBoxLayout(dlg), QLineEdit())
-        e.setMaxLength(20)
-        e.setText(default)
-        e.selectAll()
-        v.addWidget(e)
-        bb = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
-        bb.accepted.connect(dlg.accept)
-        bb.rejected.connect(dlg.reject)
-        v.addWidget(bb)
-        e.setFocus()
-        return e.text().strip() or default if dlg.exec() == QDialog.DialogCode.Accepted else None
+    def _prompt_collection_name(self, default: str = 'Collection') -> Optional[str]:
+        return self.save_manager.prompt_collection_name(default)
 
     def _update_collection_ui(self):
-        chapter = self.save_tabs.currentIndex() + 1
-        idx = self.app_state.current_collection_idx.get(chapter, -1)
-        in_col = idx != -1
-        cols = self._list_collections(chapter)
+        ui_state = self.save_manager.get_collection_ui_state()
+        in_col = ui_state['in_collection']
         self.switch_collection_btn.setText(tr('buttons.main_slots') if in_col else tr('buttons.additional_slots'))
-        self.left_col_btn.setEnabled(in_col and idx > 0)
-        self.right_col_btn.setEnabled(in_col)
+        self.left_col_btn.setEnabled(ui_state['can_navigate_left'])
+        self.right_col_btn.setEnabled(ui_state['can_navigate_right'])
         self.rename_collection_btn.setVisible(in_col)
         self.delete_collection_btn.setVisible(in_col)
         self.copy_from_main_btn.setVisible(in_col)
         self.copy_to_main_btn.setVisible(in_col)
-        if in_col and 0 <= idx < len(cols):
-            self.collection_name_lbl.setText(cols[idx].rsplit('_', 2)[0])
+        if in_col and ui_state['collection_name']:
+            self.collection_name_lbl.setText(ui_state['collection_name'])
             self.collection_name_lbl.setVisible(True)
         else:
             self.collection_name_lbl.setVisible(False)
         self.change_save_path_btn.setVisible(not in_col)
 
     def _on_chapter_tab_changed(self):
-        ch = self.save_tabs.currentIndex() + 1
-        if ch not in self.app_state.current_collection_idx:
-            self.app_state.current_collection_idx[ch] = -1
         self.app_state.selected_slot = None
         self._refresh_save_slots()
 
     def _rename_current_collection(self):
-        chapter = self.save_tabs.currentIndex() + 1
-        idx = self.app_state.current_collection_idx.get(chapter, -1)
-        if idx == -1:
-            return
-        cols = self._list_collections(chapter)
-        old_folder = cols[idx]
-        old_name = old_folder.rsplit('_', 2)[0]
-        new_name, ok = QInputDialog.getText(self, tr('dialogs.change_collection_name'), tr('dialogs.new_name'), text=old_name)
-        if not ok or not new_name.strip():
-            return
-        new_folder = f'{new_name.strip()}_{idx}_{chapter}'
-        try:
-            os.rename(os.path.join(self.app_state.save_path, old_folder), os.path.join(self.app_state.save_path, new_folder))
-            self._refresh_save_slots()
-        except Exception as e:
-            self.feedback_manager.show_error('errors.rename_failed', error=str(e))
+        idx = self.app_state.current_collection_idx
+        self.save_manager.rename_current_collection(idx)
 
     def _delete_current_collection(self):
-        chapter = self.save_tabs.currentIndex() + 1
-        idx = self.app_state.current_collection_idx.get(chapter, -1)
-        if idx == -1:
-            return
-        cols = self._list_collections(chapter)
-        folder = cols[idx]
-        if not self.feedback_manager.ask_question('dialogs.delete_collection', 'dialogs.delete_collection_confirmation', '', False):
-            return
-        try:
-            shutil.rmtree(os.path.join(self.app_state.save_path, folder))
-            remaining = self._list_collections(chapter)
-            for new_idx, f in enumerate(remaining):
-                parts = f.rsplit('_', 2)
-                cur_idx = int(parts[1])
-                if cur_idx != new_idx:
-                    new_folder = f'{parts[0]}_{new_idx}_{chapter}'
-                    os.rename(os.path.join(self.app_state.save_path, f), os.path.join(self.app_state.save_path, new_folder))
-            self.app_state.current_collection_idx[chapter] = -1
-            self._refresh_save_slots()
-        except Exception as e:
-            self.feedback_manager.show_error('errors.deletion_failed', error=str(e))
+        idx = self.app_state.current_collection_idx
+        self.save_manager.delete_current_collection(idx)
 
     def _copy_between_storages(self, to_collection: bool):
         chapter = self.save_tabs.currentIndex() + 1
-        if self.app_state.selected_slot is None or self.app_state.selected_slot[0] != chapter:
-            slot_indices = range(3)
-        else:
-            slot_indices = [self.app_state.selected_slot[1]]
-        idx = self.app_state.current_collection_idx.get(chapter, -1)
-        if idx == -1:
-            return
-        src_dir = self.app_state.save_path if to_collection else self._get_collection_path(chapter, idx)
-        dst_dir = self._get_collection_path(chapter, idx) if to_collection else self.app_state.save_path
-        if not src_dir or not dst_dir:
-            return
-        prompt = (tr('dialogs.overwrite_all_3_slots_collection') if to_collection else tr('dialogs.overwrite_all_3_main_slots')) if self.app_state.selected_slot is None else tr('dialogs.overwrite_selected_slot_collection') if to_collection else tr('dialogs.overwrite_selected_main_slot')
-        if not self.feedback_manager.ask_question('dialogs.copy_confirmation', 'dialogs.copy_confirmation', prompt, False):
-            return
-        try:
-            for slot_idx in slot_indices:
-                finish_idx = SAVE_SLOT_FINISH_MAP.get(slot_idx, -1)
-                names = [f'filech{chapter}_{slot_idx}', f'filech{chapter}_{finish_idx}']
-                for _name in names:
-                    src = os.path.join(src_dir, _name)
-                    dst = os.path.join(dst_dir, _name)
-                    if os.path.exists(src):
-                        shutil.copy2(src, dst)
-                    elif os.path.exists(dst):
-                        os.remove(dst)
-            self._refresh_save_slots()
-            self.feedback_manager.update_status(tr('status.copying_completed'), UI_COLORS['status_success'])
-        except Exception as e:
-            self.feedback_manager.show_error('errors.copy_failed', error=str(e))
-            self.feedback_manager.update_status(tr('status.copying_error'), UI_COLORS['status_error'])
+        self.save_manager.copy_between_storages(chapter, to_collection, self.app_state.selected_slot)
 
     def _action_show_save(self):
         if not self.app_state.selected_slot:
             return
         ch, s = self.app_state.selected_slot
-        idx = self.app_state.current_collection_idx.get(ch, -1)
-        path = self._get_collection_path(ch, idx)
-        QDesktopServices.openUrl(QUrl.fromLocalFile(path))
+        self.save_manager.action_show_save(ch, s)
 
     def _action_delete_save(self):
         if not self.app_state.selected_slot:
             return
         ch, s = self.app_state.selected_slot
-        idx = self.app_state.current_collection_idx.get(ch, -1)
-        base = self._get_collection_path(ch, idx)
-        fp = os.path.join(base, f'filech{ch}_{s}')
-        if not os.path.exists(fp):
-            return
-        if not self.feedback_manager.ask_question('dialogs.delete_save', 'dialogs.delete_save_confirmation', '', False):
-            return
-        try:
-            os.remove(fp)
-            self._refresh_save_slots()
-        except Exception as e:
-            self.feedback_manager.show_error('errors.error', str(e))
+        self.save_manager.action_delete_save(ch, s)
 
     def _action_import_export(self, is_import: bool):
         if not self.app_state.selected_slot:
             return
         ch, s = self.app_state.selected_slot
-        idx = self.app_state.current_collection_idx.get(ch, -1)
-        base_cur = self._get_collection_path(ch, idx)
-        src_fp = os.path.join(base_cur, f'filech{ch}_{s}')
-        choice, ok = QInputDialog.getItem(self, tr('dialogs.where_to') if not is_import else tr('dialogs.where_from'), tr('ui.select_storage'), [tr('dialogs.external_file') if is_import else tr('dialogs.external_folder'), tr('dialogs.additional_collection') if idx == -1 else tr('dialogs.main_slots')], 0, False)
-        if not ok:
-            return
-        if choice in [tr('dialogs.external_file'), tr('dialogs.external_folder')]:
-            if is_import:
-                fp, _ = QFileDialog.getOpenFileName(self, tr('ui.select_save_file'), '', f'filech{ch}_*. (*)')
-                if not fp:
-                    return
-                if not re.fullmatch(f'filech{ch}_[0-2]', os.path.basename(fp)):
-                    self.feedback_manager.show_warning('errors.invalid_file', tr('errors.wrong_save_file'))
-                    return
-                shutil.copy2(fp, src_fp)
-                fin_idx = SAVE_SLOT_FINISH_MAP.get(s, -1)
-                fin_name = f'filech{ch}_{fin_idx}'
-                fin_src = os.path.join(os.path.dirname(fp), fin_name)
-                fin_dst = os.path.join(base_cur, fin_name)
-                if os.path.exists(fin_src):
-                    shutil.copy2(fin_src, fin_dst)
-            else:
-                dir_ = QFileDialog.getExistingDirectory(self, tr('dialogs.export_save_location'))
-                if not dir_:
-                    return
-                if not os.path.exists(src_fp):
-                    self.feedback_manager.show_warning('errors.no_save', tr('errors.empty_slot'))
-                    return
-                shutil.copy2(src_fp, dir_)
-                fin_idx = SAVE_SLOT_FINISH_MAP.get(s, -1)
-                fin_src = os.path.join(base_cur, f'filech{ch}_{fin_idx}')
-                if os.path.exists(src_fp) and os.path.exists(fin_src):
-                    shutil.copy2(fin_src, dir_)
-        else:
-            if idx == -1:
-                cols = self._list_collections(ch)
-                if not cols:
-                    if not self.feedback_manager.ask_question('dialogs.no_collections', 'dialogs.create_new_collection_question', '', False):
-                        return
-                    if not self._create_new_collection(ch):
-                        return
-                    cols = self._list_collections(ch)
-                sel, ok = QInputDialog.getItem(self, tr('ui.collections'), tr('ui.select'), cols, 0, False)
-                if not ok:
-                    return
-                target_base = os.path.join(self.app_state.save_path, sel)
-            else:
-                target_base = self.app_state.save_path
-            src_main_fp = os.path.join(base_cur, f'filech{ch}_{s}')
-            target_main_fp = os.path.join(target_base, f'filech{ch}_{s}')
-            fin_idx = SAVE_SLOT_FINISH_MAP.get(s, -1)
-            fin_name = f'filech{ch}_{fin_idx}'
-            src_fin_fp = os.path.join(base_cur, fin_name)
-            target_fin_fp = os.path.join(target_base, fin_name)
-            if is_import:
-                if not os.path.exists(target_main_fp):
-                    self.feedback_manager.show_warning('errors.no_save', tr('errors.no_import_save'))
-                    return
-                shutil.copy2(target_main_fp, src_main_fp)
-                if os.path.exists(target_fin_fp):
-                    shutil.copy2(target_fin_fp, src_fin_fp)
-                elif os.path.exists(src_fin_fp):
-                    os.remove(src_fin_fp)
-            else:
-                if not os.path.exists(src_main_fp):
-                    self.feedback_manager.show_warning('errors.no_save', tr('errors.empty_slot'))
-                    return
-                shutil.copy2(src_main_fp, target_main_fp)
-                if os.path.exists(src_fin_fp):
-                    shutil.copy2(src_fin_fp, target_fin_fp)
-                elif os.path.exists(target_fin_fp):
-                    os.remove(target_fin_fp)
-        self._refresh_save_slots()
+        self.save_manager.action_import_export(ch, s, is_import)
 
     def _on_bg_ready(self, obj):
         if isinstance(obj, tuple):
@@ -4139,7 +3875,7 @@ class DeltaHubApp(QWidget):
         self._safe_stop_thread(getattr(self, 'fetch_thread', None))
         self.fetch_thread = None
 
-    def _safe_stop_thread(self, thr: Optional[QThread], timeout: int=2000):
+    def _safe_stop_thread(self, thr: Optional[QThread], timeout: int = 2000):
         if isinstance(thr, QThread) and thr.isRunning():
             thr.requestInterruption()
             thr.quit()
@@ -4358,7 +4094,7 @@ class DeltaHubApp(QWidget):
         if value > 0 and (not self.progress_bar.isVisible()):
             self.progress_bar.setVisible(True)
 
-    def _update_status(self, message: str, color: str='white'):
+    def _update_status(self, message: str, color: str = 'white'):
         if not self.is_shortcut_launch:
             from config.constants import UI_COLORS
             actual_color = UI_COLORS.get(color, color)
@@ -4431,6 +4167,9 @@ class DeltaHubApp(QWidget):
 
     def _on_settings_changed(self):
         pass
+
+    def _on_slots_updated(self):
+        self._refresh_save_slots()
 
     def _on_theme_changed_by_manager(self):
         self.apply_theme()
@@ -5305,7 +5044,7 @@ class DeltaHubApp(QWidget):
                     return True
         return False
 
-    def _find_and_validate_game_path(self, selections: Optional[Dict[int, str]]=None, is_initial: bool=False):
+    def _find_and_validate_game_path(self, selections: Optional[Dict[int, str]] = None, is_initial: bool = False):
         path_from_config = self._get_current_game_path()
         skip_data_check = bool(selections and self._has_mods_with_data_files(selections))
         if isinstance(self.app_state.game_mode, DemoGameMode):
