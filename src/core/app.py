@@ -17,7 +17,7 @@ import logging
 import requests
 from PyQt6.QtCore import QTranslator, Qt, QEvent, QThread, QTimer, pyqtSignal
 from PyQt6.QtGui import QColor, QFont, QFontDatabase, QIcon, QMovie, QPainter, QPixmap
-from PyQt6.QtWidgets import QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFrame, QLabel, QLineEdit, QMessageBox, QProgressBar, QPushButton, QTabWidget, QTextBrowser, QVBoxLayout, QWidget, QHBoxLayout, QSizePolicy, QInputDialog, QColorDialog, QListWidget, QScrollArea
+from PyQt6.QtWidgets import QApplication, QCheckBox, QDialog, QDialogButtonBox, QFileDialog, QFrame, QLabel, QLineEdit, QMessageBox, QProgressBar, QPushButton, QTabWidget, QTextBrowser, QVBoxLayout, QWidget, QHBoxLayout, QSizePolicy, QInputDialog, QColorDialog, QListWidget, QScrollArea
 from localization import localization_manager, tr
 from models.game_modes import FullGameMode, DemoGameMode, UndertaleGameMode
 from config.constants import LAUNCHER_VERSION, UI_COLORS, SOCIAL_LINKS, THEMES, ARCH
@@ -28,7 +28,7 @@ from utils.network_utils import check_internet_connection
 from threads.fetch_mods import FetchModsThread
 from threads.background_workers import PresenceWorker, FetchChangelogThread, BgLoader, FullInstallThread, InstallModsThread, FetchHelpContentThread
 from ui.styling import get_theme_color, clear_layout_widgets, load_mod_icon_universal, show_empty_message_in_layout
-from ui.widgets.custom_controls import NoScrollComboBox, NoScrollTabWidget, ClickableLabel, SlotFrame
+from ui.widgets.custom_controls import NoScrollTabWidget, SlotFrame
 from ui.widgets.outlined_label import OutlinedTextLabel
 from ui.components.screenshots_carousel import ScreenshotsCarousel
 from ui.widgets.mod_plaque_widget import ModPlaqueWidget
@@ -44,8 +44,13 @@ from core.managers.launch_manager import GameLauncher
 from core.managers.updatecheck_manager import UpdateChecker
 from core.managers.settings_manager import SettingsManager
 from core.managers.save_manager import SaveManager
+from ui.builders.search_tab_builder import SearchTabBuilder
+from ui.builders.library_tab_builder import LibraryTabBuilder
+from ui.builders.settings_view_builder import SettingsViewBuilder
+from ui.builders.save_manager_view_builder import SaveManagerViewBuilder
 _translator = QTranslator()
 _lock_file = None
+
 
 class DeltaHubApp(QWidget):
     update_status_signal = pyqtSignal(str, str)
@@ -58,7 +63,7 @@ class DeltaHubApp(QWidget):
     url_received_signal = pyqtSignal(str)
     install_from_gb_signal = pyqtSignal(object)
 
-    def __init__(self, args: Optional[argparse.Namespace]=None, parent_for_dialogs: Optional[QWidget]=None, initial_url: str | None=None):
+    def __init__(self, args: Optional[argparse.Namespace] = None, parent_for_dialogs: Optional[QWidget] = None, initial_url: str | None = None):
         super().__init__()
         self.app_state = AppState()
         self.server: SingleInstanceServer | None = None
@@ -191,12 +196,6 @@ class DeltaHubApp(QWidget):
         reply = self.feedback_manager.ask_question(title, message)
         self.mod_manager.handle_url_prompt_response(reply)
 
-    def _read_mods_metadata(self) -> Dict:
-        return self.mod_manager._read_metadata()
-
-    def _write_mods_metadata(self, data: Dict):
-        self.mod_manager._write_metadata(data)
-
     def _shortcut_launch(self, args):
         try:
             settings_json = base64.b64decode(args.shortcut_launch).decode('utf-8')
@@ -242,7 +241,7 @@ class DeltaHubApp(QWidget):
         if settings.get('is_demo_mode', False):
             mod_key = settings['mods'].get('demo')
             if mod_key:
-                mod_config = self._get_mod_config_by_key(mod_key)
+                mod_config = self.mod_manager.get_mod_config(mod_key)
                 mod_name = mod_config.get('name', tr('errors.mod_not_found', mod_key=mod_key)) if mod_config else tr('errors.mod_not_found', mod_key=mod_key)
                 description_lines.append(f"<b>{tr('status.mod_label')}</b> {mod_name}")
             else:
@@ -250,7 +249,7 @@ class DeltaHubApp(QWidget):
         elif settings.get('is_undertale_mode', False):
             mod_key = settings['mods'].get('undertale')
             if mod_key:
-                mod_config = self._get_mod_config_by_key(mod_key)
+                mod_config = self.mod_manager.get_mod_config(mod_key)
                 mod_name = mod_config.get('name', tr('errors.mod_not_found', mod_key=mod_key)) if mod_config else tr('errors.mod_not_found', mod_key=mod_key)
                 description_lines.append(f"<b>{tr('status.mod_label')}</b> {mod_name}")
             else:
@@ -265,7 +264,7 @@ class DeltaHubApp(QWidget):
                     description_lines.append(f"<b>{tr('status.direct_launch_label')}</b> {chapter_name}")
                     mod_key = settings['mods'].get(str(direct_launch_slot_id))
                     if mod_key:
-                        mod_config = self._get_mod_config_by_key(mod_key)
+                        mod_config = self.mod_manager.get_mod_config(mod_key)
                         mod_name = mod_config.get('name', tr('errors.mod_not_found', mod_key=mod_key)) if mod_config else tr('errors.mod_not_found', mod_key=mod_key)
                         description_lines.append(f"<b>{tr('status.mod_for_chapter_label', chapter_name=chapter_name)}</b> {mod_name}")
                     else:
@@ -275,7 +274,7 @@ class DeltaHubApp(QWidget):
                     for chapter_id in [0, 1, 2, 3, 4]:
                         mod_key = settings['mods'].get(str(chapter_id))
                         if mod_key:
-                            mod_config = self._get_mod_config_by_key(mod_key)
+                            mod_config = self.mod_manager.get_mod_config(mod_key)
                             mod_name = mod_config.get('name', tr('errors.mod_not_found', mod_key=mod_key)) if mod_config else tr('errors.mod_not_found', mod_key=mod_key)
                             chapter_names = {0: tr('chapters.menu'), 1: tr('tabs.chapter_1'), 2: tr('tabs.chapter_2'), 3: tr('tabs.chapter_3'), 4: tr('tabs.chapter_4')}
                             chapter_name = chapter_names.get(chapter_id, tr('ui.chapter_tab_title', chapter_num=chapter_id))
@@ -283,7 +282,7 @@ class DeltaHubApp(QWidget):
             else:
                 uni_key = settings['mods'].get('universal')
                 if uni_key:
-                    mod_config = self._get_mod_config_by_key(uni_key)
+                    mod_config = self.mod_manager.get_mod_config(uni_key)
                     mod_name = mod_config.get('name', tr('errors.mod_not_found', mod_key=uni_key)) if mod_config else tr('errors.mod_not_found', mod_key=uni_key)
                     description_lines.append(f"<b>{tr('status.mod_label')}</b> {mod_name}")
                 else:
@@ -301,9 +300,6 @@ class DeltaHubApp(QWidget):
         if self.feedback_manager.ask_question('dialogs.create_shortcut_question', 'dialogs.shortcut_create_description', description_text):
             self._save_shortcut(settings)
 
-    def _get_mod_config_by_key(self, mod_key: str) -> dict:
-        return self.mod_manager.get_mod_config(mod_key)
-
     def _set_install_buttons_enabled(self, enabled: bool):
         if hasattr(self, 'mod_list_layout'):
             for i in range(self.mod_list_layout.count() - 1):
@@ -320,7 +316,7 @@ class DeltaHubApp(QWidget):
                     if isinstance(widget, InstalledModWidget) and hasattr(widget, 'use_button') and widget.use_button:
                         widget.use_button.setEnabled(enabled)
 
-    def _create_settings_nav_button(self, text: str, on_click: Callable, style_sheet: str='', fixed_width: int=400) -> QPushButton:
+    def _create_settings_nav_button(self, text: str, on_click: Callable, style_sheet: str = '', fixed_width: int = 400) -> QPushButton:
         button = QPushButton(text)
         button.setFixedWidth(fixed_width)
         base_style = f'width: {fixed_width}px;'
@@ -409,8 +405,107 @@ class DeltaHubApp(QWidget):
         self.main_layout.addSpacing(20)
         self.main_tab_widget = NoScrollTabWidget()
         self.main_tab_widget.setTabPosition(QTabWidget.TabPosition.North)
-        self.search_mods_tab = self._create_search_mods_tab()
-        self.library_tab = self._create_library_tab()
+        self.current_page = 1
+        self.mods_per_page = 15
+        self.filtered_mods = []
+        self.sort_ascending = False
+        self.search_text = ''
+        search_builder = SearchTabBuilder(self.app_state, self)
+        self.search_mods_tab = search_builder.build()
+        search_widgets = search_builder.get_widgets()
+        self.search_container = search_widgets['search_container']
+        self.search_mods_scroll = search_widgets['search_mods_scroll']
+        self.mod_list_widget = search_widgets['mod_list_widget']
+        self.mod_list_layout = search_widgets['mod_list_layout']
+        self.sort_combo = search_widgets['sort_combo']
+        self.sort_order_btn = search_widgets['sort_order_btn']
+        self.modgame_combo = search_widgets['modgame_combo']
+        self.tags_label = search_widgets['tags_label']
+        self.tag_translation = search_widgets['tag_translation']
+        self.tag_customization = search_widgets['tag_customization']
+        self.tag_gameplay = search_widgets['tag_gameplay']
+        self.tag_other = search_widgets['tag_other']
+        self.search_button = search_widgets['search_button']
+        self.prev_page_btn = search_widgets['prev_page_btn']
+        self.page_label = search_widgets['page_label']
+        self.next_page_btn = search_widgets['next_page_btn']
+        self.sort_combo.currentIndexChanged.connect(self._on_sort_changed)
+        self.sort_order_btn.clicked.connect(self._toggle_sort_order)
+        self.modgame_combo.currentIndexChanged.connect(self._on_modgame_filter_changed)
+        self.tag_translation.stateChanged.connect(self._on_tag_filter_changed)
+        self.tag_customization.stateChanged.connect(self._on_tag_filter_changed)
+        self.tag_gameplay.stateChanged.connect(self._on_tag_filter_changed)
+        self.tag_other.stateChanged.connect(self._on_tag_filter_changed)
+        self.search_button.clicked.connect(self._show_search_dialog)
+        self.prev_page_btn.clicked.connect(self._prev_page)
+        self.next_page_btn.clicked.connect(self._next_page)
+        self.library_sort_ascending = False
+        self.library_search_text = ''
+        self._previous_mode = 'normal'
+        library_builder = LibraryTabBuilder(self.app_state, self)
+        self.library_tab = library_builder.build()
+        library_widgets = library_builder.get_widgets()
+        self.library_filters_widget = library_widgets['library_filters_widget']
+        self.game_type_combo = library_widgets['game_type_combo']
+        self.chapter_mode_checkbox = library_widgets['chapter_mode_checkbox']
+        self.full_install_checkbox = library_widgets['full_install_checkbox']
+        self.slots_container = library_widgets['slots_container']
+        self.slots_layout = library_widgets['slots_layout']
+        self.active_slots_widget = library_widgets['active_slots_widget']
+        self.active_slots_layout = library_widgets['active_slots_layout']
+        self.installed_mods_container = library_widgets['installed_mods_container']
+        self.installed_mods_scroll = library_widgets['installed_mods_scroll']
+        self.installed_mods_widget = library_widgets['installed_mods_widget']
+        self.installed_mods_layout = library_widgets['installed_mods_layout']
+        self.library_sort_combo = library_widgets['library_sort_combo']
+        self.library_sort_order_btn = library_widgets['library_sort_order_btn']
+        self.library_tags_label = library_widgets['library_tags_label']
+        self.library_tag_translation = library_widgets['library_tag_translation']
+        self.library_tag_customization = library_widgets['library_tag_customization']
+        self.library_tag_gameplay = library_widgets['library_tag_gameplay']
+        self.library_tag_other = library_widgets['library_tag_other']
+        self.library_tag_local = library_widgets['library_tag_local']
+        self.library_tag_widgets = library_widgets['library_tag_widgets']
+        self.library_search_button = library_widgets['library_search_button']
+        self.game_type_combo.currentIndexChanged.connect(self._on_game_type_changed)
+        self.chapter_mode_checkbox.stateChanged.connect(self._on_chapter_mode_changed)
+        self.full_install_checkbox.stateChanged.connect(self._on_toggle_full_install)
+        self.library_sort_combo.currentIndexChanged.connect(self._on_library_filter_changed)
+        self.library_sort_order_btn.clicked.connect(self._toggle_library_sort_order)
+        for tag in self.library_tag_widgets:
+            tag.stateChanged.connect(self._on_library_filter_changed)
+        self.library_search_button.clicked.connect(self._show_library_search_dialog)
+        saved_game_type = self.app_state.local_config.get('selected_game_type', 'deltarune')
+        saved_chapter_mode = self.app_state.local_config.get('chapter_mode_enabled', False)
+        saved_full_install = self.app_state.local_config.get('full_install_enabled', False)
+        self.game_type_combo.blockSignals(True)
+        for i in range(self.game_type_combo.count()):
+            if self.game_type_combo.itemData(i) == saved_game_type:
+                self.game_type_combo.setCurrentIndex(i)
+                break
+        self.game_type_combo.blockSignals(False)
+        self.chapter_mode_checkbox.blockSignals(True)
+        self.chapter_mode_checkbox.setChecked(saved_chapter_mode)
+        self.chapter_mode_checkbox.blockSignals(False)
+        self.game_type_combo.setEnabled(not saved_chapter_mode)
+        self.full_install_checkbox.blockSignals(True)
+        self.full_install_checkbox.setChecked(saved_full_install)
+        self.full_install_checkbox.blockSignals(False)
+        if saved_game_type == 'deltarunedemo':
+            self.app_state.game_mode = DemoGameMode()
+        elif saved_game_type == 'undertale':
+            self.app_state.game_mode = UndertaleGameMode()
+        else:
+            self.app_state.game_mode = FullGameMode()
+        self.app_state.current_mode = 'chapter' if saved_chapter_mode else 'normal'
+        self._previous_mode = self.app_state.current_mode
+        self.app_state.selected_chapter_id = None
+        self._update_checkbox_visibility()
+        self._update_saves_button_state()
+        QTimer.singleShot(500, self._update_installed_mods_display)
+        QTimer.singleShot(700, self._update_mod_widgets_slot_status)
+        self._update_slots_display()
+        QTimer.singleShot(400, self._load_slots_state)
         self.manage_mods_tab = QWidget()
         self.xdelta_patch_tab = QWidget()
         self.main_tab_widget.addTab(self.search_mods_tab, tr('ui.search_tab'))
@@ -423,239 +518,129 @@ class DeltaHubApp(QWidget):
         self.main_tab_widget.setStyleSheet('\n            QTabWidget::tab-bar {\n                alignment: center;\n            }\n            QTabBar::tab {\n                min-width: 120px;\n                padding: 8px 16px;\n            }\n        ')
         self.main_layout.addWidget(self.main_tab_widget)
         self.main_layout.addWidget(self.bottom_widget)
-        self.settings_widget = QFrame()
-        self.settings_widget.setObjectName('settings_widget')
-        settings_layout = QVBoxLayout(self.settings_widget)
-        self.settings_pages_container = QWidget()
-        pages_layout = QVBoxLayout(self.settings_pages_container)
-        pages_layout.setContentsMargins(0, 0, 0, 0)
-        self.settings_customization_page = QWidget()
-        self.settings_menu_page = QWidget()
-        settings_menu_layout = QVBoxLayout(self.settings_menu_page)
-        settings_menu_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        settings_menu_layout.setSpacing(20)
-        self.settings_title_label = QLabel(f"<h1>{tr('ui.settings_title')}</h1>")
-        self.settings_title_label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
-        settings_menu_layout.addWidget(self.settings_title_label)
-        settings_center_container = QVBoxLayout()
-        settings_center_container.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        settings_center_container.setSpacing(20)
-        language_container = QWidget()
-        language_layout = QHBoxLayout(language_container)
-        language_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        language_layout.setSpacing(10)
-        self.language_label = QLabel(tr('ui.language_label'))
-        self.language_label.setStyleSheet('font-size: 20px; font-weight: bold;')
-        language_layout.addWidget(self.language_label)
-        self.language_combo = NoScrollComboBox()
-        self.language_combo.setMinimumWidth(200)
-        self.language_combo.setMaximumWidth(250)
-        available_languages = localization_manager.get_available_languages()
-        current_language = localization_manager.get_current_language()
-        for code, name in available_languages.items():
-            self.language_combo.addItem(name, code)
-            if code == current_language:
-                self.language_combo.setCurrentIndex(self.language_combo.count() - 1)
+        settings_builder = SettingsViewBuilder(self.app_state, self)
+        self.settings_widget = settings_builder.build()
+        settings_widgets = settings_builder.get_widgets()
+        self.settings_pages_container = settings_widgets['settings_pages_container']
+        self.settings_menu_page = settings_widgets['settings_menu_page']
+        self.settings_customization_page = settings_widgets['settings_customization_page']
+        self.changelog_widget = settings_widgets['changelog_widget']
+        self.help_widget = settings_widgets['help_widget']
+        self.settings_title_label = settings_widgets['settings_title_label']
+        self.language_label = settings_widgets['language_label']
+        self.language_combo = settings_widgets['language_combo']
+        self.beta_updates_checkbox = settings_widgets['beta_updates_checkbox']
+        self.fullscreen_checkbox = settings_widgets['fullscreen_checkbox']
+        self.hide_library_filters_checkbox = settings_widgets['hide_library_filters_checkbox']
+        self.launch_via_steam_checkbox = settings_widgets['launch_via_steam_checkbox']
+        self.use_custom_executable_checkbox = settings_widgets['use_custom_executable_checkbox']
+        self.select_custom_executable_button = settings_widgets['select_custom_executable_button']
+        self.custom_executable_path_label = settings_widgets['custom_executable_path_label']
+        self.custom_exe_frame = settings_widgets['custom_exe_frame']
+        self.change_path_button = settings_widgets['change_path_button']
+        self.change_mods_dir_button = settings_widgets['change_mods_dir_button']
+        self.customization_button = settings_widgets['customization_button']
+        self.settings_customization_button = settings_widgets['settings_customization_button']
+        self.reset_button = settings_widgets['reset_button']
+        self.disable_background_checkbox = settings_widgets['disable_background_checkbox']
+        self.disable_splash_checkbox = settings_widgets['disable_splash_checkbox']
+        self.back_button_cust = settings_widgets['back_button_cust']
+        self.change_background_button = settings_widgets['change_background_button']
+        self.background_music_button = settings_widgets['background_music_button']
+        self.startup_sound_button = settings_widgets['startup_sound_button']
+        self.custom_style_frame = settings_widgets['custom_style_frame']
+        self.color_widgets = settings_widgets['color_widgets']
+        self.color_labels = settings_widgets['color_labels']
+        self.color_config = settings_widgets['color_config']
+        self.theme_button = settings_widgets['theme_button']
+        self.changelog_text_edit = settings_widgets['changelog_text_edit']
+        self.changelog_button = settings_widgets['changelog_button']
+        self.help_text_edit = settings_widgets['help_text_edit']
+        self.help_button = settings_widgets['help_button']
         self.language_combo.currentTextChanged.connect(self._on_language_changed)
-        language_layout.addWidget(self.language_combo)
-        settings_center_container.addWidget(language_container, alignment=Qt.AlignmentFlag.AlignHCenter)
-        self.beta_updates_checkbox = QCheckBox(tr('ui.beta_updates'))
-        self.beta_updates_checkbox.setToolTip(tr('tooltips.beta_updates'))
         self.beta_updates_checkbox.stateChanged.connect(self._on_toggle_beta_updates)
-        settings_center_container.addWidget(self.beta_updates_checkbox, alignment=Qt.AlignmentFlag.AlignHCenter)
-        self.fullscreen_checkbox = QCheckBox(tr('ui.fullscreen'))
-        self.fullscreen_checkbox.setToolTip(tr('tooltips.fullscreen_tooltip'))
         self.fullscreen_checkbox.stateChanged.connect(self._on_toggle_fullscreen)
-        settings_center_container.addWidget(self.fullscreen_checkbox, alignment=Qt.AlignmentFlag.AlignHCenter)
-        self.hide_library_filters_checkbox = QCheckBox(tr('ui.hide_library_filters'))
-        self.hide_library_filters_checkbox.setToolTip(tr('tooltips.hide_library_filters'))
         self.hide_library_filters_checkbox.stateChanged.connect(self._on_toggle_hide_library_filters)
-        settings_center_container.addWidget(self.hide_library_filters_checkbox, alignment=Qt.AlignmentFlag.AlignHCenter)
-        self.launch_via_steam_checkbox = QCheckBox(tr('ui.steam_launch'))
-        self.launch_via_steam_checkbox.setToolTip("<html><body style='white-space: normal;'>" + tr('tooltips.steam') + '</body></html>')
         self.launch_via_steam_checkbox.stateChanged.connect(self._on_toggle_steam_launch)
-        settings_center_container.addWidget(self.launch_via_steam_checkbox, alignment=Qt.AlignmentFlag.AlignHCenter)
-        self.use_custom_executable_checkbox = QCheckBox(tr('ui.custom_executable'))
-        self.use_custom_executable_checkbox.setToolTip("<html><body style='white-space: normal;'>" + tr('tooltips.custom_exe') + '</body></html>')
         self.use_custom_executable_checkbox.stateChanged.connect(self._on_toggle_custom_executable)
-        settings_center_container.addWidget(self.use_custom_executable_checkbox, alignment=Qt.AlignmentFlag.AlignHCenter)
-        self.select_custom_executable_button = QPushButton(tr('buttons.select_file'))
-        self.select_custom_executable_button.setFixedWidth(153)
         self.select_custom_executable_button.clicked.connect(self._select_custom_executable_file)
-        self.custom_executable_path_label = QLabel(tr('ui.file_not_selected'))
-        self.custom_executable_path_label.setFixedHeight(20)
-        self.custom_exe_frame = QFrame()
-        custom_exe_layout = QVBoxLayout(self.custom_exe_frame)
-        custom_exe_layout.setAlignment(Qt.AlignmentFlag.AlignHCenter)
-        custom_exe_layout.addWidget(self.select_custom_executable_button, alignment=Qt.AlignmentFlag.AlignHCenter)
-        custom_exe_layout.addWidget(self.custom_executable_path_label, alignment=Qt.AlignmentFlag.AlignHCenter)
-        settings_center_container.addWidget(self.custom_exe_frame, alignment=Qt.AlignmentFlag.AlignHCenter)
-        self.custom_exe_frame.setVisible(False)
-        self.change_path_button = QPushButton()
-        self.change_path_button.setFixedWidth(300)
         self.change_path_button.clicked.connect(self._prompt_for_game_path)
-        settings_center_container.addWidget(self.change_path_button, alignment=Qt.AlignmentFlag.AlignHCenter)
-        self.change_mods_dir_button = QPushButton(tr('ui.change_mods_dir'))
-        self.change_mods_dir_button.setFixedWidth(400)
-        self.change_mods_dir_button.setToolTip(tr('tooltips.change_mods_dir'))
         self.change_mods_dir_button.clicked.connect(self._prompt_for_mods_dir)
-        settings_center_container.addWidget(self.change_mods_dir_button, alignment=Qt.AlignmentFlag.AlignHCenter)
-        self.customization_button = self._create_settings_nav_button(tr('ui.launcher_customization'), lambda: self._switch_settings_page(self.settings_customization_page), fixed_width=200)
-        self.reset_button = self._create_settings_nav_button(tr('buttons.reset_settings'), self._on_reset_settings_click, fixed_width=200)
-        buttons_layout = QHBoxLayout()
-        buttons_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        buttons_layout.setSpacing(10)
-        buttons_layout.addWidget(self.customization_button)
-        buttons_layout.addWidget(self.reset_button)
-        settings_center_container.addLayout(buttons_layout)
-        self.settings_customization_button = self.customization_button
-        settings_menu_layout.addLayout(settings_center_container)
-        settings_menu_layout.addStretch()
-        pages_layout.addWidget(self.settings_menu_page)
-        self.disable_background_checkbox = QCheckBox(tr('checkboxes.disable_background'))
+        self.customization_button.clicked.connect(lambda: self._switch_settings_page(self.settings_customization_page))
+        self.reset_button.clicked.connect(self._on_reset_settings_click)
         self.disable_background_checkbox.stateChanged.connect(self._on_toggle_disable_background)
-        self.disable_splash_checkbox = QCheckBox(tr('checkboxes.disable_splash'))
         self.disable_splash_checkbox.stateChanged.connect(self._on_toggle_disable_splash)
-        self.change_background_button = QPushButton(tr('buttons.change_background'))
-        self.change_background_button.clicked.connect(self._on_background_button_click)
-        settings_customization_layout = QVBoxLayout(self.settings_customization_page)
-        self.back_button_cust = QPushButton(tr('ui.back_button'))
         self.back_button_cust.clicked.connect(self._go_back_to_settings_menu)
-        settings_customization_layout.addWidget(self.back_button_cust, alignment=Qt.AlignmentFlag.AlignLeft)
-        settings_customization_layout.addSpacing(15)
-        self.change_background_button = QPushButton()
-        self.change_background_button.setFixedWidth(400)
-        self.change_background_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.change_background_button.clicked.connect(self._on_background_button_click)
-        settings_customization_layout.addWidget(self.change_background_button, 0, Qt.AlignmentFlag.AlignHCenter)
-        settings_customization_layout.addSpacing(8)
-        sound_buttons_layout = QHBoxLayout()
-        sound_buttons_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        sound_buttons_layout.setSpacing(10)
-        self.background_music_button = QPushButton(self._get_background_music_button_text())
-        self.background_music_button.setFixedWidth(275)
-        self.background_music_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        self.background_music_button.setText(self._get_background_music_button_text())
         self.background_music_button.clicked.connect(self._on_background_music_button_click)
-        sound_buttons_layout.addWidget(self.background_music_button)
-        self.startup_sound_button = QPushButton(self._get_startup_sound_button_text())
-        self.startup_sound_button.setFixedWidth(275)
-        self.startup_sound_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        self.startup_sound_button.setText(self._get_startup_sound_button_text())
         self.startup_sound_button.clicked.connect(self._on_startup_sound_button_click)
-        sound_buttons_layout.addWidget(self.startup_sound_button)
-        settings_customization_layout.addLayout(sound_buttons_layout)
-        settings_customization_layout.addSpacing(20)
-        checkboxes_layout = QHBoxLayout()
-        checkboxes_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        checkboxes_layout.setSpacing(20)
-        checkboxes_layout.addWidget(self.disable_background_checkbox)
-        checkboxes_layout.addWidget(self.disable_splash_checkbox)
-        settings_customization_layout.addLayout(checkboxes_layout)
-        settings_customization_layout.addSpacing(8)
-        self.custom_style_frame = QFrame()
-        custom_style_layout = QVBoxLayout(self.custom_style_frame)
-        custom_style_layout.setContentsMargins(0, 15, 0, 0)
-        custom_style_layout.setSpacing(8)
-
-        def create_setting_row(label_text: str) -> tuple[QHBoxLayout, QLineEdit, QPushButton, QLabel]:
-            layout = QHBoxLayout()
-            label = QLabel(label_text)
-            color_display = QLineEdit()
-            color_display.setFixedWidth(95)
-            color_display.setReadOnly(True)
-            color_btn = QPushButton(tr('ui.select_color'))
-            color_btn.setFixedWidth(150)
-            reset_btn = QPushButton('⭯')
-            reset_btn.setStyleSheet('min-width: 35px; max-width: 35px; padding-left: 0px; padding-right: 0px;')
-            reset_btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-            reset_btn.clicked.connect(lambda: (color_display.clear(), self._on_custom_style_edited()))
-            layout.addWidget(label)
-            layout.addStretch()
-            for widget in [color_display, color_btn, reset_btn]:
-                layout.addWidget(widget)
-            return (layout, color_display, color_btn, label)
-        self.color_widgets = {}
-        self.color_labels = {}
-        self.color_config = {'background': tr('ui.background_color'), 'button': tr('ui.elements_color'), 'border': tr('ui.border_color'), 'button_hover': tr('ui.hover_color'), 'text': tr('ui.main_text_color'), 'version_text': tr('ui.secondary_text_color')}
+        self.theme_button.clicked.connect(self._on_theme_button_click)
 
         def pick_color_for_edit(target_edit):
             if (color := QColorDialog.getColor()).isValid():
                 target_edit.setText(color.name())
                 self._on_custom_style_edited()
-        for key, label_text in self.color_config.items():
-            layout, line_edit, btn, label_widget = create_setting_row(label_text)
+        for key in self.color_config.keys():
+            line_edit = self.color_widgets[key]
+            btn = settings_widgets[f'color_btn_{key}']
+            reset_btn = settings_widgets[f'color_reset_{key}']
             line_edit.editingFinished.connect(self._on_custom_style_edited)
             btn.clicked.connect(lambda _, le=line_edit: pick_color_for_edit(le))
-            self.color_widgets[key] = line_edit
-            self.color_labels[key] = label_widget
-            custom_style_layout.addLayout(layout)
-        settings_customization_layout.addWidget(self.custom_style_frame)
-        settings_customization_layout.addStretch()
-        self.theme_button = QPushButton(tr('buttons.theme_management'))
-        self.theme_button.setFixedWidth(400)
-        self.theme_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        self.theme_button.clicked.connect(self._on_theme_button_click)
-        settings_customization_layout.addWidget(self.theme_button, 0, Qt.AlignmentFlag.AlignHCenter)
-        pages_layout.addWidget(self.settings_customization_page)
-        self.settings_customization_page.setVisible(False)
-        self.changelog_widget = QFrame()
-        self.changelog_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        changelog_layout = QVBoxLayout(self.changelog_widget)
-        self.changelog_text_edit = QTextBrowser()
-        self.changelog_text_edit.setOpenExternalLinks(True)
-        self.changelog_text_edit.setMinimumHeight(0)
-        self.changelog_text_edit.setMaximumHeight(500)
-        current_font = self.font()
-        self.changelog_text_edit.setFont(current_font)
-        doc = self.changelog_text_edit.document()
-        if doc is not None:
-            doc.setDefaultFont(current_font)
-            doc.setDefaultStyleSheet('p { margin-bottom: 0.75em; } ul, ol { margin-left: 1em; } li { margin-bottom: 0.25em; }')
-        self.changelog_text_edit.setOpenExternalLinks(True)
-        self.changelog_text_edit.setMarkdown(f"<i>{tr('status.loading')}</i>")
-        changelog_layout.addWidget(self.changelog_text_edit)
-        self.help_widget = QFrame()
-        self.help_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        help_layout = QVBoxLayout(self.help_widget)
-        self.help_text_edit = QTextBrowser()
-        self.help_text_edit.setOpenExternalLinks(True)
-        self.help_text_edit.setMinimumHeight(0)
-        self.help_text_edit.setMaximumHeight(500)
-        help_font = self.font()
-        self.help_text_edit.setFont(help_font)
-        help_doc = self.help_text_edit.document()
-        if help_doc is not None:
-            help_doc.setDefaultFont(help_font)
-            help_doc.setDefaultStyleSheet('p { margin-bottom: 0.75em; } ul, ol { margin-left: 1em; } li { margin-bottom: 0.25em; }')
-        self.help_text_edit.setOpenExternalLinks(True)
-        self.help_text_edit.setMarkdown(f"<i>{tr('status.loading')}</i>")
-        help_layout.addWidget(self.help_text_edit)
-        self.changelog_button = QPushButton(tr('buttons.changelog'))
-        self.changelog_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        self.changelog_button.setStyleSheet('min-width: 220px; max-width: 220px;')
+            reset_btn.clicked.connect(lambda _, le=line_edit: (le.clear(), self._on_custom_style_edited()))
         self.changelog_button.clicked.connect(self._toggle_changelog_view)
-        self.help_button = QPushButton(tr('buttons.help'))
-        self.help_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        self.help_button.setStyleSheet('min-width: 220px; max-width: 220px;')
         self.help_button.clicked.connect(self._toggle_help_view)
         self._update_filtered_mods()
-        settings_layout.addWidget(self.settings_pages_container)
-        self.changelog_widget.setVisible(False)
-        settings_layout.addWidget(self.changelog_widget, stretch=1)
-        self.help_widget.setVisible(False)
-        settings_layout.addWidget(self.help_widget, stretch=1)
-        button_bar_layout = QHBoxLayout()
-        button_bar_layout.setSpacing(10)
-        button_bar_layout.addStretch(1)
-        button_bar_layout.addWidget(self.changelog_button)
-        button_bar_layout.addWidget(self.help_button)
-        button_bar_layout.addStretch(1)
-        settings_layout.addLayout(button_bar_layout)
-        self.settings_widget.setVisible(False)
         self.main_layout.addWidget(self.settings_widget)
-        self.save_manager_widget = QFrame()
-        self.save_manager_widget.setObjectName('save_manager_widget')
-        self._init_save_manager_ui()
-        self.save_manager_widget.setVisible(False)
+        save_manager_builder = SaveManagerViewBuilder(self.app_state, self)
+        self.save_manager_widget = save_manager_builder.build()
+        save_manager_widgets = save_manager_builder.get_widgets()
+        self.save_back_btn = save_manager_widgets['save_back_btn']
+        self.change_save_path_btn = save_manager_widgets['change_save_path_btn']
+        self.save_tabs = save_manager_widgets['save_tabs']
+        self._slot_labels = save_manager_widgets['slot_labels']
+        self._chapter_buttons = save_manager_widgets['chapter_buttons']
+        self.collection_name_lbl = save_manager_widgets['collection_name_lbl']
+        self.left_col_btn = save_manager_widgets['left_col_btn']
+        self.switch_collection_btn = save_manager_widgets['switch_collection_btn']
+        self.right_col_btn = save_manager_widgets['right_col_btn']
+        self.rename_collection_btn = save_manager_widgets['rename_collection_btn']
+        self.delete_collection_btn = save_manager_widgets['delete_collection_btn']
+        self.copy_from_main_btn = save_manager_widgets['copy_from_main_btn']
+        self.copy_to_main_btn = save_manager_widgets['copy_to_main_btn']
+        self.slot_actions = save_manager_widgets['slot_actions']
+        self.show_btn = save_manager_widgets['show_btn']
+        self.erase_btn = save_manager_widgets['erase_btn']
+        self.import_btn = save_manager_widgets['import_btn']
+        self.export_btn = save_manager_widgets['export_btn']
+        self.save_back_btn.clicked.connect(self._hide_save_manager)
+        self.change_save_path_btn.clicked.connect(self._prompt_for_save_path)
+        for lbl in self._slot_labels.values():
+            lbl.clicked.connect(self._on_save_manager_slot_clicked)
+            lbl.doubleClicked.connect(self._on_slot_double_clicked)
+        self._configure_hidden_tab_bar(self.save_tabs)
+        for ch, btn in enumerate(self._chapter_buttons, start=0):
+            btn.clicked.connect(lambda _checked, idx=ch: self.save_tabs.setCurrentIndex(idx))
+
+        def _sync_buttons(index: int):
+            for i, b in enumerate(self._chapter_buttons):
+                b.setChecked(i == index)
+        self.save_tabs.currentChanged.connect(_sync_buttons)
+        self.left_col_btn.clicked.connect(lambda: self._navigate_collection(-1))
+        self.switch_collection_btn.clicked.connect(self._toggle_collection_view)
+        self.right_col_btn.clicked.connect(lambda: self._navigate_collection(1))
+        self.rename_collection_btn.clicked.connect(self._rename_current_collection)
+        self.delete_collection_btn.clicked.connect(self._delete_current_collection)
+        self.copy_from_main_btn.clicked.connect(lambda: self._copy_between_storages(to_collection=True))
+        self.copy_to_main_btn.clicked.connect(lambda: self._copy_between_storages(to_collection=False))
+        self.show_btn.clicked.connect(self._action_show_save)
+        self.erase_btn.clicked.connect(self._action_delete_save)
+        self.import_btn.clicked.connect(lambda: self._action_import_export(True))
+        self.export_btn.clicked.connect(lambda: self._action_import_export(False))
+        self.save_tabs.currentChanged.connect(lambda _: self._on_chapter_tab_changed())
+        self.save_manager_widget.installEventFilter(self)
+        self._update_slot_highlight()
         self.main_layout.addWidget(self.save_manager_widget)
         self.app_state.current_settings_page = self.settings_menu_page
         self.tab_widget = self.main_tab_widget
@@ -812,190 +797,9 @@ class DeltaHubApp(QWidget):
         if not is_game_running():
             self._maybe_start_background_music()
 
-    def _create_search_mods_tab(self):
-        widget = QWidget()
-        layout = QVBoxLayout(widget)
-        self.current_page = 1
-        self.mods_per_page = 15
-        self.filtered_mods = []
-        filters_widget = self._create_filters_widget()
-        layout.addWidget(filters_widget)
-        self.search_container = QWidget()
-        self.search_container.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
-        self.search_container.setObjectName('search_mods_background')
-        search_container_layout = QVBoxLayout(self.search_container)
-        search_container_layout.setContentsMargins(10, 10, 10, 10)
-        search_container_layout.setSpacing(10)
-        self.search_mods_scroll = QScrollArea()
-        self.search_mods_scroll.setWidgetResizable(True)
-        self.search_mods_scroll.setFrameShape(QFrame.Shape.NoFrame)
-        self.search_mods_scroll.setStyleSheet('QScrollArea { background-color: transparent; }')
-        self.mod_list_widget = QWidget()
-        self.mod_list_layout = QVBoxLayout(self.mod_list_widget)
-        self.mod_list_layout.setSpacing(15)
-        self.mod_list_layout.addStretch()
-        self.search_mods_scroll.setWidget(self.mod_list_widget)
-        search_container_layout.addWidget(self.search_mods_scroll)
-        pagination_widget = self._create_pagination_widget()
-        search_container_layout.addWidget(pagination_widget)
-        search_bg_color = get_theme_color(self.app_state.local_config, 'background', '#000000')
-        r, g, b = (int(search_bg_color[1:3], 16), int(search_bg_color[3:5], 16), int(search_bg_color[5:7], 16)) if search_bg_color.startswith('#') else (0, 0, 0)
-        search_bg_rgba = f'rgba({r}, {g}, {b}, 128)'
-        self.search_container.setStyleSheet(f'\n            QWidget#search_mods_background {{\n                background-color: {search_bg_rgba};\n                border-radius: 10px;\n                margin: 5px;\n            }}\n        ')
-        layout.addWidget(self.search_container)
-        return widget
-
     def _update_saves_button_state(self):
         game_type = self.game_type_combo.currentData()
         self.saves_button.setEnabled(game_type != 'undertale')
-
-    def _create_library_tab(self):
-        widget = QWidget()
-        layout = QVBoxLayout(widget)
-        self.library_filters_widget = self._create_library_filters_widget()
-        hide_filters = self.app_state.local_config.get('hide_library_filters', False)
-        self.library_filters_widget.setVisible(not hide_filters)
-        layout.addWidget(self.library_filters_widget)
-        controls_layout = QHBoxLayout()
-        controls_layout.addStretch()
-        self.game_type_combo = QComboBox()
-        self.game_type_combo.addItem('DELTARUNE', 'deltarune')
-        self.game_type_combo.addItem('DELTARUNE DEMO', 'deltarunedemo')
-        self.game_type_combo.addItem('UNDERTALE', 'undertale')
-        self.game_type_combo.currentIndexChanged.connect(self._on_game_type_changed)
-        controls_layout.addWidget(self.game_type_combo)
-        controls_layout.addSpacing(20)
-        self.chapter_mode_checkbox = QCheckBox(tr('ui.chapter_mode'))
-        self.chapter_mode_checkbox.stateChanged.connect(self._on_chapter_mode_changed)
-        controls_layout.addWidget(self.chapter_mode_checkbox)
-        self.full_install_checkbox = QCheckBox(tr('ui.full_install'))
-        self.full_install_checkbox.stateChanged.connect(self._on_toggle_full_install)
-        controls_layout.addWidget(self.full_install_checkbox)
-        saved_game_type = self.app_state.local_config.get('selected_game_type', 'deltarune')
-        saved_chapter_mode = self.app_state.local_config.get('chapter_mode_enabled', False)
-        saved_full_install = self.app_state.local_config.get('full_install_enabled', False)
-        self.game_type_combo.blockSignals(True)
-        for i in range(self.game_type_combo.count()):
-            if self.game_type_combo.itemData(i) == saved_game_type:
-                self.game_type_combo.setCurrentIndex(i)
-                break
-        self.game_type_combo.blockSignals(False)
-        self.chapter_mode_checkbox.blockSignals(True)
-        self.chapter_mode_checkbox.setChecked(saved_chapter_mode)
-        self.chapter_mode_checkbox.blockSignals(False)
-        self.game_type_combo.setEnabled(not saved_chapter_mode)
-        self.full_install_checkbox.blockSignals(True)
-        self.full_install_checkbox.setChecked(saved_full_install)
-        self.full_install_checkbox.blockSignals(False)
-        if saved_game_type == 'deltarunedemo':
-            self.app_state.game_mode = DemoGameMode()
-        elif saved_game_type == 'undertale':
-            self.app_state.game_mode = UndertaleGameMode()
-        else:
-            self.app_state.game_mode = FullGameMode()
-        self.app_state.current_mode = 'chapter' if saved_chapter_mode else 'normal'
-        self._previous_mode = self.app_state.current_mode
-        self._update_checkbox_visibility()
-        self._update_saves_button_state()
-        controls_layout.addStretch()
-        layout.addLayout(controls_layout)
-        self.app_state.selected_chapter_id = None
-        self.slots_container = QWidget()
-        self.slots_layout = QVBoxLayout(self.slots_container)
-        self.active_slots_widget = QWidget()
-        self.active_slots_widget.setObjectName('slots_background')
-        self.active_slots_layout = QHBoxLayout(self.active_slots_widget)
-        self.active_slots_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.active_slots_layout.setContentsMargins(20, 15, 20, 15)
-        self.active_slots_layout.setSpacing(0)
-        slots_bg_color = get_theme_color(self.app_state.local_config, 'background', '#000000')
-        if slots_bg_color.startswith('#'):
-            r = int(slots_bg_color[1:3], 16)
-            g = int(slots_bg_color[3:5], 16)
-            b = int(slots_bg_color[5:7], 16)
-            slots_bg_rgba = f'rgba({r}, {g}, {b}, 128)'
-        else:
-            slots_bg_rgba = 'rgba(0, 0, 0, 128)'
-        self.active_slots_widget.setStyleSheet(f'\n            QWidget#slots_background {{\n                background-color: {slots_bg_rgba};\n                border-radius: 10px;\n                margin: 5px;\n            }}\n        ')
-        self.slots_layout.addWidget(self.active_slots_widget)
-        layout.addWidget(self.slots_container)
-        self.installed_mods_container = QWidget()
-        self.installed_mods_container.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
-        self.installed_mods_container.setObjectName('mods_background')
-        mods_container_layout = QVBoxLayout(self.installed_mods_container)
-        mods_container_layout.setContentsMargins(15, 15, 15, 15)
-        mods_container_layout.setSpacing(10)
-        installed_mods_label = QLabel(tr('ui.installed_mods_label'))
-        installed_mods_label.setStyleSheet('font-weight: bold; font-size: 16px;')
-        installed_mods_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        mods_container_layout.addWidget(installed_mods_label)
-        self.installed_mods_scroll = QScrollArea()
-        self.installed_mods_scroll.setWidgetResizable(True)
-        self.installed_mods_scroll.setFrameShape(QFrame.Shape.NoFrame)
-        self.installed_mods_widget = QWidget()
-        self.installed_mods_layout = QVBoxLayout(self.installed_mods_widget)
-        self.installed_mods_layout.addStretch()
-        self.installed_mods_layout.setContentsMargins(0, 0, 0, 0)
-        self.installed_mods_scroll.setWidget(self.installed_mods_widget)
-        mods_container_layout.addWidget(self.installed_mods_scroll)
-        mods_bg_color = get_theme_color(self.app_state.local_config, 'background', '#000000')
-        if mods_bg_color.startswith('#'):
-            r = int(mods_bg_color[1:3], 16)
-            g = int(mods_bg_color[3:5], 16)
-            b = int(mods_bg_color[5:7], 16)
-            mods_bg_rgba = f'rgba({r}, {g}, {b}, 128)'
-        else:
-            mods_bg_rgba = 'rgba(0, 0, 0, 128)'
-        self.installed_mods_container.setStyleSheet(f'\n            QWidget#mods_background {{\n                background-color: {mods_bg_rgba};\n                border-radius: 10px;\n                margin: 5px;\n            }}\n        ')
-        layout.addWidget(self.installed_mods_container)
-        QTimer.singleShot(500, self._update_installed_mods_display)
-        QTimer.singleShot(700, self._update_mod_widgets_slot_status)
-        self._update_slots_display()
-        QTimer.singleShot(400, self._load_slots_state)
-        return widget
-
-    def _create_library_filters_widget(self):
-        filters_widget = QFrame()
-        filters_widget.setObjectName('filters')
-        filters_widget.setFixedHeight(55)
-        filters_layout = QHBoxLayout(filters_widget)
-        filters_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        filters_layout.setContentsMargins(0, 0, 0, 0)
-        self.library_sort_combo = NoScrollComboBox()
-        self.library_sort_combo.addItems([tr('ui.sort_by_name'), tr('ui.sort_by_date')])
-        self.library_sort_combo.currentIndexChanged.connect(self._on_library_filter_changed)
-        filters_layout.addWidget(self.library_sort_combo)
-        self.library_sort_order_btn = QPushButton('▼')
-        self.library_sort_order_btn.setObjectName('sortOrderBtn')
-        self.library_sort_order_btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        self.library_sort_order_btn.setToolTip(tr('ui.sort_direction_tooltip'))
-        self.library_sort_ascending = False
-        self.library_sort_order_btn.clicked.connect(self._toggle_library_sort_order)
-        filters_layout.addWidget(self.library_sort_order_btn)
-        filters_layout.addSpacing(20)
-        self.library_tags_label = QLabel(tr('ui.tags_label'))
-        filters_layout.addWidget(self.library_tags_label)
-        self.library_tag_translation = QCheckBox(tr('tags.translation'))
-        self.library_tag_customization = QCheckBox(tr('tags.customization'))
-        self.library_tag_gameplay = QCheckBox(tr('tags.gameplay'))
-        self.library_tag_other = QCheckBox(tr('tags.other'))
-        self.library_tag_local = QCheckBox(tr('tags.local'))
-        tag_style = '\n            QCheckBox {\n                color: white;\n                font-size: 12px;\n                spacing: 5px;\n            }\n            QCheckBox::indicator {\n                width: 16px;\n                height: 16px;\n            }\n        '
-        self.library_tag_widgets = [self.library_tag_translation, self.library_tag_customization, self.library_tag_gameplay, self.library_tag_other, self.library_tag_local]
-        for tag in self.library_tag_widgets:
-            tag.setStyleSheet(tag_style)
-            tag.stateChanged.connect(self._on_library_filter_changed)
-            filters_layout.addWidget(tag)
-        filters_layout.addStretch()
-        self.library_search_text = ''
-        self.library_search_button = QPushButton('🔍')
-        self.library_search_button.setObjectName('searchBtn')
-        self.library_search_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        self.library_search_button.setFixedSize(35, 35)
-        self.library_search_button.setToolTip(tr('tooltips.search'))
-        self.library_search_button.clicked.connect(self._show_library_search_dialog)
-        filters_layout.addWidget(self.library_search_button)
-        return filters_widget
 
     def _on_library_filter_changed(self):
         self._update_installed_mods_display()
@@ -1023,77 +827,6 @@ class DeltaHubApp(QWidget):
             self.library_sort_order_btn.setText('▼')
             self.library_sort_order_btn.setToolTip(tr('ui.descending'))
         self._on_library_filter_changed()
-
-    def _create_filters_widget(self):
-        filters_widget = QFrame()
-        filters_widget.setObjectName('filters')
-        filters_widget.setFixedHeight(55)
-        filters_layout = QHBoxLayout(filters_widget)
-        filters_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        filters_layout.setContentsMargins(0, 0, 0, 0)
-        self.sort_combo = NoScrollComboBox()
-        self.sort_combo.addItems([tr('ui.sort_by_downloads'), tr('ui.sort_by_update_date'), tr('ui.sort_by_creation_date')])
-        self.sort_combo.currentIndexChanged.connect(self._on_sort_changed)
-        filters_layout.addWidget(self.sort_combo)
-        self.sort_order_btn = QPushButton('▼')
-        self.sort_order_btn.setObjectName('sortOrderBtn')
-        self.sort_order_btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        self.sort_order_btn.setToolTip(tr('ui.sort_direction_tooltip'))
-        self.sort_ascending = False
-        self.sort_order_btn.clicked.connect(self._toggle_sort_order)
-        filters_layout.addWidget(self.sort_order_btn)
-        filters_layout.addSpacing(20)
-        self.modgame_combo = QComboBox()
-        self.modgame_combo.addItem(tr('dropdowns.all_mods'), '')
-        self.modgame_combo.addItem(tr('dropdowns.filter_deltarune'), 'deltarune')
-        self.modgame_combo.addItem(tr('dropdowns.filter_deltarunedemo'), 'deltarunedemo')
-        self.modgame_combo.addItem(tr('dropdowns.filter_undertale'), 'undertale')
-        self.modgame_combo.currentIndexChanged.connect(self._on_modgame_filter_changed)
-        filters_layout.addWidget(self.modgame_combo)
-        filters_layout.addSpacing(20)
-        self.tags_label = QLabel(tr('ui.tags_label'))
-        filters_layout.addWidget(self.tags_label)
-        self.tag_translation = QCheckBox(tr('tags.translation'))
-        self.tag_customization = QCheckBox(tr('tags.customization'))
-        self.tag_gameplay = QCheckBox(tr('tags.gameplay'))
-        self.tag_other = QCheckBox(tr('tags.other'))
-        tag_style = '\n            QCheckBox {\n                color: white;\n                font-size: 12px;\n                spacing: 5px;\n            }\n            QCheckBox::indicator {\n                width: 16px;\n                height: 16px;\n            }\n        '
-        for tag in [self.tag_translation, self.tag_customization, self.tag_gameplay, self.tag_other]:
-            tag.setStyleSheet(tag_style)
-            tag.stateChanged.connect(self._on_tag_filter_changed)
-            filters_layout.addWidget(tag)
-        filters_layout.addStretch()
-        self.search_text = ''
-        self.search_button = QPushButton('🔍')
-        self.search_button.setObjectName('searchBtn')
-        self.search_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        self.search_button.setFixedSize(35, 35)
-        self.search_button.setToolTip(tr('tooltips.search'))
-        self.search_button.clicked.connect(self._show_search_dialog)
-        filters_layout.addWidget(self.search_button)
-        return filters_widget
-
-    def _create_pagination_widget(self):
-        pagination_widget = QWidget()
-        pagination_layout = QHBoxLayout(pagination_widget)
-        pagination_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.prev_page_btn = QPushButton(tr('ui.prev_page'))
-        self.prev_page_btn.clicked.connect(self._prev_page)
-        self.prev_page_btn.setEnabled(False)
-        self.prev_page_btn.setMaximumHeight(24)
-        self.prev_page_btn.setStyleSheet('font-size: 12px; padding: 3px 8px;')
-        pagination_layout.addWidget(self.prev_page_btn, alignment=Qt.AlignmentFlag.AlignVCenter)
-        self.page_label = QLabel(tr('ui.page_label', current=1, total=1))
-        self.page_label.setStyleSheet('font-size: 14px; padding: 0px 10px;')
-        self.page_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        pagination_layout.addWidget(self.page_label, alignment=Qt.AlignmentFlag.AlignVCenter)
-        self.next_page_btn = QPushButton(tr('ui.next_page'))
-        self.next_page_btn.clicked.connect(self._next_page)
-        self.next_page_btn.setEnabled(False)
-        self.next_page_btn.setMaximumHeight(24)
-        self.next_page_btn.setStyleSheet('font-size: 12px; padding: 3px 8px;')
-        pagination_layout.addWidget(self.next_page_btn, alignment=Qt.AlignmentFlag.AlignVCenter)
-        return pagination_widget
 
     def _toggle_sort_order(self):
         self.sort_ascending = not self.sort_ascending
@@ -1495,7 +1228,7 @@ class DeltaHubApp(QWidget):
         available_mods = []
         for mod_info in installed_mods:
             if mod_info:
-                mod_exists = self._check_mod_exists(mod_info)
+                mod_exists = self.mod_manager.check_mod_exists(mod_info)
                 if not mod_exists:
                     continue
                 mod_modgame = mod_info.get('modgame', 'deltarune')
@@ -1575,7 +1308,13 @@ class DeltaHubApp(QWidget):
                 if sort_type == 0:
                     installed_mods.sort(key=lambda mod: mod.get('name', '').lower(), reverse=reverse)
                 elif sort_type == 1:
-                    installed_mods.sort(key=lambda mod: mod.get('installed_date', '0'), reverse=reverse)
+
+                    def get_sort_date(mod):
+                        if mod.get('is_local_mod'):
+                            return mod.get('created_date', '0')
+                        else:
+                            return mod.get('updated_date') or mod.get('installed_date', '0')
+                    installed_mods.sort(key=get_sort_date, reverse=reverse)
             selected_tags = []
             if hasattr(self, 'library_tag_widgets'):
                 tag_map = {self.library_tag_translation: 'translation', self.library_tag_customization: 'customization', self.library_tag_gameplay: 'gameplay', self.library_tag_other: 'other', self.library_tag_local: 'local'}
@@ -1587,7 +1326,7 @@ class DeltaHubApp(QWidget):
             if hasattr(self, 'game_type_combo'):
                 current_game_type = self.game_type_combo.currentData() or 'deltarune'
             for idx, mod_info in enumerate(installed_mods):
-                mod_exists = self._check_mod_exists(mod_info)
+                mod_exists = self.mod_manager.check_mod_exists(mod_info)
                 if not mod_exists:
                     continue
                 mod_modgame = mod_info.get('modgame', 'deltarune')
@@ -1670,12 +1409,9 @@ class DeltaHubApp(QWidget):
     def _show_empty_chapter_message(self, chapter_name):
         show_empty_message_in_layout(self.installed_mods_layout, tr('ui.no_mods_for_chapter', chapter_name=chapter_name), self.app_state.local_config, font_size=16)
 
-    def _check_mod_exists(self, mod_info):
-        return self.mod_manager.check_mod_exists(mod_info)
-
     def _cleanup_missing_mods(self, installed_mods):
         installed_mod_keys = {mod.get('mod_key') for mod in installed_mods if mod.get('mod_key')}
-        mods_metadata = self._read_mods_metadata()
+        mods_metadata = self.mod_manager._read_metadata()
         metadata_updated = False
         orphaned_keys = set(mods_metadata.keys()) - installed_mod_keys
         if orphaned_keys:
@@ -1683,7 +1419,7 @@ class DeltaHubApp(QWidget):
                 del mods_metadata[key]
             metadata_updated = True
         if metadata_updated:
-            self._write_mods_metadata(mods_metadata)
+            self.mod_manager._write_metadata(mods_metadata)
         for orphaned_key in orphaned_keys:
             dummy_mod_data = self._create_mod_object_from_info({'mod_key': orphaned_key, 'name': 'Orphaned Mod'})
             if not dummy_mod_data:
@@ -1708,7 +1444,7 @@ class DeltaHubApp(QWidget):
         installed_mods = []
         if not hasattr(self, 'app_state') or not os.path.exists(self.app_state.mods_dir):
             return installed_mods
-        mods_metadata = self._read_mods_metadata()
+        mods_metadata = self.mod_manager._read_metadata()
         metadata_updated = False
         found_mod_keys = set()
         for folder_name in os.listdir(self.app_state.mods_dir):
@@ -1743,7 +1479,7 @@ class DeltaHubApp(QWidget):
                 del mods_metadata[key]
             metadata_updated = True
         if metadata_updated:
-            self._write_mods_metadata(mods_metadata)
+            self.mod_manager._write_metadata(mods_metadata)
         return installed_mods
 
     def _create_mod_object_from_info(self, mod_info):
@@ -1782,7 +1518,7 @@ class DeltaHubApp(QWidget):
     def _on_installed_mod_remove(self, mod_data):
         try:
             if self.feedback_manager.ask_question('dialogs.delete_confirmation', 'dialogs.delete_mod_confirmation', '', False, mod_name=getattr(mod_data, 'name', getattr(mod_data, 'key', 'Unknown'))):
-                self._delete_mod_files(mod_data)
+                self.mod_manager.delete_mod_files(mod_data)
                 self._remove_mod_from_all_slots(mod_data)
                 self._update_installed_mods_display()
                 try:
@@ -2262,9 +1998,6 @@ class DeltaHubApp(QWidget):
                 version_label.setStyleSheet(f'color: {status_color}; font-size: 9px; border: none; background: transparent;')
             version_label.setText(status_text)
 
-    def _delete_mod_files(self, mod_data):
-        self.mod_manager.delete_mod_files(mod_data)
-
     def _remove_mod_from_all_slots(self, mod_data):
         if not mod_data:
             return
@@ -2681,111 +2414,6 @@ class DeltaHubApp(QWidget):
             bar.setMinimumSize(0, 0)
             bar.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
 
-    def _init_save_manager_ui(self):
-        lay = QVBoxLayout(self.save_manager_widget)
-        lay.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
-        top = QHBoxLayout()
-        top.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.save_back_btn = QPushButton(tr('ui.back_button'))
-        self.save_back_btn.clicked.connect(self._hide_save_manager)
-        self.save_back_btn.setVisible(False)
-        self.change_save_path_btn = QPushButton(tr('buttons.change_save_path'))
-        self.change_save_path_btn.clicked.connect(self._prompt_for_save_path)
-        top.addWidget(self.change_save_path_btn)
-        lay.addLayout(top)
-        self.save_tabs = NoScrollTabWidget()
-        self._slot_labels = {}
-        for ch in range(1, 5):
-            tab = QWidget()
-            v = QVBoxLayout(tab)
-            for s in range(3):
-                lbl = QLabel(tr('status.empty_save_slot'))
-                lbl = ClickableLabel(ch, s, tr('status.empty_save_slot'))
-                lbl.setObjectName(f'slot_{ch}_{s}')
-                lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                lbl.setMinimumWidth(300)
-                lbl.setStyleSheet('border:1px solid white; background-color: rgba(0,0,0,128); padding:4px;')
-                lbl.clicked.connect(self._on_save_manager_slot_clicked)
-                lbl.doubleClicked.connect(self._on_slot_double_clicked)
-                v.addWidget(lbl)
-                self._slot_labels[ch, s] = lbl
-            v.addStretch()
-            self.save_tabs.addTab(tab, tr('ui.chapter_tab_title', chapter_num=ch))
-        self._configure_hidden_tab_bar(self.save_tabs)
-        chapter_bar = QHBoxLayout()
-        chapter_bar.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        chapter_bar.setSpacing(2)
-        chapter_bar.setContentsMargins(0, 0, 0, 0)
-        self._chapter_buttons = []
-        for ch in range(1, 5):
-            btn = QPushButton(tr('ui.chapter_button_title', chapter_num=ch))
-            btn.setCheckable(True)
-            btn.setMinimumWidth(80)
-            if ch == 1:
-                btn.setChecked(True)
-            btn.clicked.connect(lambda _checked, idx=ch - 1: self.save_tabs.setCurrentIndex(idx))
-            self._chapter_buttons.append(btn)
-            chapter_bar.addWidget(btn)
-        lay.addLayout(chapter_bar)
-
-        def _sync_buttons(index: int):
-            for i, b in enumerate(self._chapter_buttons):
-                b.setChecked(i == index)
-        self.save_tabs.currentChanged.connect(_sync_buttons)
-        lay.addWidget(self.save_tabs)
-        self.collection_name_lbl = QLabel('')
-        self.collection_name_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.collection_name_lbl.setVisible(False)
-        lay.addWidget(self.collection_name_lbl)
-        bottom = QHBoxLayout()
-        bottom.setAlignment(Qt.AlignmentFlag.AlignHCenter)
-        self.left_col_btn = QPushButton('←')
-        self.left_col_btn.clicked.connect(lambda: self._navigate_collection(-1))
-        bottom.addWidget(self.left_col_btn)
-        self.switch_collection_btn = QPushButton(tr('buttons.additional_slots'))
-        self.switch_collection_btn.clicked.connect(self._toggle_collection_view)
-        bottom.addWidget(self.switch_collection_btn)
-        self.right_col_btn = QPushButton('→')
-        self.right_col_btn.clicked.connect(lambda: self._navigate_collection(1))
-        bottom.addWidget(self.right_col_btn)
-        lay.addLayout(bottom)
-        self.rename_collection_btn = QPushButton(tr('buttons.rename_collection'))
-        self.rename_collection_btn.clicked.connect(self._rename_current_collection)
-        self.delete_collection_btn = QPushButton(tr('buttons.delete_collection'))
-        self.delete_collection_btn.clicked.connect(self._delete_current_collection)
-        self.rename_collection_btn.setVisible(False)
-        self.delete_collection_btn.setVisible(False)
-        copy_bar = QHBoxLayout()
-        copy_bar.setAlignment(Qt.AlignmentFlag.AlignHCenter)
-        copy_bar.addStretch()
-        self.copy_from_main_btn = QPushButton(tr('buttons.copy_from_main'))
-        self.copy_from_main_btn.clicked.connect(lambda: self._copy_between_storages(to_collection=True))
-        copy_bar.addWidget(self.copy_from_main_btn)
-        self.copy_to_main_btn = QPushButton(tr('buttons.copy_to_main'))
-        self.copy_to_main_btn.clicked.connect(lambda: self._copy_between_storages(to_collection=False))
-        copy_bar.addWidget(self.copy_to_main_btn)
-        copy_bar.addStretch()
-        lay.addLayout(copy_bar)
-        self.slot_actions = QHBoxLayout()
-        self.slot_actions.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.show_btn = QPushButton(tr('buttons.show'))
-        self.erase_btn = QPushButton(tr('buttons.erase'))
-        self.import_btn = QPushButton(tr('buttons.import'))
-        self.export_btn = QPushButton(tr('buttons.export'))
-        for b in (self.show_btn, self.erase_btn, self.import_btn, self.export_btn):
-            b.setVisible(False)
-            self.slot_actions.addWidget(b)
-        self.show_btn.clicked.connect(self._action_show_save)
-        self.erase_btn.clicked.connect(self._action_delete_save)
-        self.import_btn.clicked.connect(lambda: self._action_import_export(True))
-        self.export_btn.clicked.connect(lambda: self._action_import_export(False))
-        lay.addLayout(self.slot_actions)
-        top.addWidget(self.rename_collection_btn)
-        top.addWidget(self.delete_collection_btn)
-        self.save_tabs.currentChanged.connect(lambda _: self._on_chapter_tab_changed())
-        self.save_manager_widget.installEventFilter(self)
-        self._update_slot_highlight()
-
     def _hide_save_manager(self):
         self.save_manager_widget.setVisible(False)
         self.app_state.is_save_manager_view = False
@@ -2905,7 +2533,7 @@ class DeltaHubApp(QWidget):
     def _create_new_collection(self) -> bool:
         return self.save_manager.create_new_collection()
 
-    def _prompt_collection_name(self, default: str='Collection') -> Optional[str]:
+    def _prompt_collection_name(self, default: str = 'Collection') -> Optional[str]:
         return self.save_manager.prompt_collection_name(default)
 
     def _update_collection_ui(self):
@@ -3171,9 +2799,6 @@ class DeltaHubApp(QWidget):
                         filter_bg_color = self.app_state.local_config.get('custom_color_background') or 'rgba(0, 0, 0, 150)'
                         filter_border_color = self.app_state.local_config.get('custom_color_border') or 'white'
                         filters.setStyleSheet(f'QFrame#filters {{ background-color: {filter_bg_color}; border: 2px solid {filter_border_color}; padding: 8px; }}')
-                elif layout:
-                    new_filters = self._create_filters_widget()
-                    layout.addWidget(new_filters)
         self._update_mod_plaques_styles()
 
     def _update_mod_plaques_styles(self):
@@ -3640,7 +3265,7 @@ class DeltaHubApp(QWidget):
         self._safe_stop_thread(getattr(self, 'fetch_thread', None))
         self.fetch_thread = None
 
-    def _safe_stop_thread(self, thr: Optional[QThread], timeout: int=2000):
+    def _safe_stop_thread(self, thr: Optional[QThread], timeout: int = 2000):
         if isinstance(thr, QThread) and thr.isRunning():
             thr.requestInterruption()
             thr.quit()
@@ -3859,7 +3484,7 @@ class DeltaHubApp(QWidget):
         if value > 0 and (not self.progress_bar.isVisible()):
             self.progress_bar.setVisible(True)
 
-    def _update_status(self, message: str, color: str='white'):
+    def _update_status(self, message: str, color: str = 'white'):
         if not self.is_shortcut_launch:
             from config.constants import UI_COLORS
             actual_color = UI_COLORS.get(color, color)
@@ -4410,7 +4035,7 @@ class DeltaHubApp(QWidget):
 
     def _load_local_data(self):
         self.app_state.local_config = self._read_json(self.app_state.config_path) or {}
-        mods_metadata = self._read_mods_metadata()
+        mods_metadata = self.mod_manager._read_metadata()
         updated = False
         if not os.path.exists(self.app_state.mods_dir):
             return
@@ -4440,7 +4065,7 @@ class DeltaHubApp(QWidget):
             except Exception as e:
                 logging.warning(f'Failed to migrate metadata for mod in {folder_name}: {e}')
         if updated:
-            self._write_mods_metadata(mods_metadata)
+            self.mod_manager._write_metadata(mods_metadata)
         self.app_state.local_config['metadata_migrated_v2'] = True
         self._write_local_config()
 
@@ -4598,12 +4223,12 @@ class DeltaHubApp(QWidget):
             raise Exception(tr('errors.mod_apply_error', error=str(e)))
 
     def _apply_demo_mod(self, mod_key: str):
-        mod_config = self._get_mod_config_by_key(mod_key)
+        mod_config = self.mod_manager.get_mod_config(mod_key)
         if not mod_config:
             raise Exception(tr('errors.mod_not_found_by_key', mod_key=mod_key))
 
     def _apply_mod_by_key(self, mod_key: str):
-        mod_config = self._get_mod_config_by_key(mod_key)
+        mod_config = self.mod_manager.get_mod_config(mod_key)
         if not mod_config:
             raise Exception(tr('errors.mod_not_found_by_key', mod_key=mod_key))
         mod_folder = os.path.join(self.app_state.mods_dir, mod_key)
@@ -4731,7 +4356,7 @@ class DeltaHubApp(QWidget):
                 continue
             chapter_id = self.app_state.game_mode.get_chapter_id(ui_index)
             if getattr(mod, 'is_local_mod', False):
-                mod_config = self._get_mod_config_by_key(mod_key)
+                mod_config = self.mod_manager.get_mod_config(mod_key)
                 if mod_config:
                     chapter_files = mod_config.get('files', {}).get(str(chapter_id), {})
                     if chapter_files.get('data_file_url'):
@@ -4742,7 +4367,7 @@ class DeltaHubApp(QWidget):
                     return True
         return False
 
-    def _find_and_validate_game_path(self, selections: Optional[Dict[int, str]]=None, is_initial: bool=False):
+    def _find_and_validate_game_path(self, selections: Optional[Dict[int, str]] = None, is_initial: bool = False):
         path_from_config = self._get_current_game_path()
         skip_data_check = bool(selections and self._has_mods_with_data_files(selections))
         if isinstance(self.app_state.game_mode, DemoGameMode):
