@@ -26,7 +26,7 @@ from localization import localization_manager, tr
 from models.game_modes import FullGameMode, DemoGameMode, UndertaleGameMode
 from config.constants import LAUNCHER_VERSION, UI_COLORS, SOCIAL_LINKS, THEMES, SAVE_SLOT_FINISH_MAP, ARCH
 from models.mod_models import ModInfo, ModChapterData
-from utils.file_utils import autodetect_path, get_file_filter
+from utils.file_utils import autodetect_path
 from utils.game_utils import is_game_running, get_default_save_path, is_valid_save_path, is_valid_game_path
 from utils.path_utils import get_user_data_root, resource_path, get_launcher_dir, get_legacy_ylauncher_path, get_user_plugins_dir
 from utils.network_utils import check_internet_connection
@@ -47,9 +47,9 @@ from core.app_state import AppState
 from core.managers.mod_manager import ModManager
 from core.managers.launch_manager import GameLauncher
 from core.managers.updatecheck_manager import UpdateChecker
+from core.managers.settings_manager import SettingsManager
 _translator = QTranslator()
 _lock_file = None
-
 
 class DeltaHubApp(QWidget):
     update_status_signal = pyqtSignal(str, str)
@@ -62,7 +62,7 @@ class DeltaHubApp(QWidget):
     url_received_signal = pyqtSignal(str)
     install_from_gb_signal = pyqtSignal(object)
 
-    def __init__(self, args: Optional[argparse.Namespace] = None, parent_for_dialogs: Optional[QWidget] = None, initial_url: str | None = None):
+    def __init__(self, args: Optional[argparse.Namespace]=None, parent_for_dialogs: Optional[QWidget]=None, initial_url: str | None=None):
         super().__init__()
         self.app_state = AppState()
         self.server: SingleInstanceServer | None = None
@@ -79,6 +79,9 @@ class DeltaHubApp(QWidget):
         os.makedirs(self.app_state.plugins_dir, exist_ok=True)
         self.lang_manager = localization_manager
         self.app_state.config_path = os.path.join(self.app_state.config_dir, 'config.json')
+        self.feedback_manager = FeedbackManager(self)
+        self.feedback_manager.app_state = self.app_state
+        self.settings_manager = SettingsManager(self.app_state, self.feedback_manager, self.lang_manager, self)
         self.presence_thread = None
         self.presence_worker = None
         self._online_timer = QTimer(self)
@@ -111,9 +114,12 @@ class DeltaHubApp(QWidget):
         self._handling_plugin_tab = False
         self._plugin_tab_map = {}
         self._last_online_count = 0
-        self.feedback_manager = FeedbackManager(self)
-        self.feedback_manager.app_state = self.app_state
         self.feedback_manager.status_updated.connect(self.update_status_signal.emit)
+        self.settings_manager.settings_changed.connect(self._on_settings_changed)
+        self.settings_manager.language_changed.connect(self._on_language_changed_by_manager)
+        self.settings_manager.theme_changed.connect(self._on_theme_changed_by_manager)
+        self.settings_manager.restart_required.connect(lambda msg: self.feedback_manager.show_info('dialogs.restart_required', msg))
+        self.settings_manager.status_changed.connect(self.update_status_signal.emit)
         self.mod_manager = ModManager(self.app_state, self.feedback_manager, self)
         self.mod_manager.progress_updated.connect(self.set_progress_signal.emit)
         self.mod_manager.status_changed.connect(self.update_status_signal.emit)
@@ -494,7 +500,7 @@ class DeltaHubApp(QWidget):
                     if isinstance(widget, InstalledModWidget) and hasattr(widget, 'use_button') and widget.use_button:
                         widget.use_button.setEnabled(enabled)
 
-    def _create_settings_nav_button(self, text: str, on_click: Callable, style_sheet: str = '', fixed_width: int = 400) -> QPushButton:
+    def _create_settings_nav_button(self, text: str, on_click: Callable, style_sheet: str='', fixed_width: int=400) -> QPushButton:
         button = QPushButton(text)
         button.setFixedWidth(fixed_width)
         base_style = f'width: {fixed_width}px;'
@@ -694,7 +700,7 @@ class DeltaHubApp(QWidget):
         self.change_background_button.clicked.connect(self._on_background_button_click)
         settings_customization_layout = QVBoxLayout(self.settings_customization_page)
         self.back_button_cust = QPushButton(tr('ui.back_button'))
-        self.back_button_cust.clicked.connect(self._go_back)
+        self.back_button_cust.clicked.connect(self._go_back_to_settings_menu)
         settings_customization_layout.addWidget(self.back_button_cust, alignment=Qt.AlignmentFlag.AlignLeft)
         settings_customization_layout.addSpacing(15)
         self.change_background_button = QPushButton()
@@ -730,7 +736,7 @@ class DeltaHubApp(QWidget):
         custom_style_layout.setContentsMargins(0, 15, 0, 0)
         custom_style_layout.setSpacing(8)
 
-        def create_setting_row(label_text: str) -> tuple[QHBoxLayout, QLineEdit, QPushButton]:
+        def create_setting_row(label_text: str) -> tuple[QHBoxLayout, QLineEdit, QPushButton, QLabel]:
             layout = QHBoxLayout()
             label = QLabel(label_text)
             color_display = QLineEdit()
@@ -746,19 +752,21 @@ class DeltaHubApp(QWidget):
             layout.addStretch()
             for widget in [color_display, color_btn, reset_btn]:
                 layout.addWidget(widget)
-            return (layout, color_display, color_btn)
+            return (layout, color_display, color_btn, label)
         self.color_widgets = {}
+        self.color_labels = {}
         self.color_config = {'background': tr('ui.background_color'), 'button': tr('ui.elements_color'), 'border': tr('ui.border_color'), 'button_hover': tr('ui.hover_color'), 'text': tr('ui.main_text_color'), 'version_text': tr('ui.secondary_text_color')}
 
         def pick_color_for_edit(target_edit):
             if (color := QColorDialog.getColor()).isValid():
                 target_edit.setText(color.name())
                 self._on_custom_style_edited()
-        for key, label in self.color_config.items():
-            layout, line_edit, btn = create_setting_row(label)
+        for key, label_text in self.color_config.items():
+            layout, line_edit, btn, label_widget = create_setting_row(label_text)
             line_edit.editingFinished.connect(self._on_custom_style_edited)
             btn.clicked.connect(lambda _, le=line_edit: pick_color_for_edit(le))
             self.color_widgets[key] = line_edit
+            self.color_labels[key] = label_widget
             custom_style_layout.addLayout(layout)
         settings_customization_layout.addWidget(self.custom_style_frame)
         settings_customization_layout.addStretch()
@@ -926,6 +934,7 @@ class DeltaHubApp(QWidget):
                     pass
 
     def _load_plugins(self):
+        self.app_state.plugins.clear()
         if not os.path.isdir(self.app_state.plugins_dir):
             return
         for plugin_name in os.listdir(self.app_state.plugins_dir):
@@ -2791,27 +2800,7 @@ class DeltaHubApp(QWidget):
         self._update_action_button_state()
 
     def _prompt_for_mods_dir(self):
-        current_mods_dir = self.app_state.mods_dir
-        new_parent_dir = QFileDialog.getExistingDirectory(self, tr('ui.select_new_mods_folder'), os.path.dirname(current_mods_dir))
-        if not new_parent_dir or os.path.dirname(current_mods_dir) == new_parent_dir:
-            return
-        new_mods_dir = os.path.join(new_parent_dir, 'mods')
-        if os.path.exists(new_mods_dir):
-            self.feedback_manager.show_error('errors.mods_folder_exists', dir=new_parent_dir)
-            return
-        try:
-            self.feedback_manager.update_status(tr('status.moving_mods_folder'), UI_COLORS['status_warning'])
-            QApplication.processEvents()
-            shutil.move(current_mods_dir, new_mods_dir)
-            self.app_state.mods_dir = new_mods_dir
-            self.app_state.local_config['mods_dir_path'] = new_parent_dir
-            self._write_local_config()
-            self.feedback_manager.show_info('dialogs.success', tr('dialogs.mods_folder_moved', path=new_mods_dir))
-            self.feedback_manager.update_status(tr('status.mods_folder_location_changed'), UI_COLORS['status_success'])
-        except Exception as e:
-            self.feedback_manager.show_error('dialogs.mods_folder_move_failed', error=str(e))
-            self.app_state.mods_dir = current_mods_dir
-            self.feedback_manager.update_status(tr('status.mods_folder_change_error'), UI_COLORS['status_error'])
+        self.settings_manager.prompt_for_mods_dir()
 
     def _update_change_path_button_text(self):
         self.change_path_button.setText(self.app_state.game_mode.path_change_button_text)
@@ -3251,7 +3240,7 @@ class DeltaHubApp(QWidget):
             self.feedback_manager.show_error('errors.folder_creation_failed', error=str(e))
             return False
 
-    def _prompt_collection_name(self, default: str = 'Collection') -> Optional[str]:
+    def _prompt_collection_name(self, default: str='Collection') -> Optional[str]:
         dlg = QDialog(self)
         dlg.setWindowTitle(tr('dialogs.new_collection'))
         v, e = (QVBoxLayout(dlg), QLineEdit())
@@ -3510,7 +3499,7 @@ class DeltaHubApp(QWidget):
         except Exception:
             pass
 
-    def _go_back(self):
+    def _go_back_or_to_main_menu(self):
         if hasattr(self, 'settings_nav_stack') and self.app_state.settings_nav_stack:
             prev = self.app_state.settings_nav_stack.pop()
             if self.app_state.current_settings_page:
@@ -3519,6 +3508,14 @@ class DeltaHubApp(QWidget):
             self.app_state.current_settings_page = prev
         else:
             self._toggle_settings_view()
+
+    def _go_back_to_settings_menu(self):
+        if self.app_state.current_settings_page and self.app_state.current_settings_page is not self.settings_menu_page:
+            self.app_state.current_settings_page.setVisible(False)
+        self.settings_menu_page.setVisible(True)
+        self.app_state.current_settings_page = self.settings_menu_page
+        if self.app_state.settings_nav_stack and self.app_state.settings_nav_stack[-1] is self.settings_menu_page:
+            self.app_state.settings_nav_stack.pop()
 
     def paintEvent(self, event):
         painter = QPainter(self)
@@ -3535,56 +3532,31 @@ class DeltaHubApp(QWidget):
         super().paintEvent(event)
 
     def _on_reset_settings_click(self):
-        if self.feedback_manager.ask_question('dialogs.reset_settings_confirm_title', 'dialogs.reset_settings_confirm_text', '', False):
-            self._stop_background_music()
-            language = self.app_state.local_config.get('language', 'en')
-            custom_files = [os.path.join(self.app_state.config_dir, 'custom_background_music.mp3'), os.path.join(self.app_state.config_dir, 'custom_background_music.wav'), os.path.join(self.app_state.config_dir, 'custom_startup_sound.mp3'), os.path.join(self.app_state.config_dir, 'custom_startup_sound.wav')]
-            for file_path in custom_files:
-                if os.path.exists(file_path):
-                    os.remove(file_path)
-            self.app_state.local_config.clear()
-            self.app_state.local_config['language'] = language
-            config_keys_to_clear = ['saved_slots_deltarune', 'saved_slots_deltarune_chapter', 'saved_slots_deltarunedemo', 'saved_slots_undertale']
-            for key in config_keys_to_clear:
-                if key in self.app_state.local_config:
-                    del self.app_state.local_config[key]
-            self._write_local_config()
-            self._load_local_data()
-            self._migrate_config_if_needed()
-            self.launch_via_steam_checkbox.setChecked(False)
-            self.use_custom_executable_checkbox.setChecked(False)
-            self.chapter_mode_checkbox.setChecked(False)
-            self.beta_updates_checkbox.setChecked(False)
-            self.fullscreen_checkbox.setChecked(False)
-            self.hide_library_filters_checkbox.setChecked(False)
-            self.full_install_checkbox.setChecked(False)
-            self.disable_background_checkbox.setChecked(False)
-            self.disable_splash_checkbox.setChecked(False)
-            self._update_custom_executable_ui()
-            self._update_checkbox_visibility()
-            self._clear_all_slots()
-            self._save_slots_state()
-            self._load_slots_state()
-            self.apply_theme()
-            self._update_settings_page_visibility()
-            self._load_custom_style_settings()
-            self._update_action_button_state()
-            self.background_music_button.setText(self._get_background_music_button_text())
-            self.startup_sound_button.setText(self._get_startup_sound_button_text())
-            self.feedback_manager.show_info('dialogs.success', tr('status.settings_reset_success'))
-            self.update()
-            self.repaint()
+        self._stop_background_music()
+        callbacks = {'migrate_config': lambda: (self._load_local_data(), self._migrate_config_if_needed())}
+        self.settings_manager.on_reset_settings_click(callbacks)
+        self.launch_via_steam_checkbox.setChecked(False)
+        self.use_custom_executable_checkbox.setChecked(False)
+        self.chapter_mode_checkbox.setChecked(False)
+        self.beta_updates_checkbox.setChecked(False)
+        self.fullscreen_checkbox.setChecked(False)
+        self.hide_library_filters_checkbox.setChecked(False)
+        self.full_install_checkbox.setChecked(False)
+        self.disable_background_checkbox.setChecked(False)
+        self.disable_splash_checkbox.setChecked(False)
+        self._update_custom_executable_ui()
+        self._update_checkbox_visibility()
+        self._clear_all_slots()
+        self._save_slots_state()
+        self._load_slots_state()
+        self._update_settings_page_visibility()
+        self._load_custom_style_settings()
+        self._update_action_button_state()
+        self.background_music_button.setText(self._get_background_music_button_text())
+        self.startup_sound_button.setText(self._get_startup_sound_button_text())
 
     def _on_background_button_click(self):
-        if self.app_state.local_config.get('custom_background_path'):
-            self.app_state.local_config['custom_background_path'] = ''
-        else:
-            filepath, _ = QFileDialog.getOpenFileName(self, tr('ui.select_background_image'), '', get_file_filter('background_images'))
-            if not filepath:
-                return
-            self.app_state.local_config['custom_background_path'] = filepath
-        self._write_local_config()
-        self.apply_theme()
+        self.settings_manager.on_background_button_click()
         self._update_background_button_state()
 
     def _update_background_button_state(self):
@@ -3659,34 +3631,24 @@ class DeltaHubApp(QWidget):
 
     def _on_toggle_disable_background(self, state):
         is_disabled = bool(state)
-        self.app_state.local_config['background_disabled'] = is_disabled
-        self._write_local_config()
+        self.settings_manager.on_toggle_disable_background(is_disabled)
         self._update_background_button_state()
-        self.apply_theme()
-        self.update()
 
     def _on_toggle_disable_splash(self, state):
         is_disabled = bool(state)
-        self.app_state.local_config['disable_splash'] = is_disabled
-        self._write_local_config()
+        self.settings_manager.on_toggle_disable_splash(is_disabled)
 
     def _on_toggle_hide_library_filters(self, state):
         is_hidden = bool(state)
-        self.app_state.local_config['hide_library_filters'] = is_hidden
-        self._write_local_config()
+        self.settings_manager.on_toggle_hide_library_filters(is_hidden)
         if hasattr(self, 'library_filters_widget'):
             self.library_filters_widget.setVisible(not is_hidden)
 
     def _is_valid_hex_color(self, s: str) -> bool:
-        return bool(re.fullmatch('#[0-9a-fA-F]{6}', s or ''))
+        return self.settings_manager.is_valid_hex_color(s)
 
     def _on_custom_style_edited(self):
-        for key, widget in self.color_widgets.items():
-            color = widget.text()
-            config_key = f'custom_color_{key}'
-            self.app_state.local_config[config_key] = color if self._is_valid_hex_color(color) else ''
-        self._write_local_config()
-        self.apply_theme()
+        self.settings_manager.on_custom_style_edited(self.color_widgets)
         self._update_dynamic_elements()
 
     def _update_dynamic_elements(self):
@@ -3796,77 +3758,14 @@ class DeltaHubApp(QWidget):
         return tr('buttons.select_startup_sound')
 
     def _on_background_music_button_click(self):
-        mp3 = os.path.join(self.app_state.config_dir, 'custom_background_music.mp3')
-        wav = os.path.join(self.app_state.config_dir, 'custom_background_music.wav')
-        custom_exists = os.path.exists(mp3) or os.path.exists(wav)
-        if custom_exists:
-            try:
-                self._stop_background_music()
-                for p in (mp3, wav):
-                    try:
-                        if os.path.exists(p):
-                            os.remove(p)
-                    except Exception:
-                        pass
-                self.background_music_button.setText(self._get_background_music_button_text())
-                self.feedback_manager.show_info('dialogs.success', tr('dialogs.background_music_removed'))
-            except Exception as e:
-                print(f'Error removing background music: {e}')
-                self.feedback_manager.show_warning('errors.error', tr('errors.remove_background_music_failed'))
-        else:
-            file_path, _ = QFileDialog.getOpenFileName(self, tr('dialogs.select_background_music'), '', 'Audio Files (*.mp3 *.wav)')
-            if file_path:
-                lower = file_path.lower()
-                if not (lower.endswith('.mp3') or lower.endswith('.wav')):
-                    self.feedback_manager.show_warning('errors.error', tr('errors.can_select_only_mp3_wav'))
-                    return
-                try:
-                    self._stop_background_music()
-                    os.makedirs(self.app_state.config_dir, exist_ok=True)
-                    ext = '.mp3' if lower.endswith('.mp3') else '.wav'
-                    dest_path = os.path.join(self.app_state.config_dir, f'custom_background_music{ext}')
-                    shutil.copy2(file_path, dest_path)
-                    self.background_music_button.setText(self._get_background_music_button_text())
-                    self._maybe_start_background_music()
-                    self.feedback_manager.show_info('dialogs.success', tr('dialogs.background_music_selected'))
-                except Exception as e:
-                    print(f'Error copying background music: {e}')
-                    self.feedback_manager.show_warning('errors.error', tr('errors.copy_background_music_failed'))
+        self._stop_background_music()
+        self.settings_manager.on_background_music_button_click()
+        self.background_music_button.setText(self._get_background_music_button_text())
+        self._maybe_start_background_music()
 
     def _on_startup_sound_button_click(self):
-        mp3 = os.path.join(self.app_state.config_dir, 'custom_startup_sound.mp3')
-        wav = os.path.join(self.app_state.config_dir, 'custom_startup_sound.wav')
-        existing = self._get_startup_sound_path()
-        if existing:
-            try:
-                for p in (mp3, wav):
-                    try:
-                        if os.path.exists(p):
-                            os.remove(p)
-                    except Exception:
-                        pass
-                self.startup_sound_button.setText(self._get_startup_sound_button_text())
-                self.feedback_manager.show_info('dialogs.success', tr('dialogs.startup_sound_removed'))
-            except Exception as e:
-                print(f'Error removing startup sound: {e}')
-                self.feedback_manager.show_warning('errors.error', tr('errors.remove_startup_sound_failed'))
-        else:
-            file_path, _ = QFileDialog.getOpenFileName(self, tr('dialogs.select_startup_sound'), '', 'Audio Files (*.mp3 *.wav)')
-            if file_path:
-                lower = file_path.lower()
-                if not (lower.endswith('.mp3') or lower.endswith('.wav')):
-                    self.feedback_manager.show_warning('errors.error', tr('errors.can_select_only_mp3_wav'))
-                    return
-                try:
-                    os.makedirs(self.app_state.config_dir, exist_ok=True)
-                    ext = '.mp3' if lower.endswith('.mp3') else '.wav'
-                    dest = os.path.join(self.app_state.config_dir, f'custom_startup_sound{ext}')
-                    shutil.copy2(file_path, dest)
-                    self.startup_sound_button.setText(self._get_startup_sound_button_text())
-                    self.feedback_manager.show_info('dialogs.success', tr('dialogs.startup_sound_selected'))
-                except Exception as e:
-                    print(f'Error copying startup sound: {e}')
-                    self.feedback_manager.show_warning('errors.error', tr('errors.copy_startup_sound_failed'))
+        self.settings_manager.on_startup_sound_button_click()
+        self.startup_sound_button.setText(self._get_startup_sound_button_text())
 
     def _start_background_music(self):
         try:
@@ -3954,16 +3853,7 @@ class DeltaHubApp(QWidget):
             pass
 
     def _on_toggle_direct_launch_for_slot(self, slot_id):
-        if not self.app_state.game_mode.direct_launch_allowed:
-            return
-        if self.app_state.local_config.get('launch_via_steam', False):
-            self.feedback_manager.show_warning('dialogs.incompatibility', tr('dialogs.direct_launch_steam_incompatible'))
-            return
-        if platform.system() == 'Darwin':
-            self.feedback_manager.show_warning('dialogs.incompatibility', tr('dialogs.direct_launch_macos_incompatible'))
-            return
-        self.app_state.local_config['direct_launch_slot_id'] = slot_id
-        self._write_local_config()
+        self.settings_manager.on_toggle_direct_launch_for_slot(slot_id)
         self._update_all_slots_visual_state()
         self.launch_via_steam_checkbox.setEnabled(False)
 
@@ -3988,8 +3878,7 @@ class DeltaHubApp(QWidget):
         self.action_button.setEnabled(True)
 
     def _disable_direct_launch(self):
-        self.app_state.local_config['direct_launch_slot_id'] = -1
-        self._write_local_config()
+        self.settings_manager.disable_direct_launch()
         self._update_all_slots_visual_state()
         self.launch_via_steam_checkbox.setEnabled(True)
 
@@ -4250,7 +4139,7 @@ class DeltaHubApp(QWidget):
         self._safe_stop_thread(getattr(self, 'fetch_thread', None))
         self.fetch_thread = None
 
-    def _safe_stop_thread(self, thr: Optional[QThread], timeout: int = 2000):
+    def _safe_stop_thread(self, thr: Optional[QThread], timeout: int=2000):
         if isinstance(thr, QThread) and thr.isRunning():
             thr.requestInterruption()
             thr.quit()
@@ -4469,7 +4358,7 @@ class DeltaHubApp(QWidget):
         if value > 0 and (not self.progress_bar.isVisible()):
             self.progress_bar.setVisible(True)
 
-    def _update_status(self, message: str, color: str = 'white'):
+    def _update_status(self, message: str, color: str='white'):
         if not self.is_shortcut_launch:
             from config.constants import UI_COLORS
             actual_color = UI_COLORS.get(color, color)
@@ -4511,18 +4400,12 @@ class DeltaHubApp(QWidget):
 
     def _on_toggle_custom_executable(self):
         use_custom = self.use_custom_executable_checkbox.isChecked()
-        self.app_state.local_config['use_custom_executable'] = use_custom
-        if not use_custom:
-            self.app_state.local_config[self.app_state.game_mode.get_custom_exec_config_key()] = ''
-        self._write_local_config()
+        self.settings_manager.on_toggle_custom_executable(use_custom)
         self._update_custom_executable_ui()
 
     def _select_custom_executable_file(self):
-        dlg_title = tr('ui.select_launch_file')
-        filepath = QFileDialog.getOpenFileName(self, dlg_title)[0]
+        filepath = self.settings_manager.select_custom_executable_file()
         if filepath:
-            self.app_state.local_config[self.app_state.game_mode.get_custom_exec_config_key()] = filepath
-            self._write_local_config()
             self._update_custom_executable_ui()
 
     def _update_custom_executable_ui(self):
@@ -4534,37 +4417,39 @@ class DeltaHubApp(QWidget):
 
     def _on_toggle_steam_launch(self, state=None):
         is_steam_launch = self.launch_via_steam_checkbox.isChecked()
-        self.app_state.local_config['launch_via_steam'] = is_steam_launch
-        self._write_local_config()
+        self.settings_manager.on_toggle_steam_launch(is_steam_launch)
         self._update_custom_executable_ui()
 
     def _on_language_changed(self):
         selected_data = self.language_combo.currentData()
         if not selected_data:
             return
-        current_language = self.app_state.local_config.get('language', 'en')
-        if selected_data == current_language:
-            return
-        self.app_state.local_config['language'] = selected_data
-        self._write_json(self.app_state.config_path, self.app_state.local_config)
+        self.settings_manager.on_language_changed(selected_data)
+
+    def _on_language_changed_by_manager(self, language_code: str):
         self._retranslate_ui()
+
+    def _on_settings_changed(self):
+        pass
+
+    def _on_theme_changed_by_manager(self):
+        self.apply_theme()
 
     def _on_toggle_beta_updates(self):
         beta_enabled = self.beta_updates_checkbox.isChecked()
-        self.app_state.local_config['beta_updates_enabled'] = beta_enabled
-        self._write_local_config()
+        self.settings_manager.on_toggle_beta_updates(beta_enabled)
         self.update_checker.check_for_updates()
 
     def _on_toggle_fullscreen(self):
         fullscreen_enabled = self.fullscreen_checkbox.isChecked()
-        self.app_state.local_config['fullscreen_enabled'] = fullscreen_enabled
-        self._write_local_config()
+        self.settings_manager.on_toggle_fullscreen(fullscreen_enabled)
         if fullscreen_enabled:
             self.showFullScreen()
         else:
             self.showNormal()
 
     def _retranslate_texts(self):
+        self.color_config = {'background': tr('ui.background_color'), 'button': tr('ui.elements_color'), 'border': tr('ui.border_color'), 'button_hover': tr('ui.hover_color'), 'text': tr('ui.main_text_color'), 'version_text': tr('ui.secondary_text_color')}
         self.settings_button.setText(tr('ui.back_button') if self.app_state.is_settings_view or self.app_state.is_save_manager_view else tr('ui.settings_title'))
         self.online_label.setToolTip(tr('tooltips.online_counter'))
         self.top_refresh_button.setToolTip(tr('ui.update_mod_list'))
@@ -4616,13 +4501,9 @@ class DeltaHubApp(QWidget):
         self.startup_sound_button.setText(self._get_startup_sound_button_text())
         self.disable_background_checkbox.setText(tr('checkboxes.disable_background'))
         self.disable_splash_checkbox.setText(tr('checkboxes.disable_splash'))
-        for key, widget in self.color_widgets.items():
-            label_widget = widget.parent().findChild(QLabel)
-            if label_widget:
-                label_widget.setText(self.color_config[key])
-            button_widget = widget.parent().findChild(QPushButton)
-            if button_widget:
-                button_widget.setText(tr('ui.select_color'))
+        for key in self.color_widgets.keys():
+            if key in self.color_labels:
+                self.color_labels[key].setText(self.color_config[key])
         self.changelog_button.setText(tr('buttons.changelog_close') if self.app_state.is_changelog_view else tr('buttons.changelog'))
         self.help_button.setText(tr('buttons.help_close') if self.app_state.is_help_view else tr('buttons.help'))
 
@@ -5127,58 +5008,16 @@ class DeltaHubApp(QWidget):
         self._write_local_config()
 
     def _migrate_config_if_needed(self):
-        self.app_state.local_config['cache_format_version'] = LAUNCHER_VERSION
-        defaults = {'game_path': '', 'last_selected': {}, 'use_custom_executable': False, 'demo_game_path': '', 'launch_via_steam': False, 'direct_launch_slot_id': -1, 'demo_mode_enabled': False, 'chapter_mode_enabled': False, 'custom_background_path': '', 'custom_executable_path': '', 'background_disabled': False, 'custom_color_background': '', 'custom_color_button': '', 'custom_color_border': '', 'custom_color_button_hover': '', 'custom_color_text': '', 'mods_dir_path': '', 'custom_color_version_text': '', 'beta_updates_enabled': False}
-        for key, value in defaults.items():
-            self.app_state.local_config.setdefault(key, value)
-        self._write_local_config()
+        self.settings_manager.migrate_config_if_needed()
 
     def _write_local_config(self):
-        self._write_json(self.app_state.config_path, self.app_state.local_config)
+        self.settings_manager.write_local_config()
 
     def _write_json(self, path: str, data):
-        try:
-            dir_path = os.path.dirname(path)
-            os.makedirs(dir_path, exist_ok=True)
-            tmp = f'{path}.{os.getpid()}.{threading.get_ident()}.tmp'
-            with open(tmp, 'w', encoding='utf-8') as f:
-                json.dump(data, f, indent=2, ensure_ascii=False)
-            os.replace(tmp, path)
-        except (PermissionError, OSError):
-            self._handle_permission_error(os.path.dirname(path))
-        except Exception as e:
-            self.feedback_manager.update_status(tr('errors.file_write_error', error=str(e)), UI_COLORS['status_error'])
+        self.settings_manager.write_json(path, data)
 
     def _read_json(self, path: str):
-        try:
-            with open(path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-            if isinstance(data, dict) and path.endswith('config.json'):
-                needs_migration = False
-                if 'chapters' in data and 'files' not in data:
-                    data['files'] = data['chapters']
-                    del data['chapters']
-                    needs_migration = True
-                if 'is_demo_mod' in data and 'modgame' not in data:
-                    if data.get('is_demo_mod', False):
-                        data['modgame'] = 'deltarunedemo'
-                    else:
-                        data['modgame'] = 'deltarune'
-                    del data['is_demo_mod']
-                    needs_migration = True
-                if needs_migration:
-                    self._write_json(path, data)
-            return data
-        except FileNotFoundError:
-            return {}
-        except json.JSONDecodeError:
-            backup_path = f'{path}.invalid.bak'
-            try:
-                os.replace(path, backup_path)
-            except OSError:
-                pass
-            self.feedback_manager.update_status(tr('dialogs.corrupted_files_found'), UI_COLORS['status_warning'])
-            return {}
+        return self.settings_manager.read_json(path)
 
     def _init_localization(self):
         saved_language = self.app_state.local_config.get('language')
@@ -5466,7 +5305,7 @@ class DeltaHubApp(QWidget):
                     return True
         return False
 
-    def _find_and_validate_game_path(self, selections: Optional[Dict[int, str]] = None, is_initial: bool = False):
+    def _find_and_validate_game_path(self, selections: Optional[Dict[int, str]]=None, is_initial: bool=False):
         path_from_config = self._get_current_game_path()
         skip_data_check = bool(selections and self._has_mods_with_data_files(selections))
         if isinstance(self.app_state.game_mode, DemoGameMode):
@@ -5504,51 +5343,12 @@ class DeltaHubApp(QWidget):
             pass
 
     def _prompt_for_game_path(self, is_initial=False):
-        if isinstance(self.app_state.game_mode, DemoGameMode):
-            title = tr('dialogs.select_demo_folder')
-            message = tr('dialogs.demo_not_found')
-        elif isinstance(self.app_state.game_mode, UndertaleGameMode):
-            title = tr('dialogs.select_undertale_folder')
-            message = tr('dialogs.undertale_not_found')
-        else:
-            title = tr('dialogs.select_deltarune_folder')
-            message = tr('dialogs.deltarune_not_found')
-        if is_initial:
-            self.feedback_manager.show_info('dialogs.path_not_found', tr('dialogs.game_path_instruction', message=message))
-        if platform.system() == 'Darwin':
-            path, _ = QFileDialog.getOpenFileName(self, title, '', 'Application bundle (*.app);;All files (*)')
-            if not path:
-                path = QFileDialog.getExistingDirectory(self, title)
-        else:
-            path = QFileDialog.getExistingDirectory(self, title)
-        if path:
-            corrected_path = path
-            if platform.system() == 'Darwin' and (not path.endswith('.app')):
-                if isinstance(self.app_state.game_mode, UndertaleGameMode):
-                    app_names = ('UNDERTALE.app',)
-                else:
-                    app_names = ('DELTARUNE.app', 'DELTARUNEdemo.app')
-                for app_name in app_names:
-                    candidate = os.path.join(path, app_name)
-                    if os.path.isdir(candidate):
-                        corrected_path = candidate
-                        break
-            if isinstance(self.app_state.game_mode, UndertaleGameMode):
-                game_type = 'undertale'
-            else:
-                game_type = 'deltarune'
-            if is_valid_game_path(corrected_path, False, game_type):
-                self.app_state.game_mode.set_game_path(self.app_state.local_config, corrected_path)
-                self._write_local_config()
-                self.feedback_manager.update_status(tr('status.game_path_set', path=corrected_path), UI_COLORS['status_success'])
-                self._update_action_button_state()
-                return True
-            else:
-                self.feedback_manager.show_warning('dialogs.invalid_folder', tr('dialogs.invalid_game_folder'))
-        if is_initial:
+        result = self.settings_manager.prompt_for_game_path(is_initial)
+        if result:
+            self._update_action_button_state()
+        if is_initial and (not result):
             self._start_background_music()
             self.initialization_finished.emit()
-            self.feedback_manager.update_status(tr('status.no_game_path'), UI_COLORS['status_error'])
 
     def _handle_first_launch_settings(self):
         self.app_state.local_config['first_launch_splash_shown'] = True
@@ -5567,65 +5367,17 @@ class DeltaHubApp(QWidget):
             self._export_theme()
 
     def _export_theme(self):
-        theme_file_path, _ = QFileDialog.getSaveFileName(self, tr('dialogs.export_theme_title'), '', f"{tr('file_descriptions.theme_files')} (*.dhtheme)")
-        if not theme_file_path:
-            return
-        theme_settings = {'custom_color_background': self.app_state.local_config.get('custom_color_background', ''), 'custom_color_button': self.app_state.local_config.get('custom_color_button', ''), 'custom_color_border': self.app_state.local_config.get('custom_color_border', ''), 'custom_color_button_hover': self.app_state.local_config.get('custom_color_button_hover', ''), 'custom_color_text': self.app_state.local_config.get('custom_color_text', ''), 'custom_color_version_text': self.app_state.local_config.get('custom_color_version_text', ''), 'background_disabled': self.app_state.local_config.get('background_disabled', False), 'disable_splash': self.app_state.local_config.get('disable_splash', False)}
-        with zipfile.ZipFile(theme_file_path, 'w') as zipf:
-            zipf.writestr('theme.json', json.dumps(theme_settings, indent=2))
-            bg_path = self.app_state.local_config.get('custom_background_path')
-            if bg_path and os.path.exists(bg_path):
-                zipf.write(bg_path, f'background{os.path.splitext(bg_path)[1]}')
-            music_path = self._get_background_music_path()
-            if music_path and os.path.exists(music_path):
-                zipf.write(music_path, f'background_music{os.path.splitext(music_path)[1]}')
-            sound_path = self._get_startup_sound_path()
-            if sound_path and os.path.exists(sound_path):
-                zipf.write(sound_path, f'startup_sound{os.path.splitext(sound_path)[1]}')
-        self.feedback_manager.show_info('dialogs.success', tr('dialogs.theme_exported_success'))
+        self.settings_manager.export_theme()
 
     def _import_theme(self):
-        import tempfile
-        theme_file_path, _ = QFileDialog.getOpenFileName(self, tr('dialogs.import_theme_title'), '', f"{tr('file_descriptions.theme_files')} (*.dhtheme)")
-        if not theme_file_path:
-            return
-        try:
-            with zipfile.ZipFile(theme_file_path, 'r') as zipf:
-                if 'theme.json' not in zipf.namelist():
-                    raise ValueError('Missing theme.json')
-                with tempfile.TemporaryDirectory() as temp_dir:
-                    zipf.extractall(temp_dir)
-                    with open(os.path.join(temp_dir, 'theme.json'), 'r') as f:
-                        theme_settings = json.load(f)
-                    for key, value in theme_settings.items():
-                        self.app_state.local_config[key] = value
-                    for old_file in ['custom_background_music.mp3', 'custom_background_music.wav', 'custom_startup_sound.mp3', 'custom_startup_sound.wav']:
-                        if os.path.exists(os.path.join(self.app_state.config_dir, old_file)):
-                            os.remove(os.path.join(self.app_state.config_dir, old_file))
-                    self.app_state.local_config['custom_background_path'] = ''
-                    for filename in os.listdir(temp_dir):
-                        src_path = os.path.join(temp_dir, filename)
-                        if filename.startswith('background.'):
-                            ext = os.path.splitext(filename)[1]
-                            dest_path = os.path.join(self.app_state.config_dir, f'custom_background{ext}')
-                            shutil.copy2(src_path, dest_path)
-                            self.app_state.local_config['custom_background_path'] = dest_path
-                        elif filename.startswith('background_music.'):
-                            shutil.copy2(src_path, os.path.join(self.app_state.config_dir, f'custom_background_music{os.path.splitext(filename)[1]}'))
-                        elif filename.startswith('startup_sound.'):
-                            shutil.copy2(src_path, os.path.join(self.app_state.config_dir, f'custom_startup_sound{os.path.splitext(filename)[1]}'))
-            self._write_local_config()
-            self._load_custom_style_settings()
-            self.disable_background_checkbox.setChecked(self.app_state.local_config.get('background_disabled', False))
-            self.disable_splash_checkbox.setChecked(self.app_state.local_config.get('disable_splash', False))
-            self.background_music_button.setText(self._get_background_music_button_text())
-            self.startup_sound_button.setText(self._get_startup_sound_button_text())
-            self._stop_background_music()
-            self._maybe_start_background_music()
-            self.apply_theme()
-            self.feedback_manager.show_info('dialogs.success', tr('dialogs.theme_imported_success'))
-        except Exception as e:
-            self.feedback_manager.show_error('dialogs.error', tr('dialogs.theme_import_failed', error=str(e)))
+        self.settings_manager.import_theme()
+        self._load_custom_style_settings()
+        self.disable_background_checkbox.setChecked(self.app_state.local_config.get('background_disabled', False))
+        self.disable_splash_checkbox.setChecked(self.app_state.local_config.get('disable_splash', False))
+        self.background_music_button.setText(self._get_background_music_button_text())
+        self.startup_sound_button.setText(self._get_startup_sound_button_text())
+        self._stop_background_music()
+        self._maybe_start_background_music()
         self.app_state.local_config['first_launch_splash_shown'] = True
         self.app_state.local_config['disable_splash'] = True
         self._write_local_config()
