@@ -10,7 +10,6 @@ import threading
 import zipfile
 import time
 import uuid
-import ctypes
 import subprocess
 import webbrowser
 import rarfile
@@ -19,7 +18,6 @@ import importlib.util
 import importlib.machinery
 from typing import Callable, Optional, Dict, Any
 import logging
-from pathlib import Path
 import requests
 from PyQt6.QtCore import QTranslator, Qt, QEvent, QThread, QTimer, QUrl, pyqtSignal
 from PyQt6.QtGui import QColor, QDesktopServices, QFont, QFontDatabase, QIcon, QMovie, QPainter, QPixmap
@@ -28,7 +26,7 @@ from localization import localization_manager, tr
 from models.game_modes import FullGameMode, DemoGameMode, UndertaleGameMode
 from config.constants import LAUNCHER_VERSION, UI_COLORS, SOCIAL_LINKS, THEMES, SAVE_SLOT_FINISH_MAP, ARCH
 from models.mod_models import ModInfo, ModChapterData
-from utils.file_utils import autodetect_path, get_file_filter, fix_macos_python_symlink
+from utils.file_utils import autodetect_path, get_file_filter
 from utils.game_utils import is_game_running, get_default_save_path, is_valid_save_path, is_valid_game_path
 from utils.path_utils import get_user_data_root, resource_path, get_launcher_dir, get_legacy_ylauncher_path, get_user_plugins_dir
 from utils.network_utils import check_internet_connection
@@ -48,8 +46,10 @@ from core.startup import SingleInstanceServer
 from core.app_state import AppState
 from core.managers.mod_manager import ModManager
 from core.managers.launch_manager import GameLauncher
+from core.managers.updatecheck_manager import UpdateChecker
 _translator = QTranslator()
 _lock_file = None
+
 
 class DeltaHubApp(QWidget):
     update_status_signal = pyqtSignal(str, str)
@@ -57,16 +57,12 @@ class DeltaHubApp(QWidget):
     show_update_prompt = pyqtSignal(dict)
     initialization_finished = pyqtSignal()
     hide_window_signal = pyqtSignal()
-    quit_signal = pyqtSignal()
     restore_window_signal = pyqtSignal()
-    error_signal = pyqtSignal(str)
     mods_loaded_signal = pyqtSignal()
-    update_info_ready = pyqtSignal(dict)
-    update_cleanup = pyqtSignal()
     url_received_signal = pyqtSignal(str)
     install_from_gb_signal = pyqtSignal(object)
 
-    def __init__(self, args: Optional[argparse.Namespace]=None, parent_for_dialogs: Optional[QWidget]=None, initial_url: str | None=None):
+    def __init__(self, args: Optional[argparse.Namespace] = None, parent_for_dialogs: Optional[QWidget] = None, initial_url: str | None = None):
         super().__init__()
         self.app_state = AppState()
         self.server: SingleInstanceServer | None = None
@@ -130,6 +126,13 @@ class DeltaHubApp(QWidget):
         self.game_launcher.game_launch_started.connect(self.hide_window_signal.emit)
         self.game_launcher.game_launch_finished.connect(self._on_game_launch_finished)
         self.game_launcher.recover_previous_session()
+        self.update_checker = UpdateChecker(self.app_state, self.feedback_manager, self)
+        self.update_checker.update_available.connect(self._handle_update_info)
+        self.update_checker.status_changed.connect(self.update_status_signal.emit)
+        self.update_checker.progress_updated.connect(self.set_progress_signal.emit)
+        self.update_checker.update_finished.connect(self._on_update_cleanup)
+        self.update_checker.update_error.connect(lambda msg: self.feedback_manager.show_error('errors.error', msg))
+        self.update_checker.quit_requested.connect(QApplication.quit)
         self.init_ui()
         self.load_font()
         self.update_status_signal.connect(self._update_status)
@@ -137,11 +140,7 @@ class DeltaHubApp(QWidget):
         self.restore_window_signal.connect(self._restore_window_after_game)
         self.set_progress_signal.connect(self._on_progress_update)
         self.show_update_prompt.connect(self._prompt_for_update)
-        self.error_signal.connect(lambda msg: self.feedback_manager.show_error('errors.error', msg))
-        self.quit_signal.connect(QApplication.quit)
         self.mods_loaded_signal.connect(self._on_mods_loaded)
-        self.update_info_ready.connect(self._handle_update_info)
-        self.update_cleanup.connect(self._on_update_cleanup)
         self.url_received_signal.connect(self.handle_one_click_install)
         self.install_from_gb_signal.connect(lambda mod: self._install_single_mod(mod, force=True))
         self.initialization_finished.connect(self._handle_pending_install)
@@ -495,7 +494,7 @@ class DeltaHubApp(QWidget):
                     if isinstance(widget, InstalledModWidget) and hasattr(widget, 'use_button') and widget.use_button:
                         widget.use_button.setEnabled(enabled)
 
-    def _create_settings_nav_button(self, text: str, on_click: Callable, style_sheet: str='', fixed_width: int=400) -> QPushButton:
+    def _create_settings_nav_button(self, text: str, on_click: Callable, style_sheet: str = '', fixed_width: int = 400) -> QPushButton:
         button = QPushButton(text)
         button.setFixedWidth(fixed_width)
         base_style = f'width: {fixed_width}px;'
@@ -3252,7 +3251,7 @@ class DeltaHubApp(QWidget):
             self.feedback_manager.show_error('errors.folder_creation_failed', error=str(e))
             return False
 
-    def _prompt_collection_name(self, default: str='Collection') -> Optional[str]:
+    def _prompt_collection_name(self, default: str = 'Collection') -> Optional[str]:
         dlg = QDialog(self)
         dlg.setWindowTitle(tr('dialogs.new_collection'))
         v, e = (QVBoxLayout(dlg), QLineEdit())
@@ -4110,37 +4109,6 @@ class DeltaHubApp(QWidget):
         else:
             return 'Linux'
 
-    def _check_for_launcher_updates(self):
-        beta_enabled = self.app_state.local_config.get('beta_updates_enabled', False)
-        if beta_enabled:
-            self.feedback_manager.update_status(tr('status.beta_updates_enabled'), UI_COLORS['status_warning'])
-        try:
-            launcher_files_key = 'launcher_beta_files' if beta_enabled else 'launcher_files'
-            launcher_files = self.app_state.global_settings.get(launcher_files_key)
-            if not isinstance(launcher_files, dict):
-                self.feedback_manager.update_status(tr('status.update_info_not_found'), UI_COLORS['status_warning'])
-                return
-            remote_version = launcher_files.get('version')
-            from utils.file_utils import version_sort_key as _vkey
-            if not remote_version or _vkey(remote_version) <= _vkey(LAUNCHER_VERSION):
-                self.feedback_manager.update_status(tr('status.launcher_version_up_to_date'), UI_COLORS['status_success'])
-                return
-            platform_key_map = {'Windows': 'windows', 'Linux': 'linux', 'Darwin': f'macos-{ARCH}'}
-            current_platform_key = platform_key_map.get(platform.system())
-            download_url = launcher_files.get('urls', {}).get(current_platform_key)
-            update_message = launcher_files.get('message', tr('dialogs.new_version_available_simple'))
-            update_message_ru = launcher_files.get('message_ru')
-            update_message_en = launcher_files.get('message_en')
-            if not download_url:
-                self.feedback_manager.update_status(tr('errors.no_build_for_os', platform=current_platform_key), UI_COLORS['status_warning'])
-                return
-            update_info = {'version': remote_version, 'url': download_url, 'message': update_message, 'message_ru': update_message_ru, 'message_en': update_message_en}
-            self.update_info_ready.emit(update_info)
-        except requests.RequestException as e:
-            self.feedback_manager.update_status(tr('errors.update_check_network_error', error=str(e)), UI_COLORS['status_error'])
-        except Exception as e:
-            self.feedback_manager.update_status(tr('errors.update_check_general_error', error=str(e)), UI_COLORS['status_error'])
-
     def _handle_update_info(self, update_info):
         if self.app_state.initialization_completed and getattr(self, 'is_shown_to_user', False):
             self.show_update_prompt.emit(update_info)
@@ -4184,12 +4152,13 @@ class DeltaHubApp(QWidget):
         update_message += f"<b>{tr('dialogs.whats_new')}</b><br>{message_text}<br><br>"
         update_message += tr('dialogs.want_download_install_now') + tr('dialogs.app_will_restart')
         if self.feedback_manager.ask_question('status.update_available', 'status.update_available', update_message, True):
-            self._perform_update(update_info)
+            self._perform_update_ui_prep()
+            self.update_checker.perform_update(update_info)
         else:
             self.app_state.update_in_progress = False
             self.feedback_manager.update_status(tr('status.update_rejected'), UI_COLORS['status_info'])
 
-    def _perform_update(self, update_info):
+    def _perform_update_ui_prep(self):
         for widget in [self.action_button, self.saves_button, self.shortcut_button, self.change_path_button, self.change_background_button]:
             widget.setEnabled(False)
         try:
@@ -4202,7 +4171,6 @@ class DeltaHubApp(QWidget):
             self.tab_widget.setEnabled(False)
         self.progress_bar.setVisible(True)
         self.progress_bar.setValue(0)
-        threading.Thread(target=self._update_worker, args=(update_info,), daemon=True).start()
 
     def _on_update_cleanup(self):
         try:
@@ -4224,69 +4192,6 @@ class DeltaHubApp(QWidget):
             self._update_action_button_state()
         except Exception:
             pass
-
-    def _update_worker(self, update_info):
-        try:
-            with tempfile.TemporaryDirectory(prefix='deltahub-update-') as tmp_dir:
-                archive_path = os.path.join(tmp_dir, 'update' + os.path.splitext(update_info['url'].split('?')[0])[1])
-                self.feedback_manager.update_status(tr('status.downloading_version', version=update_info['version']), UI_COLORS['status_warning'])
-                response = requests.get(update_info['url'], stream=True, timeout=60)
-                response.raise_for_status()
-                total_size = int(response.headers.get('content-length', 0))
-                with open(archive_path, 'wb') as f:
-                    downloaded_size = 0
-                    for data in response.iter_content(chunk_size=8192):
-                        f.write(data)
-                        downloaded_size += len(data)
-                        if total_size > 0:
-                            self.set_progress_signal.emit(int(downloaded_size / total_size * 100))
-                self.feedback_manager.update_status(tr('status.unpacking_and_installing'), UI_COLORS['status_warning'])
-                system = platform.system()
-                extraction_dir = os.path.join(tmp_dir, 'extracted')
-                os.makedirs(extraction_dir, exist_ok=True)
-                if system != 'Darwin':
-                    from utils.file_utils import _extract_archive
-                    _extract_archive(archive_path, extraction_dir, os.path.basename(archive_path))
-                if system == 'Windows':
-                    new_exe_path = next((os.path.join(root, f) for root, _, files in os.walk(extraction_dir) for f in files if f.lower().endswith('.exe')), None)
-                    if not new_exe_path:
-                        raise RuntimeError(tr('errors.exe_not_found_in_archive'))
-                    ctypes.windll.shell32.ShellExecuteW(None, 'runas', new_exe_path, None, None, 1)
-                    self.feedback_manager.update_status(tr('status.installer_launched_closing'), UI_COLORS['status_success'])
-                    self.quit_signal.emit()
-                    return
-                current_exe_path = os.path.realpath(sys.executable)
-                replace_target = os.path.abspath(os.path.join(os.path.dirname(current_exe_path), '..', '..')) if system == 'Darwin' else current_exe_path
-                backup_path = f'{replace_target}.old'
-                if system == 'Darwin':
-                    if archive_path.lower().endswith('.zip'):
-                        subprocess.run(['/usr/bin/ditto', '-x', '-k', archive_path, extraction_dir], check=True)
-                    new_content_path = next((os.path.join(extraction_dir, d) for d in os.listdir(extraction_dir) if d.endswith('.app')), None)
-                    if new_content_path is None:
-                        raise RuntimeError(tr('errors.app_not_found_after_unpack'))
-                    fix_macos_python_symlink(Path(new_content_path))
-                else:
-                    new_content_path = next((os.path.join(root, file) for root, _, files in os.walk(extraction_dir) for file in files if os.path.isfile(os.path.join(root, file)) and os.access(os.path.join(root, file), os.X_OK)), None)
-                    if new_content_path is None or not os.path.exists(new_content_path):
-                        raise RuntimeError(tr('errors.executable_not_found_after_unpack'))
-                    os.chmod(new_content_path, 493)
-                if os.path.exists(backup_path):
-                    shutil.rmtree(backup_path, ignore_errors=True)
-                os.rename(replace_target, backup_path)
-                if system == 'Darwin':
-                    shutil.copytree(new_content_path, replace_target)
-                else:
-                    shutil.move(new_content_path, replace_target)
-                self.feedback_manager.update_status(tr('status.restarting'), UI_COLORS['status_success'])
-                os.execv(current_exe_path, sys.argv)
-        except PermissionError:
-            self.feedback_manager.update_status(tr('errors.update_permission_error'), UI_COLORS['status_error'])
-            self.error_signal.emit(tr('dialogs.update_permission_error_details'))
-        except Exception as e:
-            self.feedback_manager.update_status(tr('errors.update_failed', error=str(e)), UI_COLORS['status_error'])
-            self.error_signal.emit(tr('errors.update_could_not_complete', error=str(e)))
-        finally:
-            self.update_cleanup.emit()
 
     def _on_action_button_click(self):
         if self.app_state.is_installing and self.current_install_thread:
@@ -4335,7 +4240,7 @@ class DeltaHubApp(QWidget):
             self.feedback_manager.update_status(tr('status.cant_update_while_running'), UI_COLORS['status_warning'])
             return
         self._stop_fetch_thread()
-        threading.Thread(target=self._check_for_launcher_updates, daemon=True).start()
+        threading.Thread(target=self.update_checker.check_for_updates, daemon=True).start()
         self.fetch_thread = FetchModsThread(self, force_update=True)
         self.fetch_thread.status.connect(self.update_status_signal)
         self.fetch_thread.result.connect(self._on_fetch_translations_finished)
@@ -4345,7 +4250,7 @@ class DeltaHubApp(QWidget):
         self._safe_stop_thread(getattr(self, 'fetch_thread', None))
         self.fetch_thread = None
 
-    def _safe_stop_thread(self, thr: Optional[QThread], timeout: int=2000):
+    def _safe_stop_thread(self, thr: Optional[QThread], timeout: int = 2000):
         if isinstance(thr, QThread) and thr.isRunning():
             thr.requestInterruption()
             thr.quit()
@@ -4454,7 +4359,7 @@ class DeltaHubApp(QWidget):
         try:
             os.makedirs(target_dir, exist_ok=True)
         except Exception as e:
-            self.error_signal.emit(tr('errors.folder_creation_failed', error=str(e)))
+            self.feedback_manager.show_error('errors.error', tr('errors.folder_creation_failed', error=str(e)))
             self.action_button.setEnabled(True)
             return
         self.progress_bar.setVisible(True)
@@ -4564,7 +4469,7 @@ class DeltaHubApp(QWidget):
         if value > 0 and (not self.progress_bar.isVisible()):
             self.progress_bar.setVisible(True)
 
-    def _update_status(self, message: str, color: str='white'):
+    def _update_status(self, message: str, color: str = 'white'):
         if not self.is_shortcut_launch:
             from config.constants import UI_COLORS
             actual_color = UI_COLORS.get(color, color)
@@ -4648,7 +4553,7 @@ class DeltaHubApp(QWidget):
         beta_enabled = self.beta_updates_checkbox.isChecked()
         self.app_state.local_config['beta_updates_enabled'] = beta_enabled
         self._write_local_config()
-        self._check_for_launcher_updates()
+        self.update_checker.check_for_updates()
 
     def _on_toggle_fullscreen(self):
         fullscreen_enabled = self.fullscreen_checkbox.isChecked()
@@ -5561,7 +5466,7 @@ class DeltaHubApp(QWidget):
                     return True
         return False
 
-    def _find_and_validate_game_path(self, selections: Optional[Dict[int, str]]=None, is_initial: bool=False):
+    def _find_and_validate_game_path(self, selections: Optional[Dict[int, str]] = None, is_initial: bool = False):
         path_from_config = self._get_current_game_path()
         skip_data_check = bool(selections and self._has_mods_with_data_files(selections))
         if isinstance(self.app_state.game_mode, DemoGameMode):
