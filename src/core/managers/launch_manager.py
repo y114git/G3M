@@ -21,7 +21,6 @@ from utils.path_utils import get_xdelta_path
 from threads.game_monitor import GameMonitorThread
 from config.constants import UI_COLORS
 
-
 class GameLauncher(QObject):
     status_changed = pyqtSignal(str, str)
     progress_updated = pyqtSignal(int)
@@ -118,7 +117,7 @@ class GameLauncher(QObject):
         if hasattr(self, 'restore_window_callback') and self.restore_window_callback:
             self.restore_window_callback()
 
-    def _execute_game(self, launch_config: Dict[str, Any], vanilla_mode: bool = False):
+    def _execute_game(self, launch_config: Dict[str, Any], vanilla_mode: bool=False):
         target_path = launch_config.get('target')
         working_directory = launch_config.get('cwd')
         launch_type = launch_config.get('type')
@@ -371,7 +370,7 @@ class GameLauncher(QObject):
             self.status_changed.emit(tr('errors.file_prep_error', error=str(e)), UI_COLORS['status_error'])
             return False
 
-    def _is_xdelta_mod(self, mod_info, source_dir: str, chapter_id: Optional[int] = None) -> bool:
+    def _is_xdelta_mod(self, mod_info, source_dir: str, chapter_id: Optional[int]=None) -> bool:
         if mod_info and getattr(mod_info, 'is_xdelta', False):
             return True
         if chapter_id is not None:
@@ -406,7 +405,7 @@ class GameLauncher(QObject):
                         return True
         return False
 
-    def _create_backup_and_copy_mod_files(self, source_dir: str, target_dir: str, chapter_id: Optional[int] = None, mod_info=None):
+    def _create_backup_and_copy_mod_files(self, source_dir: str, target_dir: str, chapter_id: Optional[int]=None, mod_info=None):
         if not os.path.isdir(source_dir):
             self.status_changed.emit(tr('errors.mod_folder_not_found_simple', path=source_dir), UI_COLORS['status_error'])
             return False
@@ -738,7 +737,7 @@ class GameLauncher(QObject):
             self._write_session_manifest(data)
         return data
 
-    def _update_session_manifest(self, backup_files: Optional[dict] = None, mod_files: Optional[list] = None, backup_temp_dir: Optional[str] = None, direct_launch: Optional[dict] = None, mod_dirs: Optional[list] = None):
+    def _update_session_manifest(self, backup_files: Optional[dict]=None, mod_files: Optional[list]=None, backup_temp_dir: Optional[str]=None, direct_launch: Optional[dict]=None, mod_dirs: Optional[list]=None):
         data = self._ensure_session_manifest()
         if backup_files:
             data.setdefault('backup_files', {}).update(backup_files)
@@ -779,7 +778,7 @@ class GameLauncher(QObject):
         except Exception:
             pass
 
-    def _find_and_validate_game_path(self, selections: Optional[Dict[int, str]] = None, is_initial: bool = False):
+    def _find_and_validate_game_path(self, selections: Optional[Dict[int, str]]=None, is_initial: bool=False):
         from utils.game_utils import is_valid_game_path
         from utils.file_utils import autodetect_path
         path_from_config = self._get_current_game_path()
