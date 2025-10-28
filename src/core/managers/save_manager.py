@@ -9,7 +9,6 @@ from localization.manager import tr
 from config.constants import SAVE_SLOT_FINISH_MAP, UI_COLORS
 from utils.game_utils import is_valid_save_path, get_default_save_path
 
-
 class SaveManager(QObject):
     slots_updated = pyqtSignal()
     status_changed = pyqtSignal(str, str)
@@ -180,7 +179,7 @@ class SaveManager(QObject):
             self.feedback_manager.show_error('errors.folder_creation_failed', error=str(e))
             return False
 
-    def prompt_collection_name(self, default: str = 'Collection') -> Optional[str]:
+    def prompt_collection_name(self, default: str='Collection') -> Optional[str]:
         dlg = QDialog(self.parent_widget)
         dlg.setWindowTitle(tr('dialogs.new_collection'))
         v, e = (QVBoxLayout(dlg), QLineEdit())
@@ -240,7 +239,7 @@ class SaveManager(QObject):
             self.feedback_manager.show_error('errors.deletion_failed', error=str(e))
             return False
 
-    def copy_between_storages(self, chapter: int, to_collection: bool, selected_slot: Optional[tuple[int, int]] = None):
+    def copy_between_storages(self, chapter: int, to_collection: bool, selected_slot: Optional[tuple[int, int]]=None):
         idx = self.app_state.current_collection_idx
         if idx == -1:
             return
@@ -435,33 +434,20 @@ class SaveManager(QObject):
     def prompt_for_save_collection_on_launch(self) -> Optional[int]:
         if not self.app_state.save_path:
             self.find_and_validate_save_path()
-
         if not is_valid_save_path(self.app_state.save_path):
             return -1
-
         cols = self.list_collections()
         if not cols:
             return -1
-
         choices = [tr('dialogs.main_save_slots')]
         for col_folder in cols:
             col_name = col_folder.rsplit('_', 1)[0]
             choices.append(col_name)
-
-        choice, ok = QInputDialog.getItem(
-            self.parent_widget,
-            tr('dialogs.select_save_collection_title'),
-            tr('dialogs.select_save_collection_question'),
-            choices,
-            0,
-            False
-        )
+        choice, ok = QInputDialog.getItem(self.parent_widget, tr('dialogs.select_save_collection_title'), tr('dialogs.select_save_collection_question'), choices, 0, False)
         if not ok:
             return None
-
         if choice == tr('dialogs.main_save_slots'):
             return -1
-
         for idx, col_folder in enumerate(cols):
             col_name = col_folder.rsplit('_', 1)[0]
             if col_name == choice:
@@ -471,56 +457,45 @@ class SaveManager(QObject):
     def apply_collection_saves_for_launch(self, collection_idx: int) -> dict:
         if collection_idx == -1 or not is_valid_save_path(self.app_state.save_path):
             return {}
-
         collection_path = self.get_collection_path(collection_idx)
         if not collection_path or not os.path.isdir(collection_path):
             return {}
-
         backup_info = {}
         main_save_path = self.app_state.save_path
-
         for chapter in range(1, 5):
             for slot in range(3):
                 main_file = os.path.join(main_save_path, f'filech{chapter}_{slot}')
                 col_file = os.path.join(collection_path, f'filech{chapter}_{slot}')
-
                 if os.path.exists(main_file):
                     backup_file = main_file + '.deltahub_backup'
                     shutil.copy2(main_file, backup_file)
                     backup_info[main_file] = backup_file
-
                 if os.path.exists(col_file):
                     shutil.copy2(col_file, main_file)
                 elif os.path.exists(main_file):
                     os.remove(main_file)
-
                 fin_idx = SAVE_SLOT_FINISH_MAP.get(slot, -1)
                 if fin_idx != -1:
                     main_fin = os.path.join(main_save_path, f'filech{chapter}_{fin_idx}')
                     col_fin = os.path.join(collection_path, f'filech{chapter}_{fin_idx}')
-
                     if os.path.exists(main_fin):
                         backup_fin = main_fin + '.deltahub_backup'
                         shutil.copy2(main_fin, backup_fin)
                         backup_info[main_fin] = backup_fin
-
                     if os.path.exists(col_fin):
                         shutil.copy2(col_fin, main_fin)
                     elif os.path.exists(main_fin):
                         os.remove(main_fin)
-
         return backup_info
 
     def restore_original_saves_after_launch(self, backup_info: dict):
         if not backup_info:
             return
-
         for original_file, backup_file in backup_info.items():
             if os.path.exists(backup_file):
                 if os.path.exists(original_file):
                     os.remove(original_file)
                 shutil.move(backup_file, original_file)
-
         for backup_file in backup_info.values():
             if os.path.exists(backup_file):
                 os.remove(backup_file)

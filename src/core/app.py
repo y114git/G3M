@@ -4,14 +4,11 @@ import os
 import platform
 import shutil
 import sys
-import tempfile
 import threading
-import zipfile
 import time
 import uuid
 import subprocess
 import webbrowser
-import rarfile
 import argparse
 import importlib.util
 import importlib.machinery
@@ -24,7 +21,6 @@ from PyQt6.QtWidgets import QApplication, QCheckBox, QComboBox, QDialog, QDialog
 from localization import localization_manager, tr
 from models.game_modes import FullGameMode, DemoGameMode, UndertaleGameMode
 from config.constants import LAUNCHER_VERSION, UI_COLORS, SOCIAL_LINKS, THEMES, ARCH
-from models.mod_models import ModInfo, ModChapterData
 from utils.file_utils import autodetect_path
 from utils.game_utils import is_game_running, is_valid_game_path
 from utils.path_utils import get_user_data_root, resource_path, get_launcher_dir, get_legacy_ylauncher_path, get_user_plugins_dir
@@ -51,7 +47,6 @@ from core.managers.save_manager import SaveManager
 _translator = QTranslator()
 _lock_file = None
 
-
 class DeltaHubApp(QWidget):
     update_status_signal = pyqtSignal(str, str)
     set_progress_signal = pyqtSignal(int)
@@ -63,7 +58,7 @@ class DeltaHubApp(QWidget):
     url_received_signal = pyqtSignal(str)
     install_from_gb_signal = pyqtSignal(object)
 
-    def __init__(self, args: Optional[argparse.Namespace] = None, parent_for_dialogs: Optional[QWidget] = None, initial_url: str | None = None):
+    def __init__(self, args: Optional[argparse.Namespace]=None, parent_for_dialogs: Optional[QWidget]=None, initial_url: str | None=None):
         super().__init__()
         self.app_state = AppState()
         self.server: SingleInstanceServer | None = None
@@ -210,7 +205,7 @@ class DeltaHubApp(QWidget):
             print(tr('startup.shortcut_settings_read_error', error=str(e)))
             sys.exit(1)
         self._load_local_data()
-        self._load_local_mods_from_folders()
+        self.mod_manager.load_local_mods()
         try:
             if settings.get('is_undertale_mode', False):
                 self.app_state.game_mode = UndertaleGameMode()
@@ -306,187 +301,8 @@ class DeltaHubApp(QWidget):
         if self.feedback_manager.ask_question('dialogs.create_shortcut_question', 'dialogs.shortcut_create_description', description_text):
             self._save_shortcut(settings)
 
-    def _load_local_mods_from_folders(self):
-        if not os.path.exists(self.app_state.mods_dir):
-            os.makedirs(self.app_state.mods_dir, exist_ok=True)
-            return False
-        installed_mods = {}
-        try:
-            for item_name in os.listdir(self.app_state.mods_dir):
-                item_path = os.path.join(self.app_state.mods_dir, item_name)
-                if os.path.isfile(item_path) and item_name.lower().endswith(('.zip', '.7z', '.rar', '.tar.gz', '.lzma')):
-                    try:
-                        is_deltamod_archive = False
-                        item_name_lower = item_name.lower()
-                        if item_name_lower.endswith('.zip'):
-                            with zipfile.ZipFile(item_path, 'r') as zf:
-                                if '_deltamodInfo.json' in zf.namelist():
-                                    is_deltamod_archive = True
-                        elif item_name_lower.endswith('.tar.gz'):
-                            import tarfile
-                            with tarfile.open(item_path, 'r:gz') as tf:
-                                if '_deltamodInfo.json' in tf.getnames():
-                                    is_deltamod_archive = True
-                        elif item_name_lower.endswith('.rar'):
-                            try:
-                                with rarfile.RarFile(item_path, 'r') as rf:
-                                    if '_deltamodInfo.json' in rf.namelist():
-                                        is_deltamod_archive = True
-                            except Exception:
-                                pass
-                        elif item_name_lower.endswith('.7z'):
-                            import py7zr
-                            try:
-                                with py7zr.SevenZipFile(item_path, mode='r') as zf:
-                                    if '_deltamodInfo.json' in zf.getnames():
-                                        is_deltamod_archive = True
-                            except Exception:
-                                pass
-                        if is_deltamod_archive:
-                            self.feedback_manager.update_status(tr('status.deltamod_archive_detected', name=item_name), UI_COLORS['status_info'])
-                            QApplication.processEvents()
-                            with tempfile.TemporaryDirectory() as temp_dir:
-                                shutil.unpack_archive(item_path, temp_dir)
-                                content_path = temp_dir
-                                contents = os.listdir(temp_dir)
-                                if len(contents) == 1 and os.path.isdir(os.path.join(temp_dir, contents[0])):
-                                    content_path = os.path.join(temp_dir, contents[0])
-                                from utils.deltamod_converter import DeltamodConverter
-                                converter = DeltamodConverter(content_path, self.app_state.mods_dir)
-                                new_mod_path = converter.convert()
-                                if new_mod_path:
-                                    self.feedback_manager.update_status(tr('status.deltamod_converted', name=os.path.basename(new_mod_path)), UI_COLORS['status_success'])
-                                    os.remove(item_path)
-                                else:
-                                    self.feedback_manager.update_status(tr('errors.deltamod_conversion_failed', name=item_name), UI_COLORS['status_error'])
-                            continue
-                    except Exception as e:
-                        logging.error(f'Failed to process Deltamod archive {item_name}: {e}')
-                if not os.path.isdir(item_path):
-                    continue
-                if '_deltamodInfo.json' in os.listdir(item_path) and 'config.json' not in os.listdir(item_path):
-                    self.feedback_manager.update_status(tr('status.deltamod_detected', name=item_name), UI_COLORS['status_info'])
-                    QApplication.processEvents()
-                    from utils.deltamod_converter import DeltamodConverter
-                    converter = DeltamodConverter(item_path, self.app_state.mods_dir)
-                    if converter.convert():
-                        shutil.rmtree(item_path)
-                    continue
-                config_path = os.path.join(item_path, 'config.json')
-                if not os.path.exists(config_path):
-                    continue
-                try:
-                    config_data = self._read_json(config_path)
-                    if not config_data:
-                        continue
-                    mod_key = config_data.get('mod_key')
-                    if mod_key:
-                        installed_mods[mod_key] = config_data
-                except Exception:
-                    pass
-            for mod in self.app_state.all_mods:
-                if mod.key in installed_mods:
-                    config_data = installed_mods[mod.key]
-                    mod_folder_path = self._get_mod_folder_path_by_key(mod.key)
-                    if mod_folder_path:
-                        for ext in ['.png', '.jpg', '.jpeg', '.gif']:
-                            potential_icon = os.path.join(mod_folder_path, f'_icon{ext}')
-                            if os.path.exists(potential_icon):
-                                mod.icon_url = potential_icon
-                                break
-                    config_path = None
-                    for item_name in os.listdir(self.app_state.mods_dir):
-                        folder_path = os.path.join(self.app_state.mods_dir, item_name)
-                        test_config_path = os.path.join(folder_path, 'config.json')
-                        if os.path.isfile(test_config_path):
-                            try:
-                                test_config = self._read_json(test_config_path)
-                                if test_config.get('mod_key') == mod.key:
-                                    config_path = test_config_path
-                                    break
-                            except Exception as e:
-                                logging.warning(f'Failed reading config {test_config_path}: {e}')
-                                continue
-                    if config_path:
-                        config_data.get('is_available_on_server', False)
-            self.app_state.all_mods = [mod for mod in self.app_state.all_mods if not hasattr(mod, 'tags') or 'local' not in mod.tags]
-            for mod_key, config_data in installed_mods.items():
-                if config_data.get('is_local_mod'):
-                    try:
-                        mod_folder_for_icon = self._get_mod_folder_path_by_key(mod_key)
-                        icon_path = ''
-                        if mod_folder_for_icon:
-                            for ext in ['.png', '.jpg', '.jpeg', '.gif']:
-                                potential_icon = os.path.join(mod_folder_for_icon, f'_icon{ext}')
-                                if os.path.exists(potential_icon):
-                                    icon_path = potential_icon
-                                    break
-                        safe_mod_info = {'key': mod_key, 'name': config_data.get('name', tr('defaults.local_mod')), 'version': config_data.get('version', '1.0.0'), 'author': config_data.get('author', tr('defaults.unknown')), 'tagline': config_data.get('tagline', tr('defaults.no_description')), 'game_version': config_data.get('game_version', tr('defaults.not_specified')), 'description_url': '', 'downloads': 0, 'modgame': config_data.get('modgame', 'deltarune'), 'is_verified': False, 'icon_url': icon_path, 'tags': ['local'], 'hide_mod': False, 'is_xdelta': config_data.get('is_xdelta', False), 'ban_status': False, 'demo_url': None, 'demo_version': '1.0.0', 'created_date': config_data.get('created_date', 'N/A'), 'last_updated': config_data.get('created_date', 'N/A'), 'external_url': config_data.get('external_url')}
-                        mod = ModInfo(**safe_mod_info)
-                        files_data = config_data.get('files', {})
-                        mod_folder_path = None
-                        for folder_name in os.listdir(self.app_state.mods_dir):
-                            folder_path = os.path.join(self.app_state.mods_dir, folder_name)
-                            test_config_path = os.path.join(folder_path, 'config.json')
-                            if os.path.isfile(test_config_path):
-                                try:
-                                    test_config = self._read_json(test_config_path)
-                                    if test_config.get('mod_key') == mod_key:
-                                        mod_folder_path = folder_path
-                                        break
-                                except Exception as e:
-                                    logging.warning(f'Failed reading config {test_config_path}: {e}')
-                                    continue
-                        for file_key, ch_info in files_data.items():
-                            chapter_files = ch_info
-                            if mod_folder_path:
-                                if file_key == 'demo':
-                                    chapter_folder = os.path.join(mod_folder_path, 'demo')
-                                elif file_key == 'undertale':
-                                    chapter_folder = os.path.join(mod_folder_path, 'undertale')
-                                elif file_key in ['0', '1', '2', '3', '4']:
-                                    if file_key == '0':
-                                        chapter_folder = os.path.join(mod_folder_path, 'chapter_0')
-                                    else:
-                                        chapter_folder = os.path.join(mod_folder_path, f'chapter_{file_key}')
-                                else:
-                                    try:
-                                        ch_id = int(file_key)
-                                        if ch_id == -1:
-                                            chapter_folder = os.path.join(mod_folder_path, 'demo')
-                                        elif ch_id == 0:
-                                            chapter_folder = os.path.join(mod_folder_path, 'chapter_0')
-                                        else:
-                                            chapter_folder = os.path.join(mod_folder_path, f'chapter_{ch_id}')
-                                    except ValueError:
-                                        continue
-                            data_file_url = ''
-                            if chapter_files.get('data_file_url') and mod_folder_path:
-                                data_file_url = os.path.join(chapter_folder, chapter_files['data_file_url'])
-                            from models.mod_models import ModExtraFile
-                            extra_files = []
-                            if chapter_files.get('extra_files') and mod_folder_path:
-                                for group_key, filenames in chapter_files['extra_files'].items():
-                                    for filename in filenames:
-                                        file_path = os.path.join(chapter_folder, filename)
-                                        extra_files.append(ModExtraFile(key=group_key, url=file_path, version='1.0.0'))
-                            mod_chapter = ModChapterData(description=config_data.get('tagline', ''), data_file_url=data_file_url, data_file_version=chapter_files.get('data_file_version', (ch_info.get('versions', {}) or {}).get('data', '1.0.0')), extra_files=extra_files)
-                            mod.files[file_key] = mod_chapter
-                        if mod.files:
-                            self.app_state.all_mods.append(mod)
-                    except Exception as e:
-                        logging.warning(f'Failed to build local ModInfo: {e}')
-                        continue
-        except Exception as e:
-            logging.error(f'_load_local_mods_from_folders failed: {e}')
-            return False
-        return True
-
     def _get_mod_config_by_key(self, mod_key: str) -> dict:
         return self.mod_manager.get_mod_config(mod_key)
-
-    def _get_mod_folder_path_by_key(self, mod_key: str) -> str:
-        return self.mod_manager.get_mod_folder_path(mod_key)
 
     def _set_install_buttons_enabled(self, enabled: bool):
         if hasattr(self, 'mod_list_layout'):
@@ -504,7 +320,7 @@ class DeltaHubApp(QWidget):
                     if isinstance(widget, InstalledModWidget) and hasattr(widget, 'use_button') and widget.use_button:
                         widget.use_button.setEnabled(enabled)
 
-    def _create_settings_nav_button(self, text: str, on_click: Callable, style_sheet: str = '', fixed_width: int = 400) -> QPushButton:
+    def _create_settings_nav_button(self, text: str, on_click: Callable, style_sheet: str='', fixed_width: int=400) -> QPushButton:
         button = QPushButton(text)
         button.setFixedWidth(fixed_width)
         base_style = f'width: {fixed_width}px;'
@@ -1491,7 +1307,7 @@ class DeltaHubApp(QWidget):
         else:
             for i in range(5):
                 if i in self.chapter_indicators:
-                    has_files = self._mod_has_files_for_chapter(mod, i)
+                    has_files = self.mod_manager.mod_has_files_for_chapter(mod, i)
                     if has_files:
                         self.chapter_indicators[i]['status_label'].setText('✓')
                         self.chapter_indicators[i]['status_label'].setStyleSheet('color: #00FF00; font-size: 16px; font-weight: bold;')
@@ -1608,7 +1424,7 @@ class DeltaHubApp(QWidget):
                 continue
             if selected_chapter_id is not None:
                 mod_data = self._create_mod_object_from_info(mod_info)
-                if mod_data and (not self._mod_has_files_for_chapter(mod_data, selected_chapter_id)):
+                if mod_data and (not self.mod_manager.mod_has_files_for_chapter(mod_data, selected_chapter_id)):
                     continue
             is_local = mod_info.get('is_local_mod', False)
             is_available = mod_info.get('is_available_on_server', True)
@@ -1632,57 +1448,6 @@ class DeltaHubApp(QWidget):
             else:
                 self._show_empty_mods_message()
         self._updating_chapter_mods = False
-
-    def _mod_has_files_for_chapter(self, mod_data, chapter_id):
-        try:
-            mod_key = getattr(mod_data, 'key', None) or getattr(mod_data, 'mod_key', None)
-            if not mod_key:
-                return True
-            is_local = mod_key.startswith('local_')
-            if is_local:
-                mod_folder = self._get_mod_folder_path_by_key(mod_key)
-                if not mod_folder:
-                    return False
-            else:
-                mod_folder = os.path.join(self.app_state.mods_dir, mod_key)
-                if not os.path.exists(mod_folder):
-                    mod_folder_by_name = os.path.join(self.app_state.mods_dir, mod_data.name)
-                    if os.path.exists(mod_folder_by_name):
-                        mod_folder = mod_folder_by_name
-                    else:
-                        return False
-            config_path = os.path.join(mod_folder, 'config.json')
-            if os.path.exists(config_path):
-                try:
-                    with open(config_path, 'r', encoding='utf-8') as f:
-                        config_data = json.load(f)
-                    files_data = config_data.get('files', {})
-                    if files_data:
-                        if chapter_id == -1:
-                            file_key = 'demo'
-                        elif chapter_id == 0:
-                            file_key = '0'
-                        elif chapter_id > 0:
-                            file_key = str(chapter_id)
-                        else:
-                            return False
-                        if chapter_id == -1:
-                            return 'demo' in files_data or 'undertale' in files_data
-                        return file_key in files_data
-                except Exception:
-                    pass
-            chapter_folders = {-1: 'universal', 0: 'menu', 1: 'chapter1', 2: 'chapter2', 3: 'chapter3', 4: 'chapter4'}
-            folder_name = chapter_folders.get(chapter_id, 'universal')
-            chapter_folder = os.path.join(mod_folder, folder_name)
-            if os.path.exists(chapter_folder):
-                return len(os.listdir(chapter_folder)) > 0
-            universal_folder = os.path.join(mod_folder, 'universal')
-            if os.path.exists(universal_folder):
-                return len(os.listdir(universal_folder)) > 0
-            return True
-        except Exception as e:
-            print(f'Error checking mod files for chapter {chapter_id}: {e}')
-            return True
 
     def _on_chapter_mode_mod_use(self, mod_data, chapter_id):
         mod_widget = None
@@ -1845,7 +1610,7 @@ class DeltaHubApp(QWidget):
                 if not is_local and is_available:
                     public_mod = next((mod for mod in self.app_state.all_mods if mod.key == mod_info.get('key')), None)
                     if public_mod:
-                        has_update = any((self._mod_has_files_for_chapter(public_mod, i) and self._get_mod_status_for_chapter(public_mod, i) == 'update' for i in range(5)))
+                        has_update = any((self.mod_manager.mod_has_files_for_chapter(public_mod, i) and self.mod_manager.get_mod_status(public_mod, i) == 'update' for i in range(5)))
                 mod_data = self._create_mod_object_from_info(mod_info)
                 if mod_data:
                     mod_widget = InstalledModWidget(mod_data, is_local, is_available, has_update, parent=self)
@@ -1988,7 +1753,7 @@ class DeltaHubApp(QWidget):
                 if hasattr(mod, 'key') and mod.key == mod_key:
                     return mod
         from models.mod_models import ModInfo
-        return ModInfo(key=mod_key, name=mod_info.get('name', mod_key), tagline=mod_info.get('tagline', tr('defaults.no_description')), version=mod_info.get('version', '1.0.0'), author=mod_info.get('author', tr('defaults.unknown')), game_version=mod_info.get('game_version', '1.04'), description_url='', downloads=0, modgame=mod_info.get('modgame', 'deltarune'), is_verified=False)
+        return ModInfo(key=mod_key, name=mod_info.get('name', mod_key), version=mod_info.get('version', '1.0.0'), author=mod_info.get('author', tr('defaults.unknown')), tagline=mod_info.get('tagline', tr('defaults.no_description')), game_version=mod_info.get('game_version', '1.04'), description_url='', downloads=0, modgame=mod_info.get('modgame', 'deltarune'), is_verified=False, is_local_mod=mod_info.get('is_local_mod', False))
 
     def _on_installed_mod_clicked(self, mod_data):
         for i in range(self.installed_mods_layout.count() - 1):
@@ -2394,7 +2159,7 @@ class DeltaHubApp(QWidget):
         text_vbox.setAlignment(Qt.AlignmentFlag.AlignVCenter)
         name_label = QLabel()
         status_text, status_color = ('', 'gray')
-        is_local_mod = getattr(mod_data, 'key', '').startswith('local_')
+        is_local_mod = getattr(mod_data, 'is_local_mod', False)
         if is_large_slot:
             new_content_layout.setContentsMargins(8, 0, 8, 0)
             new_content_layout.setSpacing(10)
@@ -2406,7 +2171,7 @@ class DeltaHubApp(QWidget):
             if is_local_mod:
                 status_text, status_color = (tr('status.local_mod'), '#FFD700')
             else:
-                needs_update = any((self._mod_has_files_for_chapter(mod_data, i) and self._get_mod_status_for_chapter(mod_data, i) == 'update' for i in range(5)))
+                needs_update = any((self.mod_manager.mod_has_files_for_chapter(mod_data, i) and self.mod_manager.get_mod_status(mod_data, i) == 'update' for i in range(5)))
                 status_text, status_color = (tr('status.update_available'), 'orange') if needs_update else (tr('status.version_current'), 'lightgreen')
             version_label = QLabel(status_text)
             version_label.setStyleSheet(f'color: {status_color}; font-size: 10px; border: none; background: transparent;')
@@ -2423,7 +2188,7 @@ class DeltaHubApp(QWidget):
             if is_local_mod:
                 status_text, status_color = (tr('status.local'), '#FFD700')
             else:
-                needs_update = any((self._mod_has_files_for_chapter(mod_data, i) and self._get_mod_status_for_chapter(mod_data, i) == 'update' for i in range(5)))
+                needs_update = any((self.mod_manager.mod_has_files_for_chapter(mod_data, i) and self.mod_manager.get_mod_status(mod_data, i) == 'update' for i in range(5)))
                 status_text, status_color = (tr('status.update_short'), 'orange') if needs_update else (tr('status.current_short'), 'lightgreen')
             version_label = QLabel(status_text)
             version_label.setStyleSheet(f'color: {status_color}; font-size: 9px; border: none; background: transparent;')
@@ -2479,7 +2244,7 @@ class DeltaHubApp(QWidget):
                             break
         if version_label:
             is_large_slot = slot_frame.chapter_id < 0
-            is_local_mod = getattr(mod_data, 'key', '').startswith('local_')
+            is_local_mod = getattr(mod_data, 'is_local_mod', False)
             if is_local_mod:
                 if is_large_slot:
                     status_text, status_color = (tr('status.local_mod'), '#FFD700')
@@ -2488,11 +2253,11 @@ class DeltaHubApp(QWidget):
                     status_text, status_color = (tr('status.local'), '#FFD700')
                     version_label.setStyleSheet(f'color: {status_color}; font-size: 9px; border: none; background: transparent;')
             elif is_large_slot:
-                needs_update = any((self._mod_has_files_for_chapter(mod_data, i) and self._get_mod_status_for_chapter(mod_data, i) == 'update' for i in range(5)))
+                needs_update = any((self.mod_manager.mod_has_files_for_chapter(mod_data, i) and self.mod_manager.get_mod_status(mod_data, i) == 'update' for i in range(5)))
                 status_text, status_color = (tr('status.update_available'), 'orange') if needs_update else (tr('status.version_current'), 'lightgreen')
                 version_label.setStyleSheet(f'color: {status_color}; font-size: 10px; border: none; background: transparent;')
             else:
-                needs_update = any((self._mod_has_files_for_chapter(mod_data, i) and self._get_mod_status_for_chapter(mod_data, i) == 'update' for i in range(5)))
+                needs_update = any((self.mod_manager.mod_has_files_for_chapter(mod_data, i) and self.mod_manager.get_mod_status(mod_data, i) == 'update' for i in range(5)))
                 status_text, status_color = (tr('status.update_short'), 'orange') if needs_update else (tr('status.current_short'), 'lightgreen')
                 version_label.setStyleSheet(f'color: {status_color}; font-size: 9px; border: none; background: transparent;')
             version_label.setText(status_text)
@@ -2542,7 +2307,7 @@ class DeltaHubApp(QWidget):
             mod_status = getattr(mod, 'status', 'approved')
             if mod_status not in ['approved', 'pending']:
                 continue
-            if getattr(mod, 'key', '').startswith('local_'):
+            if getattr(mod, 'is_local_mod', False):
                 continue
             if selected_tags:
                 mod_tags = getattr(mod, 'tags', []) or []
@@ -2647,7 +2412,7 @@ class DeltaHubApp(QWidget):
             if not available_chapters:
                 self.feedback_manager.show_warning('errors.mod_no_files', mod_name=mod.name)
                 return
-            was_installed_before = self._is_mod_installed(mod.key)
+            was_installed_before = self.mod_manager.is_mod_installed(mod.key)
             is_xdelta_mod = getattr(mod, 'is_xdelta', False)
             if not is_xdelta_mod and (not was_installed_before):
                 if not self.feedback_manager.ask_question('dialogs.file_replacement_warning_title', 'dialogs.file_replacement_warning_body', '', False):
@@ -2716,7 +2481,7 @@ class DeltaHubApp(QWidget):
         self._set_install_buttons_enabled(True)
         self.current_install_thread = None
         if success:
-            self._load_local_mods_from_folders()
+            self.mod_manager.load_local_mods()
             self._update_search_mod_plaques()
             if hasattr(self, '_update_installed_mods_display'):
                 self._update_installed_mods_display()
@@ -3140,7 +2905,7 @@ class DeltaHubApp(QWidget):
     def _create_new_collection(self) -> bool:
         return self.save_manager.create_new_collection()
 
-    def _prompt_collection_name(self, default: str = 'Collection') -> Optional[str]:
+    def _prompt_collection_name(self, default: str='Collection') -> Optional[str]:
         return self.save_manager.prompt_collection_name(default)
 
     def _update_collection_ui(self):
@@ -3689,7 +3454,7 @@ class DeltaHubApp(QWidget):
         self._on_toggle_steam_launch()
         self._update_all_slots_visual_state()
         self.apply_theme()
-        self._load_local_mods_from_folders()
+        self.mod_manager.load_local_mods()
         self.setEnabled(False)
         self._on_refresh_clicked(is_initial=True)
         self.setEnabled(True)
@@ -3875,7 +3640,7 @@ class DeltaHubApp(QWidget):
         self._safe_stop_thread(getattr(self, 'fetch_thread', None))
         self.fetch_thread = None
 
-    def _safe_stop_thread(self, thr: Optional[QThread], timeout: int = 2000):
+    def _safe_stop_thread(self, thr: Optional[QThread], timeout: int=2000):
         if isinstance(thr, QThread) and thr.isRunning():
             thr.requestInterruption()
             thr.quit()
@@ -3890,7 +3655,7 @@ class DeltaHubApp(QWidget):
 
     def _on_fetch_translations_finished(self, success: bool):
         try:
-            self._load_local_mods_from_folders()
+            self.mod_manager.load_local_mods()
             if hasattr(self, 'mod_list_layout'):
                 self._populate_search_mods()
                 if not self.app_state.mods_loaded:
@@ -3948,7 +3713,7 @@ class DeltaHubApp(QWidget):
         self._set_install_buttons_enabled(True)
         self.current_install_thread = None
         if success:
-            self._load_local_mods_from_folders()
+            self.mod_manager.load_local_mods()
             self.feedback_manager.update_status(tr('status.installation_complete'), UI_COLORS['status_success'])
             self._update_installed_mods_display()
         self._update_action_button_state()
@@ -4094,7 +3859,7 @@ class DeltaHubApp(QWidget):
         if value > 0 and (not self.progress_bar.isVisible()):
             self.progress_bar.setVisible(True)
 
-    def _update_status(self, message: str, color: str = 'white'):
+    def _update_status(self, message: str, color: str='white'):
         if not self.is_shortcut_launch:
             from config.constants import UI_COLORS
             actual_color = UI_COLORS.get(color, color)
@@ -4322,13 +4087,12 @@ class DeltaHubApp(QWidget):
             for slot_frame in self.app_state.slots.values():
                 if slot_frame.chapter_id == slot_id and slot_frame.assigned_mod:
                     mod_data = slot_frame.assigned_mod
-                    mod_key = getattr(mod_data, 'key', None) or getattr(mod_data, 'mod_key', None)
-                    if mod_key and mod_key.startswith('local_'):
+                    if getattr(mod_data, 'is_local_mod', False):
                         continue
                     if slot_id < 0:
-                        needs_update = any((self._mod_has_files_for_chapter(mod_data, i) and self._get_mod_status_for_chapter(mod_data, i) == 'update' for i in range(5)))
+                        needs_update = any((self.mod_manager.mod_has_files_for_chapter(mod_data, i) and self.mod_manager.get_mod_status(mod_data, i) == 'update' for i in range(5)))
                     else:
-                        needs_update = any((self._mod_has_files_for_chapter(mod_data, i) and self._get_mod_status_for_chapter(mod_data, i) == 'update' for i in range(5)))
+                        needs_update = any((self.mod_manager.mod_has_files_for_chapter(mod_data, i) and self.mod_manager.get_mod_status(mod_data, i) == 'update' for i in range(5)))
                     if needs_update:
                         return True
         return False
@@ -4351,10 +4115,9 @@ class DeltaHubApp(QWidget):
             for slot_frame in self.app_state.slots.values():
                 if slot_frame.chapter_id == slot_id and slot_frame.assigned_mod:
                     mod_data = slot_frame.assigned_mod
-                    mod_key = getattr(mod_data, 'key', None) or getattr(mod_data, 'mod_key', None)
-                    if mod_key and mod_key.startswith('local_'):
+                    if getattr(mod_data, 'is_local_mod', False):
                         continue
-                    needs_update = any((self._mod_has_files_for_chapter(mod_data, i) and self._get_mod_status_for_chapter(mod_data, i) == 'update' for i in range(5)))
+                    needs_update = any((self.mod_manager.mod_has_files_for_chapter(mod_data, i) and self.mod_manager.get_mod_status(mod_data, i) == 'update' for i in range(5)))
                     if needs_update and mod_data not in mods_to_update:
                         mods_to_update.append(mod_data)
         if mods_to_update:
@@ -4603,71 +4366,6 @@ class DeltaHubApp(QWidget):
             self.setFocus()
         except Exception:
             pass
-
-    def _get_mod_status_for_chapter(self, mod: ModInfo, chapter_id: int) -> str:
-        if mod.key.startswith('local_'):
-            return 'ready'
-        if not os.path.exists(self.app_state.mods_dir):
-            return 'install'
-
-        def _collect_remote_versions(m: ModInfo, ch_id: int) -> dict:
-            if ch_id == -1:
-                return {'demo': m.demo_version} if m.is_valid_for_demo() and m.demo_version else {}
-            ch = m.get_chapter_data(ch_id)
-            if not ch:
-                return {}
-            d = {}
-            if ch.data_file_version:
-                d['data'] = ch.data_file_version
-            for ef in ch.extra_files:
-                d[ef.key] = ef.version
-            return d
-        remote_versions = _collect_remote_versions(mod, chapter_id)
-        if not remote_versions:
-            return 'n/a'
-        for mod_folder in os.listdir(self.app_state.mods_dir):
-            mod_cache_dir = os.path.join(self.app_state.mods_dir, mod_folder)
-            config_path = os.path.join(mod_cache_dir, 'config.json')
-            if not os.path.isfile(config_path):
-                continue
-            try:
-                config_data = self._read_json(config_path)
-                if config_data.get('mod_key') == mod.key:
-                    if chapter_id == -1:
-                        file_key = 'demo'
-                    elif chapter_id == 0:
-                        file_key = '0'
-                    elif chapter_id > 0:
-                        file_key = str(chapter_id)
-                    else:
-                        file_key = str(chapter_id)
-                    local_versions = {}
-                    files_data = config_data.get('files', {})
-                    if file_key in files_data:
-                        file_info = files_data[file_key]
-                        if file_info.get('data_file_version'):
-                            local_versions['data'] = file_info['data_file_version']
-                        versions_data = file_info.get('versions', {})
-                        for key, version in versions_data.items():
-                            local_versions[key] = version
-                    if not local_versions:
-                        return 'install'
-                    for k in local_versions.keys():
-                        if k not in remote_versions:
-                            return 'update'
-                    from utils.file_utils import version_sort_key
-                    for k, rv in remote_versions.items():
-                        lv = local_versions.get(k)
-                        if version_sort_key(rv) > version_sort_key(lv or '0.0.0'):
-                            return 'update'
-                    return 'ready'
-            except Exception as e:
-                logging.warning(f'Failed to parse local config {config_path}: {e}')
-                continue
-        return 'install'
-
-    def _is_mod_installed(self, mod_key: str) -> bool:
-        return self.mod_manager.is_mod_installed(mod_key)
 
     def closeEvent(self, event):
         self._stop_background_music()
@@ -5032,7 +4730,7 @@ class DeltaHubApp(QWidget):
             if not mod:
                 continue
             chapter_id = self.app_state.game_mode.get_chapter_id(ui_index)
-            if mod_key.startswith('local_'):
+            if getattr(mod, 'is_local_mod', False):
                 mod_config = self._get_mod_config_by_key(mod_key)
                 if mod_config:
                     chapter_files = mod_config.get('files', {}).get(str(chapter_id), {})
@@ -5044,7 +4742,7 @@ class DeltaHubApp(QWidget):
                     return True
         return False
 
-    def _find_and_validate_game_path(self, selections: Optional[Dict[int, str]] = None, is_initial: bool = False):
+    def _find_and_validate_game_path(self, selections: Optional[Dict[int, str]]=None, is_initial: bool=False):
         path_from_config = self._get_current_game_path()
         skip_data_check = bool(selections and self._has_mods_with_data_files(selections))
         if isinstance(self.app_state.game_mode, DemoGameMode):
@@ -5156,7 +4854,7 @@ class DeltaHubApp(QWidget):
         slots_data = self.app_state.local_config.get(config_key, {})
         if not slots_data:
             return
-        for slot_id, slot_data in slots_data.items():
+        for slot_id, slot_data in list(slots_data.items()):
             try:
                 numeric_slot_id = int(slot_id)
             except ValueError:

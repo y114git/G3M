@@ -111,8 +111,8 @@ class ModPlaqueWidget(BaseModWidget):
         self.main_layout.addWidget(self.actions_widget)
 
     def _check_installation_status(self):
-        if self.parent_app and hasattr(self.parent_app, '_is_mod_installed'):
-            self.is_installed = self.parent_app._is_mod_installed(self.mod_data.key)
+        if self.parent_app and hasattr(self.parent_app, 'mod_manager'):
+            self.is_installed = self.parent_app.mod_manager.is_mod_installed(self.mod_data.key)
             self._update_install_button()
 
     def _update_install_button(self):

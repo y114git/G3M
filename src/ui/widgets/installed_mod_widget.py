@@ -3,6 +3,7 @@ from PyQt6.QtWidgets import QLabel, QPushButton, QHBoxLayout, QVBoxLayout, QFram
 from .base_mod_widget import BaseModWidget
 from localization.manager import tr
 
+
 class InstalledModWidget(BaseModWidget):
     remove_requested = pyqtSignal(object)
     use_requested = pyqtSignal(object)
@@ -96,7 +97,7 @@ class InstalledModWidget(BaseModWidget):
     def _mod_needs_update(self):
         if not self.parent_app or self.is_local:
             return False
-        needs_update = any((self.parent_app._mod_has_files_for_chapter(self.mod_data, i) and self.parent_app._get_mod_status_for_chapter(self.mod_data, i) == 'update' for i in range(5)))
+        needs_update = any((self.parent_app.mod_manager.mod_has_files_for_chapter(self.mod_data, i) and self.parent_app.mod_manager.get_mod_status(self.mod_data, i) == 'update' for i in range(5)))
         return needs_update
 
     def _update_button_from_status(self):
