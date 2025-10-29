@@ -10,8 +10,6 @@ import uuid
 import subprocess
 import webbrowser
 import argparse
-import importlib.util
-import importlib.machinery
 from typing import Callable, Optional, Dict, Any
 import logging
 import requests
@@ -48,15 +46,18 @@ from ui.builders.search_tab_builder import SearchTabBuilder
 from ui.builders.library_tab_builder import LibraryTabBuilder
 from ui.builders.settings_view_builder import SettingsViewBuilder
 from ui.builders.save_manager_view_builder import SaveManagerViewBuilder
+from core.managers.plugin_manager import PluginManager
+from core.managers.appearance_manager import AppearanceManager
 _translator = QTranslator()
 _lock_file = None
 
 
-class DeltaHubApp(QWidget):
+class AppWindow(QWidget):
     update_status_signal = pyqtSignal(str, str)
     set_progress_signal = pyqtSignal(int)
     show_update_prompt = pyqtSignal(dict)
     initialization_finished = pyqtSignal()
+    ui_ready = pyqtSignal()
     hide_window_signal = pyqtSignal()
     restore_window_signal = pyqtSignal()
     mods_loaded_signal = pyqtSignal()
@@ -143,8 +144,11 @@ class DeltaHubApp(QWidget):
         self.update_checker.update_finished.connect(self._on_update_cleanup)
         self.update_checker.update_error.connect(lambda msg: self.feedback_manager.show_error('errors.error', msg))
         self.update_checker.quit_requested.connect(QApplication.quit)
+        self.plugin_manager = PluginManager(self.app_state, self)
+        self.appearance_manager = AppearanceManager(self.app_state, self)
         self.init_ui()
         self.load_font()
+        QTimer.singleShot(0, lambda: self.ui_ready.emit())
         self.update_status_signal.connect(self._update_status)
         self.hide_window_signal.connect(self._hide_window_for_game)
         self.restore_window_signal.connect(self._restore_window_after_game)
@@ -565,7 +569,7 @@ class DeltaHubApp(QWidget):
         self.use_custom_executable_checkbox.stateChanged.connect(self._on_toggle_custom_executable)
         self.select_custom_executable_button.clicked.connect(self._select_custom_executable_file)
         self.change_path_button.clicked.connect(self._prompt_for_game_path)
-        self.change_mods_dir_button.clicked.connect(self._prompt_for_mods_dir)
+        self.change_mods_dir_button.clicked.connect(self.settings_manager.prompt_for_mods_dir)
         self.customization_button.clicked.connect(lambda: self._switch_settings_page(self.settings_customization_page))
         self.reset_button.clicked.connect(self._on_reset_settings_click)
         self.disable_background_checkbox.stateChanged.connect(self._on_toggle_disable_background)
@@ -615,7 +619,7 @@ class DeltaHubApp(QWidget):
         self.import_btn = save_manager_widgets['import_btn']
         self.export_btn = save_manager_widgets['export_btn']
         self.save_back_btn.clicked.connect(self._hide_save_manager)
-        self.change_save_path_btn.clicked.connect(self._prompt_for_save_path)
+        self.change_save_path_btn.clicked.connect(self.save_manager.prompt_for_save_path)
         for lbl in self._slot_labels.values():
             lbl.clicked.connect(self._on_save_manager_slot_clicked)
             lbl.doubleClicked.connect(self._on_slot_double_clicked)
@@ -627,17 +631,17 @@ class DeltaHubApp(QWidget):
             for i, b in enumerate(self._chapter_buttons):
                 b.setChecked(i == index)
         self.save_tabs.currentChanged.connect(_sync_buttons)
-        self.left_col_btn.clicked.connect(lambda: self._navigate_collection(-1))
-        self.switch_collection_btn.clicked.connect(self._toggle_collection_view)
-        self.right_col_btn.clicked.connect(lambda: self._navigate_collection(1))
-        self.rename_collection_btn.clicked.connect(self._rename_current_collection)
-        self.delete_collection_btn.clicked.connect(self._delete_current_collection)
-        self.copy_from_main_btn.clicked.connect(lambda: self._copy_between_storages(to_collection=True))
-        self.copy_to_main_btn.clicked.connect(lambda: self._copy_between_storages(to_collection=False))
-        self.show_btn.clicked.connect(self._action_show_save)
-        self.erase_btn.clicked.connect(self._action_delete_save)
-        self.import_btn.clicked.connect(lambda: self._action_import_export(True))
-        self.export_btn.clicked.connect(lambda: self._action_import_export(False))
+        self.left_col_btn.clicked.connect(lambda: self.save_manager.navigate_collection(-1))
+        self.switch_collection_btn.clicked.connect(self.save_manager.toggle_collection_view)
+        self.right_col_btn.clicked.connect(lambda: self.save_manager.navigate_collection(1))
+        self.rename_collection_btn.clicked.connect(lambda: self.save_manager.rename_current_collection(self.app_state.current_collection_idx))
+        self.delete_collection_btn.clicked.connect(lambda: self.save_manager.delete_current_collection(self.app_state.current_collection_idx))
+        self.copy_from_main_btn.clicked.connect(lambda: self.save_manager.copy_between_storages(self.save_tabs.currentIndex() + 1, True, self.app_state.selected_slot))
+        self.copy_to_main_btn.clicked.connect(lambda: self.save_manager.copy_between_storages(self.save_tabs.currentIndex() + 1, False, self.app_state.selected_slot))
+        self.show_btn.clicked.connect(lambda: self.save_manager.action_show_save(*self.app_state.selected_slot) if self.app_state.selected_slot else None)
+        self.erase_btn.clicked.connect(lambda: self.save_manager.action_delete_save(*self.app_state.selected_slot) if self.app_state.selected_slot else None)
+        self.import_btn.clicked.connect(lambda: self.save_manager.action_import_export(*self.app_state.selected_slot, True) if self.app_state.selected_slot else None)
+        self.export_btn.clicked.connect(lambda: self.save_manager.action_import_export(*self.app_state.selected_slot, False) if self.app_state.selected_slot else None)
         self.save_tabs.currentChanged.connect(lambda _: self._on_chapter_tab_changed())
         self.save_manager_widget.installEventFilter(self)
         self._update_slot_highlight()
@@ -713,73 +717,7 @@ class DeltaHubApp(QWidget):
             self.previous_tab_index = index
 
     def _update_plugin_tabs(self):
-        num_original_tabs = 4
-        while self.main_tab_widget.count() > num_original_tabs:
-            self.main_tab_widget.removeTab(num_original_tabs)
-        for plugin_name in list(sys.modules.keys()):
-            if plugin_name.startswith('plugins.'):
-                del sys.modules[plugin_name]
-        self._load_plugins()
-        self._plugin_tab_map = {}
-        for plugin in self.app_state.plugins:
-            if not plugin.get('tab_hide', False):
-                plugin_tab = QWidget()
-                try:
-                    setattr(plugin_tab, '_plugin_info', plugin)
-                    plugin_tab.setProperty('plugin_name_key', plugin.get('name_key'))
-                except Exception:
-                    pass
-                tab_name = tr(plugin['name_key'])
-                self.main_tab_widget.addTab(plugin_tab, tab_name)
-                try:
-                    tab_idx = self.main_tab_widget.indexOf(plugin_tab)
-                    if tab_idx >= 0:
-                        self._plugin_tab_map[tab_idx] = plugin
-                except Exception:
-                    pass
-
-    def _load_plugins(self):
-        self.app_state.plugins.clear()
-        if not os.path.isdir(self.app_state.plugins_dir):
-            return
-        for plugin_name in os.listdir(self.app_state.plugins_dir):
-            plugin_path = os.path.join(self.app_state.plugins_dir, plugin_name)
-            main_py_path = os.path.join(plugin_path, 'main.py')
-            if os.path.isdir(plugin_path) and os.path.isfile(main_py_path):
-                try:
-                    spec = importlib.util.spec_from_file_location(f'plugins.{plugin_name}', main_py_path)
-                    if spec and spec.loader:
-                        plugin_module = importlib.util.module_from_spec(spec)
-                        sys.modules[f'plugins.{plugin_name}'] = plugin_module
-                        spec.loader.exec_module(plugin_module)
-                        plugin_display_name_key = getattr(plugin_module, 'PLUGIN_NAME', None)
-                        on_tab_open_function = getattr(plugin_module, 'on_tab_open', None)
-                        page_init_function = getattr(plugin_module, 'page_init', None)
-                        tab_hide = getattr(plugin_module, 'TAB_HIDE', False)
-                        hooks = {'on_before_game_launch': getattr(plugin_module, 'on_before_game_launch', None), 'on_after_game_launch': getattr(plugin_module, 'on_after_game_launch', None), 'on_before_game_exit': getattr(plugin_module, 'on_before_game_exit', None), 'on_after_game_exit': getattr(plugin_module, 'on_after_game_exit', None)}
-                        if hasattr(plugin_module, 'on_game_launch') and callable(getattr(plugin_module, 'on_game_launch')) and (not hooks['on_after_game_launch']):
-                            hooks['on_after_game_launch'] = getattr(plugin_module, 'on_game_launch')
-                        if hasattr(plugin_module, 'on_game_exit') and callable(getattr(plugin_module, 'on_game_exit')) and (not hooks['on_before_game_exit']):
-                            hooks['on_before_game_exit'] = getattr(plugin_module, 'on_game_exit')
-                        is_background_plugin = any((callable(h) for h in hooks.values()))
-                        is_ui_plugin = not tab_hide and plugin_display_name_key and (callable(on_tab_open_function) or callable(page_init_function))
-                        if not is_background_plugin and (not is_ui_plugin):
-                            logging.warning(f"Plugin '{plugin_name}' is invalid. It must have at least one hook function or be a UI plugin with PLUGIN_NAME.")
-                            continue
-                        current_lang = localization_manager.get_current_language().upper()
-                        lang_dict_name = f'LANG_{current_lang}'
-                        plugin_translations = getattr(plugin_module, lang_dict_name, None)
-                        if isinstance(plugin_translations, dict):
-                            localization_manager.merge_translations(plugin_translations)
-                        elif current_lang != 'EN':
-                            en_translations = getattr(plugin_module, 'LANG_EN', None)
-                            if isinstance(en_translations, dict):
-                                localization_manager.merge_translations(en_translations)
-                        plugin_info = {'name_key': plugin_display_name_key, 'module': plugin_module, 'on_tab_open': on_tab_open_function, 'page_init': page_init_function, 'tab_hide': tab_hide, 'path': plugin_path, **hooks}
-                        self.app_state.plugins.append(plugin_info)
-                        logging.info(f'Successfully loaded plugin: {plugin_name}')
-                except Exception as e:
-                    logging.error(f"Failed to load plugin '{plugin_name}': {e}")
+        self._plugin_tab_map = self.plugin_manager.update_plugin_tabs(self.main_tab_widget, num_original_tabs=4)
 
     def _on_mods_loaded(self):
         if self.initialization_timer and self.initialization_timer.isActive():
@@ -2301,9 +2239,6 @@ class DeltaHubApp(QWidget):
         self.progress_bar.setVisible(False)
         self._update_action_button_state()
 
-    def _prompt_for_mods_dir(self):
-        self.settings_manager.prompt_for_mods_dir()
-
     def _update_change_path_button_text(self):
         self.change_path_button.setText(self.app_state.game_mode.path_change_button_text)
 
@@ -2490,7 +2425,7 @@ class DeltaHubApp(QWidget):
         self.settings_button.clicked.connect(self._toggle_settings_view)
 
     def _on_configure_saves_click(self):
-        if not self._find_and_validate_save_path():
+        if not self.save_manager.find_and_validate_save_path():
             return
         self.app_state.is_save_manager_view = True
         self.main_tab_widget.setVisible(False)
@@ -2518,24 +2453,6 @@ class DeltaHubApp(QWidget):
         self._update_slot_highlight()
         self._update_slot_action_bar()
 
-    def _find_and_validate_save_path(self) -> bool:
-        return self.save_manager.find_and_validate_save_path()
-
-    def _prompt_for_save_path(self) -> bool:
-        return self.save_manager.prompt_for_save_path()
-
-    def _toggle_collection_view(self):
-        self.save_manager.toggle_collection_view()
-
-    def _navigate_collection(self, direction: int):
-        self.save_manager.navigate_collection(direction)
-
-    def _create_new_collection(self) -> bool:
-        return self.save_manager.create_new_collection()
-
-    def _prompt_collection_name(self, default: str = 'Collection') -> Optional[str]:
-        return self.save_manager.prompt_collection_name(default)
-
     def _update_collection_ui(self):
         ui_state = self.save_manager.get_collection_ui_state()
         in_col = ui_state['in_collection']
@@ -2556,36 +2473,6 @@ class DeltaHubApp(QWidget):
     def _on_chapter_tab_changed(self):
         self.app_state.selected_slot = None
         self._refresh_save_slots()
-
-    def _rename_current_collection(self):
-        idx = self.app_state.current_collection_idx
-        self.save_manager.rename_current_collection(idx)
-
-    def _delete_current_collection(self):
-        idx = self.app_state.current_collection_idx
-        self.save_manager.delete_current_collection(idx)
-
-    def _copy_between_storages(self, to_collection: bool):
-        chapter = self.save_tabs.currentIndex() + 1
-        self.save_manager.copy_between_storages(chapter, to_collection, self.app_state.selected_slot)
-
-    def _action_show_save(self):
-        if not self.app_state.selected_slot:
-            return
-        ch, s = self.app_state.selected_slot
-        self.save_manager.action_show_save(ch, s)
-
-    def _action_delete_save(self):
-        if not self.app_state.selected_slot:
-            return
-        ch, s = self.app_state.selected_slot
-        self.save_manager.action_delete_save(ch, s)
-
-    def _action_import_export(self, is_import: bool):
-        if not self.app_state.selected_slot:
-            return
-        ch, s = self.app_state.selected_slot
-        self.save_manager.action_import_export(ch, s, is_import)
 
     def _on_bg_ready(self, obj):
         if isinstance(obj, tuple):
@@ -3426,14 +3313,7 @@ class DeltaHubApp(QWidget):
         self.game_launcher.launch_game_with_all_mods(execute_plugin_hooks=self._execute_plugin_hooks, restore_window_callback=self.restore_window_signal.emit)
 
     def _execute_plugin_hooks(self, hook_name: str):
-        for plugin in self.app_state.plugins:
-            hook_func = plugin.get(hook_name)
-            if callable(hook_func):
-                try:
-                    logging.info(f"Executing {hook_name} hook for plugin: {plugin.get('name_key')}")
-                    hook_func(self)
-                except Exception as e:
-                    logging.error(f"Error executing {hook_name} hook for plugin '{plugin.get('name_key')}': {e}", exc_info=True)
+        self.plugin_manager.execute_hooks(hook_name, self)
 
     def _on_game_launch_finished(self):
         self.restore_window_signal.emit()
