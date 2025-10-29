@@ -3,14 +3,14 @@ import time
 import platform
 from typing import Optional
 from PyQt6.QtCore import QObject, QThread, pyqtSignal, QTimer
-from PyQt6.QtGui import QMovie, QPixmap, QColor
+from PyQt6.QtGui import QMovie, QPixmap
 from PyQt6.QtWidgets import QWidget
 from config.constants import THEMES
 from utils.path_utils import resource_path
 from ui.styling import get_theme_color
 
 
-class AppearanceManager(QObject):
+class CustomizationManager(QObject):
     theme_applied = pyqtSignal()
     background_changed = pyqtSignal()
     music_started = pyqtSignal()

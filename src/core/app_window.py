@@ -47,7 +47,7 @@ from ui.builders.library_tab_builder import LibraryTabBuilder
 from ui.builders.settings_view_builder import SettingsViewBuilder
 from ui.builders.save_manager_view_builder import SaveManagerViewBuilder
 from core.managers.plugin_manager import PluginManager
-from core.managers.appearance_manager import AppearanceManager
+from core.managers.customization_manager import CustomizationManager
 _translator = QTranslator()
 _lock_file = None
 
@@ -145,7 +145,7 @@ class AppWindow(QWidget):
         self.update_checker.update_error.connect(lambda msg: self.feedback_manager.show_error('errors.error', msg))
         self.update_checker.quit_requested.connect(QApplication.quit)
         self.plugin_manager = PluginManager(self.app_state, self)
-        self.appearance_manager = AppearanceManager(self.app_state, self)
+        self.customization_manager = CustomizationManager(self.app_state, self)
         self.init_ui()
         self.load_font()
         QTimer.singleShot(0, lambda: self.ui_ready.emit())
