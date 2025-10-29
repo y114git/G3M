@@ -2,7 +2,7 @@ import os
 import sys
 import logging
 import importlib.util
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 from PyQt6.QtCore import QObject, pyqtSignal
 from PyQt6.QtWidgets import QWidget, QTabWidget
 from localization import localization_manager, tr
