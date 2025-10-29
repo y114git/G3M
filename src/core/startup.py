@@ -15,12 +15,16 @@ from utils.path_utils import get_user_data_root, get_launcher_dir
 if platform.system() == 'Windows':
     import winreg
 
+
 def create_app_reference():
-    from core.app import DeltaHubApp
-    return DeltaHubApp
+    from core.app_window import AppWindow
+    return AppWindow
+
+
 SINGLE_INSTANCE_KEY = 'deltahub.y.114.single-instance-lock'
 _translator = QTranslator()
 _splash_start_time = None
+
 
 def check_game_processes():
     game_processes = {'DELTARUNE.exe', 'UNDERTALE.exe', 'DELTARUNEdemo.exe', 'DELTARUNE', 'UNDERTALE', 'DELTARUNEdemo'}
@@ -31,6 +35,7 @@ def check_game_processes():
         except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
             pass
     return None
+
 
 def register_url_protocol():
     if getattr(sys, 'frozen', False):
@@ -60,6 +65,7 @@ def register_url_protocol():
     except Exception as e:
         print(f'Failed to register URL protocol: {e}')
 
+
 class SingleInstanceServer(QLocalServer):
 
     def __init__(self, app_instance):
@@ -80,6 +86,7 @@ class SingleInstanceServer(QLocalServer):
                 self.app_instance.url_received_signal.emit(url)
         socket.close()
 
+
 def setup_app():
     language_code = localization_manager.detect_system_language()
     localization_manager.load_language(language_code)
@@ -97,6 +104,7 @@ def setup_app():
     app.setApplicationVersion(LAUNCHER_VERSION)
     app.setOrganizationName('deltahub')
     return app
+
 
 def run_app():
     parser = argparse.ArgumentParser(description='DELTAHUB')
@@ -222,7 +230,7 @@ def run_app():
         if _splash_start_time is None:
             return True
         elapsed = time.time() - _splash_start_time
-        return elapsed >= 10.0
+        return elapsed >= 3.0
 
     def close_splash():
         if hasattr(splash, 'movie'):
@@ -236,7 +244,7 @@ def run_app():
             show_launcher_window(ex)
         else:
             if _splash_start_time is not None:
-                remaining_time = int((11 - (time.time() - _splash_start_time)) * 1000)
+                remaining_time = int((3.0 - (time.time() - _splash_start_time)) * 1000)
             else:
                 remaining_time = 0
 
@@ -268,8 +276,8 @@ def run_app():
                 sys.exit(1)
             launcher_app['instance'].server = server
             launcher_app['instance']._post_show_initialization()
-            launcher_app['instance'].initialization_finished.connect(close_splash_when_ready)
-            QTimer.singleShot(15000, close_splash_when_ready)
+            launcher_app['instance'].ui_ready.connect(close_splash_when_ready)
+            QTimer.singleShot(8000, close_splash_when_ready)
         except Exception as e:
             import traceback
             traceback.print_exc()
