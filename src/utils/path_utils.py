@@ -61,7 +61,7 @@ def get_xdelta_path():
     else:
         exe_names = ['xdelta3']
     for exe_name in exe_names:
-        xdelta_path = resource_path(f'resources/bin/{exe_name}')
+        xdelta_path = resource_path(f'assets/bin/{exe_name}')
         if os.path.exists(xdelta_path):
             if system != 'Windows':
                 try:

@@ -8,11 +8,12 @@ import tempfile
 from typing import Dict
 from PyQt6.QtCore import QObject, pyqtSignal
 from PyQt6.QtWidgets import QApplication
-from localization.manager import tr
+from core.managers.localization_manager import tr
 from models.mod_models import ModInfo, ModChapterData
 from threads.background_workers import InstallModsThread, UrlInstallThread
 from utils.file_utils import sanitize_filename
 from config.constants import UI_COLORS
+
 
 class ModManager(QObject):
     progress_updated = pyqtSignal(int)
@@ -313,7 +314,6 @@ class ModManager(QObject):
     def delete_mod_files(self, mod_data):
         try:
             if not os.path.exists(self.app_state.mods_dir):
-                print('Mods directory not found')
                 return
             mod_folder_found = None
             mod_key = mod_data.get('key', '') if isinstance(mod_data, dict) else mod_data.key
@@ -335,8 +335,8 @@ class ModManager(QObject):
             if mod_folder_found and os.path.exists(mod_folder_found):
                 import shutil
                 shutil.rmtree(mod_folder_found)
-        except Exception as e:
-            print(f'Error deleting mod files: {e}')
+        except Exception:
+            pass
 
     def get_mod_status(self, mod: ModInfo, chapter_id: int) -> str:
         if mod.is_local_mod:
@@ -500,8 +500,8 @@ class ModManager(QObject):
             try:
                 with open(self.app_state.mods_metadata_path, 'w', encoding='utf-8') as f:
                     json.dump(data, f, ensure_ascii=False, indent=2)
-            except Exception as e:
-                print(f'Error writing metadata: {e}')
+            except Exception:
+                pass
 
     def _on_single_mod_install_finished(self, success):
         was_installed_before = False

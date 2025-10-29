@@ -11,7 +11,7 @@ import requests
 from PyQt6.QtCore import QObject, QThread, pyqtSignal
 from PyQt6.QtGui import QImage
 from config.constants import BROWSER_HEADERS, CLOUD_FUNCTIONS_BASE_URL, UI_COLORS
-from localization.manager import tr
+from core.managers.localization_manager import tr
 from utils.file_utils import get_unique_mod_dir
 from utils.deltamod_converter import DeltamodConverter
 from utils.network_utils import download_file
@@ -35,9 +35,11 @@ class PresenceWorker(QObject):
                     online = int(data.get('online', 0))
                     self.update_online_count.emit(max(online, 0))
                 except Exception:
-                    pass
+                    self.update_online_count.emit(-1)
+            else:
+                self.update_online_count.emit(-1)
         except requests.RequestException:
-            pass
+            self.update_online_count.emit(-1)
         finally:
             self.finished.emit()
 
@@ -116,7 +118,9 @@ class FullInstallThread(QThread):
             total_size = int(resp.headers.get('content-length', 0))
             downloaded_ref = [0]
             from utils.file_utils import download_and_extract_archive
-            def progress_callback(progress): return self.progress.emit(progress)
+
+            def progress_callback(progress):
+                return self.progress.emit(progress)
             download_and_extract_archive(full_install_url, self.target_dir, progress_callback, total_size, downloaded_ref, session, is_game_installation=True)
             self.status.emit(tr('status.demo_installation_complete'), UI_COLORS['status_success'])
             self.finished.emit(True, self.target_dir)
@@ -387,14 +391,20 @@ class InstallModsThread(QThread):
                 try:
                     if is_data_file:
                         if is_xdelta:
-                            def progress_callback(progress): return self.progress.emit(progress)
+
+                            def progress_callback(progress):
+                                return self.progress.emit(progress)
                             self._download_xdelta_file(url, cache_dir, progress_callback, total_bytes, downloaded_ref, session)
                         else:
                             from utils.file_utils import download_and_extract_archive
-                            def progress_callback(progress): return self.progress.emit(progress)
+
+                            def progress_callback(progress):
+                                return self.progress.emit(progress)
                             download_and_extract_archive(url, cache_dir, progress_callback, total_bytes, downloaded_ref, session)
                     else:
-                        def progress_callback(progress): return self.progress.emit(progress)
+
+                        def progress_callback(progress):
+                            return self.progress.emit(progress)
                         self._download_archive_file(url, cache_dir, progress_callback, total_bytes, downloaded_ref, session)
                 except Exception:
                     raise
@@ -693,5 +703,4 @@ class FetchHelpContentThread(QThread):
                 error_msg = tr('errors.load_error_http', code=response.status_code)
                 self.finished.emit(f'<i>{error_msg}</i>')
         except Exception as e:
-            print(f'Error loading help content: {e}')
             self.finished.emit(f"<i>{tr('dialogs.help_content_load_failed')}</i>")

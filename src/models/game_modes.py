@@ -5,7 +5,7 @@ if TYPE_CHECKING:
 
 
 def tr(key: str) -> str:
-    from localization.manager import tr as _tr
+    from core.managers.localization_manager import tr as _tr
     return _tr(key)
 
 

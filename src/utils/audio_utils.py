@@ -14,6 +14,7 @@ class SoundInstance(Protocol):
 
 
 class AudioManager:
+
     def __init__(self):
         self._sound_instance: Optional[SoundInstance] = None
 
@@ -21,7 +22,7 @@ class AudioManager:
         app_support_path = os.path.join(get_user_data_root(), 'settings')
         config_mp3 = os.path.join(app_support_path, 'custom_startup_sound.mp3')
         config_wav = os.path.join(app_support_path, 'custom_startup_sound.wav')
-        asset_wav = os.path.join(os.path.dirname(__file__), '..', 'resources', 'audio', 'deltahub.wav')
+        asset_wav = os.path.join(os.path.dirname(__file__), '..', 'assets', 'audio', 'deltahub.wav')
         sound_candidates = [config_mp3, config_wav, asset_wav]
         sound_path = next((p for p in sound_candidates if os.path.exists(p)), None)
         if not sound_path:

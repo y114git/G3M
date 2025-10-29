@@ -2,6 +2,7 @@ from typing import Dict, Any, List, Optional, Tuple
 from models.mod_models import ModInfo
 from models.game_modes import GameMode, FullGameMode
 
+
 class AppState:
 
     def __init__(self):

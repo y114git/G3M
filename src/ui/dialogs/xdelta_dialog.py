@@ -6,9 +6,9 @@ import logging
 import platform
 import subprocess
 from PyQt6.QtWidgets import QDialog, QVBoxLayout, QPushButton, QFileDialog, QMessageBox, QLineEdit, QWidget
-from localization.manager import tr
+from core.managers.localization_manager import tr
 from utils.file_utils import get_file_filter
-from ui.widgets.custom_controls import NoScrollTabWidget
+from PyQt6.QtWidgets import QTabWidget
 from ui.styling import create_file_group_universal
 from utils.path_utils import resource_path
 
@@ -25,7 +25,7 @@ class XdeltaDialog(QDialog):
             exe_names = ['xdelta3']
         path_to_check = None
         for exe_name in exe_names:
-            path = resource_path(f'resources/bin/{exe_name}')
+            path = resource_path(f'assets/bin/{exe_name}')
             if os.path.exists(path):
                 path_to_check = path
                 break
@@ -58,7 +58,7 @@ class XdeltaDialog(QDialog):
 
     def init_ui(self):
         main_layout = QVBoxLayout(self)
-        tabs = NoScrollTabWidget()
+        tabs = QTabWidget()
         tabs.setStyleSheet('\n            QTabWidget::tab-bar { alignment: center; }\n            QTabBar::tab { min-width: 120px; padding: 8px 16px; }\n        ')
         create_tab = QWidget()
         create_layout = QVBoxLayout(create_tab)
@@ -68,11 +68,11 @@ class XdeltaDialog(QDialog):
         create_layout.addWidget(self._create_file_group(tr('ui.original_file_label'), tr('ui.select_original_file'), get_file_filter('all_files'), self.original_create_edit))
         create_layout.addWidget(self._create_file_group(tr('ui.modified_file_label'), tr('ui.select_modified_file'), get_file_filter('all_files'), self.modified_create_edit))
         create_layout.addWidget(self._create_save_file_group(tr('ui.save_patch_as'), tr('ui.specify_patch_path'), get_file_filter('xdelta_files'), self.patch_output_edit))
-        create_button = QPushButton(tr('ui.create_patch_button'))
+        create_button = QPushButton(tr('ui.create_patch'))
         create_button.clicked.connect(self.create_patch)
         create_layout.addWidget(create_button)
         create_layout.addStretch()
-        tabs.addTab(create_tab, tr('ui.create_patch_tab'))
+        tabs.addTab(create_tab, tr('ui.create_patch'))
         apply_tab = QWidget()
         apply_layout = QVBoxLayout(apply_tab)
         self.original_apply_edit = QLineEdit()
@@ -81,11 +81,11 @@ class XdeltaDialog(QDialog):
         apply_layout.addWidget(self._create_file_group(tr('ui.original_file_label'), tr('ui.select_original_for_patch'), get_file_filter('all_files'), self.original_apply_edit))
         apply_layout.addWidget(self._create_file_group(tr('ui.patch_file_label'), tr('ui.select_patch_file'), get_file_filter('xdelta_files'), self.patch_apply_edit))
         apply_layout.addWidget(self._create_save_file_group(tr('ui.save_modified_as'), tr('ui.specify_save_path'), get_file_filter('all_files'), self.output_apply_edit))
-        apply_button = QPushButton(tr('ui.apply_patch_button'))
+        apply_button = QPushButton(tr('ui.apply_patch'))
         apply_button.clicked.connect(self.apply_patch)
         apply_layout.addWidget(apply_button)
         apply_layout.addStretch()
-        tabs.addTab(apply_tab, tr('ui.apply_patch_tab'))
+        tabs.addTab(apply_tab, tr('ui.apply_patch'))
         main_layout.addWidget(tabs)
 
     def _create_file_group(self, label_text, button_text, file_filter, line_edit):
@@ -130,19 +130,19 @@ class XdeltaDialog(QDialog):
     def create_patch(self):
         xdelta_path = self._get_xdelta_path()
         if not xdelta_path:
-            self._show_message(tr('dialogs.error'), tr('errors.xdelta_unavailable'), QMessageBox.Icon.Critical)
+            self._show_message(tr('errors.error'), tr('errors.xdelta_unavailable'), QMessageBox.Icon.Critical)
             return
         original_file = self.original_create_edit.text()
         modified_file = self.modified_create_edit.text()
         output_patch = self.patch_output_edit.text()
         if not all((original_file, modified_file, output_patch)):
-            self._show_message(tr('dialogs.error'), tr('ui.select_all_files'), QMessageBox.Icon.Warning)
+            self._show_message(tr('errors.error'), tr('ui.select_all_files'), QMessageBox.Icon.Warning)
             return
         if not os.path.exists(original_file):
-            self._show_message(tr('dialogs.error'), tr('ui.original_file_not_found', path=original_file), QMessageBox.Icon.Warning)
+            self._show_message(tr('errors.error'), tr('ui.original_file_not_found', path=original_file), QMessageBox.Icon.Warning)
             return
         if not os.path.exists(modified_file):
-            self._show_message(tr('dialogs.error'), tr('ui.modified_file_not_found', path=modified_file), QMessageBox.Icon.Warning)
+            self._show_message(tr('errors.error'), tr('ui.modified_file_not_found', path=modified_file), QMessageBox.Icon.Warning)
             return
         temp_dir = None
         try:
@@ -156,7 +156,7 @@ class XdeltaDialog(QDialog):
             result = subprocess.run(command, capture_output=True, text=True, encoding='utf-8')
             if result.returncode == 0:
                 shutil.move(temp_output, output_patch)
-                self._show_message(tr('ui.success'), tr('ui.patch_success', path=output_patch))
+                self._show_message(tr('dialogs.success'), tr('ui.patch_success', path=output_patch))
             else:
                 error_message = result.stderr or result.stdout
                 logging.error(f'xdelta create patch failed: {error_message}')
@@ -173,19 +173,19 @@ class XdeltaDialog(QDialog):
     def apply_patch(self):
         xdelta_path = self._get_xdelta_path()
         if not xdelta_path:
-            self._show_message(tr('dialogs.error'), tr('errors.xdelta_unavailable'), QMessageBox.Icon.Critical)
+            self._show_message(tr('errors.error'), tr('errors.xdelta_unavailable'), QMessageBox.Icon.Critical)
             return
         original_file = self.original_apply_edit.text()
         patch_file = self.patch_apply_edit.text()
         output_file = self.output_apply_edit.text()
         if not all((original_file, patch_file, output_file)):
-            self._show_message(tr('dialogs.error'), tr('ui.select_all_files'), QMessageBox.Icon.Warning)
+            self._show_message(tr('errors.error'), tr('ui.select_all_files'), QMessageBox.Icon.Warning)
             return
         if not os.path.exists(original_file):
-            self._show_message(tr('dialogs.error'), tr('ui.original_file_not_found', path=original_file), QMessageBox.Icon.Warning)
+            self._show_message(tr('errors.error'), tr('ui.original_file_not_found', path=original_file), QMessageBox.Icon.Warning)
             return
         if not os.path.exists(patch_file):
-            self._show_message(tr('dialogs.error'), tr('ui.patch__not_found', path=patch_file), QMessageBox.Icon.Warning)
+            self._show_message(tr('errors.error'), tr('ui.patch__not_found', path=patch_file), QMessageBox.Icon.Warning)
             return
         temp_dir = None
         try:
@@ -199,7 +199,7 @@ class XdeltaDialog(QDialog):
             result = subprocess.run(command, capture_output=True, text=True, encoding='utf-8')
             if result.returncode == 0:
                 shutil.move(temp_output, output_file)
-                self._show_message(tr('ui.success'), tr('ui.patch_apply_success', path=output_file))
+                self._show_message(tr('dialogs.success'), tr('ui.patch_apply_success', path=output_file))
             else:
                 error_message = result.stderr or result.stdout
                 logging.error(f'xdelta apply patch failed: {error_message}')

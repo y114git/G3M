@@ -6,7 +6,7 @@ import uuid
 import logging
 import xml.etree.ElementTree as ET
 from typing import Optional, Dict, Any
-from localization.manager import tr
+from core.managers.localization_manager import tr
 
 
 class DeltamodConverter:
@@ -33,7 +33,7 @@ class DeltamodConverter:
             config_path = os.path.join(target_mod_dir, 'config.json')
             with open(config_path, 'w', encoding='utf-8') as f:
                 json.dump(config_data, f, indent=4, ensure_ascii=False)
-            logging.info(f'Deltamod converted: {config_data.get("name")} → {target_mod_dir}')
+            logging.info(f"Deltamod converted: {config_data.get('name')} → {target_mod_dir}")
             return target_mod_dir
         except Exception as e:
             logging.error(f'Deltamod conversion failed: {e}')
@@ -46,32 +46,27 @@ class DeltamodConverter:
             return False
         if not os.path.exists(xml_path):
             return False
-
         try:
             with open(info_path, 'r', encoding='utf-8') as f:
                 self.deltamod_info = json.load(f)
         except Exception:
             return False
-
         try:
             self.modding_xml = ET.parse(xml_path).getroot()
         except ET.ParseError:
             try:
                 with open(xml_path, 'r', encoding='utf-8') as f:
                     xml_content = f.read().strip()
-
                 if not xml_content.startswith('<?xml'):
                     xml_content = '<?xml version="1.0" encoding="UTF-8"?>\n<patches>\n' + xml_content + '\n</patches>'
                 else:
                     xml_lines = xml_content.split('\n', 1)
                     xml_content = xml_lines[0] + '\n<patches>\n' + xml_lines[1] + '\n</patches>'
-
                 self.modding_xml = ET.fromstring(xml_content)
             except Exception:
                 self.modding_xml = None
         except Exception:
             self.modding_xml = None
-
         return True
 
     def _generate_config_json(self) -> Optional[Dict[str, Any]]:
@@ -88,28 +83,10 @@ class DeltamodConverter:
             mod_key = package_id.replace('.', '_')
         else:
             mod_key = f"local_{meta.get('name', 'unnamed')}_{uuid.uuid4().hex[:8]}"
-
         from datetime import datetime
         created_date = datetime.now().strftime('%d.%m.%y %H:%M')
-
-        has_xdelta = any(p.get('type') == 'xdelta' for p in patches)
-
-        config = {
-            'is_local_mod': True,
-            'mod_key': mod_key,
-            'created_date': created_date,
-            'is_available_on_server': False,
-            'name': meta.get('name', tr('defaults.local_mod')),
-            'version': meta.get('version', '1.0.0'),
-            'author': ', '.join(meta.get('author', [tr('defaults.unknown')])),
-            'tagline': meta.get('description', tr('defaults.no_description')),
-            'external_url': meta.get('url', ''),
-            'game_version': self.deltamod_info.get('deltaruneTargetVersion', tr('defaults.not_specified')),
-            'modgame': 'deltarunedemo' if meta.get('demoMod') else 'deltarune',
-            'is_xdelta': has_xdelta,
-            'files': self._generate_files_structure(patches),
-            'tags': meta.get('tags', [])
-        }
+        has_xdelta = any((p.get('type') == 'xdelta' for p in patches))
+        config = {'is_local_mod': True, 'mod_key': mod_key, 'created_date': created_date, 'is_available_on_server': False, 'name': meta.get('name', tr('defaults.local_mod')), 'version': meta.get('version', '1.0.0'), 'author': ', '.join(meta.get('author', [tr('defaults.unknown')])), 'tagline': meta.get('description', tr('defaults.no_description')), 'external_url': meta.get('url', ''), 'game_version': self.deltamod_info.get('deltaruneTargetVersion', tr('defaults.not_specified')), 'modgame': 'deltarunedemo' if meta.get('demoMod') else 'deltarune', 'is_xdelta': has_xdelta, 'files': self._generate_files_structure(patches), 'tags': meta.get('tags', [])}
         return config
 
     def _generate_files_structure(self, patches: list) -> Dict[str, Any]:

@@ -1,7 +1,7 @@
 from PyQt6.QtCore import pyqtSignal, Qt
 from PyQt6.QtWidgets import QLabel, QPushButton, QHBoxLayout, QVBoxLayout, QFrame, QWidget
 from .base_mod_widget import BaseModWidget
-from localization.manager import tr
+from core.managers.localization_manager import tr
 
 
 class ModPlaqueWidget(BaseModWidget):
@@ -102,7 +102,7 @@ class ModPlaqueWidget(BaseModWidget):
         self.details_button = QPushButton(tr('ui.details_button'))
         self.details_button.setObjectName('plaqueButton')
         self.details_button.clicked.connect(lambda: self.details_requested.emit(self.mod_data))
-        self.install_button = QPushButton(tr('ui.install_button'))
+        self.install_button = QPushButton(tr('buttons.install'))
         self.install_button.setObjectName('plaqueButtonInstall')
         self.install_button.clicked.connect(self._on_install_button_clicked)
         actions_layout.addWidget(self.details_button)
@@ -117,11 +117,11 @@ class ModPlaqueWidget(BaseModWidget):
 
     def _update_install_button(self):
         if self.is_installed:
-            self.install_button.setText(tr('ui.uninstall_button'))
+            self.install_button.setText(tr('buttons.delete'))
             self.install_button.setObjectName('plaqueButtonUninstall')
             self.install_button.setStyleSheet('\n                QPushButton#plaqueButtonUninstall {\n                    background-color: #F44336;\n                    color: white;\n                    font-weight: bold;\n                    min-width: 110px;\n                    max-width: 110px;\n                    min-height: 35px;\n                    max-height: 35px;\n                    font-size: 15px;\n                    padding: 1px;\n                }\n                QPushButton#plaqueButtonUninstall:hover {\n                    background-color: #d32f2f;\n                }\n            ')
         else:
-            self.install_button.setText(tr('ui.install_button'))
+            self.install_button.setText(tr('buttons.install'))
             self.install_button.setObjectName('plaqueButtonInstall')
             self.install_button.setStyleSheet('')
 

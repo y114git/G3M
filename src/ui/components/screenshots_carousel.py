@@ -1,7 +1,7 @@
 from PyQt6.QtCore import QThread, pyqtSignal, Qt
 from PyQt6.QtGui import QImage, QPixmap, QColor, QPainter
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QSizePolicy
-from localization.manager import tr
+from core.managers.localization_manager import tr
 
 
 class ScreenshotsCarousel(QWidget):

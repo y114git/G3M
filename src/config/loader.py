@@ -3,6 +3,7 @@ import sys
 from typing import Dict, Any, Optional
 from dotenv import load_dotenv
 
+
 class ConfigLoader:
 
     def __init__(self):
@@ -46,21 +47,28 @@ class ConfigLoader:
         except Exception:
             pass
 
-    def get(self, key: str, default: str='') -> str:
+    def get(self, key: str, default: str = '') -> str:
         config = self.load_config()
         return config.get(key, default)
 
     def reload(self) -> None:
         self._config_cache = None
         self.load_config()
+
+
 _config_loader = ConfigLoader()
+
 
 def load_configuration() -> Dict[str, Any]:
     return _config_loader.load_config()
 
-def get_config_value(key: str, default: str='') -> str:
+
+def get_config_value(key: str, default: str = '') -> str:
     return _config_loader.get(key, default)
+
 
 def reload_configuration() -> None:
     _config_loader.reload()
+
+
 load_configuration()

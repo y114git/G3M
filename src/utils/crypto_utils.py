@@ -26,7 +26,3 @@ def possible_secret_hashes(secret_key: str) -> list[str]:
         legacy_salted_key = (secret_key + legacy_salt).encode('utf-8')
         hashes.append(hashlib.sha256(legacy_salted_key).hexdigest())
     return hashes
-
-
-def verify_secret_key(entered_key: str, stored_hash: str) -> bool:
-    return stored_hash in possible_secret_hashes(entered_key)
