@@ -9,10 +9,9 @@ import uuid
 import webbrowser
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QColor, QImage, QPixmap, QPainter
-from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QFrame, QCheckBox, QComboBox, QMessageBox, QFileDialog, QInputDialog, QDialogButtonBox, QWidget, QListWidget
+from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QFrame, QCheckBox, QComboBox, QMessageBox, QFileDialog, QInputDialog, QDialogButtonBox, QWidget, QListWidget, QTabWidget
 from PyQt6 import sip
-from localization.manager import tr
-from ui.widgets.custom_controls import NoScrollComboBox, NoScrollTabWidget
+from core.managers.localization_manager import tr
 from ui.widgets.worker_signals import WorkerSignals
 from utils.path_utils import resource_path
 from utils.file_utils import detect_field_type_by_text, get_file_filter, sanitize_filename
@@ -123,7 +122,7 @@ class ModEditorDialog(QDialog):
             form_layout.addWidget(self.description_url_edit)
             self.description_url_edit.textChanged.connect(lambda: self._trigger_validation(self.description_url_edit, self._validate_url_for_title, title_label=self.description_title_label, is_patch=False))
             form_layout.addWidget(QLabel(tr('ui.game_version_label')))
-            self.game_version_combo = NoScrollComboBox()
+            self.game_version_combo = QComboBox()
             self._load_game_versions()
             form_layout.addWidget(self.game_version_combo)
         else:
@@ -430,7 +429,7 @@ class ModEditorDialog(QDialog):
         files_label = QLabel(tr('ui.files_management'))
         files_label.setStyleSheet('font-weight: bold; font-size: 18px;')
         files_layout.addWidget(files_label, alignment=Qt.AlignmentFlag.AlignHCenter)
-        self.file_tabs = NoScrollTabWidget()
+        self.file_tabs = QTabWidget()
         self.file_tabs.setStyleSheet('QTabWidget::tab-bar { alignment: center; } QTabBar::tab { padding: 4px 8px; }')
         self.modgame_combo.currentIndexChanged.connect(self._update_file_tabs)
         self.xdelta_checkbox.stateChanged.connect(self._update_data_file_labels)
@@ -607,7 +606,7 @@ class ModEditorDialog(QDialog):
         version_edit.setPlaceholderText('1.0.0')
         self._setup_version_validation(version_edit)
         layout.addWidget(version_edit)
-        delete_btn = QPushButton(tr('ui.delete_button'))
+        delete_btn = QPushButton(tr('buttons.delete'))
         delete_btn.clicked.connect(lambda: self._remove_data_file(None, tab_layout, frame) if file_type == 'data' else self._remove_extra_files(tab_layout, frame))
         layout.addWidget(delete_btn)
         tab_layout.insertWidget(tab_layout.count() - 1, frame)
@@ -788,7 +787,7 @@ class ModEditorDialog(QDialog):
                     except Exception:
                         first_bytes = b''
                 try:
-                    from localization.manager import localization_manager
+                    from core.managers.localization_manager import localization_manager
                     lang = localization_manager.get_current_language()
                 except Exception:
                     lang = 'en'
@@ -902,9 +901,9 @@ class ModEditorDialog(QDialog):
                 line_edit.setText(file_path)
         else:
             msg = QMessageBox(self)
-            msg.setWindowTitle(tr('ui.choice_title'))
+            msg.setWindowTitle(tr('ui.select'))
             msg.setText(tr('ui.select_file_or_folder'))
-            archive_button = msg.addButton(tr('ui.archive'), QMessageBox.ButtonRole.AcceptRole)
+            archive_button = msg.addButton(tr('file_descriptions.archives'), QMessageBox.ButtonRole.AcceptRole)
             folder_button = msg.addButton(tr('ui.folder'), QMessageBox.ButtonRole.ActionRole)
             msg.addButton(QMessageBox.StandardButton.Cancel)
             msg.setDefaultButton(archive_button)
@@ -963,13 +962,11 @@ class ModEditorDialog(QDialog):
                         return
 
     def _fill_local_data_file_in_tab(self, tab, file_path, version):
-        # Определяем индекс вкладки для формирования правильного пути к chapter_*
         tab_index = -1
         for i in range(self.file_tabs.count()):
             if self.file_tabs.widget(i) == tab:
                 tab_index = i
                 break
-
         for i in range(tab.layout().count() - 1, -1, -1):
             if (item := tab.layout().itemAt(i)) and item.widget() and hasattr(item.widget(), 'layout'):
                 if (frame_layout := item.widget().layout()):
@@ -980,21 +977,17 @@ class ModEditorDialog(QDialog):
                                     container_widget = container_item.widget()
                                     if container_widget.property('is_local_path'):
                                         folder_name = self.mod_data.get('folder_name', '')
-                                        if folder_name and not os.path.isabs(file_path):
-                                            # Определяем подпапку главы
+                                        if folder_name and (not os.path.isabs(file_path)):
                                             modgame = self.mod_data.get('modgame', 'deltarune')
                                             if modgame == 'deltarunedemo':
                                                 chapter_folder = 'demo'
                                             elif modgame == 'undertale':
                                                 chapter_folder = 'undertale'
                                             else:
-                                                # Для deltarune: вкладка 0 = chapter_0, вкладка 1 = chapter_1, etc.
                                                 chapter_folder = f'chapter_{tab_index}'
-
                                             full_path = os.path.join(self.parent_app.app_state.mods_dir, folder_name, chapter_folder, file_path)
                                         else:
                                             full_path = file_path
-
                                         container_widget.setText(full_path)
                                         for version_idx in range(j + 1, frame_layout.count()):
                                             if (version_item := frame_layout.itemAt(version_idx)) and version_item.widget() and isinstance(version_item.widget(), QLineEdit) and (not version_item.widget().isReadOnly()):
@@ -1018,7 +1011,7 @@ class ModEditorDialog(QDialog):
             buttons_layout.addWidget(cancel_button)
             buttons_layout.addSpacing(10)
             if self.is_public:
-                self.hide_mod_button = QPushButton(tr('ui.hide_mod_button'))
+                self.hide_mod_button = QPushButton(tr('ui.hide_mod'))
                 self.hide_mod_button.clicked.connect(self._toggle_mod_visibility)
                 buttons_layout.addWidget(self.hide_mod_button)
                 buttons_layout.addSpacing(10)
@@ -1096,7 +1089,7 @@ class ModEditorDialog(QDialog):
 
     def _load_default_icon(self):
         try:
-            logo_path = resource_path('resources/icons/icon.ico')
+            logo_path = resource_path('assets/icons/icon.ico')
             if os.path.exists(logo_path) and (not (pixmap := QPixmap(logo_path)).isNull()):
                 self.icon_preview.setPixmap(pixmap.scaled(64, 64, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
                 self.icon_preview.setProperty('isDefaultIcon', True)
@@ -1137,7 +1130,7 @@ class ModEditorDialog(QDialog):
 
     def _toggle_mod_visibility(self):
         if not hasattr(self, 'mod_key') or not self.mod_key:
-            QMessageBox.critical(self, tr('dialogs.error'), tr('dialogs.mod_key_error'))
+            QMessageBox.critical(self, tr('errors.error'), tr('errors.mod_key_not_determined'))
             return
         current_hidden = self.mod_data.get('hide_mod', False)
         new_state = not current_hidden
@@ -1149,7 +1142,7 @@ class ModEditorDialog(QDialog):
             resp.raise_for_status()
             QMessageBox.information(self, tr('dialogs.request_sent_title'), tr('errors.request_sent_message'))
         except Exception as e:
-            QMessageBox.critical(self, tr('dialogs.update_error'), tr('dialogs.failed_to_update_mod', error=str(e)))
+            QMessageBox.critical(self, tr('errors.update_error'), tr('dialogs.failed_to_update_mod', error=str(e)))
 
     def _save_mod(self):
         if not self._validate_fields():
@@ -1166,10 +1159,10 @@ class ModEditorDialog(QDialog):
 
     def _validate_fields(self):
         if not self.name_edit.text().strip():
-            QMessageBox.warning(self, tr('dialogs.error'), tr('dialogs.mod_name_empty'))
+            QMessageBox.warning(self, tr('errors.error'), tr('dialogs.mod_name_empty'))
             return False
         if self.is_public and (not self.author_edit.text().strip()):
-            QMessageBox.warning(self, tr('dialogs.error'), tr('dialogs.mod_author_empty'))
+            QMessageBox.warning(self, tr('errors.error'), tr('dialogs.mod_author_empty'))
             return False
         external_url = self.external_url_edit.text().strip()
         if external_url:
@@ -1177,16 +1170,16 @@ class ModEditorDialog(QDialog):
             try:
                 result = urlparse(external_url)
                 if not all([result.scheme in ['http', 'https'], result.netloc]):
-                    raise ValueError("Invalid URL scheme or network location")
+                    raise ValueError('Invalid URL scheme or network location')
                 path = result.path.lower()
-                if any(path.endswith(ext) for ext in ['.zip', '.rar', '.7z', '.exe', '.xdelta', '.win', '.ios', '.data', '.patch', '.tar', '.gz', '.pkg', '.dmg']):
-                    QMessageBox.warning(self, tr('dialogs.error'), tr('dialogs.invalid_external_url_direct_download'))
+                if any((path.endswith(ext) for ext in ['.zip', '.rar', '.7z', '.exe', '.xdelta', '.win', '.ios', '.data', '.patch', '.tar', '.gz', '.pkg', '.dmg'])):
+                    QMessageBox.warning(self, tr('errors.error'), tr('dialogs.invalid_external_url_direct_download'))
                     return False
             except Exception:
-                QMessageBox.warning(self, tr('dialogs.error'), tr('dialogs.invalid_external_url'))
+                QMessageBox.warning(self, tr('errors.error'), tr('dialogs.invalid_external_url'))
                 return False
         if len(self.version_edit.text().strip()) > 10:
-            QMessageBox.warning(self, tr('dialogs.error'), tr('dialogs.mod_version_too_long'))
+            QMessageBox.warning(self, tr('errors.error'), tr('dialogs.mod_version_too_long'))
             return False
         if self.is_public:
             pass
@@ -1434,9 +1427,9 @@ class ModEditorDialog(QDialog):
 
     def _select_local_extra_files(self, tab, tab_layout):
         msg = QMessageBox(self)
-        msg.setWindowTitle(tr('ui.choice_title'))
+        msg.setWindowTitle(tr('ui.select'))
         msg.setText(tr('ui.select_file_or_folder'))
-        archive_button = msg.addButton(tr('ui.archive'), QMessageBox.ButtonRole.AcceptRole)
+        archive_button = msg.addButton(tr('file_descriptions.archives'), QMessageBox.ButtonRole.AcceptRole)
         msg.setDefaultButton(archive_button)
         msg.exec()
         if msg.clickedButton() == archive_button:
@@ -1467,7 +1460,7 @@ class ModEditorDialog(QDialog):
                 path_edit.setProperty('is_local_extra_path', True)
                 path_edit.setProperty('extra_key', key_name)
                 extra_layout.addWidget(path_edit)
-            delete_button = QPushButton(tr('ui.delete_button'))
+            delete_button = QPushButton(tr('buttons.delete'))
             delete_button.clicked.connect(lambda: self._remove_local_extra_files(tab_layout, extra_frame))
             extra_layout.addWidget(delete_button)
             tab_layout.insertWidget(tab_layout.count() - 1, extra_frame)
@@ -1687,7 +1680,7 @@ class ModEditorDialog(QDialog):
             response.raise_for_status()
             try:
                 with open(key_file_path, 'w', encoding='utf-8') as f:
-                    f.write(f"{tr('ui.secret_key_colon')} {secret_key}\n{tr('ui.mod_name_colon')} {self.name_edit.text()}\n{tr('ui.creation_date_colon')} {time.strftime('%d.%m.%y %H:%M')}\n\n{tr('ui.secret_key_important')}\n")
+                    f.write(f"{tr('ui.secret_key_label')} {secret_key}\n{tr('ui.mod_name_label')} {self.name_edit.text()}\n{tr('ui.creation_date_colon')} {time.strftime('%d.%m.%y %H:%M')}\n\n{tr('ui.secret_key_important')}\n")
                 QMessageBox.information(self, tr('dialogs.mod_submitted'), tr('errors.mod_submitted_success', key_file_path=key_file_path))
                 self._open_file_directory(key_file_path)
             except Exception:
@@ -1752,14 +1745,11 @@ class ModEditorDialog(QDialog):
                 if data_path and os.path.exists(data_path):
                     data_filename = os.path.basename(data_path)
                     destination = os.path.join(file_folder, data_filename)
-
-                    # Если файл уже находится в папке мода, не копируем его
                     if os.path.abspath(data_path) != os.path.abspath(destination):
                         if os.path.isdir(data_path):
                             shutil.copytree(data_path, destination)
                         else:
                             shutil.copy2(data_path, destination)
-
                     new_file_data['data_file_url'] = data_filename
                     new_file_data['data_file_version'] = original_file_data.get('data_file_version', '1.0.0')
                 if 'extra_files' in original_file_data:
@@ -1773,14 +1763,11 @@ class ModEditorDialog(QDialog):
                                 if os.path.exists(path):
                                     filename = os.path.basename(path)
                                     destination = os.path.join(file_folder, filename)
-
-                                    # Если файл уже находится в папке мода, не копируем его
                                     if os.path.abspath(path) != os.path.abspath(destination):
                                         if os.path.isdir(path):
                                             shutil.copytree(path, destination)
                                         else:
                                             shutil.copy2(path, destination)
-
                                     new_file_data['extra_files'][group_key].append(filename)
                 if new_file_data:
                     processed_files_data[file_key] = new_file_data
@@ -1893,9 +1880,6 @@ class ModEditorDialog(QDialog):
         try:
             config_path = os.path.join(mod_folder_path, 'config.json')
             config_data = self.parent_app._read_json(config_path)
-
-            # НЕ удаляем chapter_* папки! Просто обновляем файлы
-
             new_icon_path = self.icon_edit.text().strip()
             if new_icon_path and os.path.exists(new_icon_path):
                 icon_filename = os.path.basename(new_icon_path)
@@ -1919,15 +1903,11 @@ class ModEditorDialog(QDialog):
                 if data_path:
                     data_filename = os.path.basename(data_path)
                     destination = os.path.join(file_folder, data_filename)
-
-                    # Копируем файл только если он существует и еще не в папке мода
                     if os.path.exists(data_path) and os.path.abspath(data_path) != os.path.abspath(destination):
                         if os.path.isdir(data_path):
                             shutil.copytree(data_path, destination)
                         else:
                             shutil.copy2(data_path, destination)
-
-                    # Сохраняем информацию о файле в любом случае
                     files_data[file_key]['data_file_url'] = data_filename
                     files_data[file_key]['data_file_version'] = file_data.get('data_file_version', '1.0.0')
                 extra_files = file_data.get('extra_files', {})
@@ -1938,15 +1918,11 @@ class ModEditorDialog(QDialog):
                         for path in paths:
                             filename = os.path.basename(path)
                             destination = os.path.join(file_folder, filename)
-
-                            # Копируем файл только если он существует и еще не в папке мода
                             if os.path.exists(path) and os.path.abspath(path) != os.path.abspath(destination):
                                 if os.path.isdir(path):
                                     shutil.copytree(path, destination)
                                 else:
                                     shutil.copy2(path, destination)
-
-                            # Добавляем файл в список в любом случае
                             copied_paths.append(filename)
                         if copied_paths:
                             files_data[file_key]['extra_files'][group_key] = copied_paths
@@ -2064,7 +2040,7 @@ class ModEditorDialog(QDialog):
         self._populate_file_tabs()
         if not self.is_creating and self.is_public and hasattr(self, 'hide_mod_button'):
             is_hidden = self.mod_data.get('hide_mod', False)
-            self.hide_mod_button.setText(tr('errors.show_hide_mod') if is_hidden else tr('errors.hide_show_mod'))
+            self.hide_mod_button.setText(tr('errors.show_hide_mod') if is_hidden else tr('ui.hide_mod'))
 
     def _populate_file_tabs(self):
         if not self.mod_data:

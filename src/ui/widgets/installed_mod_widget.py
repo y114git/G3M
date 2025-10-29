@@ -1,7 +1,7 @@
 from PyQt6.QtCore import pyqtSignal, Qt
 from PyQt6.QtWidgets import QLabel, QPushButton, QHBoxLayout, QVBoxLayout, QFrame, QWidget
 from .base_mod_widget import BaseModWidget
-from localization.manager import tr
+from core.managers.localization_manager import tr
 
 
 class InstalledModWidget(BaseModWidget):
@@ -65,7 +65,7 @@ class InstalledModWidget(BaseModWidget):
         self.use_button.setObjectName('plaqueButtonInstall')
         self.use_button.clicked.connect(lambda: self.use_requested.emit(self.mod_data))
         actions_layout.addWidget(self.use_button)
-        self.remove_button = QPushButton(tr('ui.delete_button'))
+        self.remove_button = QPushButton(tr('buttons.delete'))
         self.remove_button.setObjectName('plaqueButton')
         self.remove_button.setStyleSheet('\n            QPushButton#plaqueButton {\n                background-color: #F44336;\n                color: white;\n            }\n            QPushButton#plaqueButton:hover {\n                background-color: #da190b;\n            }\n        ')
         self.remove_button.clicked.connect(lambda: self.remove_requested.emit(self.mod_data))
@@ -77,7 +77,7 @@ class InstalledModWidget(BaseModWidget):
         style = 'font-size: 14px; font-weight: bold; margin-left: 5px;'
         if self.is_local:
             self.status_indicator.setStyleSheet(f'color: #FFD700; {style}')
-            self.status_indicator.setToolTip(tr('tooltips.local_mod'))
+            self.status_indicator.setToolTip(tr('defaults.local_mod'))
             return
         has_update_now = False
         try:

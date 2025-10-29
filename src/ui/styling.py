@@ -5,7 +5,7 @@ from PyQt6 import sip
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QColor, QImage, QPixmap
 from PyQt6.QtWidgets import QLabel, QVBoxLayout, QPushButton, QGroupBox
-from localization.manager import tr
+from core.managers.localization_manager import tr
 
 
 def update_mod_widget_style(widget, frame_selector, parent_app=None):
@@ -69,7 +69,7 @@ def clear_layout_widgets(layout, keep_last_n=1):
 
 def load_mod_icon_universal(icon_label, mod_data, size=80):
     from utils.path_utils import resource_path
-    assets_icon_path = resource_path('resources/icons/icon.ico')
+    assets_icon_path = resource_path('assets/icons/icon.ico')
     default_pixmap = None
     for default_icon_path in (assets_icon_path,):
         if os.path.exists(default_icon_path):

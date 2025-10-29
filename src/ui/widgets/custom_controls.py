@@ -1,15 +1,9 @@
 from typing import Callable, Optional
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtWidgets import QComboBox, QTabWidget, QLabel, QFrame, QWidget
+from PyQt6.QtWidgets import QComboBox, QLabel, QFrame, QWidget
 
 
 class NoScrollComboBox(QComboBox):
-
-    def wheelEvent(self, event):
-        event.ignore()
-
-
-class NoScrollTabWidget(QTabWidget):
 
     def wheelEvent(self, event):
         event.ignore()

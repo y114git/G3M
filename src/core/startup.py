@@ -8,7 +8,7 @@ import psutil
 from PyQt6.QtCore import QLibraryInfo, Qt, QTranslator, QTimer
 from PyQt6.QtNetwork import QLocalServer, QLocalSocket
 from PyQt6.QtWidgets import QApplication, QMessageBox
-from localization.manager import localization_manager, tr
+from core.managers.localization_manager import localization_manager, tr
 from utils.audio_utils import _audio_manager
 from core.splash import create_splash, create_png_splash
 from utils.path_utils import get_user_data_root, get_launcher_dir

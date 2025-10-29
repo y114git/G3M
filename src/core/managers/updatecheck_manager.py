@@ -7,10 +7,11 @@ import threading
 import subprocess
 import requests
 from PyQt6.QtCore import QObject, pyqtSignal
-from localization import tr
+from core.managers.localization_manager import tr
 from config.constants import LAUNCHER_VERSION, UI_COLORS, ARCH
 from core.app_state import AppState
 from ui.feedback import FeedbackManager
+
 
 class UpdateChecker(QObject):
     update_available = pyqtSignal(dict)

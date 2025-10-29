@@ -4,6 +4,7 @@ from PyQt6.QtGui import QPixmap
 from PyQt6.QtWidgets import QSplashScreen
 from utils.path_utils import resource_path
 
+
 class CustomSplashScreen(QSplashScreen):
 
     def __init__(self, pixmap=None, gif_path=None):
@@ -77,9 +78,10 @@ class CustomSplashScreen(QSplashScreen):
     def keyPressEvent(self, event):
         pass
 
+
 def create_png_splash():
     pixmap = QPixmap()
-    splash_path = resource_path('resources/images/splash.png')
+    splash_path = resource_path('assets/images/splash.png')
     if not pixmap.load(splash_path):
         pixmap = QPixmap(600, 600)
         pixmap.fill(Qt.GlobalColor.transparent)
@@ -89,8 +91,9 @@ def create_png_splash():
     splash.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint)
     return splash
 
+
 def create_splash():
-    gif_path = resource_path('resources/images/splash.gif')
+    gif_path = resource_path('assets/images/splash.gif')
     if os.path.exists(gif_path):
         splash = CustomSplashScreen(gif_path=gif_path)
         return splash

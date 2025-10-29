@@ -37,12 +37,7 @@ def download_and_extract_archive(url: str, target_dir: str, progress_callback=No
 def _extract_archive(tmp_path, target_dir, fname, is_game_installation=False):
     import rarfile
     low = fname.lower()
-    extractors = {
-        'zip': lambda: zipfile.ZipFile(tmp_path, 'r').extractall(target_dir),
-        'rar': lambda: rarfile.RarFile(tmp_path, 'r').extractall(target_dir),
-        'tar.gz': lambda: tarfile.open(tmp_path, 'r:gz').extractall(target_dir),
-        'lzma': lambda: _extract_lzma(tmp_path, target_dir, fname)
-    }
+    extractors = {'zip': lambda: zipfile.ZipFile(tmp_path, 'r').extractall(target_dir), 'rar': lambda: rarfile.RarFile(tmp_path, 'r').extractall(target_dir), 'tar.gz': lambda: tarfile.open(tmp_path, 'r:gz').extractall(target_dir), 'lzma': lambda: _extract_lzma(tmp_path, target_dir, fname)}
     try:
         import py7zr
         extractors['7z'] = lambda: py7zr.SevenZipFile(tmp_path, mode='r').extractall(path=target_dir)
@@ -236,7 +231,7 @@ def get_file_filter(filter_type: str) -> str:
 
     def tr(key):
         return key.replace('file_descriptions.', '').replace('_', ' ').title()
-    FILTER_DESCRIPTIONS = {'image_files': tr('file_descriptions.image_files'), 'background_images': tr('file_descriptions.background_images'), 'xdelta_files': tr('file_descriptions.xdelta_files'), 'data_files': tr('file_descriptions.data_files'), 'archive_files': tr('file_descriptions.archive_files'), 'extended_archives': tr('file_descriptions.extended_archives'), 'game_files': tr('file_descriptions.game_files'), 'text_files': tr('file_descriptions.text_files'), 'all_files': tr('file_descriptions.all_files')}
+    FILTER_DESCRIPTIONS = {'image_files': tr('file_descriptions.image_files'), 'background_images': tr('file_descriptions.background_images'), 'xdelta_files': tr('file_descriptions.xdelta_files'), 'data_files': tr('file_descriptions.data_files'), 'archive_files': tr('file_descriptions.archives'), 'extended_archives': tr('file_descriptions.archives'), 'game_files': tr('file_descriptions.game_files'), 'text_files': tr('file_descriptions.text_files'), 'all_files': tr('file_descriptions.all_files')}
     extensions = FILTER_EXTENSIONS.get(filter_type, '*')
     description = FILTER_DESCRIPTIONS.get(filter_type, filter_type)
     all_files_desc = FILTER_DESCRIPTIONS.get('all_files', 'All files')

@@ -5,9 +5,10 @@ from typing import Optional
 from PyQt6.QtCore import QObject, pyqtSignal, QUrl
 from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QFileDialog, QInputDialog, QLineEdit, QVBoxLayout
-from localization.manager import tr
+from core.managers.localization_manager import tr
 from config.constants import SAVE_SLOT_FINISH_MAP, UI_COLORS
 from utils.game_utils import is_valid_save_path, get_default_save_path
+
 
 class SaveManager(QObject):
     slots_updated = pyqtSignal()
@@ -179,7 +180,7 @@ class SaveManager(QObject):
             self.feedback_manager.show_error('errors.folder_creation_failed', error=str(e))
             return False
 
-    def prompt_collection_name(self, default: str='Collection') -> Optional[str]:
+    def prompt_collection_name(self, default: str = 'Collection') -> Optional[str]:
         dlg = QDialog(self.parent_widget)
         dlg.setWindowTitle(tr('dialogs.new_collection'))
         v, e = (QVBoxLayout(dlg), QLineEdit())
@@ -239,7 +240,7 @@ class SaveManager(QObject):
             self.feedback_manager.show_error('errors.deletion_failed', error=str(e))
             return False
 
-    def copy_between_storages(self, chapter: int, to_collection: bool, selected_slot: Optional[tuple[int, int]]=None):
+    def copy_between_storages(self, chapter: int, to_collection: bool, selected_slot: Optional[tuple[int, int]] = None):
         idx = self.app_state.current_collection_idx
         if idx == -1:
             return
@@ -439,14 +440,14 @@ class SaveManager(QObject):
         cols = self.list_collections()
         if not cols:
             return -1
-        choices = [tr('dialogs.main_save_slots')]
+        choices = [tr('dialogs.main_slots')]
         for col_folder in cols:
             col_name = col_folder.rsplit('_', 1)[0]
             choices.append(col_name)
-        choice, ok = QInputDialog.getItem(self.parent_widget, tr('dialogs.select_save_collection_title'), tr('dialogs.select_save_collection_question'), choices, 0, False)
+        choice, ok = QInputDialog.getItem(self.parent_widget, tr('dialogs.select_save_collection'), tr('dialogs.select_save_collection_question'), choices, 0, False)
         if not ok:
             return None
-        if choice == tr('dialogs.main_save_slots'):
+        if choice == tr('dialogs.main_slots'):
             return -1
         for idx, col_folder in enumerate(cols):
             col_name = col_folder.rsplit('_', 1)[0]

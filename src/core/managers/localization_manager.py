@@ -1,5 +1,6 @@
 import json
 import locale
+import logging
 import os
 import shutil
 from typing import Dict, Optional
@@ -8,8 +9,8 @@ from utils.path_utils import get_user_lang_dir, resource_path
 
 class LocalizationManager:
 
-    def __init__(self, lang_dir: Optional[str] = None):
-        self.internal_lang_dir = resource_path('localization/lang')
+    def __init__(self):
+        self.internal_lang_dir = resource_path('assets/lang')
         self.external_lang_dir = get_user_lang_dir()
         os.makedirs(self.external_lang_dir, exist_ok=True)
         self._sync_internal_languages()
@@ -25,13 +26,16 @@ class LocalizationManager:
             internal_path = os.path.join(self.internal_lang_dir, filename)
             external_path = os.path.join(self.external_lang_dir, filename)
             if filename.startswith('lang_') and filename.endswith('.json'):
-                internal_version = self._get_lang_version(internal_path)
-                external_version = self._get_lang_version(external_path)
-                if not external_version or (internal_version and internal_version >= external_version):
+                if not os.path.exists(external_path):
                     try:
                         shutil.copy2(internal_path, external_path)
                     except Exception as e:
-                        print(f"Could not copy internal file '{filename}' to external directory: {e}")
+                        logging.error(f"Could not copy internal file '{filename}' to external directory: {e}")
+                else:
+                    try:
+                        self._merge_lang_files(internal_path, external_path)
+                    except Exception as e:
+                        logging.error(f"Could not merge file '{filename}': {e}")
             elif not os.path.exists(external_path):
                 try:
                     if os.path.isdir(internal_path):
@@ -39,17 +43,47 @@ class LocalizationManager:
                     else:
                         shutil.copy2(internal_path, external_path)
                 except Exception as e:
-                    print(f"Could not copy internal file '{filename}' to external directory: {e}")
+                    logging.error(f"Could not copy internal file '{filename}' to external directory: {e}")
 
-    def _get_lang_version(self, file_path: str) -> Optional[str]:
-        if not os.path.exists(file_path):
-            return None
-        try:
-            with open(file_path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-            return data.get('metadata', {}).get('version')
-        except (json.JSONDecodeError, IOError):
-            return None
+    def _merge_lang_files(self, internal_path: str, external_path: str):
+        with open(internal_path, 'r', encoding='utf-8') as f:
+            internal_data = json.load(f)
+        with open(external_path, 'r', encoding='utf-8') as f:
+            external_data = json.load(f)
+        needs_update = False
+
+        def sync_dicts(internal_dict, external_dict):
+            nonlocal needs_update
+            keys_to_remove = []
+            for key in list(external_dict.keys()):
+                if key == 'metadata':
+                    continue
+                if key.startswith('_'):
+                    continue
+                if key not in internal_dict:
+                    keys_to_remove.append(key)
+                    needs_update = True
+            for key in keys_to_remove:
+                del external_dict[key]
+            for key, internal_value in internal_dict.items():
+                if key == 'metadata':
+                    continue
+                custom_key = f'_{key}'
+                if custom_key in external_dict:
+                    continue
+                if isinstance(internal_value, dict):
+                    if key not in external_dict or not isinstance(external_dict[key], dict):
+                        external_dict[key] = {}
+                        needs_update = True
+                    sync_dicts(internal_value, external_dict[key])
+                elif key not in external_dict or external_dict[key] != internal_value:
+                    external_dict[key] = internal_value
+                    needs_update = True
+        sync_dicts(internal_data, external_data)
+        external_data['metadata'] = internal_data.get('metadata', {})
+        if needs_update:
+            with open(external_path, 'w', encoding='utf-8') as f:
+                json.dump(external_data, f, ensure_ascii=False, indent=2)
 
     def _load_available_languages(self):
         self.available_languages = self._scan_lang_dir(self.external_lang_dir)
@@ -71,9 +105,12 @@ class LocalizationManager:
                     with open(lang_path, 'r', encoding='utf-8') as f:
                         data = json.load(f)
                     metadata = data.get('metadata', {})
-                    langs[lang_code] = {'name': metadata.get('language_name', lang_code.upper()), 'qt_translation': metadata.get('qt_translation', f'qtbase_{lang_code}'), 'font': metadata.get('font'), 'path': lang_path}
+                    font = metadata.get('_font') or metadata.get('font')
+                    qt_trans = metadata.get('_qt_translation') or metadata.get('qt_translation', f'qtbase_{lang_code}')
+                    lang_name = metadata.get('_language_name') or metadata.get('language_name', lang_code.upper())
+                    langs[lang_code] = {'name': lang_name, 'qt_translation': qt_trans, 'font': font, 'path': lang_path}
                 except (json.JSONDecodeError, IOError) as e:
-                    print(f'Error loading or parsing language file {filename}: {e}')
+                    logging.error(f'Error loading or parsing language file {filename}: {e}')
         return langs
 
     def get_available_languages(self) -> Dict[str, str]:
@@ -98,7 +135,7 @@ class LocalizationManager:
                 if lang_code in self.available_languages:
                     return lang_code
         except Exception as e:
-            print(f'Error detecting system language: {e}')
+            logging.warning(f'Error detecting system language: {e}')
         return 'en'
 
     def load_language(self, language_code: str) -> bool:
@@ -115,10 +152,11 @@ class LocalizationManager:
                 self.current_language = language_code
                 return True
         except Exception as e:
-            print(f'Error loading language {language_code}: {e}')
+            logging.error(f'Error loading language {language_code}: {e}')
             return False
 
     def merge_translations(self, new_translations: dict):
+
         def _update_dict(d, u):
             for k, v in u.items():
                 if isinstance(v, dict):
@@ -133,7 +171,12 @@ class LocalizationManager:
         value = self.translations
         try:
             for k in keys:
-                value = value[k]
+                if k in value:
+                    value = value[k]
+                elif f'_{k}' in value:
+                    value = value[f'_{k}']
+                else:
+                    raise KeyError(k)
             if not isinstance(value, str):
                 return f'[{key}]'
             value = self._process_escape_sequences(value)
@@ -174,7 +217,12 @@ def _fallback_tr(key: str, **kwargs) -> str:
         keys = key.split('.')
         value = en_translations
         for k in keys:
-            value = value[k]
+            if k in value:
+                value = value[k]
+            elif f'_{k}' in value:
+                value = value[f'_{k}']
+            else:
+                raise KeyError(k)
         if isinstance(value, str):
             return value.format(**kwargs) if kwargs else value
     except Exception:

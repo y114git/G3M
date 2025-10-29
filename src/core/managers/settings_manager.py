@@ -9,11 +9,12 @@ import zipfile
 from typing import Optional
 from PyQt6.QtCore import QObject, pyqtSignal
 from PyQt6.QtWidgets import QFileDialog, QApplication
-from localization.manager import tr, LocalizationManager
+from core.managers.localization_manager import tr, LocalizationManager
 from config.constants import LAUNCHER_VERSION, UI_COLORS
 from models.game_modes import DemoGameMode, UndertaleGameMode
 from utils.file_utils import get_file_filter
 from utils.game_utils import is_valid_game_path
+
 
 class SettingsManager(QObject):
     settings_changed = pyqtSignal()
@@ -393,19 +394,6 @@ class SettingsManager(QObject):
         self.theme_changed.emit()
         self.settings_changed.emit()
         self.feedback_manager.show_info('dialogs.success', tr('status.settings_reset_success'))
-
-    def on_toggle_direct_launch_for_slot(self, slot_id: int):
-        if not self.app_state.game_mode.direct_launch_allowed:
-            return
-        if self.app_state.local_config.get('launch_via_steam', False):
-            self.feedback_manager.show_warning('dialogs.incompatibility', tr('dialogs.direct_launch_steam_incompatible'))
-            return
-        if platform.system() == 'Darwin':
-            self.feedback_manager.show_warning('dialogs.incompatibility', tr('dialogs.direct_launch_macos_incompatible'))
-            return
-        self.app_state.local_config['direct_launch_slot_id'] = slot_id
-        self.write_local_config()
-        self.settings_changed.emit()
 
     def disable_direct_launch(self):
         self.app_state.local_config['direct_launch_slot_id'] = -1

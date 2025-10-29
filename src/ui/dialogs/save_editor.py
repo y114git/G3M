@@ -1,7 +1,7 @@
 import os
 import shutil
 from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QMessageBox, QTableWidget, QTableWidgetItem, QHeaderView
-from localization.manager import tr
+from core.managers.localization_manager import tr
 
 
 class SaveEditorDialog(QDialog):
@@ -66,4 +66,4 @@ class SaveEditorDialog(QDialog):
             path = os.path.dirname(self.file_path)
             QMessageBox.critical(self, tr('dialogs.access_error'), tr('dialogs.no_write_permissions', path=path))
         except Exception:
-            QMessageBox.critical(self, tr('dialogs.error'), tr('dialogs.save_file_error'))
+            QMessageBox.critical(self, tr('errors.error'), tr('dialogs.save_file_error'))

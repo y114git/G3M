@@ -61,17 +61,13 @@ class CustomizationManager(QObject):
         theme = THEMES['default']
         background_path = None
         background_disabled = self.app_state.local_config.get('background_disabled', False)
-
         if self.background_movie is not None:
             self.background_movie.stop()
             self.background_movie.deleteLater()
             self.background_movie = None
-
         self.background_pixmap = None
-
         if not background_disabled:
-            background_path = self.app_state.local_config.get('custom_background_path') or resource_path(f"resources/{theme.get('background', '')}")
-
+            background_path = self.app_state.local_config.get('custom_background_path') or resource_path(f"assets/{theme.get('background', '')}")
             if background_path and os.path.exists(background_path):
                 if background_path.lower().endswith('.gif'):
                     self.background_movie = QMovie(background_path)
@@ -85,7 +81,6 @@ class CustomizationManager(QObject):
                     self.background_pixmap = QPixmap(background_path)
                     if self.background_pixmap.isNull():
                         self.background_pixmap = None
-
         self.theme_applied.emit()
         return (self.background_movie, self.background_pixmap)
 
@@ -98,38 +93,23 @@ class CustomizationManager(QObject):
             bg_rgba = f'rgba({r}, {g}, {b}, 128)'
         else:
             bg_rgba = 'rgba(0, 0, 0, 128)'
-
         if search_container:
-            search_container.setStyleSheet(f'''
-            QWidget#search_mods_background {{
-                background-color: {bg_rgba};
-                border-radius: 10px;
-                margin: 5px;
-            }}
-        ''')
-
+            search_container.setStyleSheet(f'\n            QWidget#search_mods_background {{\n                background-color: {bg_rgba};\n                border-radius: 10px;\n                margin: 5px;\n            }}\n        ')
         if library_container:
-            library_container.setStyleSheet(f'''
-            QWidget#library_mods_background {{
-                background-color: {bg_rgba};
-                border-radius: 10px;
-                margin: 5px;
-            }}
-        ''')
+            library_container.setStyleSheet(f'\n            QWidget#library_mods_background {{\n                background-color: {bg_rgba};\n                border-radius: 10px;\n                margin: 5px;\n            }}\n        ')
 
     def start_background_music(self):
         try:
             music_path = self.get_background_music_path()
             if not music_path or not os.path.exists(music_path):
                 return
-
             self.stop_background_music()
-
             from playsound3 import playsound
             self._bg_music_running = True
             self._bg_music_instance = None
 
             class _MusicLoop(QThread):
+
                 def __init__(self, outer, path):
                     super().__init__()
                     self.outer, self.path = (outer, path)
@@ -151,13 +131,11 @@ class CustomizationManager(QObject):
                         except Exception:
                             time.sleep(3)
                             continue
-
             self._bg_music_thread = _MusicLoop(self, music_path)
             self._bg_music_thread.start()
             self.music_started.emit()
-
-        except Exception as e:
-            print(f'Error starting background music: {e}')
+        except Exception:
+            pass
 
     def stop_background_music(self):
         try:
@@ -172,20 +150,16 @@ class CustomizationManager(QObject):
                 except Exception:
                     pass
             self._bg_music_instance = None
-
             thr = getattr(self, '_bg_music_thread', None)
             if thr and thr.isRunning():
                 thr.wait(300)
             self._bg_music_thread = None
-
-        except Exception as e:
-            print(f'Error stopping background music: {e}')
-
+        except Exception:
+            pass
         try:
             if hasattr(self, 'bg_fallback_proc') and self.bg_fallback_proc:
                 if self.bg_fallback_proc.poll() is None:
                     self.bg_fallback_proc.terminate()
-
             if platform.system() == 'Windows':
                 try:
                     import winsound
@@ -203,7 +177,6 @@ class CustomizationManager(QObject):
             music_path = self.get_background_music_path()
             if not music_path or not os.path.exists(music_path):
                 return
-
             if self.app_state.initialization_completed and is_shown_to_user and is_visible:
                 self.start_background_music()
             else:
