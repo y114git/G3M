@@ -70,3 +70,59 @@ def get_xdelta_path():
                     logging.warning(f'Could not set executable permission on {xdelta_path}: {e}')
             return os.path.normpath(xdelta_path)
     return None
+
+
+def resolve_game_executable(base_dir: str, is_undertale: bool) -> str | None:
+    try:
+        if not base_dir or not os.path.isdir(base_dir):
+            return None
+        system = platform.system()
+        base_exe_name = 'UNDERTALE' if is_undertale else 'DELTARUNE'
+        if system == 'Windows':
+            exe_path = os.path.join(base_dir, f'{base_exe_name}.exe')
+            return exe_path if os.path.isfile(exe_path) else None
+        if system == 'Linux':
+            native_path = os.path.join(base_dir, base_exe_name)
+            if os.path.isfile(native_path) and os.access(native_path, os.X_OK):
+                return native_path
+            exe_path = os.path.join(base_dir, f'{base_exe_name}.exe')
+            return exe_path if os.path.isfile(exe_path) else None
+        if system == 'Darwin':
+            app_path = base_dir if base_dir.endswith('.app') and os.path.isdir(base_dir) else None
+            if not app_path:
+                app_names = ['UNDERTALE.app'] if is_undertale else ['DELTARUNE.app', 'DELTARUNEdemo.app']
+                for name in app_names:
+                    candidate = os.path.join(base_dir, name)
+                    if os.path.isdir(candidate):
+                        app_path = candidate
+                        break
+            return app_path
+        return None
+    except Exception:
+        return None
+
+
+def find_chapter_resource_dir(base_dir: str, chapter_id: int) -> str | None:
+    try:
+        if not base_dir:
+            return None
+        target_base = base_dir
+        if platform.system() == 'Darwin':
+            if not target_base.endswith('.app'):
+                for app_name in ('DELTARUNE.app', 'DELTARUNEdemo.app'):
+                    candidate = os.path.join(target_base, app_name)
+                    if os.path.isdir(candidate):
+                        target_base = candidate
+                        break
+            target_base = os.path.join(target_base, 'Contents', 'Resources')
+            if not os.path.isdir(target_base):
+                return None
+        if chapter_id in (-1, 0):
+            return target_base
+        chapter_prefix = f'chapter{chapter_id}_'
+        for entry in os.listdir(target_base):
+            if os.path.isdir(os.path.join(target_base, entry)) and entry.startswith(chapter_prefix):
+                return os.path.join(target_base, entry)
+        return None
+    except Exception:
+        return None

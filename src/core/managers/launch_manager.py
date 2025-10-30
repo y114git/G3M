@@ -223,7 +223,7 @@ class GameLauncher(QObject):
         use_steam = self.app_state.local_config.get('launch_via_steam', False)
         direct_launch_slot_id = self.app_state.local_config.get('direct_launch_slot_id', -1)
         is_chapter_mode = self.app_state.current_mode == 'chapter'
-        direct_launch = direct_launch_slot_id >= 0 and is_chapter_mode and self.app_state.game_mode.direct_launch_allowed and (platform.system() != 'Darwin')
+        direct_launch = direct_launch_slot_id >= 0 and direct_launch_slot_id != 0 and is_chapter_mode and self.app_state.game_mode.direct_launch_allowed and (platform.system() != 'Darwin')
         if use_steam:
             return {'target': f'steam://rungameid/{self.app_state.game_mode.steam_id}', 'cwd': None, 'type': 'webbrowser'}
         if direct_launch:
@@ -235,7 +235,11 @@ class GameLauncher(QObject):
         return {'target': launch_target, 'cwd': self._get_current_game_path(), 'type': 'subprocess'}
 
     def _handle_direct_launch(self, selected_tab_index: int) -> Optional[Dict[str, Any]]:
-        chapter_folder = self._get_target_dir(self.app_state.game_mode.get_chapter_id(selected_tab_index))
+        chapter_id = self.app_state.game_mode.get_chapter_id(selected_tab_index)
+        if chapter_id == 0:
+            self.status_changed.emit(tr('ui.direct_launch_menu_not_allowed'), UI_COLORS['status_warning'])
+            return None
+        chapter_folder = self._get_target_dir(chapter_id)
         source_exe = self._get_source_executable_path()
         use_custom_exe = self.app_state.local_config.get('use_custom_executable', False)
         if not chapter_folder or not source_exe:

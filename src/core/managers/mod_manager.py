@@ -5,11 +5,11 @@ import threading
 import zipfile
 import shutil
 import tempfile
-from typing import Dict
+from typing import Dict, Optional
 from PyQt6.QtCore import QObject, pyqtSignal
 from PyQt6.QtWidgets import QApplication
 from core.managers.localization_manager import tr
-from models.mod_models import ModInfo, ModChapterData, ModExtraFile  # noqa: F401 - used via globals()
+from models.mod_models import ModInfo, ModChapterData
 from threads.background_workers import InstallModsThread, UrlInstallThread
 from utils.file_utils import sanitize_filename
 from config.constants import UI_COLORS
@@ -561,3 +561,33 @@ class ModManager(QObject):
         if self.url_install_thread:
             self.url_install_thread.prompt_result = response
             self.url_install_thread.prompt_event.set()
+
+    def create_mod_object_from_info(self, mod_info: dict, all_mods: Optional[list] = None):
+        from models.mod_models import ModInfo
+        mod_key = mod_info.get('mod_key', '')
+        if all_mods:
+            for mod in all_mods:
+                if hasattr(mod, 'key') and mod.key == mod_key:
+                    return mod
+        return ModInfo(key=mod_key, name=mod_info.get('name', mod_key), version=mod_info.get('version', '1.0.0'), author=mod_info.get('author', tr('defaults.unknown')), tagline=mod_info.get('tagline', tr('defaults.no_description')), game_version=mod_info.get('game_version', '1.04'), description_url='', downloads=0, modgame=mod_info.get('modgame', 'deltarune'), is_verified=False, is_local_mod=mod_info.get('is_local_mod', False))
+
+
+def parse_mod_date(date_str: str) -> tuple[int, int, int, int, int]:
+    """Parse mod date string (format: 'DD.MM.YY HH:MM') into tuple (year, month, day, hour, minute)."""
+    if not date_str or date_str == 'N/A':
+        return (0, 0, 0, 0, 0)
+    try:
+        parts = date_str.split(' ')
+        if len(parts) >= 2:
+            date_part = parts[0]
+            time_part = parts[1]
+            day, month, year = map(int, date_part.split('.'))
+            hour, minute = map(int, time_part.split(':'))
+            if year < 50:
+                year += 2000
+            else:
+                year += 1900
+            return (year, month, day, hour, minute)
+    except Exception as e:
+        logging.debug(f"parse_mod_date failed for '{date_str}': {e}")
+    return (0, 0, 0, 0, 0)

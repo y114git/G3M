@@ -169,7 +169,7 @@ class ShortcutManager(QObject):
                         selections[chapter_id] = universal_key
                 else:
                     for key, mod_key in mods_settings.items():
-                        if key.isdigit() and mod_key and mod_key != 'no_change':
+                        if key.isdigit() and mod_key and (mod_key != 'no_change'):
                             chapter_id = int(key)
                             selections[chapter_id] = mod_key
                         elif key.isdigit():
@@ -181,7 +181,6 @@ class ShortcutManager(QObject):
                     raise Exception(tr('errors.mod_apply_error', error='Failed to prepare game files'))
         except Exception as e:
             raise Exception(tr('errors.mod_apply_error', error=str(e)))
-
 
     def launch_game_from_shortcut(self, launch_via_steam=False, use_custom_executable=False, custom_exec_path='', demo_custom_exec_path='', direct_launch_slot_id=-1):
         try:
@@ -196,7 +195,7 @@ class ShortcutManager(QObject):
             if launch_via_steam:
                 steam_app_id = self.app_state.game_mode.steam_id
                 webbrowser.open(f'steam://run/{steam_app_id}')
-            elif direct_launch_slot_id >= 0 and self.app_state.game_mode.direct_launch_allowed and platform.system() != 'Darwin':
+            elif direct_launch_slot_id >= 0 and self.app_state.game_mode.direct_launch_allowed and (platform.system() != 'Darwin'):
                 launch_config = game_launcher._handle_direct_launch(direct_launch_slot_id)
                 if launch_config:
                     subprocess.Popen([launch_config['target']], cwd=launch_config['cwd'])
@@ -272,4 +271,3 @@ class ShortcutManager(QObject):
         except Exception as e:
             self.status_changed.emit(tr('status.shortcut_creation_error', error=str(e)), UI_COLORS['status_error'])
             self.feedback_manager.show_error('errors.error', tr('errors.shortcut_creation_failed', error=str(e)))
-
