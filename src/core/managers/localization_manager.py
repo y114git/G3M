@@ -3,8 +3,10 @@ import locale
 import logging
 import os
 import shutil
-from typing import Dict, Optional
+from typing import Dict, Optional, Callable
 from utils.path_utils import get_user_lang_dir, resource_path
+from PyQt6.QtCore import QLibraryInfo
+from PyQt6.QtGui import QFontDatabase
 
 
 class LocalizationManager:
@@ -202,6 +204,47 @@ class LocalizationManager:
 
     def get_current_language_name(self) -> str:
         return self.available_languages.get(self.current_language, {}).get('name', self.current_language.upper())
+
+    def load_font(self) -> Optional[str]:
+        language = self.get_current_language()
+        font_path = self.get_font_path(language)
+        if font_path and os.path.exists(font_path):
+            font_id = QFontDatabase.addApplicationFont(font_path)
+            if font_id != -1:
+                families = QFontDatabase.applicationFontFamilies(font_id)
+                if families:
+                    return families[0]
+        return None
+
+    def update_qt_translations(self, language_code: str, qt_translator_holder: dict) -> bool:
+        from PyQt6.QtCore import QTranslator
+        from PyQt6.QtWidgets import QApplication
+        qt_translation = self.get_qt_translation_name(language_code)
+        if not qt_translation:
+            return False
+        app = QApplication.instance()
+        if app is None:
+            return False
+        if '_qt_translator' in qt_translator_holder and qt_translator_holder['_qt_translator']:
+            app.removeTranslator(qt_translator_holder['_qt_translator'])
+        qt_translator_holder['_qt_translator'] = QTranslator()
+        if qt_translator_holder['_qt_translator'].load(qt_translation, QLibraryInfo.path(QLibraryInfo.LibraryPath.TranslationsPath)):
+            app.installTranslator(qt_translator_holder['_qt_translator'])
+            return True
+        return False
+
+    def initialize_localization(self, local_config: dict, config_path: str, write_config_callback: Callable, write_json_callback: Callable) -> str:
+        saved_language = local_config.get('language')
+        if not saved_language or saved_language not in self.get_available_languages():
+            saved_language = self.detect_system_language()
+            local_config['language'] = saved_language
+            write_json_callback(config_path, local_config)
+        if not self.load_language(saved_language):
+            saved_language = self.detect_system_language()
+            self.load_language(saved_language)
+            local_config['language'] = saved_language
+            write_config_callback()
+        return saved_language
 
 
 localization_manager = LocalizationManager()

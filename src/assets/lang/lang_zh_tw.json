@@ -41,6 +41,7 @@
     "details_button": "詳情",
     "direct_launch": "直接啟動",
     "direct_launch_steam_conflict": "直接啟動與「透過Steam啟動」不相容。請先在設定中禁用「透過Steam啟動」。",
+    "direct_launch_menu_not_allowed": "無法為主選單啟用直接啟動。主選單是預設入口點，不需要直接啟動。",
     "disable_direct_launch": "禁用第{chapter}章的直接啟動？",
     "downloads_count": "您的模組下載次數：{count}",
     "downloads_label": "下載次數：",
@@ -290,6 +291,7 @@
     "all_mods": "所有模組"
   },
   "dialogs": {
+    "theme_choice": "選擇操作：導入或導出？",
     "create_shortcut_question": "建立捷徑？",
     "access_error": "訪問錯誤",
     "additional_collection": "附加存檔集",

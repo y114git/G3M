@@ -41,6 +41,7 @@
     "details_button": "Подробнее",
     "direct_launch": "Прямой запуск",
     "direct_launch_steam_conflict": "Прямой запуск несовместим с 'Запуском через Steam'. Пожалуйста, сначала отключите 'Запуск через Steam' в настройках.",
+    "direct_launch_menu_not_allowed": "Прямой запуск нельзя включить для Меню. Меню является точкой входа по умолчанию и не требует прямого запуска.",
     "disable_direct_launch": "Отключить прямой запуск для {chapter} главы?",
     "downloads_count": "Количество скачиваний вашего мода: {count}",
     "downloads_label": "Скачиваний:",
@@ -290,6 +291,7 @@
     "all_mods": "Все моды"
   },
   "dialogs": {
+    "theme_choice": "Выберите действие: Импорт или Экспорт?",
     "create_shortcut_question": "Создать ярлык?",
     "access_error": "Ошибка доступа",
     "additional_collection": "Дополнительная коллекция",

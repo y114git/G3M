@@ -41,6 +41,7 @@
     "details_button": "详情",
     "direct_launch": "直接启动",
     "direct_launch_steam_conflict": "直接启动与「通过Steam启动」不兼容。请先在设置中禁用「通过Steam启动」。",
+    "direct_launch_menu_not_allowed": "无法为主菜单启用直接启动。主菜单是默认入口点，不需要直接启动。",
     "disable_direct_launch": "禁用第{chapter}章的直接启动？",
     "downloads_count": "您的模组下载次数：{count}",
     "downloads_label": "下载次数：",
@@ -290,6 +291,7 @@
     "all_mods": "所有模组"
   },
   "dialogs": {
+    "theme_choice": "选择操作：导入或导出？",
     "create_shortcut_question": "创建快捷方式？",
     "access_error": "访问错误",
     "additional_collection": "附加存档集",

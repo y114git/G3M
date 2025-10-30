@@ -41,6 +41,7 @@
     "details_button": "Details",
     "direct_launch": "Direct Launch",
     "direct_launch_steam_conflict": "Direct launch is incompatible with 'Launch via Steam'. Please disable 'Launch via Steam' in the settings first.",
+    "direct_launch_menu_not_allowed": "Direct launch cannot be enabled for Menu. The menu is the default entry point and does not require direct launch.",
     "disable_direct_launch": "Disable direct launch for Chapter {chapter}?",
     "downloads_count": "Your mod downloads: {count}",
     "downloads_label": "Downloads:",
@@ -290,6 +291,7 @@
     "all_mods": "All mods"
   },
   "dialogs": {
+    "theme_choice": "Choose an action: Import or Export?",
     "create_shortcut_question": "Create Shortcut?",
     "access_error": "Access Error",
     "additional_collection": "Additional collection",

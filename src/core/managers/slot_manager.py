@@ -126,6 +126,11 @@ class SlotManager(QObject):
         chapter_names = {0: tr('chapters.menu'), 1: tr('tabs.chapter_1'), 2: tr('tabs.chapter_2'), 3: tr('tabs.chapter_3'), 4: tr('tabs.chapter_4')}
         return chapter_names.get(chapter_id, str(chapter_id + 1))
 
+    def _get_chapter_number_for_placeholder(self, chapter_id: int) -> str:
+        if chapter_id == 0:
+            return tr('chapters.menu')
+        return str(chapter_id)
+
     def on_slot_clicked(self, slot_frame: SlotFrame):
         is_chapter_mode = self.app_state.current_mode == 'chapter'
         if not is_chapter_mode:
@@ -153,6 +158,9 @@ class SlotManager(QObject):
     def on_slot_frame_double_clicked(self, slot_frame: SlotFrame):
         if slot_frame.chapter_id < 0:
             return
+        if slot_frame.chapter_id == 0:
+            self.feedback_manager.show_info('ui.direct_launch', tr('ui.direct_launch_menu_not_allowed'))
+            return
         use_steam = self.app_state.local_config.get('launch_via_steam', False)
         direct_launch_slot_id = self.app_state.local_config.get('direct_launch_slot_id', -1)
         current_is_direct = slot_frame.chapter_id == direct_launch_slot_id
@@ -160,12 +168,12 @@ class SlotManager(QObject):
             if use_steam:
                 self.feedback_manager.show_warning('ui.direct_launch', tr('ui.direct_launch_steam_conflict'))
                 return
-            chapter_name = self._get_chapter_name(slot_frame.chapter_id)
-            if self.feedback_manager.ask_question('ui.direct_launch', 'ui.enable_direct_launch', '', False, chapter=chapter_name):
+            chapter_number = self._get_chapter_number_for_placeholder(slot_frame.chapter_id)
+            if self.feedback_manager.ask_question('ui.direct_launch', 'ui.enable_direct_launch', '', False, chapter=chapter_number):
                 self.toggle_direct_launch_for_slot(slot_frame.chapter_id)
         else:
-            chapter_name = self._get_chapter_name(slot_frame.chapter_id)
-            if self.feedback_manager.ask_question('ui.direct_launch', 'ui.disable_direct_launch', '', False, chapter=chapter_name):
+            chapter_number = self._get_chapter_number_for_placeholder(slot_frame.chapter_id)
+            if self.feedback_manager.ask_question('ui.direct_launch', 'ui.disable_direct_launch', '', False, chapter=chapter_number):
                 self.toggle_direct_launch_for_slot(-1)
 
     def assign_mod_to_slot(self, slot_frame: SlotFrame, mod_data, save_state: bool = True):
@@ -307,7 +315,7 @@ class SlotManager(QObject):
                     continue
             elif mod_modgame != 'deltarune':
                 continue
-            mod_data = self.parent_widget._create_mod_object_from_info(mod_info)
+            mod_data = self.mod_manager.create_mod_object_from_info(mod_info, getattr(self.app_state, 'all_mods', None))
             if mod_data and (not self.find_mod_in_slots(mod_data)):
                 available_mods.append(mod_data)
         if not available_mods:
@@ -419,6 +427,9 @@ class SlotManager(QObject):
                     indicator_data['chapter_label'].setStyleSheet(f'color: {main_text_color}; font-size: 14px; font-weight: bold;')
 
     def toggle_direct_launch_for_slot(self, slot_id: int):
+        if slot_id == 0:
+            self.feedback_manager.show_info('ui.direct_launch', tr('ui.direct_launch_menu_not_allowed'))
+            return
         self.app_state.local_config['direct_launch_slot_id'] = slot_id
         self.settings_manager.write_local_config()
         self.update_all_slots_visual_state()
@@ -503,12 +514,12 @@ class SlotManager(QObject):
                 for installed_mod in installed_mods:
                     installed_mod_key = installed_mod.get('mod_key') or installed_mod.get('key') or installed_mod.get('name')
                     if installed_mod_key == mod_key:
-                        mod_data = self.parent_widget._create_mod_object_from_info(installed_mod)
+                        mod_data = self.mod_manager.create_mod_object_from_info(installed_mod, getattr(self.app_state, 'all_mods', None))
                         break
             if not mod_data and self.parent_widget:
                 mod_config = self.mod_manager.get_mod_config(mod_key)
                 if mod_config:
-                    mod_data = self.parent_widget._create_mod_object_from_info(mod_config)
+                    mod_data = self.mod_manager.create_mod_object_from_info(mod_config, getattr(self.app_state, 'all_mods', None))
             if mod_data:
                 if is_chapter_mode:
                     self.assign_mod_to_slot(slot_frame, mod_data, save_state=False)

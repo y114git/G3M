@@ -1,13 +1,14 @@
 import os
 import time
 import platform
-from typing import Optional
-from PyQt6.QtCore import QObject, QThread, pyqtSignal, QTimer
-from PyQt6.QtGui import QMovie, QPixmap
-from PyQt6.QtWidgets import QWidget
+from typing import Optional, Callable
+from PyQt6.QtCore import QObject, QThread, pyqtSignal, QTimer, Qt
+from PyQt6.QtGui import QMovie, QPixmap, QColor
+from PyQt6.QtWidgets import QWidget, QLabel
 from config.constants import THEMES
 from utils.path_utils import resource_path
 from ui.styling import get_theme_color
+from core.managers.localization_manager import tr
 
 
 class CustomizationManager(QObject):
@@ -47,15 +48,12 @@ class CustomizationManager(QObject):
     def get_background_music_button_text(self) -> str:
         mp3 = os.path.join(self.app_state.config_dir, 'custom_background_music.mp3')
         wav = os.path.join(self.app_state.config_dir, 'custom_background_music.wav')
-        if os.path.exists(mp3):
-            return os.path.basename(mp3)
-        if os.path.exists(wav):
-            return os.path.basename(wav)
-        return ''
+        has_file = os.path.exists(mp3) or os.path.exists(wav)
+        return tr('buttons.remove_background_music') if has_file else tr('buttons.select_background_music')
 
     def get_startup_sound_button_text(self) -> str:
         path = self.get_startup_sound_path()
-        return os.path.basename(path) if path else ''
+        return tr('buttons.remove_startup_sound') if path else tr('buttons.select_startup_sound')
 
     def apply_theme(self, widget: QWidget) -> tuple[Optional[QMovie], Optional[QPixmap]]:
         theme = THEMES['default']
@@ -183,6 +181,62 @@ class CustomizationManager(QObject):
                 QTimer.singleShot(500, lambda: self.maybe_start_background_music(is_shown_to_user, is_visible))
         except Exception:
             pass
+
+    def load_custom_style_settings(self, color_widgets: dict, apply_theme_callback: Optional[Callable] = None):
+        theme_defaults = THEMES['default']
+        for key, widget in color_widgets.items():
+            config_key = f'custom_color_{key}'
+            placeholder = theme_defaults['colors'].get(key, '#000000')
+            widget.setText(self.app_state.local_config.get(config_key, ''))
+            widget.setPlaceholderText(placeholder)
+        if apply_theme_callback:
+            apply_theme_callback()
+
+    def update_mod_plaques_styles(self, mod_list_widget=None, installed_mods_widget=None):
+        from ui.widgets.mod_plaque_widget import ModPlaqueWidget
+        from ui.widgets.installed_mod_widget import InstalledModWidget
+        if mod_list_widget:
+            layout = mod_list_widget.layout()
+            if layout:
+                for i in range(layout.count() - 1):
+                    item = layout.itemAt(i)
+                    if item and item.widget():
+                        widget = item.widget()
+                        if isinstance(widget, ModPlaqueWidget):
+                            widget._update_style()
+        if installed_mods_widget:
+            layout = installed_mods_widget.layout()
+            if layout:
+                for i in range(layout.count() - 1):
+                    item = layout.itemAt(i)
+                    if item and item.widget():
+                        widget = item.widget()
+                        if isinstance(widget, InstalledModWidget):
+                            widget._update_style()
+
+    def load_launcher_icon(self, icon_label: QLabel):
+        try:
+            splash_path = resource_path('assets/images/splash.png')
+            if os.path.exists(splash_path):
+                pixmap = QPixmap(splash_path)
+                if not pixmap.isNull():
+                    target_w, target_h = (200, 60)
+                    scaled_pixmap = pixmap.scaled(target_w, target_h, Qt.AspectRatioMode.KeepAspectRatioByExpanding, Qt.TransformationMode.SmoothTransformation)
+                    x = max(0, (scaled_pixmap.width() - target_w) // 2)
+                    y = max(0, (scaled_pixmap.height() - target_h) // 2)
+                    cropped = scaled_pixmap.copy(x, y, target_w, target_h)
+                    icon_label.setFixedSize(target_w, target_h)
+                    icon_label.setScaledContents(False)
+                    icon_label.setPixmap(cropped)
+                    return
+        except Exception:
+            pass
+        target_w, target_h = (200, 60)
+        fallback_pixmap = QPixmap(target_w, target_h)
+        fallback_pixmap.fill(QColor('#333'))
+        icon_label.setFixedSize(target_w, target_h)
+        icon_label.setScaledContents(False)
+        icon_label.setPixmap(fallback_pixmap)
 
     def cleanup(self):
         self.stop_background_music()

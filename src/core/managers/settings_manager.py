@@ -369,7 +369,11 @@ class SettingsManager(QObject):
                         elif filename.startswith('startup_sound.'):
                             shutil.copy2(src_path, os.path.join(self.app_state.config_dir, f'custom_startup_sound{os.path.splitext(filename)[1]}'))
             self.write_local_config()
+            self.app_state.local_config['first_launch_splash_shown'] = True
+            self.app_state.local_config['disable_splash'] = True
+            self.write_local_config()
             self.theme_changed.emit()
+            self.settings_changed.emit()
             self.feedback_manager.show_info('dialogs.success', tr('dialogs.theme_imported_success'))
         except Exception as e:
             self.feedback_manager.show_error('dialogs.error', tr('dialogs.theme_import_failed', error=str(e)))

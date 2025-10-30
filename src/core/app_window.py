@@ -14,7 +14,7 @@ from typing import Callable, Optional, Dict
 import logging
 import requests
 from PyQt6.QtCore import QTranslator, Qt, QEvent, QThread, QTimer, pyqtSignal
-from PyQt6.QtGui import QColor, QFont, QFontDatabase, QIcon, QMovie, QPainter, QPixmap
+from PyQt6.QtGui import QColor, QFont, QIcon, QMovie, QPainter, QPixmap
 from PyQt6.QtWidgets import QApplication, QCheckBox, QDialog, QDialogButtonBox, QFileDialog, QFrame, QLabel, QLineEdit, QMessageBox, QProgressBar, QPushButton, QTabWidget, QTextBrowser, QVBoxLayout, QWidget, QHBoxLayout, QSizePolicy, QInputDialog, QColorDialog, QListWidget, QScrollArea
 from core.managers.localization_manager import localization_manager, tr
 from models.game_modes import FullGameMode, DemoGameMode, UndertaleGameMode
@@ -23,6 +23,7 @@ from utils.file_utils import autodetect_path
 from utils.game_utils import is_game_running, is_valid_game_path
 from utils.path_utils import get_user_data_root, resource_path, get_launcher_dir, get_legacy_ylauncher_path, get_user_plugins_dir
 from utils.network_utils import check_internet_connection
+from core.managers.mod_manager import parse_mod_date
 from threads.fetch_mods import FetchModsThread
 from threads.background_workers import PresenceWorker, FetchChangelogThread, BgLoader, FullInstallThread, InstallModsThread, FetchHelpContentThread
 from ui.styling import get_theme_color, clear_layout_widgets, load_mod_icon_universal, show_empty_message_in_layout
@@ -49,6 +50,7 @@ from core.managers.plugin_manager import PluginManager
 from core.managers.customization_manager import CustomizationManager
 from core.managers.slot_manager import SlotManager
 from core.managers.shortcut_manager import ShortcutManager
+from core.managers.window_geometry_manager import WindowGeometryManager
 _translator = QTranslator()
 _lock_file = None
 
@@ -120,6 +122,7 @@ class AppWindow(QWidget):
         self.feedback_manager.status_updated.connect(self.update_status_signal.emit)
         self.settings_manager.language_changed.connect(lambda _: self._retranslate_ui())
         self.settings_manager.theme_changed.connect(self.apply_theme)
+        self.settings_manager.theme_changed.connect(self._on_theme_changed_by_manager)
         self.settings_manager.restart_required.connect(lambda msg: self.feedback_manager.show_info('dialogs.restart_required', msg))
         self.settings_manager.status_changed.connect(self.update_status_signal.emit)
         self.mod_manager = ModManager(self.app_state, self.feedback_manager, self)
@@ -144,6 +147,7 @@ class AppWindow(QWidget):
         self.plugin_manager = PluginManager(self.app_state, self)
         self.customization_manager = CustomizationManager(self.app_state, self)
         self.slot_manager = SlotManager(self.app_state, self.mod_manager, self.feedback_manager, self.settings_manager, self)
+        self.window_geometry_manager = WindowGeometryManager(self.app_state, self.settings_manager, self)
         self.slot_manager.slots_updated.connect(self._on_slot_manager_slots_updated)
         self.slot_manager.slot_state_changed.connect(lambda slot_id: self._refresh_slot_status_display(self.app_state.slots.get(slot_id)))
         self.slot_manager.action_button_update_needed.connect(self._update_action_button_state)
@@ -172,12 +176,7 @@ class AppWindow(QWidget):
         self.initialization_timer.setSingleShot(True)
         self.initialization_timer.timeout.connect(self._force_finish_initialization)
         self.initialization_timer.start(5000)
-        if (saved := self.app_state.local_config.get('window_geometry')):
-            from PyQt6.QtCore import QByteArray
-            try:
-                self.restoreGeometry(QByteArray.fromHex(saved.encode()))
-            except Exception:
-                pass
+        self.window_geometry_manager.load_window_geometry(self)
         if not self.app_state.local_config.get('first_launch_splash_shown', False):
             self.initialization_finished.connect(self._handle_first_launch_settings)
 
@@ -213,7 +212,7 @@ class AppWindow(QWidget):
             settings_json = base64.b64decode(args.shortcut_launch).decode('utf-8')
             settings = json.loads(settings_json)
         except Exception as e:
-            print(tr('startup.shortcut_settings_read_error', error=str(e)))
+            logging.error(f'Shortcut settings read error: {e}')
             sys.exit(1)
         self._load_local_data()
         self.mod_manager.load_local_mods()
@@ -231,7 +230,7 @@ class AppWindow(QWidget):
             direct_launch_slot_id = settings.get('direct_launch_slot_id', -1)
             current_game_path = self._get_current_game_path()
             if not current_game_path or not os.path.exists(current_game_path):
-                print(tr('errors.game_files_launch_not_found'))
+                logging.error('Game files not found for launch')
                 sys.exit(1)
             mods_settings = settings.get('mods', {})
             if not mods_settings:
@@ -239,7 +238,7 @@ class AppWindow(QWidget):
             self.shortcut_manager.apply_shortcut_mods(mods_settings)
             self.shortcut_manager.launch_game_from_shortcut(launch_via_steam=launch_via_steam, use_custom_executable=use_custom_executable, custom_exec_path=custom_exec_path, demo_custom_exec_path=demo_custom_exec_path, direct_launch_slot_id=direct_launch_slot_id)
         except Exception as e:
-            print(tr('startup.launch_error', error=str(e)))
+            logging.error(f'Launch error: {e}')
             sys.exit(1)
 
     def _set_install_buttons_enabled(self, enabled: bool):
@@ -317,7 +316,7 @@ class AppWindow(QWidget):
         self.launcher_icon_label = QLabel(self.top_panel_widget)
         self.launcher_icon_label.setFixedSize(225, 80)
         self.launcher_icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._load_launcher_icon()
+        self.customization_manager.load_launcher_icon(self.launcher_icon_label)
         self.bottom_widget = QFrame()
         self.bottom_widget.setObjectName('bottom_widget')
         self.bottom_frame = QVBoxLayout(self.bottom_widget)
@@ -514,9 +513,9 @@ class AppWindow(QWidget):
         self.disable_splash_checkbox.stateChanged.connect(self._on_toggle_disable_splash)
         self.back_button_cust.clicked.connect(self._go_back_to_settings_menu)
         self.change_background_button.clicked.connect(self._on_background_button_click)
-        self.background_music_button.setText(self._get_background_music_button_text())
+        self.background_music_button.setText(self.customization_manager.get_background_music_button_text())
         self.background_music_button.clicked.connect(self._on_background_music_button_click)
-        self.startup_sound_button.setText(self._get_startup_sound_button_text())
+        self.startup_sound_button.setText(self.customization_manager.get_startup_sound_button_text())
         self.startup_sound_button.clicked.connect(self._on_startup_sound_button_click)
         self.theme_button.clicked.connect(self._on_theme_button_click)
 
@@ -662,7 +661,7 @@ class AppWindow(QWidget):
             self.initialization_timer.stop()
         self.app_state.initialization_completed = True
         self.initialization_finished.emit()
-        self._maybe_start_background_music()
+        self.customization_manager.maybe_start_background_music(getattr(self, 'is_shown_to_user', False), self.isVisible())
 
     def _force_finish_initialization(self):
         if self.app_state.initialization_completed:
@@ -671,7 +670,7 @@ class AppWindow(QWidget):
         self.app_state.initialization_completed = True
         self.initialization_finished.emit()
         if not is_game_running():
-            self._maybe_start_background_music()
+            self.customization_manager.maybe_start_background_music(getattr(self, 'is_shown_to_user', False), self.isVisible())
 
     def _update_saves_button_state(self):
         game_type = self.game_type_combo.currentData()
@@ -835,6 +834,7 @@ class AppWindow(QWidget):
             if sort_type == 0:
                 installed_mods.sort(key=lambda mod: mod.get('name', '').lower(), reverse=reverse)
             elif sort_type == 1:
+
                 def get_sort_date(mod):
                     if mod.get('is_local_mod'):
                         return mod.get('created_date', '0')
@@ -866,12 +866,12 @@ class AppWindow(QWidget):
                 if search_text not in mod_name_lower and search_text not in mod_tagline:
                     continue
             if selected_chapter_id is not None:
-                mod_data_check = self._create_mod_object_from_info(mod_info)
+                mod_data_check = self.mod_manager.create_mod_object_from_info(mod_info, getattr(self.app_state, 'all_mods', None))
                 if mod_data_check and (not self.mod_manager.mod_has_files_for_chapter(mod_data_check, selected_chapter_id)):
                     continue
             is_local = mod_info.get('is_local_mod', False)
             is_available = mod_info.get('is_available_on_server', True)
-            mod_data = self._create_mod_object_from_info(mod_info)
+            mod_data = self.mod_manager.create_mod_object_from_info(mod_info, getattr(self.app_state, 'all_mods', None))
             if mod_data:
                 mod_widget = InstalledModWidget(mod_data, is_local, is_available, parent=self)
                 mod_widget.clicked.connect(self._on_installed_mod_clicked)
@@ -1013,7 +1013,7 @@ class AppWindow(QWidget):
                     public_mod = next((mod for mod in self.app_state.all_mods if mod.key == mod_info.get('key')), None)
                     if public_mod:
                         has_update = any((self.mod_manager.mod_has_files_for_chapter(public_mod, i) and self.mod_manager.get_mod_status(public_mod, i) == 'update' for i in range(5)))
-                mod_data = self._create_mod_object_from_info(mod_info)
+                mod_data = self.mod_manager.create_mod_object_from_info(mod_info, getattr(self.app_state, 'all_mods', None))
                 if mod_data:
                     mod_widget = InstalledModWidget(mod_data, is_local, is_available, has_update, parent=self)
                     mod_widget.clicked.connect(self._on_installed_mod_clicked)
@@ -1078,7 +1078,7 @@ class AppWindow(QWidget):
         if metadata_updated:
             self.mod_manager._write_metadata(mods_metadata)
         for orphaned_key in orphaned_keys:
-            dummy_mod_data = self._create_mod_object_from_info({'mod_key': orphaned_key, 'name': 'Orphaned Mod'})
+            dummy_mod_data = self.mod_manager.create_mod_object_from_info({'mod_key': orphaned_key, 'name': 'Orphaned Mod'}, getattr(self.app_state, 'all_mods', None))
             if not dummy_mod_data:
                 continue
             self.slot_manager.remove_mod_from_all_slots(dummy_mod_data)
@@ -1138,15 +1138,6 @@ class AppWindow(QWidget):
         if metadata_updated:
             self.mod_manager._write_metadata(mods_metadata)
         return installed_mods
-
-    def _create_mod_object_from_info(self, mod_info):
-        mod_key = mod_info.get('mod_key', '')
-        if hasattr(self.app_state, 'all_mods') and self.app_state.all_mods:
-            for mod in self.app_state.all_mods:
-                if hasattr(mod, 'key') and mod.key == mod_key:
-                    return mod
-        from models.mod_models import ModInfo
-        return ModInfo(key=mod_key, name=mod_info.get('name', mod_key), version=mod_info.get('version', '1.0.0'), author=mod_info.get('author', tr('defaults.unknown')), tagline=mod_info.get('tagline', tr('defaults.no_description')), game_version=mod_info.get('game_version', '1.04'), description_url='', downloads=0, modgame=mod_info.get('modgame', 'deltarune'), is_verified=False, is_local_mod=mod_info.get('is_local_mod', False))
 
     def _on_installed_mod_clicked(self, mod_data):
         for i in range(self.installed_mods_layout.count() - 1):
@@ -1587,29 +1578,9 @@ class AppWindow(QWidget):
         if sort_type == 0:
             self.filtered_mods.sort(key=lambda mod: getattr(mod, 'downloads', 0), reverse=reverse)
         elif sort_type == 1:
-            self.filtered_mods.sort(key=lambda mod: self._parse_date(getattr(mod, 'last_updated', '')), reverse=reverse)
+            self.filtered_mods.sort(key=lambda mod: parse_mod_date(getattr(mod, 'last_updated', '')), reverse=reverse)
         elif sort_type == 2:
-            self.filtered_mods.sort(key=lambda mod: self._parse_date(getattr(mod, 'created_date', '')), reverse=reverse)
-
-    def _parse_date(self, date_str):
-        if not date_str or date_str == 'N/A':
-            return (0, 0, 0, 0, 0)
-        try:
-            parts = date_str.split(' ')
-            if len(parts) >= 2:
-                date_part = parts[0]
-                time_part = parts[1]
-                day, month, year = map(int, date_part.split('.'))
-                hour, minute = map(int, time_part.split(':'))
-                if year < 50:
-                    year += 2000
-                else:
-                    year += 1900
-                return (year, month, day, hour, minute)
-        except Exception as e:
-            logging.debug(f"_parse_date failed for '{date_str}': {e}")
-            pass
-        return (0, 0, 0, 0, 0)
+            self.filtered_mods.sort(key=lambda mod: parse_mod_date(getattr(mod, 'created_date', '')), reverse=reverse)
 
     def _update_mod_display(self):
         clear_layout_widgets(self.mod_list_layout, keep_last_n=1)
@@ -1830,21 +1801,8 @@ class AppWindow(QWidget):
             return
         self._update_action_button_state()
 
-    def _save_window_geometry(self):
-        geom_ba = self.saveGeometry()
-        self.app_state.local_config['window_geometry'] = geom_ba.toHex().data().decode()
-        self._write_local_config()
-
     def load_font(self):
-        language = localization_manager.get_current_language()
-        font_path = localization_manager.get_font_path(language)
-        self.custom_font_family = None
-        if font_path and os.path.exists(font_path):
-            font_id = QFontDatabase.addApplicationFont(font_path)
-            if font_id != -1:
-                families = QFontDatabase.applicationFontFamilies(font_id)
-                if families:
-                    self.custom_font_family = families[0]
+        self.custom_font_family = localization_manager.load_font()
 
     def apply_theme(self):
         theme = THEMES['default']
@@ -1893,25 +1851,13 @@ class AppWindow(QWidget):
             if style:
                 style.unpolish(widget)
                 style.polish(widget)
-        self._update_mod_plaques_styles()
-        self._update_translucent_backgrounds()
+        mod_list = getattr(self, 'mod_list_widget', None)
+        installed_mods = getattr(self, 'installed_mods_widget', None)
+        self.customization_manager.update_mod_plaques_styles(mod_list, installed_mods)
+        search_container = getattr(self, 'search_container', None)
+        library_container = getattr(self, 'installed_mods_container', None)
+        self.customization_manager.update_translucent_backgrounds(search_container, library_container)
         self.update()
-
-    def _update_translucent_backgrounds(self):
-        bg_color = get_theme_color(self.app_state.local_config, 'background', '#000000')
-        if bg_color.startswith('#'):
-            r = int(bg_color[1:3], 16)
-            g = int(bg_color[3:5], 16)
-            b = int(bg_color[5:7], 16)
-            bg_rgba = f'rgba({r}, {g}, {b}, 128)'
-        else:
-            bg_rgba = 'rgba(0, 0, 0, 128)'
-        if hasattr(self, 'search_container'):
-            self.search_container.setStyleSheet(f'\n            QWidget#search_mods_background {{\n                background-color: {bg_rgba};\n                border-radius: 10px;\n                margin: 5px;\n            }}\n        ')
-        if hasattr(self, 'active_slots_widget'):
-            self.active_slots_widget.setStyleSheet(f'\n            QWidget#slots_background {{\n                background-color: {bg_rgba};\n                border-radius: 10px;\n                margin: 5px;\n            }}\n        ')
-        if hasattr(self, 'installed_mods_container'):
-            self.installed_mods_container.setStyleSheet(f'\n            QWidget#mods_background {{\n                background-color: {bg_rgba};\n                border-radius: 10px;\n                margin: 5px;\n            }}\n        ')
 
     def _configure_hidden_tab_bar(self, tab_widget: QTabWidget):
         bar = tab_widget.tabBar()
@@ -2072,21 +2018,10 @@ class AppWindow(QWidget):
         self.app_state.current_settings_page = page
 
     def _lock_window_size(self):
-        try:
-            sz = self.size()
-            self._locked_size = sz
-            self.setMinimumSize(sz)
-            self.setMaximumSize(sz)
-        except Exception:
-            pass
+        self.window_geometry_manager.lock_window_size(self)
 
     def _unlock_window_size(self):
-        try:
-            self.setMinimumSize(0, 0)
-            self.setMaximumSize(16777215, 16777215)
-            self._locked_size = None
-        except Exception:
-            pass
+        self.window_geometry_manager.unlock_window_size(self)
 
     def _go_back_or_to_main_menu(self):
         if hasattr(self, 'settings_nav_stack') and self.app_state.settings_nav_stack:
@@ -2121,7 +2056,7 @@ class AppWindow(QWidget):
         super().paintEvent(event)
 
     def _on_reset_settings_click(self):
-        self._stop_background_music()
+        self.customization_manager.stop_background_music()
         callbacks = {'migrate_config': lambda: (self._load_local_data(), self.settings_manager.migrate_config_if_needed())}
         self.settings_manager.on_reset_settings_click(callbacks)
         self.launch_via_steam_checkbox.setChecked(False)
@@ -2139,10 +2074,10 @@ class AppWindow(QWidget):
         self.slot_manager.save_slots_state()
         self.slot_manager.load_slots_state()
         self._update_settings_page_visibility()
-        self._load_custom_style_settings()
+        self.customization_manager.load_custom_style_settings(self.color_widgets, self.apply_theme)
         self._update_action_button_state()
-        self.background_music_button.setText(self._get_background_music_button_text())
-        self.startup_sound_button.setText(self._get_startup_sound_button_text())
+        self.background_music_button.setText(self.customization_manager.get_background_music_button_text())
+        self.startup_sound_button.setText(self.customization_manager.get_startup_sound_button_text())
 
     def _on_background_button_click(self):
         self.settings_manager.on_background_button_click()
@@ -2170,7 +2105,7 @@ class AppWindow(QWidget):
             self.settings_widget.setVisible(True)
             self._switch_settings_page(self.settings_menu_page)
             self._update_settings_page_visibility()
-            self._load_custom_style_settings()
+            self.customization_manager.load_custom_style_settings(self.color_widgets, self.apply_theme)
             self._update_status(tr('status.launcher_settings'), UI_COLORS['status_info'])
         else:
             self.settings_button.setText(tr('ui.settings_title'))
@@ -2250,184 +2185,19 @@ class AppWindow(QWidget):
                         filter_bg_color = self.app_state.local_config.get('custom_color_background') or 'rgba(0, 0, 0, 150)'
                         filter_border_color = self.app_state.local_config.get('custom_color_border') or 'white'
                         filters.setStyleSheet(f'QFrame#filters {{ background-color: {filter_bg_color}; border: 2px solid {filter_border_color}; padding: 8px; }}')
-        self._update_mod_plaques_styles()
-
-    def _update_mod_plaques_styles(self):
-        if hasattr(self, 'mod_list_widget') and self.mod_list_widget:
-            layout = self.mod_list_widget.layout()
-            if layout:
-                for i in range(layout.count() - 1):
-                    item = layout.itemAt(i)
-                    if item and item.widget():
-                        widget = item.widget()
-                        if isinstance(widget, ModPlaqueWidget):
-                            widget._update_style()
-        if hasattr(self, 'installed_mods_widget') and self.installed_mods_widget:
-            layout = self.installed_mods_widget.layout()
-            if layout:
-                for i in range(layout.count() - 1):
-                    item = layout.itemAt(i)
-                    if item and item.widget():
-                        widget = item.widget()
-                        if isinstance(widget, InstalledModWidget):
-                            widget._update_style()
-
-    def _load_custom_style_settings(self):
-        theme_defaults = THEMES['default']
-        for key, widget in self.color_widgets.items():
-            config_key = f'custom_color_{key}'
-            placeholder = theme_defaults['colors'].get(key, '#000000')
-            widget.setText(self.app_state.local_config.get(config_key, ''))
-            widget.setPlaceholderText(placeholder)
-        self.apply_theme()
-
-    def _load_launcher_icon(self):
-        try:
-            splash_path = resource_path('assets/images/splash.png')
-            if os.path.exists(splash_path):
-                pixmap = QPixmap(splash_path)
-                if not pixmap.isNull():
-                    target_w, target_h = (200, 60)
-                    scaled_pixmap = pixmap.scaled(target_w, target_h, Qt.AspectRatioMode.KeepAspectRatioByExpanding, Qt.TransformationMode.SmoothTransformation)
-                    x = max(0, (scaled_pixmap.width() - target_w) // 2)
-                    y = max(0, (scaled_pixmap.height() - target_h) // 2)
-                    cropped = scaled_pixmap.copy(x, y, target_w, target_h)
-                    self.launcher_icon_label.setFixedSize(target_w, target_h)
-                    self.launcher_icon_label.setScaledContents(False)
-                    self.launcher_icon_label.setPixmap(cropped)
-                    return
-        except Exception:
-            pass
-        target_w, target_h = (200, 60)
-        fallback_pixmap = QPixmap(target_w, target_h)
-        fallback_pixmap.fill(QColor('#333'))
-        self.launcher_icon_label.setFixedSize(target_w, target_h)
-        self.launcher_icon_label.setScaledContents(False)
-        self.launcher_icon_label.setPixmap(fallback_pixmap)
-
-    def _get_background_music_path(self):
-        mp3_path = os.path.join(self.app_state.config_dir, 'custom_background_music.mp3')
-        wav_path = os.path.join(self.app_state.config_dir, 'custom_background_music.wav')
-        if os.path.exists(mp3_path):
-            return mp3_path
-        if os.path.exists(wav_path):
-            return wav_path
-        return ''
-
-    def _get_startup_sound_path(self):
-        mp3 = os.path.join(self.app_state.config_dir, 'custom_startup_sound.mp3')
-        wav = os.path.join(self.app_state.config_dir, 'custom_startup_sound.wav')
-        if os.path.exists(mp3):
-            return mp3
-        if os.path.exists(wav):
-            return wav
-        return ''
-
-    def _get_background_music_button_text(self):
-        mp3 = os.path.join(self.app_state.config_dir, 'custom_background_music.mp3')
-        wav = os.path.join(self.app_state.config_dir, 'custom_background_music.wav')
-        custom_exists = os.path.exists(mp3) or os.path.exists(wav)
-        return tr('buttons.remove_background_music') if custom_exists else tr('buttons.select_background_music')
-
-    def _get_startup_sound_button_text(self):
-        if os.path.exists(self._get_startup_sound_path()):
-            return tr('buttons.remove_startup_sound')
-        return tr('buttons.select_startup_sound')
+        mod_list = getattr(self, 'mod_list_widget', None)
+        installed_mods = getattr(self, 'installed_mods_widget', None)
+        self.customization_manager.update_mod_plaques_styles(mod_list, installed_mods)
 
     def _on_background_music_button_click(self):
-        self._stop_background_music()
+        self.customization_manager.stop_background_music()
         self.settings_manager.on_background_music_button_click()
-        self.background_music_button.setText(self._get_background_music_button_text())
-        self._maybe_start_background_music()
+        self.background_music_button.setText(self.customization_manager.get_background_music_button_text())
+        self.customization_manager.maybe_start_background_music(getattr(self, 'is_shown_to_user', False), self.isVisible())
 
     def _on_startup_sound_button_click(self):
         self.settings_manager.on_startup_sound_button_click()
-        self.startup_sound_button.setText(self._get_startup_sound_button_text())
-
-    def _start_background_music(self):
-        try:
-            music_path = self._get_background_music_path()
-            if not music_path or not os.path.exists(music_path):
-                return
-            self._stop_background_music()
-            from PyQt6.QtCore import QThread
-            from playsound3 import playsound
-            self._bg_music_running = True
-            self._bg_music_instance = None
-
-            class _MusicLoop(QThread):
-
-                def __init__(self, outer, path):
-                    super().__init__()
-                    self.outer, self.path = (outer, path)
-
-                def run(self):
-                    while getattr(self.outer, '_bg_music_running', False):
-                        try:
-                            inst = playsound(self.path, block=False)
-                            self.outer._bg_music_instance = inst
-                            while getattr(self.outer, '_bg_music_running', False) and hasattr(inst, 'is_alive') and inst.is_alive():
-                                time.sleep(0.05)
-                            if not getattr(self.outer, '_bg_music_running', False):
-                                try:
-                                    if hasattr(inst, 'stop'):
-                                        inst.stop()
-                                except Exception:
-                                    pass
-                                break
-                        except Exception:
-                            time.sleep(3)
-                            continue
-            self._bg_music_thread = _MusicLoop(self, music_path)
-            self._bg_music_thread.start()
-        except Exception:
-            pass
-
-    def _stop_background_music(self):
-        try:
-            self._bg_music_running = False
-            inst = getattr(self, '_bg_music_instance', None)
-            if inst and hasattr(inst, 'stop'):
-                try:
-                    if hasattr(inst, 'is_alive') and inst.is_alive():
-                        inst.stop()
-                    elif hasattr(inst, 'stop'):
-                        inst.stop()
-                except Exception:
-                    pass
-            self._bg_music_instance = None
-            thr = getattr(self, '_bg_music_thread', None)
-            if thr and thr.isRunning():
-                thr.wait(300)
-            self._bg_music_thread = None
-        except Exception:
-            pass
-        try:
-            if hasattr(self, 'bg_fallback_proc') and self.bg_fallback_proc:
-                if self.bg_fallback_proc.poll() is None:
-                    self.bg_fallback_proc.terminate()
-            if platform.system() == 'Windows':
-                try:
-                    import winsound
-                    winsound.PlaySound(None, winsound.SND_PURGE)
-                except Exception:
-                    pass
-        except Exception:
-            pass
-        finally:
-            self.bg_fallback_proc = None
-
-    def _maybe_start_background_music(self):
-        try:
-            music_path = self._get_background_music_path()
-            if not music_path or not os.path.exists(music_path):
-                return
-            if self.app_state.initialization_completed and getattr(self, 'is_shown_to_user', False) and self.isVisible():
-                self._start_background_music()
-            else:
-                QTimer.singleShot(500, self._maybe_start_background_music)
-        except Exception:
-            pass
+        self.startup_sound_button.setText(self.customization_manager.get_startup_sound_button_text())
 
     def _update_action_button_state(self):
         if getattr(self, 'is_installing', False) and (not getattr(self, '_operation_cancelled', False)):
@@ -2554,7 +2324,7 @@ class AppWindow(QWidget):
             os.symlink(proton_save_path, native_save_path)
             self.feedback_manager.show_info('dialogs.steam_deck_setup', tr('dialogs.steam_deck_compatibility_configured'))
         except Exception as e:
-            print(tr('startup.steam_deck_setup_error', error=str(e)))
+            logging.error(f'Steam Deck setup error: {e}')
 
     def _get_platform_string(self) -> str:
         system = platform.system()
@@ -2759,7 +2529,7 @@ class AppWindow(QWidget):
                 if not updated_mod:
                     mod_config = self.mod_manager.get_mod_config(mod_key)
                     if mod_config:
-                        updated_mod = self._create_mod_object_from_info(mod_config)
+                        updated_mod = self.mod_manager.create_mod_object_from_info(mod_config, getattr(self.app_state, 'all_mods', None))
                 if updated_mod:
                     slot_frame.assigned_mod = updated_mod
         self._refresh_all_slot_status_displays()
@@ -2865,7 +2635,7 @@ class AppWindow(QWidget):
 
     def _hide_window_for_game(self):
         try:
-            self._stop_background_music()
+            self.customization_manager.stop_background_music()
         except Exception:
             pass
         self.app_state.game_is_running = True
@@ -2884,7 +2654,7 @@ class AppWindow(QWidget):
             self._update_installed_mods_display()
         if hasattr(self, '_update_mod_display'):
             self._update_mod_display()
-        self._maybe_start_background_music()
+        self.customization_manager.maybe_start_background_music(getattr(self, 'is_shown_to_user', False), self.isVisible())
         self._show_pending_dialogs()
         self.plugin_manager.execute_hooks('on_after_game_exit', self)
 
@@ -3047,8 +2817,8 @@ class AppWindow(QWidget):
         self.reset_button.setText(tr('buttons.reset_settings'))
         self.back_button_cust.setText(tr('ui.back_button'))
         self._update_background_button_state()
-        self.background_music_button.setText(self._get_background_music_button_text())
-        self.startup_sound_button.setText(self._get_startup_sound_button_text())
+        self.background_music_button.setText(self.customization_manager.get_background_music_button_text())
+        self.startup_sound_button.setText(self.customization_manager.get_startup_sound_button_text())
         self.disable_background_checkbox.setText(tr('checkboxes.disable_background'))
         self.disable_splash_checkbox.setText(tr('checkboxes.disable_splash'))
         for key in self.color_widgets.keys():
@@ -3381,13 +3151,13 @@ class AppWindow(QWidget):
             pass
 
     def closeEvent(self, event):
-        self._stop_background_music()
+        self.customization_manager.stop_background_music()
         self._online_timer.stop()
         if self.is_shortcut_launch:
             super().closeEvent(event)
             return
         self.game_launcher._cleanup_direct_launch_files()
-        self._save_window_geometry()
+        self.window_geometry_manager.save_window_geometry(self)
         self._stop_presence_thread()
         self._stop_fetch_thread()
         if hasattr(self, 'game_launcher') and hasattr(self.game_launcher, 'monitor_thread'):
@@ -3395,16 +3165,6 @@ class AppWindow(QWidget):
         for attr in ('install_thread', 'full_install_thread', '_bg_loader'):
             self._safe_stop_thread(getattr(self, attr, None))
         super().closeEvent(event)
-
-    def _schedule_geometry_save(self):
-        if hasattr(self, '_geometry_save_timer'):
-            self._geometry_save_timer.stop()
-        else:
-            from PyQt6.QtCore import QTimer
-            self._geometry_save_timer = QTimer()
-            self._geometry_save_timer.setSingleShot(True)
-            self._geometry_save_timer.timeout.connect(self._save_window_geometry)
-        self._geometry_save_timer.start(500)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -3415,11 +3175,11 @@ class AppWindow(QWidget):
             panel_height = self.top_panel_widget.height()
             y = max(0, (panel_height - logo_height) // 2)
             self.launcher_icon_label.move((panel_width - logo_width) // 2, y)
-        self._schedule_geometry_save()
+        self.window_geometry_manager.schedule_geometry_save(self)
 
     def moveEvent(self, event):
         super().moveEvent(event)
-        self._schedule_geometry_save()
+        self.window_geometry_manager.schedule_geometry_save(self)
 
     def _load_local_data(self):
         self.app_state.local_config = self._read_json(self.app_state.config_path) or {}
@@ -3467,102 +3227,15 @@ class AppWindow(QWidget):
         return self.settings_manager.read_json(path)
 
     def _init_localization(self):
-        saved_language = self.app_state.local_config.get('language')
-        if not saved_language or saved_language not in localization_manager.get_available_languages():
-            saved_language = localization_manager.detect_system_language()
-            self.app_state.local_config['language'] = saved_language
-            self._write_json(self.app_state.config_path, self.app_state.local_config)
-        if not localization_manager.load_language(saved_language):
-            saved_language = localization_manager.detect_system_language()
-            localization_manager.load_language(saved_language)
-            self.app_state.local_config['language'] = saved_language
-            self._write_local_config()
-        self._update_qt_translations(saved_language)
+        if not hasattr(self, '_qt_translator_holder'):
+            self._qt_translator_holder = {}
+        saved_language = localization_manager.initialize_localization(self.app_state.local_config, self.app_state.config_path, self._write_local_config, self._write_json)
+        localization_manager.update_qt_translations(saved_language, self._qt_translator_holder)
 
     def _update_qt_translations(self, language_code):
-        from PyQt6.QtCore import QLibraryInfo, QTranslator
-        qt_translation = localization_manager.get_qt_translation_name(language_code)
-        if not qt_translation:
-            return
-        app = QApplication.instance()
-        if app is None:
-            return
-        if hasattr(self, '_qt_translator') and self._qt_translator:
-            app.removeTranslator(self._qt_translator)
-        self._qt_translator = QTranslator()
-        if self._qt_translator.load(qt_translation, QLibraryInfo.path(QLibraryInfo.LibraryPath.TranslationsPath)):
-            app.installTranslator(self._qt_translator)
-
-    def _get_executable_path(self):
-        use_custom_exe = self.app_state.local_config.get('use_custom_executable', False)
-        if use_custom_exe:
-            custom_path = self.app_state.local_config.get(self.app_state.game_mode.get_custom_exec_config_key(), '')
-            if custom_path and os.path.isfile(custom_path):
-                return custom_path
-        current_game_path = self._get_current_game_path()
-        if not current_game_path or not os.path.isdir(current_game_path):
-            return None
-        system = platform.system()
-        is_undertale = isinstance(self.app_state.game_mode, UndertaleGameMode)
-        base_exe_name = 'UNDERTALE' if is_undertale else 'DELTARUNE'
-        if system == 'Windows':
-            exe_path = os.path.join(current_game_path, f'{base_exe_name}.exe')
-            if os.path.isfile(exe_path):
-                return exe_path
-        elif system == 'Linux':
-            native_path = os.path.join(current_game_path, base_exe_name)
-            if os.path.isfile(native_path) and os.access(native_path, os.X_OK):
-                return native_path
-            exe_path = os.path.join(current_game_path, f'{base_exe_name}.exe')
-            if os.path.isfile(exe_path):
-                return exe_path
-        elif system == 'Darwin':
-            if current_game_path.endswith('.app') and os.path.isdir(current_game_path):
-                app_path = current_game_path
-            else:
-                app_path = None
-                if is_undertale:
-                    app_names = ['UNDERTALE.app']
-                else:
-                    app_names = ['DELTARUNE.app', 'DELTARUNEdemo.app']
-                for name in app_names:
-                    candidate = os.path.join(current_game_path, name)
-                    if os.path.isdir(candidate):
-                        app_path = candidate
-                        break
-            if app_path:
-                return app_path
-        if not self.is_shortcut_launch:
-            self.feedback_manager.update_status(tr('errors.executable_not_found_deltarune'), UI_COLORS['status_error'])
-        return None
-
-    def _get_target_dir(self, chapter_id):
-        target_base = self._get_current_game_path()
-        if not target_base:
-            return None
-        if platform.system() == 'Darwin':
-            if not target_base.endswith('.app'):
-                for app_name in ('DELTARUNE.app', 'DELTARUNEdemo.app'):
-                    candidate = os.path.join(target_base, app_name)
-                    if os.path.isdir(candidate):
-                        target_base = candidate
-                        break
-            target_base = os.path.join(target_base, 'Contents', 'Resources')
-            if not os.path.isdir(target_base):
-                return None
-        if chapter_id == -1:
-            return target_base
-        if chapter_id == 0:
-            return target_base
-        chapter_prefix = f'chapter{chapter_id}_'
-        try:
-            for entry in os.listdir(target_base):
-                if os.path.isdir(os.path.join(target_base, entry)) and entry.startswith(chapter_prefix):
-                    return os.path.join(target_base, entry)
-            return None
-        except Exception as e:
-            self.feedback_manager.update_status(tr('errors.chapter_folder_search_error', error=str(e)), UI_COLORS['status_error'])
-            return None
+        if not hasattr(self, '_qt_translator_holder'):
+            self._qt_translator_holder = {}
+        localization_manager.update_qt_translations(language_code, self._qt_translator_holder)
 
     def _has_mods_with_data_files(self, selections: Dict[int, str]) -> bool:
         for ui_index, mod_key in selections.items():
@@ -3626,7 +3299,7 @@ class AppWindow(QWidget):
         if result:
             self._update_action_button_state()
         if is_initial and (not result):
-            self._start_background_music()
+            self.customization_manager.start_background_music()
             self.initialization_finished.emit()
 
     def _handle_first_launch_settings(self):
@@ -3641,22 +3314,18 @@ class AppWindow(QWidget):
     def _on_theme_button_click(self):
         result = self.feedback_manager.ask_custom_question(QMessageBox.Icon.Information, 'buttons.theme_management', 'dialogs.theme_choice', [('buttons.import', QMessageBox.ButtonRole.AcceptRole, 'import'), ('buttons.export', QMessageBox.ButtonRole.AcceptRole, 'export')])
         if result == 'import':
-            self._import_theme()
+            self.settings_manager.import_theme()
         elif result == 'export':
             self.settings_manager.export_theme()
 
-    def _import_theme(self):
-        self.settings_manager.import_theme()
-        self._load_custom_style_settings()
+    def _on_theme_changed_by_manager(self):
+        self.customization_manager.load_custom_style_settings(self.color_widgets, self.apply_theme)
         self.disable_background_checkbox.setChecked(self.app_state.local_config.get('background_disabled', False))
         self.disable_splash_checkbox.setChecked(self.app_state.local_config.get('disable_splash', False))
-        self.background_music_button.setText(self._get_background_music_button_text())
-        self.startup_sound_button.setText(self._get_startup_sound_button_text())
-        self._stop_background_music()
-        self._maybe_start_background_music()
-        self.app_state.local_config['first_launch_splash_shown'] = True
-        self.app_state.local_config['disable_splash'] = True
-        self._write_local_config()
+        self.background_music_button.setText(self.customization_manager.get_background_music_button_text())
+        self.startup_sound_button.setText(self.customization_manager.get_startup_sound_button_text())
+        self.customization_manager.stop_background_music()
+        self.customization_manager.maybe_start_background_music(getattr(self, 'is_shown_to_user', False), self.isVisible())
         try:
             self.initialization_finished.disconnect(self._handle_first_launch_settings)
         except TypeError:
