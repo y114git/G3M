@@ -9,7 +9,7 @@ from typing import Dict
 from PyQt6.QtCore import QObject, pyqtSignal
 from PyQt6.QtWidgets import QApplication
 from core.managers.localization_manager import tr
-from models.mod_models import ModInfo, ModChapterData
+from models.mod_models import ModInfo, ModChapterData, ModExtraFile  # noqa: F401 - used via globals()
 from threads.background_workers import InstallModsThread, UrlInstallThread
 from utils.file_utils import sanitize_filename
 from config.constants import UI_COLORS
@@ -123,6 +123,35 @@ class ModManager(QObject):
                             if os.path.exists(potential_icon):
                                 mod.icon_url = potential_icon
                                 break
+            existing_keys = {mod.key for mod in self.app_state.all_mods}
+            for mod_key, config_data in list(installed_mods.items()):
+                if not config_data.get('is_local_mod') and mod_key not in existing_keys:
+                    try:
+                        mod_folder_path = self.get_mod_folder_path(mod_key)
+                        icon_path = ''
+                        if mod_folder_path:
+                            for ext in ['.png', '.jpg', '.jpeg', '.gif']:
+                                potential_icon = os.path.join(mod_folder_path, f'_icon{ext}')
+                                if os.path.exists(potential_icon):
+                                    icon_path = potential_icon
+                                    break
+                        safe_mod_info = {'key': mod_key, 'name': config_data.get('name', 'Installed Mod'), 'version': config_data.get('version', '1.0.0'), 'author': config_data.get('author', tr('defaults.unknown')), 'tagline': config_data.get('tagline', tr('defaults.no_description')), 'game_version': config_data.get('game_version', tr('defaults.not_specified')), 'description_url': '', 'downloads': 0, 'modgame': config_data.get('modgame', 'deltarune'), 'is_verified': False, 'icon_url': icon_path, 'tags': [], 'hide_mod': False, 'is_xdelta': config_data.get('is_xdelta', False), 'is_local_mod': False, 'ban_status': False, 'demo_url': None, 'demo_version': '1.0.0', 'created_date': config_data.get('created_date', 'N/A'), 'last_updated': config_data.get('created_date', 'N/A'), 'external_url': config_data.get('external_url')}
+                        mod = ModInfo(**safe_mod_info)
+                        files_data = config_data.get('files', {})
+                        for file_key, ch_info in list(files_data.items()):
+                            extra_files_list = []
+                            for ef_data in ch_info.get('extra_files', []):
+                                if isinstance(ef_data, dict):
+                                    try:
+                                        ExtraFileClass = globals()['ModExtraFile']
+                                        extra_files_list.append(ExtraFileClass(key=ef_data.get('key', ''), version=ef_data.get('version', ''), url=ef_data.get('url', '')))
+                                    except Exception:
+                                        pass
+                            valid_chapter_fields = {'description': ch_info.get('description'), 'data_file_url': ch_info.get('data_file_url'), 'data_file_version': ch_info.get('data_file_version'), 'extra_files': extra_files_list}
+                            mod.files[file_key] = ModChapterData(**valid_chapter_fields)
+                        self.app_state.all_mods.append(mod)
+                    except Exception as e:
+                        logging.warning(f'Failed to create ModInfo for installed mod {mod_key}: {e}')
             self.app_state.all_mods = [mod for mod in self.app_state.all_mods if not hasattr(mod, 'tags') or 'local' not in mod.tags]
             for mod_key, config_data in list(installed_mods.items()):
                 if config_data.get('is_local_mod'):

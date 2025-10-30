@@ -40,6 +40,7 @@
     "desktop_shortcut_filter": "桌面快捷方式 (*.desktop)",
     "details_button": "详情",
     "direct_launch": "直接启动",
+    "direct_launch_steam_conflict": "直接启动与「通过Steam启动」不兼容。请先在设置中禁用「通过Steam启动」。",
     "disable_direct_launch": "禁用第{chapter}章的直接启动？",
     "downloads_count": "您的模组下载次数：{count}",
     "downloads_label": "下载次数：",
@@ -192,7 +193,8 @@
     "mod_slot": "模组槽位",
     "search_tab": "搜索模组",
     "select": "选择",
-    "steam_launch": "通过Steam启动"
+    "steam_launch": "通过Steam启动",
+    "steam_launch_direct_conflict": "「通过Steam启动」与直接启动不兼容。请先禁用直接启动（双击章节槽位）。"
   },
   "files": {
     "archive_link": "压缩文件链接",
@@ -288,6 +290,7 @@
     "all_mods": "所有模组"
   },
   "dialogs": {
+    "create_shortcut_question": "创建快捷方式？",
     "access_error": "访问错误",
     "additional_collection": "附加存档集",
     "all_slots_occupied": "所有槽位已被占用。在添加新模组之前请释放一个槽位。",
@@ -553,6 +556,7 @@
     "xdelta_patch_error": "无法应用xdelta补丁：{error}"
   },
   "status": {
+    "shortcut_created": "快捷方式已创建：{path}",
     "vanilla": "原版",
     "recovering_previous_session": "恢复上一会话...",
     "applying_mod": "正在应用模组：{mod_name} ({mod_type})...",

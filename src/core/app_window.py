@@ -10,7 +10,7 @@ import uuid
 import subprocess
 import webbrowser
 import argparse
-from typing import Callable, Optional, Dict, Any
+from typing import Callable, Optional, Dict
 import logging
 import requests
 from PyQt6.QtCore import QTranslator, Qt, QEvent, QThread, QTimer, pyqtSignal
@@ -48,6 +48,7 @@ from ui.builders.save_manager_view_builder import SaveManagerViewBuilder
 from core.managers.plugin_manager import PluginManager
 from core.managers.customization_manager import CustomizationManager
 from core.managers.slot_manager import SlotManager
+from core.managers.shortcut_manager import ShortcutManager
 _translator = QTranslator()
 _lock_file = None
 
@@ -92,9 +93,6 @@ class AppWindow(QWidget):
         self._online_timer = QTimer(self)
         self._online_timer.timeout.connect(self._run_presence_tick)
         self._online_timer.start(30000)
-        if self.is_shortcut_launch:
-            self._shortcut_launch(args)
-            return
         self._pending_install_url = initial_url
         self.dialog_parent = parent_for_dialogs or self
         self.session_id = uuid.uuid4().hex
@@ -150,6 +148,12 @@ class AppWindow(QWidget):
         self.slot_manager.slot_state_changed.connect(lambda slot_id: self._refresh_slot_status_display(self.app_state.slots.get(slot_id)))
         self.slot_manager.action_button_update_needed.connect(self._update_action_button_state)
         self.slot_manager.mod_widgets_update_needed.connect(self._update_mod_widgets_slot_status)
+        self.shortcut_manager = ShortcutManager(self.app_state, self.feedback_manager, self.mod_manager, self)
+        self.shortcut_manager.shortcut_created.connect(lambda path: self.feedback_manager.update_status(tr('status.shortcut_created', path=path), UI_COLORS['status_success']))
+        self.shortcut_manager.status_changed.connect(self.feedback_manager.update_status)
+        if self.is_shortcut_launch:
+            self._shortcut_launch(args)
+            return
         self.init_ui()
         self.load_font()
         QTimer.singleShot(0, lambda: self.ui_ready.emit())
@@ -232,81 +236,11 @@ class AppWindow(QWidget):
             mods_settings = settings.get('mods', {})
             if not mods_settings:
                 mods_settings = settings.get('selections', {})
-            self._apply_shortcut_mods(mods_settings)
-            self._launch_game_from_shortcut(launch_via_steam=launch_via_steam, use_custom_executable=use_custom_executable, custom_exec_path=custom_exec_path, demo_custom_exec_path=demo_custom_exec_path, direct_launch_slot_id=direct_launch_slot_id)
+            self.shortcut_manager.apply_shortcut_mods(mods_settings)
+            self.shortcut_manager.launch_game_from_shortcut(launch_via_steam=launch_via_steam, use_custom_executable=use_custom_executable, custom_exec_path=custom_exec_path, demo_custom_exec_path=demo_custom_exec_path, direct_launch_slot_id=direct_launch_slot_id)
         except Exception as e:
             print(tr('startup.launch_error', error=str(e)))
             sys.exit(1)
-
-    def _create_shortcut_flow(self):
-        settings = self._gather_shortcut_settings()
-        if not settings:
-            self.feedback_manager.show_warning('dialogs.cannot_create_shortcut_title', tr('dialogs.path_not_specified'))
-            return
-        description_lines = [tr('dialogs.shortcut_description'), '', tr('dialogs.current_shortcut_settings'), '']
-        game_name = tr('ui.undertale') if settings.get('is_undertale_mode', False) else tr('ui.deltarunedemo') if settings.get('is_demo_mode', False) else tr('ui.deltarune')
-        description_lines.append(f"<b>{tr('ui.mod_type_label')}</b> {game_name}")
-        if settings.get('is_demo_mode', False):
-            mod_key = settings['mods'].get('demo')
-            if mod_key:
-                mod_config = self.mod_manager.get_mod_config(mod_key)
-                mod_name = mod_config.get('name', tr('errors.mod_not_found', mod_key=mod_key)) if mod_config else tr('errors.mod_not_found', mod_key=mod_key)
-                description_lines.append(f"<b>{tr('status.mod_label')}</b> {mod_name}")
-            else:
-                description_lines.append(f"<b>{tr('status.mod_label')}</b> <i>{tr('status.vanilla')}</i>")
-        elif settings.get('is_undertale_mode', False):
-            mod_key = settings['mods'].get('undertale')
-            if mod_key:
-                mod_config = self.mod_manager.get_mod_config(mod_key)
-                mod_name = mod_config.get('name', tr('errors.mod_not_found', mod_key=mod_key)) if mod_config else tr('errors.mod_not_found', mod_key=mod_key)
-                description_lines.append(f"<b>{tr('status.mod_label')}</b> {mod_name}")
-            else:
-                description_lines.append(f"<b>{tr('status.mod_label')}</b> <i>{tr('status.vanilla')}</i>")
-        else:
-            is_chapter_mode = settings.get('is_chapter_mode', False)
-            direct_launch_slot_id = settings.get('direct_launch_slot_id', -1)
-            if is_chapter_mode:
-                if direct_launch_slot_id >= 0:
-                    chapter_names = {0: tr('chapters.menu'), 1: tr('tabs.chapter_1'), 2: tr('tabs.chapter_2'), 3: tr('tabs.chapter_3'), 4: tr('tabs.chapter_4')}
-                    chapter_name = chapter_names.get(direct_launch_slot_id, tr('ui.chapter_tab_title', chapter_num=direct_launch_slot_id))
-                    description_lines.append(f"<b>{tr('status.direct_launch_label')}</b> {chapter_name}")
-                    mod_key = settings['mods'].get(str(direct_launch_slot_id))
-                    if mod_key:
-                        mod_config = self.mod_manager.get_mod_config(mod_key)
-                        mod_name = mod_config.get('name', tr('errors.mod_not_found', mod_key=mod_key)) if mod_config else tr('errors.mod_not_found', mod_key=mod_key)
-                        description_lines.append(f"<b>{tr('status.mod_for_chapter_label', chapter_name=chapter_name)}</b> {mod_name}")
-                    else:
-                        description_lines.append(f"<b>{tr('status.mod_for_chapter_label', chapter_name=chapter_name)}</b> <i>{tr('status.no_mod')}</i>")
-                else:
-                    description_lines.append(f"<b>{tr('status.direct_launch_label')}</b> {tr('status.disabled')}")
-                    for chapter_id in [0, 1, 2, 3, 4]:
-                        mod_key = settings['mods'].get(str(chapter_id))
-                        if mod_key:
-                            mod_config = self.mod_manager.get_mod_config(mod_key)
-                            mod_name = mod_config.get('name', tr('errors.mod_not_found', mod_key=mod_key)) if mod_config else tr('errors.mod_not_found', mod_key=mod_key)
-                            chapter_names = {0: tr('chapters.menu'), 1: tr('tabs.chapter_1'), 2: tr('tabs.chapter_2'), 3: tr('tabs.chapter_3'), 4: tr('tabs.chapter_4')}
-                            chapter_name = chapter_names.get(chapter_id, tr('ui.chapter_tab_title', chapter_num=chapter_id))
-                            description_lines.append(f'<b>{chapter_name}:</b> {mod_name}')
-            else:
-                uni_key = settings['mods'].get('universal')
-                if uni_key:
-                    mod_config = self.mod_manager.get_mod_config(uni_key)
-                    mod_name = mod_config.get('name', tr('errors.mod_not_found', mod_key=uni_key)) if mod_config else tr('errors.mod_not_found', mod_key=uni_key)
-                    description_lines.append(f"<b>{tr('status.mod_label')}</b> {mod_name}")
-                else:
-                    description_lines.append(f"<b>{tr('status.mod_label')}</b> <i>{tr('status.no_mod')}</i>")
-        description_lines.append('')
-        if settings.get('launch_via_steam'):
-            description_lines.append(f"✓ {tr('ui.steam_launch')}")
-        elif settings.get('use_custom_executable'):
-            custom_path = settings.get('custom_executable_path', '') or settings.get('demo_custom_executable_path', '')
-            exe_name = os.path.basename(custom_path) if custom_path else '?'
-            description_lines.append(f"✓ {tr('status.custom_executable_launch', exe_name=exe_name)}")
-        else:
-            description_lines.append(f"✓ {tr('status.normal_launch')}")
-        description_text = '<br>'.join(description_lines) + f"<br><br><p>{tr('dialogs.shortcut_create_description')}</p>"
-        if self.feedback_manager.ask_question('dialogs.create_shortcut_question', 'dialogs.shortcut_create_description', description_text):
-            self._save_shortcut(settings)
 
     def _set_install_buttons_enabled(self, enabled: bool):
         if hasattr(self, 'mod_list_layout'):
@@ -393,7 +327,7 @@ class AppWindow(QWidget):
         self.progress_bar.setVisible(False)
         self.action_frame = QHBoxLayout()
         self.shortcut_button = QPushButton(tr('buttons.shortcut'))
-        self.shortcut_button.clicked.connect(self._create_shortcut_flow)
+        self.shortcut_button.clicked.connect(self.shortcut_manager.create_shortcut_flow)
         self.action_button = QPushButton(tr('status.please_wait'))
         self.action_button.setEnabled(False)
         self.action_button.setMinimumWidth(200)
@@ -895,15 +829,45 @@ class AppWindow(QWidget):
         self._updating_chapter_mods = True
         clear_layout_widgets(self.installed_mods_layout, keep_last_n=1)
         installed_mods = self._get_installed_mods_list()
+        if hasattr(self, 'library_sort_combo'):
+            sort_type = self.library_sort_combo.currentIndex()
+            reverse = not self.library_sort_ascending
+            if sort_type == 0:
+                installed_mods.sort(key=lambda mod: mod.get('name', '').lower(), reverse=reverse)
+            elif sort_type == 1:
+                def get_sort_date(mod):
+                    if mod.get('is_local_mod'):
+                        return mod.get('created_date', '0')
+                    else:
+                        return mod.get('updated_date') or mod.get('installed_date', '0')
+                installed_mods.sort(key=get_sort_date, reverse=reverse)
         is_demo_mode = hasattr(self, 'game_type_combo') and self.game_type_combo.currentData() == 'deltarunedemo'
+        selected_tags = []
+        if hasattr(self, 'library_tag_widgets'):
+            tag_map = {self.library_tag_translation: 'translation', self.library_tag_customization: 'customization', self.library_tag_gameplay: 'gameplay', self.library_tag_other: 'other', self.library_tag_local: 'local'}
+            for checkbox, tag in tag_map.items():
+                if checkbox.isChecked():
+                    selected_tags.append(tag)
+        search_text = getattr(self, 'library_search_text', '').lower()
         for mod_info in installed_mods:
             if is_demo_mode and (not mod_info.get('modgame', 'deltarune') == 'deltarunedemo'):
                 continue
             elif not is_demo_mode and mod_info.get('modgame', 'deltarune') == 'deltarunedemo':
                 continue
+            mod_tags = mod_info.get('tags', [])
+            if mod_info.get('is_local_mod'):
+                if 'local' not in mod_tags:
+                    mod_tags.append('local')
+            if selected_tags and (not all((tag in mod_tags for tag in selected_tags))):
+                continue
+            if search_text:
+                mod_name_lower = mod_info.get('name', '').lower()
+                mod_tagline = mod_info.get('tagline', '').lower()
+                if search_text not in mod_name_lower and search_text not in mod_tagline:
+                    continue
             if selected_chapter_id is not None:
-                mod_data = self._create_mod_object_from_info(mod_info)
-                if mod_data and (not self.mod_manager.mod_has_files_for_chapter(mod_data, selected_chapter_id)):
+                mod_data_check = self._create_mod_object_from_info(mod_info)
+                if mod_data_check and (not self.mod_manager.mod_has_files_for_chapter(mod_data_check, selected_chapter_id)):
                     continue
             is_local = mod_info.get('is_local_mod', False)
             is_available = mod_info.get('is_available_on_server', True)
@@ -974,11 +938,12 @@ class AppWindow(QWidget):
             return
         is_chapter_mode = hasattr(self, 'chapter_mode_checkbox') and self.chapter_mode_checkbox.isChecked()
         if is_chapter_mode:
-            if hasattr(self, 'selected_chapter_id') and self.app_state.selected_chapter_id is not None:
-                self._update_installed_mods_for_chapter_mode(self.app_state.selected_chapter_id)
+            selected_id = self.app_state.selected_chapter_id
+            if selected_id is not None:
+                self._update_installed_mods_for_chapter_mode(selected_id)
                 return
             else:
-                self._show_chapter_mode_instruction()
+                self._update_installed_mods_for_chapter_mode(None)
                 return
         self._refresh_installed_mods_async()
 
@@ -2997,6 +2962,13 @@ class AppWindow(QWidget):
 
     def _on_toggle_steam_launch(self, state=None):
         is_steam_launch = self.launch_via_steam_checkbox.isChecked()
+        if is_steam_launch:
+            direct_launch_slot_id = self.app_state.local_config.get('direct_launch_slot_id', -1)
+            is_chapter_mode = self.app_state.current_mode == 'chapter'
+            if direct_launch_slot_id >= 0 and is_chapter_mode:
+                self.feedback_manager.show_warning('ui.steam_launch', tr('ui.steam_launch_direct_conflict'))
+                self.launch_via_steam_checkbox.setChecked(False)
+                return
         self.settings_manager.on_toggle_steam_launch(is_steam_launch)
         self._update_custom_executable_ui()
 
@@ -3563,174 +3535,6 @@ class AppWindow(QWidget):
         if not self.is_shortcut_launch:
             self.feedback_manager.update_status(tr('errors.executable_not_found_deltarune'), UI_COLORS['status_error'])
         return None
-
-    def _gather_shortcut_settings(self) -> Optional[Dict[str, Any]]:
-        current_path = self._get_current_game_path()
-        if not current_path:
-            return None
-        is_demo_mode = isinstance(self.app_state.game_mode, DemoGameMode)
-        is_chapter_mode = hasattr(self, 'chapter_mode_checkbox') and self.chapter_mode_checkbox.isChecked()
-        is_undertale_mode = isinstance(self.app_state.game_mode, UndertaleGameMode)
-        settings = {'launcher_version': LAUNCHER_VERSION, 'game_path': self.app_state.game_path, 'demo_game_path': self.app_state.demo_game_path, 'is_demo_mode': is_demo_mode, 'is_chapter_mode': is_chapter_mode, 'is_undertale_mode': is_undertale_mode, 'launch_via_steam': self.launch_via_steam_checkbox.isChecked(), 'use_custom_executable': self.use_custom_executable_checkbox.isChecked(), 'custom_executable_path': self.app_state.local_config.get(FullGameMode().get_custom_exec_config_key(), ''), 'demo_custom_executable_path': self.app_state.local_config.get(DemoGameMode().get_custom_exec_config_key(), ''), 'direct_launch_slot_id': self.app_state.local_config.get('direct_launch_slot_id', -1), 'mods': {}}
-        if is_demo_mode:
-            demo_mod_key = None
-            try:
-                demo_slot = self.app_state.slots.get(-10) if hasattr(self.app_state, 'slots') else None
-                if demo_slot and getattr(demo_slot, 'assigned_mod', None):
-                    demo_mod_key = getattr(demo_slot.assigned_mod, 'key', None) or getattr(demo_slot.assigned_mod, 'mod_key', None)
-            except Exception:
-                demo_mod_key = None
-            settings['mods']['demo'] = demo_mod_key
-        elif is_undertale_mode:
-            undertale_mod_key = None
-            try:
-                undertale_slot = self.app_state.slots.get(-20) if hasattr(self.app_state, 'slots') else None
-                if undertale_slot and getattr(undertale_slot, 'assigned_mod', None):
-                    undertale_mod_key = getattr(undertale_slot.assigned_mod, 'key', None) or getattr(undertale_slot.assigned_mod, 'mod_key', None)
-            except Exception:
-                undertale_mod_key = None
-            settings['mods']['undertale'] = undertale_mod_key
-        elif is_chapter_mode:
-            for slot_frame in self.app_state.slots.values():
-                chapter_id = slot_frame.chapter_id
-                if chapter_id >= 0:
-                    mod_key = None
-                    if slot_frame.assigned_mod:
-                        mod_key = getattr(slot_frame.assigned_mod, 'key', None) or getattr(slot_frame.assigned_mod, 'mod_key', None)
-                    settings['mods'][str(chapter_id)] = mod_key
-        else:
-            universal_mod_key = None
-            try:
-                universal_slot = self.app_state.slots.get(-1) if hasattr(self.app_state, 'slots') else None
-                if universal_slot and getattr(universal_slot, 'assigned_mod', None):
-                    universal_mod_key = getattr(universal_slot.assigned_mod, 'key', None) or getattr(universal_slot.assigned_mod, 'mod_key', None)
-            except Exception:
-                universal_mod_key = None
-            settings['mods']['universal'] = universal_mod_key
-        return settings
-
-    def _apply_shortcut_mods(self, mods_settings: Dict[str, str]):
-        try:
-            if not mods_settings:
-                return
-            is_demo_mode = isinstance(self.app_state.game_mode, DemoGameMode)
-            is_undertale_mode = isinstance(self.app_state.game_mode, UndertaleGameMode)
-            if is_demo_mode:
-                mod_key = mods_settings.get('demo')
-                if mod_key and mod_key != 'no_change':
-                    self._apply_demo_mod(mod_key)
-            elif is_undertale_mode:
-                mod_key = mods_settings.get('undertale')
-                if mod_key and mod_key != 'no_change':
-                    self._apply_mod_by_key(mod_key)
-            else:
-                for key, mod_key in mods_settings.items():
-                    if mod_key and mod_key != 'no_change':
-                        if key.isdigit():
-                            self._apply_mod_by_key(mod_key)
-                        elif key == 'demo':
-                            continue
-                        else:
-                            self._apply_mod_by_key(mod_key)
-        except Exception as e:
-            raise Exception(tr('errors.mod_apply_error', error=str(e)))
-
-    def _apply_demo_mod(self, mod_key: str):
-        mod_config = self.mod_manager.get_mod_config(mod_key)
-        if not mod_config:
-            raise Exception(tr('errors.mod_not_found_by_key', mod_key=mod_key))
-
-    def _apply_mod_by_key(self, mod_key: str):
-        mod_config = self.mod_manager.get_mod_config(mod_key)
-        if not mod_config:
-            raise Exception(tr('errors.mod_not_found_by_key', mod_key=mod_key))
-        mod_folder = os.path.join(self.app_state.mods_dir, mod_key)
-        if not os.path.exists(mod_folder):
-            mod_folder = os.path.join(self.app_state.mods_dir, mod_config.get('name', ''))
-            if not os.path.exists(mod_folder):
-                raise Exception(tr('errors.mod_files_not_found_by_key', mod_key=mod_key))
-
-    def _launch_game_from_shortcut(self, launch_via_steam=False, use_custom_executable=False, custom_exec_path='', demo_custom_exec_path='', direct_launch_slot_id=-1):
-        try:
-            is_demo_mode = isinstance(self.app_state.game_mode, DemoGameMode)
-            current_game_path = self._get_current_game_path()
-            if not current_game_path or not os.path.exists(current_game_path):
-                raise Exception(tr('errors.game_files_not_found'))
-            executable_path = None
-            if use_custom_executable:
-                exec_path = demo_custom_exec_path if is_demo_mode else custom_exec_path
-                if exec_path and os.path.exists(exec_path):
-                    executable_path = exec_path
-                else:
-                    raise Exception(tr('errors.specified_executable_not_found'))
-            else:
-                if isinstance(self.app_state.game_mode, UndertaleGameMode):
-                    possible_names = ['UNDERTALE.exe', 'undertale.exe']
-                else:
-                    possible_names = ['DELTARUNE.exe', 'deltarune.exe', 'SURVEY_PROGRAM.exe', 'survey_program.exe']
-                for name in possible_names:
-                    test_path = os.path.join(current_game_path, name)
-                    if os.path.exists(test_path):
-                        executable_path = test_path
-                        break
-                if not executable_path:
-                    raise Exception(tr('errors.executable_not_found_simple'))
-            if launch_via_steam:
-                steam_app_id = self.app_state.game_mode.steam_id
-                webbrowser.open(f'steam://run/{steam_app_id}')
-            else:
-                args = []
-                if direct_launch_slot_id >= 0:
-                    if direct_launch_slot_id == 1:
-                        args.extend(['-chapter', '1'])
-                    elif direct_launch_slot_id == 2:
-                        args.extend(['-chapter', '2'])
-                command = [executable_path] + args
-                subprocess.Popen(command, cwd=current_game_path)
-        except Exception as e:
-            raise Exception(tr('errors.launch_error_details', error=str(e)))
-
-    def _save_shortcut(self, settings: Dict[str, Any]):
-        system = platform.system()
-        if system == 'Windows':
-            file_filter = tr('ui.windows_shortcut_filter')
-            default_name = tr('ui.default_shortcut_name_bat')
-        elif system == 'Darwin':
-            file_filter = 'macOS Command Script (*.command)'
-            default_name = tr('ui.default_shortcut_name_command')
-        else:
-            file_filter = tr('ui.desktop_shortcut_filter')
-            default_name = 'DELTAHUB-Deltarune.desktop'
-        shortcut_path, _ = QFileDialog.getSaveFileName(self, tr('dialogs.save_shortcut'), os.path.expanduser(f'~/{default_name}'), file_filter)
-        if not shortcut_path:
-            return
-        if getattr(sys, 'frozen', False):
-            launcher_executable_path = sys.executable
-        else:
-            launcher_executable_path = sys.executable
-            main_script_path = os.path.join(os.path.dirname(__file__), 'main.py')
-        settings_json = json.dumps(settings)
-        settings_b64 = base64.b64encode(settings_json.encode('utf-8')).decode('utf-8')
-        args = f'--shortcut-launch "{settings_b64}" --shortcut-path "{shortcut_path}"'
-        try:
-            if system == 'Windows':
-                if getattr(sys, 'frozen', False):
-                    content = f'@echo off\nstart "" "{launcher_executable_path}" {args}'
-                else:
-                    content = f'@echo off\nstart "" "{launcher_executable_path}" "{main_script_path}" {args}'
-            elif system == 'Darwin':
-                content = f'#!/bin/bash\nnohup "{launcher_executable_path}" {args} > /dev/null 2>&1 &'
-            else:
-                icon_path = resource_path('assets/icons/icon.ico')
-                content = f'[Desktop Entry]\nVersion=1.0\nType=Application\nName=Deltarune (DELTAHUB)\nExec="{launcher_executable_path}" {args}\nIcon={icon_path}\nTerminal=false\n'
-            with open(shortcut_path, 'w', encoding='utf-8') as f:
-                f.write(content)
-            if system in ['Linux', 'Darwin']:
-                os.chmod(shortcut_path, 493)
-            self.feedback_manager.show_info('dialogs.success', tr('dialogs.shortcut_created_successfully', path=shortcut_path))
-        except Exception as e:
-            self.feedback_manager.update_status(tr('status.shortcut_creation_error', error=str(e)), UI_COLORS['status_error'])
-            self.feedback_manager.show_error('errors.error', tr('errors.shortcut_creation_failed', error=str(e)))
 
     def _get_target_dir(self, chapter_id):
         target_base = self._get_current_game_path()

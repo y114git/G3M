@@ -40,6 +40,7 @@
     "desktop_shortcut_filter": "桌面捷徑 (*.desktop)",
     "details_button": "詳情",
     "direct_launch": "直接啟動",
+    "direct_launch_steam_conflict": "直接啟動與「透過Steam啟動」不相容。請先在設定中禁用「透過Steam啟動」。",
     "disable_direct_launch": "禁用第{chapter}章的直接啟動？",
     "downloads_count": "您的模組下載次數：{count}",
     "downloads_label": "下載次數：",
@@ -192,7 +193,8 @@
     "mod_slot": "模組槽位",
     "search_tab": "搜尋模組",
     "select": "選擇",
-    "steam_launch": "透過Steam啟動"
+    "steam_launch": "透過Steam啟動",
+    "steam_launch_direct_conflict": "「透過Steam啟動」與直接啟動不相容。請先禁用直接啟動（雙擊章節槽位）。"
   },
   "files": {
     "archive_link": "壓縮檔案連結",
@@ -288,6 +290,7 @@
     "all_mods": "所有模組"
   },
   "dialogs": {
+    "create_shortcut_question": "建立捷徑？",
     "access_error": "訪問錯誤",
     "additional_collection": "附加存檔集",
     "all_slots_occupied": "所有槽位已被佔用。在添加新模組之前請釋放一個槽位。",
@@ -553,6 +556,7 @@
     "xdelta_patch_error": "無法套用xdelta補丁：{error}"
   },
   "status": {
+    "shortcut_created": "捷徑已建立：{path}",
     "vanilla": "原版",
     "recovering_previous_session": "恢復上一會話...",
     "applying_mod": "正在套用模組：{mod_name} ({mod_type})...",
