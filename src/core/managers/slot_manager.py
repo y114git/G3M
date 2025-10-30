@@ -133,7 +133,6 @@ class SlotManager(QObject):
                 mod_name = getattr(slot_frame.assigned_mod, 'name', getattr(slot_frame.assigned_mod, 'key', 'Unknown'))
                 if self.feedback_manager.ask_question('ui.remove_mod_from_slot', 'ui.remove_mod_question', '', False, mod_name=mod_name):
                     self.remove_mod_from_slot(slot_frame, slot_frame.assigned_mod)
-                    self.save_slots_state()
             else:
                 self.show_mod_selection_for_slot(slot_frame)
         else:
@@ -154,9 +153,13 @@ class SlotManager(QObject):
     def on_slot_frame_double_clicked(self, slot_frame: SlotFrame):
         if slot_frame.chapter_id < 0:
             return
+        use_steam = self.app_state.local_config.get('launch_via_steam', False)
         direct_launch_slot_id = self.app_state.local_config.get('direct_launch_slot_id', -1)
         current_is_direct = slot_frame.chapter_id == direct_launch_slot_id
         if not current_is_direct:
+            if use_steam:
+                self.feedback_manager.show_warning('ui.direct_launch', tr('ui.direct_launch_steam_conflict'))
+                return
             chapter_name = self._get_chapter_name(slot_frame.chapter_id)
             if self.feedback_manager.ask_question('ui.direct_launch', 'ui.enable_direct_launch', '', False, chapter=chapter_name):
                 self.toggle_direct_launch_for_slot(slot_frame.chapter_id)
@@ -244,7 +247,7 @@ class SlotManager(QObject):
         if save_state:
             self.save_slots_state()
 
-    def remove_mod_from_slot(self, slot_frame: SlotFrame, mod_data):
+    def remove_mod_from_slot(self, slot_frame: SlotFrame, mod_data, save_state: bool = True):
         slot_frame.assigned_mod = None
         if slot_frame.content_widget:
             slot_frame.content_widget.setParent(None)
@@ -277,6 +280,8 @@ class SlotManager(QObject):
         if slot_frame.chapter_id == -1:
             self.update_chapter_indicators(None)
         self.action_button_update_needed.emit()
+        if save_state:
+            self.save_slots_state()
 
     def show_mod_selection_for_slot(self, slot_frame: SlotFrame):
         if not self.parent_widget:
@@ -352,7 +357,7 @@ class SlotManager(QObject):
             if slot_frame.assigned_mod:
                 assigned_key = getattr(slot_frame.assigned_mod, 'key', None) or getattr(slot_frame.assigned_mod, 'mod_key', None) or getattr(slot_frame.assigned_mod, 'name', None)
                 if assigned_key == mod_key:
-                    self.remove_mod_from_slot(slot_frame, slot_frame.assigned_mod)
+                    self.remove_mod_from_slot(slot_frame, slot_frame.assigned_mod, save_state=False)
         self.save_slots_state()
 
     def clear_all_slots(self):
@@ -418,6 +423,9 @@ class SlotManager(QObject):
         self.settings_manager.write_local_config()
         self.update_all_slots_visual_state()
         self.action_button_update_needed.emit()
+        if self.parent_widget and hasattr(self.parent_widget, 'launch_via_steam_checkbox'):
+            direct_launch_enabled = slot_id >= 0
+            self.parent_widget.launch_via_steam_checkbox.setEnabled(not direct_launch_enabled)
 
     def get_slots_config_key(self, game_mode_instance=None, is_chapter_mode: Optional[bool] = None):
         if game_mode_instance is None:
@@ -450,7 +458,7 @@ class SlotManager(QObject):
         config_key = self.get_slots_config_key(self.app_state.game_mode, is_chapter_mode)
         for slot in self.app_state.slots.values():
             if slot.assigned_mod:
-                self.remove_mod_from_slot(slot, slot.assigned_mod)
+                self.remove_mod_from_slot(slot, slot.assigned_mod, save_state=False)
         if isinstance(self.app_state.game_mode, DemoGameMode):
             config_key = 'saved_slots_deltarunedemo'
         elif isinstance(self.app_state.game_mode, UndertaleGameMode):
@@ -502,9 +510,12 @@ class SlotManager(QObject):
                 if mod_config:
                     mod_data = self.parent_widget._create_mod_object_from_info(mod_config)
             if mod_data:
-                current_slot = self.find_mod_in_slots(mod_data)
-                if not current_slot:
+                if is_chapter_mode:
                     self.assign_mod_to_slot(slot_frame, mod_data, save_state=False)
+                else:
+                    current_slot = self.find_mod_in_slots(mod_data)
+                    if not current_slot:
+                        self.assign_mod_to_slot(slot_frame, mod_data, save_state=False)
             elif slot_id in slots_data:
                 del slots_data[slot_id]
         if slots_data != self.app_state.local_config.get(config_key, {}):

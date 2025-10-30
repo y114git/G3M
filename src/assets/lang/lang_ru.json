@@ -40,6 +40,7 @@
     "desktop_shortcut_filter": "Ярлык рабочего стола (*.desktop)",
     "details_button": "Подробнее",
     "direct_launch": "Прямой запуск",
+    "direct_launch_steam_conflict": "Прямой запуск несовместим с 'Запуском через Steam'. Пожалуйста, сначала отключите 'Запуск через Steam' в настройках.",
     "disable_direct_launch": "Отключить прямой запуск для {chapter} главы?",
     "downloads_count": "Количество скачиваний вашего мода: {count}",
     "downloads_label": "Скачиваний:",
@@ -192,7 +193,8 @@
     "mod_slot": "Слот для мода",
     "search_tab": "Поиск модов",
     "select": "Выберите",
-    "steam_launch": "Запускать через Steam"
+    "steam_launch": "Запускать через Steam",
+    "steam_launch_direct_conflict": "'Запуск через Steam' несовместим с прямым запуском. Пожалуйста, сначала отключите прямой запуск (дважды кликните на слот главы)."
   },
   "files": {
     "archive_link": "Ссылка на архив",
@@ -288,6 +290,7 @@
     "all_mods": "Все моды"
   },
   "dialogs": {
+    "create_shortcut_question": "Создать ярлык?",
     "access_error": "Ошибка доступа",
     "additional_collection": "Дополнительная коллекция",
     "all_slots_occupied": "Все слоты заняты. Освободите слот перед добавлением нового мода.",
@@ -554,6 +557,7 @@
     "xdelta_patch_error": "Не удалось применить xdelta патч: {error}"
   },
   "status": {
+    "shortcut_created": "Ярлык создан: {path}",
     "vanilla": "Без изменений",
     "recovering_previous_session": "Восстановление предыдущей сессии...",
     "applying_mod": "Применение мода: {mod_name} ({mod_type})...",

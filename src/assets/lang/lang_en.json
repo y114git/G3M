@@ -40,6 +40,7 @@
     "desktop_shortcut_filter": "Desktop Shortcut (*.desktop)",
     "details_button": "Details",
     "direct_launch": "Direct Launch",
+    "direct_launch_steam_conflict": "Direct launch is incompatible with 'Launch via Steam'. Please disable 'Launch via Steam' in the settings first.",
     "disable_direct_launch": "Disable direct launch for Chapter {chapter}?",
     "downloads_count": "Your mod downloads: {count}",
     "downloads_label": "Downloads:",
@@ -192,7 +193,8 @@
     "mod_slot": "Mod slot",
     "search_tab": "Search Mods",
     "select": "Select",
-    "steam_launch": "Launch via Steam"
+    "steam_launch": "Launch via Steam",
+    "steam_launch_direct_conflict": "'Launch via Steam' is incompatible with direct launch. Please disable direct launch first (double-click on the chapter slot)."
   },
   "files": {
     "archive_link": "Archive link",
@@ -288,6 +290,7 @@
     "all_mods": "All mods"
   },
   "dialogs": {
+    "create_shortcut_question": "Create Shortcut?",
     "access_error": "Access Error",
     "additional_collection": "Additional collection",
     "all_slots_occupied": "All slots are occupied. Free a slot before adding a new mod.",
@@ -553,6 +556,7 @@
     "xdelta_patch_error": "Failed to apply xdelta patch: {error}"
   },
   "status": {
+    "shortcut_created": "Shortcut created: {path}",
     "vanilla": "Vanilla",
     "recovering_previous_session": "Recovering previous session...",
     "applying_mod": "Applying mod: {mod_name} ({mod_type})...",
