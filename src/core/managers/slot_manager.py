@@ -294,7 +294,7 @@ class SlotManager(QObject):
     def show_mod_selection_for_slot(self, slot_frame: SlotFrame):
         if not self.parent_widget:
             return
-        installed_mods = self.parent_widget._get_installed_mods_list()
+        installed_mods = self.mod_manager.get_installed_mods_list()
         available_mods = []
         for mod_info in installed_mods:
             if not mod_info:
@@ -510,7 +510,7 @@ class SlotManager(QObject):
                         mod_data = mod
                         break
             if not mod_data and self.parent_widget:
-                installed_mods = self.parent_widget._get_installed_mods_list()
+                installed_mods = self.mod_manager.get_installed_mods_list()
                 for installed_mod in installed_mods:
                     installed_mod_key = installed_mod.get('mod_key') or installed_mod.get('key') or installed_mod.get('name')
                     if installed_mod_key == mod_key:
@@ -568,3 +568,27 @@ class SlotManager(QObject):
                     if status == 'update':
                         return True
         return False
+
+    def collect_mods_needing_update_in_active_slots(self) -> list:
+        if getattr(self.app_state, 'is_installing', False):
+            return []
+        is_demo_mode = isinstance(self.app_state.game_mode, DemoGameMode)
+        if is_demo_mode:
+            active_slot_ids = [-10]
+        elif isinstance(self.app_state.game_mode, UndertaleGameMode):
+            active_slot_ids = [-20]
+        elif self.app_state.current_mode != 'chapter':
+            active_slot_ids = [-1]
+        else:
+            active_slot_ids = [0, 1, 2, 3, 4]
+        mods_to_update = []
+        for slot_id in active_slot_ids:
+            for slot_frame in getattr(self.app_state, 'slots', {}).values():
+                if slot_frame.chapter_id == slot_id and slot_frame.assigned_mod:
+                    mod_data = slot_frame.assigned_mod
+                    if getattr(mod_data, 'is_local_mod', False):
+                        continue
+                    needs_update = any((self.mod_manager.mod_has_files_for_chapter(mod_data, i) and self.mod_manager.get_mod_status(mod_data, i) == 'update' for i in range(5)))
+                    if needs_update and mod_data not in mods_to_update:
+                        mods_to_update.append(mod_data)
+        return mods_to_update

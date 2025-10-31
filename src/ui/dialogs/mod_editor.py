@@ -1773,7 +1773,7 @@ class ModEditorDialog(QDialog):
                     processed_files_data[file_key] = new_file_data
             config_data = {'is_local_mod': True, 'mod_key': mod_key, 'created_date': time.strftime('%d.%m.%y %H:%M'), 'is_available_on_server': False, 'name': mod_data.get('name', ''), 'version': mod_data.get('version', '1.0.0'), 'author': mod_data.get('author', ''), 'tagline': mod_data.get('tagline', tr('defaults.no_short_description')), 'external_url': mod_data.get('external_url', ''), 'game_version': mod_data.get('game_version', tr('defaults.not_specified')), 'modgame': mod_data.get('modgame', 'deltarune'), 'files': processed_files_data, 'tags': mod_data.get('tags', [])}
             config_path = os.path.join(mod_dir, 'config.json')
-            self.parent_app._write_json(config_path, config_data)
+            self.parent_app.settings_manager.write_json(config_path, config_data)
             self.parent_app.mod_manager.load_local_mods()
             self.parent_app._update_installed_mods_display()
             QMessageBox.information(self, tr('dialogs.local_mod_created_title'), tr('dialogs.local_mod_created_message', mod_name=mod_data['name']))
@@ -1868,7 +1868,7 @@ class ModEditorDialog(QDialog):
                 config_path = os.path.join(folder_path, 'config.json')
                 if os.path.exists(config_path):
                     try:
-                        config_data = self.parent_app._read_json(config_path)
+                        config_data = self.parent_app.settings_manager.read_json(config_path)
                         if config_data and config_data.get('mod_key') == mod_key:
                             mod_folder_path = folder_path
                             break
@@ -1879,7 +1879,7 @@ class ModEditorDialog(QDialog):
             return
         try:
             config_path = os.path.join(mod_folder_path, 'config.json')
-            config_data = self.parent_app._read_json(config_path)
+            config_data = self.parent_app.settings_manager.read_json(config_path)
             new_icon_path = self.icon_edit.text().strip()
             if new_icon_path and os.path.exists(new_icon_path):
                 icon_filename = os.path.basename(new_icon_path)
@@ -1927,7 +1927,7 @@ class ModEditorDialog(QDialog):
                         if copied_paths:
                             files_data[file_key]['extra_files'][group_key] = copied_paths
             config_data.update({'name': updated_data.get('name', ''), 'version': updated_data.get('version', '1.0.0'), 'author': updated_data.get('author', ''), 'tagline': updated_data.get('tagline', ''), 'external_url': updated_data.get('external_url', ''), 'game_version': updated_data.get('game_version', tr('defaults.not_specified')), 'modgame': updated_data.get('modgame', 'deltarune'), 'files': files_data, 'tags': updated_data.get('tags', [])})
-            self.parent_app._write_json(config_path, config_data)
+            self.parent_app.settings_manager.write_json(config_path, config_data)
             self.parent_app.mod_manager.load_local_mods()
             self.parent_app._update_installed_mods_display()
             QMessageBox.information(self, tr('dialogs.local_mod_updated_title'), tr('dialogs.local_mod_updated_message', mod_name=updated_data['name']))
@@ -1977,7 +1977,7 @@ class ModEditorDialog(QDialog):
                     config_path = os.path.join(folder_path, 'config.json')
                     if os.path.exists(config_path):
                         try:
-                            config_data = self.parent_app._read_json(config_path)
+                            config_data = self.parent_app.settings_manager.read_json(config_path)
                             if config_data and config_data.get('mod_key') == self.mod_key:
                                 mod_folder_path = folder_path
                                 break
