@@ -6,7 +6,7 @@ import uuid
 import logging
 import xml.etree.ElementTree as ET
 from typing import Optional, Dict, Any
-from core.managers.localization_manager import tr
+from managers.localization_manager import tr
 
 
 class DeltamodConverter:
