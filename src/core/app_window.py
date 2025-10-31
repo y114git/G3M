@@ -5,30 +5,27 @@ import platform
 import shutil
 import sys
 import threading
-import time
 import uuid
 import subprocess
 import webbrowser
 import argparse
-from typing import Callable, Optional, Dict
+from typing import Callable, Optional
 import logging
 import requests
 from PyQt6.QtCore import QTranslator, Qt, QEvent, QThread, QTimer, pyqtSignal
 from PyQt6.QtGui import QColor, QFont, QIcon, QMovie, QPainter, QPixmap
-from PyQt6.QtWidgets import QApplication, QCheckBox, QDialog, QDialogButtonBox, QFileDialog, QFrame, QLabel, QLineEdit, QMessageBox, QProgressBar, QPushButton, QTabWidget, QTextBrowser, QVBoxLayout, QWidget, QHBoxLayout, QSizePolicy, QInputDialog, QColorDialog, QListWidget, QScrollArea
+from PyQt6.QtWidgets import QApplication, QCheckBox, QDialog, QDialogButtonBox, QFileDialog, QFrame, QLabel, QLineEdit, QMessageBox, QProgressBar, QPushButton, QTabWidget, QVBoxLayout, QWidget, QHBoxLayout, QSizePolicy, QInputDialog, QColorDialog, QListWidget
 from core.managers.localization_manager import localization_manager, tr
 from models.game_modes import FullGameMode, DemoGameMode, UndertaleGameMode
 from config.constants import LAUNCHER_VERSION, UI_COLORS, SOCIAL_LINKS, THEMES, ARCH
-from utils.file_utils import autodetect_path
-from utils.game_utils import is_game_running, is_valid_game_path
+from utils.game_utils import is_game_running
 from utils.path_utils import get_user_data_root, resource_path, get_launcher_dir, get_legacy_ylauncher_path, get_user_plugins_dir
 from utils.network_utils import check_internet_connection
 from core.managers.mod_manager import parse_mod_date
 from threads.fetch_mods import FetchModsThread
 from threads.background_workers import PresenceWorker, FetchChangelogThread, BgLoader, FullInstallThread, InstallModsThread, FetchHelpContentThread
-from ui.styling import get_theme_color, clear_layout_widgets, load_mod_icon_universal, show_empty_message_in_layout
-from ui.widgets.outlined_label import OutlinedTextLabel
-from ui.components.screenshots_carousel import ScreenshotsCarousel
+from ui.styling import clear_layout_widgets, load_mod_icon_universal, show_empty_message_in_layout
+from ui.dialogs.mod_details import open_mod_details_dialog
 from ui.widgets.mod_plaque_widget import ModPlaqueWidget
 from ui.widgets.installed_mod_widget import InstalledModWidget
 from ui.dialogs.xdelta_dialog import XdeltaDialog
@@ -102,7 +99,7 @@ class AppWindow(QWidget):
         self.setWindowTitle('DELTAHUB')
         self._supports_volume = platform.system() == 'Windows'
         self._initial_size = None
-        self.app_state.local_config = self._read_json(self.app_state.config_path) or {}
+        self.app_state.local_config = self.settings_manager.read_json(self.app_state.config_path) or {}
         self._init_localization()
         self.app_state.save_path = ''
         self.resize(875, 750)
@@ -159,7 +156,7 @@ class AppWindow(QWidget):
             self._shortcut_launch(args)
             return
         self.init_ui()
-        self.load_font()
+        self.custom_font_family = localization_manager.load_font()
         QTimer.singleShot(0, lambda: self.ui_ready.emit())
         self.update_status_signal.connect(self._update_status)
         self.hide_window_signal.connect(self._hide_window_for_game)
@@ -756,7 +753,7 @@ class AppWindow(QWidget):
         self._update_change_path_button_text()
         self._update_saves_button_state()
         self.app_state.local_config['selected_game_type'] = game_type
-        self._write_local_config()
+        self.settings_manager.write_local_config()
 
     def _update_checkbox_visibility(self):
         game_type = self.game_type_combo.currentData()
@@ -779,16 +776,7 @@ class AppWindow(QWidget):
         is_chapter = bool(state)
         old_is_chapter = self.app_state.current_mode == 'chapter'
         if old_is_chapter != is_chapter:
-            old_config_key = self.slot_manager.get_slots_config_key(self.app_state.game_mode, old_is_chapter)
-            slots_data = {}
-            if hasattr(self.app_state, 'slots'):
-                for slot_id, slot_frame in self.app_state.slots.items():
-                    if slot_frame.assigned_mod:
-                        mod_key = getattr(slot_frame.assigned_mod, 'key', None) or getattr(slot_frame.assigned_mod, 'mod_key', None) or getattr(slot_frame.assigned_mod, 'name', None)
-                        if mod_key:
-                            slots_data[str(slot_id)] = {'mod_key': mod_key, 'mod_name': slot_frame.assigned_mod.name}
-            self.app_state.local_config[old_config_key] = slots_data
-            self._write_local_config()
+            self.slot_manager.save_slots_state()
         self.app_state.current_mode = 'chapter' if is_chapter else 'normal'
         self.game_type_combo.setEnabled(not is_chapter)
         self.slot_manager.update_slots_display(self.active_slots_layout)
@@ -807,7 +795,7 @@ class AppWindow(QWidget):
                 self.app_state.local_config['direct_launch_slot_id'] = -1
         self._update_change_path_button_text()
         self.app_state.local_config['chapter_mode_enabled'] = is_chapter
-        self._write_local_config()
+        self.settings_manager.write_local_config()
 
     def _show_chapter_mode_instruction(self):
         if not hasattr(self, 'installed_mods_layout'):
@@ -827,7 +815,7 @@ class AppWindow(QWidget):
             return
         self._updating_chapter_mods = True
         clear_layout_widgets(self.installed_mods_layout, keep_last_n=1)
-        installed_mods = self._get_installed_mods_list()
+        installed_mods = self.mod_manager.get_installed_mods_list()
         if hasattr(self, 'library_sort_combo'):
             sort_type = self.library_sort_combo.currentIndex()
             reverse = not self.library_sort_ascending
@@ -1054,7 +1042,7 @@ class AppWindow(QWidget):
 
             def run(self):
                 try:
-                    mods = self.outer._get_installed_mods_list()
+                    mods = self.outer.mod_manager.get_installed_mods_list()
                 except Exception:
                     mods = []
                 self.done.emit(mods)
@@ -1063,7 +1051,7 @@ class AppWindow(QWidget):
             self._installed_scan_thread.done.connect(self._update_installed_mods_display_from_list)
             self._installed_scan_thread.start()
         except Exception:
-            mods = self._get_installed_mods_list()
+            mods = self.mod_manager.get_installed_mods_list()
             self._update_installed_mods_display_from_list(mods)
 
     def _cleanup_missing_mods(self, installed_mods):
@@ -1095,49 +1083,10 @@ class AppWindow(QWidget):
                     del slots_data[slot_id_str]
                 if slots_to_clear:
                     self.app_state.local_config[config_key] = slots_data
-                    self._write_local_config()
+                    self.settings_manager.write_local_config()
 
     def _get_installed_mods_list(self):
-        installed_mods = []
-        if not hasattr(self, 'app_state') or not os.path.exists(self.app_state.mods_dir):
-            return installed_mods
-        mods_metadata = self.mod_manager._read_metadata()
-        metadata_updated = False
-        found_mod_keys = set()
-        for folder_name in os.listdir(self.app_state.mods_dir):
-            folder_path = os.path.join(self.app_state.mods_dir, folder_name)
-            if not os.path.isdir(folder_path):
-                continue
-            config_path = os.path.join(folder_path, 'config.json')
-            if os.path.exists(config_path):
-                try:
-                    config_data = self._read_json(config_path)
-                    if config_data:
-                        mod_key = config_data.get('mod_key')
-                        if not mod_key:
-                            continue
-                        found_mod_keys.add(mod_key)
-                        mod_meta = mods_metadata.get(mod_key)
-                        if not mod_meta:
-                            mods_metadata[mod_key] = {'installed_date': time.strftime('%Y-%m-%d %H:%M:%S'), 'is_available_on_server': not config_data.get('is_local_mod', False)}
-                            metadata_updated = True
-                            mod_meta = mods_metadata[mod_key]
-                        config_data['installed_date'] = mod_meta.get('installed_date')
-                        config_data['is_available_on_server'] = mod_meta.get('is_available_on_server', False)
-                        config_data['is_local_mod'] = config_data.get('is_local_mod', False)
-                        config_data['folder_name'] = folder_name
-                        installed_mods.append(config_data)
-                except Exception as e:
-                    logging.warning(f'Failed to read config {config_path}: {e}')
-                    continue
-        orphaned_keys = set(mods_metadata.keys()) - found_mod_keys
-        if orphaned_keys:
-            for key in list(orphaned_keys):
-                del mods_metadata[key]
-            metadata_updated = True
-        if metadata_updated:
-            self.mod_manager._write_metadata(mods_metadata)
-        return installed_mods
+        return self.mod_manager.get_installed_mods_list()
 
     def _on_installed_mod_clicked(self, mod_data):
         for i in range(self.installed_mods_layout.count() - 1):
@@ -1252,222 +1201,7 @@ class AppWindow(QWidget):
                 self.slot_manager.assign_mod_to_slot(selected_slot, mod_data)
 
     def _show_mod_details_dialog(self, mod_data):
-        dialog = QDialog(self)
-        dialog.setWindowTitle(tr('ui.mod_details_title', mod_name=mod_data.name))
-        dialog.setMinimumSize(700, 700)
-        dialog.resize(800, 750)
-        secondary_text_color = get_theme_color(self.app_state.local_config, 'version_text', 'rgba(255, 255, 255, 178)')
-        layout = QVBoxLayout(dialog)
-        layout.setSpacing(15)
-        scroll_area = QScrollArea()
-        scroll_widget = QWidget()
-        scroll_layout = QVBoxLayout(scroll_widget)
-        header_layout = QHBoxLayout()
-        left_layout = QVBoxLayout()
-        icon_label = QLabel()
-        icon_label.setFixedSize(120, 120)
-        icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        icon_label.setStyleSheet('border: 2px solid #fff;')
-        load_mod_icon_universal(icon_label, mod_data, 120)
-        left_layout.addWidget(icon_label)
-        left_container = QWidget()
-        left_container.setMaximumWidth(200)
-        left_container.setLayout(left_layout)
-        metadata_layout = QVBoxLayout()
-        metadata_layout.setSpacing(3)
-        author_text = mod_data.author or tr('defaults.unknown')
-        author_label = QLabel(f"""<span style="color: white;">{tr('ui.author_label')}</span> <span style="color: {secondary_text_color};">{author_text}</span>""")
-        author_label.setStyleSheet('font-size: 12px;')
-        metadata_layout.addWidget(author_label)
-        game_version_text = mod_data.game_version or 'N/A'
-        game_version_label = QLabel(f"""<span style="color: white;">{tr('ui.game_version_label')}</span> <span style="color: {secondary_text_color};">{game_version_text}</span>""")
-        game_version_label.setStyleSheet('font-size: 12px;')
-        metadata_layout.addWidget(game_version_label)
-        created_date_text = mod_data.created_date or 'N/A'
-        created_label = QLabel(f"""<span style="color: white;">{tr('ui.created_label')}</span> <span style="color: {secondary_text_color};">{created_date_text}</span>""")
-        created_label.setStyleSheet('font-size: 12px;')
-        metadata_layout.addWidget(created_label)
-        updated_date_text = mod_data.last_updated or 'N/A'
-        updated_label = QLabel(f"""<span style="color: white;">{tr('ui.updated_label')}</span> <span style="color: {secondary_text_color};">{updated_date_text}</span>""")
-        updated_label.setStyleSheet('font-size: 12px;')
-        metadata_layout.addWidget(updated_label)
-        downloads_label = QLabel(f"""<span style="color: white;">{tr('ui.downloads_label')}</span> <span style="color: {secondary_text_color};">{mod_data.downloads}</span>""")
-        downloads_label.setStyleSheet('font-size: 12px;')
-        metadata_layout.addWidget(downloads_label)
-        if hasattr(mod_data, 'tags') and mod_data.tags:
-            metadata_layout.addSpacing(8)
-            tags_header = QLabel(tr('ui.tags_label'))
-            tags_header.setStyleSheet('font-size: 12px; color: white; font-weight: bold;')
-            metadata_layout.addWidget(tags_header)
-            tag_translations = {'translation': tr('tags.translation'), 'customization': tr('tags.customization'), 'gameplay': tr('tags.gameplay'), 'other': tr('tags.other')}
-            tags_list = mod_data.tags if isinstance(mod_data.tags, list) else [mod_data.tags]
-            filtered_tags = [tag for tag in tags_list if tag]
-            translated_tags = [tag_translations.get(tag, tag) or tag for tag in filtered_tags]
-            for tag in translated_tags:
-                tag_label = QLabel(tag)
-                tag_label.setStyleSheet(f'font-size: 12px; color: {secondary_text_color}; margin-left: 10px;')
-                tag_label.setMaximumWidth(190)
-                metadata_layout.addWidget(tag_label)
-        left_layout.addLayout(metadata_layout)
-        left_layout.addStretch()
-        header_layout.addWidget(left_container)
-        right_layout = QVBoxLayout()
-        if hasattr(mod_data, 'external_url') and mod_data.external_url:
-            external_url_button = QPushButton(tr('ui.view_on_external_site'))
-            external_url_button.clicked.connect(lambda: webbrowser.open(mod_data.external_url))
-            external_url_button.setStyleSheet('color: #FFD700; font-weight: bold;')
-            right_layout.addWidget(external_url_button)
-        title_label = QLabel(f'<h2>{mod_data.name}</h2>')
-        title_label.setWordWrap(True)
-        right_layout.addWidget(title_label)
-        mod_version = mod_data.version.split('|')[0] if mod_data.version and '|' in mod_data.version else mod_data.version
-        version_text = mod_version or 'N/A'
-        version_label = QLabel(tr('ui.mod_version_label', version_text=version_text))
-        version_label.setStyleSheet(f'font-size: 14px; color: {secondary_text_color}; margin-bottom: 10px;')
-        right_layout.addWidget(version_label)
-        tagline_container = QWidget()
-        tagline_container.setMinimumHeight(180)
-        tagline_layout = QVBoxLayout(tagline_container)
-        tagline_layout.setContentsMargins(0, 0, 0, 0)
-        if mod_data.tagline:
-            tagline_label = QLabel(mod_data.tagline)
-            tagline_label.setWordWrap(True)
-            tagline_label.setStyleSheet('font-size: 14px; color: #ddd;')
-            tagline_label.setAlignment(Qt.AlignmentFlag.AlignTop)
-            tagline_layout.addWidget(tagline_label)
-        tagline_layout.addSpacing(20)
-        status_layout = QVBoxLayout()
-        status_layout.setSpacing(15)
-        modgame_container = QVBoxLayout()
-        modgame_container.setSpacing(4)
-        modgame_label = OutlinedTextLabel(tr(f'ui.{mod_data.modgame}_label'))
-        fill_color = 'white'
-        outline_color = '#222222'
-        if mod_data.modgame == 'deltarune':
-            outline_color = '#222222'
-        elif mod_data.modgame == 'deltarunedemo':
-            outline_color = 'lightgreen'
-        elif mod_data.modgame == 'undertale':
-            outline_color = '#750B0B'
-        f = modgame_label.font()
-        f.setBold(True)
-        f.setPointSize(15)
-        modgame_label.setFont(f)
-        modgame_label.setColors(fill_color, outline_color)
-        modgame_label.setOutlineWidth(0.8)
-        modgame_label.setMinimumHeight(26)
-        modgame_label.setLeftMargin(0)
-        modgame_container.addWidget(modgame_label)
-        modgame_desc = OutlinedTextLabel(tr(f'ui.{mod_data.modgame}_desc'))
-        df = modgame_desc.font()
-        df.setPointSize(11)
-        modgame_desc.setFont(df)
-        modgame_desc.setColors(fill_color, outline_color)
-        modgame_desc.setOutlineWidth(0.7)
-        modgame_desc.setMinimumHeight(18)
-        modgame_desc.setLeftMargin(12)
-        modgame_container.addWidget(modgame_desc)
-        status_layout.addLayout(modgame_container)
-        tagline_layout.addLayout(status_layout)
-        tagline_layout.addStretch()
-        right_layout.addWidget(tagline_container)
-        if getattr(mod_data, 'is_verified', False):
-            verified_container = QVBoxLayout()
-            verified_container.setSpacing(4)
-            verified_label = QLabel(tr('ui.verified_label'))
-            verified_label.setStyleSheet('color: #4CAF50; font-size: 15px;')
-            verified_container.addWidget(verified_label)
-            verified_desc = QLabel(tr('ui.verified_desc'))
-            verified_desc.setStyleSheet('color: #4CAF50; font-size: 11px; margin-left: 12px;')
-            verified_desc.setWordWrap(True)
-            verified_container.addWidget(verified_desc)
-            status_layout.addLayout(verified_container)
-        if getattr(mod_data, 'is_xdelta', False):
-            patching_container = QVBoxLayout()
-            patching_container.setSpacing(4)
-            patching_label = QLabel(tr('ui.patching_label'))
-            patching_label.setStyleSheet('color: #2196F3; font-size: 15px;')
-            patching_container.addWidget(patching_label)
-            patching_desc = QLabel(tr('ui.patching_desc'))
-            patching_desc.setStyleSheet('color: #2196F3; font-size: 11px; margin-left: 12px;')
-            patching_desc.setWordWrap(True)
-            patching_container.addWidget(patching_desc)
-            status_layout.addLayout(patching_container)
-        else:
-            replacement_container = QVBoxLayout()
-            replacement_container.setSpacing(4)
-            replacement_label = QLabel(tr('ui.file_replacement_label'))
-            replacement_label.setStyleSheet('color: #FF9800; font-size: 15px;')
-            replacement_container.addWidget(replacement_label)
-            replacement_desc = QLabel(tr('ui.file_replacement_desc'))
-            replacement_desc.setStyleSheet('color: #FF9800; font-size: 11px; margin-left: 12px;')
-            replacement_desc.setWordWrap(True)
-            replacement_container.addWidget(replacement_desc)
-            status_layout.addLayout(replacement_container)
-        right_layout.addStretch()
-        header_layout.addLayout(right_layout)
-        scroll_layout.addLayout(header_layout)
-        separator = QFrame()
-        separator.setFrameShape(QFrame.Shape.HLine)
-        separator.setFrameShadow(QFrame.Shadow.Sunken)
-        scroll_layout.addWidget(separator)
-        screenshots = getattr(mod_data, 'screenshots_url', []) or []
-        if isinstance(screenshots, list) and any((isinstance(u, str) and u.strip() for u in screenshots)):
-            screenshots_title = QLabel(f"<b>{tr('ui.screenshots_title')}</b>")
-            screenshots_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            scroll_layout.addWidget(screenshots_title)
-            carousel = ScreenshotsCarousel(screenshots, self)
-            container = QWidget()
-            cont_layout = QHBoxLayout(container)
-            cont_layout.setContentsMargins(0, 0, 0, 0)
-            cont_layout.addStretch()
-            cont_layout.addWidget(carousel)
-            cont_layout.addStretch()
-            scroll_layout.addWidget(container)
-            scroll_layout.addSpacing(12)
-        full_desc_label = QLabel(f"<b>{tr('ui.full_description_label')}</b>")
-        full_desc_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        scroll_layout.addWidget(full_desc_label)
-        scroll_layout.addSpacing(6)
-        desc_text = QTextBrowser()
-        desc_text.setMinimumHeight(300)
-        desc_text.setOpenExternalLinks(True)
-        if hasattr(mod_data, 'description_url') and mod_data.description_url:
-            self._load_description_from_url(desc_text, mod_data.description_url)
-        else:
-            desc_text.setPlainText(tr('ui.no_description'))
-        scroll_layout.addWidget(desc_text)
-        scroll_area.setWidget(scroll_widget)
-        scroll_area.setWidgetResizable(True)
-        layout.addWidget(scroll_area)
-        buttons_layout = QHBoxLayout()
-        if hasattr(mod_data, 'url') and mod_data.url:
-            open_url_btn = QPushButton(tr('ui.open_in_browser'))
-            open_url_btn.clicked.connect(lambda: webbrowser.open(mod_data.url))
-            buttons_layout.addWidget(open_url_btn)
-        buttons_layout.addStretch()
-        close_btn = QPushButton(tr('buttons.close'))
-        close_btn.clicked.connect(dialog.close)
-        buttons_layout.addWidget(close_btn)
-        layout.addLayout(buttons_layout)
-        dialog.exec()
-
-    def _load_description_from_url(self, text_widget, description_url):
-        try:
-            import requests
-            text_widget.setPlainText(tr('status.loading_description'))
-            response = requests.get(description_url, timeout=10)
-            if response.ok:
-                content = response.text
-                is_markdown = description_url.lower().endswith(('.md', '.markdown')) or '# ' in content or '## ' in content or ('**' in content) or ('__' in content)
-                if is_markdown:
-                    text_widget.setMarkdown(content)
-                else:
-                    text_widget.setPlainText(content)
-            else:
-                text_widget.setPlainText(tr('errors.description_http_error_code', code=response.status_code))
-        except Exception as e:
-            text_widget.setPlainText(tr('errors.description_load_error_details', error=str(e)))
+        open_mod_details_dialog(self, mod_data)
 
     def _update_mod_widgets_slot_status(self):
         if not hasattr(self, 'installed_mods_layout') or self.installed_mods_layout is None:
@@ -1801,9 +1535,6 @@ class AppWindow(QWidget):
             return
         self._update_action_button_state()
 
-    def load_font(self):
-        self.custom_font_family = localization_manager.load_font()
-
     def apply_theme(self):
         theme = THEMES['default']
         background_path = None
@@ -1863,10 +1594,6 @@ class AppWindow(QWidget):
         bar = tab_widget.tabBar()
         if bar:
             bar.hide()
-            bar.setEnabled(False)
-            bar.setMaximumSize(0, 0)
-            bar.setMinimumSize(0, 0)
-            bar.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
 
     def _hide_save_manager(self):
         self.save_manager_widget.setVisible(False)
@@ -2016,12 +1743,6 @@ class AppWindow(QWidget):
             self.app_state.current_settings_page.setVisible(False)
         page.setVisible(True)
         self.app_state.current_settings_page = page
-
-    def _lock_window_size(self):
-        self.window_geometry_manager.lock_window_size(self)
-
-    def _unlock_window_size(self):
-        self.window_geometry_manager.unlock_window_size(self)
 
     def _go_back_or_to_main_menu(self):
         if hasattr(self, 'settings_nav_stack') and self.app_state.settings_nav_stack:
@@ -2251,7 +1972,7 @@ class AppWindow(QWidget):
             changelog_thread.start()
         else:
             self.changelog_text_edit.setMarkdown(tr('status.changelog_load_failed'))
-        self._check_and_manage_steam_deck_saves()
+        self.save_manager.manage_steam_deck_saves()
         if is_game_running():
             self.feedback_manager.update_status(tr('status.deltarune_already_running'), UI_COLORS['status_error'])
             return
@@ -2295,36 +2016,8 @@ class AppWindow(QWidget):
         self._on_refresh_clicked(is_initial=True)
         self.setEnabled(True)
         self._update_installed_mods_display()
-        if not self._find_and_validate_game_path(is_initial=True):
+        if not self.game_launcher._find_and_validate_game_path(is_initial=True):
             self.action_button.setEnabled(False)
-
-    def _check_and_manage_steam_deck_saves(self):
-        if platform.system() != 'Linux':
-            return
-        try:
-            home_dir = os.path.expanduser('~')
-            if isinstance(self.app_state.game_mode, UndertaleGameMode):
-                game_name = 'UNDERTALE'
-            else:
-                game_name = 'DELTARUNE'
-            steam_app_id = self.app_state.game_mode.steam_id
-            native_save_path = os.path.join(home_dir, '.config', game_name)
-            proton_save_path = os.path.join(home_dir, '.steam', 'steam', 'steamapps', 'compatdata', steam_app_id, 'pfx', 'drive_c', 'users', 'steamuser', 'AppData', 'Local', game_name)
-            if not os.path.isdir(proton_save_path):
-                return
-            if os.path.lexists(native_save_path):
-                if os.path.islink(native_save_path) and os.readlink(native_save_path) == proton_save_path:
-                    return
-                if os.path.isdir(native_save_path) and (not os.listdir(native_save_path)):
-                    os.rmdir(native_save_path)
-                else:
-                    backup_path = f'{native_save_path}_backup_{int(time.time())}'
-                    os.rename(native_save_path, backup_path)
-                    self.feedback_manager.show_info('dialogs.backup', tr('dialogs.backup_created_for_steam_deck', backup_path=backup_path))
-            os.symlink(proton_save_path, native_save_path)
-            self.feedback_manager.show_info('dialogs.steam_deck_setup', tr('dialogs.steam_deck_compatibility_configured'))
-        except Exception as e:
-            logging.error(f'Steam Deck setup error: {e}')
 
     def _get_platform_string(self) -> str:
         system = platform.system()
@@ -2611,13 +2304,13 @@ class AppWindow(QWidget):
             else:
                 self.app_state.game_path = target_dir
                 self.app_state.local_config['game_path'] = target_dir
-            self._write_local_config()
+            self.settings_manager.write_local_config()
             self.feedback_manager.update_status(tr('status.game_files_install_complete'), UI_COLORS['status_success'])
             self._update_action_button_state()
             return
         else:
             self.feedback_manager.update_status(tr('status.game_files_install_failed'), UI_COLORS['status_error'])
-        self._write_local_config()
+        self.settings_manager.write_local_config()
         self._update_action_button_state()
 
     def _run_as_admin_windows(self, path: str) -> bool:
@@ -2843,7 +2536,7 @@ class AppWindow(QWidget):
             language_code = self.app_state.local_config.get('language', 'en')
             localization_manager.load_language(language_code)
             self._update_qt_translations(language_code)
-            self.load_font()
+            self.custom_font_family = localization_manager.load_font()
             self._update_plugin_tabs()
             try:
                 if hasattr(self, 'main_tab_widget') and current_index >= 0 and (current_index < self.main_tab_widget.count()):
@@ -2887,28 +2580,7 @@ class AppWindow(QWidget):
             self._suppress_tab_handlers = False
 
     def _update_mods_in_active_slots(self):
-        if self.app_state.is_installing:
-            return
-        is_chapter_mode = self.chapter_mode_checkbox.isChecked()
-        is_demo_mode = isinstance(self.app_state.game_mode, DemoGameMode)
-        if is_demo_mode:
-            active_slot_ids = [-10]
-        elif isinstance(self.app_state.game_mode, UndertaleGameMode):
-            active_slot_ids = [-20]
-        elif not is_chapter_mode:
-            active_slot_ids = [-1]
-        else:
-            active_slot_ids = [0, 1, 2, 3, 4]
-        mods_to_update = []
-        for slot_id in active_slot_ids:
-            for slot_frame in self.app_state.slots.values():
-                if slot_frame.chapter_id == slot_id and slot_frame.assigned_mod:
-                    mod_data = slot_frame.assigned_mod
-                    if getattr(mod_data, 'is_local_mod', False):
-                        continue
-                    needs_update = any((self.mod_manager.mod_has_files_for_chapter(mod_data, i) and self.mod_manager.get_mod_status(mod_data, i) == 'update' for i in range(5)))
-                    if needs_update and mod_data not in mods_to_update:
-                        mods_to_update.append(mod_data)
+        mods_to_update = self.slot_manager.collect_mods_needing_update_in_active_slots()
         if mods_to_update:
             self.pending_updates = mods_to_update[1:] if len(mods_to_update) > 1 else []
             self.mod_manager.update_mod(mods_to_update[0])
@@ -3036,32 +2708,15 @@ class AppWindow(QWidget):
         secret_key, ok = QInputDialog.getText(self, tr('dialogs.enter_secret_key'), tr('ui.secret_key_label'), QLineEdit.EchoMode.Password)
         if not ok or not secret_key.strip():
             return
-        from utils.crypto_utils import possible_secret_hashes
-        candidate_hashes = possible_secret_hashes(secret_key.strip())
-        mod_data = None
-        found_in_pending = False
         try:
-            found_hash = None
-            from config.constants import CLOUD_FUNCTIONS_BASE_URL
-            for h in candidate_hashes:
-                resp = requests.get(f'{CLOUD_FUNCTIONS_BASE_URL}/getModData?modId={h}', timeout=10)
-                if resp.status_code == 200 and resp.json():
-                    mod_data = resp.json()
-                    found_hash = h
-                    break
-                resp = requests.get(f'{CLOUD_FUNCTIONS_BASE_URL}/getPendingModData?modId={h}', timeout=10)
-                if resp.status_code == 200 and resp.json():
-                    mod_data = resp.json()
-                    found_hash = h
-                    found_in_pending = True
-                    break
-            if found_hash and isinstance(mod_data, dict):
-                mod_data['key'] = found_hash
-                hashed_key = found_hash
-        except requests.RequestException as e:
+            mod_data, hashed_key, found_in_pending = self.mod_manager.fetch_mod_data_by_secret(secret_key)
+        except Exception as e:
             self.feedback_manager.show_error('errors.error', tr('errors.key_check_failed', error=str(e)))
             return
         if not mod_data:
+            self.feedback_manager.show_warning('errors.mod_not_found', tr('errors.secret_key_invalid'))
+            return
+        if not hashed_key:
             self.feedback_manager.show_warning('errors.mod_not_found', tr('errors.secret_key_invalid'))
             return
         if mod_data.get('ban_status', False):
@@ -3072,30 +2727,22 @@ class AppWindow(QWidget):
             result = self.feedback_manager.ask_custom_question(QMessageBox.Icon.Information, 'dialogs.mod_on_moderation', 'dialogs.mod_on_moderation_message', [('buttons.withdraw_request', QMessageBox.ButtonRole.DestructiveRole, 'withdraw'), ('buttons.ok', QMessageBox.ButtonRole.AcceptRole, 'ok')], 'ok')
             if result == 'withdraw':
                 try:
-                    from config.constants import CLOUD_FUNCTIONS_BASE_URL
-                    requests.post(f'{CLOUD_FUNCTIONS_BASE_URL}/withdrawPendingMod', json={'hashedKey': hashed_key}, timeout=10)
+                    self.mod_manager.withdraw_pending_mod(hashed_key)
                     self.feedback_manager.show_info('dialogs.request_withdrawn', tr('dialogs.withdrawal_success'))
                 except Exception as e:
                     self.feedback_manager.show_error('errors.error', tr('errors.request_revoke_failed', error=str(e)))
             return
-        try:
-            from config.constants import CLOUD_FUNCTIONS_BASE_URL
-            pending_changes_response = requests.get(f'{CLOUD_FUNCTIONS_BASE_URL}/getPendingChangeData?modId={hashed_key}', timeout=10)
-            if pending_changes_response.status_code == 200 and pending_changes_response.json():
-                result = self.feedback_manager.ask_custom_question(QMessageBox.Icon.Information, 'dialogs.changes_under_review', 'dialogs.request_pending', [('buttons.withdraw_request', QMessageBox.ButtonRole.DestructiveRole, 'withdraw')])
-                if result == 'withdraw':
-                    try:
-                        from config.constants import CLOUD_FUNCTIONS_BASE_URL
-                        delete_response = requests.post(f'{CLOUD_FUNCTIONS_BASE_URL}/withdrawPendingChange', json={'hashedKey': hashed_key}, timeout=10)
-                        delete_response.raise_for_status()
-                        self.feedback_manager.show_info('dialogs.request_withdrawn', tr('dialogs.withdrawal_success'))
-                    except requests.RequestException as e:
-                        self.feedback_manager.show_error('errors.error', tr('errors.request_revoke_failed', error=str(e)))
-                        return
-                else:
+        if self.mod_manager.has_pending_changes(hashed_key):
+            result = self.feedback_manager.ask_custom_question(QMessageBox.Icon.Information, 'dialogs.changes_under_review', 'dialogs.request_pending', [('buttons.withdraw_request', QMessageBox.ButtonRole.DestructiveRole, 'withdraw')])
+            if result == 'withdraw':
+                try:
+                    self.mod_manager.withdraw_pending_change(hashed_key)
+                    self.feedback_manager.show_info('dialogs.request_withdrawn', tr('dialogs.withdrawal_success'))
+                except Exception as e:
+                    self.feedback_manager.show_error('errors.error', tr('errors.request_revoke_failed', error=str(e)))
                     return
-        except requests.RequestException:
-            pass
+            else:
+                return
         editor = ModEditorDialog(self, is_creating=False, is_public=True, mod_data=mod_data)
         editor.exec()
         try:
@@ -3107,22 +2754,7 @@ class AppWindow(QWidget):
 
     def _edit_local_mod(self, parent_dialog):
         parent_dialog.accept()
-        local_mods = []
-        if os.path.exists(self.app_state.mods_dir):
-            for folder_name in os.listdir(self.app_state.mods_dir):
-                folder_path = os.path.join(self.app_state.mods_dir, folder_name)
-                if not os.path.isdir(folder_path):
-                    continue
-                config_path = os.path.join(folder_path, 'config.json')
-                if not os.path.exists(config_path):
-                    continue
-                try:
-                    config_data = self._read_json(config_path)
-                    if config_data and config_data.get('is_local_mod'):
-                        mod_info = {'key': config_data.get('mod_key'), 'name': config_data.get('name', 'Неизвестный мод'), 'data': config_data, 'folder_path': folder_path}
-                        local_mods.append(mod_info)
-                except Exception:
-                    continue
+        local_mods = self.mod_manager.list_local_mods()
         if not local_mods:
             self.feedback_manager.show_info('dialogs.no_local_mods_title', tr('dialogs.no_local_mods_message'))
             return
@@ -3182,109 +2814,24 @@ class AppWindow(QWidget):
         self.window_geometry_manager.schedule_geometry_save(self)
 
     def _load_local_data(self):
-        self.app_state.local_config = self._read_json(self.app_state.config_path) or {}
-        mods_metadata = self.mod_manager._read_metadata()
-        updated = False
-        if not os.path.exists(self.app_state.mods_dir):
-            return
-        for folder_name in os.listdir(self.app_state.mods_dir):
-            folder_path = os.path.join(self.app_state.mods_dir, folder_name)
-            if not os.path.isdir(folder_path):
-                continue
-            config_path = os.path.join(folder_path, 'config.json')
-            if not os.path.exists(config_path):
-                continue
-            try:
-                config_data = self._read_json(config_path)
-                if not config_data or not isinstance(config_data, dict):
-                    continue
-                mod_key = config_data.get('mod_key')
-                if not mod_key:
-                    continue
-                if 'installed_date' in config_data or 'is_available_on_server' in config_data:
-                    if mod_key not in mods_metadata:
-                        mods_metadata[mod_key] = {}
-                    if 'installed_date' in config_data:
-                        mods_metadata[mod_key]['installed_date'] = config_data.pop('installed_date')
-                    if 'is_available_on_server' in config_data:
-                        mods_metadata[mod_key]['is_available_on_server'] = config_data.pop('is_available_on_server')
-                    self._write_json(config_path, config_data)
-                    updated = True
-            except Exception as e:
-                logging.warning(f'Failed to migrate metadata for mod in {folder_name}: {e}')
-        if updated:
-            self.mod_manager._write_metadata(mods_metadata)
+        self.app_state.local_config = self.settings_manager.read_json(self.app_state.config_path) or {}
+        try:
+            self.mod_manager.migrate_metadata_from_local_configs()
+        except Exception as e:
+            logging.warning(f'Metadata migration failed: {e}')
         self.app_state.local_config['metadata_migrated_v2'] = True
-        self._write_local_config()
-
-    def _write_local_config(self):
         self.settings_manager.write_local_config()
-
-    def _write_json(self, path: str, data):
-        self.settings_manager.write_json(path, data)
-
-    def _read_json(self, path: str):
-        return self.settings_manager.read_json(path)
 
     def _init_localization(self):
         if not hasattr(self, '_qt_translator_holder'):
             self._qt_translator_holder = {}
-        saved_language = localization_manager.initialize_localization(self.app_state.local_config, self.app_state.config_path, self._write_local_config, self._write_json)
+        saved_language = localization_manager.initialize_localization(self.app_state.local_config, self.app_state.config_path, self.settings_manager.write_local_config, self.settings_manager.write_json)
         localization_manager.update_qt_translations(saved_language, self._qt_translator_holder)
 
     def _update_qt_translations(self, language_code):
         if not hasattr(self, '_qt_translator_holder'):
             self._qt_translator_holder = {}
         localization_manager.update_qt_translations(language_code, self._qt_translator_holder)
-
-    def _has_mods_with_data_files(self, selections: Dict[int, str]) -> bool:
-        for ui_index, mod_key in selections.items():
-            if mod_key == 'no_change':
-                continue
-            mod = next((m for m in self.app_state.all_mods if m.key == mod_key), None)
-            if not mod:
-                continue
-            chapter_id = self.app_state.game_mode.get_chapter_id(ui_index)
-            if getattr(mod, 'is_local_mod', False):
-                mod_config = self.mod_manager.get_mod_config(mod_key)
-                if mod_config:
-                    chapter_files = mod_config.get('files', {}).get(str(chapter_id), {})
-                    if chapter_files.get('data_file_url'):
-                        return True
-            else:
-                chapter_data = mod.get_chapter_data(chapter_id)
-                if chapter_data and hasattr(chapter_data, 'data_file_url') and chapter_data.data_file_url:
-                    return True
-        return False
-
-    def _find_and_validate_game_path(self, selections: Optional[Dict[int, str]] = None, is_initial: bool = False):
-        path_from_config = self._get_current_game_path()
-        skip_data_check = bool(selections and self._has_mods_with_data_files(selections))
-        if isinstance(self.app_state.game_mode, DemoGameMode):
-            game_type = 'deltarune'
-        elif isinstance(self.app_state.game_mode, UndertaleGameMode):
-            game_type = 'undertale'
-        else:
-            game_type = 'deltarune'
-        if is_valid_game_path(path_from_config, skip_data_check, game_type):
-            self.feedback_manager.update_status(tr('status.game_path', path=path_from_config), UI_COLORS['status_info'])
-            return True
-        self.feedback_manager.update_status(tr('status.autodetecting_path'), UI_COLORS['status_info'])
-        if isinstance(self.app_state.game_mode, DemoGameMode):
-            game_name = 'DELTARUNEdemo'
-        elif isinstance(self.app_state.game_mode, UndertaleGameMode):
-            game_name = 'UNDERTALE'
-        else:
-            game_name = 'DELTARUNE'
-        autodetected_path = autodetect_path(game_name)
-        if autodetected_path and is_valid_game_path(autodetected_path, skip_data_check, game_type):
-            self.app_state.game_mode.set_game_path(self.app_state.local_config, autodetected_path)
-            self.feedback_manager.update_status(tr('status.game_folder_found', path=autodetected_path), UI_COLORS['status_success'])
-            self._write_local_config()
-            return True
-        if is_initial:
-            self.feedback_manager.update_status(tr('status.no_game_path'), UI_COLORS['status_error'])
-        return False
 
     def _init_session(self):
         try:
@@ -3305,7 +2852,7 @@ class AppWindow(QWidget):
     def _handle_first_launch_settings(self):
         self.app_state.local_config['first_launch_splash_shown'] = True
         self.app_state.local_config['disable_splash'] = True
-        self._write_local_config()
+        self.settings_manager.write_local_config()
         try:
             self.initialization_finished.disconnect(self._handle_first_launch_settings)
         except TypeError:

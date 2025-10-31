@@ -1,11 +1,15 @@
 import os
 import re
 import shutil
+import time
+import platform
+import logging
 from typing import Optional
 from PyQt6.QtCore import QObject, pyqtSignal, QUrl
 from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QFileDialog, QInputDialog, QLineEdit, QVBoxLayout
 from core.managers.localization_manager import tr
+from models.game_modes import UndertaleGameMode
 from config.constants import SAVE_SLOT_FINISH_MAP, UI_COLORS
 from utils.game_utils import is_valid_save_path, get_default_save_path
 
@@ -116,6 +120,34 @@ class SaveManager(QObject):
                 pass
         if migrated_count > 0:
             self._reindex_collections()
+
+    def manage_steam_deck_saves(self) -> None:
+        if platform.system() != 'Linux':
+            return
+        try:
+            home_dir = os.path.expanduser('~')
+            if isinstance(self.app_state.game_mode, UndertaleGameMode):
+                game_name = 'UNDERTALE'
+            else:
+                game_name = 'DELTARUNE'
+            steam_app_id = self.app_state.game_mode.steam_id
+            native_save_path = os.path.join(home_dir, '.config', game_name)
+            proton_save_path = os.path.join(home_dir, '.steam', 'steam', 'steamapps', 'compatdata', steam_app_id, 'pfx', 'drive_c', 'users', 'steamuser', 'AppData', 'Local', game_name)
+            if not os.path.isdir(proton_save_path):
+                return
+            if os.path.lexists(native_save_path):
+                if os.path.islink(native_save_path) and os.readlink(native_save_path) == proton_save_path:
+                    return
+                if os.path.isdir(native_save_path) and (not os.listdir(native_save_path)):
+                    os.rmdir(native_save_path)
+                else:
+                    backup_path = f'{native_save_path}_backup_{int(time.time())}'
+                    os.rename(native_save_path, backup_path)
+                    self.feedback_manager.show_info('dialogs.backup', tr('dialogs.backup_created_for_steam_deck', backup_path=backup_path))
+            os.symlink(proton_save_path, native_save_path)
+            self.feedback_manager.show_info('dialogs.steam_deck_setup', tr('dialogs.steam_deck_compatibility_configured'))
+        except Exception as e:
+            logging.error(f'Steam Deck setup error: {e}')
 
     def _reindex_collections(self):
         cols = []

@@ -152,7 +152,7 @@ class InstallModsThread(QThread):
             config_path = os.path.join(self.main_window.app_state.mods_dir, folder_name, 'config.json')
             if os.path.exists(config_path):
                 try:
-                    config_data = self.main_window._read_json(config_path)
+                    config_data = self.main_window.settings_manager.read_json(config_path)
                     if config_data.get('mod_key') == mod_key:
                         return folder_name
                 except Exception:
@@ -182,7 +182,7 @@ class InstallModsThread(QThread):
         if not os.path.exists(config_path):
             return {}
         try:
-            config_data = self.main_window._read_json(config_path)
+            config_data = self.main_window.settings_manager.read_json(config_path)
             local_versions = config_data.get('chapters', {}).get(str(chapter_id), {}).get('versions', {}) or {}
             remote_versions = self._collect_remote_versions_for_chapter(mod, chapter_id)
             components_to_update: dict[str, dict] = {}
@@ -453,11 +453,11 @@ class InstallModsThread(QThread):
                         files_data[file_key] = file_info
                 config_data = {'is_local_mod': False, 'mod_key': mod.key, 'name': mod.name, 'author': mod.author, 'version': mod.version, 'game_version': mod.game_version, 'modgame': mod.modgame, 'files': files_data, 'tags': mod.tags}
                 config_path = os.path.join(mod_dir, 'config.json')
-                self.main_window._write_json(config_path, config_data)
-            metadata = self.main_window._read_mods_metadata()
+                self.main_window.settings_manager.write_json(config_path, config_data)
+            metadata = self.main_window.mod_manager._read_metadata()
             for mod_key in installed_mods.keys():
                 metadata[mod_key] = {'installed_date': time.strftime('%Y-%m-%d %H:%M:%S'), 'is_available_on_server': True}
-            self.main_window._write_mods_metadata(metadata)
+            self.main_window.mod_manager._write_metadata(metadata)
             self._increment_downloads_for_installed_mods(installed_mods.keys())
             try:
                 os.makedirs(self.main_window.app_state.mods_dir, exist_ok=True)

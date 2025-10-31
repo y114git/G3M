@@ -5,14 +5,18 @@ import threading
 import zipfile
 import shutil
 import tempfile
-from typing import Dict, Optional
+from typing import Dict, Optional, List, Tuple, Set
 from PyQt6.QtCore import QObject, pyqtSignal
 from PyQt6.QtWidgets import QApplication
 from core.managers.localization_manager import tr
-from models.mod_models import ModInfo, ModChapterData
+from models.mod_models import ModChapterData
+import models.mod_models as mod_models
 from threads.background_workers import InstallModsThread, UrlInstallThread
 from utils.file_utils import sanitize_filename
 from config.constants import UI_COLORS
+import requests
+import time
+from config.constants import CLOUD_FUNCTIONS_BASE_URL
 
 
 class ModManager(QObject):
@@ -136,7 +140,7 @@ class ModManager(QObject):
                                     icon_path = potential_icon
                                     break
                         safe_mod_info = {'key': mod_key, 'name': config_data.get('name', 'Installed Mod'), 'version': config_data.get('version', '1.0.0'), 'author': config_data.get('author', tr('defaults.unknown')), 'tagline': config_data.get('tagline', tr('defaults.no_description')), 'game_version': config_data.get('game_version', tr('defaults.not_specified')), 'description_url': '', 'downloads': 0, 'modgame': config_data.get('modgame', 'deltarune'), 'is_verified': False, 'icon_url': icon_path, 'tags': [], 'hide_mod': False, 'is_xdelta': config_data.get('is_xdelta', False), 'is_local_mod': False, 'ban_status': False, 'demo_url': None, 'demo_version': '1.0.0', 'created_date': config_data.get('created_date', 'N/A'), 'last_updated': config_data.get('created_date', 'N/A'), 'external_url': config_data.get('external_url')}
-                        mod = ModInfo(**safe_mod_info)
+                        mod = mod_models.ModInfo(**safe_mod_info)
                         files_data = config_data.get('files', {})
                         for file_key, ch_info in list(files_data.items()):
                             extra_files_list = []
@@ -165,7 +169,7 @@ class ModManager(QObject):
                                     icon_path = potential_icon
                                     break
                         safe_mod_info = {'key': mod_key, 'name': config_data.get('name', tr('defaults.local_mod')), 'version': config_data.get('version', '1.0.0'), 'author': config_data.get('author', tr('defaults.unknown')), 'tagline': config_data.get('tagline', tr('defaults.no_description')), 'game_version': config_data.get('game_version', tr('defaults.not_specified')), 'description_url': '', 'downloads': 0, 'modgame': config_data.get('modgame', 'deltarune'), 'is_verified': False, 'icon_url': icon_path, 'tags': ['local'], 'hide_mod': False, 'is_xdelta': config_data.get('is_xdelta', False), 'is_local_mod': config_data.get('is_local_mod', True), 'ban_status': False, 'demo_url': None, 'demo_version': '1.0.0', 'created_date': config_data.get('created_date', 'N/A'), 'last_updated': config_data.get('created_date', 'N/A'), 'external_url': config_data.get('external_url')}
-                        mod = ModInfo(**safe_mod_info)
+                        mod = mod_models.ModInfo(**safe_mod_info)
                         files_data = config_data.get('files', {})
                         mod_folder_path = None
                         for folder_name in os.listdir(self.app_state.mods_dir):
@@ -367,13 +371,13 @@ class ModManager(QObject):
         except Exception:
             pass
 
-    def get_mod_status(self, mod: ModInfo, chapter_id: int) -> str:
+    def get_mod_status(self, mod: mod_models.ModInfo, chapter_id: int) -> str:
         if mod.is_local_mod:
             return 'ready'
         if not os.path.exists(self.app_state.mods_dir):
             return 'install'
 
-        def _collect_remote_versions(m: ModInfo, ch_id: int) -> dict:
+        def _collect_remote_versions(m: mod_models.ModInfo, ch_id: int) -> dict:
             if ch_id == -1:
                 return {'demo': m.demo_version} if m.is_valid_for_demo() and m.demo_version else {}
             ch = m.get_chapter_data(ch_id)
@@ -563,17 +567,159 @@ class ModManager(QObject):
             self.url_install_thread.prompt_event.set()
 
     def create_mod_object_from_info(self, mod_info: dict, all_mods: Optional[list] = None):
-        from models.mod_models import ModInfo
         mod_key = mod_info.get('mod_key', '')
         if all_mods:
             for mod in all_mods:
                 if hasattr(mod, 'key') and mod.key == mod_key:
                     return mod
-        return ModInfo(key=mod_key, name=mod_info.get('name', mod_key), version=mod_info.get('version', '1.0.0'), author=mod_info.get('author', tr('defaults.unknown')), tagline=mod_info.get('tagline', tr('defaults.no_description')), game_version=mod_info.get('game_version', '1.04'), description_url='', downloads=0, modgame=mod_info.get('modgame', 'deltarune'), is_verified=False, is_local_mod=mod_info.get('is_local_mod', False))
+        return mod_models.ModInfo(key=mod_key, name=mod_info.get('name', mod_key), version=mod_info.get('version', '1.0.0'), author=mod_info.get('author', tr('defaults.unknown')), tagline=mod_info.get('tagline', tr('defaults.no_description')), game_version=mod_info.get('game_version', '1.04'), description_url='', downloads=0, modgame=mod_info.get('modgame', 'deltarune'), is_verified=False, is_local_mod=mod_info.get('is_local_mod', False))
+
+    def fetch_mod_data_by_secret(self, secret_key: str) -> Tuple[Optional[dict], Optional[str], bool]:
+        from utils.crypto_utils import possible_secret_hashes
+        candidate_hashes = possible_secret_hashes(secret_key.strip())
+        mod_data: Optional[dict] = None
+        found_in_pending = False
+        found_hash: Optional[str] = None
+        for h in candidate_hashes:
+            try:
+                resp = requests.get(f'{CLOUD_FUNCTIONS_BASE_URL}/getModData?modId={h}', timeout=10)
+                if resp.status_code == 200 and resp.json():
+                    mod_data = resp.json()
+                    found_hash = h
+                    break
+                resp = requests.get(f'{CLOUD_FUNCTIONS_BASE_URL}/getPendingModData?modId={h}', timeout=10)
+                if resp.status_code == 200 and resp.json():
+                    mod_data = resp.json()
+                    found_hash = h
+                    found_in_pending = True
+                    break
+            except requests.RequestException:
+                raise
+        if mod_data and found_hash:
+            mod_data['key'] = found_hash
+        return (mod_data, found_hash, found_in_pending)
+
+    def has_pending_changes(self, hashed_key: str) -> bool:
+        try:
+            resp = requests.get(f'{CLOUD_FUNCTIONS_BASE_URL}/getPendingChangeData?modId={hashed_key}', timeout=10)
+            return bool(resp.status_code == 200 and resp.json())
+        except requests.RequestException:
+            return False
+
+    def withdraw_pending_mod(self, hashed_key: str) -> None:
+        try:
+            requests.post(f'{CLOUD_FUNCTIONS_BASE_URL}/withdrawPendingMod', json={'hashedKey': hashed_key}, timeout=10)
+        except requests.RequestException:
+            raise
+
+    def withdraw_pending_change(self, hashed_key: str) -> None:
+        try:
+            resp = requests.post(f'{CLOUD_FUNCTIONS_BASE_URL}/withdrawPendingChange', json={'hashedKey': hashed_key}, timeout=10)
+            resp.raise_for_status()
+        except requests.RequestException:
+            raise
+
+    def list_local_mods(self) -> List[dict]:
+        local_mods: List[dict] = []
+        if not os.path.exists(self.app_state.mods_dir):
+            return local_mods
+        for folder_name in os.listdir(self.app_state.mods_dir):
+            folder_path = os.path.join(self.app_state.mods_dir, folder_name)
+            if not os.path.isdir(folder_path):
+                continue
+            config_path = os.path.join(folder_path, 'config.json')
+            if not os.path.exists(config_path):
+                continue
+            try:
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    config_data = json.load(f)
+                if config_data and config_data.get('is_local_mod'):
+                    local_mods.append({'key': config_data.get('mod_key'), 'name': config_data.get('name', 'Unknown mod'), 'data': config_data, 'folder_path': folder_path})
+            except Exception:
+                continue
+        return local_mods
+
+    def migrate_metadata_from_local_configs(self) -> bool:
+        mods_metadata = self._read_metadata()
+        updated = False
+        if not os.path.exists(self.app_state.mods_dir):
+            return False
+        for folder_name in os.listdir(self.app_state.mods_dir):
+            folder_path = os.path.join(self.app_state.mods_dir, folder_name)
+            if not os.path.isdir(folder_path):
+                continue
+            config_path = os.path.join(folder_path, 'config.json')
+            if not os.path.exists(config_path):
+                continue
+            try:
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    config_data = json.load(f)
+                if not config_data or not isinstance(config_data, dict):
+                    continue
+                mod_key = config_data.get('mod_key')
+                if not mod_key:
+                    continue
+                if 'installed_date' in config_data or 'is_available_on_server' in config_data:
+                    if mod_key not in mods_metadata:
+                        mods_metadata[mod_key] = {}
+                    if 'installed_date' in config_data:
+                        mods_metadata[mod_key]['installed_date'] = config_data.pop('installed_date')
+                    if 'is_available_on_server' in config_data:
+                        mods_metadata[mod_key]['is_available_on_server'] = config_data.pop('is_available_on_server')
+                    with open(config_path, 'w', encoding='utf-8') as f:
+                        json.dump(config_data, f, indent=4, ensure_ascii=False)
+                    updated = True
+            except Exception as e:
+                logging.warning(f'Failed to migrate metadata for mod in {folder_name}: {e}')
+        if updated:
+            self._write_metadata(mods_metadata)
+        return updated
+
+    def get_installed_mods_list(self) -> List[dict]:
+        installed_mods: List[dict] = []
+        if not hasattr(self.app_state, 'mods_dir') or not os.path.exists(self.app_state.mods_dir):
+            return installed_mods
+        mods_metadata = self._read_metadata()
+        metadata_updated = False
+        found_mod_keys: Set[str] = set()
+        for folder_name in os.listdir(self.app_state.mods_dir):
+            folder_path = os.path.join(self.app_state.mods_dir, folder_name)
+            if not os.path.isdir(folder_path):
+                continue
+            config_path = os.path.join(folder_path, 'config.json')
+            if os.path.exists(config_path):
+                try:
+                    with open(config_path, 'r', encoding='utf-8') as f:
+                        config_data = json.load(f)
+                    if config_data:
+                        mod_key = config_data.get('mod_key')
+                        if not mod_key:
+                            continue
+                        found_mod_keys.add(mod_key)
+                        mod_meta = mods_metadata.get(mod_key)
+                        if not mod_meta:
+                            mods_metadata[mod_key] = {'installed_date': time.strftime('%Y-%m-%d %H:%M:%S'), 'is_available_on_server': not config_data.get('is_local_mod', False)}
+                            metadata_updated = True
+                            mod_meta = mods_metadata[mod_key]
+                        config_data['installed_date'] = mod_meta.get('installed_date')
+                        config_data['is_available_on_server'] = mod_meta.get('is_available_on_server', False)
+                        config_data['is_local_mod'] = config_data.get('is_local_mod', False)
+                        config_data['folder_name'] = folder_name
+                        installed_mods.append(config_data)
+                except Exception as e:
+                    logging.warning(f'Failed to read config {config_path}: {e}')
+                    continue
+        orphaned_keys = set(mods_metadata.keys()) - found_mod_keys
+        if orphaned_keys:
+            for key in list(orphaned_keys):
+                del mods_metadata[key]
+            metadata_updated = True
+        if metadata_updated:
+            self._write_metadata(mods_metadata)
+        return installed_mods
 
 
 def parse_mod_date(date_str: str) -> tuple[int, int, int, int, int]:
-    """Parse mod date string (format: 'DD.MM.YY HH:MM') into tuple (year, month, day, hour, minute)."""
     if not date_str or date_str == 'N/A':
         return (0, 0, 0, 0, 0)
     try:
