@@ -1,29 +1,182 @@
 import os
-import platform
 import shutil
 import threading
 import logging
 import base64
 import json
-import sys
+from core.startup import ShortcutLaunchError
 import subprocess
-from typing import Optional
-from PyQt6.QtCore import QThread, QTimer
+from typing import Optional, Any, cast
+from PyQt6.QtCore import QThread, QTimer, Qt
 from PyQt6.QtWidgets import QTabWidget, QLabel, QWidget, QDialog, QDialogButtonBox, QVBoxLayout, QFileDialog
 from PyQt6.QtGui import QMovie, QPixmap
 from managers.localization_manager import tr, localization_manager
 from managers.mod_manager import parse_mod_date
-from config.constants import UI_COLORS, THEMES, ARCH
-from utils.path_utils import resource_path, get_legacy_ylauncher_path
+from config.constants import UI_COLORS
+from utils.path_utils import get_legacy_ylauncher_path
 from ui.widgets.mod.mod_plaque_widget import ModPlaqueWidget
 from ui.widgets.mod.installed_mod_widget import InstalledModWidget
 from ui.common.styling import clear_layout_widgets, load_mod_icon_universal, show_empty_message_in_layout
-from models.game_modes import DemoGameMode
-from workers.background_workers import BgLoader
+from models.game_modes import DemoGameMode, UndertaleGameMode, FullGameMode
+from workers.background_workers import InstallModsThread, FullInstallThread
 from workers.fetch_mods import FetchModsThread
 
 
 class OperationsMixin:
+    app_state: Any
+    mod_manager: Any
+    plugin_manager: Any
+    shortcut_manager: Any
+    feedback_manager: Any
+    save_manager: Any
+    slot_manager: Any
+    settings_manager: Any
+    main_tab_widget: Any
+    game_type_combo: Any
+    saves_button: Any
+    save_tabs: Any
+    _slot_labels: Any
+    switch_collection_btn: Any
+    left_col_btn: Any
+    right_col_btn: Any
+    rename_collection_btn: Any
+    delete_collection_btn: Any
+    copy_from_main_btn: Any
+    copy_to_main_btn: Any
+    collection_name_lbl: Any
+    change_save_path_btn: Any
+    installed_mods_layout: Any
+    installed_mods_container: Any
+    library_sort_combo: Any
+    library_sort_ascending: Any
+    library_tag_translation: Any
+    library_tag_customization: Any
+    library_tag_gameplay: Any
+    library_tag_other: Any
+    library_tag_local: Any
+    mod_list_layout: Any
+    mod_list_widget: Any
+    mods_per_page: Any
+    page_label: Any
+    prev_page_btn: Any
+    next_page_btn: Any
+    search_text: Any
+    tag_translation: Any
+    tag_customization: Any
+    tag_gameplay: Any
+    tag_other: Any
+    modgame_combo: Any
+    sort_combo: Any
+    sort_ascending: Any
+    action_button: Any
+    shortcut_button: Any
+    change_path_button: Any
+    change_background_button: Any
+    top_refresh_button: Any
+    settings_button: Any
+    tab_widget: Any
+    progress_bar: Any
+    set_progress_signal: Any
+    update_status_signal: Any
+    presence_worker: Any
+    current_install_thread: Any
+    install_thread: Any
+    is_shortcut_launch: Any
+    online_label: Any
+    status_label: Any
+    chapter_mode_checkbox: Any
+    show_btn: Any
+    import_btn: Any
+    erase_btn: Any
+    export_btn: Any
+    full_install_checkbox: Any
+    game_launcher: Any
+    restore_window_signal: Any
+    customization_manager: Any
+    language_combo: Any
+    update_checker: Any
+    mods_loaded_signal: Any
+
+    def _load_local_data(self) -> None:
+        ...
+
+    def _get_current_game_path(self) -> str:
+        return ''
+
+    def _show_main_mod_management_dialog(self) -> None:
+        ...
+
+    def _on_xdelta_patch_click(self) -> None:
+        ...
+
+    def _on_installed_mod_clicked(self, *args, **kwargs) -> None:
+        ...
+
+    def _on_installed_mod_remove(self, *args, **kwargs) -> None:
+        ...
+
+    def _on_chapter_mode_mod_use(self, *args, **kwargs) -> None:
+        ...
+
+    def _on_installed_mod_use(self, *args, **kwargs) -> None:
+        ...
+
+    def _show_chapter_mode_instruction(self) -> None:
+        ...
+
+    def _update_action_button_state(self) -> None:
+        ...
+
+    def _refresh_mods_in_slots(self) -> None:
+        ...
+
+    def _retranslate_ui(self) -> None:
+        ...
+
+    def _update_background_button_state(self) -> None:
+        ...
+
+    def _on_mod_install_requested(self, *args, **kwargs) -> None:
+        ...
+
+    def _on_mod_uninstall_requested(self, *args, **kwargs) -> None:
+        ...
+
+    def _on_mod_clicked(self, *args, **kwargs) -> None:
+        ...
+
+    def _show_mod_details_dialog(self, *args, **kwargs) -> None:
+        ...
+
+    def _show_pending_dialogs(self) -> None:
+        ...
+
+    def _full_install_tooltip(self) -> str:
+        ...
+
+    def activateWindow(self) -> None:
+        ...
+
+    def raise_(self) -> None:
+        ...
+
+    def hide(self) -> None:
+        ...
+
+    def showNormal(self) -> None:
+        ...
+
+    def update(self) -> None:
+        ...
+
+    def size(self) -> Any:
+        ...
+
+    def isVisible(self) -> bool:
+        ...
+
+    def updateGeometry(self) -> None:
+        ...
 
     def _shortcut_launch(self, args):
         try:
@@ -31,7 +184,7 @@ class OperationsMixin:
             settings = json.loads(settings_json)
         except Exception as e:
             logging.error(f'Shortcut settings read error: {e}')
-            sys.exit(1)
+            raise ShortcutLaunchError('Failed to read shortcut settings')
         self._load_local_data()
         self.mod_manager.load_local_mods()
         try:
@@ -49,13 +202,13 @@ class OperationsMixin:
             current_game_path = self._get_current_game_path()
             if not current_game_path or not os.path.exists(current_game_path):
                 logging.error('Game files not found for launch')
-                sys.exit(1)
+                raise ShortcutLaunchError('Game files not found for launch')
             mods_settings = settings.get('mods', {}) or settings.get('selections', {})
             self.shortcut_manager.apply_shortcut_mods(mods_settings)
             self.shortcut_manager.launch_game_from_shortcut(launch_via_steam=launch_via_steam, use_custom_executable=use_custom_executable, custom_exec_path=custom_exec_path, demo_custom_exec_path=demo_custom_exec_path, direct_launch_slot_id=direct_launch_slot_id)
         except Exception as e:
             logging.error(f'Launch error: {e}')
-            sys.exit(1)
+            raise ShortcutLaunchError(str(e) or 'Shortcut launch failed')
 
     def _on_tab_changed(self, index):
         num_original_tabs = 4
@@ -752,30 +905,8 @@ class OperationsMixin:
     def _run_presence_tick(self):
         if self.is_shortcut_launch:
             return
-        thr = getattr(self, 'presence_thread', None)
-        try:
-            if thr and thr.isRunning():
-                return
-        except RuntimeError:
-            self.presence_thread = None
-            thr = None
-        if thr and (not thr.isRunning()):
-            try:
-                thr.deleteLater()
-            except RuntimeError:
-                pass
-            self.presence_thread = None
-            self.presence_worker = None
-        self.presence_thread = QThread(self)
-        self.presence_worker = PresenceWorker(self.session_id)
-        self.presence_worker.moveToThread(self.presence_thread)
-        self.presence_thread.started.connect(self.presence_worker.run)
-        self.presence_worker.finished.connect(self.presence_thread.quit)
-        self.presence_thread.finished.connect(lambda: setattr(self, 'presence_thread', None))
-        self.presence_thread.finished.connect(self.presence_thread.deleteLater)
-        self.presence_worker.finished.connect(self.presence_worker.deleteLater)
-        self.presence_worker.update_online_count.connect(self._update_online_label)
-        self.presence_thread.start()
+        if hasattr(self, 'presence_worker') and self.presence_worker:
+            self.presence_worker.run()
 
     def _update_online_label(self, count: int):
         if not self.is_shortcut_launch:
@@ -810,7 +941,7 @@ class OperationsMixin:
             return
         self.action_button.setEnabled(False)
         self.saves_button.setEnabled(False)
-        dlg = QDialog(self)
+        dlg = QDialog(cast(QWidget, self))
         dlg.setWindowTitle(tr('dialogs.full_demo_install'))
         v = QVBoxLayout(dlg)
         lbl = QLabel(self._full_install_tooltip())
@@ -823,7 +954,7 @@ class OperationsMixin:
         if dlg.exec() != QDialog.DialogCode.Accepted:
             self.action_button.setEnabled(True)
             return
-        base_dir = QFileDialog.getExistingDirectory(self, tr('dialogs.install_demo_location'))
+        base_dir = QFileDialog.getExistingDirectory(cast(QWidget, self), tr('dialogs.install_demo_location'))
         if not base_dir:
             self.action_button.setEnabled(True)
             return
@@ -836,7 +967,7 @@ class OperationsMixin:
             return
         self.progress_bar.setVisible(True)
         self.progress_bar.setValue(0)
-        self.full_install_thread = FullInstallThread(self, target_dir, False)
+        self.full_install_thread = FullInstallThread(cast(Any, self), target_dir, False)
         self.full_install_thread.progress.connect(self.set_progress_signal)
         self.full_install_thread.progress.connect(self.progress_bar.setValue)
         self.full_install_thread.status.connect(self.update_status_signal)

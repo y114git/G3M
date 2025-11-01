@@ -8,7 +8,7 @@ import time
 import zipfile
 import py7zr
 import requests
-from PyQt6.QtCore import QObject, QThread, pyqtSignal
+from PyQt6.QtCore import QObject, QThread, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QImage
 from config.constants import BROWSER_HEADERS, CLOUD_FUNCTIONS_BASE_URL, UI_COLORS
 from managers.localization_manager import tr
@@ -23,9 +23,14 @@ class PresenceWorker(QObject):
     def __init__(self, session_id):
         super().__init__()
         self.session_id = session_id
+        self._busy = False
 
+    @pyqtSlot()
     def run(self):
         try:
+            if self._busy:
+                return
+            self._busy = True
             url = f'{CLOUD_FUNCTIONS_BASE_URL}/presenceHeartbeat'
             data = {'sessionId': self.session_id}
             resp = requests.post(url, json=data, timeout=8)
@@ -41,6 +46,7 @@ class PresenceWorker(QObject):
         except requests.RequestException:
             self.update_online_count.emit(-1)
         finally:
+            self._busy = False
             self.finished.emit()
 
 
@@ -558,8 +564,7 @@ class InstallModsThread(QThread):
             else:
                 self.status.emit(tr('status.installation_complete'), UI_COLORS['status_success'])
                 self.finished.emit(True)
-        except PermissionError as e:
-            path = e.filename if e.filename else self.main_window.app_state.mods_dir
+        except PermissionError:
             try:
                 self.status.emit(tr('errors.permission_error_install'), UI_COLORS['status_error'])
             except Exception:
@@ -804,5 +809,5 @@ class FetchHelpContentThread(QThread):
             else:
                 error_msg = tr('errors.load_error_http', code=response.status_code)
                 self.finished.emit(f'<i>{error_msg}</i>')
-        except Exception as e:
+        except Exception:
             self.finished.emit(f"<i>{tr('dialogs.help_content_load_failed')}</i>")

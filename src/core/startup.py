@@ -17,6 +17,10 @@ if platform.system() == 'Windows':
     import winreg
 
 
+class ShortcutLaunchError(Exception):
+    pass
+
+
 def create_app_reference():
     from core.app_window import AppWindow
     return AppWindow
@@ -141,7 +145,13 @@ def run_app():
         logging.warning(f'Could not register protocol handler: {e}')
     if args.shortcut_launch:
         DeltaHubApp = create_app_reference()
-        DeltaHubApp(args=args)
+        try:
+            DeltaHubApp(args=args)
+        except ShortcutLaunchError as e:
+            error_msg = str(e) or tr('errors.error')
+            print(f'STARTUP ERROR: {error_msg}')
+            QMessageBox.critical(None, tr('errors.error'), error_msg)
+            sys.exit(1)
         return
     config = {}
     try:
