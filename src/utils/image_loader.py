@@ -1,5 +1,6 @@
 from __future__ import annotations
 import io
+import logging
 from typing import Optional
 import requests
 from PIL import Image
@@ -7,6 +8,7 @@ from PyQt6.QtCore import QRunnable
 from PyQt6.QtGui import QImage
 from ui.widgets.common.worker_signals import WorkerSignals
 from utils.cache import _IMG_CACHE, _IMG_CACHE_LOCK, _NET_SEM
+from utils.network_utils import get_session
 
 
 class ImageLoaderRunnable(QRunnable):
@@ -19,8 +21,8 @@ class ImageLoaderRunnable(QRunnable):
     def _emit_error(self, message: str) -> None:
         try:
             self.signals.error.emit(self.url, message)
-        except Exception:
-            pass
+        except Exception as e:
+            logging.debug(f'ImageLoader._emit_error: signal emit failed for {self.url}: {e}')
 
     def run(self) -> None:
         try:
@@ -36,13 +38,14 @@ class ImageLoaderRunnable(QRunnable):
             if _NET_SEM:
                 _NET_SEM.acquire()
             try:
-                resp = requests.get(self.url, timeout=8)
+                session = get_session()
+                resp = session.get(self.url, timeout=8)
             finally:
                 try:
                     if _NET_SEM:
                         _NET_SEM.release()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logging.debug(f'ImageLoader.run: semaphore release failed: {e}')
             resp.raise_for_status()
             try:
                 image_data = io.BytesIO(resp.content)
@@ -52,7 +55,8 @@ class ImageLoaderRunnable(QRunnable):
                 buffer = io.BytesIO()
                 pil_img.save(buffer, format='PNG')
                 processed_content = buffer.getvalue()
-            except Exception:
+            except Exception as e:
+                logging.debug(f'ImageLoader.run: PIL processing failed for {self.url}, using raw content: {e}')
                 processed_content = resp.content
             img = QImage()
             if not img.loadFromData(processed_content):
@@ -63,14 +67,14 @@ class ImageLoaderRunnable(QRunnable):
                     if _IMG_CACHE_LOCK is not None:
                         _IMG_CACHE_LOCK.acquire()
                     _IMG_CACHE[self.url] = img
-                except Exception:
-                    pass
+                except Exception as e:
+                    logging.debug(f'ImageLoader.run: cache store failed for {self.url}: {e}')
                 finally:
                     try:
                         if _IMG_CACHE_LOCK is not None:
                             _IMG_CACHE_LOCK.release()
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logging.debug(f'ImageLoader.run: cache lock release failed: {e}')
             try:
                 self.signals.result.emit(img)
             finally:

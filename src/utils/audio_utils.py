@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 from typing import Optional, Protocol
 from utils.path_utils import get_user_data_root
@@ -30,15 +31,15 @@ class AudioManager:
         try:
             from playsound3 import playsound
             self._sound_instance = playsound(os.path.abspath(sound_path), block=False)
-        except Exception:
-            pass
+        except Exception as e:
+            logging.debug(f'AudioManager.play_deltahub_sound: failed to play {sound_path}: {e}')
 
     def stop_deltahub_sound(self) -> None:
         if self._sound_instance and self._sound_instance.is_alive():
             try:
                 self._sound_instance.stop()
-            except Exception:
-                pass
+            except Exception as e:
+                logging.debug(f'AudioManager.stop_deltahub_sound: failed to stop: {e}')
         self._sound_instance = None
 
 

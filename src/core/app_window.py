@@ -1273,8 +1273,8 @@ class AppWindow(QWidget, UiControlsMixin, OperationsMixin):
             if getattr(self, '_operation_cancelled', False):
                 try:
                     self._operation_cancelled = False
-                except Exception:
-                    pass
+                except Exception as e:
+                    logging.debug(f'_on_single_mod_install_finished: cancel flag reset failed: {e}')
             else:
                 self.feedback_manager.update_status(tr('status.mod_install_error'), UI_COLORS['status_error'])
             try:
@@ -1282,8 +1282,8 @@ class AppWindow(QWidget, UiControlsMixin, OperationsMixin):
                 temp_root = getattr(thr, 'temp_root', None)
                 if temp_root and os.path.isdir(temp_root):
                     shutil.rmtree(temp_root, ignore_errors=True)
-            except Exception:
-                pass
+            except Exception as e:
+                logging.debug(f'_on_single_mod_install_finished: temp cleanup failed: {e}')
         self.app_state.is_installing = False
         self._set_install_buttons_enabled(True)
         self.current_install_thread = None
@@ -1369,21 +1369,21 @@ class AppWindow(QWidget, UiControlsMixin, OperationsMixin):
         self.progress_bar.setVisible(False)
         try:
             QTimer.singleShot(0, self._update_search_mod_plaques)
-        except Exception:
-            pass
+        except Exception as e:
+            logging.debug(f'_on_mod_installation_finished: update_search_mod_plaques failed: {e}')
         try:
             self.mod_manager.load_local_mods()
-        except Exception:
-            pass
+        except Exception as e:
+            logging.warning(f'_on_mod_installation_finished: load_local_mods failed: {e}')
         try:
             QTimer.singleShot(0, self._update_installed_mods_display)
-        except Exception:
-            pass
+        except Exception as e:
+            logging.debug(f'_on_mod_installation_finished: update_installed_mods_display failed: {e}')
         try:
             if hasattr(self, 'slot_manager'):
                 self.slot_manager.refresh_slots_content()
-        except Exception:
-            pass
+        except Exception as e:
+            logging.debug(f'_on_mod_installation_finished: refresh_slots_content failed: {e}')
         if success:
             try:
                 QTimer.singleShot(0, lambda: self.feedback_manager.show_info('dialogs.mod_installed_apply_info'))
@@ -1792,7 +1792,8 @@ class AppWindow(QWidget, UiControlsMixin, OperationsMixin):
         self._init_session()
         try:
             from config.constants import CLOUD_FUNCTIONS_BASE_URL
-            response = requests.get(f'{CLOUD_FUNCTIONS_BASE_URL}/getGlobalSettings', timeout=5)
+            from utils.network_utils import get_session
+            response = get_session().get(f'{CLOUD_FUNCTIONS_BASE_URL}/getGlobalSettings', timeout=5)
             if response.status_code == 200:
                 self.app_state.global_settings = response.json() or {}
         except requests.RequestException:
@@ -2003,8 +2004,8 @@ class AppWindow(QWidget, UiControlsMixin, OperationsMixin):
                 temp_root = getattr(thr, 'temp_root', None)
                 if temp_root and os.path.isdir(temp_root):
                     shutil.rmtree(temp_root, ignore_errors=True)
-            except Exception:
-                pass
+            except Exception as e:
+                logging.debug(f'_on_url_install_finished: temp cleanup failed: {e}')
         self.app_state.is_installing = False
         self._set_install_buttons_enabled(True)
         self.current_install_thread = None
@@ -2033,8 +2034,8 @@ class AppWindow(QWidget, UiControlsMixin, OperationsMixin):
     def _hide_window_for_game(self):
         try:
             self.customization_manager.stop_background_music()
-        except Exception:
-            pass
+        except Exception as e:
+            logging.debug(f'_hide_window_for_game: stop_background_music failed: {e}')
         self.app_state.game_is_running = True
         self.hide()
 
@@ -2518,11 +2519,12 @@ class AppWindow(QWidget, UiControlsMixin, OperationsMixin):
 
     def _init_session(self):
         try:
-            import requests
+            from utils.network_utils import get_session
             from config.constants import CLOUD_FUNCTIONS_BASE_URL
-            requests.post(f'{CLOUD_FUNCTIONS_BASE_URL}/presenceHeartbeat', json={'sessionId': self.session_id}, timeout=5)
-        except Exception:
-            pass
+            get_session().post(f'{CLOUD_FUNCTIONS_BASE_URL}/presenceHeartbeat', json={'sessionId': self.session_id}, timeout=5)
+        except Exception as e:
+            import logging
+            logging.debug(f'_init_session: heartbeat failed: {e}')
 
     def _handle_first_launch_settings(self):
         self.app_state.local_config['first_launch_splash_shown'] = True

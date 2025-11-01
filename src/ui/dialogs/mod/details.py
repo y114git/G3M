@@ -191,9 +191,9 @@ def open_mod_details_dialog(parent, mod_data):
     desc_text.setOpenExternalLinks(True)
     if hasattr(mod_data, 'description_url') and mod_data.description_url:
         try:
-            import requests
+            from utils.network_utils import get_session
             desc_text.setPlainText(tr('status.loading_description'))
-            response = requests.get(mod_data.description_url, timeout=10)
+            response = get_session().get(mod_data.description_url, timeout=10)
             if response.ok:
                 content = response.text
                 is_markdown = mod_data.description_url.lower().endswith(('.md', '.markdown')) or '# ' in content or '## ' in content or ('**' in content) or ('__' in content)

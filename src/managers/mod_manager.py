@@ -62,16 +62,16 @@ class ModManager(QObject):
                                 with rarfile.RarFile(item_path, 'r') as rf:
                                     if '_deltamodInfo.json' in rf.namelist():
                                         is_deltamod_archive = True
-                            except Exception:
-                                pass
+                            except Exception as e:
+                                logging.debug(f'load_local_mods: failed to check rar archive {item_name}: {e}')
                         elif item_name_lower.endswith('.7z'):
                             import py7zr
                             try:
                                 with py7zr.SevenZipFile(item_path, mode='r') as zf:
                                     if '_deltamodInfo.json' in zf.getnames():
                                         is_deltamod_archive = True
-                            except Exception:
-                                pass
+                            except Exception as e:
+                                logging.debug(f'load_local_mods: failed to check 7z archive {item_name}: {e}')
                         if is_deltamod_archive:
                             self.status_changed.emit(tr('status.deltamod_archive_detected', name=item_name), UI_COLORS['status_info'])
                             QApplication.processEvents()
@@ -115,8 +115,8 @@ class ModManager(QObject):
                     mod_key = config_data.get('mod_key')
                     if mod_key:
                         installed_mods[mod_key] = config_data
-                except Exception:
-                    pass
+                except Exception as e:
+                    logging.debug(f'load_local_mods: failed to load mod from {folder_path}: {e}')
             for mod in list(self.app_state.all_mods):
                 if mod.key in installed_mods:
                     config_data = installed_mods[mod.key]
@@ -149,8 +149,8 @@ class ModManager(QObject):
                                     try:
                                         ExtraFileClass = globals()['ModExtraFile']
                                         extra_files_list.append(ExtraFileClass(key=ef_data.get('key', ''), version=ef_data.get('version', ''), url=ef_data.get('url', '')))
-                                    except Exception:
-                                        pass
+                                    except Exception as e:
+                                        logging.debug(f'load_local_mods: failed to parse extra_file: {e}')
                             valid_chapter_fields = {'description': ch_info.get('description'), 'data_file_url': ch_info.get('data_file_url'), 'data_file_version': ch_info.get('data_file_version'), 'extra_files': extra_files_list}
                             mod.files[file_key] = ModChapterData(**valid_chapter_fields)
                         self.app_state.all_mods.append(mod)
@@ -232,14 +232,14 @@ class ModManager(QObject):
                 if os.path.exists(p):
                     try:
                         os.remove(p)
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logging.debug(f'load_local_mods: failed to remove cleanup file {p}: {e}')
             for d in cleanup_dirs:
                 if os.path.exists(d):
                     try:
                         shutil.rmtree(d)
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logging.debug(f'load_local_mods: failed to remove cleanup dir {d}: {e}')
             self._write_metadata({'mod_files_to_cleanup': [], 'mod_dirs_to_cleanup': []})
             if conversion_happened and (not _skip_conversion):
                 return self.load_local_mods(_skip_conversion=True)
@@ -263,7 +263,8 @@ class ModManager(QObject):
                     config_data = json.load(f)
                 if config_data.get('mod_key') == mod_key:
                     return config_data
-            except Exception:
+            except Exception as e:
+                logging.debug(f'get_mod_config: failed to read {config_path}: {e}')
                 continue
         return {}
 
@@ -282,7 +283,8 @@ class ModManager(QObject):
                     config_data = json.load(f)
                 if config_data.get('mod_key') == mod_key:
                     return folder_path
-            except Exception:
+            except Exception as e:
+                logging.debug(f'get_mod_folder_path: failed to read {config_path}: {e}')
                 continue
         return ''
 
@@ -301,7 +303,8 @@ class ModManager(QObject):
                 for chapter_id in range(0, 5):
                     try:
                         chapter_data = mod.get_chapter_data(chapter_id)
-                    except Exception:
+                    except Exception as e:
+                        logging.debug(f'install_mod: failed to get chapter {chapter_id} data: {e}')
                         chapter_data = None
                     if chapter_data:
                         available_chapters.append(chapter_id)
@@ -379,13 +382,14 @@ class ModManager(QObject):
                     if config_data.get('mod_key') == mod_key:
                         mod_folder_found = folder_path
                         break
-                except Exception:
+                except Exception as e:
+                    logging.debug(f'uninstall_mod: failed to check {folder_path}: {e}')
                     continue
             if mod_folder_found and os.path.exists(mod_folder_found):
                 import shutil
                 shutil.rmtree(mod_folder_found)
-        except Exception:
-            pass
+        except Exception as e:
+            logging.warning(f'uninstall_mod: cleanup failed: {e}')
 
     def get_mod_status(self, mod: mod_models.ModInfo, chapter_id: int) -> str:
         if mod.is_local_mod:
@@ -461,7 +465,8 @@ class ModManager(QObject):
                         config_data = json.load(f)
                     if config_data.get('mod_key') == mod_key:
                         return True
-                except Exception:
+                except Exception as e:
+                    logging.debug(f'is_mod_installed: failed to read {config_path}: {e}')
                     continue
         return False
 
@@ -520,8 +525,8 @@ class ModManager(QObject):
                         if chapter_id == -1:
                             return 'demo' in files_data or 'undertale' in files_data
                         return file_key in files_data
-                except Exception:
-                    pass
+                except Exception as e:
+                    logging.debug(f'mod_has_files_for_chapter: exception: {e}')
             chapter_folders = {-1: 'universal', 0: 'menu', 1: 'chapter1', 2: 'chapter2', 3: 'chapter3', 4: 'chapter4'}
             folder_name = chapter_folders.get(chapter_id, 'universal')
             chapter_folder = os.path.join(mod_folder, folder_name)
@@ -531,7 +536,8 @@ class ModManager(QObject):
             if os.path.exists(universal_folder):
                 return len(os.listdir(universal_folder)) > 0
             return True
-        except Exception:
+        except Exception as e:
+            logging.debug(f'check_mod_exists: exception: {e}')
             return True
 
     def _read_metadata(self) -> Dict:
@@ -541,7 +547,8 @@ class ModManager(QObject):
             try:
                 with open(self.app_state.mods_metadata_path, 'r', encoding='utf-8') as f:
                     return json.load(f) or {}
-            except Exception:
+            except Exception as e:
+                logging.debug(f'_read_metadata: failed: {e}')
                 return {}
 
     def _write_metadata(self, data: Dict):
@@ -549,8 +556,8 @@ class ModManager(QObject):
             try:
                 with open(self.app_state.mods_metadata_path, 'w', encoding='utf-8') as f:
                     json.dump(data, f, ensure_ascii=False, indent=2)
-            except Exception:
-                pass
+            except Exception as e:
+                logging.warning(f'_write_metadata: failed: {e}')
 
     def _on_single_mod_install_finished(self, success):
         was_installed_before = False
@@ -602,12 +609,14 @@ class ModManager(QObject):
         found_hash: Optional[str] = None
         for h in candidate_hashes:
             try:
-                resp = requests.get(f'{CLOUD_FUNCTIONS_BASE_URL}/getModData?modId={h}', timeout=10)
+                from utils.network_utils import get_session
+                session = get_session()
+                resp = session.get(f'{CLOUD_FUNCTIONS_BASE_URL}/getModData?modId={h}', timeout=10)
                 if resp.status_code == 200 and resp.json():
                     mod_data = resp.json()
                     found_hash = h
                     break
-                resp = requests.get(f'{CLOUD_FUNCTIONS_BASE_URL}/getPendingModData?modId={h}', timeout=10)
+                resp = session.get(f'{CLOUD_FUNCTIONS_BASE_URL}/getPendingModData?modId={h}', timeout=10)
                 if resp.status_code == 200 and resp.json():
                     mod_data = resp.json()
                     found_hash = h
@@ -621,20 +630,23 @@ class ModManager(QObject):
 
     def has_pending_changes(self, hashed_key: str) -> bool:
         try:
-            resp = requests.get(f'{CLOUD_FUNCTIONS_BASE_URL}/getPendingChangeData?modId={hashed_key}', timeout=10)
+            from utils.network_utils import get_session
+            resp = get_session().get(f'{CLOUD_FUNCTIONS_BASE_URL}/getPendingChangeData?modId={hashed_key}', timeout=10)
             return bool(resp.status_code == 200 and resp.json())
         except requests.RequestException:
             return False
 
     def withdraw_pending_mod(self, hashed_key: str) -> None:
         try:
-            requests.post(f'{CLOUD_FUNCTIONS_BASE_URL}/withdrawPendingMod', json={'hashedKey': hashed_key}, timeout=10)
+            from utils.network_utils import get_session
+            get_session().post(f'{CLOUD_FUNCTIONS_BASE_URL}/withdrawPendingMod', json={'hashedKey': hashed_key}, timeout=10)
         except requests.RequestException:
             raise
 
     def withdraw_pending_change(self, hashed_key: str) -> None:
         try:
-            resp = requests.post(f'{CLOUD_FUNCTIONS_BASE_URL}/withdrawPendingChange', json={'hashedKey': hashed_key}, timeout=10)
+            from utils.network_utils import get_session
+            resp = get_session().post(f'{CLOUD_FUNCTIONS_BASE_URL}/withdrawPendingChange', json={'hashedKey': hashed_key}, timeout=10)
             resp.raise_for_status()
         except requests.RequestException:
             raise
@@ -655,7 +667,8 @@ class ModManager(QObject):
                     config_data = json.load(f)
                 if config_data and config_data.get('is_local_mod'):
                     local_mods.append({'key': config_data.get('mod_key'), 'name': config_data.get('name', 'Unknown mod'), 'data': config_data, 'folder_path': folder_path})
-            except Exception:
+            except Exception as e:
+                logging.debug(f'list_local_mods: failed to read {config_path}: {e}')
                 continue
         return local_mods
 

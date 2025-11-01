@@ -3,6 +3,7 @@ import os
 import re
 from typing import Any, Dict, List, Optional
 import requests
+from utils.network_utils import get_session
 import logging
 from PyQt6.QtCore import QThread, pyqtSignal
 from config.constants import CLOUD_FUNCTIONS_BASE_URL, UI_COLORS
@@ -26,7 +27,8 @@ class FetchModsThread(QThread):
                 self.status.emit('Cloud Functions URL not configured', 'red')
                 self.result.emit(False)
                 return
-            response = requests.get(f'{CLOUD_FUNCTIONS_BASE_URL}/getMods', timeout=15)
+            session = get_session()
+            response = session.get(f'{CLOUD_FUNCTIONS_BASE_URL}/getMods', timeout=15)
             response.raise_for_status()
             mods_json = response.json() or {}
             all_mods = self._parse_mods(mods_json)

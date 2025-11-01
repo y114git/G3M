@@ -2,8 +2,47 @@ import os
 import platform
 import re
 import time
+import logging
 from pathlib import Path
 import requests
+import threading
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+_session_lock = threading.Lock()
+_shared_session = None
+
+
+def get_session() -> requests.Session:
+    global _shared_session
+    if _shared_session is not None:
+        return _shared_session
+    with _session_lock:
+        if _shared_session is None:
+            _shared_session = _build_session()
+    return _shared_session
+
+
+def _build_session() -> requests.Session:
+    from config.constants import LAUNCHER_VERSION, BROWSER_HEADERS
+    session = requests.Session()
+    headers = dict(BROWSER_HEADERS or {})
+    headers.setdefault('User-Agent', f'DELTAHUB/{LAUNCHER_VERSION}')
+    session.headers.update(headers)
+    retry = Retry(total=3, connect=3, read=3, backoff_factor=0.3, status_forcelist=(429, 500, 502, 503, 504), allowed_methods=('HEAD', 'GET', 'PUT', 'DELETE', 'OPTIONS', 'TRACE', 'POST'), raise_on_status=False)
+    adapter = HTTPAdapter(max_retries=retry, pool_connections=4, pool_maxsize=16)
+    session.mount('http://', adapter)
+    session.mount('https://', adapter)
+    return session
+
+
+def close_shared_session() -> None:
+    global _shared_session
+    with _session_lock:
+        if _shared_session is not None:
+            try:
+                _shared_session.close()
+            finally:
+                _shared_session = None
 
 
 def get_filename_from_url(session, url):
@@ -21,8 +60,8 @@ def get_filename_from_url(session, url):
             potential_name = os.path.basename(unquote(path))
             if '.' in potential_name:
                 return potential_name
-    except Exception:
-        pass
+    except Exception as e:
+        logging.debug(f'get_filename_from_url: header parsing failed: {e}')
     return Path(url.split('?', 1)[0]).name or 'file.tmp'
 
 
@@ -33,7 +72,8 @@ def download_file(session, url, tmp_path, progress_callback=None, total_size: in
     try:
         h = session.head(url, allow_redirects=True, timeout=15)
         expected_size = int(h.headers.get('content-length', 0))
-    except Exception:
+    except Exception as e:
+        logging.debug(f'download_file: failed to get expected size for {url}: {e}')
         expected_size = 0
     attempt = 0
     while attempt < max_retries:
@@ -43,13 +83,15 @@ def download_file(session, url, tmp_path, progress_callback=None, total_size: in
             headers = {}
             if expected_size and 0 < current_size < expected_size:
                 headers['Range'] = f'bytes={current_size}-'
+            if session is None:
+                session = get_session()
             r = session.get(url, stream=True, timeout=60, allow_redirects=True, headers=headers)
             r.raise_for_status()
             try:
                 if on_response:
                     on_response(r)
-            except Exception:
-                pass
+            except Exception as e:
+                logging.debug(f'download_file: on_response callback failed: {e}')
             status_code = getattr(r, 'status_code', 200)
             duplicate_remaining = 0
             mode = 'ab'
@@ -62,7 +104,8 @@ def download_file(session, url, tmp_path, progress_callback=None, total_size: in
             this_request_expected = 0
             try:
                 this_request_expected = int(r.headers.get('content-length', 0))
-            except Exception:
+            except Exception as e:
+                logging.debug(f'download_file: failed to parse content-length: {e}')
                 this_request_expected = 0
             written_this_request = 0
             with open(tmp_path, mode) as f:
@@ -87,26 +130,28 @@ def download_file(session, url, tmp_path, progress_callback=None, total_size: in
                         try:
                             progress = int(min(100, max(0, downloaded_ref[0] / total_size * 100)))
                             progress_callback(progress)
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            logging.debug(f'download_file: progress callback failed: {e}')
             final_size = os.path.getsize(tmp_path) if os.path.exists(tmp_path) else 0
             if this_request_expected and written_this_request < this_request_expected:
                 raise IOError('connection dropped during download')
             if expected_size and final_size < expected_size:
                 continue
             return
-        except Exception:
+        except Exception as e:
             if attempt >= max_retries:
                 raise
+            logging.debug(f'download_file: attempt {attempt}/{max_retries} failed for {url}: {e}')
             try:
                 time.sleep(min(2.0, 0.2 * attempt))
-            except Exception:
-                pass
+            except Exception as sleep_e:
+                logging.debug(f'download_file: sleep failed: {sleep_e}')
 
 
 def check_internet_connection() -> bool:
     try:
-        requests.get('https://www.google.com', timeout=5)
+        session = get_session()
+        session.get('https://www.google.com', timeout=5)
         return True
     except requests.RequestException:
         return False
@@ -118,6 +163,7 @@ def increment_launch_counter() -> None:
     os_key = os_map.get(platform.system(), 'other')
     try:
         url = f'{CLOUD_FUNCTIONS_BASE_URL}/incrementLaunches'
-        requests.post(url, json={'os': os_key}, timeout=5)
+        session = get_session()
+        session.post(url, json={'os': os_key}, timeout=5)
     except requests.RequestException:
         pass

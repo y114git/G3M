@@ -1,3 +1,4 @@
+import logging
 import threading
 from PyQt6.QtGui import QImage, QPixmap
 try:
@@ -5,5 +6,6 @@ try:
     _PIX_CACHE: dict[str, QPixmap] = {}
     _IMG_CACHE_LOCK = threading.Lock()
     _NET_SEM = threading.Semaphore(6)
-except Exception:
+except Exception as e:
+    logging.warning(f'cache: failed to initialize cache/locks: {e}')
     _IMG_CACHE, _PIX_CACHE, _IMG_CACHE_LOCK, _NET_SEM = ({}, {}, None, None)

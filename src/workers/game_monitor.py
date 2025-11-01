@@ -1,3 +1,4 @@
+import logging
 import time
 from PyQt6.QtCore import QThread, pyqtSignal
 from utils.game_utils import is_game_running
@@ -17,8 +18,8 @@ class GameMonitorThread(QThread):
         if self.process:
             try:
                 self.process.wait()
-            except Exception:
-                pass
+            except Exception as e:
+                logging.debug(f'GameMonitorThread.run: process.wait() failed: {e}')
             finally:
                 self.finished.emit(self.vanilla_mode)
                 return

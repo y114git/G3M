@@ -116,8 +116,8 @@ class SaveManager(QObject):
                     old_path = os.path.join(self.app_state.save_path, old_folder)
                     shutil.rmtree(old_path)
                 migrated_count += 1
-            except Exception:
-                pass
+            except Exception as e:
+                logging.warning(f'SaveManager._migrate_old_collections: migration failed for {name}: {e}')
         if migrated_count > 0:
             self._reindex_collections()
 
@@ -167,8 +167,8 @@ class SaveManager(QObject):
                     old_path = os.path.join(self.app_state.save_path, old_folder)
                     new_path = os.path.join(self.app_state.save_path, new_folder)
                     os.rename(old_path, new_path)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logging.debug(f'SaveManager._reindex_collections: rename {old_folder} to {new_folder} failed: {e}')
 
     def get_slot_data(self, chapter: int, slot: int, base_path: str) -> tuple[bool, str]:
         fp = os.path.join(base_path, f'filech{chapter}_{slot}')
@@ -179,7 +179,8 @@ class SaveManager(QObject):
                     lines = f.read().splitlines()
                 nickname = lines[0] if len(lines) > 0 else '???'
                 currency = lines[10] if len(lines) > 10 else '0'
-            except Exception:
+            except Exception as e:
+                logging.debug(f'SaveManager.get_slot_data: failed to read {fp}: {e}')
                 nickname, currency = ('???', '0')
             fin_idx = SAVE_SLOT_FINISH_MAP.get(slot, -1)
             fin_fp = os.path.join(base_path, f'filech{chapter}_{fin_idx}')

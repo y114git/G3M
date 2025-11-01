@@ -6,6 +6,7 @@ import shutil
 import threading
 import subprocess
 import requests
+from utils.network_utils import get_session
 from PyQt6.QtCore import QObject, pyqtSignal
 from managers.localization_manager import tr
 from config.constants import LAUNCHER_VERSION, UI_COLORS, ARCH
@@ -66,7 +67,8 @@ class UpdateChecker(QObject):
             with tempfile.TemporaryDirectory(prefix='deltahub-update-') as tmp_dir:
                 archive_path = os.path.join(tmp_dir, 'update' + os.path.splitext(update_info['url'].split('?')[0])[1])
                 self.feedback_manager.update_status(tr('status.downloading_version', version=update_info['version']), UI_COLORS['status_warning'])
-                response = requests.get(update_info['url'], stream=True, timeout=60)
+                session = get_session()
+                response = session.get(update_info['url'], stream=True, timeout=60)
                 response.raise_for_status()
                 total_size = int(response.headers.get('content-length', 0))
                 with open(archive_path, 'wb') as f:

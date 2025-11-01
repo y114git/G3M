@@ -49,7 +49,8 @@ class DeltamodConverter:
         try:
             with open(info_path, 'r', encoding='utf-8') as f:
                 self.deltamod_info = json.load(f)
-        except Exception:
+        except Exception as e:
+            logging.debug(f'DeltamodConverter._validate_source: failed to read {info_path}: {e}')
             return False
         try:
             self.modding_xml = ET.parse(xml_path).getroot()
@@ -63,9 +64,11 @@ class DeltamodConverter:
                     xml_lines = xml_content.split('\n', 1)
                     xml_content = xml_lines[0] + '\n<patches>\n' + xml_lines[1] + '\n</patches>'
                 self.modding_xml = ET.fromstring(xml_content)
-            except Exception:
+            except Exception as e:
+                logging.debug(f'DeltamodConverter._validate_source: failed to parse XML fallback: {e}')
                 self.modding_xml = None
-        except Exception:
+        except Exception as e:
+            logging.debug(f'DeltamodConverter._validate_source: failed to parse XML: {e}')
             self.modding_xml = None
         return True
 

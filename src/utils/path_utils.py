@@ -98,7 +98,8 @@ def resolve_game_executable(base_dir: str, is_undertale: bool) -> str | None:
                         break
             return app_path
         return None
-    except Exception:
+    except Exception as e:
+        logging.debug(f'resolve_game_executable: failed for {base_dir}: {e}')
         return None
 
 
@@ -124,5 +125,6 @@ def find_chapter_resource_dir(base_dir: str, chapter_id: int) -> str | None:
             if os.path.isdir(os.path.join(target_base, entry)) and entry.startswith(chapter_prefix):
                 return os.path.join(target_base, entry)
         return None
-    except Exception:
+    except Exception as e:
+        logging.debug(f'find_chapter_resource_dir: failed for {base_dir}, chapter {chapter_id}: {e}')
         return None

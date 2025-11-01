@@ -1,4 +1,5 @@
-from PyQt6.QtCore import QObject, QTimer, QByteArray, pyqtSignal
+import logging
+from PyQt6.QtCore import QObject, QTimer, QByteArray
 from PyQt6.QtWidgets import QWidget
 from typing import Optional
 
@@ -18,7 +19,8 @@ class WindowGeometryManager(QObject):
         try:
             widget.restoreGeometry(QByteArray.fromHex(saved.encode()))
             return True
-        except Exception:
+        except Exception as e:
+            logging.debug(f'load_window_geometry: failed: {e}')
             return False
 
     def save_window_geometry(self, widget: QWidget):
@@ -40,12 +42,12 @@ class WindowGeometryManager(QObject):
             sz = widget.size()
             widget.setMinimumSize(sz)
             widget.setMaximumSize(sz)
-        except Exception:
-            pass
+        except Exception as e:
+            logging.debug(f'lock_window_size: failed: {e}')
 
     def unlock_window_size(self, widget: QWidget):
         try:
             widget.setMinimumSize(0, 0)
             widget.setMaximumSize(16777215, 16777215)
-        except Exception:
-            pass
+        except Exception as e:
+            logging.debug(f'unlock_window_size: failed: {e}')

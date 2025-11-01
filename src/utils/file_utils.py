@@ -8,12 +8,14 @@ import tempfile
 import zipfile
 import tarfile
 import lzma
+import logging
 from pathlib import Path
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from config.constants import BROWSER_HEADERS
-from utils.network_utils import download_file, get_filename_from_url
+from utils.network_utils import download_file, get_filename_from_url, get_session
+import errno
 
 
 def download_and_extract_archive(url: str, target_dir: str, progress_callback=None, total_size: int = 0, downloaded_ref: list[int] | None = None, session=None, is_game_installation=False, cancel_check=None, on_response=None):
@@ -21,36 +23,112 @@ def download_and_extract_archive(url: str, target_dir: str, progress_callback=No
         downloaded_ref = [0]
     os.makedirs(target_dir, exist_ok=True)
     if session is None:
-        session = requests.Session()
-        session.headers.update(BROWSER_HEADERS)
-        retry_strategy = Retry(total=3, backoff_factor=0.3, status_forcelist=[429, 500, 502, 503, 504])
-        adapter = HTTPAdapter(max_retries=retry_strategy, pool_connections=1, pool_maxsize=10)
-        session.mount('http://', adapter)
-        session.mount('https://', adapter)
+        session = get_session()
     fname = get_filename_from_url(session, url)
     with tempfile.TemporaryDirectory(prefix='deltahub-dl-') as tmp:
         tmp_path = os.path.join(tmp, fname)
         download_file(session, url, tmp_path, progress_callback, total_size, downloaded_ref, cancel_check=cancel_check, on_response=on_response)
         if cancel_check and cancel_check():
             return
-        _extract_archive(tmp_path, target_dir, fname, is_game_installation)
+        extract_archive(tmp_path, target_dir, fname=fname, is_game_installation=is_game_installation)
 
 
-def _extract_archive(tmp_path, target_dir, fname, is_game_installation=False):
+def extract_archive(archive_path: str, target_dir: str, fname: str | None = None, is_game_installation: bool = False, size_cap_bytes: int | None = None) -> None:
+    os.makedirs(target_dir, exist_ok=True)
+    low = (fname or os.path.basename(archive_path)).lower()
+    with tempfile.TemporaryDirectory(prefix='deltahub-extract-') as temp_out:
+        _extract_archive_raw(archive_path, low, temp_out)
+        if size_cap_bytes is not None:
+            total = 0
+            for root, _, files in os.walk(temp_out):
+                for f in files:
+                    try:
+                        total += os.path.getsize(os.path.join(root, f))
+                    except OSError:
+                        pass
+            if total > size_cap_bytes:
+                raise IOError('extracted_content_too_large')
+        _move_tree_safely(temp_out, target_dir)
+        _cleanup_extracted_archive(target_dir, is_game_installation)
+
+
+def _extract_archive_raw(src_path: str, fname_lower: str, out_dir: str) -> None:
     import rarfile
-    low = fname.lower()
-    extractors = {'zip': lambda: zipfile.ZipFile(tmp_path, 'r').extractall(target_dir), 'rar': lambda: rarfile.RarFile(tmp_path, 'r').extractall(target_dir), 'tar.gz': lambda: tarfile.open(tmp_path, 'r:gz').extractall(target_dir), 'lzma': lambda: _extract_lzma(tmp_path, target_dir, fname)}
     try:
         import py7zr
-        extractors['7z'] = lambda: py7zr.SevenZipFile(tmp_path, mode='r').extractall(path=target_dir)
-    except Exception:
-        pass
-    for ext, extractor in extractors.items():
-        if low.endswith(f'.{ext}'):
-            extractor()
-            _cleanup_extracted_archive(target_dir, is_game_installation)
-            return
-    shutil.copy2(tmp_path, os.path.join(target_dir, fname))
+    except Exception as e:
+        logging.debug(f'_extract_archive_raw: py7zr import failed (not installed): {e}')
+        py7zr = None
+    if fname_lower.endswith('.zip'):
+        with zipfile.ZipFile(src_path, 'r') as zf:
+            zf.extractall(out_dir)
+        return
+    if fname_lower.endswith('.tar.gz'):
+        with tarfile.open(src_path, 'r:gz') as tf:
+            tf.extractall(out_dir)
+        return
+    if fname_lower.endswith('.rar'):
+        with rarfile.RarFile(src_path, 'r') as rf:
+            rf.extractall(out_dir)
+        return
+    if fname_lower.endswith('.7z') and py7zr is not None:
+        with py7zr.SevenZipFile(src_path, mode='r') as zf:
+            zf.extractall(path=out_dir)
+        return
+    if fname_lower.endswith('.lzma'):
+        _extract_lzma(src_path, out_dir, fname_lower)
+        return
+    shutil.copy2(src_path, os.path.join(out_dir, os.path.basename(src_path)))
+
+
+def _is_symlink(path: str) -> bool:
+    try:
+        return os.path.islink(path)
+    except OSError:
+        return False
+
+
+def _safe_join(base: str, *paths: str) -> str:
+    base_abs = os.path.abspath(base)
+    final = os.path.abspath(os.path.join(base_abs, *paths))
+    if os.path.commonpath([final, base_abs]) != base_abs:
+        raise ValueError('path_traversal')
+    return final
+
+
+def _move_tree_safely(src_root: str, dst_root: str) -> None:
+    for root, dirs, files in os.walk(src_root):
+        rel_root = os.path.relpath(root, src_root)
+        rel_root = '' if rel_root == '.' else rel_root
+        if os.path.isabs(rel_root):
+            continue
+        if len(rel_root) >= 2 and rel_root[1] == ':' and rel_root[0].isalpha():
+            continue
+        dst_dir = _safe_join(dst_root, rel_root) if rel_root else dst_root
+        os.makedirs(dst_dir, exist_ok=True)
+        for d in list(dirs):
+            try:
+                _safe_join(dst_dir, d)
+            except ValueError:
+                dirs.remove(d)
+                continue
+        for f in files:
+            src_path = os.path.join(root, f)
+            if _is_symlink(src_path):
+                continue
+            try:
+                dst_path = _safe_join(dst_dir, f)
+            except ValueError:
+                continue
+            os.makedirs(os.path.dirname(dst_path), exist_ok=True)
+            try:
+                shutil.move(src_path, dst_path)
+            except (OSError, shutil.Error):
+                try:
+                    shutil.copy2(src_path, dst_path)
+                except OSError as e:
+                    if e.errno != errno.ENOENT:
+                        raise
 
 
 def _extract_lzma(tmp_path, target_dir, fname):
@@ -141,14 +219,15 @@ def fix_macos_python_symlink(app_dir: Path) -> None:
         if p.is_file() and p.stat().st_size < 512:
             try:
                 target_rel = p.read_text(encoding='utf-8').strip()
-            except Exception:
+            except Exception as e:
+                logging.debug(f'fix_macos_python_symlink: failed to read symlink target: {e}')
                 target_rel = 'Python.framework/Versions/3.12/Python'
             p.unlink(missing_ok=True)
             os.symlink(target_rel, p)
             st = os.lstat(p)
             os.chmod(p, stat.S_IMODE(st.st_mode) | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
-    except Exception:
-        pass
+    except Exception as e:
+        logging.debug(f'fix_macos_python_symlink: failed: {e}')
 
 
 def cleanup_old_updater_files():
@@ -164,8 +243,8 @@ def cleanup_old_updater_files():
         backup_path = f'{replace_target}.old'
         if os.path.exists(backup_path):
             shutil.rmtree(backup_path, ignore_errors=True)
-    except Exception:
-        pass
+    except Exception as e:
+        logging.debug(f'cleanup_old_updater_files: failed: {e}')
 
 
 def version_sort_key(version_string: str):
@@ -193,7 +272,8 @@ def version_sort_key(version_string: str):
             nums.append(0)
         has_suffix = 1 if suffix_part else 0
         return (nums[0], nums[1], nums[2], has_suffix, suffix_part)
-    except Exception:
+    except Exception as e:
+        logging.debug(f'version_sort_key: failed to parse "{version_string}": {e}')
         return (0, 0, 0, 0, '')
 
 
@@ -213,7 +293,8 @@ def game_version_sort_key(version_string: str):
             if len(parts) > 1 and parts[1].isdigit():
                 minor = int(parts[1])
             return (major, minor, 0)
-    except Exception:
+    except Exception as e:
+        logging.debug(f'game_version_sort_key: failed to parse "{version_string}": {e}')
         return (0, 0, 0)
 
 

@@ -13,6 +13,8 @@ from managers.localization_manager import localization_manager, tr
 from utils.audio_utils import _audio_manager
 from core.splash import create_splash, create_png_splash
 from utils.path_utils import get_user_data_root, get_launcher_dir
+from logging.handlers import RotatingFileHandler
+import traceback
 if platform.system() == 'Windows':
     import winreg
 
@@ -40,6 +42,40 @@ def check_game_processes():
         except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
             pass
     return None
+
+
+def configure_logging(app_name: str, user_data_root: str) -> str:
+    logs_dir = os.path.join(user_data_root, 'logs')
+    os.makedirs(logs_dir, exist_ok=True)
+    log_path = os.path.join(logs_dir, f'{app_name.lower()}.log')
+    root = logging.getLogger()
+    if not root.handlers:
+        root.setLevel(logging.INFO)
+        fmt = logging.Formatter('%(asctime)s %(levelname)s %(name)s: %(message)s')
+        file_handler = RotatingFileHandler(log_path, maxBytes=1000000, backupCount=3, encoding='utf-8')
+        file_handler.setFormatter(fmt)
+        root.addHandler(file_handler)
+        console = logging.StreamHandler()
+        console.setLevel(logging.WARNING)
+        console.setFormatter(fmt)
+        root.addHandler(console)
+    return log_path
+
+
+def install_excepthook(show_message_callback=None):
+
+    def _hook(exctype, value, tb):
+        try:
+            logging.critical('Uncaught exception', exc_info=(exctype, value, tb))
+        except Exception:
+            pass
+        try:
+            if callable(show_message_callback):
+                msg = ''.join(traceback.format_exception(exctype, value, tb))
+                show_message_callback(msg)
+        except Exception:
+            pass
+    sys.excepthook = _hook
 
 
 def register_url_protocol():
@@ -112,6 +148,12 @@ def setup_app():
 
 
 def run_app():
+    try:
+        user_root = get_user_data_root()
+        configure_logging('DELTAHUB', user_root)
+        install_excepthook()
+    except Exception:
+        pass
     parser = argparse.ArgumentParser(description='DELTAHUB')
     parser.add_argument('--shortcut-launch', type=str)
     parser.add_argument('--shortcut-path', type=str)
