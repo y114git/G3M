@@ -53,7 +53,10 @@ class GameLauncher(QObject):
 
     def launch_game_with_all_mods(self, execute_plugin_hooks=None, restore_window_callback=None):
         if self.save_manager:
-            collection_idx = self.save_manager.prompt_for_save_collection_on_launch()
+            if isinstance(self.app_state.game_mode, UndertaleGameMode):
+                collection_idx = -1
+            else:
+                collection_idx = self.save_manager.prompt_for_save_collection_on_launch()
             if collection_idx is None:
                 if restore_window_callback:
                     restore_window_callback()

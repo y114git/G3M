@@ -427,6 +427,10 @@ class OperationsMixin:
                     self.feedback_manager.update_status(tr('status.install_cancelled_by_user'), UI_COLORS['status_info'])
                     return
             install_tasks = [(mod, chapter_id) for chapter_id in available_chapters]
+            try:
+                self._operation_cancelled = False
+            except Exception:
+                pass
             self.app_state.is_installing = True
             self._set_install_buttons_enabled(False)
             self.action_button.setText(tr('ui.cancel_button'))
@@ -537,8 +541,8 @@ class OperationsMixin:
 
     def _set_install_buttons_enabled(self, enabled: bool):
         try:
-            self.action_button.setEnabled(enabled)
-            self.saves_button.setEnabled(enabled)
+            self.action_button.setEnabled(True if self.app_state.is_installing else enabled)
+            self.saves_button.setEnabled(True)
             self.shortcut_button.setEnabled(enabled)
         except Exception:
             pass

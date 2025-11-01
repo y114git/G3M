@@ -423,7 +423,11 @@
     "select_save_collection": "選擇存檔集合",
     "main_slots": "主槽位",
     "select_mod": "選擇模組",
-    "success": "成功"
+    "success": "成功",
+    "delete_confirmation": "確認刪除",
+    "delete_mod_confirmation": "此模組將被永久刪除。是否繼續？",
+    "file_replacement_warning_title": "檔案替換警告",
+    "file_replacement_warning_body": "此模組將透過直接拷貝替換原始遊戲檔案。確定要繼續嗎？"
   },
   "errors": {
     "access_permission_error": "訪問錯誤。檢查模組編輯權限。",

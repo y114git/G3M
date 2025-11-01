@@ -1,6 +1,4 @@
 # -*- mode: python ; coding: utf-8 -*-
-# Универсальный spec: одна точка входа, все ассеты внутри
-# Запускается:  pyinstaller -y builds/DELTAHUB.spec
 
 block_cipher = None
 
@@ -21,7 +19,7 @@ else:
         binaries_extra.append((vcredist_dll, '.'))
 
 a = Analysis(
-    ['../src/main.py'],  # Единственная точка входа в src/
+    ['../src/main.py'],
     pathex=['..'],
     binaries=binaries_extra,
     datas=[('../src', 'src')],
@@ -74,7 +72,6 @@ exe = EXE(
     upx=False,
 )
 
-# На macOS формируем .app бандл из exe
 if sys.platform == 'darwin':
     app = BUNDLE(
         exe,
@@ -84,7 +81,7 @@ if sys.platform == 'darwin':
         info_plist={
             'CFBundleURLTypes': [
                 {
-                    'CFBundleURLName': 'DELTAHUB Mod URL',
+                    'CFBundleURLName': 'DELTAHUB URL',
                     'CFBundleURLSchemes': ['deltahub']
                 }
             ]

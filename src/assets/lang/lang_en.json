@@ -240,7 +240,7 @@
     "other": "Other",
     "translation": "Translation",
     "translation_text": "Translation/Text",
-    "local": "local",
+    "local": "Local",
     "customization": "Customization"
   },
   "buttons": {
@@ -423,7 +423,11 @@
     "select_save_collection": "Select Save Collection",
     "main_slots": "Main slots",
     "select_mod": "Select mod",
-    "success": "Success"
+    "success": "Success",
+    "delete_confirmation": "Delete confirmation",
+    "delete_mod_confirmation": "This will permanently delete the mod. Continue?",
+    "file_replacement_warning_title": "File Replacement Warning",
+    "file_replacement_warning_body": "This mod will replace original game files via direct copying. Are you sure you want to proceed?"
   },
   "errors": {
     "access_permission_error": "Access error. Check mod edit permissions.",

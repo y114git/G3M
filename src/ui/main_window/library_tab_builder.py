@@ -1,9 +1,18 @@
 from typing import Dict, Any
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QSize
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QFrame, QLabel, QPushButton, QCheckBox, QComboBox, QScrollArea, QSizePolicy
 from managers.localization_manager import tr
 from ui.widgets.common.custom_controls import NoScrollComboBox
 from ui.common.styling import get_theme_color
+
+
+class _ZeroHintWidget(QWidget):
+
+    def sizeHint(self) -> QSize:
+        return QSize(0, 0)
+
+    def minimumSizeHint(self) -> QSize:
+        return QSize(0, 0)
 
 
 class LibraryTabBuilder:
@@ -15,6 +24,7 @@ class LibraryTabBuilder:
 
     def build(self) -> QWidget:
         widget = QWidget()
+        widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         layout = QVBoxLayout(widget)
         library_filters_widget = self._create_library_filters_widget()
         hide_filters = self.app_state.local_config.get('hide_library_filters', False)
@@ -35,8 +45,10 @@ class LibraryTabBuilder:
         controls_layout.addStretch()
         layout.addLayout(controls_layout)
         slots_container = QWidget()
+        slots_container.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
         slots_layout = QVBoxLayout(slots_container)
         active_slots_widget = QWidget()
+        active_slots_widget.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
         active_slots_widget.setObjectName('slots_background')
         active_slots_layout = QHBoxLayout(active_slots_widget)
         active_slots_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -66,12 +78,22 @@ class LibraryTabBuilder:
         installed_mods_scroll = QScrollArea()
         installed_mods_scroll.setWidgetResizable(True)
         installed_mods_scroll.setFrameShape(QFrame.Shape.NoFrame)
-        installed_mods_widget = QWidget()
+        installed_mods_scroll.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        from PyQt6.QtWidgets import QAbstractScrollArea
+        installed_mods_scroll.setSizeAdjustPolicy(QAbstractScrollArea.SizeAdjustPolicy.AdjustIgnored)
+        installed_mods_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        installed_mods_widget = _ZeroHintWidget()
+        installed_mods_widget.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
         installed_mods_layout = QVBoxLayout(installed_mods_widget)
         installed_mods_layout.addStretch()
         installed_mods_layout.setContentsMargins(0, 0, 0, 0)
         installed_mods_scroll.setWidget(installed_mods_widget)
         mods_container_layout.addWidget(installed_mods_scroll)
+        try:
+            mods_container_layout.setStretch(0, 0)
+            mods_container_layout.setStretch(1, 1)
+        except Exception:
+            pass
         mods_bg_color = get_theme_color(self.app_state.local_config, 'background', '#000000')
         if mods_bg_color.startswith('#'):
             r = int(mods_bg_color[1:3], 16)
@@ -82,6 +104,13 @@ class LibraryTabBuilder:
             mods_bg_rgba = 'rgba(0, 0, 0, 128)'
         installed_mods_container.setStyleSheet(f'\n            QWidget#mods_background {{\n                background-color: {mods_bg_rgba};\n                border-radius: 10px;\n                margin: 5px;\n            }}\n        ')
         layout.addWidget(installed_mods_container)
+        try:
+            layout.setStretch(0, 0)
+            layout.setStretch(1, 0)
+            layout.setStretch(2, 0)
+            layout.setStretch(3, 1)
+        except Exception:
+            pass
         self.widgets['library_filters_widget'] = library_filters_widget
         self.widgets['game_type_combo'] = game_type_combo
         self.widgets['chapter_mode_checkbox'] = chapter_mode_checkbox
