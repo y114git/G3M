@@ -46,7 +46,6 @@ from managers.plugin_manager import PluginManager
 from managers.customization_manager import CustomizationManager
 from managers.slot_manager import SlotManager
 from managers.shortcut_manager import ShortcutManager
-from managers.window_geometry_manager import WindowGeometryManager
 _translator = QTranslator()
 _lock_file = None
 
@@ -146,7 +145,6 @@ class AppWindow(QWidget, UiControlsMixin, OperationsMixin):
         self.plugin_manager = PluginManager(self.app_state, self)
         self.customization_manager = CustomizationManager(self.app_state, self)
         self.slot_manager = SlotManager(self.app_state, self.mod_manager, self.feedback_manager, self.settings_manager, self)
-        self.window_geometry_manager = WindowGeometryManager(self.app_state, self.settings_manager, self)
         self.slot_manager.slots_updated.connect(self._on_slot_manager_slots_updated)
         self.slot_manager.slot_state_changed.connect(lambda slot_id: self._refresh_slot_status_display(self.app_state.slots.get(slot_id)))
         self.slot_manager.action_button_update_needed.connect(self._update_action_button_state)
@@ -175,7 +173,7 @@ class AppWindow(QWidget, UiControlsMixin, OperationsMixin):
         self.initialization_timer.setSingleShot(True)
         self.initialization_timer.timeout.connect(self._force_finish_initialization)
         self.initialization_timer.start(5000)
-        self.window_geometry_manager.load_window_geometry(self)
+        self.settings_manager.load_window_geometry(self)
         if not self.app_state.local_config.get('first_launch_splash_shown', False):
             self.initialization_finished.connect(self._handle_first_launch_settings)
 
@@ -2473,7 +2471,7 @@ class AppWindow(QWidget, UiControlsMixin, OperationsMixin):
             super().closeEvent(event)
             return
         self.game_launcher._cleanup_direct_launch_files()
-        self.window_geometry_manager.save_window_geometry(self)
+        self.settings_manager.save_window_geometry(self)
         self._stop_presence_thread()
         self._stop_fetch_thread()
         if hasattr(self, 'game_launcher') and hasattr(self.game_launcher, 'monitor_thread'):
@@ -2491,11 +2489,11 @@ class AppWindow(QWidget, UiControlsMixin, OperationsMixin):
             panel_height = self.top_panel_widget.height()
             y = max(0, (panel_height - logo_height) // 2)
             self.launcher_icon_label.move((panel_width - logo_width) // 2, y)
-        self.window_geometry_manager.schedule_geometry_save(self)
+        self.settings_manager.schedule_geometry_save(self)
 
     def moveEvent(self, event):
         super().moveEvent(event)
-        self.window_geometry_manager.schedule_geometry_save(self)
+        self.settings_manager.schedule_geometry_save(self)
 
     def _load_local_data(self):
         self.app_state.local_config = self.settings_manager.read_json(self.app_state.config_path) or {}

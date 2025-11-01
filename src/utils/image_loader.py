@@ -6,8 +6,8 @@ import requests
 from PIL import Image
 from PyQt6.QtCore import QRunnable
 from PyQt6.QtGui import QImage
-from ui.widgets.common.worker_signals import WorkerSignals
-from utils.cache import _IMG_CACHE, _IMG_CACHE_LOCK, _NET_SEM
+from workers import WorkerSignals
+from utils.cache import _IMG_CACHE, _IMG_CACHE_LOCK, _NET_SEM, cache_lock, _trim_cache
 from utils.network_utils import get_session
 
 
@@ -27,7 +27,7 @@ class ImageLoaderRunnable(QRunnable):
     def run(self) -> None:
         try:
             if _IMG_CACHE is not None and _IMG_CACHE_LOCK is not None:
-                with _IMG_CACHE_LOCK:
+                with cache_lock():
                     cached: Optional[QImage] = _IMG_CACHE.get(self.url)
                     if cached is not None and (not cached.isNull()):
                         try:
@@ -63,23 +63,14 @@ class ImageLoaderRunnable(QRunnable):
                 self._emit_error('decode')
                 return
             if _IMG_CACHE is not None:
-                try:
-                    if _IMG_CACHE_LOCK is not None:
-                        _IMG_CACHE_LOCK.acquire()
+                with cache_lock():
                     _IMG_CACHE[self.url] = img
-                except Exception as e:
-                    logging.debug(f'ImageLoader.run: cache store failed for {self.url}: {e}')
-                finally:
-                    try:
-                        if _IMG_CACHE_LOCK is not None:
-                            _IMG_CACHE_LOCK.release()
-                    except Exception as e:
-                        logging.debug(f'ImageLoader.run: cache lock release failed: {e}')
+                    _trim_cache()
             try:
                 self.signals.result.emit(img)
             finally:
                 pass
         except requests.RequestException as e:
             self._emit_error(f'network:{e}')
-        except Exception as e:
+        except (OSError, ValueError, RuntimeError) as e:
             self._emit_error(str(e))

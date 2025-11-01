@@ -131,7 +131,7 @@ class ScreenshotsCarousel(QWidget):
             if not self._loading[self.index]:
                 self._loading[self.index] = True
                 from PyQt6.QtCore import QThread, pyqtSignal
-                from utils.cache import _IMG_CACHE, _IMG_CACHE_LOCK, _NET_SEM
+                from utils.cache import _IMG_CACHE, _NET_SEM, cache_lock
 
                 class _ImgLoader(QThread):
                     loaded = pyqtSignal(int, object)
@@ -143,8 +143,8 @@ class ScreenshotsCarousel(QWidget):
 
                     def run(self):
                         try:
-                            if _IMG_CACHE is not None and _IMG_CACHE_LOCK is not None:
-                                with _IMG_CACHE_LOCK:
+                            if _IMG_CACHE is not None:
+                                with cache_lock():
                                     if self.url in _IMG_CACHE:
                                         self.loaded.emit(self.idx, _IMG_CACHE[self.url])
                                         return
@@ -166,9 +166,9 @@ class ScreenshotsCarousel(QWidget):
                             if not q.loadFromData(r.content):
                                 self.failed.emit(self.idx)
                                 return
-                            if _IMG_CACHE is not None and _IMG_CACHE_LOCK is not None:
+                            if _IMG_CACHE is not None:
                                 try:
-                                    with _IMG_CACHE_LOCK:
+                                    with cache_lock():
                                         _IMG_CACHE[self.url] = q
                                 except Exception:
                                     pass
@@ -229,7 +229,7 @@ class ScreenshotsCarousel(QWidget):
         self._loading[idx] = True
         if not hasattr(self, '_workers'):
             self._workers = {}
-        from utils.cache import _IMG_CACHE, _IMG_CACHE_LOCK, _NET_SEM
+        from utils.cache import _IMG_CACHE, _NET_SEM, cache_lock
 
         class _Preloader(QThread):
             loaded = pyqtSignal(int, object)
@@ -241,8 +241,8 @@ class ScreenshotsCarousel(QWidget):
 
             def run(self):
                 try:
-                    if _IMG_CACHE is not None and _IMG_CACHE_LOCK is not None:
-                        with _IMG_CACHE_LOCK:
+                    if _IMG_CACHE is not None:
+                        with cache_lock():
                             if self.url in _IMG_CACHE:
                                 self.loaded.emit(self.i, _IMG_CACHE[self.url])
                                 return
@@ -264,9 +264,9 @@ class ScreenshotsCarousel(QWidget):
                     if not q.loadFromData(r.content):
                         self.failed.emit(self.i)
                         return
-                    if _IMG_CACHE is not None and _IMG_CACHE_LOCK is not None:
+                    if _IMG_CACHE is not None:
                         try:
-                            with _IMG_CACHE_LOCK:
+                            with cache_lock():
                                 _IMG_CACHE[self.url] = q
                         except Exception:
                             pass

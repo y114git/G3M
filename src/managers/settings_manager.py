@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import platform
 import re
@@ -7,8 +8,8 @@ import tempfile
 import threading
 import zipfile
 from typing import Optional
-from PyQt6.QtCore import QObject, pyqtSignal
-from PyQt6.QtWidgets import QFileDialog, QApplication
+from PyQt6.QtCore import QObject, pyqtSignal, QTimer, QByteArray
+from PyQt6.QtWidgets import QFileDialog, QApplication, QWidget
 from managers.localization_manager import tr, LocalizationManager
 from config.constants import LAUNCHER_VERSION, UI_COLORS
 from models.game_modes import DemoGameMode, UndertaleGameMode
@@ -403,3 +404,45 @@ class SettingsManager(QObject):
         self.app_state.local_config['direct_launch_slot_id'] = -1
         self.write_local_config()
         self.settings_changed.emit()
+
+    def load_window_geometry(self, widget: QWidget) -> bool:
+        saved = self.app_state.local_config.get('window_geometry')
+        if not saved:
+            return False
+        try:
+            widget.restoreGeometry(QByteArray.fromHex(saved.encode()))
+            return True
+        except (ValueError, AttributeError) as e:
+            logging.debug(f'load_window_geometry: failed: {e}')
+            return False
+
+    def save_window_geometry(self, widget: QWidget):
+        geom_ba = widget.saveGeometry()
+        self.app_state.local_config['window_geometry'] = geom_ba.toHex().data().decode()
+        self.write_local_config()
+
+    def schedule_geometry_save(self, widget: QWidget, timeout_ms: int = 500):
+        if not hasattr(self, '_geometry_save_timer'):
+            self._geometry_save_timer = None
+        if self._geometry_save_timer is None:
+            self._geometry_save_timer = QTimer()
+            self._geometry_save_timer.setSingleShot(True)
+            self._geometry_save_timer.timeout.connect(lambda: self.save_window_geometry(widget))
+        else:
+            self._geometry_save_timer.stop()
+        self._geometry_save_timer.start(timeout_ms)
+
+    def lock_window_size(self, widget: QWidget):
+        try:
+            sz = widget.size()
+            widget.setMinimumSize(sz)
+            widget.setMaximumSize(sz)
+        except (AttributeError, ValueError) as e:
+            logging.debug(f'lock_window_size: failed: {e}')
+
+    def unlock_window_size(self, widget: QWidget):
+        try:
+            widget.setMinimumSize(0, 0)
+            widget.setMaximumSize(16777215, 16777215)
+        except (AttributeError, ValueError) as e:
+            logging.debug(f'unlock_window_size: failed: {e}')

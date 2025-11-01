@@ -108,7 +108,7 @@ def load_mod_icon_universal(icon_label, mod_data, size=80):
                 return
         if icon_url and isinstance(icon_url, str) and icon_url.startswith(('http://', 'https://')):
             try:
-                from ui.widgets.common.worker_signals import WorkerSignals
+                from workers import WorkerSignals
                 from utils.image_loader import ImageLoaderRunnable
                 pool = QThreadPool.globalInstance()
                 signals = WorkerSignals()
@@ -156,7 +156,8 @@ def load_mod_icon_universal(icon_label, mod_data, size=80):
                     icon_label.destroyed.connect(_cleanup_refs)
                 except Exception:
                     pass
-                pool.start(runnable)
+                if pool is not None:
+                    pool.start(runnable)
             except Exception:
                 pass
     except Exception:

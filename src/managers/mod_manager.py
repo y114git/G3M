@@ -62,7 +62,7 @@ class ModManager(QObject):
                                 with rarfile.RarFile(item_path, 'r') as rf:
                                     if '_deltamodInfo.json' in rf.namelist():
                                         is_deltamod_archive = True
-                            except Exception as e:
+                            except (OSError, ImportError) as e:
                                 logging.debug(f'load_local_mods: failed to check rar archive {item_name}: {e}')
                         elif item_name_lower.endswith('.7z'):
                             import py7zr
@@ -70,7 +70,7 @@ class ModManager(QObject):
                                 with py7zr.SevenZipFile(item_path, mode='r') as zf:
                                     if '_deltamodInfo.json' in zf.getnames():
                                         is_deltamod_archive = True
-                            except Exception as e:
+                            except (OSError, ImportError) as e:
                                 logging.debug(f'load_local_mods: failed to check 7z archive {item_name}: {e}')
                         if is_deltamod_archive:
                             self.status_changed.emit(tr('status.deltamod_archive_detected', name=item_name), UI_COLORS['status_info'])
@@ -91,7 +91,7 @@ class ModManager(QObject):
                                 else:
                                     self.status_changed.emit(tr('errors.deltamod_conversion_failed', name=item_name), UI_COLORS['status_error'])
                             continue
-                    except Exception as e:
+                    except (OSError, ValueError, shutil.Error) as e:
                         logging.error(f'Failed to process Deltamod archive {item_name}: {e}')
                 if not os.path.isdir(item_path):
                     continue
@@ -115,8 +115,8 @@ class ModManager(QObject):
                     mod_key = config_data.get('mod_key')
                     if mod_key:
                         installed_mods[mod_key] = config_data
-                except Exception as e:
-                    logging.debug(f'load_local_mods: failed to load mod from {folder_path}: {e}')
+                except (OSError, json.JSONDecodeError, KeyError) as e:
+                    logging.debug(f'load_local_mods: failed to load mod from {item_path}: {e}')
             for mod in list(self.app_state.all_mods):
                 if mod.key in installed_mods:
                     config_data = installed_mods[mod.key]
@@ -149,7 +149,7 @@ class ModManager(QObject):
                                     try:
                                         ExtraFileClass = globals()['ModExtraFile']
                                         extra_files_list.append(ExtraFileClass(key=ef_data.get('key', ''), version=ef_data.get('version', ''), url=ef_data.get('url', '')))
-                                    except Exception as e:
+                                    except (KeyError, TypeError, ValueError) as e:
                                         logging.debug(f'load_local_mods: failed to parse extra_file: {e}')
                             valid_chapter_fields = {'description': ch_info.get('description'), 'data_file_url': ch_info.get('data_file_url'), 'data_file_version': ch_info.get('data_file_version'), 'extra_files': extra_files_list}
                             mod.files[file_key] = ModChapterData(**valid_chapter_fields)
