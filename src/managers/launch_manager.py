@@ -513,10 +513,27 @@ class GameLauncher(QObject):
                             self._update_session_manifest(mod_files=extracted_files)
                         files_copied += 1
                     else:
-                        shutil.copy2(cache_file_path, game_file_path)
-                        files_copied += 1
-                        self._mod_files_to_cleanup.append(game_file_path)
-                        self._update_session_manifest(mod_files=[game_file_path])
+                        tmp_target = game_file_path + '.tmp'
+                        try:
+                            shutil.copy2(cache_file_path, tmp_target)
+                            if os.path.exists(game_file_path) and game_file_path not in self._backup_files:
+                                unique_hash = hashlib.md5(game_file_path.encode('utf-8')).hexdigest()
+                                backup_filename = f'{unique_hash}_{os.path.basename(game_file_path)}'
+                                backup_file_path = os.path.join(self._backup_temp_dir, backup_filename)
+                                os.makedirs(os.path.dirname(backup_file_path), exist_ok=True)
+                                shutil.move(game_file_path, backup_file_path)
+                                self._backup_files[game_file_path] = backup_file_path
+                                self._update_session_manifest(backup_files={game_file_path: backup_file_path})
+                            os.replace(tmp_target, game_file_path)
+                            files_copied += 1
+                            self._mod_files_to_cleanup.append(game_file_path)
+                            self._update_session_manifest(mod_files=[game_file_path])
+                        finally:
+                            try:
+                                if os.path.exists(tmp_target):
+                                    os.remove(tmp_target)
+                            except Exception:
+                                pass
                 except Exception as e:
                     self.status_changed.emit(tr('errors.file_copy_error', file=file, error=str(e)), UI_COLORS['status_error'])
         if files_copied > 0:
@@ -556,7 +573,8 @@ class GameLauncher(QObject):
             shutil.copy2(original_data_file, backup_file_path)
             self._backup_files[original_data_file] = backup_file_path
             self._update_session_manifest(backup_files={original_data_file: backup_file_path})
-        command = ['-d', '-f', '-s', self._backup_files[original_data_file], xdelta_file_path, original_data_file]
+        temp_output = original_data_file + '.tmp'
+        command = ['-d', '-f', '-s', self._backup_files[original_data_file], xdelta_file_path, temp_output]
         try:
             command_to_run = [xdelta_exe] + command
             startupinfo = None
@@ -565,10 +583,23 @@ class GameLauncher(QObject):
                 startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
             process = subprocess.run(command_to_run, capture_output=True, text=True, check=False, startupinfo=startupinfo, encoding='utf-8', errors='replace')
             if process.returncode == 0:
-                self._mod_files_to_cleanup.append(original_data_file)
-                self.status_changed.emit(tr('status.xdelta_patch_applied', patch_name=os.path.basename(xdelta_file_path)), UI_COLORS['status_success'])
-                return True
+                try:
+                    os.replace(temp_output, original_data_file)
+                    self._mod_files_to_cleanup.append(original_data_file)
+                    self.status_changed.emit(tr('status.xdelta_patch_applied', patch_name=os.path.basename(xdelta_file_path)), UI_COLORS['status_success'])
+                    return True
+                finally:
+                    try:
+                        if os.path.exists(temp_output):
+                            os.remove(temp_output)
+                    except Exception:
+                        pass
             else:
+                try:
+                    if os.path.exists(temp_output):
+                        os.remove(temp_output)
+                except Exception:
+                    pass
                 shutil.copy2(self._backup_files[original_data_file], original_data_file)
                 error_message = process.stderr.strip() or process.stdout.strip()
                 self.status_changed.emit(tr('errors.xdelta_patch_error', error=error_message), UI_COLORS['status_error'])
@@ -578,6 +609,11 @@ class GameLauncher(QObject):
             return False
         except Exception as e:
             self.status_changed.emit(tr('errors.xdelta_patch_critical_error', error=str(e)), UI_COLORS['status_error'])
+            try:
+                if os.path.exists(temp_output):
+                    os.remove(temp_output)
+            except Exception:
+                pass
             try:
                 shutil.copy2(self._backup_files[original_data_file], original_data_file)
             except Exception:
@@ -630,18 +666,27 @@ class GameLauncher(QObject):
                                 self._update_session_manifest(mod_dirs=[target_dirname])
                         except Exception:
                             pass
-                        if os.path.exists(target_file):
-                            backup_rel_path = os.path.relpath(target_file, target_dir)
-                            if self._backup_temp_dir:
-                                backup_file_path = os.path.join(self._backup_temp_dir, backup_rel_path)
-                                os.makedirs(os.path.dirname(backup_file_path), exist_ok=True)
-                                shutil.move(target_file, backup_file_path)
-                                if not hasattr(self, '_backup_files'):
-                                    self._backup_files = {}
-                                self._backup_files[target_file] = backup_file_path
-                                self._update_session_manifest(backup_files={target_file: backup_file_path})
-                        shutil.copy2(source_file, target_file)
-                        extracted_files.append(target_file)
+                        tmp_target = target_file + '.tmp'
+                        try:
+                            shutil.copy2(source_file, tmp_target)
+                            if os.path.exists(target_file):
+                                backup_rel_path = os.path.relpath(target_file, target_dir)
+                                if self._backup_temp_dir:
+                                    backup_file_path = os.path.join(self._backup_temp_dir, backup_rel_path)
+                                    os.makedirs(os.path.dirname(backup_file_path), exist_ok=True)
+                                    shutil.move(target_file, backup_file_path)
+                                    if not hasattr(self, '_backup_files'):
+                                        self._backup_files = {}
+                                    self._backup_files[target_file] = backup_file_path
+                                    self._update_session_manifest(backup_files={target_file: backup_file_path})
+                            os.replace(tmp_target, target_file)
+                            extracted_files.append(target_file)
+                        finally:
+                            try:
+                                if os.path.exists(tmp_target):
+                                    os.remove(tmp_target)
+                            except Exception:
+                                pass
         except Exception as e:
             self.status_changed.emit(tr('errors.archive_unpack_error', archive_name=os.path.basename(archive_path), error=str(e)), UI_COLORS['status_error'])
         return extracted_files

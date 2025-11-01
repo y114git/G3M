@@ -3,7 +3,6 @@ import json
 import os
 import platform
 import shutil
-import sys
 import threading
 import uuid
 import subprocess
@@ -32,7 +31,7 @@ from ui.dialogs.patch.xdelta import XdeltaDialog
 from ui.dialogs.save.editor import SaveEditorDialog
 from ui.dialogs.mod.editor import ModEditorDialog
 from ui.common.feedback import FeedbackManager
-from core.startup import SingleInstanceServer
+from core.startup import SingleInstanceServer, ShortcutLaunchError
 from core.app_state import AppState
 from managers.mod_manager import ModManager
 from managers.launch_manager import GameLauncher
@@ -87,15 +86,18 @@ class AppWindow(QWidget, UiControlsMixin, OperationsMixin):
         self.save_manager = SaveManager(self.app_state, self.feedback_manager, self.settings_manager, self)
         self.save_manager.slots_updated.connect(self._refresh_save_slots)
         self.save_manager.status_changed.connect(lambda msg, color: self.feedback_manager.update_status(msg, color))
-        self.presence_thread = None
-        self.presence_worker = None
-        self._online_timer = QTimer(self)
-        self._online_timer.timeout.connect(self._run_presence_tick)
-        self._online_timer.start(30000)
         self._pending_install_url = initial_url
         self.dialog_parent = parent_for_dialogs or self
         self.session_id = uuid.uuid4().hex
-        QTimer.singleShot(0, self._run_presence_tick)
+        self.presence_thread = QThread(self)
+        self.presence_worker = PresenceWorker(self.session_id)
+        self.presence_worker.moveToThread(self.presence_thread)
+        self.presence_worker.update_online_count.connect(self._update_online_label)
+        self.presence_thread.start()
+        self._online_timer = QTimer(self)
+        self._online_timer.timeout.connect(self.presence_worker.run)
+        self._online_timer.start(30000)
+        QTimer.singleShot(0, self.presence_worker.run)
         self.setWindowTitle('DELTAHUB')
         self._supports_volume = platform.system() == 'Windows'
         self._initial_size = None
@@ -210,7 +212,7 @@ class AppWindow(QWidget, UiControlsMixin, OperationsMixin):
             settings = json.loads(settings_json)
         except Exception as e:
             logging.error(f'Shortcut settings read error: {e}')
-            sys.exit(1)
+            raise ShortcutLaunchError('Failed to read shortcut settings')
         self._load_local_data()
         self.mod_manager.load_local_mods()
         try:
@@ -228,7 +230,7 @@ class AppWindow(QWidget, UiControlsMixin, OperationsMixin):
             current_game_path = self._get_current_game_path()
             if not current_game_path or not os.path.exists(current_game_path):
                 logging.error('Game files not found for launch')
-                sys.exit(1)
+                raise ShortcutLaunchError('Game files not found for launch')
             mods_settings = settings.get('mods', {})
             if not mods_settings:
                 mods_settings = settings.get('selections', {})
@@ -236,7 +238,7 @@ class AppWindow(QWidget, UiControlsMixin, OperationsMixin):
             self.shortcut_manager.launch_game_from_shortcut(launch_via_steam=launch_via_steam, use_custom_executable=use_custom_executable, custom_exec_path=custom_exec_path, demo_custom_exec_path=demo_custom_exec_path, direct_launch_slot_id=direct_launch_slot_id)
         except Exception as e:
             logging.error(f'Launch error: {e}')
-            sys.exit(1)
+            raise ShortcutLaunchError(str(e) or 'Shortcut launch failed')
 
     def _set_install_buttons_enabled(self, enabled: bool):
         if hasattr(self, 'mod_list_layout'):
@@ -2068,30 +2070,8 @@ class AppWindow(QWidget, UiControlsMixin, OperationsMixin):
     def _run_presence_tick(self):
         if self.is_shortcut_launch:
             return
-        thr = getattr(self, 'presence_thread', None)
-        try:
-            if thr and thr.isRunning():
-                return
-        except RuntimeError:
-            self.presence_thread = None
-            thr = None
-        if thr and (not thr.isRunning()):
-            try:
-                thr.deleteLater()
-            except RuntimeError:
-                pass
-            self.presence_thread = None
-            self.presence_worker = None
-        self.presence_thread = QThread(self)
-        self.presence_worker = PresenceWorker(self.session_id)
-        self.presence_worker.moveToThread(self.presence_thread)
-        self.presence_thread.started.connect(self.presence_worker.run)
-        self.presence_worker.finished.connect(self.presence_thread.quit)
-        self.presence_thread.finished.connect(lambda: setattr(self, 'presence_thread', None))
-        self.presence_thread.finished.connect(self.presence_thread.deleteLater)
-        self.presence_worker.finished.connect(self.presence_worker.deleteLater)
-        self.presence_worker.update_online_count.connect(self._update_online_label)
-        self.presence_thread.start()
+        if hasattr(self, 'presence_worker') and self.presence_worker:
+            self.presence_worker.run()
 
     def _update_online_label(self, count: int):
         if not self.is_shortcut_launch:
