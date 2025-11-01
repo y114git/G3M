@@ -13,17 +13,16 @@ from typing import Callable, Optional
 import logging
 import requests
 from PyQt6.QtCore import QTranslator, Qt, QEvent, QThread, QTimer, pyqtSignal
-from PyQt6.QtGui import QColor, QFont, QIcon, QMovie, QPainter, QPixmap
-from PyQt6.QtWidgets import QApplication, QCheckBox, QDialog, QDialogButtonBox, QFileDialog, QFrame, QLabel, QLineEdit, QMessageBox, QProgressBar, QPushButton, QTabWidget, QVBoxLayout, QWidget, QHBoxLayout, QSizePolicy, QInputDialog, QColorDialog, QListWidget
+from PyQt6.QtGui import QColor, QFont, QIcon, QPainter, QPixmap
+from PyQt6.QtWidgets import QApplication, QCheckBox, QDialog, QFrame, QLabel, QLineEdit, QMessageBox, QProgressBar, QPushButton, QTabWidget, QVBoxLayout, QWidget, QHBoxLayout, QSizePolicy, QInputDialog, QColorDialog
 from managers.localization_manager import localization_manager, tr
 from models.game_modes import FullGameMode, DemoGameMode, UndertaleGameMode
-from config.constants import LAUNCHER_VERSION, UI_COLORS, SOCIAL_LINKS, THEMES, ARCH
+from config.constants import UI_COLORS, SOCIAL_LINKS, THEMES, ARCH
 from utils.game_utils import is_game_running
 from utils.path_utils import get_user_data_root, resource_path, get_launcher_dir, get_legacy_ylauncher_path, get_user_plugins_dir
 from utils.network_utils import check_internet_connection
 from managers.mod_manager import parse_mod_date
-from workers.fetch_mods import FetchModsThread
-from workers.background_workers import PresenceWorker, FetchChangelogThread, BgLoader, FullInstallThread, InstallModsThread, FetchHelpContentThread
+from workers.background_workers import PresenceWorker, FetchChangelogThread, BgLoader, FetchHelpContentThread
 from ui.common.styling import clear_layout_widgets, load_mod_icon_universal, show_empty_message_in_layout
 from ui.main_window.ui_controls import UiControlsMixin
 from ui.main_window.operations import OperationsMixin
@@ -255,11 +254,11 @@ class AppWindow(QWidget, UiControlsMixin, OperationsMixin):
                     if isinstance(widget, InstalledModWidget) and hasattr(widget, 'use_button') and widget.use_button:
                         widget.use_button.setEnabled(enabled)
         try:
-            self.action_button.setEnabled(enabled)
+            self.action_button.setEnabled(True if self.app_state.is_installing else enabled)
         except Exception:
             pass
         try:
-            self.saves_button.setEnabled(enabled)
+            self.saves_button.setEnabled(True)
         except Exception:
             pass
 
@@ -435,6 +434,9 @@ class AppWindow(QWidget, UiControlsMixin, OperationsMixin):
         self.full_install_checkbox.blockSignals(True)
         self.full_install_checkbox.setChecked(saved_full_install)
         self.full_install_checkbox.blockSignals(False)
+        self.app_state.is_installing_changed.connect(self._update_action_button_state)
+        self.app_state.is_installing_changed.connect(lambda v: self._set_install_buttons_enabled(not v))
+        self.app_state.game_mode_changed.connect(self._on_game_mode_updated_by_state)
         if saved_game_type == 'deltarunedemo':
             self.app_state.game_mode = DemoGameMode()
         elif saved_game_type == 'undertale':
@@ -645,12 +647,6 @@ class AppWindow(QWidget, UiControlsMixin, OperationsMixin):
             self.app_state.game_mode = UndertaleGameMode()
         else:
             self.app_state.game_mode = FullGameMode()
-        self._update_checkbox_visibility()
-        self.slot_manager.update_slots_display(self.active_slots_layout)
-        self.slot_manager.load_slots_state()
-        self._update_installed_mods_display()
-        self._update_change_path_button_text()
-        self._update_saves_button_state()
         self.app_state.local_config['selected_game_type'] = game_type
         self.settings_manager.write_local_config()
 
@@ -665,6 +661,27 @@ class AppWindow(QWidget, UiControlsMixin, OperationsMixin):
         else:
             self.chapter_mode_checkbox.setVisible(False)
             self.full_install_checkbox.setVisible(False)
+
+    def _on_game_mode_updated_by_state(self, mode_obj):
+        try:
+            self._update_checkbox_visibility()
+            game_type = self.game_type_combo.currentData()
+            if game_type != 'deltarune':
+                try:
+                    self.chapter_mode_checkbox.blockSignals(True)
+                    self.chapter_mode_checkbox.setChecked(False)
+                finally:
+                    self.chapter_mode_checkbox.blockSignals(False)
+                if getattr(self.app_state, 'current_mode', 'normal') != 'normal':
+                    self.app_state.current_mode = 'normal'
+                self.game_type_combo.setEnabled(True)
+            self.slot_manager.update_slots_display(self.active_slots_layout)
+            self.slot_manager.load_slots_state()
+            self._update_installed_mods_display()
+            self._update_change_path_button_text()
+            self._update_saves_button_state()
+        except Exception:
+            pass
 
     def _on_chapter_mode_changed(self, state):
         game_type = self.game_type_combo.currentData()
@@ -1058,12 +1075,24 @@ class AppWindow(QWidget, UiControlsMixin, OperationsMixin):
     def _update_mod_widgets_slot_status(self):
         if not hasattr(self, 'installed_mods_layout') or self.installed_mods_layout is None:
             return
+        assigned_keys = set()
+        try:
+            for mod in getattr(self.slot_manager, 'slots_data', {}).values():
+                if mod is None:
+                    continue
+                key = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None) or getattr(mod, 'name', None)
+                if key:
+                    assigned_keys.add(key)
+        except Exception:
+            assigned_keys = set()
         for i in range(self.installed_mods_layout.count() - 1):
             item = self.installed_mods_layout.itemAt(i)
             if item:
                 widget = item.widget()
                 if isinstance(widget, InstalledModWidget):
-                    is_in_slot = self.slot_manager.find_mod_in_slots(widget.mod_data) is not None
+                    mod = widget.mod_data
+                    k = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None) or getattr(mod, 'name', None)
+                    is_in_slot = k in assigned_keys if k else False
                     widget.set_in_slot(is_in_slot)
 
     def _refresh_all_slot_status_displays(self):
@@ -1205,46 +1234,15 @@ class AppWindow(QWidget, UiControlsMixin, OperationsMixin):
         try:
             if self.app_state.is_installing and (not force):
                 return
-            available_chapters = []
-            if mod.modgame == 'undertale':
-                if mod.files.get('undertale'):
-                    available_chapters.append(0)
-            elif mod.modgame == 'deltarunedemo':
-                if mod.files.get('demo'):
-                    available_chapters.append(-1)
-            else:
-                for chapter_id in range(0, 5):
-                    chapter_data = mod.get_chapter_data(chapter_id)
-                    if chapter_data:
-                        available_chapters.append(chapter_id)
-            if not available_chapters:
-                self.feedback_manager.show_warning('errors.mod_no_files', mod_name=mod.name)
-                return
-            was_installed_before = self.mod_manager.is_mod_installed(mod.key)
-            is_xdelta_mod = getattr(mod, 'is_xdelta', False)
-            if not is_xdelta_mod and (not was_installed_before):
-                if not self.feedback_manager.ask_question('dialogs.file_replacement_warning_title', 'dialogs.file_replacement_warning_body', '', False):
-                    self.feedback_manager.update_status(tr('status.install_cancelled_by_user'), UI_COLORS['status_info'])
-                    return
-            install_tasks = [(mod, chapter_id) for chapter_id in available_chapters]
-            self.app_state.is_installing = True
-            self._set_install_buttons_enabled(False)
-            self.action_button.setText(tr('ui.cancel_button'))
-            self._install_op_id = getattr(self, '_install_op_id', 0) + 1
-            op_id = self._install_op_id
-            self.current_install_thread = InstallModsThread(self, install_tasks, was_installed_before)
-            self.install_thread = self.current_install_thread
-            self.install_thread.progress.connect(lambda v, oid=op_id: self._on_install_progress_token(v, oid))
-            self.install_thread.status.connect(lambda msg, col, oid=op_id: self._on_install_status_token(msg, col, oid))
-            self.install_thread.finished.connect(lambda ok, oid=op_id: self._on_install_finished_token(ok, oid))
-            self.progress_bar.setVisible(True)
-            self.progress_bar.setValue(0)
             try:
-                self.feedback_manager.update_status(tr('status.preparing_download'), UI_COLORS['status_warning'])
+                self._operation_cancelled = False
             except Exception:
                 pass
-            self._update_action_button_state()
-            self.install_thread.start()
+            if hasattr(self, 'progress_bar'):
+                self.progress_bar.setVisible(True)
+                self.progress_bar.setValue(0)
+                self._update_action_button_state()
+            self.mod_manager.install_mod(mod, force=force)
         except Exception as e:
             self.feedback_manager.show_error('errors.mod_install_failed', error=str(e))
 
@@ -1367,7 +1365,32 @@ class AppWindow(QWidget, UiControlsMixin, OperationsMixin):
         self.app_state.is_installing = False
         self._set_install_buttons_enabled(True)
         self.progress_bar.setVisible(False)
+        try:
+            QTimer.singleShot(0, self._update_search_mod_plaques)
+        except Exception:
+            pass
+        try:
+            self.mod_manager.load_local_mods()
+        except Exception:
+            pass
+        try:
+            QTimer.singleShot(0, self._update_installed_mods_display)
+        except Exception:
+            pass
+        try:
+            if hasattr(self, 'slot_manager'):
+                self.slot_manager.refresh_slots_content()
+        except Exception:
+            pass
+        if success:
+            try:
+                QTimer.singleShot(0, lambda: self.feedback_manager.show_info('dialogs.mod_installed_apply_info'))
+            except Exception:
+                pass
         self._update_action_button_state()
+        if success and getattr(self, 'pending_updates', None):
+            next_mod = self.pending_updates.pop(0)
+            QTimer.singleShot(0, lambda: self.mod_manager.update_mod(next_mod))
 
     def _update_change_path_button_text(self):
         self.change_path_button.setText(self.app_state.game_mode.path_change_button_text)
@@ -1462,7 +1485,7 @@ class AppWindow(QWidget, UiControlsMixin, OperationsMixin):
         self._update_slot_action_bar()
 
     def eventFilter(self, obj, ev):
-        if obj is self.save_manager_widget and ev.type() == QEvent.Type.MouseButtonPress:
+        if obj is getattr(self, 'save_manager_widget', None) and ev.type() == QEvent.Type.MouseButtonPress:
             click_pos = ev.pos()
             inside = any((lbl.rect().contains(lbl.mapFrom(self.save_manager_widget, click_pos)) for lbl in self._slot_labels.values()))
             if not inside:
@@ -1731,7 +1754,7 @@ class AppWindow(QWidget, UiControlsMixin, OperationsMixin):
         self.startup_sound_button.setText(self.customization_manager.get_startup_sound_button_text())
 
     def _update_action_button_state(self):
-        if getattr(self, 'is_installing', False) and (not getattr(self, '_operation_cancelled', False)):
+        if self.app_state.is_installing and (not getattr(self, '_operation_cancelled', False)):
             self.action_button.setText(tr('ui.cancel_button'))
             self.action_button.setEnabled(True)
             return
@@ -1901,7 +1924,7 @@ class AppWindow(QWidget, UiControlsMixin, OperationsMixin):
             pass
 
     def _on_action_button_click(self):
-        if self.app_state.is_installing and self.current_install_thread:
+        if self.app_state.is_installing:
             self._operation_cancelled = True
             self.feedback_manager.update_status(tr('status.operation_cancelled'), UI_COLORS['status_error'])
             try:
@@ -1910,9 +1933,26 @@ class AppWindow(QWidget, UiControlsMixin, OperationsMixin):
             except Exception:
                 pass
             try:
-                self.current_install_thread.cancel()
+                thr = None
+                if getattr(self, 'current_install_thread', None):
+                    thr = self.current_install_thread
+                elif getattr(self, 'install_thread', None):
+                    thr = self.install_thread
+                elif getattr(self, 'full_install_thread', None):
+                    thr = self.full_install_thread
+                elif getattr(self, 'mod_manager', None) and getattr(self.mod_manager, 'current_install_thread', None):
+                    thr = self.mod_manager.current_install_thread
+                elif getattr(self, 'mod_manager', None) and getattr(self.mod_manager, 'url_install_thread', None):
+                    thr = self.mod_manager.url_install_thread
+                if thr and hasattr(thr, 'cancel'):
+                    thr.cancel()
             except Exception:
                 pass
+            try:
+                self.app_state.is_installing = False
+            except Exception:
+                pass
+            self._update_action_button_state()
             return
         if isinstance(self.app_state.game_mode, DemoGameMode) and getattr(self, 'full_install_checkbox', None) is not None and self.full_install_checkbox.isChecked():
             self._perform_full_install()
@@ -2236,6 +2276,16 @@ class AppWindow(QWidget, UiControlsMixin, OperationsMixin):
         mods_to_update = self.slot_manager.collect_mods_needing_update_in_active_slots()
         if mods_to_update:
             self.pending_updates = mods_to_update[1:] if len(mods_to_update) > 1 else []
+            try:
+                self._operation_cancelled = False
+            except Exception:
+                pass
+            if hasattr(self, 'progress_bar'):
+                try:
+                    self.progress_bar.setVisible(True)
+                    self.progress_bar.setValue(0)
+                except Exception:
+                    pass
             self.mod_manager.update_mod(mods_to_update[0])
 
     def _on_xdelta_patch_click(self):

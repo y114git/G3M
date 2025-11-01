@@ -1,9 +1,8 @@
 import os
-import io
-from PIL import Image
+from PyQt6.QtCore import Qt, QThreadPool
+import weakref
 from PyQt6 import sip
-from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QColor, QImage, QPixmap
+from PyQt6.QtGui import QColor, QPixmap
 from PyQt6.QtWidgets import QLabel, QVBoxLayout, QPushButton, QGroupBox
 from managers.localization_manager import tr
 
@@ -65,6 +64,8 @@ def clear_layout_widgets(layout, keep_last_n=1):
             widget = item.widget()
             if widget:
                 widget.setParent(None)
+            else:
+                layout.removeItem(item)
 
 
 def load_mod_icon_universal(icon_label, mod_data, size=80):
@@ -105,99 +106,58 @@ def load_mod_icon_universal(icon_label, mod_data, size=80):
                 scaled_pixmap = cropped.scaled(size, size, Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation)
                 icon_label.setPixmap(scaled_pixmap)
                 return
-        if icon_url:
-            if isinstance(icon_url, str) and icon_url.startswith(('http://', 'https://')):
-                from PyQt6.QtCore import QThread, pyqtSignal
+        if icon_url and isinstance(icon_url, str) and icon_url.startswith(('http://', 'https://')):
+            try:
+                from ui.widgets.common.worker_signals import WorkerSignals
+                from utils.image_loader import ImageLoaderRunnable
+                pool = QThreadPool.globalInstance()
+                signals = WorkerSignals()
+                label_ref = weakref.ref(icon_label)
 
-                class _IconLoader(QThread):
-                    loaded = pyqtSignal(object)
-                    failed = pyqtSignal(str)
-
-                    def __init__(self, url):
-                        super().__init__()
-                        self.url = url
-
-                    def run(self):
-                        try:
-                            from utils.cache import _PIX_CACHE, _IMG_CACHE_LOCK, _NET_SEM
-                            if _PIX_CACHE is not None and _IMG_CACHE_LOCK is not None:
-                                with _IMG_CACHE_LOCK:
-                                    if self.url in _PIX_CACHE:
-                                        self.loaded.emit(_PIX_CACHE[self.url])
-                                        return
-                            import requests
-                            if _NET_SEM:
-                                _NET_SEM.acquire()
-                            try:
-                                resp = requests.get(self.url, timeout=8)
-                            finally:
-                                try:
-                                    if _NET_SEM:
-                                        _NET_SEM.release()
-                                except Exception:
-                                    pass
-                            resp.raise_for_status()
-                            try:
-                                image_data = io.BytesIO(resp.content)
-                                pil_img = Image.open(image_data)
-                                if 'icc_profile' in pil_img.info:
-                                    del pil_img.info['icc_profile']
-                                buffer = io.BytesIO()
-                                pil_img.save(buffer, format='PNG')
-                                processed_content = buffer.getvalue()
-                            except Exception:
-                                processed_content = resp.content
-                            img = QImage()
-                            if img.loadFromData(processed_content):
-                                pm = QPixmap.fromImage(img)
-                                if _PIX_CACHE is not None:
-                                    try:
-                                        if _IMG_CACHE_LOCK is not None:
-                                            _IMG_CACHE_LOCK.acquire()
-                                        _PIX_CACHE[self.url] = pm
-                                    except Exception:
-                                        pass
-                                    finally:
-                                        try:
-                                            if _IMG_CACHE_LOCK is not None:
-                                                _IMG_CACHE_LOCK.release()
-                                        except Exception:
-                                            pass
-                                self.loaded.emit(pm)
-                            else:
-                                self.failed.emit('decode')
-                        except Exception as e:
-                            self.failed.emit(str(e))
-                worker = _IconLoader(icon_url)
-                setattr(icon_label, '_icon_loader', worker)
-
-                def safe_cleanup():
+                def _on_loaded_image(img):
                     try:
-                        if worker and (not sip.isdeleted(worker)):
-                            worker.requestInterruption()
-                            worker.quit()
-                            worker.wait(1000)
+                        lbl = label_ref()
+                        if not lbl:
+                            return
+                        if sip.isdeleted(lbl):
+                            return
+                        if img is not None and (not getattr(img, 'isNull', lambda: True)()):
+                            pm = QPixmap.fromImage(img)
+                            if not pm.isNull():
+                                icon_size = min(pm.width(), pm.height())
+                                cropped = pm.copy((pm.width() - icon_size) // 2, (pm.height() - icon_size) // 2, icon_size, icon_size)
+                                scaled_pixmap = cropped.scaled(size, size, Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                                lbl.setPixmap(scaled_pixmap)
+                    except Exception:
+                        pass
+
+                def _on_error(url, err):
+                    pass
+                signals.result.connect(_on_loaded_image)
+                signals.error.connect(_on_error)
+                runnable = ImageLoaderRunnable(icon_url, signals)
+                setattr(icon_label, '_icon_loader_signals', signals)
+                setattr(icon_label, '_icon_loader_runnable', runnable)
+
+                def _cleanup_refs():
+                    try:
+                        signals.result.disconnect(_on_loaded_image)
+                        signals.error.disconnect(_on_error)
+                    except Exception:
+                        pass
+                    try:
+                        if hasattr(icon_label, '_icon_loader_signals'):
+                            delattr(icon_label, '_icon_loader_signals')
+                        if hasattr(icon_label, '_icon_loader_runnable'):
+                            delattr(icon_label, '_icon_loader_runnable')
                     except Exception:
                         pass
                 try:
-                    icon_label.destroyed.connect(safe_cleanup)
+                    icon_label.destroyed.connect(_cleanup_refs)
                 except Exception:
                     pass
-
-                def _on_loaded(pm: QPixmap):
-                    try:
-                        if pm and (not pm.isNull()):
-                            icon_size = min(pm.width(), pm.height())
-                            cropped = pm.copy((pm.width() - icon_size) // 2, (pm.height() - icon_size) // 2, icon_size, icon_size)
-                            scaled_pixmap = cropped.scaled(size, size, Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation)
-                            icon_label.setPixmap(scaled_pixmap)
-                    except Exception as e:
-                        print(f'Error applying mod icon: {e}')
-
-                def _on_failed(err: str):
-                    print(f'Icon load failed: {err}')
-                worker.loaded.connect(_on_loaded)
-                worker.failed.connect(_on_failed)
-                worker.start()
-    except Exception as e:
-        print(f'Error loading mod icon: {e}')
+                pool.start(runnable)
+            except Exception:
+                pass
+    except Exception:
+        pass

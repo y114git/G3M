@@ -291,14 +291,30 @@ class ModManager(QObject):
             if self.app_state.is_installing and (not force):
                 return
             available_chapters = []
-            if mod.modgame == 'undertale':
-                available_chapters = [1]
-            elif mod.modgame == 'deltarune':
-                available_chapters = [1, 2, 3, 4]
+            if getattr(mod, 'modgame', 'deltarune') == 'undertale':
+                if getattr(mod, 'files', {}).get('undertale'):
+                    available_chapters.append(0)
+            elif getattr(mod, 'modgame', 'deltarune') == 'deltarunedemo':
+                if getattr(mod, 'files', {}).get('demo'):
+                    available_chapters.append(-1)
+            else:
+                for chapter_id in range(0, 5):
+                    try:
+                        chapter_data = mod.get_chapter_data(chapter_id)
+                    except Exception:
+                        chapter_data = None
+                    if chapter_data:
+                        available_chapters.append(chapter_id)
             if not available_chapters:
                 self.feedback_manager.show_error('errors.no_chapters_available')
                 return
-            was_installed = self.is_mod_installed(mod)
+            was_installed = self.is_mod_installed(mod.key if hasattr(mod, 'key') else '')
+            is_xdelta_mod = getattr(mod, 'is_xdelta', False)
+            if not is_xdelta_mod and (not was_installed) and (not is_update):
+                ask = self.feedback_manager.ask_question('dialogs.file_replacement_warning_title', 'dialogs.file_replacement_warning_body', '', False)
+                if not ask:
+                    self.status_changed.emit(tr('status.install_cancelled_by_user'), UI_COLORS['status_info'])
+                    return
             self.app_state.is_installing = True
             parent = self.parent()
             if parent:
@@ -547,6 +563,8 @@ class ModManager(QObject):
                 self.status_changed.emit(tr('status.mod_updated'), 'status_success')
             else:
                 self.status_changed.emit(tr('status.mod_installed'), 'status_success')
+        elif self.current_install_thread and getattr(self.current_install_thread, '_cancelled', False):
+            self.status_changed.emit(tr('status.install_cancelled_by_user'), 'status_info')
         else:
             self.status_changed.emit(tr('status.installation_failed'), 'status_error')
         self.mod_list_updated.emit()
@@ -557,6 +575,8 @@ class ModManager(QObject):
         self.mod_list_updated.emit()
         if success:
             self.status_changed.emit(tr('status.mod_installed'), 'status_success')
+        elif self.url_install_thread and getattr(self.url_install_thread, '_cancelled', False):
+            self.status_changed.emit(tr('status.install_cancelled_by_user'), 'status_info')
         else:
             self.status_changed.emit(tr('status.installation_failed'), 'status_error')
         self.installation_finished.emit(success, message)

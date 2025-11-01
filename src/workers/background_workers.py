@@ -97,6 +97,25 @@ class FullInstallThread(QThread):
         super().__init__(main_window)
         self.main_window = main_window
         self.target_dir = target_dir
+        self._cancelled = False
+        self._session = None
+        self._active_response = None
+
+    def cancel(self):
+        self._cancelled = True
+        try:
+            if self._session is not None:
+                try:
+                    self._session.close()
+                except Exception:
+                    pass
+            if self._active_response is not None:
+                try:
+                    self._active_response.close()
+                except Exception:
+                    pass
+        finally:
+            self.status.emit(tr('status.operation_cancelled'), UI_COLORS['status_error'])
 
     def run(self):
         full_install_url = self.main_window.global_settings.get('full_install_url')
@@ -114,19 +133,30 @@ class FullInstallThread(QThread):
             adapter = HTTPAdapter(max_retries=retry_strategy, pool_connections=1, pool_maxsize=10)
             session.mount('http://', adapter)
             session.mount('https://', adapter)
-            resp = session.head(full_install_url, allow_redirects=True, timeout=15)
+            self._session = session
+            resp = session.head(full_install_url, allow_redirects=True, timeout=10)
             total_size = int(resp.headers.get('content-length', 0))
             downloaded_ref = [0]
             from utils.file_utils import download_and_extract_archive
 
             def progress_callback(progress):
-                return self.progress.emit(progress)
-            download_and_extract_archive(full_install_url, self.target_dir, progress_callback, total_size, downloaded_ref, session, is_game_installation=True)
+                self.progress.emit(progress)
+
+            def on_response(r):
+                self._active_response = r
+            download_and_extract_archive(full_install_url, self.target_dir, progress_callback, total_size, downloaded_ref, session, is_game_installation=True, cancel_check=lambda: self._cancelled, on_response=on_response)
+            if self._cancelled:
+                self.status.emit(tr('status.operation_cancelled'), UI_COLORS['status_error'])
+                self.finished.emit(False, self.target_dir)
+                return
             self.status.emit(tr('status.demo_installation_complete'), UI_COLORS['status_success'])
             self.finished.emit(True, self.target_dir)
         except Exception as e:
             self.status.emit(tr('errors.full_installation_error').format(str(e)), UI_COLORS['status_error'])
             self.finished.emit(False, self.target_dir)
+        finally:
+            self._session = None
+            self._active_response = None
 
 
 class InstallModsThread(QThread):
@@ -140,10 +170,25 @@ class InstallModsThread(QThread):
         self._cancelled = False
         self._installed_dirs = []
         self.temp_root = None
+        self._session = None
+        self._active_response = None
 
     def cancel(self):
         self._cancelled = True
         self.status.emit(tr('status.operation_cancelled'), UI_COLORS['status_error'])
+        try:
+            if self._session is not None:
+                try:
+                    self._session.close()
+                except Exception:
+                    pass
+            if self._active_response is not None:
+                try:
+                    self._active_response.close()
+                except Exception:
+                    pass
+        except Exception:
+            pass
 
     def _find_existing_mod_folder(self, mod_key: str) -> str:
         if not os.path.exists(self.main_window.app_state.mods_dir):
@@ -243,7 +288,10 @@ class InstallModsThread(QThread):
         os.makedirs(target_dir, exist_ok=True)
         target_path = os.path.join(target_dir, filename)
         try:
-            download_file(session, url, target_path, progress_callback, total_size, downloaded_ref)
+
+            def on_response(r):
+                self._active_response = r
+            download_file(session, url, target_path, progress_callback, total_size, downloaded_ref, cancel_check=lambda: self._cancelled, on_response=on_response)
         except Exception as e:
             if os.path.exists(target_path):
                 try:
@@ -269,7 +317,10 @@ class InstallModsThread(QThread):
         os.makedirs(target_dir, exist_ok=True)
         target_path = os.path.join(target_dir, filename)
         try:
-            download_file(session, url, target_path, progress_callback, total_size, downloaded_ref)
+
+            def on_response(r):
+                self._active_response = r
+            download_file(session, url, target_path, progress_callback, total_size, downloaded_ref, cancel_check=lambda: self._cancelled, on_response=on_response)
         except Exception as e:
             if os.path.exists(target_path):
                 try:
@@ -324,6 +375,7 @@ class InstallModsThread(QThread):
             adapter = HTTPAdapter(max_retries=retry_strategy, pool_connections=1, pool_maxsize=10)
             session.mount('http://', adapter)
             session.mount('https://', adapter)
+            self._session = session
             download_tasks = [t for t in tasks if t.get('url')]
             file_sizes_cache = {}
             for task in download_tasks:
@@ -347,6 +399,7 @@ class InstallModsThread(QThread):
             downloaded_ref = [0]
             done_files = 0
             installed_mods = {}
+            mod_configs = {}
             total_items = len(download_tasks)
             current_index = 0
             for task in tasks:
@@ -393,18 +446,21 @@ class InstallModsThread(QThread):
                         if is_xdelta:
 
                             def progress_callback(progress):
-                                return self.progress.emit(progress)
+                                self.progress.emit(progress)
                             self._download_xdelta_file(url, cache_dir, progress_callback, total_bytes, downloaded_ref, session)
                         else:
                             from utils.file_utils import download_and_extract_archive
 
                             def progress_callback(progress):
-                                return self.progress.emit(progress)
-                            download_and_extract_archive(url, cache_dir, progress_callback, total_bytes, downloaded_ref, session)
+                                self.progress.emit(progress)
+                            download_and_extract_archive(url, cache_dir, progress_callback, total_bytes, downloaded_ref, session, cancel_check=lambda: self._cancelled)
+                            if self._cancelled:
+                                self.finished.emit(False)
+                                return
                     else:
 
                         def progress_callback(progress):
-                            return self.progress.emit(progress)
+                            self.progress.emit(progress)
                         self._download_archive_file(url, cache_dir, progress_callback, total_bytes, downloaded_ref, session)
                 except Exception:
                     raise
@@ -415,6 +471,10 @@ class InstallModsThread(QThread):
                     done_files += 1
                     progress = int(done_files / max(1, len(download_tasks)) * 100)
                     self.progress.emit(progress)
+            if self._cancelled:
+                self.status.emit(tr('status.operation_cancelled'), UI_COLORS['status_error'])
+                self.finished.emit(False)
+                return
             for mod_key, mod_data in installed_mods.items():
                 mod = mod_data['mod']
                 mod_folder_name = mod_folders[mod.key]
@@ -452,13 +512,7 @@ class InstallModsThread(QThread):
                             file_key = str(chapter_id)
                         files_data[file_key] = file_info
                 config_data = {'is_local_mod': False, 'mod_key': mod.key, 'name': mod.name, 'author': mod.author, 'version': mod.version, 'game_version': mod.game_version, 'modgame': mod.modgame, 'files': files_data, 'tags': mod.tags}
-                config_path = os.path.join(mod_dir, 'config.json')
-                self.main_window.settings_manager.write_json(config_path, config_data)
-            metadata = self.main_window.mod_manager._read_metadata()
-            for mod_key in installed_mods.keys():
-                metadata[mod_key] = {'installed_date': time.strftime('%Y-%m-%d %H:%M:%S'), 'is_available_on_server': True}
-            self.main_window.mod_manager._write_metadata(metadata)
-            self._increment_downloads_for_installed_mods(installed_mods.keys())
+                mod_configs[mod.key] = {'folder_name': mod_folder_name, 'config': config_data}
             try:
                 os.makedirs(self.main_window.app_state.mods_dir, exist_ok=True)
                 for entry in os.listdir(self.temp_root or ''):
@@ -483,25 +537,44 @@ class InstallModsThread(QThread):
                         shutil.copy2(src, dst)
             except Exception:
                 pass
-            self.status.emit(tr('status.installation_complete'), UI_COLORS['status_success'])
-            self.finished.emit(True)
+            if self._cancelled:
+                self.status.emit(tr('status.operation_cancelled'), UI_COLORS['status_error'])
+                self.finished.emit(False)
+                return
+            for mod_key, info in mod_configs.items():
+                folder_name = info['folder_name']
+                config_data = info['config']
+                mod_dir = os.path.join(self.main_window.app_state.mods_dir, folder_name)
+                config_path = os.path.join(mod_dir, 'config.json')
+                self.main_window.settings_manager.write_json(config_path, config_data)
+            metadata = self.main_window.mod_manager._read_metadata()
+            for mod_key in installed_mods.keys():
+                metadata[mod_key] = {'installed_date': time.strftime('%Y-%m-%d %H:%M:%S'), 'is_available_on_server': True}
+            self.main_window.mod_manager._write_metadata(metadata)
+            self._increment_downloads_for_installed_mods(installed_mods.keys())
+            if self._cancelled:
+                self.status.emit(tr('status.operation_cancelled'), UI_COLORS['status_error'])
+                self.finished.emit(False)
+            else:
+                self.status.emit(tr('status.installation_complete'), UI_COLORS['status_success'])
+                self.finished.emit(True)
         except PermissionError as e:
             path = e.filename if e.filename else self.main_window.app_state.mods_dir
-            self.status.emit(tr('errors.permission_error_install'), UI_COLORS['status_error'])
-            from PyQt6.QtWidgets import QMessageBox
-            error_message = tr('dialogs.permission_error_message').format(path)
-            QMessageBox.critical(self.main_window, tr('dialogs.access_error'), error_message)
+            try:
+                self.status.emit(tr('errors.permission_error_install'), UI_COLORS['status_error'])
+            except Exception:
+                pass
             self.finished.emit(False)
         except Exception as e:
             self.status.emit(tr('errors.installation_error', error=str(e)), UI_COLORS['status_error'])
             self.finished.emit(False)
         finally:
-            if not self._cancelled:
-                try:
-                    if self.temp_root and os.path.isdir(self.temp_root):
-                        shutil.rmtree(self.temp_root, ignore_errors=True)
-                except Exception:
-                    pass
+            try:
+                if self.temp_root and os.path.isdir(self.temp_root):
+                    shutil.rmtree(self.temp_root, ignore_errors=True)
+            except Exception:
+                pass
+            self._session = None
 
 
 class UrlInstallThread(QThread):
@@ -516,6 +589,28 @@ class UrlInstallThread(QThread):
         self.url = url
         self.prompt_event = threading.Event()
         self.prompt_result = False
+        self._cancelled = False
+        self._session = None
+        self._active_response = None
+
+    def cancel(self):
+        self._cancelled = True
+        try:
+            if self._session is not None:
+                try:
+                    self._session.close()
+                except Exception:
+                    pass
+            if self._active_response is not None:
+                try:
+                    self._active_response.close()
+                except Exception:
+                    pass
+        finally:
+            try:
+                self.status.emit(tr('status.operation_cancelled'), UI_COLORS['status_error'])
+            except Exception:
+                pass
 
     def run(self):
         try:
@@ -592,12 +687,19 @@ class UrlInstallThread(QThread):
         if not any((filename.lower().endswith(ext) for ext in ['.zip', '.rar', '.7z', '.tar.gz', '.lzma'])):
             filename = 'mod.zip'
         archive_path = os.path.join(temp_dir, filename)
-        response = requests.get(url, stream=True, timeout=30, headers=BROWSER_HEADERS)
+        self._session = requests.Session()
+        self._session.headers.update(BROWSER_HEADERS)
+        response = self._session.get(url, stream=True, timeout=30)
+        self._active_response = response
         response.raise_for_status()
         total_size = int(response.headers.get('content-length', 0))
         downloaded_size = 0
         with open(archive_path, 'wb') as f:
             for chunk in response.iter_content(chunk_size=8192):
+                if self._cancelled:
+                    raise RuntimeError('download_cancelled')
+                if not chunk:
+                    continue
                 f.write(chunk)
                 downloaded_size += len(chunk)
                 if total_size > 0:

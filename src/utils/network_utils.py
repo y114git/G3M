@@ -26,7 +26,7 @@ def get_filename_from_url(session, url):
     return Path(url.split('?', 1)[0]).name or 'file.tmp'
 
 
-def download_file(session, url, tmp_path, progress_callback=None, total_size: int = 0, downloaded_ref: list[int] | None = None, max_retries: int = 5):
+def download_file(session, url, tmp_path, progress_callback=None, total_size: int = 0, downloaded_ref: list[int] | None = None, max_retries: int = 5, cancel_check=None, on_response=None):
     if downloaded_ref is None:
         downloaded_ref = [0]
     expected_size = 0
@@ -45,6 +45,11 @@ def download_file(session, url, tmp_path, progress_callback=None, total_size: in
                 headers['Range'] = f'bytes={current_size}-'
             r = session.get(url, stream=True, timeout=60, allow_redirects=True, headers=headers)
             r.raise_for_status()
+            try:
+                if on_response:
+                    on_response(r)
+            except Exception:
+                pass
             status_code = getattr(r, 'status_code', 200)
             duplicate_remaining = 0
             mode = 'ab'
@@ -64,6 +69,8 @@ def download_file(session, url, tmp_path, progress_callback=None, total_size: in
                 for chunk in r.iter_content(chunk_size=262144):
                     if not chunk:
                         continue
+                    if cancel_check and cancel_check():
+                        raise RuntimeError('download_cancelled')
                     f.write(chunk)
                     sz = len(chunk)
                     written_this_request += sz

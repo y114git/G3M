@@ -29,6 +29,23 @@ class SlotManager(QObject):
         self.parent_widget: Optional['AppWindow'] = parent
         self.chapter_indicators: Dict[int, Dict[str, Any]] = {}
         self._previous_mode = None
+        self.slots_data: Dict[int, Any] = {}
+
+    def get_slot_mod(self, slot_id: int):
+        return self.slots_data.get(slot_id)
+
+    def set_slot_mod(self, slot_id: int, mod_data: Optional[Any], save_state: bool = True) -> None:
+        if mod_data is None:
+            if slot_id in self.slots_data:
+                del self.slots_data[slot_id]
+        else:
+            self.slots_data[slot_id] = mod_data
+        self.slot_state_changed.emit(slot_id)
+        if save_state:
+            try:
+                self.save_slots_state()
+            except Exception:
+                pass
 
     def init_slots_system(self, active_slots_layout=None):
         if active_slots_layout is None and self.parent_widget and hasattr(self.parent_widget, 'active_slots_layout'):
@@ -60,7 +77,7 @@ class SlotManager(QObject):
                     active_slots_layout.addWidget(slot)
                 self.app_state.slots[-1] = slot
                 self.create_chapter_indicators(active_slots_layout)
-        else:
+        if self.app_state.current_mode != 'normal':
             slot_names = [tr('chapters.menu'), tr('tabs.chapter_1'), tr('tabs.chapter_2'), tr('tabs.chapter_3'), tr('tabs.chapter_4')]
             for i, name in enumerate(slot_names):
                 slot = self.create_slot_widget(name, i)
@@ -85,7 +102,8 @@ class SlotManager(QObject):
         layout.addWidget(name_label)
         content_widget = QWidget()
         content_layout = QVBoxLayout(content_widget)
-        content_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        content_layout.setContentsMargins(8, 0, 8, 0)
+        content_layout.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
         mod_icon = QLabel(tr('ui.empty'))
         mod_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
         mod_icon.setObjectName('secondaryText')
@@ -177,6 +195,10 @@ class SlotManager(QObject):
                 self.toggle_direct_launch_for_slot(-1)
 
     def assign_mod_to_slot(self, slot_frame: SlotFrame, mod_data, save_state: bool = True):
+        try:
+            self.set_slot_mod(slot_frame.chapter_id, mod_data, save_state=False)
+        except Exception:
+            pass
         slot_frame.assigned_mod = mod_data
         if slot_frame.content_widget:
             slot_frame.content_widget.setParent(None)
@@ -256,6 +278,10 @@ class SlotManager(QObject):
             self.save_slots_state()
 
     def remove_mod_from_slot(self, slot_frame: SlotFrame, mod_data, save_state: bool = True):
+        try:
+            self.set_slot_mod(slot_frame.chapter_id, None, save_state=False)
+        except Exception:
+            pass
         slot_frame.assigned_mod = None
         if slot_frame.content_widget:
             slot_frame.content_widget.setParent(None)
@@ -380,13 +406,22 @@ class SlotManager(QObject):
             self.update_slot_visual_state(slot_frame)
 
     def create_chapter_indicators(self, active_slots_layout=None):
+        from models.game_modes import FullGameMode
+        if not isinstance(self.app_state.game_mode, FullGameMode):
+            self.chapter_indicators = {}
+            return
+        if self.app_state.current_mode != 'normal':
+            self.chapter_indicators = {}
+            return
         chapter_names = [tr('ui.menu_label'), tr('ui.chapter_1_label'), tr('ui.chapter_2_label'), tr('ui.chapter_3_label'), tr('ui.chapter_4_label')]
         self.chapter_indicators = {}
         main_text_color = get_theme_color(self.app_state.local_config, 'text', 'white')
+        GAP = 36
         for i, chapter_name in enumerate(chapter_names):
             indicator_frame = QFrame()
+            indicator_frame.setFixedWidth(110)
             indicator_layout = QVBoxLayout(indicator_frame)
-            indicator_layout.setContentsMargins(5, 5, 5, 5)
+            indicator_layout.setContentsMargins(0, 0, 0, 0)
             indicator_layout.setSpacing(2)
             chapter_label = QLabel(chapter_name)
             chapter_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -398,6 +433,8 @@ class SlotManager(QObject):
             indicator_layout.addWidget(status_label)
             self.chapter_indicators[i] = {'status_label': status_label, 'chapter_label': chapter_label, 'frame': indicator_frame}
             if active_slots_layout is not None:
+                if active_slots_layout.count() > 0:
+                    active_slots_layout.addSpacing(GAP)
                 active_slots_layout.addWidget(indicator_frame)
 
     def update_chapter_indicators(self, mod=None):
@@ -479,7 +516,10 @@ class SlotManager(QObject):
             config_key = 'saved_slots_deltarune_chapter' if is_chapter_mode else 'saved_slots_deltarune'
         slots_data = self.app_state.local_config.get(config_key, {})
         if not slots_data:
+            self.slots_data.clear()
+            self.slots_updated.emit()
             return
+        self.slots_data.clear()
         for slot_id, slot_data in list(slots_data.items()):
             try:
                 numeric_slot_id = int(slot_id)
@@ -521,6 +561,7 @@ class SlotManager(QObject):
                 if mod_config:
                     mod_data = self.mod_manager.create_mod_object_from_info(mod_config, getattr(self.app_state, 'all_mods', None))
             if mod_data:
+                self.slots_data[numeric_slot_id] = mod_data
                 if is_chapter_mode:
                     self.assign_mod_to_slot(slot_frame, mod_data, save_state=False)
                 else:
