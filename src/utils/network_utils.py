@@ -60,7 +60,7 @@ def get_filename_from_url(session, url):
             potential_name = os.path.basename(unquote(path))
             if '.' in potential_name:
                 return potential_name
-    except Exception as e:
+    except (requests.RequestException, ValueError, AttributeError) as e:
         logging.debug(f'get_filename_from_url: header parsing failed: {e}')
     return Path(url.split('?', 1)[0]).name or 'file.tmp'
 
@@ -72,7 +72,7 @@ def download_file(session, url, tmp_path, progress_callback=None, total_size: in
     try:
         h = session.head(url, allow_redirects=True, timeout=15)
         expected_size = int(h.headers.get('content-length', 0))
-    except Exception as e:
+    except (requests.RequestException, ValueError) as e:
         logging.debug(f'download_file: failed to get expected size for {url}: {e}')
         expected_size = 0
     attempt = 0
@@ -90,7 +90,7 @@ def download_file(session, url, tmp_path, progress_callback=None, total_size: in
             try:
                 if on_response:
                     on_response(r)
-            except Exception as e:
+            except (TypeError, AttributeError) as e:
                 logging.debug(f'download_file: on_response callback failed: {e}')
             status_code = getattr(r, 'status_code', 200)
             duplicate_remaining = 0
@@ -104,7 +104,7 @@ def download_file(session, url, tmp_path, progress_callback=None, total_size: in
             this_request_expected = 0
             try:
                 this_request_expected = int(r.headers.get('content-length', 0))
-            except Exception as e:
+            except (ValueError, TypeError) as e:
                 logging.debug(f'download_file: failed to parse content-length: {e}')
                 this_request_expected = 0
             written_this_request = 0
@@ -130,7 +130,7 @@ def download_file(session, url, tmp_path, progress_callback=None, total_size: in
                         try:
                             progress = int(min(100, max(0, downloaded_ref[0] / total_size * 100)))
                             progress_callback(progress)
-                        except Exception as e:
+                        except (TypeError, ZeroDivisionError) as e:
                             logging.debug(f'download_file: progress callback failed: {e}')
             final_size = os.path.getsize(tmp_path) if os.path.exists(tmp_path) else 0
             if this_request_expected and written_this_request < this_request_expected:
@@ -138,13 +138,13 @@ def download_file(session, url, tmp_path, progress_callback=None, total_size: in
             if expected_size and final_size < expected_size:
                 continue
             return
-        except Exception as e:
+        except (requests.RequestException, OSError, IOError) as e:
             if attempt >= max_retries:
                 raise
             logging.debug(f'download_file: attempt {attempt}/{max_retries} failed for {url}: {e}')
             try:
                 time.sleep(min(2.0, 0.2 * attempt))
-            except Exception as sleep_e:
+            except OSError as sleep_e:
                 logging.debug(f'download_file: sleep failed: {sleep_e}')
 
 

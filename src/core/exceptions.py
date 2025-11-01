@@ -1,2 +1,0 @@
-class ShortcutLaunchError(Exception):
-    pass

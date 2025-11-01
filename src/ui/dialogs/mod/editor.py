@@ -12,13 +12,12 @@ from PyQt6.QtGui import QColor, QImage, QPixmap, QPainter
 from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QFrame, QCheckBox, QComboBox, QMessageBox, QFileDialog, QInputDialog, QDialogButtonBox, QWidget, QListWidget, QTabWidget
 from PyQt6 import sip
 from managers.localization_manager import tr
-from ui.widgets.common.worker_signals import WorkerSignals
+from workers import WorkerSignals
 from utils.path_utils import resource_path
 from utils.file_utils import detect_field_type_by_text, get_file_filter, sanitize_filename
 from utils.crypto_utils import generate_secret_key, hash_secret_key
 from utils.file_utils import game_version_sort_key
 import logging
-import requests
 from utils.network_utils import get_session
 
 
@@ -293,9 +292,9 @@ class ModEditorDialog(QDialog):
 
                     def run(self):
                         try:
-                            from utils.cache import _IMG_CACHE, _IMG_CACHE_LOCK, _NET_SEM
-                            if _IMG_CACHE is not None and _IMG_CACHE_LOCK is not None:
-                                with _IMG_CACHE_LOCK:
+                            from utils.cache import _IMG_CACHE, _NET_SEM, cache_lock
+                            if _IMG_CACHE is not None:
+                                with cache_lock():
                                     if self.url in _IMG_CACHE:
                                         self.loaded.emit(self.idx, _IMG_CACHE[self.url])
                                         return
@@ -331,9 +330,9 @@ class ModEditorDialog(QDialog):
                             if not qimg.loadFromData(resp.content):
                                 self.failed.emit(self.idx, 'not_image')
                                 return
-                            if _IMG_CACHE is not None and _IMG_CACHE_LOCK is not None:
+                            if _IMG_CACHE is not None:
                                 try:
-                                    with _IMG_CACHE_LOCK:
+                                    with cache_lock():
                                         _IMG_CACHE[self.url] = qimg
                                 except Exception:
                                     pass
