@@ -19,6 +19,7 @@ from utils.crypto_utils import generate_secret_key, hash_secret_key
 from utils.file_utils import game_version_sort_key
 import logging
 import requests
+from utils.network_utils import get_session
 
 
 class ModEditorDialog(QDialog):
@@ -194,8 +195,8 @@ class ModEditorDialog(QDialog):
             def run(self):
                 try:
                     from config.constants import CLOUD_FUNCTIONS_BASE_URL
-                    import requests
-                    r = requests.get(f'{CLOUD_FUNCTIONS_BASE_URL}/getGlobalSettings', timeout=6)
+                    session = get_session()
+                    r = session.get(f'{CLOUD_FUNCTIONS_BASE_URL}/getGlobalSettings', timeout=6)
                     if r.status_code == 200:
                         data = r.json() or {}
                         vers = data.get('supported_game_versions', ['1.04']) or ['1.04']
@@ -298,12 +299,12 @@ class ModEditorDialog(QDialog):
                                     if self.url in _IMG_CACHE:
                                         self.loaded.emit(self.idx, _IMG_CACHE[self.url])
                                         return
-                            import requests
+                            session = get_session()
                             try:
                                 if _NET_SEM:
                                     _NET_SEM.acquire()
                                 try:
-                                    h = requests.head(self.url, allow_redirects=True, timeout=6)
+                                    h = session.head(self.url, allow_redirects=True, timeout=6)
                                 finally:
                                     if _NET_SEM:
                                         _NET_SEM.release()
@@ -316,7 +317,7 @@ class ModEditorDialog(QDialog):
                             if _NET_SEM:
                                 _NET_SEM.acquire()
                             try:
-                                resp = requests.get(self.url, timeout=8)
+                                resp = session.get(self.url, timeout=8)
                             finally:
                                 if _NET_SEM:
                                     _NET_SEM.release()
@@ -748,16 +749,19 @@ class ModEditorDialog(QDialog):
                         pass
                 r = None
                 if file_type == 'icon':
-                    r = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=10)
+                    session = get_session()
+                    r = session.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=10)
                     r.raise_for_status()
                     headers = r.headers
                 else:
                     try:
-                        rh = requests.head(url, headers={'User-Agent': 'Mozilla/5.0'}, allow_redirects=True, timeout=10)
+                        session = get_session()
+                        rh = session.head(url, headers={'User-Agent': 'Mozilla/5.0'}, allow_redirects=True, timeout=10)
                         rh.raise_for_status()
                         headers = rh.headers
                     except Exception:
-                        rg = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, stream=True, timeout=10)
+                        session = get_session()
+                        rg = session.get(url, headers={'User-Agent': 'Mozilla/5.0'}, stream=True, timeout=10)
                         rg.raise_for_status()
                         headers = rg.headers
                 size_bytes = int(headers.get('content-length', 0)) if headers.get('content-length', '').isdigit() else 0
@@ -1052,8 +1056,8 @@ class ModEditorDialog(QDialog):
 
                 def run(self):
                     try:
-                        import requests
-                        response = requests.get(self.url, timeout=10)
+                        session = get_session()
+                        response = session.get(self.url, timeout=10)
                         response.raise_for_status()
                         pixmap = QPixmap()
                         if pixmap.loadFromData(response.content):
@@ -1138,7 +1142,8 @@ class ModEditorDialog(QDialog):
             import requests
             from config.constants import CLOUD_FUNCTIONS_BASE_URL
             change = {'hide_mod': new_state}
-            resp = requests.post(f'{CLOUD_FUNCTIONS_BASE_URL}/submitModChange', json={'modData': change, 'hashedKey': self.mod_key}, timeout=10)
+            session = get_session()
+            resp = session.post(f'{CLOUD_FUNCTIONS_BASE_URL}/submitModChange', json={'modData': change, 'hashedKey': self.mod_key}, timeout=10)
             resp.raise_for_status()
             QMessageBox.information(self, tr('dialogs.request_sent_title'), tr('errors.request_sent_message'))
         except Exception as e:
@@ -1204,7 +1209,8 @@ class ModEditorDialog(QDialog):
                 desc_url = self.description_url_edit.text().strip()
                 if desc_url and (not re.match('^https?://.+\\.(md|txt)(\\?.*)?$', desc_url, re.IGNORECASE)):
                     try:
-                        h = requests.head(desc_url, headers={'User-Agent': 'Mozilla/5.0'}, allow_redirects=True, timeout=6)
+                        session = get_session()
+                        h = session.head(desc_url, headers={'User-Agent': 'Mozilla/5.0'}, allow_redirects=True, timeout=6)
                         ct = (h.headers.get('Content-Type') or '').lower()
                         if not (ct.startswith('text/') or 'markdown' in ct):
                             raise ValueError('not text')
@@ -1256,7 +1262,8 @@ class ModEditorDialog(QDialog):
                         first_bytes = b''
                         ok = False
                         try:
-                            h = requests.head(url, headers=headers, allow_redirects=True, timeout=8)
+                            session = get_session()
+                            h = session.head(url, headers=headers, allow_redirects=True, timeout=8)
                             if h.status_code in (200, 206, 301, 302, 303, 307, 308):
                                 ok = True
                                 ct = h.headers.get('Content-Type') or h.headers.get('content-type') or ''
@@ -1268,7 +1275,8 @@ class ModEditorDialog(QDialog):
                             ok, content_disp = (False, '')
                         if not ok:
                             try:
-                                g = requests.get(url, headers=headers, allow_redirects=True, stream=True, timeout=12)
+                                session = get_session()
+                                g = session.get(url, headers=headers, allow_redirects=True, stream=True, timeout=12)
                                 g.raise_for_status()
                                 ct = g.headers.get('Content-Type') or g.headers.get('content-type') or ''
                                 content_type = ct.lower()
@@ -1374,7 +1382,8 @@ class ModEditorDialog(QDialog):
                             ok = False
                             headers = {'User-Agent': 'Mozilla/5.0'}
                             try:
-                                h = requests.head(url_text, headers=headers, allow_redirects=True, timeout=7)
+                                session = get_session()
+                                h = session.head(url_text, headers=headers, allow_redirects=True, timeout=7)
                                 if h.status_code in (200, 206):
                                     ok = True
                                 elif h.status_code in (301, 302, 303, 307, 308):
@@ -1383,7 +1392,8 @@ class ModEditorDialog(QDialog):
                                 pass
                             if not ok:
                                 try:
-                                    g = requests.get(url_text, headers=headers, allow_redirects=True, stream=True, timeout=10)
+                                    session = get_session()
+                                    g = session.get(url_text, headers=headers, allow_redirects=True, stream=True, timeout=10)
                                     if g.status_code in (200, 206):
                                         next(g.iter_content(chunk_size=1), None)
                                         ok = True
@@ -1676,7 +1686,8 @@ class ModEditorDialog(QDialog):
             import requests
             from config.constants import CLOUD_FUNCTIONS_BASE_URL
             functions_url = f'{CLOUD_FUNCTIONS_BASE_URL}/submitNewMod'
-            response = requests.post(functions_url, json={'modData': mod_data, 'hashedKey': hashed_key}, timeout=10)
+            session = get_session()
+            response = session.post(functions_url, json={'modData': mod_data, 'hashedKey': hashed_key}, timeout=10)
             response.raise_for_status()
             try:
                 with open(key_file_path, 'w', encoding='utf-8') as f:
@@ -1815,7 +1826,8 @@ class ModEditorDialog(QDialog):
                 return
             try:
                 from config.constants import CLOUD_FUNCTIONS_BASE_URL
-                chk = requests.get(f'{CLOUD_FUNCTIONS_BASE_URL}/getModData?modId={hashed_key}', timeout=8)
+                session = get_session()
+                chk = session.get(f'{CLOUD_FUNCTIONS_BASE_URL}/getModData?modId={hashed_key}', timeout=8)
                 if chk.status_code == 200 and isinstance(chk.json(), dict):
                     server_data = chk.json()
                     is_verified = bool(server_data.get('is_verified', self.original_mod_data.get('is_verified', False)))
@@ -1832,7 +1844,8 @@ class ModEditorDialog(QDialog):
             from config.constants import CLOUD_FUNCTIONS_BASE_URL
             updated_data['change_type'] = 'update'
             updated_data['original_mod_key'] = hashed_key
-            response = requests.post(f'{CLOUD_FUNCTIONS_BASE_URL}/submitModChange', json={'modData': updated_data, 'hashedKey': hashed_key}, timeout=10)
+            session = get_session()
+            response = session.post(f'{CLOUD_FUNCTIONS_BASE_URL}/submitModChange', json={'modData': updated_data, 'hashedKey': hashed_key}, timeout=10)
             response.raise_for_status()
             QMessageBox.information(self, tr('dialogs.request_sent_title'), tr('errors.request_sent_message'))
             self.accept()
@@ -1954,7 +1967,8 @@ class ModEditorDialog(QDialog):
         try:
             import requests
             from config.constants import CLOUD_FUNCTIONS_BASE_URL
-            resp = requests.post(f'{CLOUD_FUNCTIONS_BASE_URL}/deletePublicMod', json={'hashedKey': hashed_key}, timeout=10)
+            session = get_session()
+            resp = session.post(f'{CLOUD_FUNCTIONS_BASE_URL}/deletePublicMod', json={'hashedKey': hashed_key}, timeout=10)
             resp.raise_for_status()
             QMessageBox.information(self, tr('errors.mod_deleted_title'), tr('errors.mod_deleted_message'))
             self.accept()

@@ -148,11 +148,11 @@ class ScreenshotsCarousel(QWidget):
                                     if self.url in _IMG_CACHE:
                                         self.loaded.emit(self.idx, _IMG_CACHE[self.url])
                                         return
-                            import requests
+                            from utils.network_utils import get_session
                             if _NET_SEM:
                                 _NET_SEM.acquire()
                             try:
-                                r = requests.get(self.url, timeout=10)
+                                r = get_session().get(self.url, timeout=10)
                             finally:
                                 try:
                                     if _NET_SEM:
@@ -246,11 +246,11 @@ class ScreenshotsCarousel(QWidget):
                             if self.url in _IMG_CACHE:
                                 self.loaded.emit(self.i, _IMG_CACHE[self.url])
                                 return
-                    import requests
+                    from utils.network_utils import get_session
                     if _NET_SEM:
                         _NET_SEM.acquire()
                     try:
-                        r = requests.get(self.url, timeout=10)
+                        r = get_session().get(self.url, timeout=10)
                     finally:
                         try:
                             if _NET_SEM:

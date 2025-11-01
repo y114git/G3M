@@ -1,3 +1,4 @@
+import logging
 from PyQt6.QtCore import QObject, pyqtSignal, QTimer, Qt
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QDialog, QListWidget, QDialogButtonBox
 from typing import Dict, Optional, Any, TYPE_CHECKING
@@ -44,8 +45,8 @@ class SlotManager(QObject):
         if save_state:
             try:
                 self.save_slots_state()
-            except Exception:
-                pass
+            except Exception as e:
+                logging.warning(f'set_slot_mod: save_state failed: {e}')
 
     def init_slots_system(self, active_slots_layout=None):
         if active_slots_layout is None and self.parent_widget and hasattr(self.parent_widget, 'active_slots_layout'):
@@ -197,8 +198,8 @@ class SlotManager(QObject):
     def assign_mod_to_slot(self, slot_frame: SlotFrame, mod_data, save_state: bool = True):
         try:
             self.set_slot_mod(slot_frame.chapter_id, mod_data, save_state=False)
-        except Exception:
-            pass
+        except Exception as e:
+            logging.warning(f'assign_mod_to_slot: set_slot_mod failed: {e}')
         slot_frame.assigned_mod = mod_data
         if slot_frame.content_widget:
             slot_frame.content_widget.setParent(None)
@@ -280,8 +281,8 @@ class SlotManager(QObject):
     def remove_mod_from_slot(self, slot_frame: SlotFrame, mod_data, save_state: bool = True):
         try:
             self.set_slot_mod(slot_frame.chapter_id, None, save_state=False)
-        except Exception:
-            pass
+        except Exception as e:
+            logging.warning(f'remove_mod_from_slot: set_slot_mod failed: {e}')
         slot_frame.assigned_mod = None
         if slot_frame.content_widget:
             slot_frame.content_widget.setParent(None)

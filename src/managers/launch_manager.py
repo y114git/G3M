@@ -11,6 +11,7 @@ import tarfile
 import lzma
 import py7zr
 import zipfile
+import logging
 from typing import Dict, Optional, Any
 from PyQt6.QtCore import QObject, QTimer, pyqtSignal
 from managers.localization_manager import tr
@@ -148,8 +149,8 @@ class GameLauncher(QObject):
                         self.monitor_thread.quit()
                         self.monitor_thread.wait(1000)
                     self.monitor_thread.deleteLater()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logging.debug(f'_execute_game: monitor thread cleanup failed: {e}')
                 self.monitor_thread = None
             if launch_type == 'webbrowser':
                 self.monitor_thread = GameMonitorThread(None, vanilla_mode, self)
@@ -218,8 +219,8 @@ class GameLauncher(QObject):
                 try:
                     self.monitor_thread.wait(1000)
                     self.monitor_thread.deleteLater()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logging.debug(f'_check_game_running: monitor thread cleanup failed: {e}')
                 self.monitor_thread = None
 
     def _determine_launch_config(self, selections: Dict[int, str]) -> Optional[Dict[str, Any]]:
@@ -485,8 +486,8 @@ class GameLauncher(QObject):
                         if target_dirname not in self._mod_dirs_to_cleanup:
                             self._mod_dirs_to_cleanup.append(target_dirname)
                             self._update_session_manifest(mod_dirs=[target_dirname])
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logging.debug(f'_prepare_game_files: manifest update failed: {e}')
                     if is_xdelta_mod and file_lower.endswith('.xdelta') and is_core_data_file:
                         if applied_xdelta_for_this_chapter:
                             continue
@@ -532,8 +533,8 @@ class GameLauncher(QObject):
                             try:
                                 if os.path.exists(tmp_target):
                                     os.remove(tmp_target)
-                            except Exception:
-                                pass
+                            except Exception as e:
+                                logging.debug(f'_prepare_game_files: tmp cleanup failed: {e}')
                 except Exception as e:
                     self.status_changed.emit(tr('errors.file_copy_error', file=file, error=str(e)), UI_COLORS['status_error'])
         if files_copied > 0:
@@ -592,14 +593,14 @@ class GameLauncher(QObject):
                     try:
                         if os.path.exists(temp_output):
                             os.remove(temp_output)
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logging.debug(f'_apply_xdelta_patch: temp cleanup failed (success): {e}')
             else:
                 try:
                     if os.path.exists(temp_output):
                         os.remove(temp_output)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logging.debug(f'_apply_xdelta_patch: temp cleanup failed (error): {e}')
                 shutil.copy2(self._backup_files[original_data_file], original_data_file)
                 error_message = process.stderr.strip() or process.stdout.strip()
                 self.status_changed.emit(tr('errors.xdelta_patch_error', error=error_message), UI_COLORS['status_error'])
@@ -608,16 +609,17 @@ class GameLauncher(QObject):
             self.status_changed.emit(tr('errors.xdelta_not_found', path=xdelta_exe), UI_COLORS['status_error'])
             return False
         except Exception as e:
+            logging.error(f'_apply_xdelta_patch: critical error: {e}', exc_info=True)
             self.status_changed.emit(tr('errors.xdelta_patch_critical_error', error=str(e)), UI_COLORS['status_error'])
             try:
                 if os.path.exists(temp_output):
                     os.remove(temp_output)
-            except Exception:
-                pass
+            except Exception as cleanup_e:
+                logging.debug(f'_apply_xdelta_patch: temp cleanup failed (critical): {cleanup_e}')
             try:
                 shutil.copy2(self._backup_files[original_data_file], original_data_file)
-            except Exception:
-                pass
+            except Exception as restore_e:
+                logging.warning(f'_apply_xdelta_patch: restore backup failed: {restore_e}')
             return False
 
     def _extract_archive_to_target(self, archive_path: str, target_dir: str):
@@ -664,8 +666,8 @@ class GameLauncher(QObject):
                             if target_dirname not in self._mod_dirs_to_cleanup:
                                 self._mod_dirs_to_cleanup.append(target_dirname)
                                 self._update_session_manifest(mod_dirs=[target_dirname])
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            logging.debug(f'_extract_archive_to_target: manifest update failed: {e}')
                         tmp_target = target_file + '.tmp'
                         try:
                             shutil.copy2(source_file, tmp_target)
@@ -685,8 +687,8 @@ class GameLauncher(QObject):
                             try:
                                 if os.path.exists(tmp_target):
                                     os.remove(tmp_target)
-                            except Exception:
-                                pass
+                            except Exception as e:
+                                logging.debug(f'_extract_archive_to_target: tmp cleanup failed: {e}')
         except Exception as e:
             self.status_changed.emit(tr('errors.archive_unpack_error', archive_name=os.path.basename(archive_path), error=str(e)), UI_COLORS['status_error'])
         return extracted_files
@@ -728,7 +730,8 @@ class GameLauncher(QObject):
                                 os.remove(original_path)
                             os.makedirs(os.path.dirname(original_path), exist_ok=True)
                             shutil.move(backup_path, original_path)
-                    except Exception:
+                    except Exception as e:
+                        logging.warning(f'_restore_game_files: restore {original_path} failed: {e}')
                         continue
                 self._backup_files = {}
             if self._mod_files_to_cleanup:
@@ -741,15 +744,16 @@ class GameLauncher(QObject):
                             os.remove(file_path)
                         else:
                             remaining_files.append(file_path)
-                    except Exception:
+                    except Exception as e:
+                        logging.warning(f'_restore_game_files: cleanup {file_path} failed: {e}')
                         continue
                 self._mod_files_to_cleanup = []
             if self._backup_temp_dir and os.path.exists(self._backup_temp_dir):
                 try:
                     shutil.rmtree(self._backup_temp_dir)
                     self._backup_temp_dir = None
-                except Exception:
-                    pass
+                except Exception as e:
+                    logging.warning(f'_restore_game_files: backup temp dir cleanup failed: {e}')
             try:
                 dirs = []
                 if self._mod_dirs_to_cleanup:
@@ -761,11 +765,11 @@ class GameLauncher(QObject):
                     try:
                         if os.path.isdir(d) and (not os.listdir(d)):
                             os.rmdir(d)
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logging.debug(f'_restore_game_files: rmdir {d} failed: {e}')
                 self._mod_dirs_to_cleanup = []
-            except Exception:
-                pass
+            except Exception as e:
+                logging.warning(f'_restore_game_files: dir cleanup failed: {e}')
             if not cleanup_info:
                 cleanup_info = self._direct_launch_cleanup_info
             if cleanup_info:
@@ -785,7 +789,8 @@ class GameLauncher(QObject):
             with open(self._session_manifest_path(), 'r', encoding='utf-8') as f:
                 import json
                 return json.load(f) or {}
-        except Exception:
+        except Exception as e:
+            logging.debug(f'_load_session_manifest: failed: {e}')
             return {}
 
     def _write_session_manifest(self, data: dict):
@@ -793,8 +798,8 @@ class GameLauncher(QObject):
             with open(self._session_manifest_path(), 'w', encoding='utf-8') as f:
                 import json
                 json.dump(data, f, ensure_ascii=False)
-        except Exception:
-            pass
+        except Exception as e:
+            logging.warning(f'_write_session_manifest: failed: {e}')
 
     def _ensure_session_manifest(self) -> dict:
         data = self._load_session_manifest()
@@ -826,8 +831,8 @@ class GameLauncher(QObject):
     def _clear_session_manifest(self):
         try:
             os.remove(self._session_manifest_path())
-        except Exception:
-            pass
+        except Exception as e:
+            logging.debug(f'_clear_session_manifest: failed: {e}')
 
     def recover_previous_session(self):
         try:
@@ -841,8 +846,8 @@ class GameLauncher(QObject):
             self.feedback_manager.update_status(tr('status.recovering_previous_session'), UI_COLORS['status_warning'])
             self._cleanup_direct_launch_files()
             self._clear_session_manifest()
-        except Exception:
-            pass
+        except Exception as e:
+            logging.warning(f'recover_previous_session: cleanup failed: {e}')
 
     def _find_and_validate_game_path(self, selections: Optional[Dict[int, str]] = None, is_initial: bool = False):
         from utils.game_utils import is_valid_game_path

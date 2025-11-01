@@ -8,13 +8,15 @@ import time
 import zipfile
 import py7zr
 import requests
+from utils.network_utils import get_session
 from PyQt6.QtCore import QObject, QThread, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QImage
-from config.constants import BROWSER_HEADERS, CLOUD_FUNCTIONS_BASE_URL, UI_COLORS
+from config.constants import CLOUD_FUNCTIONS_BASE_URL, UI_COLORS
 from managers.localization_manager import tr
 from utils.file_utils import get_unique_mod_dir
 from utils.deltamod_converter import DeltamodConverter
 from utils.network_utils import download_file
+import logging
 
 
 class PresenceWorker(QObject):
@@ -33,13 +35,15 @@ class PresenceWorker(QObject):
             self._busy = True
             url = f'{CLOUD_FUNCTIONS_BASE_URL}/presenceHeartbeat'
             data = {'sessionId': self.session_id}
-            resp = requests.post(url, json=data, timeout=8)
+            session = get_session()
+            resp = session.post(url, json=data, timeout=8)
             if resp.status_code == 200:
                 try:
                     data = resp.json() or {}
                     online = int(data.get('online', 0))
                     self.update_online_count.emit(max(online, 0))
-                except Exception:
+                except Exception as e:
+                    logging.debug(f'PresenceWorker: parse error: {e}')
                     self.update_online_count.emit(-1)
             else:
                 self.update_online_count.emit(-1)
@@ -79,7 +83,8 @@ class FetchChangelogThread(QThread):
             if self.source.startswith(('http://', 'https://')):
                 params = {'ts': int(time.time())}
                 headers = {'Cache-Control': 'no-cache', 'Pragma': 'no-cache', 'User-Agent': 'DELTAHUB/1.0'}
-                with requests.get(self.source, params=params, headers=headers, timeout=10) as resp:
+                session = get_session()
+                with session.get(self.source, params=params, headers=headers, timeout=10) as resp:
                     resp.raise_for_status()
                     text = resp.text
             elif os.path.exists(self.source) or os.path.exists(self.source.replace('.md', '.txt')):
@@ -88,7 +93,8 @@ class FetchChangelogThread(QThread):
                     text = f.read()
             else:
                 text = self.source
-        except Exception:
+        except Exception as e:
+            logging.warning(f'FetchChangelogThread: failed to load changelog from {self.source}: {e}', exc_info=True)
             text = tr('errors.changelog_load_failed')
         finally:
             self.finished.emit(text)
@@ -113,13 +119,13 @@ class FullInstallThread(QThread):
             if self._session is not None:
                 try:
                     self._session.close()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logging.debug(f'FullInstallThread.cancel: session close error: {e}')
             if self._active_response is not None:
                 try:
                     self._active_response.close()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logging.debug(f'FullInstallThread.cancel: response close error: {e}')
         finally:
             self.status.emit(tr('status.operation_cancelled'), UI_COLORS['status_error'])
 
@@ -131,14 +137,7 @@ class FullInstallThread(QThread):
             return
         self.status.emit(tr('status.installing_game_files'), UI_COLORS['status_warning'])
         try:
-            from requests.adapters import HTTPAdapter
-            from urllib3.util.retry import Retry
-            session = requests.Session()
-            session.headers.update(BROWSER_HEADERS)
-            retry_strategy = Retry(total=3, backoff_factor=0.3, status_forcelist=[429, 500, 502, 503, 504])
-            adapter = HTTPAdapter(max_retries=retry_strategy, pool_connections=1, pool_maxsize=10)
-            session.mount('http://', adapter)
-            session.mount('https://', adapter)
+            session = get_session()
             self._session = session
             resp = session.head(full_install_url, allow_redirects=True, timeout=10)
             total_size = int(resp.headers.get('content-length', 0))
@@ -186,15 +185,15 @@ class InstallModsThread(QThread):
             if self._session is not None:
                 try:
                     self._session.close()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logging.debug(f'InstallModsThread.cancel: session close error: {e}')
             if self._active_response is not None:
                 try:
                     self._active_response.close()
-                except Exception:
-                    pass
-        except Exception:
-            pass
+                except Exception as e:
+                    logging.debug(f'InstallModsThread.cancel: response close error: {e}')
+        except Exception as e:
+            logging.debug(f'InstallModsThread.cancel: cleanup failed: {e}')
 
     def _find_existing_mod_folder(self, mod_key: str) -> str:
         if not os.path.exists(self.main_window.app_state.mods_dir):
@@ -206,7 +205,8 @@ class InstallModsThread(QThread):
                     config_data = self.main_window.settings_manager.read_json(config_path)
                     if config_data.get('mod_key') == mod_key:
                         return folder_name
-                except Exception:
+                except Exception as e:
+                    logging.debug(f'_find_existing_mod_folder: failed reading {config_path}: {e}')
                     continue
         return ''
 
@@ -244,7 +244,8 @@ class InstallModsThread(QThread):
                 try:
                     mod_path = os.path.join(self.main_window.app_state.mods_dir, existing_folder)
                     local_is_xdelta = any((f.lower().endswith('.xdelta') for f in os.listdir(mod_path) if os.path.isfile(os.path.join(mod_path, f))))
-                except Exception:
+                except Exception as e:
+                    logging.debug(f'_should_update_component: local is_xdelta check failed: {e}')
                     local_is_xdelta = False
                 type_changed = is_xdelta_mod != local_is_xdelta
                 local_data_v = local_versions.get('data')
@@ -262,31 +263,33 @@ class InstallModsThread(QThread):
                 for missing_key in [k for k in local_versions.keys() if k != 'data' and k not in remote_extra_keys]:
                     components_to_update[missing_key] = {'delete': True}
             return components_to_update
-        except Exception:
+        except Exception as e:
+            logging.warning(f'_should_update_component: failed to compute updates: {e}')
             return {}
 
     def _increment_downloads_for_installed_mods(self, installed_mods):
         try:
             for mod_key in [key for key in installed_mods if not key.startswith('local_')]:
                 self._increment_mod_downloads_on_server(mod_key)
-        except Exception:
-            pass
+        except Exception as e:
+            logging.debug(f'_increment_downloads_for_installed_mods: failed: {e}')
 
     def _increment_mod_downloads_on_server(self, mod_key):
         try:
             url = f'{CLOUD_FUNCTIONS_BASE_URL}/incrementDownloads'
             data = {'modId': mod_key}
-            response = requests.post(url, json=data, timeout=10)
+            session = get_session()
+            response = session.post(url, json=data, timeout=10)
             return response.status_code == 200
-        except Exception:
+        except Exception as e:
+            logging.debug(f'_increment_mod_downloads_on_server: failed: {e}')
             return False
 
     def _download_archive_file(self, url: str, target_dir: str, progress_callback, total_size: int, downloaded_ref: list[int], session=None):
         import os
         from urllib.parse import urlparse, unquote
         if session is None:
-            session = requests.Session()
-            session.headers.update(BROWSER_HEADERS)
+            session = get_session()
         parsed_url = urlparse(url)
         filename = unquote(os.path.basename(parsed_url.path))
         if not filename or '.' not in filename:
@@ -302,16 +305,15 @@ class InstallModsThread(QThread):
             if os.path.exists(target_path):
                 try:
                     os.remove(target_path)
-                except Exception:
-                    pass
+                except Exception as rm_e:
+                    logging.debug(f'_download_archive_file: cleanup failed: {rm_e}')
             raise e
 
     def _download_xdelta_file(self, url: str, target_dir: str, progress_callback, total_size: int, downloaded_ref: list[int], session=None):
         import os
         from urllib.parse import urlparse, unquote
         if session is None:
-            session = requests.Session()
-            session.headers.update(BROWSER_HEADERS)
+            session = get_session()
         parsed_url = urlparse(url)
         filename = unquote(os.path.basename(parsed_url.path))
         if not filename.endswith('.xdelta'):
@@ -331,8 +333,8 @@ class InstallModsThread(QThread):
             if os.path.exists(target_path):
                 try:
                     os.remove(target_path)
-                except Exception:
-                    pass
+                except Exception as rm_e:
+                    logging.debug(f'_download_xdelta_file: cleanup failed: {rm_e}')
             raise e
 
     def run(self):
@@ -373,14 +375,7 @@ class InstallModsThread(QThread):
             if not tasks:
                 self.finished.emit(True)
                 return
-            from requests.adapters import HTTPAdapter
-            from urllib3.util.retry import Retry
-            session = requests.Session()
-            session.headers.update(BROWSER_HEADERS)
-            retry_strategy = Retry(total=3, backoff_factor=0.3, status_forcelist=[429, 500, 502, 503, 504])
-            adapter = HTTPAdapter(max_retries=retry_strategy, pool_connections=1, pool_maxsize=10)
-            session.mount('http://', adapter)
-            session.mount('https://', adapter)
+            session = get_session()
             self._session = session
             download_tasks = [t for t in tasks if t.get('url')]
             file_sizes_cache = {}
@@ -391,7 +386,8 @@ class InstallModsThread(QThread):
                     content_length = int(h.headers.get('content-length', 0))
                     file_sizes_cache[u] = content_length
                     total_bytes += content_length
-                except Exception:
+                except Exception as e:
+                    logging.debug(f'InstallModsThread: HEAD failed for {u}: {e}')
                     file_sizes_cache[u] = 0
                     total_bytes = 0
                     break
@@ -429,8 +425,8 @@ class InstallModsThread(QThread):
                                 fl = fname.lower()
                                 if fl.endswith(('.zip', '.rar', '.7z', '.tar.gz', '.lzma')):
                                     pass
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logging.debug(f'InstallModsThread: delete cleanup failed: {e}')
                     continue
                 url = task.get('url')
                 if not url:
@@ -468,7 +464,8 @@ class InstallModsThread(QThread):
                         def progress_callback(progress):
                             self.progress.emit(progress)
                         self._download_archive_file(url, cache_dir, progress_callback, total_bytes, downloaded_ref, session)
-                except Exception:
+                except Exception as e:
+                    logging.error(f'InstallModsThread._download_mod_file: download failed for {url}: {e}', exc_info=True)
                     raise
                 if mod.key not in installed_mods:
                     installed_mods[mod.key] = {'mod': mod, 'chapters': set()}
@@ -541,8 +538,8 @@ class InstallModsThread(QThread):
                                         shutil.copy2(os.path.join(root, f), os.path.join(target_root, f))
                     else:
                         shutil.copy2(src, dst)
-            except Exception:
-                pass
+            except Exception as e:
+                logging.warning(f'InstallModsThread: copy extracted files failed: {e}')
             if self._cancelled:
                 self.status.emit(tr('status.operation_cancelled'), UI_COLORS['status_error'])
                 self.finished.emit(False)
@@ -564,21 +561,23 @@ class InstallModsThread(QThread):
             else:
                 self.status.emit(tr('status.installation_complete'), UI_COLORS['status_success'])
                 self.finished.emit(True)
-        except PermissionError:
+        except PermissionError as e:
+            logging.warning(f'InstallModsThread.run: permission error: {e}')
             try:
                 self.status.emit(tr('errors.permission_error_install'), UI_COLORS['status_error'])
-            except Exception:
-                pass
+            except Exception as emit_e:
+                logging.debug(f'InstallModsThread: failed to emit permission error: {emit_e}')
             self.finished.emit(False)
         except Exception as e:
+            logging.error(f'InstallModsThread.run: installation error: {e}', exc_info=True)
             self.status.emit(tr('errors.installation_error', error=str(e)), UI_COLORS['status_error'])
             self.finished.emit(False)
         finally:
             try:
                 if self.temp_root and os.path.isdir(self.temp_root):
                     shutil.rmtree(self.temp_root, ignore_errors=True)
-            except Exception:
-                pass
+            except Exception as cleanup_e:
+                logging.debug(f'InstallModsThread: temp cleanup failed: {cleanup_e}')
             self._session = None
 
 
@@ -604,18 +603,18 @@ class UrlInstallThread(QThread):
             if self._session is not None:
                 try:
                     self._session.close()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logging.debug(f'UrlInstallThread.cancel: session close error: {e}')
             if self._active_response is not None:
                 try:
                     self._active_response.close()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logging.debug(f'UrlInstallThread.cancel: response close error: {e}')
         finally:
             try:
                 self.status.emit(tr('status.operation_cancelled'), UI_COLORS['status_error'])
-            except Exception:
-                pass
+            except Exception as e:
+                logging.debug(f'UrlInstallThread.cancel: emit failed: {e}')
 
     def run(self):
         try:
@@ -692,8 +691,8 @@ class UrlInstallThread(QThread):
         if not any((filename.lower().endswith(ext) for ext in ['.zip', '.rar', '.7z', '.tar.gz', '.lzma'])):
             filename = 'mod.zip'
         archive_path = os.path.join(temp_dir, filename)
-        self._session = requests.Session()
-        self._session.headers.update(BROWSER_HEADERS)
+        session = get_session()
+        self._session = session
         response = self._session.get(url, stream=True, timeout=30)
         self._active_response = response
         response.raise_for_status()
@@ -743,7 +742,8 @@ class UrlInstallThread(QThread):
                             config_content = extracted_file.read()
             if config_content:
                 return json.loads(config_content)
-        except Exception:
+        except Exception as e:
+            logging.debug(f'UrlInstallThread._read_config_from_archive: failed to read config.json from {archive_path}: {e}')
             return None
         return None
 
@@ -763,33 +763,10 @@ class UrlInstallThread(QThread):
                 import tarfile
                 with tarfile.open(archive_path, 'r:gz') as tf:
                     return len(tf.getnames()) == 1 and 'config.json' in tf.getnames()
-        except Exception:
+        except Exception as e:
+            logging.debug(f'UrlInstallThread._is_single_config_archive: archive structure probe failed for {archive_path}: {e}')
             return False
         return False
-
-    def _extract_full_archive(self, archive_path: str, target_dir: str):
-        archive_path_lower = archive_path.lower()
-        if archive_path_lower.endswith('.zip'):
-            with zipfile.ZipFile(archive_path, 'r') as zf:
-                zf.extractall(target_dir)
-        elif archive_path_lower.endswith('.rar'):
-            with rarfile.RarFile(archive_path, 'r') as rf:
-                rf.extractall(target_dir)
-        elif archive_path_lower.endswith('.7z'):
-            with py7zr.SevenZipFile(archive_path, mode='r') as zf:
-                zf.extractall(path=target_dir)
-        elif archive_path_lower.endswith('.tar.gz'):
-            import tarfile
-            with tarfile.open(archive_path, 'r:gz') as tf:
-                tf.extractall(target_dir)
-        elif archive_path_lower.endswith('.lzma'):
-            import lzma
-            import shutil
-            output_path = os.path.join(target_dir, os.path.splitext(os.path.basename(archive_path))[0])
-            with lzma.open(archive_path) as f_in, open(output_path, 'wb') as f_out:
-                shutil.copyfileobj(f_in, f_out)
-        else:
-            raise ValueError(tr('errors.unsupported_archive_format'))
 
 
 class FetchHelpContentThread(QThread):
@@ -801,13 +778,14 @@ class FetchHelpContentThread(QThread):
 
     def run(self):
         try:
-            import requests
-            response = requests.get(self.url, timeout=10)
+            from utils.network_utils import get_session
+            response = get_session().get(self.url, timeout=10)
             if response.ok:
                 content = response.text
                 self.finished.emit(content)
             else:
                 error_msg = tr('errors.load_error_http', code=response.status_code)
                 self.finished.emit(f'<i>{error_msg}</i>')
-        except Exception:
+        except Exception as e:
+            logging.warning(f'FetchHelpContentThread: failed to load help content: {e}', exc_info=True)
             self.finished.emit(f"<i>{tr('dialogs.help_content_load_failed')}</i>")
