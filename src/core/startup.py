@@ -207,8 +207,12 @@ def run_app():
             import json
             with open(config_path, 'r', encoding='utf-8') as f:
                 config = json.load(f)
+    except (OSError, IOError) as e:
+        logging.warning(f'Failed to read config file: {e}')
+    except (json.JSONDecodeError, ValueError) as e:
+        logging.warning(f'Failed to parse config JSON: {e}')
     except Exception as e:
-        logging.warning(f'Failed to load config: {e}')
+        logging.warning(f'Unexpected error loading config: {e}')
     is_first_launch = not config.get('first_launch_splash_shown', False)
     splash_disabled_by_user = config.get('disable_splash', False)
     show_animated_splash = is_first_launch or not splash_disabled_by_user

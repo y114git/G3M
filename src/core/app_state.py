@@ -1,6 +1,6 @@
 from typing import Dict, Any, List, Optional, Tuple
 import threading
-from PyQt6.QtCore import QObject, pyqtSignal
+from PyQt6.QtCore import QObject, QThread, pyqtSignal
 from models.mod_models import ModInfo
 from models.game_modes import GameMode, FullGameMode
 
@@ -12,6 +12,17 @@ class AppState(QObject):
     selected_chapter_changed = pyqtSignal(object)
     is_save_manager_view_changed = pyqtSignal(bool)
     operation_cancelled_changed = pyqtSignal(bool)
+    filtered_mods_changed = pyqtSignal(list)
+    current_page_changed = pyqtSignal(int)
+    search_text_changed = pyqtSignal(str)
+    library_search_text_changed = pyqtSignal(str)
+    mods_per_page_changed = pyqtSignal(int)
+    current_task_changed = pyqtSignal(object)
+    action_button_text_changed = pyqtSignal(str)
+    action_button_enabled_changed = pyqtSignal(bool)
+    saves_button_enabled_changed = pyqtSignal(bool)
+    progress_bar_visible_changed = pyqtSignal(bool)
+    progress_bar_value_changed = pyqtSignal(int)
 
     def __init__(self):
         super().__init__()
@@ -51,6 +62,17 @@ class AppState(QObject):
         self.game_is_running: bool = False
         self.pending_dialogs: List[Any] = []
         self._operation_cancelled: bool = False
+        self._filtered_mods: List[ModInfo] = []
+        self._current_page: int = 1
+        self._search_text: str = ''
+        self._library_search_text: str = ''
+        self._mods_per_page: int = 20
+        self._current_task: Optional[QThread] = None
+        self._action_button_text: str = ''
+        self._action_button_enabled: bool = True
+        self._saves_button_enabled: bool = True
+        self._progress_bar_visible: bool = False
+        self._progress_bar_value: int = 0
 
     @property
     def is_installing(self) -> bool:
@@ -111,3 +133,116 @@ class AppState(QObject):
         if self._operation_cancelled != value:
             self._operation_cancelled = value
             self.operation_cancelled_changed.emit(value)
+
+    @property
+    def filtered_mods(self) -> List[ModInfo]:
+        return self._filtered_mods
+
+    @filtered_mods.setter
+    def filtered_mods(self, value: List[ModInfo]) -> None:
+        if self._filtered_mods != value:
+            self._filtered_mods = value
+            self.filtered_mods_changed.emit(value)
+
+    @property
+    def current_page(self) -> int:
+        return self._current_page
+
+    @current_page.setter
+    def current_page(self, value: int) -> None:
+        if self._current_page != value:
+            self._current_page = value
+            self.current_page_changed.emit(value)
+
+    @property
+    def search_text(self) -> str:
+        return self._search_text
+
+    @search_text.setter
+    def search_text(self, value: str) -> None:
+        if self._search_text != value:
+            self._search_text = value
+            self.search_text_changed.emit(value)
+
+    @property
+    def library_search_text(self) -> str:
+        return self._library_search_text
+
+    @library_search_text.setter
+    def library_search_text(self, value: str) -> None:
+        if self._library_search_text != value:
+            self._library_search_text = value
+            self.library_search_text_changed.emit(value)
+
+    @property
+    def mods_per_page(self) -> int:
+        return self._mods_per_page
+
+    @mods_per_page.setter
+    def mods_per_page(self, value: int) -> None:
+        if self._mods_per_page != value:
+            self._mods_per_page = value
+            self.mods_per_page_changed.emit(value)
+
+    @property
+    def current_task(self) -> Optional[QThread]:
+        return self._current_task
+
+    @current_task.setter
+    def current_task(self, task: Optional[QThread]) -> None:
+        if self._current_task != task:
+            self._current_task = task
+            self.current_task_changed.emit(task)
+
+    def clear_current_task(self) -> None:
+        self.current_task = None
+
+    @property
+    def action_button_text(self) -> str:
+        return self._action_button_text
+
+    @action_button_text.setter
+    def action_button_text(self, value: str) -> None:
+        if self._action_button_text != value:
+            self._action_button_text = value
+            self.action_button_text_changed.emit(value)
+
+    @property
+    def action_button_enabled(self) -> bool:
+        return self._action_button_enabled
+
+    @action_button_enabled.setter
+    def action_button_enabled(self, value: bool) -> None:
+        if self._action_button_enabled != value:
+            self._action_button_enabled = value
+            self.action_button_enabled_changed.emit(value)
+
+    @property
+    def saves_button_enabled(self) -> bool:
+        return self._saves_button_enabled
+
+    @saves_button_enabled.setter
+    def saves_button_enabled(self, value: bool) -> None:
+        if self._saves_button_enabled != value:
+            self._saves_button_enabled = value
+            self.saves_button_enabled_changed.emit(value)
+
+    @property
+    def progress_bar_visible(self) -> bool:
+        return self._progress_bar_visible
+
+    @progress_bar_visible.setter
+    def progress_bar_visible(self, value: bool) -> None:
+        if self._progress_bar_visible != value:
+            self._progress_bar_visible = value
+            self.progress_bar_visible_changed.emit(value)
+
+    @property
+    def progress_bar_value(self) -> int:
+        return self._progress_bar_value
+
+    @progress_bar_value.setter
+    def progress_bar_value(self, value: int) -> None:
+        if self._progress_bar_value != value:
+            self._progress_bar_value = value
+            self.progress_bar_value_changed.emit(value)

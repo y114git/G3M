@@ -65,5 +65,5 @@ class SaveEditorDialog(QDialog):
         except PermissionError:
             path = os.path.dirname(self.file_path)
             QMessageBox.critical(self, tr('dialogs.access_error'), tr('dialogs.no_write_permissions', path=path))
-        except Exception:
-            QMessageBox.critical(self, tr('errors.error'), tr('dialogs.save_file_error'))
+        except (OSError, IOError) as e:
+            QMessageBox.critical(self, tr('errors.error'), tr('dialogs.save_file_error', error=str(e)))

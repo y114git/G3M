@@ -18,6 +18,7 @@ from utils.file_utils import detect_field_type_by_text, get_file_filter, sanitiz
 from utils.crypto_utils import generate_secret_key, hash_secret_key
 from utils.file_utils import game_version_sort_key
 import logging
+import requests
 from utils.network_utils import get_session
 
 
@@ -1690,17 +1691,31 @@ class ModEditorDialog(QDialog):
                     f.write(f"{tr('ui.secret_key_label')} {secret_key}\n{tr('ui.mod_name_label')} {self.name_edit.text()}\n{tr('ui.creation_date_colon')} {time.strftime('%d.%m.%y %H:%M')}\n\n{tr('ui.secret_key_important')}\n")
                 QMessageBox.information(self, tr('dialogs.mod_submitted'), tr('errors.mod_submitted_success', key_file_path=key_file_path))
                 self._open_file_directory(key_file_path)
-            except Exception:
+            except (OSError, IOError, PermissionError) as e:
+                logging.error(f'Failed to save secret key file: {e}', exc_info=True)
+                QMessageBox.warning(self, tr('errors.mod_sent_key_error'), tr('errors.mod_submitted_key_save_failed', secret_key=secret_key))
+            except Exception as e:
+                logging.error(f'Unexpected error saving secret key file: {e}', exc_info=True)
                 QMessageBox.warning(self, tr('errors.mod_sent_key_error'), tr('errors.mod_submitted_key_save_failed', secret_key=secret_key))
             self.accept()
-        except Exception as e:
+        except requests.RequestException as e:
             error_msg = tr('errors.mod_submission_failed', error_type=type(e).__name__)
-            if '400' in str(e):
-                error_msg = tr('errors.validation_data_error')
-            elif 'KeyError' in str(e):
-                error_msg = tr('errors.data_structure_error')
-            elif 'TypeError' in str(e):
-                error_msg = tr('errors.data_types_error')
+            if hasattr(e, 'response') and e.response is not None:
+                status_code = e.response.status_code
+                if status_code == 400:
+                    error_msg = tr('errors.validation_data_error')
+                elif status_code in (401, 403):
+                    error_msg = tr('errors.access_permission_error')
+                elif status_code >= 500:
+                    error_msg = tr('errors.server_error')
+            QMessageBox.critical(self, tr('errors.submission_error_title'), error_msg)
+        except (KeyError, TypeError) as e:
+            logging.error(f'Data error during mod submission: {e}', exc_info=True)
+            error_msg = tr('errors.data_structure_error') if isinstance(e, KeyError) else tr('errors.data_types_error')
+            QMessageBox.critical(self, tr('errors.submission_error_title'), error_msg)
+        except Exception as e:
+            logging.error(f'Unexpected error during mod submission: {e}', exc_info=True)
+            error_msg = tr('errors.mod_submission_failed', error_type=type(e).__name__)
             QMessageBox.critical(self, tr('errors.submission_error_title'), error_msg)
 
     def _open_file_directory(self, file_path):
@@ -1844,14 +1859,22 @@ class ModEditorDialog(QDialog):
             response.raise_for_status()
             QMessageBox.information(self, tr('dialogs.request_sent_title'), tr('errors.request_sent_message'))
             self.accept()
-        except Exception as e:
+        except requests.RequestException as e:
             error_msg = tr('errors.update_connection_error')
-            if '400' in str(e):
-                error_msg = tr('errors.validation_data_error')
-            elif '401' in str(e) or '403' in str(e):
-                error_msg = tr('errors.access_permission_error')
-            elif '404' in str(e):
-                error_msg = tr('errors.mod_not_found_server')
+            if hasattr(e, 'response') and e.response is not None:
+                status_code = e.response.status_code
+                if status_code == 400:
+                    error_msg = tr('errors.validation_data_error')
+                elif status_code in (401, 403):
+                    error_msg = tr('errors.access_permission_error')
+                elif status_code == 404:
+                    error_msg = tr('errors.mod_not_found_server')
+                elif status_code >= 500:
+                    error_msg = tr('errors.server_error')
+            QMessageBox.critical(self, tr('errors.update_error'), error_msg)
+        except Exception as e:
+            logging.error(f'Unexpected error updating mod: {e}', exc_info=True)
+            error_msg = tr('errors.update_connection_error')
             QMessageBox.critical(self, tr('errors.update_error'), error_msg)
 
     def _has_real_changes(self) -> bool:

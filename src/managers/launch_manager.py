@@ -21,7 +21,7 @@ from utils.file_utils import ensure_writable, sanitize_filename
 from utils.game_utils import is_game_running
 from utils.path_utils import get_xdelta_path
 from workers.game_monitor import GameMonitorWorker
-from config.constants import UI_COLORS
+from config.constants import UI_COLORS, SLOT_ID_UNIVERSAL
 
 
 class GameLauncher(QObject):
@@ -251,7 +251,7 @@ class GameLauncher(QObject):
 
     def _determine_launch_config(self, selections: Dict[int, str]) -> Optional[Dict[str, Any]]:
         use_steam = self.app_state.local_config.get('launch_via_steam', False)
-        direct_launch_slot_id = self.app_state.local_config.get('direct_launch_slot_id', -1)
+        direct_launch_slot_id = self.app_state.local_config.get('direct_launch_slot_id', SLOT_ID_UNIVERSAL)
         is_chapter_mode = self.app_state.current_mode == 'chapter'
         direct_launch = direct_launch_slot_id >= 0 and direct_launch_slot_id != 0 and is_chapter_mode and self.app_state.game_mode.direct_launch_allowed and (platform.system() != 'Darwin')
         if use_steam:

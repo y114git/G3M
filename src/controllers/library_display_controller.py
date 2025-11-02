@@ -2,16 +2,17 @@ from PyQt6.QtCore import QThread
 from managers.localization_manager import tr
 from ui.common.styling import clear_layout_widgets, show_empty_message_in_layout
 from ui.widgets.mod.installed_mod_widget import InstalledModWidget
+from config.constants import SLOT_ID_UNIVERSAL, SLOT_ID_DEMO, SLOT_ID_UNDERTALE, SLOT_ID_MENU, SLOT_ID_CHAPTER_1, SLOT_ID_CHAPTER_2, SLOT_ID_CHAPTER_3, SLOT_ID_CHAPTER_4
 
 
 class LibraryDisplayController:
 
-    def __init__(self, app_window):
+    def __init__(self, app_state, feedback_manager, mod_manager, slot_manager, app_window):
+        self.app_state = app_state
+        self.feedback_manager = feedback_manager
+        self.mod_manager = mod_manager
+        self.slot_manager = slot_manager
         self.app = app_window
-        self.app_state = app_window.app_state
-        self.feedback_manager = app_window.feedback_manager
-        self.mod_manager = app_window.mod_manager
-        self.slot_manager = app_window.slot_manager
 
     def update_display(self):
         if not hasattr(self.app, 'installed_mods_layout'):
@@ -93,7 +94,7 @@ class LibraryDisplayController:
                 self.app.installed_mods_layout.insertWidget(self.app.installed_mods_layout.count() - 1, mod_widget)
         if self.app.installed_mods_layout.count() <= 1:
             if selected_chapter_id is not None:
-                chapter_names = {-1: tr('ui.mod_slot'), 0: tr('chapters.menu'), 1: tr('tabs.chapter_1'), 2: tr('tabs.chapter_2'), 3: tr('tabs.chapter_3'), 4: tr('tabs.chapter_4')}
+                chapter_names = {SLOT_ID_UNIVERSAL: tr('ui.mod_slot'), SLOT_ID_MENU: tr('chapters.menu'), SLOT_ID_CHAPTER_1: tr('tabs.chapter_1'), SLOT_ID_CHAPTER_2: tr('tabs.chapter_2'), SLOT_ID_CHAPTER_3: tr('tabs.chapter_3'), SLOT_ID_CHAPTER_4: tr('tabs.chapter_4')}
                 chapter_name = chapter_names.get(selected_chapter_id, tr('ui.chapter_n', chapter=str(selected_chapter_id)))
                 show_empty_message_in_layout(self.app.installed_mods_layout, tr('ui.no_mods_for_chapter', chapter_name=chapter_name), self.app_state.local_config, font_size=16)
             else:
@@ -210,7 +211,7 @@ class LibraryDisplayController:
             if self.app.installed_mods_layout.count() <= 1:
                 show_empty_message_in_layout(self.app.installed_mods_layout, tr('ui.empty'), self.app_state.local_config, font_size=18)
             self.update_mod_widgets_slot_status()
-            self.app._update_action_button_state()
+            self.app.game_launch.update_button_state()
             self.app.installed_mods_container.setUpdatesEnabled(True)
         except Exception:
             if hasattr(self.app, 'installed_mods_container'):
@@ -282,9 +283,16 @@ class LibraryDisplayController:
                 self.update_display()
                 try:
                     self.app.search_display.update_search_plaques()
-                except Exception:
-                    pass
+                except Exception as e:
+                    import logging
+                    logging.debug(f'Failed to update search plaques after mod removal: {e}')
+        except (OSError, IOError, PermissionError) as e:
+            import logging
+            logging.error(f'File operation failed during mod removal: {e}', exc_info=True)
+            self.feedback_manager.show_error('errors.mod_removal_failed', error=str(e))
         except Exception as e:
+            import logging
+            logging.error(f'Unexpected error during mod removal: {e}', exc_info=True)
             self.feedback_manager.show_error('errors.mod_removal_failed', error=str(e))
 
     def on_mod_use(self, mod_data):
@@ -316,11 +324,11 @@ class LibraryDisplayController:
             elif not is_chapter_mode or is_demo_mode:
                 target_slot = None
                 if is_demo_mode:
-                    target_slot_id = -10
+                    target_slot_id = SLOT_ID_DEMO
                 elif hasattr(mod_data, 'modgame') and mod_data.modgame == 'undertale':
-                    target_slot_id = -20
+                    target_slot_id = SLOT_ID_UNDERTALE
                 else:
-                    target_slot_id = -1
+                    target_slot_id = SLOT_ID_UNIVERSAL
                 for key, slot_frame in self.app_state.slots.items():
                     if slot_frame.chapter_id == target_slot_id:
                         target_slot = slot_frame

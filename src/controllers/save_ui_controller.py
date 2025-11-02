@@ -7,12 +7,12 @@ from ui.dialogs.save_editor import SaveEditorDialog
 
 class SaveUiController:
 
-    def __init__(self, app_window):
+    def __init__(self, app_state, feedback_manager, save_manager, settings_manager, app_window):
+        self.app_state = app_state
+        self.feedback_manager = feedback_manager
+        self.save_manager = save_manager
+        self.settings_manager = settings_manager
         self.app = app_window
-        self.app_state = app_window.app_state
-        self.feedback_manager = app_window.feedback_manager
-        self.save_manager = app_window.save_manager
-        self.settings_manager = app_window.settings_manager
 
     def configure_hidden_tab_bar(self, tab_widget: QTabWidget):
         bar = tab_widget.tabBar()

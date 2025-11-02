@@ -12,13 +12,13 @@ from PyQt6.QtWidgets import QApplication
 from managers.localization_manager import tr
 from models.mod_models import ModChapterData
 import models.mod_models as mod_models
-from workers.background_workers import InstallModsThread, UrlInstallThread
+from workers.background_workers import InstallModsThread, UrlInstallThread, ModScanThread
 from utils.file_utils import sanitize_filename
 from config.constants import UI_COLORS
 import requests
 import time
 from config.constants import CLOUD_FUNCTIONS_BASE_URL
-from core.exceptions import ModConfigError, ModInstallationError, ModUninstallationError, FileOperationError, FilePermissionError, ArchiveError, JSONParsingError
+from core.exceptions import ModUninstallationError
 
 
 @dataclass
@@ -41,12 +41,12 @@ class ModManager(QObject):
         super().__init__(parent)
         self.app_state = app_state
         self.feedback_manager = feedback_manager
-        self.current_install_thread = None
-        self.url_install_thread = None
         self._cache_lock = threading.RLock()
         self._mods_cache: Dict[str, ModFolderInfo] = {}
         self._mods_by_name: Dict[str, str] = {}
         self._mods_cache_valid = False
+        self._scan_thread: Optional[ModScanThread] = None
+        self._scan_in_progress = False
 
     def _scan_mods_directory(self) -> Dict[str, ModFolderInfo]:
         cache: Dict[str, ModFolderInfo] = {}
@@ -98,10 +98,34 @@ class ModManager(QObject):
             self._mods_cache_valid = False
             self._mods_by_name.clear()
 
-    def _get_mods_cache(self) -> Dict[str, ModFolderInfo]:
+    def _on_scan_completed(self, cache_dict: Dict):
+        with self._cache_lock:
+            cache = {}
+            mods_by_name = {}
+            for mod_key, mod_info_dict in cache_dict.items():
+                mod_info = ModFolderInfo(mod_key=mod_info_dict['mod_key'], folder_path=mod_info_dict['folder_path'], folder_name=mod_info_dict['folder_name'], config_data=mod_info_dict['config_data'], config_mtime=mod_info_dict['config_mtime'])
+                cache[mod_key] = mod_info
+                mod_name = mod_info_dict['config_data'].get('name', '')
+                if mod_name:
+                    mods_by_name[mod_name.lower()] = mod_key
+            self._mods_cache = cache
+            self._mods_by_name = mods_by_name
+            self._mods_cache_valid = True
+            self._scan_in_progress = False
+            self._scan_thread = None
+
+    def _get_mods_cache(self, use_async: bool = False) -> Dict[str, ModFolderInfo]:
         with self._cache_lock:
             if self._mods_cache_valid:
                 return self._mods_cache.copy()
+            if use_async and (not self._scan_in_progress):
+                if self._scan_thread and self._scan_thread.isRunning():
+                    pass
+                else:
+                    self._scan_in_progress = True
+                    self._scan_thread = ModScanThread(self.app_state.mods_dir, self.parent())
+                    self._scan_thread.scan_completed.connect(self._on_scan_completed)
+                    self._scan_thread.start()
             if hasattr(self, '_temp_mods_by_name'):
                 del self._temp_mods_by_name
             self._mods_cache = self._scan_mods_directory()
@@ -414,19 +438,36 @@ class ModManager(QObject):
             install_tasks = []
             for chapter_id in available_chapters:
                 install_tasks.append((mod, chapter_id))
-            self.current_install_thread = InstallModsThread(self.parent(), install_tasks, was_installed or is_update)
-            self.current_install_thread.progress.connect(self.progress_updated.emit)
-            self.current_install_thread.status.connect(self.status_changed.emit)
-            self.current_install_thread.finished.connect(self._on_single_mod_install_finished)
-            self.current_install_thread.start()
+            install_thread = InstallModsThread(self.parent(), install_tasks, was_installed or is_update)
+            install_thread.progress.connect(self.progress_updated.emit)
+            install_thread.status.connect(self.status_changed.emit)
+            install_thread.finished.connect(self._on_single_mod_install_finished)
+            self.app_state.current_task = install_thread
+            install_thread.start()
+        except PermissionError as e:
+            self.app_state.is_installing = False
+            self.app_state.clear_current_task()
+            mod_key = getattr(mod, 'key', 'unknown')
+            mod_name = getattr(mod, 'name', 'Unknown Mod')
+            logging.error(f'install_mod: permission error: {e}', exc_info=True, extra={'mod_key': mod_key, 'mod_name': mod_name, 'operation': 'install'})
+            self.feedback_manager.show_error('errors.installation_failed', tr('errors.permission_denied'))
         except (OSError, shutil.Error) as e:
             self.app_state.is_installing = False
+            self.app_state.clear_current_task()
             mod_key = getattr(mod, 'key', 'unknown')
             mod_name = getattr(mod, 'name', 'Unknown Mod')
             logging.error(f'install_mod: file operation error: {e}', exc_info=True, extra={'mod_key': mod_key, 'mod_name': mod_name, 'operation': 'install'})
             self.feedback_manager.show_error('errors.installation_failed', tr('errors.file_operation_failed', error=str(e)))
+        except (KeyError, AttributeError) as e:
+            self.app_state.is_installing = False
+            self.app_state.clear_current_task()
+            mod_key = getattr(mod, 'key', 'unknown')
+            mod_name = getattr(mod, 'name', 'Unknown Mod')
+            logging.error(f'install_mod: data error: {e}', exc_info=True, extra={'mod_key': mod_key, 'mod_name': mod_name})
+            self.feedback_manager.show_error('errors.installation_failed', str(e))
         except Exception as e:
             self.app_state.is_installing = False
+            self.app_state.clear_current_task()
             mod_key = getattr(mod, 'key', 'unknown')
             mod_name = getattr(mod, 'name', 'Unknown Mod')
             logging.error(f'install_mod: unexpected error: {e}', exc_info=True, extra={'mod_key': mod_key, 'mod_name': mod_name})
@@ -437,12 +478,13 @@ class ModManager(QObject):
             return
         self.app_state.is_installing = True
         self.status_changed.emit(tr('status.downloading_mod'), 'status_info')
-        self.url_install_thread = UrlInstallThread(self.parent(), url)
-        self.url_install_thread.progress.connect(self.progress_updated.emit)
-        self.url_install_thread.status.connect(self.status_changed.emit)
-        self.url_install_thread.finished.connect(self._on_url_install_finished)
-        self.url_install_thread.prompt_required.connect(self.url_prompt_required.emit)
-        self.url_install_thread.start()
+        url_install_thread = UrlInstallThread(self.parent(), url)
+        url_install_thread.progress.connect(self.progress_updated.emit)
+        url_install_thread.status.connect(self.status_changed.emit)
+        url_install_thread.finished.connect(self._on_url_install_finished)
+        url_install_thread.prompt_required.connect(self.url_prompt_required.emit)
+        self.app_state.current_task = url_install_thread
+        url_install_thread.start()
 
     def uninstall_mod(self, mod):
         try:
@@ -450,21 +492,33 @@ class ModManager(QObject):
             self.app_state.is_installing = False
             self.mod_list_updated.emit()
             self.status_changed.emit(tr('status.mod_uninstalled'), 'status_success')
-        except (OSError, shutil.Error) as e:
-            mod_key = mod.get('key', '') if isinstance(mod, dict) else getattr(mod, 'key', 'unknown')
-            mod_name = mod.get('name', '') if isinstance(mod, dict) else getattr(mod, 'name', 'Unknown Mod')
-            logging.error(f'uninstall_mod: file operation error: {e}', exc_info=True, extra={'mod_key': mod_key, 'mod_name': mod_name, 'operation': 'uninstall'})
-            self.feedback_manager.show_error('errors.uninstall_failed', tr('errors.file_operation_failed', error=str(e)))
         except PermissionError as e:
             mod_key = mod.get('key', '') if isinstance(mod, dict) else getattr(mod, 'key', 'unknown')
             mod_name = mod.get('name', '') if isinstance(mod, dict) else getattr(mod, 'name', 'Unknown Mod')
+            error = ModUninstallationError(f'Permission denied during uninstallation: {e}', mod_key=mod_key, mod_name=mod_name, reason='permission_error')
             logging.error(f'uninstall_mod: permission error: {e}', exc_info=True, extra={'mod_key': mod_key, 'mod_name': mod_name})
             self.feedback_manager.show_error('errors.uninstall_failed', tr('errors.permission_denied'))
+            raise error
+        except (OSError, shutil.Error) as e:
+            mod_key = mod.get('key', '') if isinstance(mod, dict) else getattr(mod, 'key', 'unknown')
+            mod_name = mod.get('name', '') if isinstance(mod, dict) else getattr(mod, 'name', 'Unknown Mod')
+            error = ModUninstallationError(f'File operation failed during uninstallation: {e}', mod_key=mod_key, mod_name=mod_name, reason='io_error')
+            logging.error(f'uninstall_mod: file operation error: {e}', exc_info=True, extra={'mod_key': mod_key, 'mod_name': mod_name})
+            self.feedback_manager.show_error('errors.uninstall_failed', tr('errors.file_operation_failed', error=str(e)))
+            raise error
+        except (KeyError, AttributeError) as e:
+            mod_key = mod.get('key', '') if isinstance(mod, dict) else getattr(mod, 'key', 'unknown')
+            mod_name = mod.get('name', '') if isinstance(mod, dict) else getattr(mod, 'name', 'Unknown Mod')
+            error = ModUninstallationError(f'Missing required data: {e}', mod_key=mod_key, mod_name=mod_name, reason='missing_data')
+            logging.error(f'uninstall_mod: data error: {e}', exc_info=True, extra={'mod_key': mod_key, 'mod_name': mod_name})
+            raise error
         except Exception as e:
             mod_key = mod.get('key', '') if isinstance(mod, dict) else getattr(mod, 'key', 'unknown')
             mod_name = mod.get('name', '') if isinstance(mod, dict) else getattr(mod, 'name', 'Unknown Mod')
+            error = ModUninstallationError(f'Unexpected error during uninstallation: {e}', mod_key=mod_key, mod_name=mod_name, reason='unknown')
             logging.error(f'uninstall_mod: unexpected error: {e}', exc_info=True, extra={'mod_key': mod_key, 'mod_name': mod_name})
             self.feedback_manager.show_error('errors.uninstall_failed', str(e))
+            raise error
 
     def update_mod(self, mod_data):
         if self.app_state.is_installing:
@@ -624,17 +678,18 @@ class ModManager(QObject):
 
     def _on_single_mod_install_finished(self, success):
         was_installed_before = False
-        if self.current_install_thread:
-            was_installed_before = getattr(self.current_install_thread, 'was_installed_before', False)
+        if self.app_state.current_task:
+            was_installed_before = getattr(self.app_state.current_task, 'was_installed_before', False)
         self.progress_updated.emit(0)
         self.app_state.is_installing = False
+        self.app_state.clear_current_task()
         if success:
             self.invalidate_mods_cache()
             if was_installed_before:
                 self.status_changed.emit(tr('status.mod_updated'), 'status_success')
             else:
                 self.status_changed.emit(tr('status.mod_installed'), 'status_success')
-        elif self.current_install_thread and getattr(self.current_install_thread, '_cancelled', False):
+        elif self.app_state.current_task and getattr(self.app_state.current_task, '_cancelled', False):
             self.status_changed.emit(tr('status.install_cancelled_by_user'), 'status_info')
         else:
             self.status_changed.emit(tr('status.installation_failed'), 'status_error')
@@ -643,20 +698,21 @@ class ModManager(QObject):
 
     def _on_url_install_finished(self, success: bool, message: str):
         self.app_state.is_installing = False
+        self.app_state.clear_current_task()
         self.mod_list_updated.emit()
         if success:
             self.invalidate_mods_cache()
             self.status_changed.emit(tr('status.mod_installed'), 'status_success')
-        elif self.url_install_thread and getattr(self.url_install_thread, '_cancelled', False):
+        elif self.app_state.current_task and getattr(self.app_state.current_task, '_cancelled', False):
             self.status_changed.emit(tr('status.install_cancelled_by_user'), 'status_info')
         else:
             self.status_changed.emit(tr('status.installation_failed'), 'status_error')
         self.installation_finished.emit(success, message)
 
     def handle_url_prompt_response(self, response: bool):
-        if self.url_install_thread:
-            self.url_install_thread.prompt_result = response
-            self.url_install_thread.prompt_event.set()
+        if self.app_state.current_task:
+            self.app_state.current_task.prompt_result = response
+            self.app_state.current_task.prompt_event.set()
 
     def create_mod_object_from_info(self, mod_info: dict, all_mods: Optional[list] = None):
         mod_key = mod_info.get('mod_key', '')

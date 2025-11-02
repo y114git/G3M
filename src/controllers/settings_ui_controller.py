@@ -1,18 +1,18 @@
 from PyQt6.QtWidgets import QWidget
 from managers.localization_manager import tr
-from config.constants import UI_COLORS
+from config.constants import UI_COLORS, SLOT_ID_UNIVERSAL
 from models.game_modes import DemoGameMode, UndertaleGameMode, FullGameMode
 
 
 class SettingsUiController:
 
-    def __init__(self, app_window):
+    def __init__(self, app_state, feedback_manager, settings_manager, slot_manager, customization_manager, app_window):
+        self.app_state = app_state
+        self.feedback_manager = feedback_manager
+        self.settings_manager = settings_manager
+        self.slot_manager = slot_manager
+        self.customization_manager = customization_manager
         self.app = app_window
-        self.app_state = app_window.app_state
-        self.feedback_manager = app_window.feedback_manager
-        self.settings_manager = app_window.settings_manager
-        self.slot_manager = app_window.slot_manager
-        self.customization_manager = app_window.customization_manager
 
     def toggle_settings_view(self, show_changelog=False):
         if show_changelog:
@@ -41,7 +41,7 @@ class SettingsUiController:
             self.app.bottom_widget.setVisible(True)
             self.app.update()
             self.app.repaint()
-            self.app._update_action_button_state()
+            self.app.game_launch.update_button_state()
 
     def toggle_help_view(self):
         self.app_state.is_help_view = not self.app_state.is_help_view
@@ -99,7 +99,7 @@ class SettingsUiController:
         self.slot_manager.load_slots_state()
         self.update_settings_page_visibility()
         self.customization_manager.load_custom_style_settings(self.app.color_widgets, self.app.theme.apply_theme)
-        self.app._update_action_button_state()
+        self.app.game_launch.update_button_state()
         self.app.background_music_button.setText(self.customization_manager.get_background_music_button_text())
         self.app.startup_sound_button.setText(self.customization_manager.get_startup_sound_button_text())
 
@@ -135,7 +135,7 @@ class SettingsUiController:
         self.slot_manager.update_slots_display(self.app.active_slots_layout)
         if hasattr(self.app, 'library_display'):
             self.app.library_display.update_mod_widgets_slot_status()
-        self.app._update_action_button_state()
+        self.app.game_launch.update_button_state()
         if is_chapter:
             for slot_frame in self.app_state.slots.values():
                 slot_frame.is_selected = False
@@ -167,7 +167,7 @@ class SettingsUiController:
     def on_toggle_steam_launch(self, state=None):
         is_steam_launch = self.app.launch_via_steam_checkbox.isChecked()
         if is_steam_launch:
-            direct_launch_slot_id = self.app_state.local_config.get('direct_launch_slot_id', -1)
+            direct_launch_slot_id = self.app_state.local_config.get('direct_launch_slot_id', SLOT_ID_UNIVERSAL)
             is_chapter_mode = self.app_state.current_mode == 'chapter'
             if direct_launch_slot_id >= 0 and is_chapter_mode:
                 self.feedback_manager.show_warning('ui.steam_launch', tr('ui.steam_launch_direct_conflict'))
