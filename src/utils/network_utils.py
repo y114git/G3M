@@ -8,6 +8,7 @@ import requests
 import threading
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
+from config.constants import MAX_DOWNLOAD_RETRIES, DOWNLOAD_CHUNK_SIZE, NETWORK_TIMEOUT_SHORT, NETWORK_TIMEOUT_MEDIUM, NETWORK_TIMEOUT_HEAD, NETWORK_TIMEOUT_LONG
 _session_lock = threading.Lock()
 _shared_session = None
 
@@ -48,7 +49,7 @@ def close_shared_session() -> None:
 def get_filename_from_url(session, url):
     try:
         from urllib.parse import urlparse, unquote
-        response = session.head(url, timeout=10, allow_redirects=True)
+        response = session.head(url, timeout=NETWORK_TIMEOUT_MEDIUM, allow_redirects=True)
         if (content_disp := response.headers.get('Content-Disposition')):
             if (fn_match := re.search('filename\\*?=(.+)', content_disp, re.IGNORECASE)):
                 fn_data = fn_match.group(1).strip()
@@ -65,12 +66,12 @@ def get_filename_from_url(session, url):
     return Path(url.split('?', 1)[0]).name or 'file.tmp'
 
 
-def download_file(session, url, tmp_path, progress_callback=None, total_size: int = 0, downloaded_ref: list[int] | None = None, max_retries: int = 5, cancel_check=None, on_response=None):
+def download_file(session, url, tmp_path, progress_callback=None, total_size: int = 0, downloaded_ref: list[int] | None = None, max_retries: int = MAX_DOWNLOAD_RETRIES, cancel_check=None, on_response=None):
     if downloaded_ref is None:
         downloaded_ref = [0]
     expected_size = 0
     try:
-        h = session.head(url, allow_redirects=True, timeout=15)
+        h = session.head(url, allow_redirects=True, timeout=NETWORK_TIMEOUT_HEAD)
         expected_size = int(h.headers.get('content-length', 0))
     except (requests.RequestException, ValueError) as e:
         logging.debug(f'download_file: failed to get expected size for {url}: {e}')
@@ -85,7 +86,7 @@ def download_file(session, url, tmp_path, progress_callback=None, total_size: in
                 headers['Range'] = f'bytes={current_size}-'
             if session is None:
                 session = get_session()
-            r = session.get(url, stream=True, timeout=60, allow_redirects=True, headers=headers)
+            r = session.get(url, stream=True, timeout=NETWORK_TIMEOUT_LONG, allow_redirects=True, headers=headers)
             r.raise_for_status()
             try:
                 if on_response:
@@ -109,7 +110,7 @@ def download_file(session, url, tmp_path, progress_callback=None, total_size: in
                 this_request_expected = 0
             written_this_request = 0
             with open(tmp_path, mode) as f:
-                for chunk in r.iter_content(chunk_size=262144):
+                for chunk in r.iter_content(chunk_size=DOWNLOAD_CHUNK_SIZE):
                     if not chunk:
                         continue
                     if cancel_check and cancel_check():
@@ -151,7 +152,7 @@ def download_file(session, url, tmp_path, progress_callback=None, total_size: in
 def check_internet_connection() -> bool:
     try:
         session = get_session()
-        session.get('https://www.google.com', timeout=5)
+        session.get('https://www.google.com', timeout=NETWORK_TIMEOUT_SHORT)
         return True
     except requests.RequestException:
         return False
@@ -164,6 +165,6 @@ def increment_launch_counter() -> None:
     try:
         url = f'{CLOUD_FUNCTIONS_BASE_URL}/incrementLaunches'
         session = get_session()
-        session.post(url, json={'os': os_key}, timeout=5)
+        session.post(url, json={'os': os_key}, timeout=NETWORK_TIMEOUT_SHORT)
     except requests.RequestException:
         pass

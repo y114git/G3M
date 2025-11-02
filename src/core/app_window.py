@@ -12,24 +12,28 @@ from typing import Callable, Optional
 import logging
 import requests
 from PyQt6.QtCore import QTranslator, Qt, QEvent, QThread, QTimer, pyqtSignal
-from PyQt6.QtGui import QColor, QFont, QIcon, QPainter, QPixmap
-from PyQt6.QtWidgets import QApplication, QCheckBox, QDialog, QFrame, QLabel, QLineEdit, QMessageBox, QProgressBar, QPushButton, QTabWidget, QVBoxLayout, QWidget, QHBoxLayout, QSizePolicy, QInputDialog, QColorDialog
+from PyQt6.QtGui import QColor, QIcon, QPainter, QPixmap
+from PyQt6.QtWidgets import QApplication, QCheckBox, QDialog, QDialogButtonBox, QFrame, QLabel, QLineEdit, QListWidget, QMessageBox, QProgressBar, QPushButton, QTabWidget, QVBoxLayout, QWidget, QHBoxLayout, QSizePolicy, QInputDialog, QColorDialog
 from managers.localization_manager import localization_manager, tr
 from models.game_modes import FullGameMode, DemoGameMode, UndertaleGameMode
-from config.constants import UI_COLORS, SOCIAL_LINKS, THEMES, ARCH
+from config.constants import UI_COLORS, SOCIAL_LINKS, ARCH, ONLINE_UPDATE_INTERVAL, INITIALIZATION_TIMEOUT, LEGACY_CLEANUP_DELAY, THREAD_WAIT_TIMEOUT
 from utils.game_utils import is_game_running
 from utils.path_utils import get_user_data_root, resource_path, get_launcher_dir, get_legacy_ylauncher_path, get_user_plugins_dir
 from utils.network_utils import check_internet_connection
 from managers.mod_manager import parse_mod_date
-from workers.background_workers import PresenceWorker, FetchChangelogThread, BgLoader, FetchHelpContentThread
-from ui.common.styling import clear_layout_widgets, load_mod_icon_universal, show_empty_message_in_layout
-from ui.main_window.ui_controls import UiControlsMixin
-from ui.main_window.operations import OperationsMixin
+from workers.background_workers import PresenceWorker, FetchChangelogThread, FetchHelpContentThread
+from ui.common.styling import clear_layout_widgets, show_empty_message_in_layout
 from ui.widgets.mod.mod_plaque_widget import ModPlaqueWidget
 from ui.widgets.mod.installed_mod_widget import InstalledModWidget
-from ui.dialogs.patch.xdelta import XdeltaDialog
-from ui.dialogs.save.editor import SaveEditorDialog
-from ui.dialogs.mod.editor import ModEditorDialog
+from controllers.mod_operations_controller import ModOperationsController
+from controllers.library_display_controller import LibraryDisplayController
+from controllers.search_display_controller import SearchDisplayController
+from controllers.save_ui_controller import SaveUiController
+from controllers.settings_ui_controller import SettingsUiController
+from controllers.theme_controller import ThemeController
+from controllers.game_launch_controller import GameLaunchController
+from ui.dialogs.xdelta import XdeltaDialog
+from ui.dialogs.mod_editor import ModEditorDialog
 from ui.common.feedback import FeedbackManager
 from core.startup import SingleInstanceServer, ShortcutLaunchError
 from core.app_state import AppState
@@ -50,7 +54,7 @@ _translator = QTranslator()
 _lock_file = None
 
 
-class AppWindow(QWidget, UiControlsMixin, OperationsMixin):
+class AppWindow(QWidget):
     update_status_signal = pyqtSignal(str, str)
     set_progress_signal = pyqtSignal(int)
     show_update_prompt = pyqtSignal(dict)
@@ -73,7 +77,6 @@ class AppWindow(QWidget, UiControlsMixin, OperationsMixin):
         self.app_state.mods_dir = get_user_mods_dir()
         self.app_state.plugins_dir = get_user_plugins_dir()
         self.app_state.mods_metadata_path = os.path.join(self.app_state.mods_dir, 'metadata.json')
-        self._mods_metadata_lock = threading.Lock()
         os.makedirs(self.app_state.config_dir, exist_ok=True)
         os.makedirs(self.app_state.mods_dir, exist_ok=True)
         os.makedirs(self.app_state.plugins_dir, exist_ok=True)
@@ -95,7 +98,7 @@ class AppWindow(QWidget, UiControlsMixin, OperationsMixin):
         self.presence_thread.start()
         self._online_timer = QTimer(self)
         self._online_timer.timeout.connect(self.presence_worker.run)
-        self._online_timer.start(30000)
+        self._online_timer.start(ONLINE_UPDATE_INTERVAL)
         QTimer.singleShot(0, self.presence_worker.run)
         self.setWindowTitle('DELTAHUB')
         self._supports_volume = platform.system() == 'Windows'
@@ -152,6 +155,13 @@ class AppWindow(QWidget, UiControlsMixin, OperationsMixin):
         self.shortcut_manager = ShortcutManager(self.app_state, self.feedback_manager, self.mod_manager, self)
         self.shortcut_manager.shortcut_created.connect(lambda path: self.feedback_manager.update_status(tr('status.shortcut_created', path=path), UI_COLORS['status_success']))
         self.shortcut_manager.status_changed.connect(self.feedback_manager.update_status)
+        self.mod_ops = ModOperationsController(self)
+        self.library_display = LibraryDisplayController(self)
+        self.search_display = SearchDisplayController(self)
+        self.save_ui = SaveUiController(self)
+        self.settings_ui = SettingsUiController(self)
+        self.theme = ThemeController(self)
+        self.game_launch = GameLaunchController(self)
         if self.is_shortcut_launch:
             self._shortcut_launch(args)
             return
@@ -168,11 +178,11 @@ class AppWindow(QWidget, UiControlsMixin, OperationsMixin):
         self.install_from_gb_signal.connect(lambda mod: self._install_single_mod(mod, force=True))
         self.initialization_finished.connect(self._handle_pending_install)
         self._legacy_cleanup_done = False
-        QTimer.singleShot(1000, self._maybe_run_legacy_cleanup)
+        QTimer.singleShot(LEGACY_CLEANUP_DELAY, self._maybe_run_legacy_cleanup)
         self.initialization_timer = QTimer()
         self.initialization_timer.setSingleShot(True)
         self.initialization_timer.timeout.connect(self._force_finish_initialization)
-        self.initialization_timer.start(5000)
+        self.initialization_timer.start(INITIALIZATION_TIMEOUT)
         self.settings_manager.load_window_geometry(self)
         if not self.app_state.local_config.get('first_launch_splash_shown', False):
             self.initialization_finished.connect(self._handle_first_launch_settings)
@@ -237,30 +247,6 @@ class AppWindow(QWidget, UiControlsMixin, OperationsMixin):
         except Exception as e:
             logging.error(f'Launch error: {e}')
             raise ShortcutLaunchError(str(e) or 'Shortcut launch failed')
-
-    def _set_install_buttons_enabled(self, enabled: bool):
-        if hasattr(self, 'mod_list_layout'):
-            for i in range(self.mod_list_layout.count() - 1):
-                item = self.mod_list_layout.itemAt(i)
-                if item:
-                    widget = item.widget()
-                    if isinstance(widget, ModPlaqueWidget):
-                        widget.install_button.setEnabled(enabled)
-        if hasattr(self, 'installed_mods_layout'):
-            for i in range(self.installed_mods_layout.count() - 1):
-                item = self.installed_mods_layout.itemAt(i)
-                if item and item.widget():
-                    widget = item.widget()
-                    if isinstance(widget, InstalledModWidget) and hasattr(widget, 'use_button') and widget.use_button:
-                        widget.use_button.setEnabled(enabled)
-        try:
-            self.action_button.setEnabled(True if self.app_state.is_installing else enabled)
-        except Exception:
-            pass
-        try:
-            self.saves_button.setEnabled(True)
-        except Exception:
-            pass
 
     def _create_settings_nav_button(self, text: str, on_click: Callable, style_sheet: str = '', fixed_width: int = 400) -> QPushButton:
         button = QPushButton(text)
@@ -436,16 +422,16 @@ class AppWindow(QWidget, UiControlsMixin, OperationsMixin):
         self.full_install_checkbox.blockSignals(False)
         self.app_state.is_installing_changed.connect(self._update_action_button_state)
         self.app_state.is_installing_changed.connect(lambda v: self._set_install_buttons_enabled(not v))
-        self.app_state.game_mode_changed.connect(self._on_game_mode_updated_by_state)
+        self.app_state.current_mode = 'chapter' if saved_chapter_mode else 'normal'
+        self._previous_mode = self.app_state.current_mode
+        self.app_state.selected_chapter_id = None
         if saved_game_type == 'deltarunedemo':
             self.app_state.game_mode = DemoGameMode()
         elif saved_game_type == 'undertale':
             self.app_state.game_mode = UndertaleGameMode()
         else:
             self.app_state.game_mode = FullGameMode()
-        self.app_state.current_mode = 'chapter' if saved_chapter_mode else 'normal'
-        self._previous_mode = self.app_state.current_mode
-        self.app_state.selected_chapter_id = None
+        self.app_state.game_mode_changed.connect(self._on_game_mode_updated_by_state)
         self._update_checkbox_visibility()
         self._update_saves_button_state()
         QTimer.singleShot(500, self._update_installed_mods_display)
@@ -636,20 +622,6 @@ class AppWindow(QWidget, UiControlsMixin, OperationsMixin):
             self.sort_order_btn.setToolTip(tr('ui.descending'))
         self._update_filtered_mods()
 
-    def _on_game_type_changed(self, index):
-        game_type = self.game_type_combo.itemData(index)
-        if not game_type:
-            return
-        self.slot_manager.save_slots_state()
-        if game_type == 'deltarunedemo':
-            self.app_state.game_mode = DemoGameMode()
-        elif game_type == 'undertale':
-            self.app_state.game_mode = UndertaleGameMode()
-        else:
-            self.app_state.game_mode = FullGameMode()
-        self.app_state.local_config['selected_game_type'] = game_type
-        self.settings_manager.write_local_config()
-
     def _update_checkbox_visibility(self):
         game_type = self.game_type_combo.currentData()
         if game_type == 'deltarune':
@@ -682,163 +654,6 @@ class AppWindow(QWidget, UiControlsMixin, OperationsMixin):
             self._update_saves_button_state()
         except Exception:
             pass
-
-    def _on_chapter_mode_changed(self, state):
-        game_type = self.game_type_combo.currentData()
-        if game_type != 'deltarune':
-            return
-        old_mode = getattr(self, 'current_mode', 'normal')
-        self._previous_mode = old_mode
-        is_chapter = bool(state)
-        old_is_chapter = self.app_state.current_mode == 'chapter'
-        if old_is_chapter != is_chapter:
-            self.slot_manager.save_slots_state()
-        self.app_state.current_mode = 'chapter' if is_chapter else 'normal'
-        self.game_type_combo.setEnabled(not is_chapter)
-        self.slot_manager.update_slots_display(self.active_slots_layout)
-        self._update_mod_widgets_slot_status()
-        self._update_action_button_state()
-        if is_chapter:
-            for slot_frame in self.app_state.slots.values():
-                slot_frame.is_selected = False
-                self.slot_manager.update_slot_visual_state(slot_frame)
-            self.app_state.selected_chapter_id = None
-            self._show_chapter_mode_instruction()
-        else:
-            self.app_state.selected_chapter_id = None
-            self._update_installed_mods_display()
-            if self.app_state.local_config.get('direct_launch_slot_id', -1) >= 0:
-                self.app_state.local_config['direct_launch_slot_id'] = -1
-        self._update_change_path_button_text()
-        self.app_state.local_config['chapter_mode_enabled'] = is_chapter
-        self.settings_manager.write_local_config()
-
-    def _update_installed_mods_for_chapter_mode(self, selected_chapter_id):
-        if not hasattr(self, 'installed_mods_layout'):
-            return
-        if hasattr(self, '_updating_chapter_mods') and self._updating_chapter_mods:
-            return
-        self._updating_chapter_mods = True
-        clear_layout_widgets(self.installed_mods_layout, keep_last_n=1)
-        installed_mods = self.mod_manager.get_installed_mods_list()
-        if hasattr(self, 'library_sort_combo'):
-            sort_type = self.library_sort_combo.currentIndex()
-            reverse = not self.library_sort_ascending
-            if sort_type == 0:
-                installed_mods.sort(key=lambda mod: mod.get('name', '').lower(), reverse=reverse)
-            elif sort_type == 1:
-
-                def get_sort_date(mod):
-                    if mod.get('is_local_mod'):
-                        return mod.get('created_date', '0')
-                    else:
-                        return mod.get('updated_date') or mod.get('installed_date', '0')
-                installed_mods.sort(key=get_sort_date, reverse=reverse)
-        is_demo_mode = hasattr(self, 'game_type_combo') and self.game_type_combo.currentData() == 'deltarunedemo'
-        selected_tags = []
-        if hasattr(self, 'library_tag_widgets'):
-            tag_map = {self.library_tag_translation: 'translation', self.library_tag_customization: 'customization', self.library_tag_gameplay: 'gameplay', self.library_tag_other: 'other', self.library_tag_local: 'local'}
-            for checkbox, tag in tag_map.items():
-                if checkbox.isChecked():
-                    selected_tags.append(tag)
-        search_text = getattr(self, 'library_search_text', '').lower()
-        for mod_info in installed_mods:
-            if is_demo_mode and (not mod_info.get('modgame', 'deltarune') == 'deltarunedemo'):
-                continue
-            elif not is_demo_mode and mod_info.get('modgame', 'deltarune') == 'deltarunedemo':
-                continue
-            mod_tags = mod_info.get('tags', [])
-            if mod_info.get('is_local_mod'):
-                if 'local' not in mod_tags:
-                    mod_tags.append('local')
-            if selected_tags and (not all((tag in mod_tags for tag in selected_tags))):
-                continue
-            if search_text:
-                mod_name_lower = mod_info.get('name', '').lower()
-                mod_tagline = mod_info.get('tagline', '').lower()
-                if search_text not in mod_name_lower and search_text not in mod_tagline:
-                    continue
-            if selected_chapter_id is not None:
-                mod_data_check = self.mod_manager.create_mod_object_from_info(mod_info, getattr(self.app_state, 'all_mods', None))
-                if mod_data_check and (not self.mod_manager.mod_has_files_for_chapter(mod_data_check, selected_chapter_id)):
-                    continue
-            is_local = mod_info.get('is_local_mod', False)
-            is_available = mod_info.get('is_available_on_server', True)
-            mod_data = self.mod_manager.create_mod_object_from_info(mod_info, getattr(self.app_state, 'all_mods', None))
-            if mod_data:
-                mod_widget = InstalledModWidget(mod_data, is_local, is_available, parent=self)
-                mod_widget.clicked.connect(self._on_installed_mod_clicked)
-                mod_widget.remove_requested.connect(self._on_installed_mod_remove)
-                if selected_chapter_id is not None:
-                    mod_widget.use_requested.connect(lambda mod_data=mod_data: self._on_chapter_mode_mod_use(mod_data, selected_chapter_id))
-                    is_in_slot = self.slot_manager.is_mod_in_specific_slot(mod_data, selected_chapter_id)
-                    mod_widget.set_in_slot(is_in_slot)
-                else:
-                    mod_widget.use_requested.connect(self._on_installed_mod_use)
-                self.installed_mods_layout.insertWidget(self.installed_mods_layout.count() - 1, mod_widget)
-        if self.installed_mods_layout.count() <= 1:
-            if selected_chapter_id is not None:
-                chapter_names = {-1: tr('ui.mod_slot'), 0: tr('chapters.menu'), 1: tr('tabs.chapter_1'), 2: tr('tabs.chapter_2'), 3: tr('tabs.chapter_3'), 4: tr('tabs.chapter_4')}
-                chapter_name = chapter_names.get(selected_chapter_id, tr('ui.chapter_n', chapter=str(selected_chapter_id)))
-                show_empty_message_in_layout(self.installed_mods_layout, tr('ui.no_mods_for_chapter', chapter_name=chapter_name), self.app_state.local_config, font_size=16)
-            else:
-                show_empty_message_in_layout(self.installed_mods_layout, tr('ui.empty'), self.app_state.local_config, font_size=18)
-        self._updating_chapter_mods = False
-
-    def _on_chapter_mode_mod_use(self, mod_data, chapter_id):
-        mod_widget = None
-        for i in range(self.installed_mods_layout.count()):
-            item = self.installed_mods_layout.itemAt(i)
-            if item and item.widget():
-                widget = item.widget()
-                if hasattr(widget, 'mod_data') and hasattr(widget, 'use_button'):
-                    widget_mod_data = getattr(widget, 'mod_data', None)
-                    if widget_mod_data:
-                        widget_mod_key = getattr(widget_mod_data, 'key', None) or getattr(widget_mod_data, 'mod_key', None) or getattr(widget_mod_data, 'name', None)
-                        current_mod_key = getattr(mod_data, 'key', None) or getattr(mod_data, 'mod_key', None) or getattr(mod_data, 'name', None)
-                        if widget_mod_key == current_mod_key:
-                            mod_widget = widget
-                            break
-        status = getattr(mod_widget, 'status', 'ready') if mod_widget else 'ready'
-        if status == 'needs_update':
-            self.mod_manager.update_mod(mod_data)
-            return
-        target_slot = None
-        for slot_frame in self.app_state.slots.values():
-            if slot_frame.chapter_id == chapter_id:
-                target_slot = slot_frame
-                break
-        if target_slot and target_slot.assigned_mod:
-            assigned_mod_key = getattr(target_slot.assigned_mod, 'key', None) or getattr(target_slot.assigned_mod, 'mod_key', None) or getattr(target_slot.assigned_mod, 'name', None)
-            mod_key = getattr(mod_data, 'key', None) or getattr(mod_data, 'mod_key', None) or getattr(mod_data, 'name', None)
-            if assigned_mod_key == mod_key:
-                self.slot_manager.remove_mod_from_slot(target_slot, mod_data)
-                self._update_installed_mods_for_chapter_mode(chapter_id)
-                return
-        target_slot = None
-        for slot_frame in self.app_state.slots.values():
-            if slot_frame.chapter_id == chapter_id:
-                target_slot = slot_frame
-                break
-        if target_slot:
-            self.slot_manager.assign_mod_to_slot(target_slot, mod_data)
-            self._update_installed_mods_for_chapter_mode(chapter_id)
-        else:
-            self.feedback_manager.show_warning('errors.target_slot_not_found')
-
-    def _update_installed_mods_display(self):
-        if not hasattr(self, 'installed_mods_layout'):
-            return
-        is_chapter_mode = hasattr(self, 'chapter_mode_checkbox') and self.chapter_mode_checkbox.isChecked()
-        if is_chapter_mode:
-            selected_id = self.app_state.selected_chapter_id
-            if selected_id is not None:
-                self._update_installed_mods_for_chapter_mode(selected_id)
-                return
-            else:
-                self._update_installed_mods_for_chapter_mode(None)
-                return
-        self._refresh_installed_mods_async()
 
     def _update_installed_mods_display_from_list(self, installed_mods):
         try:
@@ -922,92 +737,8 @@ class AppWindow(QWidget, UiControlsMixin, OperationsMixin):
             if hasattr(self, 'installed_mods_container'):
                 self.installed_mods_container.setUpdatesEnabled(True)
 
-    def _refresh_installed_mods_async(self):
-        is_chapter_mode = hasattr(self, 'chapter_mode_checkbox') and self.chapter_mode_checkbox.isChecked()
-        if is_chapter_mode:
-            selected_id = getattr(self, 'selected_chapter_id', None)
-            if selected_id is None:
-                if hasattr(self, 'installed_mods_container') and hasattr(self, 'installed_mods_layout'):
-                    self.installed_mods_container.setUpdatesEnabled(False)
-                    clear_layout_widgets(self.installed_mods_layout, keep_last_n=1)
-                    self._show_chapter_mode_instruction()
-                    self.installed_mods_container.setUpdatesEnabled(True)
-                return
-            else:
-                self._update_installed_mods_for_chapter_mode(selected_id)
-                return
-        from PyQt6.QtCore import QThread, pyqtSignal
-
-        class _Scan(QThread):
-            done = pyqtSignal(list)
-
-            def __init__(self, outer):
-                super().__init__(outer)
-                self.outer = outer
-
-            def run(self):
-                try:
-                    mods = self.outer.mod_manager.get_installed_mods_list()
-                except Exception:
-                    mods = []
-                self.done.emit(mods)
-        try:
-            self._installed_scan_thread = _Scan(self)
-            self._installed_scan_thread.done.connect(self._update_installed_mods_display_from_list)
-            self._installed_scan_thread.start()
-        except Exception:
-            mods = self.mod_manager.get_installed_mods_list()
-            self._update_installed_mods_display_from_list(mods)
-
-    def _cleanup_missing_mods(self, installed_mods):
-        installed_mod_keys = {mod.get('mod_key') for mod in installed_mods if mod.get('mod_key')}
-        mods_metadata = self.mod_manager._read_metadata()
-        metadata_updated = False
-        orphaned_keys = set(mods_metadata.keys()) - installed_mod_keys
-        if orphaned_keys:
-            for key in orphaned_keys:
-                del mods_metadata[key]
-            metadata_updated = True
-        if metadata_updated:
-            self.mod_manager._write_metadata(mods_metadata)
-        for orphaned_key in orphaned_keys:
-            dummy_mod_data = self.mod_manager.create_mod_object_from_info({'mod_key': orphaned_key, 'name': 'Orphaned Mod'}, getattr(self.app_state, 'all_mods', None))
-            if not dummy_mod_data:
-                continue
-            self.slot_manager.remove_mod_from_all_slots(dummy_mod_data)
-            config_keys = ['saved_slots_deltarune', 'saved_slots_deltarune_chapter', 'saved_slots_deltarunedemo', 'saved_slots_undertale']
-            for config_key in config_keys:
-                slots_data = self.app_state.local_config.get(config_key, {})
-                slots_to_clear = []
-                for slot_id_str, slot_info in list(slots_data.items()):
-                    if isinstance(slot_info, dict):
-                        saved_mod_key = slot_info.get('mod_key')
-                        if saved_mod_key == orphaned_key:
-                            slots_to_clear.append(slot_id_str)
-                for slot_id_str in slots_to_clear:
-                    del slots_data[slot_id_str]
-                if slots_to_clear:
-                    self.app_state.local_config[config_key] = slots_data
-                    self.settings_manager.write_local_config()
-
     def _get_installed_mods_list(self):
         return self.mod_manager.get_installed_mods_list()
-
-    def _on_installed_mod_clicked(self, mod_data):
-        for i in range(self.installed_mods_layout.count() - 1):
-            try:
-                item = self.installed_mods_layout.itemAt(i)
-                if item:
-                    widget = item.widget()
-                    if isinstance(widget, InstalledModWidget):
-                        widget_mod_key = getattr(widget.mod_data, 'key', None)
-                        mod_data_key = getattr(mod_data, 'key', None)
-                        if widget_mod_key == mod_data_key:
-                            self._clear_all_installed_mod_selections()
-                            widget.set_selected(True)
-                            break
-            except Exception:
-                continue
 
     def _clear_all_installed_mod_selections(self):
         for i in range(self.installed_mods_layout.count() - 1):
@@ -1016,174 +747,6 @@ class AppWindow(QWidget, UiControlsMixin, OperationsMixin):
                 widget = item.widget()
                 if isinstance(widget, InstalledModWidget):
                     widget.set_selected(False)
-
-    def _on_installed_mod_remove(self, mod_data):
-        try:
-            if self.feedback_manager.ask_question('dialogs.delete_confirmation', 'dialogs.delete_mod_confirmation', '', False, mod_name=getattr(mod_data, 'name', getattr(mod_data, 'key', 'Unknown'))):
-                self.mod_manager.delete_mod_files(mod_data)
-                self.slot_manager.remove_mod_from_all_slots(mod_data)
-                self._update_installed_mods_display()
-                try:
-                    self._update_search_mod_plaques()
-                except Exception:
-                    pass
-        except Exception as e:
-            self.feedback_manager.show_error('errors.mod_removal_failed', error=str(e))
-
-    def _on_installed_mod_use(self, mod_data):
-        current_slot = self.slot_manager.find_mod_in_slots(mod_data)
-        if current_slot:
-            self.slot_manager.remove_mod_from_slot(current_slot, mod_data)
-            self.slot_manager.save_slots_state()
-        else:
-            is_chapter_mode = self.chapter_mode_checkbox.isChecked()
-            is_demo_mode = isinstance(self.app_state.game_mode, DemoGameMode)
-            mod_widget = None
-            for i in range(self.installed_mods_layout.count()):
-                item = self.installed_mods_layout.itemAt(i)
-                if item and item.widget():
-                    widget = item.widget()
-                    if hasattr(widget, 'mod_data') and hasattr(widget, 'use_button'):
-                        widget_mod_data = getattr(widget, 'mod_data', None)
-                        if widget_mod_data:
-                            widget_mod_key = getattr(widget_mod_data, 'key', None) or getattr(widget_mod_data, 'mod_key', None) or getattr(widget_mod_data, 'name', None)
-                            current_mod_key = getattr(mod_data, 'key', None) or getattr(mod_data, 'mod_key', None) or getattr(mod_data, 'name', None)
-                            if widget_mod_key == current_mod_key:
-                                mod_widget = widget
-                                break
-            status = getattr(mod_widget, 'status', 'ready') if mod_widget else 'ready'
-            if status == 'needs_update':
-                self.mod_manager.update_mod(mod_data)
-                return
-            elif not is_chapter_mode or is_demo_mode:
-                target_slot = None
-                if is_demo_mode:
-                    target_slot_id = -10
-                elif hasattr(mod_data, 'modgame') and mod_data.modgame == 'undertale':
-                    target_slot_id = -20
-                else:
-                    target_slot_id = -1
-                for key, slot_frame in self.app_state.slots.items():
-                    if slot_frame.chapter_id == target_slot_id:
-                        target_slot = slot_frame
-                        break
-                if target_slot:
-                    self.slot_manager.assign_mod_to_slot(target_slot, mod_data)
-            else:
-                self._show_slot_selection_dialog(mod_data)
-
-    def _update_mod_widgets_slot_status(self):
-        if not hasattr(self, 'installed_mods_layout') or self.installed_mods_layout is None:
-            return
-        assigned_keys = set()
-        try:
-            for mod in getattr(self.slot_manager, 'slots_data', {}).values():
-                if mod is None:
-                    continue
-                key = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None) or getattr(mod, 'name', None)
-                if key:
-                    assigned_keys.add(key)
-        except Exception:
-            assigned_keys = set()
-        for i in range(self.installed_mods_layout.count() - 1):
-            item = self.installed_mods_layout.itemAt(i)
-            if item:
-                widget = item.widget()
-                if isinstance(widget, InstalledModWidget):
-                    mod = widget.mod_data
-                    k = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None) or getattr(mod, 'name', None)
-                    is_in_slot = k in assigned_keys if k else False
-                    widget.set_in_slot(is_in_slot)
-
-    def _refresh_all_slot_status_displays(self):
-        for slot_frame in self.app_state.slots.values():
-            if slot_frame.assigned_mod and slot_frame.content_widget:
-                self._refresh_slot_status_display(slot_frame)
-                if hasattr(slot_frame, 'mod_icon') and slot_frame.mod_icon:
-                    load_mod_icon_universal(slot_frame.mod_icon, slot_frame.assigned_mod, 32)
-
-    def _refresh_slot_status_display(self, slot_frame):
-        if not slot_frame.assigned_mod or not slot_frame.content_widget:
-            return
-        mod_data = slot_frame.assigned_mod
-        version_label = None
-        content_layout = slot_frame.content_widget.layout()
-        if content_layout:
-            for i in range(content_layout.count()):
-                item = content_layout.itemAt(i)
-                if item and item.layout():
-                    text_layout = item.layout()
-                    if text_layout and text_layout.count() >= 2:
-                        version_item = text_layout.itemAt(1)
-                        if version_item and version_item.widget() and isinstance(version_item.widget(), QLabel):
-                            version_label = version_item.widget()
-                            break
-        if version_label:
-            is_large_slot = slot_frame.chapter_id < 0
-            is_local_mod = getattr(mod_data, 'is_local_mod', False)
-            if is_local_mod:
-                if is_large_slot:
-                    status_text, status_color = (tr('defaults.local_mod'), '#FFD700')
-                    version_label.setStyleSheet(f'color: {status_color}; font-size: 10px; border: none; background: transparent;')
-                else:
-                    status_text, status_color = (tr('tags.local'), '#FFD700')
-                    version_label.setStyleSheet(f'color: {status_color}; font-size: 9px; border: none; background: transparent;')
-            elif is_large_slot:
-                needs_update = any((self.mod_manager.mod_has_files_for_chapter(mod_data, i) and self.mod_manager.get_mod_status(mod_data, i) == 'update' for i in range(5)))
-                status_text, status_color = (tr('status.update_available'), 'orange') if needs_update else (tr('status.version_current'), 'lightgreen')
-                version_label.setStyleSheet(f'color: {status_color}; font-size: 10px; border: none; background: transparent;')
-            else:
-                needs_update = any((self.mod_manager.mod_has_files_for_chapter(mod_data, i) and self.mod_manager.get_mod_status(mod_data, i) == 'update' for i in range(5)))
-                status_text, status_color = (tr('status.update_short'), 'orange') if needs_update else (tr('status.current_short'), 'lightgreen')
-                version_label.setStyleSheet(f'color: {status_color}; font-size: 9px; border: none; background: transparent;')
-            version_label.setText(status_text)
-
-    def _update_filtered_mods(self):
-        if not hasattr(self.app_state, 'all_mods') or not self.app_state.all_mods:
-            self.filtered_mods = []
-            self._update_mod_display()
-            return
-        selected_tags = []
-        if hasattr(self, 'tag_translation') and self.tag_translation.isChecked():
-            selected_tags.append('translation')
-        if hasattr(self, 'tag_customization') and self.tag_customization.isChecked():
-            selected_tags.append('customization')
-        if hasattr(self, 'tag_gameplay') and self.tag_gameplay.isChecked():
-            selected_tags.append('gameplay')
-        if hasattr(self, 'tag_other') and self.tag_other.isChecked():
-            selected_tags.append('other')
-        selected_modgame = ''
-        if hasattr(self, 'modgame_combo'):
-            selected_modgame = self.modgame_combo.currentData() or ''
-        self.filtered_mods = []
-        for mod in self.app_state.all_mods:
-            if getattr(mod, 'hide_mod', False) in [True, 'true', 'True', 1]:
-                continue
-            if getattr(mod, 'ban_status', False) in [True, 'true', 'True', 1]:
-                continue
-            mod_status = getattr(mod, 'status', 'approved')
-            if mod_status not in ['approved', 'pending']:
-                continue
-            if getattr(mod, 'is_local_mod', False):
-                continue
-            if selected_tags:
-                mod_tags = getattr(mod, 'tags', []) or []
-                if not all((tag in mod_tags for tag in selected_tags)):
-                    continue
-            if selected_modgame:
-                mod_modgame = getattr(mod, 'modgame', 'deltarune')
-                if mod_modgame != selected_modgame:
-                    continue
-            if hasattr(self, 'search_text') and self.search_text:
-                search_text_lower = self.search_text.lower()
-                mod_name = getattr(mod, 'name', '').lower()
-                mod_tagline = getattr(mod, 'tagline', '').lower()
-                if search_text_lower not in mod_name and search_text_lower not in mod_tagline:
-                    continue
-            self.filtered_mods.append(mod)
-        self._sort_filtered_mods()
-        self.current_page = 1
-        self._update_mod_display()
 
     def _sort_filtered_mods(self):
         if not hasattr(self, 'sort_combo') or not self.filtered_mods:
@@ -1197,25 +760,6 @@ class AppWindow(QWidget, UiControlsMixin, OperationsMixin):
         elif sort_type == 2:
             self.filtered_mods.sort(key=lambda mod: parse_mod_date(getattr(mod, 'created_date', '')), reverse=reverse)
 
-    def _update_mod_display(self):
-        clear_layout_widgets(self.mod_list_layout, keep_last_n=1)
-        start_index = (self.current_page - 1) * self.mods_per_page
-        end_index = start_index + self.mods_per_page
-        current_page_mods = self.filtered_mods[start_index:end_index]
-        self.mod_list_widget.setUpdatesEnabled(False)
-        try:
-            for mod in current_page_mods:
-                plaque = ModPlaqueWidget(mod, parent=self)
-                plaque.install_requested.connect(self._on_mod_install_requested)
-                plaque.uninstall_requested.connect(self._on_mod_uninstall_requested)
-                plaque.clicked.connect(self._on_mod_clicked)
-                plaque.details_requested.connect(self._show_mod_details_dialog)
-                plaque.install_button.setEnabled(not self.app_state.is_installing)
-                self.mod_list_layout.insertWidget(self.mod_list_layout.count() - 1, plaque)
-        finally:
-            self.mod_list_widget.setUpdatesEnabled(True)
-        self._update_pagination_controls()
-
     def _update_pagination_controls(self):
         if not hasattr(self, 'page_label') or not hasattr(self, 'prev_page_btn') or (not hasattr(self, 'next_page_btn')):
             return
@@ -1224,27 +768,6 @@ class AppWindow(QWidget, UiControlsMixin, OperationsMixin):
         self.page_label.setText(tr('ui.page_label', current=self.current_page, total=total_pages))
         self.prev_page_btn.setEnabled(self.current_page > 1)
         self.next_page_btn.setEnabled(self.current_page < total_pages)
-
-    def _on_mod_install_requested(self, mod):
-        if self.app_state.is_installing:
-            return
-        self._install_single_mod(mod)
-
-    def _install_single_mod(self, mod, force=False):
-        try:
-            if self.app_state.is_installing and (not force):
-                return
-            try:
-                self._operation_cancelled = False
-            except Exception:
-                pass
-            if hasattr(self, 'progress_bar'):
-                self.progress_bar.setVisible(True)
-                self.progress_bar.setValue(0)
-                self._update_action_button_state()
-            self.mod_manager.install_mod(mod, force=force)
-        except Exception as e:
-            self.feedback_manager.show_error('errors.mod_install_failed', error=str(e))
 
     def _on_install_progress_token(self, value: int, op_id: int):
         if getattr(self, '_install_op_id', 0) == op_id and self.app_state.is_installing:
@@ -1258,43 +781,6 @@ class AppWindow(QWidget, UiControlsMixin, OperationsMixin):
         if getattr(self, '_install_op_id', 0) != op_id:
             return
         self._on_single_mod_install_finished(success)
-
-    def _on_single_mod_install_finished(self, success):
-        was_installed_before = False
-        if hasattr(self, 'current_install_thread') and self.current_install_thread:
-            was_installed_before = getattr(self.current_install_thread, 'was_installed_before', False)
-        self.progress_bar.setValue(0)
-        self.progress_bar.setVisible(False)
-        if success:
-            self.feedback_manager.update_status(tr('status.mod_installed_success'), UI_COLORS['status_success'])
-        else:
-            if getattr(self, '_operation_cancelled', False):
-                try:
-                    self._operation_cancelled = False
-                except Exception as e:
-                    logging.debug(f'_on_single_mod_install_finished: cancel flag reset failed: {e}')
-            else:
-                self.feedback_manager.update_status(tr('status.mod_install_error'), UI_COLORS['status_error'])
-            try:
-                thr = self.current_install_thread
-                temp_root = getattr(thr, 'temp_root', None)
-                if temp_root and os.path.isdir(temp_root):
-                    shutil.rmtree(temp_root, ignore_errors=True)
-            except Exception as e:
-                logging.debug(f'_on_single_mod_install_finished: temp cleanup failed: {e}')
-        self.app_state.is_installing = False
-        self._set_install_buttons_enabled(True)
-        self.current_install_thread = None
-        if success:
-            self.mod_manager.load_local_mods()
-            self._update_search_mod_plaques()
-            if hasattr(self, '_update_installed_mods_display'):
-                self._update_installed_mods_display()
-            QTimer.singleShot(100, self._refresh_specific_mod_widget_after_update)
-            if not was_installed_before:
-                self.feedback_manager.show_info('dialogs.mod_installed_title', tr('dialogs.mod_installed_apply_info'))
-            self.feedback_manager.update_status(tr('status.mod_installed_success'), UI_COLORS['status_success'])
-        self._update_action_button_state()
 
     def _refresh_specific_mod_widget_after_update(self):
         if not hasattr(self, 'current_install_thread') or not self.current_install_thread:
@@ -1318,16 +804,6 @@ class AppWindow(QWidget, UiControlsMixin, OperationsMixin):
                             widget.update_status()
                             break
 
-    def _on_mod_uninstall_requested(self, mod):
-        if self.app_state.is_installing:
-            return
-        if self.feedback_manager.ask_question('dialogs.delete_confirmation', 'dialogs.delete_mod_confirmation', '', False, mod_name=mod.name):
-            self._uninstall_single_mod(mod)
-
-    def _uninstall_single_mod(self, mod):
-        self.mod_manager.uninstall_mod(mod)
-        self._update_search_mod_plaques()
-
     def _update_search_mod_plaques(self):
         for i in range(self.mod_list_layout.count() - 1):
             item = self.mod_list_layout.itemAt(i)
@@ -1335,16 +811,6 @@ class AppWindow(QWidget, UiControlsMixin, OperationsMixin):
                 widget = item.widget()
                 if isinstance(widget, ModPlaqueWidget):
                     widget.update_installation_status()
-
-    def _on_mod_clicked(self, mod):
-        for i in range(self.mod_list_layout.count() - 1):
-            item = self.mod_list_layout.itemAt(i)
-            if item:
-                widget = item.widget()
-                if isinstance(widget, ModPlaqueWidget) and widget.mod_data == mod:
-                    self._clear_all_mod_selections()
-                    widget.set_selected(True)
-                    break
 
     def _clear_all_mod_selections(self):
         for i in range(self.mod_list_layout.count() - 1):
@@ -1361,37 +827,6 @@ class AppWindow(QWidget, UiControlsMixin, OperationsMixin):
         self.progress_bar.setVisible(False)
         self._update_action_button_state()
 
-    def _on_mod_installation_finished(self, success: bool, message: str):
-        self.app_state.is_installing = False
-        self._set_install_buttons_enabled(True)
-        self.progress_bar.setVisible(False)
-        try:
-            QTimer.singleShot(0, self._update_search_mod_plaques)
-        except Exception as e:
-            logging.debug(f'_on_mod_installation_finished: update_search_mod_plaques failed: {e}')
-        try:
-            self.mod_manager.load_local_mods()
-        except Exception as e:
-            logging.warning(f'_on_mod_installation_finished: load_local_mods failed: {e}')
-        try:
-            QTimer.singleShot(0, self._update_installed_mods_display)
-        except Exception as e:
-            logging.debug(f'_on_mod_installation_finished: update_installed_mods_display failed: {e}')
-        try:
-            if hasattr(self, 'slot_manager'):
-                self.slot_manager.refresh_slots_content()
-        except Exception as e:
-            logging.debug(f'_on_mod_installation_finished: refresh_slots_content failed: {e}')
-        if success:
-            try:
-                QTimer.singleShot(0, lambda: self.feedback_manager.show_info('dialogs.mod_installed_apply_info'))
-            except Exception:
-                pass
-        self._update_action_button_state()
-        if success and getattr(self, 'pending_updates', None):
-            next_mod = self.pending_updates.pop(0)
-            QTimer.singleShot(0, lambda: self.mod_manager.update_mod(next_mod))
-
     def _update_change_path_button_text(self):
         self.change_path_button.setText(self.app_state.game_mode.path_change_button_text)
 
@@ -1399,90 +834,6 @@ class AppWindow(QWidget, UiControlsMixin, OperationsMixin):
         if platform.system() == 'Darwin':
             return tr('tooltips.macos_install_unavailable')
         return tr('tooltips.full_install_instructions')
-
-    def _on_toggle_full_install(self, state):
-        self.app_state.is_full_install = bool(state)
-        if platform.system() == 'Darwin' and self.app_state.is_full_install:
-            self.feedback_manager.show_info('dialogs.unavailable', tr('dialogs.macos_install_unavailable'))
-            self.full_install_checkbox.blockSignals(True)
-            self.full_install_checkbox.setChecked(False)
-            self.full_install_checkbox.blockSignals(False)
-            return
-        self._update_action_button_state()
-
-    def apply_theme(self):
-        theme = THEMES['default']
-        background_path = None
-        background_disabled = self.app_state.local_config.get('background_disabled', False)
-        if self.background_movie is not None:
-            self.background_movie.stop()
-            self.background_movie.deleteLater()
-            self.background_movie = None
-        self.background_pixmap = None
-        if not background_disabled:
-            background_path = self.app_state.local_config.get('custom_background_path') or resource_path(f"assets/{theme.get('background', '')}")
-            if background_path:
-                self._bg_loader = BgLoader(background_path, self.size())
-                self._bg_loader.loaded.connect(self._on_bg_ready)
-                self._bg_loader.start()
-        user_bg_hex = self.app_state.local_config.get('custom_color_background')
-        if user_bg_hex and self.settings_manager.is_valid_hex_color(user_bg_hex):
-            frame_bg_color = f"#C0{user_bg_hex.lstrip('#')}"
-        else:
-            frame_bg_color = 'rgba(0, 0, 0, 150)'
-        button_color = self.app_state.local_config.get('custom_color_button') or theme['colors']['button']
-        border_color = self.app_state.local_config.get('custom_color_border') or theme['colors']['border']
-        button_hover_color = self.app_state.local_config.get('custom_color_button_hover') or theme['colors']['button_hover']
-        main_text_color = self.app_state.local_config.get('custom_color_text') or theme['colors']['text']
-        base_family = self.custom_font_family or theme['font_family']
-        font_family_main = base_family
-        font_size_main = theme['font_size_main']
-        font_size_small = theme['font_size_small']
-        status_font = QFont(font_family_main, font_size_small)
-        self.status_label.setFont(status_font)
-        explicit_color_widgets = [getattr(self, 'telegram_button', None), getattr(self, 'discord_button', None)]
-        explicit_colors = [UI_COLORS['link'], UI_COLORS['social_discord']]
-        for widget, color in zip(explicit_color_widgets, explicit_colors):
-            if widget is not None:
-                widget.setStyleSheet(f'color: {color};')
-        style_sheet = f'''\n                    QFrame#bottom_widget, QFrame#settings_widget {{ background-color: {frame_bg_color}; }}\n                    QWidget {{ font-family: "{font_family_main}", sans-serif; outline: none; font-size: {font_size_main}pt; color: {main_text_color}; background-color: transparent; }}\n                    QDialog, QMessageBox {{ font-family: "{font_family_main}", sans-serif; font-size: {font_size_small}pt; color: {main_text_color}; background-color: {frame_bg_color}; border: 3px solid {border_color}; }}\n                    QDialog > QLabel, QMessageBox > QLabel {{ background: transparent; font-size: {font_size_small}pt; }}\n                    QDialog QPushButton, QMessageBox QPushButton {{ font-size: {font_size_small}pt; }}\n                    QPushButton {{ background-color: {button_color}; border: 2px solid {border_color}; color: {theme['colors']['button_text']}; padding: 5px; min-height: 30px; min-width: 100px; }}\n                    QPushButton:hover {{ background-color: {button_hover_color}; }}\n                    QPushButton:disabled, QComboBox:disabled {{ background-color: #333333; color: #888888; border: 2px solid #555555; }}\n                    QPushButton#addTranslationButton {{ min-width: 33px; min-height: 33px; padding: 2px; }}\n                    QComboBox {{ background-color: {button_color}; color: {theme['colors']['button_text']}; border: 2px solid {border_color}; padding: 4px; min-height: 30px; }}\n                    QComboBox QAbstractItemView {{ background-color: {button_color}; border: 2px solid {border_color}; color: {theme['colors']['button_text']}; selection-background-color: {button_hover_color}; }}\n                    QTextEdit, QTextBrowser {{ background-color: {frame_bg_color}; border: 2px solid {border_color}; }}\n                    QFrame#filters {{\n                        background-color: {frame_bg_color};\n                        border: 2px solid {border_color};\n                        padding: 4px 8px;\n                    }}\n                    QPushButton#sortOrderBtn {{\n                        min-width: 35px;\n                        max-width: 35px;\n                        padding-left: 0px;\n                        padding-right: 0px;\n                        background-color: {button_color};\n                        border: 2px solid {border_color};\n                        color: {theme['colors']['button_text']};\n                        font-weight: bold;\n                        font-size: 12px;\n                    }}\n                    QPushButton#sortOrderBtn:hover {{\n                        background-color: {button_hover_color};\n                    }}\n                    QPushButton#searchBtn {{\n                        min-width: 35px;\n                        max-width: 35px;\n                        min-height: 30px;\n                        max-height: 30px;\n                        padding-left: 0px;\n                        padding-right: 0px;\n                        background-color: {button_color};\n                        border: 2px solid {border_color};\n                        color: {theme['colors']['button_text']};\n                        font-weight: bold;\n                        font-size: 16px;\n                    }}\n                    QPushButton#searchBtn:hover {{\n                        background-color: {button_hover_color};\n                    }}\n                    QTextEdit, QTextBrowser {{ background-color: {frame_bg_color}; color: {main_text_color}; border: 2px solid {border_color}; min-height: 100px; }}\n                    QTabBar::tab {{ background-color: {button_color}; color: {theme['colors']['button_text']}; border: 2px solid {border_color}; padding: 5px; min-height: 25px; min-width: 80px; }}\n                    QTabBar::tab:selected, QTabBar::tab:hover {{ background-color: {button_hover_color}; }}\n                    QTabBar::tab:disabled {{ background-color: #333333; color: #888888; border: 2px solid #555555; }}\n                    QTabWidget::pane {{ background: transparent; border: 0px; }}\n                    QCheckBox:disabled {{ color: #888888; }}\n                    QCheckBox::indicator {{ width: 15px; height: 15px; background-color: {button_color}; border: 2px solid {border_color}; }}\n                    QCheckBox::indicator:checked {{ background-color: {('#ffffff' if not self.color_widgets['button_hover'].text() else button_hover_color)}; }}\n                    QCheckBox::indicator:disabled {{ background-color: #333333; border: 2px solid #555555; }}\n                    QPushButton:checked {{ background-color: {button_hover_color}; border: 2px solid {main_text_color}; }}\n            '''
-        scroll_handle_color = self.app_state.local_config.get('custom_color_button') or 'white'
-        scroll_groove_color = 'rgba(0, 0, 0, 40)'
-        scroll_bar_qss = f'\n                QScrollBar:vertical {{\n                    border: none;\n                    background: {scroll_groove_color};\n                    width: 14px;\n                    margin: 0;\n                }}\n                QScrollBar::handle:vertical {{\n                    background-color: {scroll_handle_color};\n                    min-height: 25px;\n                }}\n                QScrollBar:horizontal {{\n                    border: none;\n                    background: {scroll_groove_color};\n                    height: 14px;\n                    margin: 0;\n                }}\n                QScrollBar::handle:horizontal {{\n                    background-color: {scroll_handle_color};\n                    min-width: 25px;\n                }}\n            '
-        style_sheet += scroll_bar_qss
-        app_inst = QApplication.instance()
-        (app_inst if isinstance(app_inst, QApplication) else self).setStyleSheet(style_sheet)
-        for widget in self.findChildren(QWidget):
-            style = widget.style()
-            if style:
-                style.unpolish(widget)
-                style.polish(widget)
-        mod_list = getattr(self, 'mod_list_widget', None)
-        installed_mods = getattr(self, 'installed_mods_widget', None)
-        self.customization_manager.update_mod_plaques_styles(mod_list, installed_mods)
-        search_container = getattr(self, 'search_container', None)
-        library_container = getattr(self, 'installed_mods_container', None)
-        self.customization_manager.update_translucent_backgrounds(search_container, library_container)
-        self.update()
-
-    def _configure_hidden_tab_bar(self, tab_widget: QTabWidget):
-        bar = tab_widget.tabBar()
-        if bar:
-            bar.hide()
-
-    def _hide_save_manager(self):
-        self.save_manager_widget.setVisible(False)
-        self.app_state.is_save_manager_view = False
-        if self.app_state.is_settings_view:
-            self.settings_widget.setVisible(True)
-        else:
-            self.main_tab_widget.setVisible(True)
-            self.bottom_widget.setVisible(True)
-
-    def _clear_selected_slot(self):
-        self.app_state.selected_slot = None
-        self._update_slot_highlight()
-        self._update_slot_action_bar()
 
     def eventFilter(self, obj, ev):
         if obj is getattr(self, 'save_manager_widget', None) and ev.type() == QEvent.Type.MouseButtonPress:
@@ -1492,108 +843,8 @@ class AppWindow(QWidget, UiControlsMixin, OperationsMixin):
                 self._clear_selected_slot()
         return super().eventFilter(obj, ev)
 
-    def _update_slot_action_bar(self):
-        in_main = self.app_state.current_collection_idx == -1
-        visible = self.app_state.selected_slot is not None
-        for b in (self.show_btn, self.import_btn, self.erase_btn, self.export_btn):
-            b.setVisible(visible)
-        has_data = False
-        if self.app_state.selected_slot:
-            ch, s = self.app_state.selected_slot
-            idx = self.app_state.current_collection_idx
-            base = self.save_manager.get_collection_path(idx)
-            fp = os.path.join(base, f'filech{ch}_{s}')
-            has_data = os.path.exists(fp) and os.path.getsize(fp) > 0
-        self.erase_btn.setEnabled(has_data)
-        self.export_btn.setEnabled(has_data)
-        self.copy_from_main_btn.setEnabled(not in_main)
-        self.copy_to_main_btn.setEnabled(not in_main)
-
-    def _on_slot_double_clicked(self, chapter: int, slot: int):
-        idx = self.app_state.current_collection_idx
-        base = self.save_manager.get_collection_path(idx)
-        fp = os.path.join(base, f'filech{chapter}_{slot}')
-        if not (os.path.exists(fp) and os.path.getsize(fp) > 0):
-            return
-        dlg = SaveEditorDialog(fp, self)
-        if dlg.exec():
-            self._refresh_save_slots()
-
-    def _on_save_manager_slot_clicked(self, chapter: int, slot: int):
-        self.app_state.selected_slot = (chapter, slot)
-        self._update_slot_highlight()
-        self._update_slot_action_bar()
-
-    def _update_slot_highlight(self):
-        user_bg = self.app_state.local_config.get('custom_color_background')
-        if user_bg and self.settings_manager.is_valid_hex_color(user_bg):
-            slot_bg = f"#80{user_bg.lstrip('#')}"
-        else:
-            slot_bg = '#80000000'
-        for (ch, sl), lbl in self._slot_labels.items():
-            if self.app_state.selected_slot == (ch, sl):
-                lbl.setStyleSheet(f'border:2px solid white; background-color: {slot_bg}; padding:4px;')
-            else:
-                lbl.setStyleSheet(f'border:1px solid white; background-color: {slot_bg}; padding:4px;')
-
     def _return_from_save_manager(self):
-        self._hide_save_manager()
-        self.settings_button.setText(tr('ui.settings_title'))
-        try:
-            self.settings_button.clicked.disconnect(self._return_from_save_manager)
-        except TypeError:
-            pass
-        self.settings_button.clicked.connect(self._toggle_settings_view)
-
-    def _on_configure_saves_click(self):
-        if not self.save_manager.find_and_validate_save_path():
-            return
-        self.app_state.is_save_manager_view = True
-        self.main_tab_widget.setVisible(False)
-        self.bottom_widget.setVisible(False)
-        self.settings_widget.setVisible(False)
-        self.save_manager_widget.setVisible(True)
-        self.app_state.selected_slot = None
-        self._refresh_save_slots()
-        self.feedback_manager.update_status(tr('status.save_path_info', save_path=self.app_state.save_path), UI_COLORS['status_info'])
-        self.settings_button.setText(tr('ui.back_button'))
-        try:
-            self.settings_button.clicked.disconnect(self._toggle_settings_view)
-        except TypeError:
-            pass
-        self.settings_button.clicked.connect(self._return_from_save_manager)
-
-    def _refresh_save_slots(self):
-        if not (self.app_state.save_path and os.path.isdir(self.app_state.save_path)):
-            return
-        chapter = self.save_tabs.currentIndex() + 1
-        slots_data = self.save_manager.refresh_save_slots_data(chapter)
-        for s, (active, text) in slots_data.items():
-            self._slot_labels[chapter, s].setText(text)
-        self._update_collection_ui()
-        self._update_slot_highlight()
-        self._update_slot_action_bar()
-
-    def _update_collection_ui(self):
-        ui_state = self.save_manager.get_collection_ui_state()
-        in_col = ui_state['in_collection']
-        self.switch_collection_btn.setText(tr('dialogs.main_slots') if in_col else tr('buttons.additional_slots'))
-        self.left_col_btn.setEnabled(ui_state['can_navigate_left'])
-        self.right_col_btn.setEnabled(ui_state['can_navigate_right'])
-        self.rename_collection_btn.setVisible(in_col)
-        self.delete_collection_btn.setVisible(in_col)
-        self.copy_from_main_btn.setVisible(in_col)
-        self.copy_to_main_btn.setVisible(in_col)
-        if in_col and ui_state['collection_name']:
-            self.collection_name_lbl.setText(ui_state['collection_name'])
-            self.collection_name_lbl.setVisible(True)
-        else:
-            self.collection_name_lbl.setVisible(False)
-        self.change_save_path_btn.setVisible(not in_col)
-
-    def _on_chapter_tab_changed(self):
-        self.app_state.selected_slot = None
-        self._refresh_save_slots()
+        self.save_ui.return_from_save_manager()
 
     def paintEvent(self, event):
         painter = QPainter(self)
@@ -1609,76 +860,6 @@ class AppWindow(QWidget, UiControlsMixin, OperationsMixin):
                 painter.fillRect(self.rect(), QColor('rgba(0, 0, 0, 200)'))
         super().paintEvent(event)
 
-    def _on_reset_settings_click(self):
-        self.customization_manager.stop_background_music()
-        callbacks = {'migrate_config': lambda: (self._load_local_data(), self.settings_manager.migrate_config_if_needed())}
-        self.settings_manager.on_reset_settings_click(callbacks)
-        self.launch_via_steam_checkbox.setChecked(False)
-        self.use_custom_executable_checkbox.setChecked(False)
-        self.chapter_mode_checkbox.setChecked(False)
-        self.beta_updates_checkbox.setChecked(False)
-        self.fullscreen_checkbox.setChecked(False)
-        self.hide_library_filters_checkbox.setChecked(False)
-        self.full_install_checkbox.setChecked(False)
-        self.disable_background_checkbox.setChecked(False)
-        self.disable_splash_checkbox.setChecked(False)
-        self._update_custom_executable_ui()
-        self._update_checkbox_visibility()
-        self.slot_manager.clear_all_slots()
-        self.slot_manager.save_slots_state()
-        self.slot_manager.load_slots_state()
-        self._update_settings_page_visibility()
-        self.customization_manager.load_custom_style_settings(self.color_widgets, self.apply_theme)
-        self._update_action_button_state()
-        self.background_music_button.setText(self.customization_manager.get_background_music_button_text())
-        self.startup_sound_button.setText(self.customization_manager.get_startup_sound_button_text())
-
-    def _on_background_button_click(self):
-        self.settings_manager.on_background_button_click()
-        self._update_background_button_state()
-
-    def _update_background_button_state(self):
-        background_disabled = self.app_state.local_config.get('background_disabled', False)
-        self.change_background_button.setEnabled(not background_disabled)
-        self.change_background_button.setText(tr('buttons.remove_background') if self.app_state.local_config.get('custom_background_path') else tr('buttons.change_background'))
-
-    def _toggle_settings_view(self, show_changelog=False):
-        if show_changelog:
-            self.app_state.is_changelog_view = not self.app_state.is_changelog_view
-        else:
-            self.app_state.is_settings_view = not self.app_state.is_settings_view
-            if not self.app_state.is_settings_view:
-                if self.app_state.is_save_manager_view:
-                    self._on_configure_saves_click()
-                if self.app_state.is_changelog_view:
-                    self.app_state.is_changelog_view = False
-        if self.app_state.is_settings_view:
-            self.settings_button.setText(tr('ui.back_button'))
-            self.tab_widget.setVisible(False)
-            self.bottom_widget.setVisible(False)
-            self.settings_widget.setVisible(True)
-            self._switch_settings_page(self.settings_menu_page)
-            self._update_settings_page_visibility()
-            self.customization_manager.load_custom_style_settings(self.color_widgets, self.apply_theme)
-            self._update_status(tr('status.launcher_settings'), UI_COLORS['status_info'])
-        else:
-            self.settings_button.setText(tr('ui.settings_title'))
-            self.apply_theme()
-            self.settings_widget.setVisible(False)
-            self.main_tab_widget.setVisible(True)
-            self.bottom_widget.setVisible(True)
-            self.update()
-            self.repaint()
-            self._update_action_button_state()
-
-    def _toggle_help_view(self):
-        self.app_state.is_help_view = not self.app_state.is_help_view
-        if self.app_state.is_help_view and self.app_state.is_changelog_view:
-            self.app_state.is_changelog_view = False
-        if self.app_state.is_help_view:
-            self._load_help_content()
-        self._update_settings_page_visibility()
-
     def _load_help_content(self):
         if localization_manager.get_current_language() == 'ru':
             help_url = self.app_state.global_settings.get('help_ru_url', self.app_state.global_settings.get('help_url', ''))
@@ -1691,87 +872,6 @@ class AppWindow(QWidget, UiControlsMixin, OperationsMixin):
         self.help_thread = FetchHelpContentThread(help_url.strip(), self)
         self.help_thread.finished.connect(self.help_text_edit.setMarkdown)
         self.help_thread.start()
-
-    def _update_settings_page_visibility(self):
-        is_changelog = self.app_state.is_changelog_view
-        is_help = self.app_state.is_help_view
-        self.settings_pages_container.setVisible(not is_changelog and (not is_help))
-        self.changelog_widget.setVisible(is_changelog)
-        self.help_widget.setVisible(is_help)
-        self.changelog_button.setText(tr('buttons.close') if is_changelog else tr('buttons.changelog'))
-        self.help_button.setText(tr('buttons.close') if is_help else tr('buttons.help'))
-
-    def _on_toggle_disable_background(self, state):
-        is_disabled = bool(state)
-        self.settings_manager.on_toggle_disable_background(is_disabled)
-        self._update_background_button_state()
-
-    def _on_toggle_disable_splash(self, state):
-        is_disabled = bool(state)
-        self.settings_manager.on_toggle_disable_splash(is_disabled)
-
-    def _on_toggle_hide_library_filters(self, state):
-        is_hidden = bool(state)
-        self.settings_manager.on_toggle_hide_library_filters(is_hidden)
-        if hasattr(self, 'library_filters_widget'):
-            self.library_filters_widget.setVisible(not is_hidden)
-
-    def _on_custom_style_edited(self):
-        self.settings_manager.on_custom_style_edited(self.color_widgets)
-        self._update_dynamic_elements()
-
-    def _update_dynamic_elements(self):
-        if hasattr(self.app_state, 'slots'):
-            self.slot_manager.update_all_slots_visual_state()
-        self.slot_manager.update_chapter_indicators_style()
-        if hasattr(self, 'sort_combo') and hasattr(self, 'sort_order_btn'):
-            search_tab = None
-            for i in range(self.tab_widget.count()):
-                if self.tab_widget.tabText(i) == tr('ui.search_tab'):
-                    search_tab = self.tab_widget.widget(i)
-                    break
-            if search_tab:
-                layout = search_tab.layout()
-                if layout and layout.count() > 0:
-                    item0 = layout.itemAt(0)
-                    filters = item0.widget() if item0 is not None else None
-                    if filters and filters.objectName() == 'filters':
-                        filter_bg_color = self.app_state.local_config.get('custom_color_background') or 'rgba(0, 0, 0, 150)'
-                        filter_border_color = self.app_state.local_config.get('custom_color_border') or 'white'
-                        filters.setStyleSheet(f'QFrame#filters {{ background-color: {filter_bg_color}; border: 2px solid {filter_border_color}; padding: 8px; }}')
-        mod_list = getattr(self, 'mod_list_widget', None)
-        installed_mods = getattr(self, 'installed_mods_widget', None)
-        self.customization_manager.update_mod_plaques_styles(mod_list, installed_mods)
-
-    def _on_background_music_button_click(self):
-        self.customization_manager.stop_background_music()
-        self.settings_manager.on_background_music_button_click()
-        self.background_music_button.setText(self.customization_manager.get_background_music_button_text())
-        self.customization_manager.maybe_start_background_music(getattr(self, 'is_shown_to_user', False), self.isVisible())
-
-    def _on_startup_sound_button_click(self):
-        self.settings_manager.on_startup_sound_button_click()
-        self.startup_sound_button.setText(self.customization_manager.get_startup_sound_button_text())
-
-    def _update_action_button_state(self):
-        if self.app_state.is_installing and (not getattr(self, '_operation_cancelled', False)):
-            self.action_button.setText(tr('ui.cancel_button'))
-            self.action_button.setEnabled(True)
-            return
-        if not self.app_state.initialization_completed:
-            self.action_button.setText(tr('status.please_wait'))
-            self.action_button.setEnabled(False)
-            return
-        is_demo_mode = isinstance(self.app_state.game_mode, DemoGameMode)
-        is_full_install_enabled = is_demo_mode and hasattr(self, 'full_install_checkbox') and self.full_install_checkbox.isChecked()
-        if is_full_install_enabled:
-            action_text = tr('buttons.install')
-        elif self.slot_manager.check_active_slots_need_updates():
-            action_text = tr('ui.update_button')
-        else:
-            action_text = tr('ui.launch_button')
-        self.action_button.setText(action_text)
-        self.action_button.setEnabled(True)
 
     def _disable_direct_launch(self):
         self.settings_manager.disable_direct_launch()
@@ -1924,75 +1024,6 @@ class AppWindow(QWidget, UiControlsMixin, OperationsMixin):
         except Exception:
             pass
 
-    def _on_action_button_click(self):
-        if self.app_state.is_installing:
-            self._operation_cancelled = True
-            self.feedback_manager.update_status(tr('status.operation_cancelled'), UI_COLORS['status_error'])
-            try:
-                self.progress_bar.setValue(0)
-                self.progress_bar.setVisible(False)
-            except Exception:
-                pass
-            try:
-                thr = None
-                if getattr(self, 'current_install_thread', None):
-                    thr = self.current_install_thread
-                elif getattr(self, 'install_thread', None):
-                    thr = self.install_thread
-                elif getattr(self, 'full_install_thread', None):
-                    thr = self.full_install_thread
-                elif getattr(self, 'mod_manager', None) and getattr(self.mod_manager, 'current_install_thread', None):
-                    thr = self.mod_manager.current_install_thread
-                elif getattr(self, 'mod_manager', None) and getattr(self.mod_manager, 'url_install_thread', None):
-                    thr = self.mod_manager.url_install_thread
-                if thr and hasattr(thr, 'cancel'):
-                    thr.cancel()
-            except Exception:
-                pass
-            try:
-                self.app_state.is_installing = False
-            except Exception:
-                pass
-            self._update_action_button_state()
-            return
-        if isinstance(self.app_state.game_mode, DemoGameMode) and getattr(self, 'full_install_checkbox', None) is not None and self.full_install_checkbox.isChecked():
-            self._perform_full_install()
-            return
-        if self.app_state.is_installing:
-            return
-        if self.slot_manager.check_active_slots_need_updates():
-            self._update_mods_in_active_slots()
-            return
-        if getattr(self, '_operation_cancelled', False):
-            return
-        self.action_button.setEnabled(False)
-        self.saves_button.setEnabled(False)
-        self.progress_bar.setVisible(False)
-        self._launch_game_with_all_mods()
-
-    def _refresh_mods_in_slots(self):
-        if not hasattr(self, 'slots') or not self.app_state.all_mods:
-            return
-        for slot_frame in self.app_state.slots.values():
-            if slot_frame.assigned_mod:
-                old_mod = slot_frame.assigned_mod
-                mod_key = getattr(old_mod, 'key', None) or getattr(old_mod, 'mod_key', None)
-                if not mod_key:
-                    continue
-                updated_mod = None
-                for mod in self.app_state.all_mods:
-                    updated_mod_key = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
-                    if updated_mod_key == mod_key:
-                        updated_mod = mod
-                        break
-                if not updated_mod:
-                    mod_config = self.mod_manager.get_mod_config(mod_key)
-                    if mod_config:
-                        updated_mod = self.mod_manager.create_mod_object_from_info(mod_config, getattr(self.app_state, 'all_mods', None))
-                if updated_mod:
-                    slot_frame.assigned_mod = updated_mod
-        self._refresh_all_slot_status_displays()
-
     def _on_install_finished(self, success):
         self.progress_bar.setValue(0)
         self.progress_bar.setVisible(False)
@@ -2029,31 +1060,6 @@ class AppWindow(QWidget, UiControlsMixin, OperationsMixin):
     def _launch_game_with_all_mods(self):
         self.game_launcher.launch_game_with_all_mods(execute_plugin_hooks=lambda hook_name: self.plugin_manager.execute_hooks(hook_name, self), restore_window_callback=self.restore_window_signal.emit)
 
-    def _hide_window_for_game(self):
-        try:
-            self.customization_manager.stop_background_music()
-        except Exception as e:
-            logging.debug(f'_hide_window_for_game: stop_background_music failed: {e}')
-        self.app_state.game_is_running = True
-        self.hide()
-
-    def _restore_window_after_game(self):
-        self.app_state.game_is_running = False
-        self.showNormal()
-        self.activateWindow()
-        self.raise_()
-        self.saves_button.setEnabled(True)
-        self.progress_bar.setVisible(False)
-        self._update_action_button_state()
-        QTimer.singleShot(100, self.updateGeometry)
-        if hasattr(self, '_update_installed_mods_display'):
-            self._update_installed_mods_display()
-        if hasattr(self, '_update_mod_display'):
-            self._update_mod_display()
-        self.customization_manager.maybe_start_background_music(getattr(self, 'is_shown_to_user', False), self.isVisible())
-        self._show_pending_dialogs()
-        self.plugin_manager.execute_hooks('on_after_game_exit', self)
-
     def _on_progress_update(self, value: int):
         self.progress_bar.setValue(value)
         if value > 0 and (not self.progress_bar.isVisible()):
@@ -2078,11 +1084,6 @@ class AppWindow(QWidget, UiControlsMixin, OperationsMixin):
             display_count = '?' if count < 0 else count
             self.online_label.setText(f"<span style='color:{UI_COLORS['status_ready']};'>●</span> {tr('status.online_count', count=display_count)}")
 
-    def _on_toggle_custom_executable(self):
-        use_custom = self.use_custom_executable_checkbox.isChecked()
-        self.settings_manager.on_toggle_custom_executable(use_custom)
-        self._update_custom_executable_ui()
-
     def _select_custom_executable_file(self):
         filepath = self.settings_manager.select_custom_executable_file()
         if filepath:
@@ -2095,43 +1096,12 @@ class AppWindow(QWidget, UiControlsMixin, OperationsMixin):
         if self.custom_exe_frame.isVisible():
             self.custom_executable_path_label.setText(tr('ui.currently_selected', filename=os.path.basename(path)) if path else tr('ui.file_not_selected'))
 
-    def _on_toggle_steam_launch(self, state=None):
-        is_steam_launch = self.launch_via_steam_checkbox.isChecked()
-        if is_steam_launch:
-            direct_launch_slot_id = self.app_state.local_config.get('direct_launch_slot_id', -1)
-            is_chapter_mode = self.app_state.current_mode == 'chapter'
-            if direct_launch_slot_id >= 0 and is_chapter_mode:
-                self.feedback_manager.show_warning('ui.steam_launch', tr('ui.steam_launch_direct_conflict'))
-                self.launch_via_steam_checkbox.setChecked(False)
-                return
-        self.settings_manager.on_toggle_steam_launch(is_steam_launch)
-        self._update_custom_executable_ui()
-
-    def _on_language_changed(self):
-        selected_data = self.language_combo.currentData()
-        if not selected_data:
-            return
-        self.settings_manager.on_language_changed(selected_data)
-
     def _on_slot_manager_slots_updated(self):
         self._refresh_save_slots()
         if self.app_state.current_mode == 'chapter':
             selected_chapter_id = getattr(self.app_state, 'selected_chapter_id', None)
             if selected_chapter_id is not None:
                 self._update_installed_mods_for_chapter_mode(selected_chapter_id)
-
-    def _on_toggle_beta_updates(self):
-        beta_enabled = self.beta_updates_checkbox.isChecked()
-        self.settings_manager.on_toggle_beta_updates(beta_enabled)
-        self.update_checker.check_for_updates()
-
-    def _on_toggle_fullscreen(self):
-        fullscreen_enabled = self.fullscreen_checkbox.isChecked()
-        self.settings_manager.on_toggle_fullscreen(fullscreen_enabled)
-        if fullscreen_enabled:
-            self.showFullScreen()
-        else:
-            self.showNormal()
 
     def _retranslate_texts(self):
         self.color_config = {'background': tr('ui.background_color'), 'button': tr('ui.elements_color'), 'border': tr('ui.border_color'), 'button_hover': tr('ui.hover_color'), 'text': tr('ui.main_text_color'), 'version_text': tr('ui.secondary_text_color')}
@@ -2250,22 +1220,6 @@ class AppWindow(QWidget, UiControlsMixin, OperationsMixin):
             self.update()
         finally:
             self._suppress_tab_handlers = False
-
-    def _update_mods_in_active_slots(self):
-        mods_to_update = self.slot_manager.collect_mods_needing_update_in_active_slots()
-        if mods_to_update:
-            self.pending_updates = mods_to_update[1:] if len(mods_to_update) > 1 else []
-            try:
-                self._operation_cancelled = False
-            except Exception:
-                pass
-            if hasattr(self, 'progress_bar'):
-                try:
-                    self.progress_bar.setVisible(True)
-                    self.progress_bar.setValue(0)
-                except Exception:
-                    pass
-            self.mod_manager.update_mod(mods_to_update[0])
 
     def _on_xdelta_patch_click(self):
         try:
@@ -2533,22 +1487,458 @@ class AppWindow(QWidget, UiControlsMixin, OperationsMixin):
         except TypeError:
             pass
 
-    def _on_theme_button_click(self):
-        result = self.feedback_manager.ask_custom_question(QMessageBox.Icon.Information, 'buttons.theme_management', 'dialogs.theme_choice', [('buttons.import', QMessageBox.ButtonRole.AcceptRole, 'import'), ('buttons.export', QMessageBox.ButtonRole.AcceptRole, 'export')])
-        if result == 'import':
-            self.settings_manager.import_theme()
-        elif result == 'export':
-            self.settings_manager.export_theme()
-
     def _on_theme_changed_by_manager(self):
-        self.customization_manager.load_custom_style_settings(self.color_widgets, self.apply_theme)
-        self.disable_background_checkbox.setChecked(self.app_state.local_config.get('background_disabled', False))
-        self.disable_splash_checkbox.setChecked(self.app_state.local_config.get('disable_splash', False))
-        self.background_music_button.setText(self.customization_manager.get_background_music_button_text())
-        self.startup_sound_button.setText(self.customization_manager.get_startup_sound_button_text())
-        self.customization_manager.stop_background_music()
-        self.customization_manager.maybe_start_background_music(getattr(self, 'is_shown_to_user', False), self.isVisible())
+        self.theme.on_theme_changed_by_manager()
+
+    def _prev_page(self):
+        self.search_display.prev_page()
+
+    def _next_page(self):
+        self.search_display.next_page()
+
+    def _show_search_dialog(self):
+        self.search_display.show_search_dialog()
+
+    def _show_library_search_dialog(self):
+        self.library_search_text = ''
+        self.library_search_button.setText('🔍')
+        self.library_search_button.setToolTip(tr('ui.search_placeholder'))
+        self.library_display.update_display()
+
+    def _switch_settings_page(self, page):
+        self.settings_ui.switch_settings_page(page)
+
+    def _go_back_to_settings_menu(self):
+        self.settings_ui.go_back_to_settings_menu()
+
+    def _prompt_for_game_path(self, is_initial=False):
+        result = self.settings_manager.prompt_for_game_path(is_initial)
+        if result:
+            self._update_action_button_state()
+        if is_initial and (not result):
+            self.customization_manager.start_background_music()
+        return result
+
+    def _update_filtered_mods(self):
+        self.search_display.update_filtered_mods()
+
+    def _update_mod_display(self):
+        self.search_display.update_display()
+
+    def _update_action_button_state(self):
+        self.game_launch.update_button_state()
+
+    def _update_installed_mods_display(self):
+        self.library_display.update_display()
+
+    def _update_installed_mods_for_chapter_mode(self, chapter_id):
+        self.library_display.update_for_chapter_mode(chapter_id)
+
+    def _update_mod_widgets_slot_status(self):
+        self.library_display.update_mod_widgets_slot_status()
+
+    def _refresh_installed_mods_async(self):
+        self.library_display.refresh_async()
+
+    def _cleanup_missing_mods(self, mods):
+        self.library_display.cleanup_missing_mods(mods)
+
+    def _install_single_mod(self, mod, force=False):
+        self.mod_ops.install_mod(mod, force)
+
+    def _on_mod_install_requested(self, mod):
+        self.mod_ops.on_mod_install_requested(mod)
+
+    def _on_single_mod_install_finished(self, success):
+        self.mod_ops.on_install_finished(success)
+
+    def _on_mod_uninstall_requested(self, mod):
+        self.mod_ops.on_mod_uninstall_requested(mod)
+
+    def _uninstall_single_mod(self, mod):
+        self.mod_ops.uninstall_mod(mod)
+
+    def _on_mod_clicked(self, mod):
+        self.search_display.on_mod_clicked(mod)
+
+    def _on_mod_installation_finished(self, success, message):
+        self.mod_ops.on_mod_installation_finished(success, message)
+
+    def _show_mod_details_dialog(self, mod_data):
+        self.search_display.show_details(mod_data)
+
+    def _show_chapter_mode_instruction(self):
+        if not hasattr(self, 'installed_mods_layout'):
+            return
+        from ui.common.styling import clear_layout_widgets
+        clear_layout_widgets(self.installed_mods_layout, keep_last_n=1)
+        instruction_widget = QLabel(tr('ui.chapter_mode_instruction'))
+        instruction_widget.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        instruction_widget.setStyleSheet('\n            QLabel {\n                color: #CCCCCC;\n                font-size: 14px;\n                font-style: italic;\n                padding: 20px;\n                border: 2px dashed #666666;\n                background-color: rgba(255, 255, 255, 0.1);\n            }\n        ')
+        instruction_widget.setWordWrap(True)
+        instruction_widget.setMinimumHeight(80)
+        self.installed_mods_layout.insertWidget(self.installed_mods_layout.count() - 1, instruction_widget)
+
+    def _show_slot_selection_dialog(self, mod_data):
+        dialog = QDialog(self)
+        dialog.setWindowTitle(tr('ui.select_slot'))
+        dialog.setFixedSize(300, 200)
+        layout = QVBoxLayout(dialog)
+        label = QLabel(tr('ui.select_slot_for_mod', mod_name=mod_data.name))
+        layout.addWidget(label)
+        slot_list = QListWidget()
+        available_slots = []
+        for key, slot_frame in self.app_state.slots.items():
+            if slot_frame.assigned_mod is None:
+                if slot_frame.chapter_id == -1:
+                    slot_name = tr('ui.mod_slot')
+                else:
+                    chapter_names = [tr('chapters.menu'), tr('tabs.chapter_1'), tr('tabs.chapter_2'), tr('tabs.chapter_3'), tr('tabs.chapter_4')]
+                    slot_name = chapter_names[slot_frame.chapter_id]
+                slot_list.addItem(slot_name)
+                available_slots.append(slot_frame)
+        if not available_slots:
+            self.feedback_manager.show_info('dialogs.no_free_slots', tr('dialogs.all_slots_occupied'))
+            return
+        layout.addWidget(slot_list)
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            selected_items = slot_list.selectedItems()
+            if selected_items:
+                selected_index = slot_list.row(selected_items[0])
+                selected_slot = available_slots[selected_index]
+                self.slot_manager.assign_mod_to_slot(selected_slot, mod_data)
+
+    def _on_bg_ready(self, obj):
+        self.theme.on_background_ready(obj)
+
+    def apply_theme(self):
+        self.theme.apply_theme()
+
+    def _on_chapter_mode_mod_use(self, mod_data, chapter_id):
+        self.library_display.on_chapter_mode_mod_use(mod_data, chapter_id)
+
+    def _on_installed_mod_clicked(self, mod_data):
+        self.library_display.on_mod_clicked(mod_data)
+
+    def _on_installed_mod_remove(self, mod_data):
+        self.library_display.on_mod_remove(mod_data)
+
+    def _on_installed_mod_use(self, mod_data):
+        self.library_display.on_mod_use(mod_data)
+
+    def _set_install_buttons_enabled(self, enabled):
+        self.mod_ops.set_install_buttons_enabled(enabled)
+
+    def _refresh_save_slots(self):
+        self.save_ui.refresh_slots()
+
+    def _update_collection_ui(self):
+        self.save_ui.update_collection_ui()
+
+    def _update_slot_highlight(self):
+        self.save_ui.update_slot_highlight()
+
+    def _update_slot_action_bar(self):
+        self.save_ui.update_slot_action_bar()
+
+    def _clear_selected_slot(self):
+        self.save_ui.clear_selected_slot()
+
+    def _configure_hidden_tab_bar(self, tab_widget):
+        self.save_ui.configure_hidden_tab_bar(tab_widget)
+
+    def _on_save_manager_slot_clicked(self, chapter, slot):
+        self.save_ui.on_slot_clicked(chapter, slot)
+
+    def _on_slot_double_clicked(self, chapter, slot):
+        self.save_ui.on_slot_double_clicked(chapter, slot)
+
+    def _on_configure_saves_click(self):
+        self.save_ui.show_save_manager()
+
+    def _hide_save_manager(self):
+        self.save_ui.hide_save_manager()
+
+    def _on_chapter_tab_changed(self):
+        self.save_ui.on_chapter_tab_changed()
+
+    def _toggle_settings_view(self, show_changelog=False):
+        self.settings_ui.toggle_settings_view(show_changelog)
+
+    def _toggle_help_view(self):
+        self.settings_ui.toggle_help_view()
+
+    def _update_settings_page_visibility(self):
+        self.settings_ui.update_settings_page_visibility()
+
+    def _on_reset_settings_click(self):
+        self.settings_ui.reset_settings()
+
+    def _on_language_changed(self):
+        language_code = self.language_combo.currentData()
+        self.settings_ui.on_language_changed(language_code)
+
+    def _on_game_type_changed(self, index):
+        self.settings_ui.on_game_type_changed(index)
+
+    def _on_chapter_mode_changed(self, state):
+        self.settings_ui.on_chapter_mode_changed(state)
+
+    def _on_toggle_beta_updates(self):
+        self.settings_ui.on_toggle_beta_updates()
+
+    def _on_toggle_fullscreen(self):
+        self.settings_ui.on_toggle_fullscreen()
+
+    def _on_toggle_steam_launch(self, state=None):
+        self.settings_ui.on_toggle_steam_launch(state)
+
+    def _on_toggle_custom_executable(self):
+        self.settings_ui.on_toggle_custom_executable()
+
+    def _on_toggle_hide_library_filters(self, state):
+        self.settings_ui.on_toggle_hide_library_filters(state)
+
+    def _on_toggle_disable_background(self, state):
+        self.settings_ui.on_toggle_disable_background(state)
+
+    def _on_toggle_disable_splash(self, state):
+        self.settings_ui.on_toggle_disable_splash(state)
+
+    def _on_background_button_click(self):
+        self.theme.on_background_button_click()
+
+    def _update_background_button_state(self):
+        self.theme.update_background_button_state()
+
+    def _on_background_music_button_click(self):
+        self.theme.on_background_music_button_click()
+
+    def _on_startup_sound_button_click(self):
+        self.theme.on_startup_sound_button_click()
+
+    def _on_theme_button_click(self):
+        self.theme.on_theme_button_click()
+
+    def _on_custom_style_edited(self):
+        self.theme.on_custom_style_edited()
+
+    def _update_dynamic_elements(self):
+        self.theme.update_dynamic_elements()
+
+    def _on_action_button_click(self):
+        self.game_launch.on_action_button_click()
+
+    def _perform_full_install(self):
+        self.game_launch.perform_full_install()
+
+    def _on_full_install_finished(self, success, target_dir):
+        self.game_launch.on_full_install_finished(success, target_dir)
+
+    def _hide_window_for_game(self):
+        self.game_launch.hide_window()
+
+    def _restore_window_after_game(self):
+        self.game_launch.restore_window()
+
+    def _refresh_mods_in_slots(self):
+        self.game_launch.refresh_mods_in_slots()
+
+    def _refresh_all_slot_status_displays(self):
+        self.game_launch.refresh_slot_displays()
+
+    def _refresh_slot_status_display(self, slot_frame):
+        self.game_launch.refresh_slot_status_display(slot_frame)
+
+    def _update_mods_in_active_slots(self):
+        self.game_launch.update_mods_in_active_slots()
+
+    def _on_toggle_full_install(self, state):
+        self.app_state.is_full_install = bool(state)
+        if platform.system() == 'Darwin' and self.app_state.is_full_install:
+            self.feedback_manager.show_info('dialogs.unavailable', tr('dialogs.macos_install_unavailable'))
+            self.full_install_checkbox.blockSignals(True)
+            self.full_install_checkbox.setChecked(False)
+            self.full_install_checkbox.blockSignals(False)
+            return
+        self._update_action_button_state()
+
+    def _on_refresh_clicked(self, is_initial=False):
+        from workers.fetch_mods import FetchModsThread
+        current_lang_code = localization_manager.get_current_language()
+        localization_manager.rescan_languages()
+        self.language_combo.blockSignals(True)
+        self.language_combo.clear()
+        available_languages = localization_manager.get_available_languages()
+        for code, name in available_languages.items():
+            self.language_combo.addItem(name, code)
+        index = self.language_combo.findData(current_lang_code)
+        if index != -1:
+            self.language_combo.setCurrentIndex(index)
+        self.language_combo.blockSignals(False)
+        if not is_initial:
+            self._retranslate_ui()
+        from utils.game_utils import is_game_running
+        if is_game_running():
+            self.feedback_manager.update_status(tr('status.cant_update_while_running'), UI_COLORS['status_warning'])
+            return
+        self._stop_fetch_thread()
+        threading.Thread(target=self.update_checker.check_for_updates, daemon=True).start()
+        self.fetch_thread = FetchModsThread(self, force_update=True)
+        self.fetch_thread.status.connect(self.update_status_signal)
+        self.fetch_thread.result.connect(self._on_fetch_translations_finished)
+        self.fetch_thread.start()
+
+    def _on_fetch_translations_finished(self, success: bool):
         try:
-            self.initialization_finished.disconnect(self._handle_first_launch_settings)
-        except TypeError:
-            pass
+            self.mod_manager.load_local_mods()
+            if hasattr(self, 'mod_list_layout'):
+                self._update_filtered_mods()
+                if not self.app_state.mods_loaded:
+                    self.app_state.mods_loaded = True
+                    self.mods_loaded_signal.emit()
+            if hasattr(self, 'installed_mods_layout'):
+                self._update_installed_mods_display()
+            self._refresh_mods_in_slots()
+            self.slot_manager.refresh_slots_content()
+            self._update_action_button_state()
+            if success:
+                self.feedback_manager.update_status(tr('status.mod_list_updated'), UI_COLORS['status_success'])
+            else:
+                fallback_msg = tr('ui.network_fallback_message') if self.app_state.all_mods else tr('ui.network_update_failed')
+                self.feedback_manager.update_status(fallback_msg, UI_COLORS['status_error'])
+            QTimer.singleShot(100, self.slot_manager.load_slots_state)
+            self._update_plugin_tabs()
+        except Exception as e:
+            self.feedback_manager.update_status(tr('errors.mod_list_processing_error', error=str(e)), UI_COLORS['status_error'])
+
+    def _update_plugin_tabs(self):
+        if not hasattr(self, 'plugin_manager') or not hasattr(self, 'main_tab_widget'):
+            return
+        if self._handling_plugin_tab:
+            return
+        self._handling_plugin_tab = True
+        self._plugin_tab_map = self.plugin_manager.update_plugin_tabs(self.main_tab_widget, num_original_tabs=4)
+        self._handling_plugin_tab = False
+
+    def _on_tab_changed(self, index):
+        num_original_tabs = 4
+        if getattr(self, '_suppress_tab_handlers', False):
+            self.previous_tab_index = index
+            return
+        if index >= num_original_tabs:
+            visible_plugins = [p for p in self.app_state.plugins if not p.get('tab_hide', False)]
+            plugin_index = index - num_original_tabs
+            if 0 <= plugin_index < len(visible_plugins):
+                plugin = self._plugin_tab_map.get(index) or visible_plugins[plugin_index]
+                current_widget = self.main_tab_widget.widget(index)
+                is_placeholder = type(current_widget) is QWidget and current_widget.layout() is None
+                if is_placeholder:
+                    if self._handling_plugin_tab:
+                        return
+                    self._handling_plugin_tab = True
+                    try:
+                        bound = getattr(current_widget, '_plugin_info', None)
+                        if isinstance(bound, dict):
+                            plugin = bound
+                    except Exception:
+                        pass
+                    try:
+                        if current_widget is not None and hasattr(current_widget, 'property'):
+                            name_key = current_widget.property('plugin_name_key')
+                            if name_key:
+                                for p in visible_plugins:
+                                    if p.get('name_key') == name_key:
+                                        plugin = p
+                                        break
+                    except Exception:
+                        pass
+                    try:
+                        new_widget = None
+                        handler = plugin.get('page_init') if callable(plugin.get('page_init')) else plugin.get('on_tab_open')
+                        if callable(handler):
+                            new_widget = handler(self)
+                        if isinstance(new_widget, QWidget):
+                            self.main_tab_widget.removeTab(index)
+                            self.main_tab_widget.insertTab(index, new_widget, tr(plugin['name_key']))
+                            self.main_tab_widget.setCurrentIndex(index)
+                            self.previous_tab_index = index
+                        else:
+                            self.main_tab_widget.setCurrentIndex(self.previous_tab_index)
+                    except Exception as e:
+                        logging.error(f"Error running plugin '{plugin['name_key']}': {e}")
+                        self.feedback_manager.show_error('errors.error', f"Failed to run plugin '{tr(plugin['name_key'])}':\n{e}")
+                        self.main_tab_widget.setCurrentIndex(self.previous_tab_index)
+                    finally:
+                        self._handling_plugin_tab = False
+                    return
+            self.previous_tab_index = index
+            return
+        if index == 2:
+            self._show_main_mod_management_dialog()
+            self.main_tab_widget.setCurrentIndex(self.previous_tab_index)
+        elif index == 3:
+            self._on_xdelta_patch_click()
+            self.main_tab_widget.setCurrentIndex(self.previous_tab_index)
+        elif index == 1:
+            self._update_installed_mods_display()
+            self.previous_tab_index = index
+        else:
+            self.previous_tab_index = index
+
+    def _prompt_for_update(self, update_info):
+        from config.constants import LAUNCHER_VERSION, UI_COLORS
+        if self.app_state.update_in_progress:
+            return
+        if self.app_state.game_is_running:
+            self.app_state.pending_dialogs.append(('update', update_info))
+            return
+        self.app_state.update_in_progress = True
+        update_message = f"<b>{tr('dialogs.new_version_banner', version=update_info['version']).replace('<br>', '')}</b><br>"
+        update_message += tr('dialogs.current_version_banner', current_version=LAUNCHER_VERSION).replace('<br><br>', '') + '<br><br>'
+        if localization_manager.get_current_language() == 'ru':
+            message_text = update_info.get('message_ru') or update_info.get('message', '')
+        else:
+            message_text = update_info.get('message_en') or update_info.get('message', '')
+        update_message += f"<b>{tr('dialogs.whats_new')}</b><br>{message_text}<br><br>"
+        update_message += tr('dialogs.want_download_install_now') + tr('dialogs.app_will_restart')
+        if self.feedback_manager.ask_question('status.update_available', 'status.update_available', update_message, True):
+            if hasattr(self, '_perform_update_ui_prep'):
+                self._perform_update_ui_prep()
+            self.update_checker.perform_update(update_info)
+        else:
+            self.app_state.update_in_progress = False
+            self.feedback_manager.update_status(tr('status.update_rejected'), UI_COLORS['status_info'])
+
+    def _show_pending_dialogs(self):
+        if not self.app_state.pending_dialogs:
+            return
+        pending = self.app_state.pending_dialogs.copy()
+        self.app_state.pending_dialogs.clear()
+        for dialog_type, dialog_data in pending:
+            if dialog_type == 'update':
+                self._prompt_for_update(dialog_data)
+
+    def _stop_fetch_thread(self):
+        self._safe_stop_thread(getattr(self, 'fetch_thread', None))
+        self.fetch_thread = None
+
+    def _safe_stop_thread(self, thread, timeout=THREAD_WAIT_TIMEOUT):
+        if isinstance(thread, QThread) and thread.isRunning():
+            thread.requestInterruption()
+            thread.quit()
+            if not thread.wait(timeout):
+                thread.terminate()
+                thread.wait()
+
+    def _stop_presence_thread(self):
+        self._safe_stop_thread(getattr(self, 'presence_thread', None))
+        self.presence_thread = None
+        self.presence_worker = None
+
+    def _current_tab_names(self):
+        return self.app_state.game_mode.tab_names

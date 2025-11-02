@@ -1,13 +1,12 @@
 from __future__ import annotations
 import io
 import logging
-from typing import Optional
 import requests
 from PIL import Image
 from PyQt6.QtCore import QRunnable
 from PyQt6.QtGui import QImage
 from workers import WorkerSignals
-from utils.cache import _IMG_CACHE, _IMG_CACHE_LOCK, _NET_SEM, cache_lock, _trim_cache
+from utils.cache import _NET_SEM, get_from_cache, add_to_cache
 from utils.network_utils import get_session
 
 
@@ -26,15 +25,13 @@ class ImageLoaderRunnable(QRunnable):
 
     def run(self) -> None:
         try:
-            if _IMG_CACHE is not None and _IMG_CACHE_LOCK is not None:
-                with cache_lock():
-                    cached: Optional[QImage] = _IMG_CACHE.get(self.url)
-                    if cached is not None and (not cached.isNull()):
-                        try:
-                            self.signals.result.emit(cached)
-                        finally:
-                            pass
-                        return
+            cached = get_from_cache(self.url)
+            if cached is not None and (not cached.isNull()):
+                try:
+                    self.signals.result.emit(cached)
+                finally:
+                    pass
+                return
             if _NET_SEM:
                 _NET_SEM.acquire()
             try:
@@ -62,10 +59,7 @@ class ImageLoaderRunnable(QRunnable):
             if not img.loadFromData(processed_content):
                 self._emit_error('decode')
                 return
-            if _IMG_CACHE is not None:
-                with cache_lock():
-                    _IMG_CACHE[self.url] = img
-                    _trim_cache()
+            add_to_cache(self.url, img)
             try:
                 self.signals.result.emit(img)
             finally:

@@ -1,4 +1,5 @@
 from typing import Dict, Any, List, Optional, Tuple
+import threading
 from PyQt6.QtCore import QObject, pyqtSignal
 from models.mod_models import ModInfo
 from models.game_modes import GameMode, FullGameMode
@@ -13,6 +14,7 @@ class AppState(QObject):
 
     def __init__(self):
         super().__init__()
+        self._mods_metadata_lock = threading.Lock()
         self.local_config: Dict[str, Any] = {}
         self.game_path: str = ''
         self.demo_game_path: str = ''

@@ -14,6 +14,7 @@ from utils.audio_utils import _audio_manager
 from core.splash import create_splash, create_png_splash
 from utils.path_utils import get_user_data_root, get_launcher_dir
 from logging.handlers import RotatingFileHandler
+from config.constants import SPLASH_MIN_DURATION, SPLASH_SOUND_DELAY, LAUNCHER_FALLBACK_TIMEOUT, SPLASH_RETRY_DELAY
 import traceback
 if platform.system() == 'Windows':
     import winreg
@@ -45,13 +46,17 @@ def check_game_processes():
 
 
 def configure_logging(app_name: str, user_data_root: str) -> str:
-    logs_dir = os.path.join(user_data_root, 'logs')
-    os.makedirs(logs_dir, exist_ok=True)
-    log_path = os.path.join(logs_dir, f'{app_name.lower()}.log')
+    log_path = os.path.join(user_data_root, f'{app_name.lower()}.log')
     root = logging.getLogger()
     if not root.handlers:
         root.setLevel(logging.INFO)
         fmt = logging.Formatter('%(asctime)s %(levelname)s %(name)s: %(message)s')
+        if os.path.exists(log_path):
+            try:
+                with open(log_path, 'w', encoding='utf-8'):
+                    pass
+            except Exception as e:
+                print(f'Failed to clear log file: {e}')
         file_handler = RotatingFileHandler(log_path, maxBytes=1000000, backupCount=3, encoding='utf-8')
         file_handler.setFormatter(fmt)
         root.addHandler(file_handler)
@@ -152,8 +157,8 @@ def run_app():
         user_root = get_user_data_root()
         configure_logging('DELTAHUB', user_root)
         install_excepthook()
-    except Exception:
-        pass
+    except Exception as e:
+        logging.warning(f'Failed to initialize logging: {e}')
     parser = argparse.ArgumentParser(description='DELTAHUB')
     parser.add_argument('--shortcut-launch', type=str)
     parser.add_argument('--shortcut-path', type=str)
@@ -202,8 +207,8 @@ def run_app():
             import json
             with open(config_path, 'r', encoding='utf-8') as f:
                 config = json.load(f)
-    except Exception:
-        pass
+    except Exception as e:
+        logging.warning(f'Failed to load config: {e}')
     is_first_launch = not config.get('first_launch_splash_shown', False)
     splash_disabled_by_user = config.get('disable_splash', False)
     show_animated_splash = is_first_launch or not splash_disabled_by_user
@@ -250,7 +255,7 @@ def run_app():
                 error_msg = tr('errors.startup_error_message', details=str(e))
                 print(f'STARTUP ERROR: {error_msg}')
                 QMessageBox.critical(None, tr('errors.startup_error_title'), error_msg)
-        QTimer.singleShot(100, create_launcher_no_animation)
+        QTimer.singleShot(SPLASH_RETRY_DELAY, create_launcher_no_animation)
         try:
             sys.exit(app.exec())
         except Exception as e:
@@ -276,14 +281,14 @@ def run_app():
             time.sleep(0.01)
     splash.show()
     app.processEvents()
-    QTimer.singleShot(1000, start_splash_and_sound)
+    QTimer.singleShot(SPLASH_SOUND_DELAY, start_splash_and_sound)
     launcher_app = {}
 
     def check_minimum_splash_time():
         if _splash_start_time is None:
             return True
         elapsed = time.time() - _splash_start_time
-        return elapsed >= 3.0
+        return elapsed >= SPLASH_MIN_DURATION
 
     def close_splash():
         if hasattr(splash, 'movie'):
@@ -297,7 +302,7 @@ def run_app():
             show_launcher_window(ex)
         else:
             if _splash_start_time is not None:
-                remaining_time = int((3.0 - (time.time() - _splash_start_time)) * 1000)
+                remaining_time = int((SPLASH_MIN_DURATION - (time.time() - _splash_start_time)) * 1000)
             else:
                 remaining_time = 0
 
@@ -330,7 +335,7 @@ def run_app():
             launcher_app['instance'].server = server
             launcher_app['instance']._post_show_initialization()
             launcher_app['instance'].ui_ready.connect(close_splash_when_ready)
-            QTimer.singleShot(8000, close_splash_when_ready)
+            QTimer.singleShot(LAUNCHER_FALLBACK_TIMEOUT, close_splash_when_ready)
         except Exception as e:
             import traceback
             traceback.print_exc()
@@ -338,7 +343,7 @@ def run_app():
             error_msg = tr('errors.startup_error_message', details=str(e))
             print(f'STARTUP ERROR: {error_msg}')
             QMessageBox.critical(None, tr('errors.startup_error_title'), error_msg)
-    QTimer.singleShot(100, create_launcher)
+    QTimer.singleShot(SPLASH_RETRY_DELAY, create_launcher)
     try:
         sys.exit(app.exec())
     except Exception as e:
