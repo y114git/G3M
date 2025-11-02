@@ -1138,7 +1138,6 @@ class ModEditorDialog(QDialog):
         current_hidden = self.mod_data.get('hide_mod', False)
         new_state = not current_hidden
         try:
-            import requests
             from config.constants import CLOUD_FUNCTIONS_BASE_URL
             change = {'hide_mod': new_state}
             session = get_session()
@@ -1197,7 +1196,6 @@ class ModEditorDialog(QDialog):
     def _revalidate_on_save(self) -> bool:
         try:
             import re
-            import requests
             from urllib.parse import unquote
             if self.is_public and hasattr(self, 'icon_edit') and hasattr(self, 'icon_preview'):
                 icon_url = self.icon_edit.text().strip()
@@ -1682,7 +1680,6 @@ class ModEditorDialog(QDialog):
             mod_data = self._collect_mod_data()
             timestamp = time.strftime('%d.%m.%y %H:%M')
             mod_data.update({'status': 'pending', 'downloads': 0, 'is_verified': False, 'submission_date': timestamp, 'created_date': timestamp, 'last_updated': timestamp})
-            import requests
             from config.constants import CLOUD_FUNCTIONS_BASE_URL
             functions_url = f'{CLOUD_FUNCTIONS_BASE_URL}/submitNewMod'
             session = get_session()
@@ -1818,7 +1815,6 @@ class ModEditorDialog(QDialog):
             updated_data['downloads'] = self.original_mod_data.get('downloads', 0)
         updated_data['last_updated'] = time.strftime('%d.%m.%y %H:%M')
         try:
-            import requests
             hashed_key = self.mod_key
             if not hashed_key:
                 QMessageBox.critical(self, tr('errors.error'), tr('errors.mod_key_not_determined'))
@@ -1964,7 +1960,6 @@ class ModEditorDialog(QDialog):
             QMessageBox.warning(self, tr('dialogs.invalid_key'), tr('dialogs.invalid_key_message'))
             return
         try:
-            import requests
             from config.constants import CLOUD_FUNCTIONS_BASE_URL
             session = get_session()
             resp = session.post(f'{CLOUD_FUNCTIONS_BASE_URL}/deletePublicMod', json={'hashedKey': hashed_key}, timeout=10)

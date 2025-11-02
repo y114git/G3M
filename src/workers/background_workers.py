@@ -11,7 +11,7 @@ import requests
 from utils.network_utils import get_session
 from PyQt6.QtCore import QObject, QThread, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QImage
-from config.constants import CLOUD_FUNCTIONS_BASE_URL, UI_COLORS
+from config.constants import CLOUD_FUNCTIONS_BASE_URL, UI_COLORS, NETWORK_TIMEOUT_MEDIUM, NETWORK_TIMEOUT_HEAD, NETWORK_TIMEOUT_LONG
 from managers.localization_manager import tr
 from utils.file_utils import get_unique_mod_dir
 from utils.deltamod_converter import DeltamodConverter
@@ -36,7 +36,7 @@ class PresenceWorker(QObject):
             url = f'{CLOUD_FUNCTIONS_BASE_URL}/presenceHeartbeat'
             data = {'sessionId': self.session_id}
             session = get_session()
-            resp = session.post(url, json=data, timeout=8)
+            resp = session.post(url, json=data, timeout=NETWORK_TIMEOUT_MEDIUM)
             if resp.status_code == 200:
                 try:
                     data = resp.json() or {}
@@ -84,7 +84,7 @@ class FetchChangelogThread(QThread):
                 params = {'ts': int(time.time())}
                 headers = {'Cache-Control': 'no-cache', 'Pragma': 'no-cache', 'User-Agent': 'DELTAHUB/1.0'}
                 session = get_session()
-                with session.get(self.source, params=params, headers=headers, timeout=10) as resp:
+                with session.get(self.source, params=params, headers=headers, timeout=NETWORK_TIMEOUT_MEDIUM) as resp:
                     resp.raise_for_status()
                     text = resp.text
             elif os.path.exists(self.source) or os.path.exists(self.source.replace('.md', '.txt')):
@@ -139,7 +139,7 @@ class FullInstallThread(QThread):
         try:
             session = get_session()
             self._session = session
-            resp = session.head(full_install_url, allow_redirects=True, timeout=10)
+            resp = session.head(full_install_url, allow_redirects=True, timeout=NETWORK_TIMEOUT_MEDIUM)
             total_size = int(resp.headers.get('content-length', 0))
             downloaded_ref = [0]
             from utils.file_utils import download_and_extract_archive
@@ -279,7 +279,7 @@ class InstallModsThread(QThread):
             url = f'{CLOUD_FUNCTIONS_BASE_URL}/incrementDownloads'
             data = {'modId': mod_key}
             session = get_session()
-            response = session.post(url, json=data, timeout=10)
+            response = session.post(url, json=data, timeout=NETWORK_TIMEOUT_MEDIUM)
             return response.status_code == 200
         except Exception as e:
             logging.debug(f'_increment_mod_downloads_on_server: failed: {e}')
@@ -382,7 +382,7 @@ class InstallModsThread(QThread):
             for task in download_tasks:
                 u = task.get('url')
                 try:
-                    h = session.head(u, allow_redirects=True, timeout=15)
+                    h = session.head(u, allow_redirects=True, timeout=NETWORK_TIMEOUT_HEAD)
                     content_length = int(h.headers.get('content-length', 0))
                     file_sizes_cache[u] = content_length
                     total_bytes += content_length
@@ -568,6 +568,14 @@ class InstallModsThread(QThread):
             except Exception as emit_e:
                 logging.debug(f'InstallModsThread: failed to emit permission error: {emit_e}')
             self.finished.emit(False)
+        except RuntimeError as e:
+            if str(e) == 'download_cancelled':
+                logging.info('InstallModsThread.run: download cancelled by user')
+                self.finished.emit(False)
+            else:
+                logging.error(f'InstallModsThread.run: installation error: {e}', exc_info=True)
+                self.status.emit(tr('errors.installation_error', error=str(e)), UI_COLORS['status_error'])
+                self.finished.emit(False)
         except Exception as e:
             logging.error(f'InstallModsThread.run: installation error: {e}', exc_info=True)
             self.status.emit(tr('errors.installation_error', error=str(e)), UI_COLORS['status_error'])
@@ -693,7 +701,7 @@ class UrlInstallThread(QThread):
         archive_path = os.path.join(temp_dir, filename)
         session = get_session()
         self._session = session
-        response = self._session.get(url, stream=True, timeout=30)
+        response = self._session.get(url, stream=True, timeout=NETWORK_TIMEOUT_LONG)
         self._active_response = response
         response.raise_for_status()
         total_size = int(response.headers.get('content-length', 0))
@@ -779,7 +787,7 @@ class FetchHelpContentThread(QThread):
     def run(self):
         try:
             from utils.network_utils import get_session
-            response = get_session().get(self.url, timeout=10)
+            response = get_session().get(self.url, timeout=NETWORK_TIMEOUT_MEDIUM)
             if response.ok:
                 content = response.text
                 self.finished.emit(content)

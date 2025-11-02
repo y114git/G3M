@@ -1,7 +1,6 @@
 import os
 import json
 import logging
-import threading
 import zipfile
 import shutil
 import tempfile
@@ -30,7 +29,6 @@ class ModManager(QObject):
         super().__init__(parent)
         self.app_state = app_state
         self.feedback_manager = feedback_manager
-        self._mods_metadata_lock = threading.Lock()
         self.current_install_thread = None
         self.url_install_thread = None
 
@@ -541,7 +539,7 @@ class ModManager(QObject):
             return True
 
     def _read_metadata(self) -> Dict:
-        with self._mods_metadata_lock:
+        with self.app_state._mods_metadata_lock:
             if not os.path.exists(self.app_state.mods_metadata_path):
                 return {}
             try:
@@ -552,7 +550,7 @@ class ModManager(QObject):
                 return {}
 
     def _write_metadata(self, data: Dict):
-        with self._mods_metadata_lock:
+        with self.app_state._mods_metadata_lock:
             try:
                 with open(self.app_state.mods_metadata_path, 'w', encoding='utf-8') as f:
                     json.dump(data, f, ensure_ascii=False, indent=2)
