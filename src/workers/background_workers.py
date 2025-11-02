@@ -16,7 +16,6 @@ from managers.localization_manager import tr
 from utils.file_utils import get_unique_mod_dir
 from utils.deltamod_converter import DeltamodConverter
 from utils.network_utils import download_file
-from core.exceptions import NetworkError, NetworkTimeoutError, NetworkConnectionError, HTTPError, ArchiveError, ArchiveCorruptedError, FileOperationError, FilePermissionError
 import logging
 
 
@@ -858,3 +857,58 @@ class FetchHelpContentWorker(QObject):
         except Exception as e:
             logging.warning(f'FetchHelpContentWorker: failed to load help content: {e}', exc_info=True)
             self.finished.emit(f"<i>{tr('dialogs.help_content_load_failed')}</i>")
+
+
+class ModScanThread(QThread):
+    scan_completed = pyqtSignal(dict)
+
+    def __init__(self, mods_dir: str, parent=None):
+        super().__init__(parent)
+        self.mods_dir = mods_dir
+        self._cancel_flag = False
+
+    def cancel(self):
+        self._cancel_flag = True
+
+    def run(self):
+        cache = {}
+        if not os.path.exists(self.mods_dir):
+            self.scan_completed.emit(cache)
+            return
+        try:
+            with os.scandir(self.mods_dir) as entries:
+                for entry in entries:
+                    if self._cancel_flag:
+                        break
+                    if not entry.is_dir(follow_symlinks=False):
+                        continue
+                    folder_name = entry.name
+                    folder_path = entry.path
+                    config_path = os.path.join(folder_path, 'config.json')
+                    if not os.path.exists(config_path):
+                        continue
+                    try:
+                        config_mtime = os.path.getmtime(config_path)
+                        with open(config_path, 'r', encoding='utf-8') as f:
+                            config_data = json.load(f)
+                        mod_key = config_data.get('mod_key')
+                        if not mod_key:
+                            continue
+                        if mod_key in cache:
+                            existing_info = cache[mod_key]
+                            if config_mtime <= existing_info.config_mtime:
+                                continue
+                        mod_info = {'mod_key': mod_key, 'folder_path': folder_path, 'folder_name': folder_name, 'config_data': config_data, 'config_mtime': config_mtime}
+                        cache[mod_key] = mod_info
+                    except OSError as e:
+                        logging.warning(f'ModScanThread: failed to access config {config_path}: {e}', exc_info=True)
+                        continue
+                    except json.JSONDecodeError as e:
+                        logging.warning(f'ModScanThread: invalid JSON in {config_path}: {e}', exc_info=True)
+                        continue
+                    except KeyError as e:
+                        logging.debug(f'ModScanThread: missing key in {config_path}: {e}')
+                        continue
+        except OSError as e:
+            logging.error(f'ModScanThread: failed to list directory {self.mods_dir}: {e}', exc_info=True)
+        self.scan_completed.emit(cache)

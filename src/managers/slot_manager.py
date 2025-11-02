@@ -12,6 +12,7 @@ from models.game_modes import DemoGameMode, UndertaleGameMode
 from ui.widgets.common.custom_controls import SlotFrame
 from ui.common.styling import get_theme_color, clear_layout_widgets, load_mod_icon_universal
 from managers.localization_manager import tr
+from config.constants import SLOT_ID_UNIVERSAL, SLOT_ID_DEMO, SLOT_ID_UNDERTALE, SLOT_ID_MENU, SLOT_ID_CHAPTER_1, SLOT_ID_CHAPTER_2, SLOT_ID_CHAPTER_3, SLOT_ID_CHAPTER_4
 
 
 class SlotManager(QObject):
@@ -63,20 +64,20 @@ class SlotManager(QObject):
         is_demo_mode = isinstance(self.app_state.game_mode, DemoGameMode)
         if self.app_state.current_mode == 'normal':
             if is_demo_mode:
-                slot = self.create_slot_widget(tr('ui.demo_slot'), -10)
+                slot = self.create_slot_widget(tr('ui.demo_slot'), SLOT_ID_DEMO)
                 if active_slots_layout is not None:
                     active_slots_layout.addWidget(slot)
-                self.app_state.slots[-10] = slot
+                self.app_state.slots[SLOT_ID_DEMO] = slot
             elif isinstance(self.app_state.game_mode, UndertaleGameMode):
-                slot = self.create_slot_widget(tr('ui.mod_slot'), -20)
+                slot = self.create_slot_widget(tr('ui.mod_slot'), SLOT_ID_UNDERTALE)
                 if active_slots_layout is not None:
                     active_slots_layout.addWidget(slot)
-                self.app_state.slots[-20] = slot
+                self.app_state.slots[SLOT_ID_UNDERTALE] = slot
             else:
-                slot = self.create_slot_widget(tr('ui.mod_slot'), -1)
+                slot = self.create_slot_widget(tr('ui.mod_slot'), SLOT_ID_UNIVERSAL)
                 if active_slots_layout is not None:
                     active_slots_layout.addWidget(slot)
-                self.app_state.slots[-1] = slot
+                self.app_state.slots[SLOT_ID_UNIVERSAL] = slot
                 self.create_chapter_indicators(active_slots_layout)
         if self.app_state.current_mode != 'normal':
             slot_names = [tr('chapters.menu'), tr('tabs.chapter_1'), tr('tabs.chapter_2'), tr('tabs.chapter_3'), tr('tabs.chapter_4')]
@@ -89,7 +90,7 @@ class SlotManager(QObject):
 
     def create_slot_widget(self, name: str, chapter_id: int) -> SlotFrame:
         slot_frame = SlotFrame()
-        if chapter_id in [-1, -10, -20]:
+        if chapter_id in [SLOT_ID_UNIVERSAL, SLOT_ID_DEMO, SLOT_ID_UNDERTALE]:
             slot_frame.setFixedSize(250, 100)
         else:
             slot_frame.setFixedSize(150, 100)
@@ -127,7 +128,7 @@ class SlotManager(QObject):
         else:
             slot_bg_color = 'rgba(0, 0, 0, 150)'
         slot_border_color = get_theme_color(self.app_state.local_config, 'border', 'white')
-        direct_launch_slot_id = self.app_state.local_config.get('direct_launch_slot_id', -1)
+        direct_launch_slot_id = self.app_state.local_config.get('direct_launch_slot_id', SLOT_ID_UNIVERSAL)
         is_direct_launch_slot = direct_launch_slot_id >= 0 and slot_frame.chapter_id >= 0 and (slot_frame.chapter_id == direct_launch_slot_id)
         border_style = '3px dashed' if is_direct_launch_slot else '3px solid'
         if getattr(slot_frame, 'is_selected', False):
@@ -181,7 +182,7 @@ class SlotManager(QObject):
             self.feedback_manager.show_info('ui.direct_launch', tr('ui.direct_launch_menu_not_allowed'))
             return
         use_steam = self.app_state.local_config.get('launch_via_steam', False)
-        direct_launch_slot_id = self.app_state.local_config.get('direct_launch_slot_id', -1)
+        direct_launch_slot_id = self.app_state.local_config.get('direct_launch_slot_id', SLOT_ID_UNIVERSAL)
         current_is_direct = slot_frame.chapter_id == direct_launch_slot_id
         if not current_is_direct:
             if use_steam:
@@ -193,7 +194,7 @@ class SlotManager(QObject):
         else:
             chapter_number = self._get_chapter_number_for_placeholder(slot_frame.chapter_id)
             if self.feedback_manager.ask_question('ui.direct_launch', 'ui.disable_direct_launch', '', False, chapter=chapter_number):
-                self.toggle_direct_launch_for_slot(-1)
+                self.toggle_direct_launch_for_slot(SLOT_ID_UNIVERSAL)
 
     def assign_mod_to_slot(self, slot_frame: SlotFrame, mod_data, save_state: bool = True):
         try:
@@ -272,7 +273,7 @@ class SlotManager(QObject):
         slot_frame.content_widget = new_content_widget
         slot_frame.mod_icon = mod_icon
         self.mod_widgets_update_needed.emit()
-        if slot_frame.chapter_id == -1:
+        if slot_frame.chapter_id == SLOT_ID_UNIVERSAL:
             self.update_chapter_indicators(mod_data)
         self.action_button_update_needed.emit()
         if save_state:
@@ -331,13 +332,13 @@ class SlotManager(QObject):
                 continue
             mod_modgame = mod_info.get('modgame', 'deltarune')
             slot_id = slot_frame.chapter_id
-            if slot_id == -10:
+            if slot_id == SLOT_ID_DEMO:
                 if mod_modgame != 'deltarunedemo':
                     continue
-            elif slot_id == -20:
+            elif slot_id == SLOT_ID_UNDERTALE:
                 if mod_modgame != 'undertale':
                     continue
-            elif slot_id == -1:
+            elif slot_id == SLOT_ID_UNIVERSAL:
                 if mod_modgame not in ['deltarune', 'deltarunedemo']:
                     continue
             elif mod_modgame != 'deltarune':
@@ -528,15 +529,15 @@ class SlotManager(QObject):
                 continue
             is_chapter_mode = self.app_state.current_mode == 'chapter'
             if isinstance(self.app_state.game_mode, DemoGameMode):
-                if numeric_slot_id != -10:
+                if numeric_slot_id != SLOT_ID_DEMO:
                     continue
             elif isinstance(self.app_state.game_mode, UndertaleGameMode):
-                if numeric_slot_id != -20:
+                if numeric_slot_id != SLOT_ID_UNDERTALE:
                     continue
             elif is_chapter_mode:
-                if numeric_slot_id not in [0, 1, 2, 3, 4]:
+                if numeric_slot_id not in [SLOT_ID_MENU, SLOT_ID_CHAPTER_1, SLOT_ID_CHAPTER_2, SLOT_ID_CHAPTER_3, SLOT_ID_CHAPTER_4]:
                     continue
-            elif numeric_slot_id != -1:
+            elif numeric_slot_id != SLOT_ID_UNIVERSAL:
                 continue
             if numeric_slot_id not in self.app_state.slots:
                 continue
@@ -616,13 +617,13 @@ class SlotManager(QObject):
             return []
         is_demo_mode = isinstance(self.app_state.game_mode, DemoGameMode)
         if is_demo_mode:
-            active_slot_ids = [-10]
+            active_slot_ids = [SLOT_ID_DEMO]
         elif isinstance(self.app_state.game_mode, UndertaleGameMode):
-            active_slot_ids = [-20]
+            active_slot_ids = [SLOT_ID_UNDERTALE]
         elif self.app_state.current_mode != 'chapter':
-            active_slot_ids = [-1]
+            active_slot_ids = [SLOT_ID_UNIVERSAL]
         else:
-            active_slot_ids = [0, 1, 2, 3, 4]
+            active_slot_ids = [SLOT_ID_MENU, SLOT_ID_CHAPTER_1, SLOT_ID_CHAPTER_2, SLOT_ID_CHAPTER_3, SLOT_ID_CHAPTER_4]
         mods_to_update = []
         for slot_id in active_slot_ids:
             for slot_frame in getattr(self.app_state, 'slots', {}).values():

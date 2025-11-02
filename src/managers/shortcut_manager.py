@@ -12,7 +12,7 @@ from core.app_state import AppState
 from ui.common.feedback import FeedbackManager
 from managers.mod_manager import ModManager
 from models.game_modes import DemoGameMode, FullGameMode, UndertaleGameMode
-from config.constants import LAUNCHER_VERSION, UI_COLORS
+from config.constants import LAUNCHER_VERSION, UI_COLORS, SLOT_ID_UNIVERSAL, SLOT_ID_DEMO, SLOT_ID_UNDERTALE
 from managers.localization_manager import tr
 from utils.path_utils import resource_path
 
@@ -54,7 +54,7 @@ class ShortcutManager(QObject):
                 description_lines.append(f"<b>{tr('status.mod_label')}</b> <i>{tr('status.vanilla')}</i>")
         else:
             is_chapter_mode = settings.get('is_chapter_mode', False)
-            direct_launch_slot_id = settings.get('direct_launch_slot_id', -1)
+            direct_launch_slot_id = settings.get('direct_launch_slot_id', SLOT_ID_UNIVERSAL)
             if is_chapter_mode:
                 if direct_launch_slot_id >= 0:
                     chapter_names = {0: tr('chapters.menu'), 1: tr('tabs.chapter_1'), 2: tr('tabs.chapter_2'), 3: tr('tabs.chapter_3'), 4: tr('tabs.chapter_4')}
@@ -100,11 +100,11 @@ class ShortcutManager(QObject):
         is_demo_mode = isinstance(self.app_state.game_mode, DemoGameMode)
         is_chapter_mode = hasattr(self.parent_widget, 'chapter_mode_checkbox') and self.parent_widget.chapter_mode_checkbox.isChecked()
         is_undertale_mode = isinstance(self.app_state.game_mode, UndertaleGameMode)
-        settings = {'launcher_version': LAUNCHER_VERSION, 'game_path': self.app_state.game_path, 'demo_game_path': self.app_state.demo_game_path, 'is_demo_mode': is_demo_mode, 'is_chapter_mode': is_chapter_mode, 'is_undertale_mode': is_undertale_mode, 'launch_via_steam': self.parent_widget.launch_via_steam_checkbox.isChecked(), 'use_custom_executable': self.parent_widget.use_custom_executable_checkbox.isChecked(), 'custom_executable_path': self.app_state.local_config.get(FullGameMode().get_custom_exec_config_key(), ''), 'demo_custom_executable_path': self.app_state.local_config.get(DemoGameMode().get_custom_exec_config_key(), ''), 'direct_launch_slot_id': self.app_state.local_config.get('direct_launch_slot_id', -1), 'mods': {}}
+        settings = {'launcher_version': LAUNCHER_VERSION, 'game_path': self.app_state.game_path, 'demo_game_path': self.app_state.demo_game_path, 'is_demo_mode': is_demo_mode, 'is_chapter_mode': is_chapter_mode, 'is_undertale_mode': is_undertale_mode, 'launch_via_steam': self.parent_widget.launch_via_steam_checkbox.isChecked(), 'use_custom_executable': self.parent_widget.use_custom_executable_checkbox.isChecked(), 'custom_executable_path': self.app_state.local_config.get(FullGameMode().get_custom_exec_config_key(), ''), 'demo_custom_executable_path': self.app_state.local_config.get(DemoGameMode().get_custom_exec_config_key(), ''), 'direct_launch_slot_id': self.app_state.local_config.get('direct_launch_slot_id', SLOT_ID_UNIVERSAL), 'mods': {}}
         if is_demo_mode:
             demo_mod_key = None
             try:
-                demo_slot = self.app_state.slots.get(-10) if hasattr(self.app_state, 'slots') else None
+                demo_slot = self.app_state.slots.get(SLOT_ID_DEMO) if hasattr(self.app_state, 'slots') else None
                 if demo_slot and getattr(demo_slot, 'assigned_mod', None):
                     demo_mod_key = getattr(demo_slot.assigned_mod, 'key', None) or getattr(demo_slot.assigned_mod, 'mod_key', None)
             except Exception:
@@ -113,7 +113,7 @@ class ShortcutManager(QObject):
         elif is_undertale_mode:
             undertale_mod_key = None
             try:
-                undertale_slot = self.app_state.slots.get(-20) if hasattr(self.app_state, 'slots') else None
+                undertale_slot = self.app_state.slots.get(SLOT_ID_UNDERTALE) if hasattr(self.app_state, 'slots') else None
                 if undertale_slot and getattr(undertale_slot, 'assigned_mod', None):
                     undertale_mod_key = getattr(undertale_slot.assigned_mod, 'key', None) or getattr(undertale_slot.assigned_mod, 'mod_key', None)
             except Exception:
@@ -130,7 +130,7 @@ class ShortcutManager(QObject):
         else:
             universal_mod_key = None
             try:
-                universal_slot = self.app_state.slots.get(-1) if hasattr(self.app_state, 'slots') else None
+                universal_slot = self.app_state.slots.get(SLOT_ID_UNIVERSAL) if hasattr(self.app_state, 'slots') else None
                 if universal_slot and getattr(universal_slot, 'assigned_mod', None):
                     universal_mod_key = getattr(universal_slot.assigned_mod, 'key', None) or getattr(universal_slot.assigned_mod, 'mod_key', None)
             except Exception:

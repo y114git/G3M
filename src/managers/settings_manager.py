@@ -11,7 +11,7 @@ from typing import Optional
 from PyQt6.QtCore import QObject, pyqtSignal, QTimer, QByteArray
 from PyQt6.QtWidgets import QFileDialog, QApplication, QWidget
 from managers.localization_manager import tr, LocalizationManager
-from config.constants import LAUNCHER_VERSION, UI_COLORS
+from config.constants import LAUNCHER_VERSION, UI_COLORS, SLOT_ID_UNIVERSAL
 from models.game_modes import DemoGameMode, UndertaleGameMode
 from utils.file_utils import get_file_filter
 from utils.game_utils import is_valid_game_path
@@ -86,7 +86,7 @@ class SettingsManager(QObject):
 
     def migrate_config_if_needed(self):
         self.app_state.local_config['cache_format_version'] = LAUNCHER_VERSION
-        defaults = {'game_path': '', 'last_selected': {}, 'use_custom_executable': False, 'demo_game_path': '', 'launch_via_steam': False, 'direct_launch_slot_id': -1, 'demo_mode_enabled': False, 'chapter_mode_enabled': False, 'custom_background_path': '', 'custom_executable_path': '', 'background_disabled': False, 'custom_color_background': '', 'custom_color_button': '', 'custom_color_border': '', 'custom_color_button_hover': '', 'custom_color_text': '', 'mods_dir_path': '', 'custom_color_version_text': '', 'beta_updates_enabled': False}
+        defaults = {'game_path': '', 'last_selected': {}, 'use_custom_executable': False, 'demo_game_path': '', 'launch_via_steam': False, 'direct_launch_slot_id': SLOT_ID_UNIVERSAL, 'demo_mode_enabled': False, 'chapter_mode_enabled': False, 'custom_background_path': '', 'custom_executable_path': '', 'background_disabled': False, 'custom_color_background': '', 'custom_color_button': '', 'custom_color_border': '', 'custom_color_button_hover': '', 'custom_color_text': '', 'mods_dir_path': '', 'custom_color_version_text': '', 'beta_updates_enabled': False}
         for key, value in defaults.items():
             self.app_state.local_config.setdefault(key, value)
         self.write_local_config()
@@ -392,7 +392,7 @@ class SettingsManager(QObject):
         self.feedback_manager.show_info('dialogs.success', tr('status.settings_reset_success'))
 
     def disable_direct_launch(self):
-        self.app_state.local_config['direct_launch_slot_id'] = -1
+        self.app_state.local_config['direct_launch_slot_id'] = SLOT_ID_UNIVERSAL
         self.write_local_config()
         self.settings_changed.emit()
 

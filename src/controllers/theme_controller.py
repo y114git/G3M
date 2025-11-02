@@ -7,12 +7,12 @@ from workers.background_workers import BgLoader
 
 class ThemeController:
 
-    def __init__(self, app_window):
+    def __init__(self, app_state, feedback_manager, settings_manager, customization_manager, app_window):
+        self.app_state = app_state
+        self.feedback_manager = feedback_manager
+        self.settings_manager = settings_manager
+        self.customization_manager = customization_manager
         self.app = app_window
-        self.app_state = app_window.app_state
-        self.feedback_manager = app_window.feedback_manager
-        self.settings_manager = app_window.settings_manager
-        self.customization_manager = app_window.customization_manager
 
     def apply_theme(self):
         theme = THEMES['default']
