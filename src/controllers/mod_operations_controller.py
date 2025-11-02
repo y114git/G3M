@@ -58,13 +58,13 @@ class ModOperationsController:
                     return
             install_tasks = [(mod, chapter_id) for chapter_id in available_chapters]
             try:
-                self.app._operation_cancelled = False
+                self.app_state.operation_cancelled = False
             except Exception:
                 pass
             self.app_state.is_installing = True
             self.set_install_buttons_enabled(False)
             self.app.action_button.setText(tr('ui.cancel_button'))
-            self.app._install_op_id = getattr(self.app, '_install_op_id', 0) + 1
+            self.app._install_op_id += 1
             op_id = self.app._install_op_id
             self.app.current_install_thread = InstallModsThread(self.app, install_tasks, was_installed_before)
             self.app.install_thread = self.app.current_install_thread
@@ -83,30 +83,30 @@ class ModOperationsController:
             self.feedback_manager.show_error('errors.mod_install_failed', error=str(e))
 
     def on_install_progress_token(self, value: int, op_id: int):
-        if getattr(self.app, '_install_op_id', 0) == op_id and self.app_state.is_installing:
+        if self.app._install_op_id == op_id and self.app_state.is_installing:
             self.app.progress_bar.setValue(value)
 
     def on_install_status_token(self, message: str, color: str, op_id: int):
-        if getattr(self.app, '_install_op_id', 0) == op_id and self.app_state.is_installing:
+        if self.app._install_op_id == op_id and self.app_state.is_installing:
             self.app._update_status(message, color)
 
     def on_install_finished_token(self, success: bool, op_id: int):
-        if getattr(self.app, '_install_op_id', 0) != op_id:
+        if self.app._install_op_id != op_id:
             return
         self.on_install_finished(success)
 
     def on_install_finished(self, success: bool):
         was_installed_before = False
-        if hasattr(self.app, 'current_install_thread') and self.app.current_install_thread:
+        if self.app.current_install_thread:
             was_installed_before = getattr(self.app.current_install_thread, 'was_installed_before', False)
         self.app.progress_bar.setValue(0)
         self.app.progress_bar.setVisible(False)
         if success:
             self.feedback_manager.update_status(tr('status.mod_installed_success'), UI_COLORS['status_success'])
         else:
-            if getattr(self.app, '_operation_cancelled', False):
+            if self.app_state.operation_cancelled:
                 try:
-                    self.app._operation_cancelled = False
+                    self.app_state.operation_cancelled = False
                 except Exception:
                     pass
             else:

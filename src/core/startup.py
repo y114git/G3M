@@ -227,7 +227,7 @@ def run_app():
                 if hasattr(ex, 'app_state') and getattr(ex.app_state, 'game_is_running', False):
                     return
                 ex.show()
-                ex.is_shown_to_user = True
+                ex.app_state.is_shown_to_user = True
                 ex.activateWindow()
                 ex.raise_()
                 ex.setWindowState(ex.windowState() & ~Qt.WindowState.WindowMinimized | Qt.WindowState.WindowActive)

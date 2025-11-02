@@ -16,8 +16,8 @@ class FetchModsThread(QThread):
     result = pyqtSignal(bool)
     status = pyqtSignal(str, str)
 
-    def __init__(self, main_window, force_update=False):
-        super().__init__(main_window)
+    def __init__(self, main_window, force_update=False, parent=None):
+        super().__init__(parent)
         self.main_window = main_window
         self.force_update = force_update
 

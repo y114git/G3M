@@ -23,7 +23,7 @@ class GameLaunchController:
         self.customization_manager = app_window.customization_manager
 
     def update_button_state(self):
-        if self.app_state.is_installing and (not getattr(self.app, '_operation_cancelled', False)):
+        if self.app_state.is_installing and (not self.app_state.operation_cancelled):
             self.app.action_button.setText(tr('ui.cancel_button'))
             self.app.action_button.setEnabled(True)
             return
@@ -32,7 +32,7 @@ class GameLaunchController:
             self.app.action_button.setEnabled(False)
             return
         is_demo_mode = isinstance(self.app_state.game_mode, DemoGameMode)
-        is_full_install_enabled = is_demo_mode and hasattr(self.app, 'full_install_checkbox') and self.app.full_install_checkbox.isChecked()
+        is_full_install_enabled = is_demo_mode and self.app.full_install_checkbox.isChecked()
         if is_full_install_enabled:
             action_text = tr('buttons.install')
         elif self.slot_manager.check_active_slots_need_updates():
@@ -44,36 +44,33 @@ class GameLaunchController:
 
     def on_action_button_click(self):
         if self.app_state.is_installing:
-            self.app._operation_cancelled = True
+            self.app_state.operation_cancelled = True
             self.feedback_manager.update_status(tr('status.operation_cancelled'), UI_COLORS['status_error'])
             try:
                 self.app.progress_bar.setValue(0)
                 self.app.progress_bar.setVisible(False)
             except Exception:
                 pass
-            try:
-                thr = None
-                if getattr(self.app, 'current_install_thread', None):
-                    thr = self.app.current_install_thread
-                elif getattr(self.app, 'install_thread', None):
-                    thr = self.app.install_thread
-                elif getattr(self.app, 'full_install_thread', None):
-                    thr = self.app.full_install_thread
-                elif getattr(self.app, 'mod_manager', None) and getattr(self.app.mod_manager, 'current_install_thread', None):
-                    thr = self.app.mod_manager.current_install_thread
-                elif getattr(self.app, 'mod_manager', None) and getattr(self.app.mod_manager, 'url_install_thread', None):
-                    thr = self.app.mod_manager.url_install_thread
-                if thr and hasattr(thr, 'cancel'):
-                    thr.cancel()
-            except Exception:
-                pass
+            thr = None
+            if self.app.current_install_thread:
+                thr = self.app.current_install_thread
+            elif self.app.install_thread:
+                thr = self.app.install_thread
+            elif self.app.full_install_thread:
+                thr = self.app.full_install_thread
+            elif self.mod_manager.current_install_thread:
+                thr = self.mod_manager.current_install_thread
+            elif self.mod_manager.url_install_thread:
+                thr = self.mod_manager.url_install_thread
+            if thr and hasattr(thr, 'cancel'):
+                thr.cancel()
             try:
                 self.app_state.is_installing = False
             except Exception:
                 pass
             self.update_button_state()
             return
-        if isinstance(self.app_state.game_mode, DemoGameMode) and getattr(self.app, 'full_install_checkbox', None) is not None and self.app.full_install_checkbox.isChecked():
+        if isinstance(self.app_state.game_mode, DemoGameMode) and self.app.full_install_checkbox.isChecked():
             self.perform_full_install()
             return
         if self.app_state.is_installing:
@@ -81,7 +78,7 @@ class GameLaunchController:
         if self.slot_manager.check_active_slots_need_updates():
             self.update_mods_in_active_slots()
             return
-        if getattr(self.app, '_operation_cancelled', False):
+        if self.app_state.operation_cancelled:
             return
         self.app.action_button.setEnabled(False)
         self.app.saves_button.setEnabled(False)
@@ -108,19 +105,16 @@ class GameLaunchController:
         self.app.progress_bar.setVisible(False)
         self.update_button_state()
         QTimer.singleShot(100, self.app.updateGeometry)
-        if hasattr(self.app, 'library_display'):
-            self.app.library_display.update_display()
-        if hasattr(self.app, 'search_display'):
-            self.app.search_display.update_display()
-        self.customization_manager.maybe_start_background_music(getattr(self.app, 'is_shown_to_user', False), self.app.isVisible())
-        if hasattr(self.app, '_show_pending_dialogs'):
-            self.app._show_pending_dialogs()
+        self.app.library_display.update_display()
+        self.app.search_display.update_display()
+        self.customization_manager.maybe_start_background_music(self.app_state.is_shown_to_user, self.app.isVisible())
+        self.app._show_pending_dialogs()
         self.app.plugin_manager.execute_hooks('on_after_game_exit', self.app)
 
     def perform_full_install(self):
         if self.app_state.is_installing:
             return
-        if hasattr(self.app, 'full_install_thread') and self.app.full_install_thread and self.app.full_install_thread.isRunning():
+        if self.app.full_install_thread and self.app.full_install_thread.isRunning():
             return
         self.app.action_button.setEnabled(False)
         self.app.saves_button.setEnabled(False)
@@ -184,16 +178,9 @@ class GameLaunchController:
         mods_to_update = self.slot_manager.collect_mods_needing_update_in_active_slots()
         if mods_to_update:
             self.app.pending_updates = mods_to_update[1:] if len(mods_to_update) > 1 else []
-            try:
-                self.app._operation_cancelled = False
-            except Exception:
-                pass
-            if hasattr(self.app, 'progress_bar'):
-                try:
-                    self.app.progress_bar.setVisible(True)
-                    self.app.progress_bar.setValue(0)
-                except Exception:
-                    pass
+            self.app_state.operation_cancelled = False
+            self.app.progress_bar.setVisible(True)
+            self.app.progress_bar.setValue(0)
             self.mod_manager.update_mod(mods_to_update[0])
 
     def refresh_mods_in_slots(self):

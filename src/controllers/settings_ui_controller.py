@@ -53,7 +53,8 @@ class SettingsUiController:
 
     def load_help_content(self):
         from managers.localization_manager import localization_manager
-        from workers.background_workers import FetchHelpContentThread
+        from workers.background_workers import FetchHelpContentWorker
+        from PyQt6.QtCore import QThread
         if localization_manager.get_current_language() == 'ru':
             help_url = self.app_state.global_settings.get('help_ru_url', self.app_state.global_settings.get('help_url', ''))
         else:
@@ -62,8 +63,11 @@ class SettingsUiController:
             self.app.help_text_edit.setMarkdown(f"<i>{tr('dialogs.help_not_available')}</i>")
             return
         self.app.help_text_edit.setMarkdown(f"<i>{tr('status.loading')}</i>")
-        self.app.help_thread = FetchHelpContentThread(help_url.strip(), self.app)
-        self.app.help_thread.finished.connect(self.app.help_text_edit.setMarkdown)
+        self.app.help_thread = QThread(self.app)
+        self.app.help_worker = FetchHelpContentWorker(help_url.strip())
+        self.app.help_worker.moveToThread(self.app.help_thread)
+        self.app.help_worker.finished.connect(self.app.help_text_edit.setMarkdown)
+        self.app.help_thread.started.connect(self.app.help_worker.run)
         self.app.help_thread.start()
 
     def update_settings_page_visibility(self):

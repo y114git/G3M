@@ -263,12 +263,10 @@ class SettingsManager(QObject):
         existing = ''
         if hasattr(self.parent_widget, 'customization_manager'):
             existing = self.parent_widget.customization_manager.get_startup_sound_path()
-        else:
-            # Fallback если customization_manager еще не создан
-            if os.path.exists(mp3):
-                existing = mp3
-            elif os.path.exists(wav):
-                existing = wav
+        elif os.path.exists(mp3):
+            existing = mp3
+        elif os.path.exists(wav):
+            existing = wav
         if existing:
             try:
                 for p in (mp3, wav):
@@ -297,7 +295,6 @@ class SettingsManager(QObject):
                     self.theme_changed.emit()
                 except Exception:
                     self.feedback_manager.show_warning('errors.error', tr('errors.copy_startup_sound_failed'))
-
 
     def is_valid_hex_color(self, s: str) -> bool:
         return bool(re.fullmatch('#[0-9a-fA-F]{6}', s or ''))
@@ -333,7 +330,6 @@ class SettingsManager(QObject):
             if sound_path and os.path.exists(sound_path):
                 zipf.write(sound_path, f'startup_sound{os.path.splitext(sound_path)[1]}')
         self.feedback_manager.show_info('dialogs.success', tr('dialogs.theme_exported_success'))
-
 
     def import_theme(self):
         theme_file_path, _ = QFileDialog.getOpenFileName(self.parent_widget, tr('dialogs.import_theme_title'), '', f"{tr('file_descriptions.theme_files')} (*.dhtheme)")
