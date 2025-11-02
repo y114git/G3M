@@ -260,7 +260,15 @@ class SettingsManager(QObject):
     def on_startup_sound_button_click(self):
         mp3 = os.path.join(self.app_state.config_dir, 'custom_startup_sound.mp3')
         wav = os.path.join(self.app_state.config_dir, 'custom_startup_sound.wav')
-        existing = self._get_startup_sound_path()
+        existing = ''
+        if hasattr(self.parent_widget, 'customization_manager'):
+            existing = self.parent_widget.customization_manager.get_startup_sound_path()
+        else:
+            # Fallback если customization_manager еще не создан
+            if os.path.exists(mp3):
+                existing = mp3
+            elif os.path.exists(wav):
+                existing = wav
         if existing:
             try:
                 for p in (mp3, wav):
@@ -290,14 +298,6 @@ class SettingsManager(QObject):
                 except Exception:
                     self.feedback_manager.show_warning('errors.error', tr('errors.copy_startup_sound_failed'))
 
-    def _get_startup_sound_path(self) -> Optional[str]:
-        mp3 = os.path.join(self.app_state.config_dir, 'custom_startup_sound.mp3')
-        wav = os.path.join(self.app_state.config_dir, 'custom_startup_sound.wav')
-        if os.path.exists(mp3):
-            return mp3
-        if os.path.exists(wav):
-            return wav
-        return None
 
     def is_valid_hex_color(self, s: str) -> bool:
         return bool(re.fullmatch('#[0-9a-fA-F]{6}', s or ''))
@@ -323,22 +323,17 @@ class SettingsManager(QObject):
             bg_path = self.app_state.local_config.get('custom_background_path')
             if bg_path and os.path.exists(bg_path):
                 zipf.write(bg_path, f'background{os.path.splitext(bg_path)[1]}')
-            music_path = self._get_background_music_path()
+            music_path = None
+            sound_path = None
+            if hasattr(self.parent_widget, 'customization_manager'):
+                music_path = self.parent_widget.customization_manager.get_background_music_path() or None
+                sound_path = self.parent_widget.customization_manager.get_startup_sound_path() or None
             if music_path and os.path.exists(music_path):
                 zipf.write(music_path, f'background_music{os.path.splitext(music_path)[1]}')
-            sound_path = self._get_startup_sound_path()
             if sound_path and os.path.exists(sound_path):
                 zipf.write(sound_path, f'startup_sound{os.path.splitext(sound_path)[1]}')
         self.feedback_manager.show_info('dialogs.success', tr('dialogs.theme_exported_success'))
 
-    def _get_background_music_path(self) -> Optional[str]:
-        mp3 = os.path.join(self.app_state.config_dir, 'custom_background_music.mp3')
-        wav = os.path.join(self.app_state.config_dir, 'custom_background_music.wav')
-        if os.path.exists(mp3):
-            return mp3
-        if os.path.exists(wav):
-            return wav
-        return None
 
     def import_theme(self):
         theme_file_path, _ = QFileDialog.getOpenFileName(self.parent_widget, tr('dialogs.import_theme_title'), '', f"{tr('file_descriptions.theme_files')} (*.dhtheme)")
