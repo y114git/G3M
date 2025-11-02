@@ -16,6 +16,8 @@ from managers.localization_manager import tr
 from utils.file_utils import get_unique_mod_dir
 from utils.deltamod_converter import DeltamodConverter
 from utils.network_utils import download_file
+from core.exceptions import (NetworkError, NetworkTimeoutError, NetworkConnectionError, HTTPError,
+                             ArchiveError, ArchiveCorruptedError, FileOperationError, FilePermissionError)
 import logging
 
 
@@ -47,7 +49,14 @@ class PresenceWorker(QObject):
                     self.update_online_count.emit(-1)
             else:
                 self.update_online_count.emit(-1)
-        except requests.RequestException:
+        except requests.Timeout as e:
+            logging.debug(f'PresenceWorker: timeout error: {e}', extra={'url': url})
+            self.update_online_count.emit(-1)
+        except requests.ConnectionError as e:
+            logging.debug(f'PresenceWorker: connection error: {e}', extra={'url': url})
+            self.update_online_count.emit(-1)
+        except requests.RequestException as e:
+            logging.debug(f'PresenceWorker: request error: {e}', extra={'url': url, 'status_code': getattr(e.response, 'status_code', None)})
             self.update_online_count.emit(-1)
         finally:
             self._busy = False
@@ -301,13 +310,34 @@ class InstallModsThread(QThread):
             def on_response(r):
                 self._active_response = r
             download_file(session, url, target_path, progress_callback, total_size, downloaded_ref, cancel_check=lambda: self._cancelled, on_response=on_response)
+        except (requests.Timeout, requests.ConnectionError) as e:
+            if os.path.exists(target_path):
+                try:
+                    os.remove(target_path)
+                except OSError as rm_e:
+                    logging.debug(f'_download_archive_file: cleanup failed: {rm_e}')
+            logging.error(f'_download_archive_file: network error downloading {url}: {e}',
+                        exc_info=True, extra={'url': url, 'target_path': target_path})
+            raise
+        except requests.RequestException as e:
+            if os.path.exists(target_path):
+                try:
+                    os.remove(target_path)
+                except OSError as rm_e:
+                    logging.debug(f'_download_archive_file: cleanup failed: {rm_e}')
+            logging.error(f'_download_archive_file: request error downloading {url}: {e}',
+                        exc_info=True, extra={'url': url, 'target_path': target_path, 
+                                             'status_code': getattr(e.response, 'status_code', None)})
+            raise
         except Exception as e:
             if os.path.exists(target_path):
                 try:
                     os.remove(target_path)
-                except Exception as rm_e:
+                except OSError as rm_e:
                     logging.debug(f'_download_archive_file: cleanup failed: {rm_e}')
-            raise e
+            logging.error(f'_download_archive_file: unexpected error downloading {url}: {e}',
+                        exc_info=True, extra={'url': url, 'target_path': target_path})
+            raise
 
     def _download_xdelta_file(self, url: str, target_dir: str, progress_callback, total_size: int, downloaded_ref: list[int], session=None):
         import os
@@ -329,13 +359,34 @@ class InstallModsThread(QThread):
             def on_response(r):
                 self._active_response = r
             download_file(session, url, target_path, progress_callback, total_size, downloaded_ref, cancel_check=lambda: self._cancelled, on_response=on_response)
+        except (requests.Timeout, requests.ConnectionError) as e:
+            if os.path.exists(target_path):
+                try:
+                    os.remove(target_path)
+                except OSError as rm_e:
+                    logging.debug(f'_download_xdelta_file: cleanup failed: {rm_e}')
+            logging.error(f'_download_xdelta_file: network error downloading {url}: {e}',
+                        exc_info=True, extra={'url': url, 'target_path': target_path})
+            raise
+        except requests.RequestException as e:
+            if os.path.exists(target_path):
+                try:
+                    os.remove(target_path)
+                except OSError as rm_e:
+                    logging.debug(f'_download_xdelta_file: cleanup failed: {rm_e}')
+            logging.error(f'_download_xdelta_file: request error downloading {url}: {e}',
+                        exc_info=True, extra={'url': url, 'target_path': target_path,
+                                             'status_code': getattr(e.response, 'status_code', None)})
+            raise
         except Exception as e:
             if os.path.exists(target_path):
                 try:
                     os.remove(target_path)
-                except Exception as rm_e:
+                except OSError as rm_e:
                     logging.debug(f'_download_xdelta_file: cleanup failed: {rm_e}')
-            raise e
+            logging.error(f'_download_xdelta_file: unexpected error downloading {url}: {e}',
+                        exc_info=True, extra={'url': url, 'target_path': target_path})
+            raise
 
     def run(self):
         try:
@@ -383,11 +434,29 @@ class InstallModsThread(QThread):
                 u = task.get('url')
                 try:
                     h = session.head(u, allow_redirects=True, timeout=NETWORK_TIMEOUT_HEAD)
+                    h.raise_for_status()
                     content_length = int(h.headers.get('content-length', 0))
                     file_sizes_cache[u] = content_length
                     total_bytes += content_length
+                except requests.Timeout as e:
+                    logging.warning(f'InstallModsThread: HEAD timeout for {u}: {e}', extra={'url': u})
+                    file_sizes_cache[u] = 0
+                    total_bytes = 0
+                    break
+                except requests.HTTPError as e:
+                    logging.warning(f'InstallModsThread: HEAD HTTP error for {u}: {e}', 
+                                  extra={'url': u, 'status_code': e.response.status_code if e.response else None})
+                    file_sizes_cache[u] = 0
+                    total_bytes = 0
+                    break
+                except requests.RequestException as e:
+                    logging.warning(f'InstallModsThread: HEAD request error for {u}: {e}', extra={'url': u})
+                    file_sizes_cache[u] = 0
+                    total_bytes = 0
+                    break
                 except Exception as e:
-                    logging.debug(f'InstallModsThread: HEAD failed for {u}: {e}')
+                    logging.warning(f'InstallModsThread: unexpected error during HEAD for {u}: {e}', 
+                                  exc_info=True, extra={'url': u})
                     file_sizes_cache[u] = 0
                     total_bytes = 0
                     break

@@ -3,7 +3,7 @@ import time
 import platform
 from typing import Optional, Callable
 from PyQt6.QtCore import QObject, QThread, pyqtSignal, QTimer, Qt
-from PyQt6.QtGui import QMovie, QPixmap, QColor
+from PyQt6.QtGui import QPixmap, QColor
 from PyQt6.QtWidgets import QWidget, QLabel
 from config.constants import THEMES
 from utils.path_utils import resource_path
@@ -12,7 +12,6 @@ from managers.localization_manager import tr
 
 
 class CustomizationManager(QObject):
-    theme_applied = pyqtSignal()
     background_changed = pyqtSignal()
     music_started = pyqtSignal()
     music_stopped = pyqtSignal()
@@ -20,8 +19,6 @@ class CustomizationManager(QObject):
     def __init__(self, app_state, parent=None):
         super().__init__(parent)
         self.app_state = app_state
-        self.background_movie = None
-        self.background_pixmap: Optional[QPixmap] = None
         self._bg_music_running = False
         self._bg_music_thread = None
         self._bg_music_instance = None
@@ -54,33 +51,6 @@ class CustomizationManager(QObject):
     def get_startup_sound_button_text(self) -> str:
         path = self.get_startup_sound_path()
         return tr('buttons.remove_startup_sound') if path else tr('buttons.select_startup_sound')
-
-    def apply_theme(self, widget: QWidget) -> tuple[Optional[QMovie], Optional[QPixmap]]:
-        theme = THEMES['default']
-        background_path = None
-        background_disabled = self.app_state.local_config.get('background_disabled', False)
-        if self.background_movie is not None:
-            self.background_movie.stop()
-            self.background_movie.deleteLater()
-            self.background_movie = None
-        self.background_pixmap = None
-        if not background_disabled:
-            background_path = self.app_state.local_config.get('custom_background_path') or resource_path(f"assets/{theme.get('background', '')}")
-            if background_path and os.path.exists(background_path):
-                if background_path.lower().endswith('.gif'):
-                    self.background_movie = QMovie(background_path)
-                    if not self.background_movie.isValid():
-                        self.background_movie = None
-                    else:
-                        self.background_movie.setScaledSize(widget.size())
-                        self.background_movie.frameChanged.connect(widget.update)
-                        self.background_movie.start()
-                else:
-                    self.background_pixmap = QPixmap(background_path)
-                    if self.background_pixmap.isNull():
-                        self.background_pixmap = None
-        self.theme_applied.emit()
-        return (self.background_movie, self.background_pixmap)
 
     def update_translucent_backgrounds(self, search_container: Optional[QWidget] = None, library_container: Optional[QWidget] = None):
         bg_color = get_theme_color(self.app_state.local_config, 'background', '#000000')
@@ -240,7 +210,3 @@ class CustomizationManager(QObject):
 
     def cleanup(self):
         self.stop_background_music()
-        if self.background_movie:
-            self.background_movie.stop()
-            self.background_movie.deleteLater()
-            self.background_movie = None

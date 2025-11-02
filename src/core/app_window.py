@@ -20,10 +20,8 @@ from config.constants import UI_COLORS, SOCIAL_LINKS, ARCH, ONLINE_UPDATE_INTERV
 from utils.game_utils import is_game_running
 from utils.path_utils import get_user_data_root, resource_path, get_launcher_dir, get_legacy_ylauncher_path, get_user_plugins_dir
 from utils.network_utils import check_internet_connection
-from managers.mod_manager import parse_mod_date
 from workers.background_workers import PresenceWorker, FetchChangelogThread, FetchHelpContentThread
 from ui.common.styling import clear_layout_widgets, show_empty_message_in_layout
-from ui.widgets.mod.mod_plaque_widget import ModPlaqueWidget
 from ui.widgets.mod.installed_mod_widget import InstalledModWidget
 from controllers.mod_operations_controller import ModOperationsController
 from controllers.library_display_controller import LibraryDisplayController
@@ -86,7 +84,6 @@ class AppWindow(QWidget):
         self.feedback_manager.app_state = self.app_state
         self.settings_manager = SettingsManager(self.app_state, self.feedback_manager, self.lang_manager, self)
         self.save_manager = SaveManager(self.app_state, self.feedback_manager, self.settings_manager, self)
-        self.save_manager.slots_updated.connect(self._refresh_save_slots)
         self.save_manager.status_changed.connect(lambda msg, color: self.feedback_manager.update_status(msg, color))
         self._pending_install_url = initial_url
         self.dialog_parent = parent_for_dialogs or self
@@ -122,8 +119,6 @@ class AppWindow(QWidget):
         self._last_online_count = 0
         self.feedback_manager.status_updated.connect(self.update_status_signal.emit)
         self.settings_manager.language_changed.connect(lambda _: self._retranslate_ui())
-        self.settings_manager.theme_changed.connect(self.apply_theme)
-        self.settings_manager.theme_changed.connect(self._on_theme_changed_by_manager)
         self.settings_manager.restart_required.connect(lambda msg: self.feedback_manager.show_info('dialogs.restart_required', msg))
         self.settings_manager.status_changed.connect(self.update_status_signal.emit)
         self.mod_manager = ModManager(self.app_state, self.feedback_manager, self)
@@ -149,7 +144,7 @@ class AppWindow(QWidget):
         self.customization_manager = CustomizationManager(self.app_state, self)
         self.slot_manager = SlotManager(self.app_state, self.mod_manager, self.feedback_manager, self.settings_manager, self)
         self.slot_manager.slots_updated.connect(self._on_slot_manager_slots_updated)
-        self.slot_manager.slot_state_changed.connect(lambda slot_id: self._refresh_slot_status_display(self.app_state.slots.get(slot_id)))
+        self.slot_manager.slot_state_changed.connect(lambda slot_id: self.game_launch.refresh_slot_status_display(self.app_state.slots.get(slot_id)))
         self.slot_manager.action_button_update_needed.connect(self._update_action_button_state)
         self.slot_manager.mod_widgets_update_needed.connect(self._update_mod_widgets_slot_status)
         self.shortcut_manager = ShortcutManager(self.app_state, self.feedback_manager, self.mod_manager, self)
@@ -162,6 +157,9 @@ class AppWindow(QWidget):
         self.settings_ui = SettingsUiController(self)
         self.theme = ThemeController(self)
         self.game_launch = GameLaunchController(self)
+        self.save_manager.slots_updated.connect(self.save_ui.refresh_slots)
+        self.settings_manager.theme_changed.connect(self.theme.apply_theme)
+        self.settings_manager.theme_changed.connect(self._on_theme_changed_by_manager)
         if self.is_shortcut_launch:
             self._shortcut_launch(args)
             return
@@ -169,8 +167,8 @@ class AppWindow(QWidget):
         self.custom_font_family = localization_manager.load_font()
         QTimer.singleShot(0, lambda: self.ui_ready.emit())
         self.update_status_signal.connect(self._update_status)
-        self.hide_window_signal.connect(self._hide_window_for_game)
-        self.restore_window_signal.connect(self._restore_window_after_game)
+        self.hide_window_signal.connect(self.game_launch.hide_window)
+        self.restore_window_signal.connect(self.game_launch.restore_window)
         self.set_progress_signal.connect(self._on_progress_update)
         self.show_update_prompt.connect(self._prompt_for_update)
         self.mods_loaded_signal.connect(self._on_mods_loaded)
@@ -204,7 +202,7 @@ class AppWindow(QWidget):
 
     def _on_url_install_finished(self, success: bool, message: str):
         self.app_state.is_installing = False
-        self._set_install_buttons_enabled(True)
+        self.mod_ops.set_install_buttons_enabled(True)
         self.progress_bar.setVisible(False)
         self._update_installed_mods_display()
         status_color = UI_COLORS['status_success'] if success else UI_COLORS['status_error']
@@ -272,7 +270,7 @@ class AppWindow(QWidget):
         self.top_panel_widget = QFrame()
         self.top_frame = QHBoxLayout(self.top_panel_widget)
         self.settings_button = QPushButton(tr('ui.settings_title'))
-        self.settings_button.clicked.connect(self._toggle_settings_view)
+        self.settings_button.clicked.connect(self.settings_ui.toggle_settings_view)
         self.online_label = QLabel(tr('status.online_count', count='?'))
         self.online_label.setStyleSheet('padding-left:8px;')
         self.online_label.setToolTip(tr('tooltips.online_counter'))
@@ -318,13 +316,13 @@ class AppWindow(QWidget):
         self.action_button = QPushButton(tr('status.please_wait'))
         self.action_button.setEnabled(False)
         self.action_button.setMinimumWidth(200)
-        self.action_button.clicked.connect(self._on_action_button_click)
+        self.action_button.clicked.connect(self.game_launch.on_action_button_click)
         self.app_state.is_installing = False
         self.current_install_thread = None
         self.pending_updates = []
         self.saves_button = QPushButton(tr('ui.saves_button'))
         self.saves_button.setStyleSheet('color: yellow;')
-        self.saves_button.clicked.connect(self._on_configure_saves_click)
+        self.saves_button.clicked.connect(self.save_ui.show_save_manager)
         self.action_frame.addWidget(self.shortcut_button)
         self.action_frame.addWidget(self.action_button)
         self.action_frame.addWidget(self.saves_button)
@@ -396,8 +394,8 @@ class AppWindow(QWidget):
         self.library_tag_local = library_widgets['library_tag_local']
         self.library_tag_widgets = library_widgets['library_tag_widgets']
         self.library_search_button = library_widgets['library_search_button']
-        self.game_type_combo.currentIndexChanged.connect(self._on_game_type_changed)
-        self.chapter_mode_checkbox.stateChanged.connect(self._on_chapter_mode_changed)
+        self.game_type_combo.currentIndexChanged.connect(self.settings_ui.on_game_type_changed)
+        self.chapter_mode_checkbox.stateChanged.connect(self.settings_ui.on_chapter_mode_changed)
         self.full_install_checkbox.stateChanged.connect(self._on_toggle_full_install)
         self.library_sort_combo.currentIndexChanged.connect(self._on_library_filter_changed)
         self.library_sort_order_btn.clicked.connect(self._toggle_library_sort_order)
@@ -421,7 +419,7 @@ class AppWindow(QWidget):
         self.full_install_checkbox.setChecked(saved_full_install)
         self.full_install_checkbox.blockSignals(False)
         self.app_state.is_installing_changed.connect(self._update_action_button_state)
-        self.app_state.is_installing_changed.connect(lambda v: self._set_install_buttons_enabled(not v))
+        self.app_state.is_installing_changed.connect(lambda v: self.mod_ops.set_install_buttons_enabled(not v))
         self.app_state.current_mode = 'chapter' if saved_chapter_mode else 'normal'
         self._previous_mode = self.app_state.current_mode
         self.app_state.selected_chapter_id = None
@@ -489,40 +487,40 @@ class AppWindow(QWidget):
         self.changelog_button = settings_widgets['changelog_button']
         self.help_text_edit = settings_widgets['help_text_edit']
         self.help_button = settings_widgets['help_button']
-        self.language_combo.currentTextChanged.connect(self._on_language_changed)
-        self.beta_updates_checkbox.stateChanged.connect(self._on_toggle_beta_updates)
-        self.fullscreen_checkbox.stateChanged.connect(self._on_toggle_fullscreen)
-        self.hide_library_filters_checkbox.stateChanged.connect(self._on_toggle_hide_library_filters)
-        self.launch_via_steam_checkbox.stateChanged.connect(self._on_toggle_steam_launch)
-        self.use_custom_executable_checkbox.stateChanged.connect(self._on_toggle_custom_executable)
+        self.language_combo.currentTextChanged.connect(lambda: self.settings_ui.on_language_changed(self.language_combo.currentData()))
+        self.beta_updates_checkbox.stateChanged.connect(self.settings_ui.on_toggle_beta_updates)
+        self.fullscreen_checkbox.stateChanged.connect(self.settings_ui.on_toggle_fullscreen)
+        self.hide_library_filters_checkbox.stateChanged.connect(self.settings_ui.on_toggle_hide_library_filters)
+        self.launch_via_steam_checkbox.stateChanged.connect(self.settings_ui.on_toggle_steam_launch)
+        self.use_custom_executable_checkbox.stateChanged.connect(self.settings_ui.on_toggle_custom_executable)
         self.select_custom_executable_button.clicked.connect(self._select_custom_executable_file)
         self.change_path_button.clicked.connect(self._prompt_for_game_path)
         self.change_mods_dir_button.clicked.connect(self.settings_manager.prompt_for_mods_dir)
         self.customization_button.clicked.connect(lambda: self._switch_settings_page(self.settings_customization_page))
-        self.reset_button.clicked.connect(self._on_reset_settings_click)
-        self.disable_background_checkbox.stateChanged.connect(self._on_toggle_disable_background)
-        self.disable_splash_checkbox.stateChanged.connect(self._on_toggle_disable_splash)
+        self.reset_button.clicked.connect(self.settings_ui.reset_settings)
+        self.disable_background_checkbox.stateChanged.connect(self.settings_ui.on_toggle_disable_background)
+        self.disable_splash_checkbox.stateChanged.connect(self.settings_ui.on_toggle_disable_splash)
         self.back_button_cust.clicked.connect(self._go_back_to_settings_menu)
-        self.change_background_button.clicked.connect(self._on_background_button_click)
+        self.change_background_button.clicked.connect(self.theme.on_background_button_click)
         self.background_music_button.setText(self.customization_manager.get_background_music_button_text())
-        self.background_music_button.clicked.connect(self._on_background_music_button_click)
+        self.background_music_button.clicked.connect(self.theme.on_background_music_button_click)
         self.startup_sound_button.setText(self.customization_manager.get_startup_sound_button_text())
-        self.startup_sound_button.clicked.connect(self._on_startup_sound_button_click)
-        self.theme_button.clicked.connect(self._on_theme_button_click)
+        self.startup_sound_button.clicked.connect(self.theme.on_startup_sound_button_click)
+        self.theme_button.clicked.connect(self.theme.on_theme_button_click)
 
         def pick_color_for_edit(target_edit):
             if (color := QColorDialog.getColor()).isValid():
                 target_edit.setText(color.name())
-                self._on_custom_style_edited()
+                self.theme.on_custom_style_edited()
         for key in self.color_config.keys():
             line_edit = self.color_widgets[key]
             btn = settings_widgets[f'color_btn_{key}']
             reset_btn = settings_widgets[f'color_reset_{key}']
-            line_edit.editingFinished.connect(self._on_custom_style_edited)
+            line_edit.editingFinished.connect(self.theme.on_custom_style_edited)
             btn.clicked.connect(lambda _, le=line_edit: pick_color_for_edit(le))
-            reset_btn.clicked.connect(lambda _, le=line_edit: (le.clear(), self._on_custom_style_edited()))
-        self.changelog_button.clicked.connect(lambda: self._toggle_settings_view(show_changelog=True))
-        self.help_button.clicked.connect(self._toggle_help_view)
+            reset_btn.clicked.connect(lambda _, le=line_edit: (le.clear(), self.theme.on_custom_style_edited()))
+        self.changelog_button.clicked.connect(lambda: self.settings_ui.toggle_settings_view(show_changelog=True))
+        self.help_button.clicked.connect(self.settings_ui.toggle_help_view)
         self._update_filtered_mods()
         self.main_layout.addWidget(self.settings_widget)
         save_manager_builder = SaveManagerViewBuilder(self.app_state, self)
@@ -546,12 +544,12 @@ class AppWindow(QWidget):
         self.erase_btn = save_manager_widgets['erase_btn']
         self.import_btn = save_manager_widgets['import_btn']
         self.export_btn = save_manager_widgets['export_btn']
-        self.save_back_btn.clicked.connect(self._hide_save_manager)
+        self.save_back_btn.clicked.connect(self.save_ui.hide_save_manager)
         self.change_save_path_btn.clicked.connect(self.save_manager.prompt_for_save_path)
         for lbl in self._slot_labels.values():
-            lbl.clicked.connect(self._on_save_manager_slot_clicked)
-            lbl.doubleClicked.connect(self._on_slot_double_clicked)
-        self._configure_hidden_tab_bar(self.save_tabs)
+            lbl.clicked.connect(self.save_ui.on_slot_clicked)
+            lbl.doubleClicked.connect(self.save_ui.on_slot_double_clicked)
+        self.save_ui.configure_hidden_tab_bar(self.save_tabs)
         for ch, btn in enumerate(self._chapter_buttons, start=0):
             btn.clicked.connect(lambda _checked, idx=ch: self.save_tabs.setCurrentIndex(idx))
 
@@ -570,9 +568,9 @@ class AppWindow(QWidget):
         self.erase_btn.clicked.connect(lambda: self.save_manager.action_delete_save(*self.app_state.selected_slot) if self.app_state.selected_slot else None)
         self.import_btn.clicked.connect(lambda: self.save_manager.action_import_export(*self.app_state.selected_slot, True) if self.app_state.selected_slot else None)
         self.export_btn.clicked.connect(lambda: self.save_manager.action_import_export(*self.app_state.selected_slot, False) if self.app_state.selected_slot else None)
-        self.save_tabs.currentChanged.connect(lambda _: self._on_chapter_tab_changed())
+        self.save_tabs.currentChanged.connect(lambda _: self.save_ui.on_chapter_tab_changed())
         self.save_manager_widget.installEventFilter(self)
-        self._update_slot_highlight()
+        self.save_ui.update_slot_highlight()
         self.main_layout.addWidget(self.save_manager_widget)
         self.app_state.current_settings_page = self.settings_menu_page
         self.tab_widget = self.main_tab_widget
@@ -724,9 +722,9 @@ class AppWindow(QWidget):
                 mod_data = self.mod_manager.create_mod_object_from_info(mod_info, getattr(self.app_state, 'all_mods', None))
                 if mod_data:
                     mod_widget = InstalledModWidget(mod_data, is_local, is_available, has_update, parent=self)
-                    mod_widget.clicked.connect(self._on_installed_mod_clicked)
-                    mod_widget.remove_requested.connect(self._on_installed_mod_remove)
-                    mod_widget.use_requested.connect(self._on_installed_mod_use)
+                    mod_widget.clicked.connect(self.library_display.on_mod_clicked)
+                    mod_widget.remove_requested.connect(self.library_display.on_mod_remove)
+                    mod_widget.use_requested.connect(self.library_display.on_mod_use)
                     self.installed_mods_layout.insertWidget(self.installed_mods_layout.count() - 1, mod_widget)
             if self.installed_mods_layout.count() <= 1:
                 show_empty_message_in_layout(self.installed_mods_layout, tr('ui.empty'), self.app_state.local_config, font_size=18)
@@ -737,29 +735,6 @@ class AppWindow(QWidget):
             if hasattr(self, 'installed_mods_container'):
                 self.installed_mods_container.setUpdatesEnabled(True)
 
-    def _get_installed_mods_list(self):
-        return self.mod_manager.get_installed_mods_list()
-
-    def _clear_all_installed_mod_selections(self):
-        for i in range(self.installed_mods_layout.count() - 1):
-            item = self.installed_mods_layout.itemAt(i)
-            if item:
-                widget = item.widget()
-                if isinstance(widget, InstalledModWidget):
-                    widget.set_selected(False)
-
-    def _sort_filtered_mods(self):
-        if not hasattr(self, 'sort_combo') or not self.filtered_mods:
-            return
-        sort_type = self.sort_combo.currentIndex()
-        reverse = not self.sort_ascending
-        if sort_type == 0:
-            self.filtered_mods.sort(key=lambda mod: getattr(mod, 'downloads', 0), reverse=reverse)
-        elif sort_type == 1:
-            self.filtered_mods.sort(key=lambda mod: parse_mod_date(getattr(mod, 'last_updated', '')), reverse=reverse)
-        elif sort_type == 2:
-            self.filtered_mods.sort(key=lambda mod: parse_mod_date(getattr(mod, 'created_date', '')), reverse=reverse)
-
     def _update_pagination_controls(self):
         if not hasattr(self, 'page_label') or not hasattr(self, 'prev_page_btn') or (not hasattr(self, 'next_page_btn')):
             return
@@ -769,60 +744,9 @@ class AppWindow(QWidget):
         self.prev_page_btn.setEnabled(self.current_page > 1)
         self.next_page_btn.setEnabled(self.current_page < total_pages)
 
-    def _on_install_progress_token(self, value: int, op_id: int):
-        if getattr(self, '_install_op_id', 0) == op_id and self.app_state.is_installing:
-            self.progress_bar.setValue(value)
-
-    def _on_install_status_token(self, message: str, color: str, op_id: int):
-        if getattr(self, '_install_op_id', 0) == op_id and self.app_state.is_installing:
-            self._update_status(message, color)
-
-    def _on_install_finished_token(self, success: bool, op_id: int):
-        if getattr(self, '_install_op_id', 0) != op_id:
-            return
-        self._on_single_mod_install_finished(success)
-
-    def _refresh_specific_mod_widget_after_update(self):
-        if not hasattr(self, 'current_install_thread') or not self.current_install_thread:
-            return
-        install_tasks = getattr(self.current_install_thread, 'install_tasks', [])
-        if not install_tasks:
-            return
-        mod_data_tuple = install_tasks[0]
-        mod_to_update = mod_data_tuple[0]
-        mod_key_to_find = getattr(mod_to_update, 'key', None)
-        if not mod_key_to_find:
-            return
-        if hasattr(self, 'installed_mods_layout'):
-            for i in range(self.installed_mods_layout.count()):
-                item = self.installed_mods_layout.itemAt(i)
-                if item and item.widget():
-                    widget = item.widget()
-                    if isinstance(widget, InstalledModWidget):
-                        widget_mod_key = getattr(widget.mod_data, 'key', None)
-                        if widget_mod_key == mod_key_to_find:
-                            widget.update_status()
-                            break
-
-    def _update_search_mod_plaques(self):
-        for i in range(self.mod_list_layout.count() - 1):
-            item = self.mod_list_layout.itemAt(i)
-            if item:
-                widget = item.widget()
-                if isinstance(widget, ModPlaqueWidget):
-                    widget.update_installation_status()
-
-    def _clear_all_mod_selections(self):
-        for i in range(self.mod_list_layout.count() - 1):
-            item = self.mod_list_layout.itemAt(i)
-            if item:
-                widget = item.widget()
-                if isinstance(widget, ModPlaqueWidget):
-                    widget.set_selected(False)
-
     def _on_mod_install_finished(self, success, from_gb=False):
         self.app_state.is_installing = False
-        self._set_install_buttons_enabled(True)
+        self.mod_ops.set_install_buttons_enabled(True)
         self.current_install_thread = None
         self.progress_bar.setVisible(False)
         self._update_action_button_state()
@@ -840,7 +764,7 @@ class AppWindow(QWidget):
             click_pos = ev.pos()
             inside = any((lbl.rect().contains(lbl.mapFrom(self.save_manager_widget, click_pos)) for lbl in self._slot_labels.values()))
             if not inside:
-                self._clear_selected_slot()
+                self.save_ui.clear_selected_slot()
         return super().eventFilter(obj, ev)
 
     def _return_from_save_manager(self):
@@ -884,7 +808,7 @@ class AppWindow(QWidget):
             return
         if is_direct_launch:
             self.launch_via_steam_checkbox.setEnabled(False)
-        self.apply_theme()
+        self.theme.apply_theme()
 
     def _post_show_initialization(self):
         self._init_session()
@@ -937,14 +861,14 @@ class AppWindow(QWidget):
             self.hide_library_filters_checkbox.setChecked(self.app_state.local_config.get('hide_library_filters', False))
         self.disable_splash_checkbox.blockSignals(False)
         self._update_change_path_button_text()
-        self._update_background_button_state()
+        self.theme.update_background_button_state()
         self.settings_manager.migrate_config_if_needed()
         self.use_custom_executable_checkbox.setChecked(self.app_state.local_config.get('use_custom_executable', False))
         self.launch_via_steam_checkbox.setChecked(self.app_state.local_config.get('launch_via_steam', False))
         self._initialize_mutual_exclusions()
-        self._on_toggle_steam_launch()
+        self.settings_ui.on_toggle_steam_launch()
         self.slot_manager.update_all_slots_visual_state()
-        self.apply_theme()
+        self.theme.apply_theme()
         self.mod_manager.load_local_mods()
         self.setEnabled(False)
         self._on_refresh_clicked(is_initial=True)
@@ -1036,7 +960,7 @@ class AppWindow(QWidget):
             except Exception as e:
                 logging.debug(f'_on_url_install_finished: temp cleanup failed: {e}')
         self.app_state.is_installing = False
-        self._set_install_buttons_enabled(True)
+        self.mod_ops.set_install_buttons_enabled(True)
         self.current_install_thread = None
         if success:
             self.mod_manager.load_local_mods()
@@ -1097,7 +1021,7 @@ class AppWindow(QWidget):
             self.custom_executable_path_label.setText(tr('ui.currently_selected', filename=os.path.basename(path)) if path else tr('ui.file_not_selected'))
 
     def _on_slot_manager_slots_updated(self):
-        self._refresh_save_slots()
+        self.save_ui.refresh_slots()
         if self.app_state.current_mode == 'chapter':
             selected_chapter_id = getattr(self.app_state, 'selected_chapter_id', None)
             if selected_chapter_id is not None:
@@ -1151,7 +1075,7 @@ class AppWindow(QWidget):
         self.customization_button.setText(tr('tags.customization'))
         self.reset_button.setText(tr('buttons.reset_settings'))
         self.back_button_cust.setText(tr('ui.back_button'))
-        self._update_background_button_state()
+        self.theme.update_background_button_state()
         self.background_music_button.setText(self.customization_manager.get_background_music_button_text())
         self.startup_sound_button.setText(self.customization_manager.get_startup_sound_button_text())
         self.disable_background_checkbox.setText(tr('checkboxes.disable_background'))
@@ -1204,7 +1128,7 @@ class AppWindow(QWidget):
                     self.hide_library_filters_checkbox.setToolTip(tr('tooltips.hide_library_filters'))
             except Exception:
                 pass
-            self.apply_theme()
+            self.theme.apply_theme()
             try:
                 if hasattr(self, 'online_label'):
                     self._update_online_label(getattr(self, '_last_online_count', 0))
@@ -1215,7 +1139,7 @@ class AppWindow(QWidget):
             self.slot_manager.update_slots_display(self.active_slots_layout)
             self._update_pagination_controls()
             if self.app_state.is_save_manager_view:
-                self._refresh_save_slots()
+                self.save_ui.refresh_slots()
             self._update_action_button_state()
             self.update()
         finally:
@@ -1522,9 +1446,6 @@ class AppWindow(QWidget):
     def _update_filtered_mods(self):
         self.search_display.update_filtered_mods()
 
-    def _update_mod_display(self):
-        self.search_display.update_display()
-
     def _update_action_button_state(self):
         self.game_launch.update_button_state()
 
@@ -1612,151 +1533,6 @@ class AppWindow(QWidget):
                 selected_slot = available_slots[selected_index]
                 self.slot_manager.assign_mod_to_slot(selected_slot, mod_data)
 
-    def _on_bg_ready(self, obj):
-        self.theme.on_background_ready(obj)
-
-    def apply_theme(self):
-        self.theme.apply_theme()
-
-    def _on_chapter_mode_mod_use(self, mod_data, chapter_id):
-        self.library_display.on_chapter_mode_mod_use(mod_data, chapter_id)
-
-    def _on_installed_mod_clicked(self, mod_data):
-        self.library_display.on_mod_clicked(mod_data)
-
-    def _on_installed_mod_remove(self, mod_data):
-        self.library_display.on_mod_remove(mod_data)
-
-    def _on_installed_mod_use(self, mod_data):
-        self.library_display.on_mod_use(mod_data)
-
-    def _set_install_buttons_enabled(self, enabled):
-        self.mod_ops.set_install_buttons_enabled(enabled)
-
-    def _refresh_save_slots(self):
-        self.save_ui.refresh_slots()
-
-    def _update_collection_ui(self):
-        self.save_ui.update_collection_ui()
-
-    def _update_slot_highlight(self):
-        self.save_ui.update_slot_highlight()
-
-    def _update_slot_action_bar(self):
-        self.save_ui.update_slot_action_bar()
-
-    def _clear_selected_slot(self):
-        self.save_ui.clear_selected_slot()
-
-    def _configure_hidden_tab_bar(self, tab_widget):
-        self.save_ui.configure_hidden_tab_bar(tab_widget)
-
-    def _on_save_manager_slot_clicked(self, chapter, slot):
-        self.save_ui.on_slot_clicked(chapter, slot)
-
-    def _on_slot_double_clicked(self, chapter, slot):
-        self.save_ui.on_slot_double_clicked(chapter, slot)
-
-    def _on_configure_saves_click(self):
-        self.save_ui.show_save_manager()
-
-    def _hide_save_manager(self):
-        self.save_ui.hide_save_manager()
-
-    def _on_chapter_tab_changed(self):
-        self.save_ui.on_chapter_tab_changed()
-
-    def _toggle_settings_view(self, show_changelog=False):
-        self.settings_ui.toggle_settings_view(show_changelog)
-
-    def _toggle_help_view(self):
-        self.settings_ui.toggle_help_view()
-
-    def _update_settings_page_visibility(self):
-        self.settings_ui.update_settings_page_visibility()
-
-    def _on_reset_settings_click(self):
-        self.settings_ui.reset_settings()
-
-    def _on_language_changed(self):
-        language_code = self.language_combo.currentData()
-        self.settings_ui.on_language_changed(language_code)
-
-    def _on_game_type_changed(self, index):
-        self.settings_ui.on_game_type_changed(index)
-
-    def _on_chapter_mode_changed(self, state):
-        self.settings_ui.on_chapter_mode_changed(state)
-
-    def _on_toggle_beta_updates(self):
-        self.settings_ui.on_toggle_beta_updates()
-
-    def _on_toggle_fullscreen(self):
-        self.settings_ui.on_toggle_fullscreen()
-
-    def _on_toggle_steam_launch(self, state=None):
-        self.settings_ui.on_toggle_steam_launch(state)
-
-    def _on_toggle_custom_executable(self):
-        self.settings_ui.on_toggle_custom_executable()
-
-    def _on_toggle_hide_library_filters(self, state):
-        self.settings_ui.on_toggle_hide_library_filters(state)
-
-    def _on_toggle_disable_background(self, state):
-        self.settings_ui.on_toggle_disable_background(state)
-
-    def _on_toggle_disable_splash(self, state):
-        self.settings_ui.on_toggle_disable_splash(state)
-
-    def _on_background_button_click(self):
-        self.theme.on_background_button_click()
-
-    def _update_background_button_state(self):
-        self.theme.update_background_button_state()
-
-    def _on_background_music_button_click(self):
-        self.theme.on_background_music_button_click()
-
-    def _on_startup_sound_button_click(self):
-        self.theme.on_startup_sound_button_click()
-
-    def _on_theme_button_click(self):
-        self.theme.on_theme_button_click()
-
-    def _on_custom_style_edited(self):
-        self.theme.on_custom_style_edited()
-
-    def _update_dynamic_elements(self):
-        self.theme.update_dynamic_elements()
-
-    def _on_action_button_click(self):
-        self.game_launch.on_action_button_click()
-
-    def _perform_full_install(self):
-        self.game_launch.perform_full_install()
-
-    def _on_full_install_finished(self, success, target_dir):
-        self.game_launch.on_full_install_finished(success, target_dir)
-
-    def _hide_window_for_game(self):
-        self.game_launch.hide_window()
-
-    def _restore_window_after_game(self):
-        self.game_launch.restore_window()
-
-    def _refresh_mods_in_slots(self):
-        self.game_launch.refresh_mods_in_slots()
-
-    def _refresh_all_slot_status_displays(self):
-        self.game_launch.refresh_slot_displays()
-
-    def _refresh_slot_status_display(self, slot_frame):
-        self.game_launch.refresh_slot_status_display(slot_frame)
-
-    def _update_mods_in_active_slots(self):
-        self.game_launch.update_mods_in_active_slots()
-
     def _on_toggle_full_install(self, state):
         self.app_state.is_full_install = bool(state)
         if platform.system() == 'Darwin' and self.app_state.is_full_install:
@@ -1803,7 +1579,7 @@ class AppWindow(QWidget):
                     self.mods_loaded_signal.emit()
             if hasattr(self, 'installed_mods_layout'):
                 self._update_installed_mods_display()
-            self._refresh_mods_in_slots()
+            self.game_launch.refresh_mods_in_slots()
             self.slot_manager.refresh_slots_content()
             self._update_action_button_state()
             if success:
