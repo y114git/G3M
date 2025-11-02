@@ -3,7 +3,6 @@ import json
 import os
 import platform
 import shutil
-import threading
 import uuid
 import subprocess
 import webbrowser
@@ -20,7 +19,7 @@ from config.constants import UI_COLORS, SOCIAL_LINKS, ARCH, ONLINE_UPDATE_INTERV
 from utils.game_utils import is_game_running
 from utils.path_utils import get_user_data_root, resource_path, get_launcher_dir, get_legacy_ylauncher_path, get_user_plugins_dir
 from utils.network_utils import check_internet_connection
-from workers.background_workers import PresenceWorker, FetchChangelogThread, FetchHelpContentThread
+from workers.background_workers import PresenceWorker, FetchChangelogWorker, FetchHelpContentWorker
 from ui.common.styling import clear_layout_widgets, show_empty_message_in_layout
 from ui.widgets.mod.installed_mod_widget import InstalledModWidget
 from controllers.mod_operations_controller import ModOperationsController
@@ -117,6 +116,11 @@ class AppWindow(QWidget):
         self._handling_plugin_tab = False
         self._plugin_tab_map = {}
         self._last_online_count = 0
+        self._install_op_id = 0
+        self.current_install_thread = None
+        self.install_thread = None
+        self.full_install_thread = None
+        self.pending_updates = []
         self.feedback_manager.status_updated.connect(self.update_status_signal.emit)
         self.settings_manager.language_changed.connect(lambda _: self._retranslate_ui())
         self.settings_manager.restart_required.connect(lambda msg: self.feedback_manager.show_info('dialogs.restart_required', msg))
@@ -157,6 +161,8 @@ class AppWindow(QWidget):
         self.settings_ui = SettingsUiController(self)
         self.theme = ThemeController(self)
         self.game_launch = GameLaunchController(self)
+        from controllers.refresh_controller import RefreshController
+        self.refresh_controller = RefreshController(self.app_state, self.feedback_manager, self.mod_manager, self.slot_manager, self.game_launch, self.update_checker, self.settings_manager)
         self.save_manager.slots_updated.connect(self.save_ui.refresh_slots)
         self.settings_manager.theme_changed.connect(self.theme.apply_theme)
         self.settings_manager.theme_changed.connect(self._on_theme_changed_by_manager)
@@ -582,7 +588,7 @@ class AppWindow(QWidget):
             self.initialization_timer.stop()
         self.app_state.initialization_completed = True
         self.initialization_finished.emit()
-        self.customization_manager.maybe_start_background_music(getattr(self, 'is_shown_to_user', False), self.isVisible())
+        self.customization_manager.maybe_start_background_music(self.app_state.is_shown_to_user, self.isVisible())
 
     def _force_finish_initialization(self):
         if self.app_state.initialization_completed:
@@ -591,7 +597,7 @@ class AppWindow(QWidget):
         self.app_state.initialization_completed = True
         self.initialization_finished.emit()
         if not is_game_running():
-            self.customization_manager.maybe_start_background_music(getattr(self, 'is_shown_to_user', False), self.isVisible())
+            self.customization_manager.maybe_start_background_music(self.app_state.is_shown_to_user, self.isVisible())
 
     def _update_saves_button_state(self):
         game_type = self.game_type_combo.currentData()
@@ -793,8 +799,11 @@ class AppWindow(QWidget):
             self.help_text_edit.setMarkdown(f"<i>{tr('dialogs.help_not_available')}</i>")
             return
         self.help_text_edit.setMarkdown(f"<i>{tr('status.loading')}</i>")
-        self.help_thread = FetchHelpContentThread(help_url.strip(), self)
-        self.help_thread.finished.connect(self.help_text_edit.setMarkdown)
+        self.help_thread = QThread(self)
+        self.help_worker = FetchHelpContentWorker(help_url.strip())
+        self.help_worker.moveToThread(self.help_thread)
+        self.help_worker.finished.connect(self.help_text_edit.setMarkdown)
+        self.help_thread.started.connect(self.help_worker.run)
         self.help_thread.start()
 
     def _disable_direct_launch(self):
@@ -825,9 +834,12 @@ class AppWindow(QWidget):
         else:
             changelog_url = self.app_state.global_settings.get('changelog_en_url', self.app_state.global_settings.get('changelog_url'))
         if changelog_url:
-            changelog_thread = FetchChangelogThread(changelog_url.strip(), self)
-            changelog_thread.finished.connect(self.changelog_text_edit.setMarkdown)
-            changelog_thread.start()
+            self.changelog_thread = QThread(self)
+            self.changelog_worker = FetchChangelogWorker(changelog_url.strip())
+            self.changelog_worker.moveToThread(self.changelog_thread)
+            self.changelog_worker.finished.connect(self.changelog_text_edit.setMarkdown)
+            self.changelog_thread.started.connect(self.changelog_worker.run)
+            self.changelog_thread.start()
         else:
             self.changelog_text_edit.setMarkdown(tr('status.changelog_load_failed'))
         self.save_manager.manage_steam_deck_saves()
@@ -887,7 +899,7 @@ class AppWindow(QWidget):
             return 'Linux'
 
     def _handle_update_info(self, update_info):
-        if self.app_state.initialization_completed and getattr(self, 'is_shown_to_user', False):
+        if self.app_state.initialization_completed and self.app_state.is_shown_to_user:
             self.show_update_prompt.emit(update_info)
         else:
             QTimer.singleShot(1000, lambda: self._handle_update_info(update_info))
@@ -895,7 +907,7 @@ class AppWindow(QWidget):
     def _maybe_run_legacy_cleanup(self):
         if self._legacy_cleanup_done:
             return
-        if self.app_state.initialization_completed and getattr(self, 'is_shown_to_user', False):
+        if self.app_state.initialization_completed and self.app_state.is_shown_to_user:
             self._cleanup_legacy_ylauncher_folder()
             self._legacy_cleanup_done = True
         else:
@@ -1348,15 +1360,71 @@ class AppWindow(QWidget):
         if self.is_shortcut_launch:
             super().closeEvent(event)
             return
-        self.game_launcher._cleanup_direct_launch_files()
-        self.settings_manager.save_window_geometry(self)
-        self._stop_presence_thread()
-        self._stop_fetch_thread()
-        if hasattr(self, 'game_launcher') and hasattr(self.game_launcher, 'monitor_thread'):
-            self._safe_stop_thread(self.game_launcher.monitor_thread)
-        for attr in ('install_thread', 'full_install_thread', '_bg_loader'):
-            self._safe_stop_thread(getattr(self, attr, None))
-        super().closeEvent(event)
+        try:
+            if self.game_launcher.monitor_thread:
+                try:
+                    self.game_launcher.monitor_thread.setParent(None)
+                except Exception:
+                    pass
+                self._safe_stop_thread(self.game_launcher.monitor_thread)
+            for attr in ('install_thread', 'full_install_thread', 'current_install_thread'):
+                thread = getattr(self, attr, None)
+                if thread:
+                    try:
+                        thread.setParent(None)
+                    except Exception:
+                        pass
+                    self._safe_stop_thread(thread)
+            if self.presence_thread:
+                try:
+                    self.presence_thread.setParent(None)
+                except Exception:
+                    pass
+            self._stop_presence_thread()
+            if hasattr(self.refresh_controller, 'fetch_thread') and self.refresh_controller.fetch_thread:
+                try:
+                    self.refresh_controller.fetch_thread.setParent(None)
+                except Exception:
+                    pass
+            self._stop_fetch_thread()
+            for attr in ('help_thread', 'changelog_thread'):
+                thread = getattr(self, attr, None)
+                if thread:
+                    try:
+                        thread.setParent(None)
+                    except Exception:
+                        pass
+                    self._safe_stop_thread(thread)
+                worker_attr = attr.replace('_thread', '_worker')
+                worker = getattr(self, worker_attr, None)
+                if worker:
+                    try:
+                        worker.setParent(None)
+                        worker.disconnect()
+                    except Exception:
+                        pass
+            bg_loader = getattr(self, '_bg_loader', None)
+            if bg_loader:
+                self._safe_stop_thread(bg_loader)
+            self.game_launcher._cleanup_direct_launch_files()
+            self.settings_manager.save_window_geometry(self)
+            critical_threads = [('presence_thread', self.presence_thread), ('fetch_thread', getattr(self.refresh_controller, 'fetch_thread', None)), ('monitor_thread', getattr(self.game_launcher, 'monitor_thread', None)), ('help_thread', getattr(self, 'help_thread', None)), ('changelog_thread', getattr(self, 'changelog_thread', None))]
+            for name, thread in critical_threads:
+                if thread and thread.isRunning():
+                    logging.warning(f'closeEvent: {name} still running, forcing termination')
+                    try:
+                        thread.terminate()
+                        if not thread.wait(1000):
+                            logging.error(f'closeEvent: {name} failed to terminate')
+                    except Exception as e:
+                        logging.error(f'closeEvent: error terminating {name}: {e}', exc_info=True)
+            QApplication.processEvents()
+            import time
+            time.sleep(0.1)
+        except Exception as e:
+            logging.error(f'closeEvent: error during cleanup: {e}', exc_info=True)
+        finally:
+            super().closeEvent(event)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -1544,53 +1612,7 @@ class AppWindow(QWidget):
         self._update_action_button_state()
 
     def _on_refresh_clicked(self, is_initial=False):
-        from workers.fetch_mods import FetchModsThread
-        current_lang_code = localization_manager.get_current_language()
-        localization_manager.rescan_languages()
-        self.language_combo.blockSignals(True)
-        self.language_combo.clear()
-        available_languages = localization_manager.get_available_languages()
-        for code, name in available_languages.items():
-            self.language_combo.addItem(name, code)
-        index = self.language_combo.findData(current_lang_code)
-        if index != -1:
-            self.language_combo.setCurrentIndex(index)
-        self.language_combo.blockSignals(False)
-        if not is_initial:
-            self._retranslate_ui()
-        from utils.game_utils import is_game_running
-        if is_game_running():
-            self.feedback_manager.update_status(tr('status.cant_update_while_running'), UI_COLORS['status_warning'])
-            return
-        self._stop_fetch_thread()
-        threading.Thread(target=self.update_checker.check_for_updates, daemon=True).start()
-        self.fetch_thread = FetchModsThread(self, force_update=True)
-        self.fetch_thread.status.connect(self.update_status_signal)
-        self.fetch_thread.result.connect(self._on_fetch_translations_finished)
-        self.fetch_thread.start()
-
-    def _on_fetch_translations_finished(self, success: bool):
-        try:
-            self.mod_manager.load_local_mods()
-            if hasattr(self, 'mod_list_layout'):
-                self._update_filtered_mods()
-                if not self.app_state.mods_loaded:
-                    self.app_state.mods_loaded = True
-                    self.mods_loaded_signal.emit()
-            if hasattr(self, 'installed_mods_layout'):
-                self._update_installed_mods_display()
-            self.game_launch.refresh_mods_in_slots()
-            self.slot_manager.refresh_slots_content()
-            self._update_action_button_state()
-            if success:
-                self.feedback_manager.update_status(tr('status.mod_list_updated'), UI_COLORS['status_success'])
-            else:
-                fallback_msg = tr('ui.network_fallback_message') if self.app_state.all_mods else tr('ui.network_update_failed')
-                self.feedback_manager.update_status(fallback_msg, UI_COLORS['status_error'])
-            QTimer.singleShot(100, self.slot_manager.load_slots_state)
-            self._update_plugin_tabs()
-        except Exception as e:
-            self.feedback_manager.update_status(tr('errors.mod_list_processing_error', error=str(e)), UI_COLORS['status_error'])
+        self.refresh_controller.refresh_mods_list(is_initial=is_initial, language_combo=self.language_combo, retranslate_callback=self._retranslate_ui, on_fetch_finished_kwargs={'update_filtered_mods_callback': self._update_filtered_mods, 'update_installed_mods_callback': self._update_installed_mods_display, 'update_action_button_callback': self._update_action_button_state, 'update_plugin_tabs_callback': self._update_plugin_tabs, 'mods_loaded_signal': self.mods_loaded_signal})
 
     def _update_plugin_tabs(self):
         if not hasattr(self, 'plugin_manager') or not hasattr(self, 'main_tab_widget'):
@@ -1700,21 +1722,47 @@ class AppWindow(QWidget):
                 self._prompt_for_update(dialog_data)
 
     def _stop_fetch_thread(self):
-        self._safe_stop_thread(getattr(self, 'fetch_thread', None))
-        self.fetch_thread = None
+        self.refresh_controller._stop_fetch_thread()
 
     def _safe_stop_thread(self, thread, timeout=THREAD_WAIT_TIMEOUT):
-        if isinstance(thread, QThread) and thread.isRunning():
-            thread.requestInterruption()
-            thread.quit()
-            if not thread.wait(timeout):
-                thread.terminate()
-                thread.wait()
+        if not thread:
+            return
+        if isinstance(thread, QThread):
+            try:
+                if thread.isRunning():
+                    thread.requestInterruption()
+                    thread.quit()
+                    if not thread.wait(timeout):
+                        logging.warning(f'_safe_stop_thread: thread {type(thread).__name__} did not stop in {timeout}ms, terminating')
+                        thread.terminate()
+                        if not thread.wait(1000):
+                            logging.error(f'_safe_stop_thread: failed to terminate thread {type(thread).__name__}')
+                if thread.isRunning():
+                    logging.warning(f'_safe_stop_thread: {type(thread).__name__} still running, forcing termination')
+                    thread.terminate()
+                    thread.wait(1000)
+                    if thread.isRunning():
+                        logging.error(f'_safe_stop_thread: {type(thread).__name__} failed to stop even after terminate')
+            except Exception as e:
+                logging.error(f'_safe_stop_thread: error stopping thread {type(thread).__name__}: {e}', exc_info=True)
 
     def _stop_presence_thread(self):
-        self._safe_stop_thread(getattr(self, 'presence_thread', None))
-        self.presence_thread = None
-        self.presence_worker = None
+        if self.presence_thread:
+            try:
+                if self.presence_thread.isRunning():
+                    self.presence_thread.requestInterruption()
+                    self.presence_thread.quit()
+                    if not self.presence_thread.wait(2000):
+                        logging.warning('_stop_presence_thread: thread did not stop in time')
+                        self.presence_thread.terminate()
+                        if not self.presence_thread.wait(1000):
+                            logging.error('_stop_presence_thread: failed to terminate thread')
+            except Exception as e:
+                logging.error(f'_stop_presence_thread: failed to stop thread: {e}', exc_info=True)
+            finally:
+                if not (self.presence_thread and self.presence_thread.isRunning()):
+                    self.presence_thread = None
+                    self.presence_worker = None
 
     def _current_tab_names(self):
         return self.app_state.game_mode.tab_names

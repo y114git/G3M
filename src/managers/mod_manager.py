@@ -18,13 +18,11 @@ from config.constants import UI_COLORS
 import requests
 import time
 from config.constants import CLOUD_FUNCTIONS_BASE_URL
-from core.exceptions import (ModConfigError, ModInstallationError, ModUninstallationError,
-                             FileOperationError, FilePermissionError, ArchiveError, JSONParsingError)
+from core.exceptions import ModConfigError, ModInstallationError, ModUninstallationError, FileOperationError, FilePermissionError, ArchiveError, JSONParsingError
 
 
 @dataclass
 class ModFolderInfo:
-    """Информация о папке установленного мода"""
     mod_key: str
     folder_path: str
     folder_name: str
@@ -45,138 +43,84 @@ class ModManager(QObject):
         self.feedback_manager = feedback_manager
         self.current_install_thread = None
         self.url_install_thread = None
-        # Кэш информации о модах (потокобезопасный)
         self._cache_lock = threading.RLock()
-        self._mods_cache: Dict[str, ModFolderInfo] = {}  # Индекс по mod_key
-        self._mods_by_name: Dict[str, str] = {}  # Индекс: имя мода -> mod_key для O(1) поиска
+        self._mods_cache: Dict[str, ModFolderInfo] = {}
+        self._mods_by_name: Dict[str, str] = {}
         self._mods_cache_valid = False
 
     def _scan_mods_directory(self) -> Dict[str, ModFolderInfo]:
-        """Сканирует директорию модов и возвращает кэш информации о всех модах.
-        
-        Оптимизированное сканирование использует os.scandir() для лучшей производительности
-        и избегает множественных системных вызовов stat().
-        """
         cache: Dict[str, ModFolderInfo] = {}
         if not os.path.exists(self.app_state.mods_dir):
             return cache
-        
         try:
-            # Используем os.scandir() вместо os.listdir() для лучшей производительности
-            # scandir() возвращает DirEntry объекты с уже собранной информацией о файлах
             with os.scandir(self.app_state.mods_dir) as entries:
                 for entry in entries:
-                    # Проверяем, что это директория (используем кэшированную информацию из DirEntry)
                     if not entry.is_dir(follow_symlinks=False):
                         continue
-                    
                     folder_name = entry.name
                     folder_path = entry.path
-                    
-                    # Формируем путь к config.json
                     config_path = os.path.join(folder_path, 'config.json')
-                    
-                    # Проверяем существование config.json (можно оптимизировать дальше, но это уже быстро)
                     if not os.path.exists(config_path):
                         continue
-                    
                     try:
-                        # Получаем mtime конфига (однократный системный вызов)
                         config_mtime = os.path.getmtime(config_path)
-                        
-                        # Читаем и парсим JSON
                         with open(config_path, 'r', encoding='utf-8') as f:
                             config_data = json.load(f)
-                        
                         mod_key = config_data.get('mod_key')
                         if not mod_key:
                             continue
-                        
-                        # Проверяем, нужно ли обновить запись (по mtime)
                         if mod_key in cache:
                             existing_info = cache[mod_key]
                             if config_mtime <= existing_info.config_mtime:
                                 continue
-                        
-                        # Создаем новую запись в кэше
-                        mod_info = ModFolderInfo(
-                            mod_key=mod_key,
-                            folder_path=folder_path,
-                            folder_name=folder_name,
-                            config_data=config_data,
-                            config_mtime=config_mtime
-                        )
+                        mod_info = ModFolderInfo(mod_key=mod_key, folder_path=folder_path, folder_name=folder_name, config_data=config_data, config_mtime=config_mtime)
                         cache[mod_key] = mod_info
-                        
-                        # Обновляем временный индекс по имени мода (для последующего использования)
                         mod_name = config_data.get('name', '')
                         if mod_name:
-                            # Используем временный атрибут для построения индекса во время сканирования
                             if not hasattr(self, '_temp_mods_by_name'):
                                 self._temp_mods_by_name = {}
                             self._temp_mods_by_name[mod_name.lower()] = mod_key
                     except OSError as e:
-                        logging.warning(f'_scan_mods_directory: failed to access config {config_path}: {e}', 
-                                      exc_info=True, extra={'mod_folder': folder_name, 'config_path': config_path})
+                        logging.warning(f'_scan_mods_directory: failed to access config {config_path}: {e}', exc_info=True, extra={'mod_folder': folder_name, 'config_path': config_path})
                         continue
                     except json.JSONDecodeError as e:
-                        logging.warning(f'_scan_mods_directory: invalid JSON in {config_path}: {e}', 
-                                      exc_info=True, extra={'mod_folder': folder_name, 'config_path': config_path,
-                                                             'json_line': getattr(e, 'lineno', None),
-                                                             'json_col': getattr(e, 'colno', None)})
+                        logging.warning(f'_scan_mods_directory: invalid JSON in {config_path}: {e}', exc_info=True, extra={'mod_folder': folder_name, 'config_path': config_path, 'json_line': getattr(e, 'lineno', None), 'json_col': getattr(e, 'colno', None)})
                         continue
                     except KeyError as e:
-                        logging.debug(f'_scan_mods_directory: missing key in {config_path}: {e}',
-                                    extra={'mod_folder': folder_name, 'config_path': config_path, 'missing_key': str(e)})
+                        logging.debug(f'_scan_mods_directory: missing key in {config_path}: {e}', extra={'mod_folder': folder_name, 'config_path': config_path, 'missing_key': str(e)})
                         continue
         except OSError as e:
-            logging.error(f'_scan_mods_directory: failed to list directory {self.app_state.mods_dir}: {e}',
-                         exc_info=True, extra={'mods_dir': self.app_state.mods_dir})
-        
+            logging.error(f'_scan_mods_directory: failed to list directory {self.app_state.mods_dir}: {e}', exc_info=True, extra={'mods_dir': self.app_state.mods_dir})
         return cache
 
     def invalidate_mods_cache(self) -> None:
-        """Инвалидирует кэш модов, заставляя его пересканировать при следующем запросе."""
         with self._cache_lock:
             self._mods_cache_valid = False
             self._mods_by_name.clear()
 
     def _get_mods_cache(self) -> Dict[str, ModFolderInfo]:
-        """Получает актуальный кэш модов, автоматически пересканировав при необходимости."""
         with self._cache_lock:
             if self._mods_cache_valid:
-                return self._mods_cache.copy()  # Возвращаем копию для потокобезопасности
-            
-            # Сбрасываем временный индекс имени перед сканированием
+                return self._mods_cache.copy()
             if hasattr(self, '_temp_mods_by_name'):
                 del self._temp_mods_by_name
-            
-            # Сканируем и строим индексы
             self._mods_cache = self._scan_mods_directory()
-            
-            # Копируем временный индекс в постоянный (если он был создан)
             if hasattr(self, '_temp_mods_by_name'):
                 self._mods_by_name = self._temp_mods_by_name.copy()
                 del self._temp_mods_by_name
             else:
                 self._mods_by_name = {}
-            
             self._mods_cache_valid = True
-            return self._mods_cache.copy()  # Возвращаем копию для потокобезопасности
+            return self._mods_cache.copy()
 
-    def load_local_mods(self, _skip_conversion=False):
+    def convert_legacy_mods(self) -> bool:
         if not os.path.exists(self.app_state.mods_dir):
-            os.makedirs(self.app_state.mods_dir, exist_ok=True)
             return False
-        
-        self._get_mods_cache()
-        
-        installed_mods = {}
         conversion_happened = False
         try:
             for item_name in os.listdir(self.app_state.mods_dir):
                 item_path = os.path.join(self.app_state.mods_dir, item_name)
-                if not _skip_conversion and os.path.isfile(item_path) and item_name.lower().endswith(('.zip', '.7z', '.rar', '.tar.gz', '.lzma')):
+                if os.path.isfile(item_path) and item_name.lower().endswith(('.zip', '.7z', '.rar', '.tar.gz', '.lzma')):
                     try:
                         is_deltamod_archive = False
                         item_name_lower = item_name.lower()
@@ -196,7 +140,7 @@ class ModManager(QObject):
                                     if '_deltamodInfo.json' in rf.namelist():
                                         is_deltamod_archive = True
                             except (OSError, ImportError) as e:
-                                logging.debug(f'load_local_mods: failed to check rar archive {item_name}: {e}')
+                                logging.warning(f'convert_legacy_mods: failed to check rar archive {item_name}: {e}', exc_info=True)
                         elif item_name_lower.endswith('.7z'):
                             import py7zr
                             try:
@@ -204,7 +148,7 @@ class ModManager(QObject):
                                     if '_deltamodInfo.json' in zf.getnames():
                                         is_deltamod_archive = True
                             except (OSError, ImportError) as e:
-                                logging.debug(f'load_local_mods: failed to check 7z archive {item_name}: {e}')
+                                logging.warning(f'convert_legacy_mods: failed to check 7z archive {item_name}: {e}', exc_info=True)
                         if is_deltamod_archive:
                             self.status_changed.emit(tr('status.deltamod_archive_detected', name=item_name), UI_COLORS['status_info'])
                             QApplication.processEvents()
@@ -221,21 +165,55 @@ class ModManager(QObject):
                                     self.status_changed.emit(tr('status.deltamod_converted', name=os.path.basename(new_mod_path)), UI_COLORS['status_success'])
                                     os.remove(item_path)
                                     conversion_happened = True
+                                    logging.info(f'convert_legacy_mods: converted archive {item_name} -> {new_mod_path}')
                                 else:
                                     self.status_changed.emit(tr('errors.deltamod_conversion_failed', name=item_name), UI_COLORS['status_error'])
-                            continue
+                                    logging.warning(f'convert_legacy_mods: conversion failed for archive {item_name}')
                     except (OSError, ValueError, shutil.Error) as e:
-                        logging.error(f'Failed to process Deltamod archive {item_name}: {e}')
+                        error_msg = f'Failed to process Deltamod archive {item_name}: {e}'
+                        logging.error(f'convert_legacy_mods: {error_msg}', exc_info=True)
+                        self.status_changed.emit(tr('errors.deltamod_conversion_failed', name=item_name), UI_COLORS['status_error'])
+                elif os.path.isdir(item_path):
+                    try:
+                        dir_contents = os.listdir(item_path)
+                        if '_deltamodInfo.json' in dir_contents and 'config.json' not in dir_contents:
+                            self.status_changed.emit(tr('status.deltamod_detected', name=item_name), UI_COLORS['status_info'])
+                            QApplication.processEvents()
+                            from utils.deltamod_converter import DeltamodConverter
+                            converter = DeltamodConverter(item_path, self.app_state.mods_dir)
+                            if converter.convert():
+                                shutil.rmtree(item_path)
+                                conversion_happened = True
+                                logging.info(f'convert_legacy_mods: converted folder {item_name}')
+                            else:
+                                self.status_changed.emit(tr('errors.deltamod_conversion_failed', name=item_name), UI_COLORS['status_error'])
+                                logging.warning(f'convert_legacy_mods: conversion failed for folder {item_name}')
+                    except Exception as e:
+                        error_msg = f'Failed to process Deltamod folder {item_name}: {e}'
+                        logging.error(f'convert_legacy_mods: {error_msg}', exc_info=True)
+            if conversion_happened:
+                self.invalidate_mods_cache()
+                logging.info('convert_legacy_mods: conversion completed, mods cache invalidated')
+            return conversion_happened
+        except Exception as e:
+            error_msg = f'Error during legacy mod conversion: {e}'
+            logging.error(f'convert_legacy_mods: {error_msg}', exc_info=True)
+            return False
+
+    def load_local_mods(self, _skip_conversion=False):
+        if not os.path.exists(self.app_state.mods_dir):
+            os.makedirs(self.app_state.mods_dir, exist_ok=True)
+            return False
+        if not _skip_conversion:
+            conversion_happened = self.convert_legacy_mods()
+            if conversion_happened:
+                return self.load_local_mods(_skip_conversion=True)
+        self._get_mods_cache()
+        installed_mods = {}
+        try:
+            for item_name in os.listdir(self.app_state.mods_dir):
+                item_path = os.path.join(self.app_state.mods_dir, item_name)
                 if not os.path.isdir(item_path):
-                    continue
-                if not _skip_conversion and '_deltamodInfo.json' in os.listdir(item_path) and ('config.json' not in os.listdir(item_path)):
-                    self.status_changed.emit(tr('status.deltamod_detected', name=item_name), UI_COLORS['status_info'])
-                    QApplication.processEvents()
-                    from utils.deltamod_converter import DeltamodConverter
-                    converter = DeltamodConverter(item_path, self.app_state.mods_dir)
-                    if converter.convert():
-                        shutil.rmtree(item_path)
-                        conversion_happened = True
                     continue
                 config_path = os.path.join(item_path, 'config.json')
                 if not os.path.exists(config_path):
@@ -366,24 +344,20 @@ class ModManager(QObject):
                     try:
                         os.remove(p)
                     except Exception as e:
-                        logging.debug(f'load_local_mods: failed to remove cleanup file {p}: {e}')
+                        logging.warning(f'load_local_mods: failed to remove cleanup file {p}: {e}', exc_info=True)
             for d in cleanup_dirs:
                 if os.path.exists(d):
                     try:
                         shutil.rmtree(d)
                     except Exception as e:
-                        logging.debug(f'load_local_mods: failed to remove cleanup dir {d}: {e}')
+                        logging.warning(f'load_local_mods: failed to remove cleanup dir {d}: {e}', exc_info=True)
             self._write_metadata({'mod_files_to_cleanup': [], 'mod_dirs_to_cleanup': []})
-            if conversion_happened and (not _skip_conversion):
-                self.invalidate_mods_cache()
-                return self.load_local_mods(_skip_conversion=True)
             return True
         except Exception as e:
-            logging.error(f'_load_local_mods_from_folders failed: {e}')
+            logging.error(f'_load_local_mods_from_folders failed: {e}', exc_info=True)
             return False
 
     def get_mod_config(self, mod_key: str) -> dict:
-        """Получает конфигурацию мода из кэша."""
         cache = self._get_mods_cache()
         mod_info = cache.get(mod_key)
         if mod_info:
@@ -391,7 +365,6 @@ class ModManager(QObject):
         return {}
 
     def get_mod_folder_path(self, mod_key: str) -> str:
-        """Получает путь к папке мода из кэша."""
         cache = self._get_mods_cache()
         mod_info = cache.get(mod_key)
         if mod_info:
@@ -414,12 +387,10 @@ class ModManager(QObject):
                     try:
                         chapter_data = mod.get_chapter_data(chapter_id)
                     except (AttributeError, KeyError, TypeError) as e:
-                        logging.debug(f'install_mod: failed to get chapter {chapter_id} data: {e}',
-                                    extra={'chapter_id': chapter_id, 'mod_key': getattr(mod, 'key', None)})
+                        logging.debug(f'install_mod: failed to get chapter {chapter_id} data: {e}', extra={'chapter_id': chapter_id, 'mod_key': getattr(mod, 'key', None)})
                         chapter_data = None
                     except Exception as e:
-                        logging.warning(f'install_mod: unexpected error getting chapter {chapter_id} data: {e}',
-                                     exc_info=True, extra={'chapter_id': chapter_id, 'mod_key': getattr(mod, 'key', None)})
+                        logging.warning(f'install_mod: unexpected error getting chapter {chapter_id} data: {e}', exc_info=True, extra={'chapter_id': chapter_id, 'mod_key': getattr(mod, 'key', None)})
                         chapter_data = None
                     if chapter_data:
                         available_chapters.append(chapter_id)
@@ -452,16 +423,13 @@ class ModManager(QObject):
             self.app_state.is_installing = False
             mod_key = getattr(mod, 'key', 'unknown')
             mod_name = getattr(mod, 'name', 'Unknown Mod')
-            logging.error(f'install_mod: file operation error: {e}', exc_info=True,
-                        extra={'mod_key': mod_key, 'mod_name': mod_name, 'operation': 'install'})
-            self.feedback_manager.show_error('errors.installation_failed', 
-                                           tr('errors.file_operation_failed', error=str(e)))
+            logging.error(f'install_mod: file operation error: {e}', exc_info=True, extra={'mod_key': mod_key, 'mod_name': mod_name, 'operation': 'install'})
+            self.feedback_manager.show_error('errors.installation_failed', tr('errors.file_operation_failed', error=str(e)))
         except Exception as e:
             self.app_state.is_installing = False
             mod_key = getattr(mod, 'key', 'unknown')
             mod_name = getattr(mod, 'name', 'Unknown Mod')
-            logging.error(f'install_mod: unexpected error: {e}', exc_info=True,
-                        extra={'mod_key': mod_key, 'mod_name': mod_name})
+            logging.error(f'install_mod: unexpected error: {e}', exc_info=True, extra={'mod_key': mod_key, 'mod_name': mod_name})
             self.feedback_manager.show_error('errors.installation_failed', str(e))
 
     def install_from_url(self, url: str):
@@ -485,22 +453,17 @@ class ModManager(QObject):
         except (OSError, shutil.Error) as e:
             mod_key = mod.get('key', '') if isinstance(mod, dict) else getattr(mod, 'key', 'unknown')
             mod_name = mod.get('name', '') if isinstance(mod, dict) else getattr(mod, 'name', 'Unknown Mod')
-            logging.error(f'uninstall_mod: file operation error: {e}', exc_info=True,
-                        extra={'mod_key': mod_key, 'mod_name': mod_name, 'operation': 'uninstall'})
-            self.feedback_manager.show_error('errors.uninstall_failed', 
-                                           tr('errors.file_operation_failed', error=str(e)))
+            logging.error(f'uninstall_mod: file operation error: {e}', exc_info=True, extra={'mod_key': mod_key, 'mod_name': mod_name, 'operation': 'uninstall'})
+            self.feedback_manager.show_error('errors.uninstall_failed', tr('errors.file_operation_failed', error=str(e)))
         except PermissionError as e:
             mod_key = mod.get('key', '') if isinstance(mod, dict) else getattr(mod, 'key', 'unknown')
             mod_name = mod.get('name', '') if isinstance(mod, dict) else getattr(mod, 'name', 'Unknown Mod')
-            logging.error(f'uninstall_mod: permission error: {e}', exc_info=True,
-                        extra={'mod_key': mod_key, 'mod_name': mod_name})
-            self.feedback_manager.show_error('errors.uninstall_failed', 
-                                           tr('errors.permission_denied'))
+            logging.error(f'uninstall_mod: permission error: {e}', exc_info=True, extra={'mod_key': mod_key, 'mod_name': mod_name})
+            self.feedback_manager.show_error('errors.uninstall_failed', tr('errors.permission_denied'))
         except Exception as e:
             mod_key = mod.get('key', '') if isinstance(mod, dict) else getattr(mod, 'key', 'unknown')
             mod_name = mod.get('name', '') if isinstance(mod, dict) else getattr(mod, 'name', 'Unknown Mod')
-            logging.error(f'uninstall_mod: unexpected error: {e}', exc_info=True,
-                        extra={'mod_key': mod_key, 'mod_name': mod_name})
+            logging.error(f'uninstall_mod: unexpected error: {e}', exc_info=True, extra={'mod_key': mod_key, 'mod_name': mod_name})
             self.feedback_manager.show_error('errors.uninstall_failed', str(e))
 
     def update_mod(self, mod_data):
@@ -509,27 +472,23 @@ class ModManager(QObject):
         self.install_mod(mod_data, force=True, is_update=True)
 
     def delete_mod_files(self, mod_data):
-        """Удаляет файлы мода, используя кэш для поиска."""
         try:
             mod_key = mod_data.get('key', '') if isinstance(mod_data, dict) else mod_data.key
             cache = self._get_mods_cache()
             mod_info = cache.get(mod_key)
-            
             if not mod_info:
                 return
-            
             if os.path.exists(mod_info.folder_path):
                 import shutil
                 shutil.rmtree(mod_info.folder_path)
                 self.invalidate_mods_cache()
         except Exception as e:
-            logging.warning(f'uninstall_mod: cleanup failed: {e}')
+            logging.error(f'uninstall_mod: cleanup failed: {e}', exc_info=True)
 
     def get_mod_status(self, mod: mod_models.ModInfo, chapter_id: int) -> str:
-        """Получает статус мода для указанной главы, используя кэш."""
         if mod.is_local_mod:
             return 'ready'
-        
+
         def _collect_remote_versions(m: mod_models.ModInfo, ch_id: int) -> dict:
             if ch_id == -1:
                 return {'demo': m.demo_version} if m.is_valid_for_demo() and m.demo_version else {}
@@ -542,18 +501,14 @@ class ModManager(QObject):
             for ef in ch.extra_files:
                 d[ef.key] = ef.version
             return d
-        
         remote_versions = _collect_remote_versions(mod, chapter_id)
         if not remote_versions:
             return 'n/a'
-        
         cache = self._get_mods_cache()
         mod_info = cache.get(mod.key)
         if not mod_info:
             return 'install'
-        
         config_data = mod_info.config_data
-        
         if chapter_id == -1:
             file_key = 'demo'
         elif chapter_id == 0:
@@ -562,7 +517,6 @@ class ModManager(QObject):
             file_key = str(chapter_id)
         else:
             file_key = str(chapter_id)
-        
         local_versions = {}
         files_data = config_data.get('files', {})
         if file_key in files_data:
@@ -572,77 +526,57 @@ class ModManager(QObject):
             versions_data = file_info.get('versions', {})
             for key, version in versions_data.items():
                 local_versions[key] = version
-        
         if not local_versions:
             return 'install'
-        
         for k in local_versions.keys():
             if k not in remote_versions:
                 return 'update'
-        
         from utils.file_utils import version_sort_key
         for k, rv in remote_versions.items():
             lv = local_versions.get(k)
             if version_sort_key(rv) > version_sort_key(lv or '0.0.0'):
                 return 'update'
-        
         return 'ready'
 
     def is_mod_installed(self, mod_key: str) -> bool:
-        """Проверяет, установлен ли мод по его ключу. O(1) операция благодаря кэшу."""
         with self._cache_lock:
             if not self._mods_cache_valid:
                 self._get_mods_cache()
             return mod_key in self._mods_cache
-    
+
     def find_mod_by_name(self, mod_name: str) -> Optional[str]:
-        """Находит mod_key по имени мода. O(1) операция благодаря индексу.
-        
-        Args:
-            mod_name: Имя мода (регистронезависимый поиск)
-            
-        Returns:
-            mod_key если мод найден, иначе None
-        """
         with self._cache_lock:
             if not self._mods_cache_valid:
                 self._get_mods_cache()
             return self._mods_by_name.get(mod_name.lower())
 
     def check_mod_exists(self, mod_info):
-        """Проверяет существование мода, используя кэш."""
         cache = self._get_mods_cache()
         mod_key = mod_info.get('mod_key', '')
         if mod_key and mod_key in cache:
             return True
-        
         folder_name = mod_info.get('folder_name', '')
         if folder_name:
             for mod_info_cached in cache.values():
                 if mod_info_cached.folder_name == folder_name:
                     return True
-        
         mod_name = mod_info.get('name', '')
         if mod_name:
             safe_name = sanitize_filename(mod_name)
             for mod_info_cached in cache.values():
                 if mod_info_cached.folder_name == safe_name:
                     return True
-        
         return False
 
     def mod_has_files_for_chapter(self, mod_data, chapter_id):
-        """Проверяет наличие файлов мода для главы, используя кэш."""
         try:
             mod_key = getattr(mod_data, 'key', None) or getattr(mod_data, 'mod_key', None)
             if not mod_key:
                 return True
-            
             cache = self._get_mods_cache()
             mod_info = cache.get(mod_key)
             if not mod_info:
                 return False
-            
             files_data = mod_info.config_data.get('files', {})
             if files_data:
                 if chapter_id == -1:
@@ -656,7 +590,6 @@ class ModManager(QObject):
                 if chapter_id == -1:
                     return 'demo' in files_data or 'undertale' in files_data
                 return file_key in files_data
-            
             chapter_folders = {-1: 'universal', 0: 'menu', 1: 'chapter1', 2: 'chapter2', 3: 'chapter3', 4: 'chapter4'}
             folder_name = chapter_folders.get(chapter_id, 'universal')
             chapter_folder = os.path.join(mod_info.folder_path, folder_name)
@@ -667,7 +600,7 @@ class ModManager(QObject):
                 return len(os.listdir(universal_folder)) > 0
             return True
         except Exception as e:
-            logging.debug(f'mod_has_files_for_chapter: exception: {e}')
+            logging.warning(f'mod_has_files_for_chapter: exception: {e}', exc_info=True)
             return True
 
     def _read_metadata(self) -> Dict:
@@ -678,7 +611,7 @@ class ModManager(QObject):
                 with open(self.app_state.mods_metadata_path, 'r', encoding='utf-8') as f:
                     return json.load(f) or {}
             except Exception as e:
-                logging.debug(f'_read_metadata: failed: {e}')
+                logging.warning(f'_read_metadata: failed: {e}', exc_info=True)
                 return {}
 
     def _write_metadata(self, data: Dict):
@@ -687,7 +620,7 @@ class ModManager(QObject):
                 with open(self.app_state.mods_metadata_path, 'w', encoding='utf-8') as f:
                     json.dump(data, f, ensure_ascii=False, indent=2)
             except Exception as e:
-                logging.warning(f'_write_metadata: failed: {e}')
+                logging.error(f'_write_metadata: failed: {e}', exc_info=True)
 
     def _on_single_mod_install_finished(self, success):
         was_installed_before = False
@@ -800,7 +733,7 @@ class ModManager(QObject):
                 if config_data and config_data.get('is_local_mod'):
                     local_mods.append({'key': config_data.get('mod_key'), 'name': config_data.get('name', 'Unknown mod'), 'data': config_data, 'folder_path': folder_path})
             except Exception as e:
-                logging.debug(f'list_local_mods: failed to read {config_path}: {e}')
+                logging.warning(f'list_local_mods: failed to read {config_path}: {e}', exc_info=True)
                 continue
         return local_mods
 

@@ -11,6 +11,7 @@ class AppState(QObject):
     current_mode_changed = pyqtSignal(str)
     selected_chapter_changed = pyqtSignal(object)
     is_save_manager_view_changed = pyqtSignal(bool)
+    operation_cancelled_changed = pyqtSignal(bool)
 
     def __init__(self):
         super().__init__()
@@ -49,6 +50,7 @@ class AppState(QObject):
         self.is_full_install: bool = False
         self.game_is_running: bool = False
         self.pending_dialogs: List[Any] = []
+        self._operation_cancelled: bool = False
 
     @property
     def is_installing(self) -> bool:
@@ -99,3 +101,13 @@ class AppState(QObject):
         if self._is_save_manager_view != value:
             self._is_save_manager_view = value
             self.is_save_manager_view_changed.emit(value)
+
+    @property
+    def operation_cancelled(self) -> bool:
+        return self._operation_cancelled
+
+    @operation_cancelled.setter
+    def operation_cancelled(self, value: bool) -> None:
+        if self._operation_cancelled != value:
+            self._operation_cancelled = value
+            self.operation_cancelled_changed.emit(value)
