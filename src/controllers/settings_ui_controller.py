@@ -94,9 +94,9 @@ class SettingsUiController:
         self.app.disable_splash_checkbox.setChecked(False)
         self.app._update_custom_executable_ui()
         self.app._update_checkbox_visibility()
-        self.slot_manager.clear_all_slots()
-        self.slot_manager.save_slots_state()
-        self.slot_manager.load_slots_state()
+        self.slot_manager.used_mods.clear()
+        self.slot_manager.save_used_mods_state()
+        self.slot_manager.load_used_mods_state()
         self.update_settings_page_visibility()
         self.customization_manager.load_custom_style_settings(self.app.color_widgets, self.app.theme.apply_theme)
         self.app.game_launch.update_button_state()
@@ -110,7 +110,7 @@ class SettingsUiController:
         game_type = self.app.game_type_combo.itemData(index)
         if not game_type:
             return
-        self.slot_manager.save_slots_state()
+        self.slot_manager.save_used_mods_state()
         if game_type == 'deltarunedemo':
             self.app_state.game_mode = DemoGameMode()
         elif game_type == 'undertale':
@@ -129,17 +129,18 @@ class SettingsUiController:
         is_chapter = bool(state)
         old_is_chapter = self.app_state.current_mode == 'chapter'
         if old_is_chapter != is_chapter:
-            self.slot_manager.save_slots_state()
-        self.app_state.current_mode = 'chapter' if is_chapter else 'normal'
+            self.slot_manager.save_used_mods_state()
+            self.app_state.current_mode = 'chapter' if is_chapter else 'normal'
+            self.slot_manager.load_used_mods_state()
+        else:
+            self.app_state.current_mode = 'chapter' if is_chapter else 'normal'
         self.app.game_type_combo.setEnabled(not is_chapter)
-        self.slot_manager.update_slots_display(self.app.active_slots_layout)
         if hasattr(self.app, 'library_display'):
             self.app.library_display.update_mod_widgets_slot_status()
         self.app.game_launch.update_button_state()
+        if hasattr(self.app, 'chapter_tabs_widget'):
+            self.app.chapter_tabs_widget.setVisible(is_chapter)
         if is_chapter:
-            for slot_frame in self.app_state.slots.values():
-                slot_frame.is_selected = False
-                self.slot_manager.update_slot_visual_state(slot_frame)
             self.app_state.selected_chapter_id = None
             if hasattr(self.app, '_show_chapter_mode_instruction'):
                 self.app._show_chapter_mode_instruction()

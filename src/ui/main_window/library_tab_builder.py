@@ -44,27 +44,31 @@ class LibraryTabBuilder:
         controls_layout.addWidget(full_install_checkbox)
         controls_layout.addStretch()
         layout.addLayout(controls_layout)
-        slots_container = QWidget()
-        slots_container.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
-        slots_layout = QVBoxLayout(slots_container)
-        active_slots_widget = QWidget()
-        active_slots_widget.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
-        active_slots_widget.setObjectName('slots_background')
-        active_slots_layout = QHBoxLayout(active_slots_widget)
-        active_slots_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        active_slots_layout.setContentsMargins(20, 15, 20, 15)
-        active_slots_layout.setSpacing(0)
-        slots_bg_color = get_theme_color(self.app_state.local_config, 'background', '#000000')
-        if slots_bg_color.startswith('#'):
-            r = int(slots_bg_color[1:3], 16)
-            g = int(slots_bg_color[3:5], 16)
-            b = int(slots_bg_color[5:7], 16)
-            slots_bg_rgba = f'rgba({r}, {g}, {b}, 128)'
-        else:
-            slots_bg_rgba = 'rgba(0, 0, 0, 128)'
-        active_slots_widget.setStyleSheet(f'\n            QWidget#slots_background {{\n                background-color: {slots_bg_rgba};\n                border-radius: 10px;\n                margin: 5px;\n            }}\n        ')
-        slots_layout.addWidget(active_slots_widget)
-        layout.addWidget(slots_container)
+        chapter_tabs_widget = QWidget()
+        chapter_tabs_widget.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
+        chapter_tabs_layout = QHBoxLayout(chapter_tabs_widget)
+        chapter_tabs_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        chapter_tabs_layout.setContentsMargins(20, 10, 20, 10)
+        chapter_tabs_layout.setSpacing(10)
+        chapter_tabs_layout.addStretch()
+        chapter_tabs_widget.setObjectName('chapter_tabs_container')
+        chapter_tab_names = [tr('chapters.menu'), tr('tabs.chapter_1'), tr('tabs.chapter_2'), tr('tabs.chapter_3'), tr('tabs.chapter_4')]
+        chapter_tab_buttons = []
+        border_color = get_theme_color(self.app_state.local_config, 'border', 'white')
+        button_color = get_theme_color(self.app_state.local_config, 'button', 'black')
+        hover_color = get_theme_color(self.app_state.local_config, 'button_hover', '#333')
+        for i, chapter_name in enumerate(chapter_tab_names):
+            chapter_btn = QPushButton(chapter_name)
+            chapter_btn.setCheckable(True)
+            chapter_btn.setObjectName(f'chapter_tab_{i}')
+            chapter_btn.setFixedHeight(40)
+            chapter_btn.setMinimumWidth(100)
+            chapter_btn.setStyleSheet(f'\n                QPushButton#chapter_tab_{i} {{\n                    background-color: {button_color};\n                    border: 2px solid {border_color};\n                    color: white;\n                    font-weight: bold;\n                    font-size: 13px;\n                    border-radius: 0px;\n                    padding: 5px;\n                }}\n                QPushButton#chapter_tab_{i}:checked {{\n                    background-color: {hover_color};\n                    border: 3px solid {border_color};\n                }}\n                QPushButton#chapter_tab_{i}:hover {{\n                    background-color: {hover_color};\n                }}\n            ')
+            chapter_tabs_layout.addWidget(chapter_btn)
+            chapter_tab_buttons.append(chapter_btn)
+        chapter_tabs_layout.addStretch()
+        chapter_tabs_widget.setVisible(False)
+        layout.addWidget(chapter_tabs_widget)
         installed_mods_container = QWidget()
         installed_mods_container.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
         installed_mods_container.setObjectName('mods_background')
@@ -115,10 +119,9 @@ class LibraryTabBuilder:
         self.widgets['game_type_combo'] = game_type_combo
         self.widgets['chapter_mode_checkbox'] = chapter_mode_checkbox
         self.widgets['full_install_checkbox'] = full_install_checkbox
-        self.widgets['slots_container'] = slots_container
-        self.widgets['slots_layout'] = slots_layout
-        self.widgets['active_slots_widget'] = active_slots_widget
-        self.widgets['active_slots_layout'] = active_slots_layout
+        self.widgets['chapter_tabs_widget'] = chapter_tabs_widget
+        self.widgets['chapter_tabs_layout'] = chapter_tabs_layout
+        self.widgets['chapter_tab_buttons'] = chapter_tab_buttons
         self.widgets['installed_mods_container'] = installed_mods_container
         self.widgets['installed_mods_scroll'] = installed_mods_scroll
         self.widgets['installed_mods_widget'] = installed_mods_widget

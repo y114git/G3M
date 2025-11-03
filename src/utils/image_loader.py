@@ -21,7 +21,9 @@ class ImageLoaderRunnable(QRunnable):
         try:
             self.signals.error.emit(self.url, message)
         except Exception as e:
-            logging.debug(f'ImageLoader._emit_error: signal emit failed for {self.url}: {e}')
+            from utils.network_utils import sanitize_log_message
+            safe_msg = sanitize_log_message(f'ImageLoader._emit_error: signal emit failed: {e}')
+            logging.debug(safe_msg)
 
     def run(self) -> None:
         try:
@@ -53,7 +55,9 @@ class ImageLoaderRunnable(QRunnable):
                 pil_img.save(buffer, format='PNG')
                 processed_content = buffer.getvalue()
             except Exception as e:
-                logging.debug(f'ImageLoader.run: PIL processing failed for {self.url}, using raw content: {e}')
+                from utils.network_utils import sanitize_log_message
+                safe_msg = sanitize_log_message(f'ImageLoader.run: PIL processing failed, using raw content: {e}')
+                logging.debug(safe_msg)
                 processed_content = resp.content
             img = QImage()
             if not img.loadFromData(processed_content):

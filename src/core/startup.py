@@ -45,12 +45,26 @@ def check_game_processes():
     return None
 
 
+class SecureLogFilter(logging.Filter):
+
+    def filter(self, record):
+        try:
+            from utils.network_utils import sanitize_log_message
+            if record.getMessage():
+                record.msg = sanitize_log_message(str(record.msg))
+                record.args = ()
+        except Exception:
+            pass
+        return True
+
+
 def configure_logging(app_name: str, user_data_root: str) -> str:
     log_path = os.path.join(user_data_root, f'{app_name.lower()}.log')
     root = logging.getLogger()
     if not root.handlers:
         root.setLevel(logging.INFO)
         fmt = logging.Formatter('%(asctime)s %(levelname)s %(name)s: %(message)s')
+        secure_filter = SecureLogFilter()
         if os.path.exists(log_path):
             try:
                 with open(log_path, 'w', encoding='utf-8'):
@@ -59,11 +73,19 @@ def configure_logging(app_name: str, user_data_root: str) -> str:
                 print(f'Failed to clear log file: {e}')
         file_handler = RotatingFileHandler(log_path, maxBytes=1000000, backupCount=3, encoding='utf-8')
         file_handler.setFormatter(fmt)
+        file_handler.addFilter(secure_filter)
         root.addHandler(file_handler)
         console = logging.StreamHandler()
         console.setLevel(logging.WARNING)
         console.setFormatter(fmt)
+        console.addFilter(secure_filter)
         root.addHandler(console)
+        urllib3_logger = logging.getLogger('urllib3')
+        urllib3_logger.addFilter(secure_filter)
+        urllib3_logger.setLevel(logging.WARNING)
+        requests_logger = logging.getLogger('requests')
+        requests_logger.addFilter(secure_filter)
+        requests_logger.setLevel(logging.WARNING)
     return log_path
 
 
@@ -109,7 +131,9 @@ def register_url_protocol():
                 f.write(desktop_file_content)
             subprocess.run(['xdg-mime', 'default', 'deltahub.desktop', 'x-scheme-handler/deltahub'], check=False)
     except Exception as e:
-        logging.warning(f'Failed to register URL protocol: {e}')
+        from utils.network_utils import sanitize_log_message
+        safe_msg = sanitize_log_message(f'Failed to register URL protocol: {e}')
+        logging.warning(safe_msg)
 
 
 class SingleInstanceServer(QLocalServer):
@@ -189,7 +213,9 @@ def run_app():
     try:
         register_url_protocol()
     except Exception as e:
-        logging.warning(f'Could not register protocol handler: {e}')
+        from utils.network_utils import sanitize_log_message
+        safe_msg = sanitize_log_message(f'Could not register protocol handler: {e}')
+        logging.warning(safe_msg)
     if args.shortcut_launch:
         DeltaHubApp = create_app_reference()
         try:
@@ -208,11 +234,17 @@ def run_app():
             with open(config_path, 'r', encoding='utf-8') as f:
                 config = json.load(f)
     except (OSError, IOError) as e:
-        logging.warning(f'Failed to read config file: {e}')
+        from utils.network_utils import sanitize_log_message
+        safe_msg = sanitize_log_message(f'Failed to read config file: {e}')
+        logging.warning(safe_msg)
     except (json.JSONDecodeError, ValueError) as e:
-        logging.warning(f'Failed to parse config JSON: {e}')
+        from utils.network_utils import sanitize_log_message
+        safe_msg = sanitize_log_message(f'Failed to parse config JSON: {e}')
+        logging.warning(safe_msg)
     except Exception as e:
-        logging.warning(f'Unexpected error loading config: {e}')
+        from utils.network_utils import sanitize_log_message
+        safe_msg = sanitize_log_message(f'Unexpected error loading config: {e}')
+        logging.warning(safe_msg)
     is_first_launch = not config.get('first_launch_splash_shown', False)
     splash_disabled_by_user = config.get('disable_splash', False)
     show_animated_splash = is_first_launch or not splash_disabled_by_user

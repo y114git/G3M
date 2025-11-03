@@ -99,8 +99,7 @@ class RefreshController:
                     mods_loaded_signal.emit()
             if update_installed_mods_callback:
                 update_installed_mods_callback()
-            self.game_launch_controller.refresh_mods_in_slots()
-            self.slot_manager.refresh_slots_content()
+            self.game_launch_controller.refresh_mods_in_use()
             if update_action_button_callback:
                 update_action_button_callback()
             if success:
@@ -108,7 +107,7 @@ class RefreshController:
             else:
                 fallback_msg = tr('ui.network_fallback_message') if self.app_state.all_mods else tr('ui.network_update_failed')
                 self.feedback_manager.update_status(fallback_msg, UI_COLORS['status_error'])
-            QTimer.singleShot(100, self.slot_manager.load_slots_state)
+            QTimer.singleShot(100, self.slot_manager.load_used_mods_state)
             if update_plugin_tabs_callback:
                 update_plugin_tabs_callback()
         except Exception as e:

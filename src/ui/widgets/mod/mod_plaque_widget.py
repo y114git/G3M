@@ -101,6 +101,14 @@ class ModPlaqueWidget(BaseModWidget):
         self.actions_widget.setVisible(False)
         self.main_layout.addWidget(self.actions_widget)
 
+    def _update_actions_visibility(self):
+        if not hasattr(self, 'actions_widget'):
+            return
+        if self.is_selected:
+            self.actions_widget.setVisible(True)
+        else:
+            self.actions_widget.setVisible(False)
+
     def _check_installation_status(self):
         if self.parent_app and hasattr(self.parent_app, 'mod_manager'):
             self.is_installed = self.parent_app.mod_manager.is_mod_installed(self.mod_data.key)

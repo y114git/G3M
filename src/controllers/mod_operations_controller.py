@@ -133,13 +133,14 @@ class ModOperationsController:
         self.app_state.clear_current_task()
         self.set_install_buttons_enabled(True)
         if success:
+            self.mod_manager.invalidate_mods_cache()
             self.mod_manager.load_local_mods()
             self.app.search_display.update_search_plaques()
             if hasattr(self.app, 'library_display'):
                 self.app.library_display.update_display()
             QTimer.singleShot(100, self.refresh_specific_mod_widget_after_update)
             if not was_installed_before:
-                self._safe_execute(lambda: self.feedback_manager.show_info('dialogs.mod_installed_title', tr('dialogs.mod_installed_apply_info')), 'Failed to show mod installed info')
+                self._safe_execute(lambda: self.feedback_manager.show_info('dialogs.mod_installed_apply_info'), 'Failed to show mod installed info')
             self.feedback_manager.update_status(tr('status.mod_installed_success'), UI_COLORS['status_success'])
         self.app.game_launch.update_button_state()
 
@@ -147,10 +148,11 @@ class ModOperationsController:
         self.app_state.is_installing = False
         self.set_install_buttons_enabled(True)
         self.app.progress_bar.setVisible(False)
+        if success:
+            self._safe_execute(lambda: self.mod_manager.invalidate_mods_cache(), 'invalidate_mods_cache failed', default_return=None)
         self._safe_execute(lambda: QTimer.singleShot(0, self.app.search_display.update_search_plaques), 'update_search_plaques failed')
         self._safe_execute(lambda: self.mod_manager.load_local_mods(), 'load_local_mods failed', default_return=None)
         self._safe_execute(lambda: QTimer.singleShot(0, self.app.library_display.update_display) if hasattr(self.app, 'library_display') else None, 'update_library_display failed')
-        self._safe_execute(lambda: self.app.slot_manager.refresh_slots_content() if hasattr(self.app, 'slot_manager') else None, 'refresh_slots_content failed')
         if success:
             self._safe_execute(lambda: QTimer.singleShot(0, lambda: self.feedback_manager.show_info('dialogs.mod_installed_apply_info')), 'Failed to show mod installed info')
         self.app.game_launch.update_button_state()

@@ -87,7 +87,6 @@ class ModEditorDialog(QDialog):
         finally:
             combo.blockSignals(False)
 
-
     def _create_form_fields(self, form_layout):
         form_layout.addWidget(QLabel(tr('ui.mod_name_label')))
         self.name_edit = QLineEdit()
@@ -428,7 +427,6 @@ class ModEditorDialog(QDialog):
         files_layout.addWidget(self.file_tabs)
         parent_layout.addWidget(files_frame)
         self._update_file_tabs()
-
 
     def _data_button_text(self) -> str:
         return tr('ui.add_data_file')
