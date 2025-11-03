@@ -53,6 +53,23 @@ class GameLauncher(QObject):
         if not hasattr(self, '_mod_dirs_to_cleanup'):
             self._mod_dirs_to_cleanup = []
 
+    def _stop_monitor_thread(self):
+        if not self.monitor_thread:
+            return
+        try:
+            if self.monitor_thread.isRunning():
+                self.monitor_thread.requestInterruption()
+                self.monitor_thread.quit()
+                if not self.monitor_thread.wait(2000):
+                    logging.warning('monitor thread did not stop in time')
+                    self.monitor_thread.terminate()
+                    self.monitor_thread.wait(1000)
+            self.monitor_thread.deleteLater()
+            if hasattr(self, 'monitor_worker') and self.monitor_worker is not None:
+                self.monitor_worker.deleteLater()
+        except Exception as e:
+            logging.error(f'monitor thread cleanup failed: {e}', exc_info=True)
+
     def launch_game_with_all_mods(self, execute_plugin_hooks=None, restore_window_callback=None):
         if self.save_manager:
             if isinstance(self.app_state.game_mode, UndertaleGameMode):
@@ -143,24 +160,7 @@ class GameLauncher(QObject):
                 self.restore_window_callback()
             return
         try:
-            if self.monitor_thread:
-                try:
-                    if self.monitor_thread.isRunning():
-                        self.monitor_thread.requestInterruption()
-                        self.monitor_thread.quit()
-                        if not self.monitor_thread.wait(2000):
-                            logging.warning('_execute_game: monitor thread did not stop in time')
-                            self.monitor_thread.terminate()
-                            self.monitor_thread.wait(1000)
-                    self.monitor_thread.deleteLater()
-                    if hasattr(self, 'monitor_worker'):
-                        self.monitor_worker.deleteLater()
-                except Exception as e:
-                    logging.error(f'_execute_game: monitor thread cleanup failed: {e}', exc_info=True)
-                finally:
-                    self.monitor_thread = None
-                    if hasattr(self, 'monitor_worker'):
-                        self.monitor_worker = None
+            self._stop_monitor_thread()
             if launch_type == 'webbrowser':
                 self.monitor_thread = QThread(self)
                 self.monitor_worker = GameMonitorWorker(None, vanilla_mode)
@@ -230,23 +230,10 @@ class GameLauncher(QObject):
                 self.save_manager.restore_original_saves_after_launch(self._collection_backup_info)
                 self._collection_backup_info = {}
             if self.monitor_thread:
-                try:
-                    if self.monitor_thread.isRunning():
-                        self.monitor_thread.requestInterruption()
-                        self.monitor_thread.quit()
-                        if not self.monitor_thread.wait(2000):
-                            logging.warning('_check_game_running: monitor thread did not stop in time')
-                            self.monitor_thread.terminate()
-                            self.monitor_thread.wait(1000)
-                    self.monitor_thread.deleteLater()
-                    if hasattr(self, 'monitor_worker'):
-                        self.monitor_worker.deleteLater()
-                except Exception as e:
-                    logging.error(f'_check_game_running: monitor thread cleanup failed: {e}', exc_info=True)
-                finally:
-                    self.monitor_thread = None
-                    if hasattr(self, 'monitor_worker'):
-                        self.monitor_worker = None
+                self._stop_monitor_thread()
+                self.monitor_thread = None
+                if hasattr(self, 'monitor_worker'):
+                    self.monitor_worker = None
             self.game_launch_finished.emit()
 
     def _determine_launch_config(self, selections: Dict[int, str]) -> Optional[Dict[str, Any]]:
@@ -824,7 +811,7 @@ class GameLauncher(QObject):
                 logging.warning('_cleanup_direct_launch_files: session manifest validation failed or incomplete, attempting cleanup with available data')
             cleanup_info = session_data.get('direct_launch')
             if cleanup_info and cleanup_info.get('save_collection_swap'):
-                logging.info(f'_cleanup_direct_launch_files: restoring save collection swap')
+                logging.info('_cleanup_direct_launch_files: restoring save collection swap')
                 collection_path = cleanup_info.get('collection_path')
                 backup_path = cleanup_info.get('backup_path')
                 current_save_path = self.app_state.save_path
@@ -849,7 +836,7 @@ class GameLauncher(QObject):
                         if os.path.exists(backup_path):
                             shutil.copytree(backup_path, current_save_path, dirs_exist_ok=True)
                             shutil.rmtree(backup_path)
-                        logging.info(f'_cleanup_direct_launch_files: save collection swap restored successfully')
+                        logging.info('_cleanup_direct_launch_files: save collection swap restored successfully')
                     except Exception as e:
                         error_msg = f'Save collection swap restore failed: {e}'
                         logging.error(f'_cleanup_direct_launch_files: {error_msg}', exc_info=True)

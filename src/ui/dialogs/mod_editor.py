@@ -79,13 +79,25 @@ class ModEditorDialog(QDialog):
         main_layout.addWidget(scroll_area)
         self._create_action_buttons(main_layout)
 
+    def _set_checkbox_checked_silently(self, checkbox, checked):
+        checkbox.blockSignals(True)
+        try:
+            checkbox.setChecked(checked)
+        finally:
+            checkbox.blockSignals(False)
+
+    def _set_combo_silently(self, combo, operation):
+        combo.blockSignals(True)
+        try:
+            operation()
+        finally:
+            combo.blockSignals(False)
+
     def _on_xdelta_checkbox_changed(self, state):
         if self.is_creating and state == 0:
             reply = QMessageBox.question(self, tr('dialogs.xdelta_disable_warning_title'), tr('dialogs.xdelta_disable_warning_body'), QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No)
             if reply != QMessageBox.StandardButton.Yes:
-                self.xdelta_checkbox.blockSignals(True)
-                self.xdelta_checkbox.setChecked(True)
-                self.xdelta_checkbox.blockSignals(False)
+                self._set_checkbox_checked_silently(self.xdelta_checkbox, True)
 
     def _create_form_fields(self, form_layout):
         form_layout.addWidget(QLabel(tr('ui.mod_name_label')))
@@ -177,11 +189,7 @@ class ModEditorDialog(QDialog):
 
     def _load_game_versions(self):
         try:
-            self.game_version_combo.blockSignals(True)
-            self.game_version_combo.clear()
-            self.game_version_combo.addItems(['1.04'])
-            self.game_version_combo.setCurrentIndex(0)
-            self.game_version_combo.blockSignals(False)
+            self._set_combo_silently(self.game_version_combo, lambda: (self.game_version_combo.clear(), self.game_version_combo.addItems(['1.04']), self.game_version_combo.setCurrentIndex(0)))
         except Exception:
             pass
         from PyQt6.QtCore import QThread
@@ -210,12 +218,7 @@ class ModEditorDialog(QDialog):
             try:
                 vers = list(vers)
                 vers.sort(key=game_version_sort_key, reverse=True)
-                self.game_version_combo.blockSignals(True)
-                self.game_version_combo.clear()
-                self.game_version_combo.addItems(vers)
-                if vers:
-                    self.game_version_combo.setCurrentIndex(0)
-                self.game_version_combo.blockSignals(False)
+                self._set_combo_silently(self.game_version_combo, lambda: (self.game_version_combo.clear(), self.game_version_combo.addItems(vers), self.game_version_combo.setCurrentIndex(0) if vers else None))
             except Exception:
                 pass
         worker.got.connect(_apply)

@@ -1,5 +1,6 @@
 import os
 import shutil
+import logging
 from PyQt6.QtCore import QTimer
 from managers.localization_manager import tr
 from config.constants import UI_COLORS
@@ -14,6 +15,16 @@ class ModOperationsController:
         self.feedback_manager = feedback_manager
         self.mod_manager = mod_manager
         self.app = app_window
+
+    def _safe_execute(self, func, error_msg_prefix='', default_return=None):
+        try:
+            return func()
+        except (AttributeError, RuntimeError) as e:
+            logging.debug(f'{error_msg_prefix}: {e}', exc_info=True)
+            return default_return
+        except Exception as e:
+            logging.debug(f'{error_msg_prefix}: {e}')
+            return default_return
 
     def handle_url_install(self, url: str):
         from utils.game_utils import is_game_running
@@ -57,11 +68,7 @@ class ModOperationsController:
                     self.feedback_manager.update_status(tr('status.install_cancelled_by_user'), UI_COLORS['status_info'])
                     return
             install_tasks = [(mod, chapter_id) for chapter_id in available_chapters]
-            try:
-                self.app_state.operation_cancelled = False
-            except (AttributeError, RuntimeError):
-                import logging
-                logging.debug('Failed to set operation_cancelled', exc_info=True)
+            self._safe_execute(lambda: setattr(self.app_state, 'operation_cancelled', False), 'Failed to set operation_cancelled')
             self.app_state.is_installing = True
             self.set_install_buttons_enabled(False)
             self.app.action_button.setText(tr('ui.cancel_button'))
@@ -73,11 +80,7 @@ class ModOperationsController:
             install_thread.finished.connect(lambda ok, oid=op_id: self.on_install_finished_token(ok, oid))
             self.app.progress_bar.setVisible(True)
             self.app.progress_bar.setValue(0)
-            try:
-                self.feedback_manager.update_status(tr('status.preparing_download'), UI_COLORS['status_warning'])
-            except (AttributeError, RuntimeError):
-                import logging
-                logging.debug('Feedback manager update failed', exc_info=True)
+            self._safe_execute(lambda: self.feedback_manager.update_status(tr('status.preparing_download'), UI_COLORS['status_warning']), 'Feedback manager update failed')
             self.app_state.current_task = install_thread
             self.app.game_launch.update_button_state()
             install_thread.start()
@@ -95,10 +98,7 @@ class ModOperationsController:
             from core.exceptions import ModInstallationError
             mod_key = getattr(mod, 'key', None)
             mod_name = getattr(mod, 'name', 'Unknown Mod')
-            error = ModInstallationError(f'Unexpected error during installation: {e}', mod_key=mod_key, mod_name=mod_name, reason='unknown')
-            self.feedback_manager.show_error('errors.mod_install_failed', error=str(e))
-            import logging
-            logging.error(f'Mod installation failed: {e}', exc_info=True, extra={'mod_key': mod_key, 'mod_name': mod_name})
+            raise ModInstallationError(f'Unexpected error during installation: {e}', mod_key=mod_key, mod_name=mod_name, reason='unknown') from e
 
     def on_install_progress_token(self, value: int, op_id: int):
         if self.app._install_op_id == op_id and self.app_state.is_installing:
@@ -123,11 +123,7 @@ class ModOperationsController:
             self.feedback_manager.update_status(tr('status.mod_installed_success'), UI_COLORS['status_success'])
         else:
             if self.app_state.operation_cancelled:
-                try:
-                    self.app_state.operation_cancelled = False
-                except (AttributeError, RuntimeError):
-                    import logging
-                    logging.debug('Failed to set operation_cancelled', exc_info=True)
+                self._safe_execute(lambda: setattr(self.app_state, 'operation_cancelled', False), 'Failed to set operation_cancelled')
             else:
                 self.feedback_manager.update_status(tr('status.mod_install_error'), UI_COLORS['status_error'])
             try:
@@ -147,12 +143,8 @@ class ModOperationsController:
             if hasattr(self.app, 'library_display'):
                 self.app.library_display.update_display()
             QTimer.singleShot(100, self.refresh_specific_mod_widget_after_update)
-            try:
-                if not was_installed_before:
-                    self.feedback_manager.show_info('dialogs.mod_installed_title', tr('dialogs.mod_installed_apply_info'))
-            except (AttributeError, RuntimeError) as e:
-                import logging
-                logging.debug(f'Failed to show mod installed info: {e}', exc_info=True)
+            if not was_installed_before:
+                self._safe_execute(lambda: self.feedback_manager.show_info('dialogs.mod_installed_title', tr('dialogs.mod_installed_apply_info')), 'Failed to show mod installed info')
             self.feedback_manager.update_status(tr('status.mod_installed_success'), UI_COLORS['status_success'])
         self.app.game_launch.update_button_state()
 
@@ -160,34 +152,12 @@ class ModOperationsController:
         self.app_state.is_installing = False
         self.set_install_buttons_enabled(True)
         self.app.progress_bar.setVisible(False)
-        try:
-            QTimer.singleShot(0, self.app.search_display.update_search_plaques)
-        except Exception as e:
-            import logging
-            logging.debug(f'update_search_plaques failed: {e}')
-        try:
-            self.mod_manager.load_local_mods()
-        except Exception as e:
-            import logging
-            logging.warning(f'load_local_mods failed: {e}')
-        try:
-            if hasattr(self.app, 'library_display'):
-                QTimer.singleShot(0, self.app.library_display.update_display)
-        except Exception as e:
-            import logging
-            logging.debug(f'update_library_display failed: {e}')
-        try:
-            if hasattr(self.app, 'slot_manager'):
-                self.app.slot_manager.refresh_slots_content()
-        except Exception as e:
-            import logging
-            logging.debug(f'refresh_slots_content failed: {e}')
+        self._safe_execute(lambda: QTimer.singleShot(0, self.app.search_display.update_search_plaques), 'update_search_plaques failed')
+        self._safe_execute(lambda: self.mod_manager.load_local_mods(), 'load_local_mods failed', default_return=None)
+        self._safe_execute(lambda: QTimer.singleShot(0, self.app.library_display.update_display) if hasattr(self.app, 'library_display') else None, 'update_library_display failed')
+        self._safe_execute(lambda: self.app.slot_manager.refresh_slots_content() if hasattr(self.app, 'slot_manager') else None, 'refresh_slots_content failed')
         if success:
-            try:
-                QTimer.singleShot(0, lambda: self.feedback_manager.show_info('dialogs.mod_installed_apply_info'))
-            except (AttributeError, RuntimeError) as e:
-                import logging
-                logging.debug(f'Failed to show mod installed info: {e}', exc_info=True)
+            self._safe_execute(lambda: QTimer.singleShot(0, lambda: self.feedback_manager.show_info('dialogs.mod_installed_apply_info')), 'Failed to show mod installed info')
         self.app.game_launch.update_button_state()
         if success and getattr(self.app, 'pending_updates', None):
             next_mod = self.app.pending_updates.pop(0)
@@ -226,10 +196,4 @@ class ModOperationsController:
         self.app.search_display.update_search_plaques()
 
     def set_install_buttons_enabled(self, enabled: bool):
-        try:
-            self.app.action_button.setEnabled(True if self.app_state.is_installing else enabled)
-            self.app.saves_button.setEnabled(True)
-            self.app.shortcut_button.setEnabled(enabled)
-        except (AttributeError, RuntimeError) as e:
-            import logging
-            logging.debug(f'Failed to set install buttons enabled: {e}', exc_info=True)
+        self._safe_execute(lambda: (self.app.action_button.setEnabled(True if self.app_state.is_installing else enabled), self.app.saves_button.setEnabled(True), self.app.shortcut_button.setEnabled(enabled)), 'Failed to set install buttons enabled')

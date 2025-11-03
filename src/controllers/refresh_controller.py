@@ -18,20 +18,27 @@ class RefreshController:
         self.settings_manager = settings_manager
         self.fetch_thread = None
 
+    def _set_combo_silently(self, combo, operation):
+        combo.blockSignals(True)
+        try:
+            operation()
+        finally:
+            combo.blockSignals(False)
+
     def refresh_mods_list(self, is_initial=False, language_combo=None, retranslate_callback=None, on_fetch_finished_kwargs=None):
         try:
             if language_combo is not None:
                 current_lang_code = localization_manager.get_current_language()
                 localization_manager.rescan_languages()
-                language_combo.blockSignals(True)
-                language_combo.clear()
-                available_languages = localization_manager.get_available_languages()
-                for code, name in available_languages.items():
-                    language_combo.addItem(name, code)
-                index = language_combo.findData(current_lang_code)
-                if index != -1:
-                    language_combo.setCurrentIndex(index)
-                language_combo.blockSignals(False)
+
+                def _populate_combo():
+                    language_combo.clear()
+                    for code, name in localization_manager.get_available_languages().items():
+                        language_combo.addItem(name, code)
+                    index = language_combo.findData(current_lang_code)
+                    if index != -1:
+                        language_combo.setCurrentIndex(index)
+                self._set_combo_silently(language_combo, _populate_combo)
             if not is_initial and retranslate_callback:
                 retranslate_callback()
             if is_game_running():
@@ -57,25 +64,29 @@ class RefreshController:
             logging.error(f'RefreshController.refresh_mods_list: {error_msg}', exc_info=True)
             self.feedback_manager.update_status(f"{tr('errors.update_list_failed')}: {str(e)}", UI_COLORS['status_error'])
 
+    def _safe_stop_thread(self, thread, timeout=2000):
+        if not thread:
+            return
+        try:
+            if thread.isRunning():
+                thread.requestInterruption()
+                thread.quit()
+                if not thread.wait(timeout):
+                    logging.warning(f'_safe_stop_thread: thread did not stop in {timeout}ms, terminating')
+                    thread.terminate()
+                    if not thread.wait(1000):
+                        logging.error('_safe_stop_thread: failed to terminate thread')
+            if thread.isRunning():
+                thread.terminate()
+                thread.wait(500)
+        except Exception as e:
+            logging.error(f'_safe_stop_thread: error stopping thread: {e}', exc_info=True)
+
     def _stop_fetch_thread(self):
         if self.fetch_thread:
-            try:
-                if self.fetch_thread.isRunning():
-                    self.fetch_thread.requestInterruption()
-                    self.fetch_thread.quit()
-                    if not self.fetch_thread.wait(2000):
-                        logging.warning('RefreshController._stop_fetch_thread: thread did not stop in time')
-                        self.fetch_thread.terminate()
-                        if not self.fetch_thread.wait(1000):
-                            logging.error('RefreshController._stop_fetch_thread: failed to terminate thread')
-                if self.fetch_thread.isRunning():
-                    self.fetch_thread.terminate()
-                    self.fetch_thread.wait(500)
-            except Exception as e:
-                logging.error(f'RefreshController._stop_fetch_thread: failed to stop thread: {e}', exc_info=True)
-            finally:
-                if not (self.fetch_thread and self.fetch_thread.isRunning()):
-                    self.fetch_thread = None
+            self._safe_stop_thread(self.fetch_thread)
+            if not (self.fetch_thread and self.fetch_thread.isRunning()):
+                self.fetch_thread = None
 
     def _on_fetch_finished(self, success: bool, retranslate_callback=None, update_filtered_mods_callback=None, update_installed_mods_callback=None, update_action_button_callback=None, update_plugin_tabs_callback=None, mods_loaded_signal=None):
         try:
