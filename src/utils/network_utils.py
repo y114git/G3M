@@ -4,6 +4,7 @@ import re
 import time
 import logging
 from pathlib import Path
+from urllib.parse import urlparse
 import requests
 import threading
 from requests.adapters import HTTPAdapter
@@ -11,6 +12,48 @@ from urllib3.util.retry import Retry
 from config.constants import MAX_DOWNLOAD_RETRIES, DOWNLOAD_CHUNK_SIZE, NETWORK_TIMEOUT_SHORT, NETWORK_TIMEOUT_MEDIUM, NETWORK_TIMEOUT_HEAD, NETWORK_TIMEOUT_LONG
 _session_lock = threading.Lock()
 _shared_session = None
+
+
+def mask_url(url: str) -> str:
+    if not url or not isinstance(url, str):
+        return str(url) if url else ''
+    if not url.startswith(('http://', 'https://')):
+        return url
+    try:
+        parsed = urlparse(url)
+        if '/api/' in parsed.path.lower() or '/functions/' in parsed.path.lower() or 'cloudfunctions' in parsed.netloc.lower():
+            return f'{parsed.scheme}://[HIDDEN_DOMAIN]/[API_ENDPOINT]'
+        elif parsed.path and parsed.path != '/':
+            return f'{parsed.scheme}://[HIDDEN_DOMAIN]/[PATH]'
+        else:
+            return f'{parsed.scheme}://[HIDDEN_DOMAIN]/[ROOT]'
+    except Exception:
+        return '[INVALID_URL]'
+
+
+def mask_api_key(text: str) -> str:
+    if not text or not isinstance(text, str):
+        return str(text) if text else ''
+    patterns = [('key["\\\']?\\s*[:=]\\s*["\\\']?([a-zA-Z0-9_-]{10,})', 'key="[MASKED]"'), ('token["\\\']?\\s*[:=]\\s*["\\\']?([a-zA-Z0-9_-]{10,})', 'token="[MASKED]"'), ('secret["\\\']?\\s*[:=]\\s*["\\\']?([a-zA-Z0-9_-]{10,})', 'secret="[MASKED]"'), ('password["\\\']?\\s*[:=]\\s*["\\\']?([^\\s"\\\']+)', 'password="[MASKED]"'), ('api[_-]?key["\\\']?\\s*[:=]\\s*["\\\']?([a-zA-Z0-9_-]{10,})', 'api_key="[MASKED]"')]
+    masked = text
+    for pattern, replacement in patterns:
+        masked = re.sub(pattern, replacement, masked, flags=re.IGNORECASE)
+    return masked
+
+
+def sanitize_log_message(message: str) -> str:
+    if not message or not isinstance(message, str):
+        return str(message) if message else ''
+    msg = message
+    msg = mask_api_key(msg)
+    urls = re.findall('https?://[^\\s\\)\\]\\}\\\'\\"\\;\\,]+', msg)
+    for url in urls:
+        msg = msg.replace(url, mask_url(url))
+    domain_patterns = re.findall('[a-zA-Z0-9.-]+\\.(cloudfunctions|net|com|org|io|cloud)[^\\s\\)\\]\\}\\\'\\"]*', msg)
+    for domain_match in domain_patterns:
+        if '://' not in domain_match:
+            msg = msg.replace(domain_match, '[HIDDEN_DOMAIN]')
+    return msg
 
 
 def get_session() -> requests.Session:
@@ -62,7 +105,8 @@ def get_filename_from_url(session, url):
             if '.' in potential_name:
                 return potential_name
     except (requests.RequestException, ValueError, AttributeError) as e:
-        logging.debug(f'get_filename_from_url: header parsing failed: {e}')
+        safe_msg = sanitize_log_message(f'get_filename_from_url: header parsing failed: {e}')
+        logging.debug(safe_msg)
     return Path(url.split('?', 1)[0]).name or 'file.tmp'
 
 
@@ -74,7 +118,8 @@ def download_file(session, url, tmp_path, progress_callback=None, total_size: in
         h = session.head(url, allow_redirects=True, timeout=NETWORK_TIMEOUT_HEAD)
         expected_size = int(h.headers.get('content-length', 0))
     except (requests.RequestException, ValueError) as e:
-        logging.debug(f'download_file: failed to get expected size for {url}: {e}')
+        safe_msg = sanitize_log_message(f'download_file: failed to get expected size: {e}')
+        logging.debug(safe_msg)
         expected_size = 0
     attempt = 0
     while attempt < max_retries:
@@ -142,7 +187,8 @@ def download_file(session, url, tmp_path, progress_callback=None, total_size: in
         except (requests.RequestException, OSError, IOError) as e:
             if attempt >= max_retries:
                 raise
-            logging.debug(f'download_file: attempt {attempt}/{max_retries} failed for {url}: {e}')
+            safe_msg = sanitize_log_message(f'download_file: attempt {attempt}/{max_retries} failed: {e}')
+            logging.debug(safe_msg)
             try:
                 time.sleep(min(2.0, 0.2 * attempt))
             except OSError as sleep_e:

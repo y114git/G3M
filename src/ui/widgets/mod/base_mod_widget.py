@@ -94,9 +94,8 @@ class BaseModWidget(QFrame):
 
     def set_selected(self, selected):
         self.is_selected = selected
-        actions_widget = getattr(self, 'actions_widget', None)
-        if actions_widget:
-            actions_widget.setVisible(selected)
+        if hasattr(self, '_update_actions_visibility'):
+            self._update_actions_visibility()
         self._update_style()
 
     def mousePressEvent(self, event):

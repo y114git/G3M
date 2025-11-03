@@ -32,8 +32,8 @@ class SaveUiController:
         self.feedback_manager.update_status(tr('status.save_path_info', save_path=self.app_state.save_path), UI_COLORS['status_info'])
         self.app.settings_button.setText(tr('ui.back_button'))
         try:
-            self.app.settings_button.clicked.disconnect(self.app._toggle_settings_view)
-        except TypeError:
+            self.app.settings_button.clicked.disconnect(self.app.settings_ui.toggle_settings_view)
+        except (TypeError, AttributeError):
             pass
         self.app.settings_button.clicked.connect(self.return_from_save_manager)
 
@@ -53,7 +53,7 @@ class SaveUiController:
             self.app.settings_button.clicked.disconnect(self.return_from_save_manager)
         except TypeError:
             pass
-        self.app.settings_button.clicked.connect(self.app._toggle_settings_view)
+        self.app.settings_button.clicked.connect(self.app.settings_ui.toggle_settings_view)
 
     def refresh_slots(self):
         if not (self.app_state.save_path and os.path.isdir(self.app_state.save_path)):

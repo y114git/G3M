@@ -21,7 +21,7 @@ from utils.file_utils import ensure_writable, sanitize_filename
 from utils.game_utils import is_game_running
 from utils.path_utils import get_xdelta_path
 from workers.game_monitor import GameMonitorWorker
-from config.constants import UI_COLORS, SLOT_ID_UNIVERSAL
+from config.constants import UI_COLORS, SLOT_ID_UNIVERSAL, SLOT_ID_DEMO, SLOT_ID_UNDERTALE
 
 
 class GameLauncher(QObject):
@@ -82,44 +82,72 @@ class GameLauncher(QObject):
                 return
             if collection_idx != -1:
                 self._collection_backup_info = self.save_manager.apply_collection_saves_for_launch(collection_idx)
-        selections = self._get_slot_selections()
+        selections = self._get_used_mods_selections()
         self._launch_game_with_selections(selections, execute_plugin_hooks, restore_window_callback)
 
-    def _get_slot_selections(self) -> Dict[int, str]:
+    def _get_used_mods_selections(self) -> Dict[int, str]:
         selections = {}
-        if not hasattr(self.app_state, 'slots'):
+        try:
+            parent_obj = self.parent()
+        except (AttributeError, TypeError):
+            parent_obj = None
+        slot_manager = getattr(parent_obj, 'slot_manager', None) if parent_obj else None
+        if not slot_manager or not hasattr(slot_manager, 'used_mods') or (not slot_manager.used_mods):
+            for chapter_id in range(5):
+                selections[chapter_id] = 'no_change'
             return selections
         is_demo_mode = isinstance(self.app_state.game_mode, DemoGameMode)
         is_undertale_mode = isinstance(self.app_state.game_mode, UndertaleGameMode)
+
+        def _get_mod_key(mod_data):
+            if not mod_data:
+                return None
+            return getattr(mod_data, 'key', None) or getattr(mod_data, 'mod_key', None) or getattr(mod_data, 'name', None)
         if is_demo_mode:
-            demo_slot = self.app_state.slots.get(-10)
-            if demo_slot and demo_slot.assigned_mod:
-                selections[-1] = demo_slot.assigned_mod.key
+            used_mod = slot_manager.used_mods.get(SLOT_ID_DEMO)
+            if used_mod:
+                mod_key = _get_mod_key(used_mod)
+                if mod_key:
+                    selections[-1] = mod_key
+                else:
+                    selections[-1] = 'no_change'
             else:
                 selections[-1] = 'no_change'
         elif is_undertale_mode:
-            undertale_slot = self.app_state.slots.get(-20)
-            if undertale_slot and undertale_slot.assigned_mod:
-                selections[-1] = undertale_slot.assigned_mod.key
+            used_mod = slot_manager.used_mods.get(SLOT_ID_UNDERTALE)
+            if used_mod:
+                mod_key = _get_mod_key(used_mod)
+                if mod_key:
+                    selections[-1] = mod_key
+                else:
+                    selections[-1] = 'no_change'
             else:
                 selections[-1] = 'no_change'
         elif self.app_state.current_mode == 'normal':
-            universal_slot = self.app_state.slots.get(-1)
-            if universal_slot and universal_slot.assigned_mod:
-                mod = universal_slot.assigned_mod
-                for chapter_id in range(5):
-                    if mod.get_chapter_data(chapter_id):
-                        selections[chapter_id] = mod.key
-                    else:
+            used_mod = slot_manager.used_mods.get(SLOT_ID_UNIVERSAL)
+            if used_mod:
+                mod_key = _get_mod_key(used_mod)
+                if mod_key:
+                    for chapter_id in range(5):
+                        if used_mod.get_chapter_data(chapter_id):
+                            selections[chapter_id] = mod_key
+                        else:
+                            selections[chapter_id] = 'no_change'
+                else:
+                    for chapter_id in range(5):
                         selections[chapter_id] = 'no_change'
             else:
                 for chapter_id in range(5):
                     selections[chapter_id] = 'no_change'
         elif self.app_state.current_mode == 'chapter':
             for chapter_id in range(5):
-                slot = self.app_state.slots.get(chapter_id)
-                if slot and slot.assigned_mod:
-                    selections[chapter_id] = slot.assigned_mod.key
+                used_mod = slot_manager.used_mods.get(chapter_id)
+                if used_mod:
+                    mod_key = _get_mod_key(used_mod)
+                    if mod_key:
+                        selections[chapter_id] = mod_key
+                    else:
+                        selections[chapter_id] = 'no_change'
                 else:
                     selections[chapter_id] = 'no_change'
         return selections
@@ -359,11 +387,16 @@ class GameLauncher(QObject):
 
     def _prepare_game_files(self, selections: Dict[int, str]) -> bool:
         try:
+            if not selections:
+                return True
             applied_chapters = set()
             for ui_index, mod_key in selections.items():
                 if mod_key == 'no_change':
                     continue
-                chapter_id = self.app_state.game_mode.get_chapter_id(ui_index)
+                if ui_index == -1:
+                    chapter_id = -1
+                else:
+                    chapter_id = self.app_state.game_mode.get_chapter_id(ui_index)
                 mod = next((m for m in self.app_state.all_mods if m.key == mod_key), None)
                 if not mod:
                     continue

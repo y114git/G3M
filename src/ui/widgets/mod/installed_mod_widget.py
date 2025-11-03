@@ -56,6 +56,12 @@ class InstalledModWidget(BaseModWidget):
                 separator.setObjectName('secondaryText')
                 self.metadata_layout.addWidget(separator)
         self.metadata_layout.addStretch()
+        self.checkmark_label = QLabel('✓')
+        self.checkmark_label.setAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
+        self.checkmark_label.setStyleSheet('font-size: 18px; font-weight: bold; color: #4CAF50;')
+        self.checkmark_label.setFixedWidth(40)
+        self.checkmark_label.setVisible(False)
+        self.main_layout.addWidget(self.checkmark_label)
         self.actions_widget = QWidget()
         actions_layout = QVBoxLayout(self.actions_widget)
         actions_layout.setContentsMargins(0, 0, 0, 0)
@@ -123,6 +129,24 @@ class InstalledModWidget(BaseModWidget):
             self.status = 'ready'
         self._update_button_from_status()
         self._update_indicator()
+        self._update_actions_visibility()
+
+    def _update_actions_visibility(self):
+        if not hasattr(self, 'actions_widget') or not hasattr(self, 'checkmark_label'):
+            return
+        if self.is_selected:
+            self.actions_widget.setVisible(True)
+            self.checkmark_label.setVisible(False)
+        elif self.is_in_slot:
+            self.actions_widget.setVisible(False)
+            self.checkmark_label.setVisible(True)
+        else:
+            self.actions_widget.setVisible(False)
+            self.checkmark_label.setVisible(False)
+
+    def set_selected(self, selected):
+        super().set_selected(selected)
+        self._update_actions_visibility()
 
     def update_status(self):
         if self.is_in_slot:
@@ -133,3 +157,4 @@ class InstalledModWidget(BaseModWidget):
             self.status = 'ready'
         self._update_button_from_status()
         self._update_indicator()
+        self._update_actions_visibility()

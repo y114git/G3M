@@ -69,6 +69,8 @@ class ThemeController:
         search_container = getattr(self.app, 'search_container', None)
         library_container = getattr(self.app, 'installed_mods_container', None)
         self.customization_manager.update_translucent_backgrounds(search_container, library_container)
+        if hasattr(self.app, '_update_chapter_tabs_style'):
+            self.app._update_chapter_tabs_style()
         self.app.update()
 
     def on_background_ready(self, obj):
@@ -113,9 +115,6 @@ class ThemeController:
         self.update_dynamic_elements()
 
     def update_dynamic_elements(self):
-        if hasattr(self.app_state, 'slots'):
-            self.app.slot_manager.update_all_slots_visual_state()
-        self.app.slot_manager.update_chapter_indicators_style()
         if hasattr(self.app, 'sort_combo') and hasattr(self.app, 'sort_order_btn'):
             search_tab = None
             for i in range(self.app.tab_widget.count()):

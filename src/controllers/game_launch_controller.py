@@ -50,7 +50,7 @@ class GameLaunchController(QObject):
         is_full_install_enabled = is_demo_mode and self._full_install_checkbox_is_checked
         if is_full_install_enabled:
             action_text = tr('buttons.install')
-        elif self.slot_manager.check_active_slots_need_updates():
+        elif self.slot_manager.check_used_mods_need_updates():
             action_text = tr('ui.update_button')
         else:
             action_text = tr('ui.launch_button')
@@ -78,8 +78,8 @@ class GameLaunchController(QObject):
             return
         if self.app_state.is_installing:
             return
-        if self.slot_manager.check_active_slots_need_updates():
-            self.update_mods_in_active_slots()
+        if self.slot_manager.check_used_mods_need_updates():
+            self.update_mods_in_use()
             return
         if self.app_state.operation_cancelled:
             return
@@ -174,8 +174,8 @@ class GameLaunchController(QObject):
         self.settings_manager.write_local_config()
         self.update_button_state()
 
-    def update_mods_in_active_slots(self):
-        mods_to_update = self.slot_manager.collect_mods_needing_update_in_active_slots()
+    def update_mods_in_use(self):
+        mods_to_update = self.slot_manager.collect_mods_needing_update()
         if mods_to_update:
             self.pending_updates_changed.emit(mods_to_update[1:] if len(mods_to_update) > 1 else [])
             self.app_state.operation_cancelled = False
@@ -183,73 +183,27 @@ class GameLaunchController(QObject):
             self.app_state.progress_bar_value = 0
             self.mod_manager.update_mod(mods_to_update[0])
 
-    def refresh_mods_in_slots(self):
-        if not hasattr(self.app, 'slots') or not self.app_state.all_mods:
+    def refresh_mods_in_use(self):
+        if not self.app_state.all_mods:
             return
-        for slot_frame in self.app_state.slots.values():
-            if slot_frame.assigned_mod:
-                old_mod = slot_frame.assigned_mod
-                mod_key = getattr(old_mod, 'key', None) or getattr(old_mod, 'mod_key', None)
-                if not mod_key:
-                    continue
-                updated_mod = None
-                for mod in self.app_state.all_mods:
-                    updated_mod_key = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
-                    if updated_mod_key == mod_key:
-                        updated_mod = mod
-                        break
-                if not updated_mod:
-                    mod_config = self.mod_manager.get_mod_config(mod_key)
-                    if mod_config:
-                        updated_mod = self.mod_manager.create_mod_object_from_info(mod_config, getattr(self.app_state, 'all_mods', None))
-                if updated_mod:
-                    slot_frame.assigned_mod = updated_mod
-        self.refresh_slot_displays()
-
-    def refresh_slot_displays(self):
-        for slot_frame in self.app_state.slots.values():
-            if slot_frame.assigned_mod and slot_frame.content_widget:
-                self.refresh_slot_status_display(slot_frame)
-                if hasattr(slot_frame, 'mod_icon') and slot_frame.mod_icon:
-                    load_mod_icon_universal(slot_frame.mod_icon, slot_frame.assigned_mod, 32)
-
-    def refresh_slot_status_display(self, slot_frame):
-        if not slot_frame.assigned_mod or not slot_frame.content_widget:
-            return
-        mod_data = slot_frame.assigned_mod
-        version_label = None
-        content_layout = slot_frame.content_widget.layout()
-        if content_layout:
-            for i in range(content_layout.count()):
-                item = content_layout.itemAt(i)
-                if item and item.layout():
-                    text_layout = item.layout()
-                    if text_layout and text_layout.count() >= 2:
-                        version_item = text_layout.itemAt(1)
-                        if version_item and version_item.widget():
-                            from PyQt6.QtWidgets import QLabel
-                            if isinstance(version_item.widget(), QLabel):
-                                version_label = version_item.widget()
-                                break
-        if version_label:
-            is_large_slot = slot_frame.chapter_id < 0
-            is_local_mod = getattr(mod_data, 'is_local_mod', False)
-            if is_local_mod:
-                if is_large_slot:
-                    status_text, status_color = (tr('defaults.local_mod'), '#FFD700')
-                    version_label.setStyleSheet(f'color: {status_color}; font-size: 10px; border: none; background: transparent;')
-                else:
-                    status_text, status_color = (tr('tags.local'), '#FFD700')
-                    version_label.setStyleSheet(f'color: {status_color}; font-size: 9px; border: none; background: transparent;')
-            elif is_large_slot:
-                needs_update = any((self.mod_manager.mod_has_files_for_chapter(mod_data, i) and self.mod_manager.get_mod_status(mod_data, i) == 'update' for i in range(5)))
-                status_text, status_color = (tr('status.update_available'), 'orange') if needs_update else (tr('status.version_current'), 'lightgreen')
-                version_label.setStyleSheet(f'color: {status_color}; font-size: 10px; border: none; background: transparent;')
-            else:
-                needs_update = any((self.mod_manager.mod_has_files_for_chapter(mod_data, i) and self.mod_manager.get_mod_status(mod_data, i) == 'update' for i in range(5)))
-                status_text, status_color = (tr('status.update_short'), 'orange') if needs_update else (tr('status.current_short'), 'lightgreen')
-                version_label.setStyleSheet(f'color: {status_color}; font-size: 9px; border: none; background: transparent;')
-            version_label.setText(status_text)
+        for chapter_id, mod_data in list(self.slot_manager.used_mods.items()):
+            if not mod_data:
+                continue
+            mod_key = getattr(mod_data, 'key', None) or getattr(mod_data, 'mod_key', None)
+            if not mod_key:
+                continue
+            updated_mod = None
+            for mod in self.app_state.all_mods:
+                updated_mod_key = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
+                if updated_mod_key == mod_key:
+                    updated_mod = mod
+                    break
+            if not updated_mod:
+                mod_config = self.mod_manager.get_mod_config(mod_key)
+                if mod_config:
+                    updated_mod = self.mod_manager.create_mod_object_from_info(mod_config, getattr(self.app_state, 'all_mods', None))
+            if updated_mod:
+                self.slot_manager.used_mods[chapter_id] = updated_mod
 
     def run_as_admin_windows(self, path: str) -> bool:
         import subprocess
