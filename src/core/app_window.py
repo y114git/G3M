@@ -441,13 +441,9 @@ class AppWindow(QWidget):
                 self.game_type_combo.setCurrentIndex(i)
                 break
         self.game_type_combo.blockSignals(False)
-        self.chapter_mode_checkbox.blockSignals(True)
-        self.chapter_mode_checkbox.setChecked(saved_chapter_mode)
-        self.chapter_mode_checkbox.blockSignals(False)
+        self._set_checkbox_checked_silently(self.chapter_mode_checkbox, saved_chapter_mode)
         self.game_type_combo.setEnabled(not saved_chapter_mode)
-        self.full_install_checkbox.blockSignals(True)
-        self.full_install_checkbox.setChecked(saved_full_install)
-        self.full_install_checkbox.blockSignals(False)
+        self._set_checkbox_checked_silently(self.full_install_checkbox, saved_full_install)
         self.game_launch.set_full_install_checkbox_state(saved_full_install)
         self.app_state.is_installing_changed.connect(self.game_launch.update_button_state)
         self.app_state.is_installing_changed.connect(lambda v: self.mod_ops.set_install_buttons_enabled(not v))
@@ -669,11 +665,7 @@ class AppWindow(QWidget):
             self._update_checkbox_visibility()
             game_type = self.game_type_combo.currentData()
             if game_type != 'deltarune':
-                try:
-                    self.chapter_mode_checkbox.blockSignals(True)
-                    self.chapter_mode_checkbox.setChecked(False)
-                finally:
-                    self.chapter_mode_checkbox.blockSignals(False)
+                self._set_checkbox_checked_silently(self.chapter_mode_checkbox, False)
                 if getattr(self.app_state, 'current_mode', 'normal') != 'normal':
                     self.app_state.current_mode = 'normal'
                 self.game_type_combo.setEnabled(True)
@@ -708,6 +700,20 @@ class AppWindow(QWidget):
         if platform.system() == 'Darwin':
             return tr('tooltips.macos_install_unavailable')
         return tr('tooltips.full_install_instructions')
+
+    def _safe_set_parent_none(self, obj):
+        try:
+            if obj:
+                obj.setParent(None)
+        except Exception:
+            pass
+
+    def _set_checkbox_checked_silently(self, checkbox, checked):
+        checkbox.blockSignals(True)
+        try:
+            checkbox.setChecked(checked)
+        finally:
+            checkbox.blockSignals(False)
 
     def eventFilter(self, obj, ev):
         if obj is getattr(self, 'save_manager_widget', None) and ev.type() == QEvent.Type.MouseButtonPress:
@@ -805,19 +811,13 @@ class AppWindow(QWidget):
                     break
             self.game_type_combo.blockSignals(False)
         if hasattr(self, 'chapter_mode_checkbox'):
-            self.chapter_mode_checkbox.blockSignals(True)
-            self.chapter_mode_checkbox.setChecked(saved_chapter_mode)
-            self.chapter_mode_checkbox.blockSignals(False)
-        self.disable_background_checkbox.blockSignals(True)
-        self.disable_background_checkbox.setChecked(self.app_state.local_config.get('background_disabled', False))
-        self.disable_background_checkbox.blockSignals(False)
-        self.disable_splash_checkbox.blockSignals(True)
-        self.disable_splash_checkbox.setChecked(self.app_state.local_config.get('disable_splash', False))
+            self._set_checkbox_checked_silently(self.chapter_mode_checkbox, saved_chapter_mode)
+        self._set_checkbox_checked_silently(self.disable_background_checkbox, self.app_state.local_config.get('background_disabled', False))
+        self._set_checkbox_checked_silently(self.disable_splash_checkbox, self.app_state.local_config.get('disable_splash', False))
         self.beta_updates_checkbox.setChecked(self.app_state.local_config.get('beta_updates_enabled', False))
         self.fullscreen_checkbox.setChecked(self.app_state.local_config.get('fullscreen_enabled', False))
         if hasattr(self, 'hide_library_filters_checkbox'):
             self.hide_library_filters_checkbox.setChecked(self.app_state.local_config.get('hide_library_filters', False))
-        self.disable_splash_checkbox.blockSignals(False)
         self._update_change_path_button_text()
         self.theme.update_background_button_state()
         self.settings_manager.migrate_config_if_needed()
@@ -1142,69 +1142,52 @@ class AppWindow(QWidget):
         layout.addWidget(cancel_button)
         dialog.exec()
 
-    def _on_create_mod_choice(self, parent_dialog, has_internet):
-        parent_dialog.accept()
+    def _show_mod_choice_dialog(self, title_key, public_callback, local_callback, has_internet):
         dialog = QDialog(self)
-        dialog.setWindowTitle(tr('ui.create_mod'))
+        dialog.setWindowTitle(tr('ui.create_mod') if 'create' in title_key else tr('ui.edit_mod'))
         dialog.setModal(True)
         dialog.resize(300, 200)
         layout = QVBoxLayout(dialog)
         layout.setSpacing(20)
         layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        title = QLabel(tr('ui.how_to_create_mod'))
+        title = QLabel(tr(title_key))
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         title.setStyleSheet('font-size: 16px; font-weight: bold;')
         layout.addWidget(title)
-        type_buttons_layout = QHBoxLayout()
-        type_buttons_layout.setSpacing(15)
+        buttons_layout = QHBoxLayout()
+        buttons_layout.setSpacing(15)
         public_button = QPushButton(tr('buttons.public'))
         public_button.setFixedSize(130, 40)
-        public_button.clicked.connect(lambda: self._create_mod(dialog, public=True))
+        public_button.clicked.connect(lambda: (dialog.accept(), public_callback(dialog)))
         public_button.setEnabled(has_internet)
         if not has_internet:
             public_button.setToolTip(tr('errors.internet_required'))
         local_button = QPushButton(tr('tags.local'))
         local_button.setFixedSize(130, 40)
-        local_button.clicked.connect(lambda: self._create_mod(dialog, public=False))
-        type_buttons_layout.addWidget(public_button)
-        type_buttons_layout.addWidget(local_button)
-        layout.addLayout(type_buttons_layout)
+        local_button.clicked.connect(lambda: (dialog.accept(), local_callback(dialog)))
+        buttons_layout.addWidget(public_button)
+        buttons_layout.addWidget(local_button)
+        layout.addLayout(buttons_layout)
         cancel_button = QPushButton(tr('ui.cancel_button'))
         cancel_button.clicked.connect(dialog.reject)
         layout.addWidget(cancel_button)
         dialog.exec()
 
+    def _on_create_mod_choice(self, parent_dialog, has_internet):
+        parent_dialog.accept()
+        self._show_mod_choice_dialog('ui.how_to_create_mod', lambda d: self._create_mod(d, public=True), lambda d: self._create_mod(d, public=False), has_internet)
+
     def _on_edit_mod_choice(self, parent_dialog, has_internet):
         parent_dialog.accept()
-        dialog = QDialog(self)
-        dialog.setWindowTitle(tr('ui.edit_mod'))
-        dialog.setModal(True)
-        dialog.resize(300, 200)
-        layout = QVBoxLayout(dialog)
-        layout.setSpacing(20)
-        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        title = QLabel(tr('dialogs.what_mod_type_to_change'))
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        title.setStyleSheet('font-size: 16px; font-weight: bold;')
-        layout.addWidget(title)
-        edit_buttons_layout = QHBoxLayout()
-        edit_buttons_layout.setSpacing(15)
-        public_button = QPushButton(tr('buttons.public'))
-        public_button.setFixedSize(130, 40)
-        public_button.clicked.connect(lambda: self._edit_public_mod(dialog))
-        public_button.setEnabled(has_internet)
-        if not has_internet:
-            public_button.setToolTip(tr('errors.internet_required'))
-        local_button = QPushButton(tr('tags.local'))
-        local_button.setFixedSize(130, 40)
-        local_button.clicked.connect(lambda: self._edit_local_mod(dialog))
-        edit_buttons_layout.addWidget(public_button)
-        edit_buttons_layout.addWidget(local_button)
-        layout.addLayout(edit_buttons_layout)
-        cancel_button = QPushButton(tr('ui.cancel_button'))
-        cancel_button.clicked.connect(dialog.reject)
-        layout.addWidget(cancel_button)
-        dialog.exec()
+        self._show_mod_choice_dialog('dialogs.what_mod_type_to_change', self._edit_public_mod, self._edit_local_mod, has_internet)
+
+    def _activate_window_safe(self):
+        try:
+            self.activateWindow()
+            self.raise_()
+            self.setFocus()
+        except Exception:
+            pass
 
     def _create_mod(self, parent_dialog, public: bool):
         parent_dialog.accept()
@@ -1213,12 +1196,7 @@ class AppWindow(QWidget):
             return
         editor = ModEditorDialog(self, is_creating=True, is_public=public)
         editor.exec()
-        try:
-            self.activateWindow()
-            self.raise_()
-            self.setFocus()
-        except Exception:
-            pass
+        self._activate_window_safe()
 
     def _edit_public_mod(self, parent_dialog):
         parent_dialog.accept()
@@ -1231,10 +1209,10 @@ class AppWindow(QWidget):
         try:
             mod_data, hashed_key, found_in_pending = self.mod_manager.fetch_mod_data_by_secret(secret_key)
         except requests.RequestException as e:
-            self.feedback_manager.show_error('errors.error', tr('errors.key_check_failed', error=str(e)))
+            error_msg = tr('errors.key_check_failed', error=str(e))
+            self.feedback_manager.show_error('errors.error', error_msg)
             return
         except Exception as e:
-            import logging
             logging.error(f'Unexpected error fetching mod data: {e}', exc_info=True)
             self.feedback_manager.show_error('errors.error', tr('errors.key_check_failed', error=str(e)))
             return
@@ -1255,9 +1233,9 @@ class AppWindow(QWidget):
                     self.mod_manager.withdraw_pending_mod(hashed_key)
                     self.feedback_manager.show_info('dialogs.request_withdrawn', tr('dialogs.withdrawal_success'))
                 except requests.RequestException as e:
-                    self.feedback_manager.show_error('errors.error', tr('errors.request_revoke_failed', error=str(e)))
+                    error_msg = tr('errors.request_revoke_failed', error=str(e))
+                    self.feedback_manager.show_error('errors.error', error_msg)
                 except Exception as e:
-                    import logging
                     logging.error(f'Unexpected error withdrawing pending mod: {e}', exc_info=True)
                     self.feedback_manager.show_error('errors.error', tr('errors.request_revoke_failed', error=str(e)))
             return
@@ -1267,24 +1245,19 @@ class AppWindow(QWidget):
                 try:
                     self.mod_manager.withdraw_pending_change(hashed_key)
                     self.feedback_manager.show_info('dialogs.request_withdrawn', tr('dialogs.withdrawal_success'))
-                except requests.RequestException as e:
-                    self.feedback_manager.show_error('errors.error', tr('errors.request_revoke_failed', error=str(e)))
-                    return
-                except Exception as e:
-                    import logging
-                    logging.error(f'Unexpected error withdrawing pending change: {e}', exc_info=True)
-                    self.feedback_manager.show_error('errors.error', tr('errors.request_revoke_failed', error=str(e)))
+                except (requests.RequestException, Exception) as e:
+                    if isinstance(e, requests.RequestException):
+                        error_msg = tr('errors.request_revoke_failed', error=str(e))
+                    else:
+                        logging.error(f'Unexpected error withdrawing pending change: {e}', exc_info=True)
+                        error_msg = tr('errors.request_revoke_failed', error=str(e))
+                    self.feedback_manager.show_error('errors.error', error_msg)
                     return
             else:
                 return
         editor = ModEditorDialog(self, is_creating=False, is_public=True, mod_data=mod_data)
         editor.exec()
-        try:
-            self.activateWindow()
-            self.raise_()
-            self.setFocus()
-        except Exception:
-            pass
+        self._activate_window_safe()
 
     def _edit_local_mod(self, parent_dialog):
         parent_dialog.accept()
@@ -1296,11 +1269,7 @@ class AppWindow(QWidget):
         selected_name, ok = QInputDialog.getItem(self, tr('dialogs.select_mod'), tr('dialogs.local_mods'), mod_names, 0, False)
         if not ok:
             return
-        selected_mod = None
-        for mod_info in local_mods:
-            if mod_info['name'] == selected_name:
-                selected_mod = mod_info
-                break
+        selected_mod = next((mod_info for mod_info in local_mods if mod_info['name'] == selected_name), None)
         if not selected_mod:
             self.feedback_manager.show_warning('errors.error', tr('errors.selected_mod_not_found'))
             return
@@ -1309,12 +1278,7 @@ class AppWindow(QWidget):
         mod_data['folder_name'] = os.path.basename(selected_mod['folder_path']) if selected_mod.get('folder_path') else ''
         editor = ModEditorDialog(self, is_creating=False, is_public=False, mod_data=mod_data)
         editor.exec()
-        try:
-            self.activateWindow()
-            self.raise_()
-            self.setFocus()
-        except Exception:
-            pass
+        self._activate_window_safe()
 
     def closeEvent(self, event):
         self.customization_manager.stop_background_music()
@@ -1323,66 +1287,63 @@ class AppWindow(QWidget):
             super().closeEvent(event)
             return
         try:
+            threads_to_stop = []
             if self.game_launcher.monitor_thread:
-                try:
-                    self.game_launcher.monitor_thread.setParent(None)
-                except Exception:
-                    pass
-                self._safe_stop_thread(self.game_launcher.monitor_thread)
-            for attr in ('install_thread', 'full_install_thread', 'current_install_thread'):
+                threads_to_stop.append(self.game_launcher.monitor_thread)
+            for attr in ('install_thread', 'full_install_thread', 'current_install_thread', 'help_thread', 'changelog_thread'):
                 thread = getattr(self, attr, None)
                 if thread:
-                    try:
-                        thread.setParent(None)
-                    except Exception:
-                        pass
-                    self._safe_stop_thread(thread)
-            if self.presence_thread:
-                try:
-                    self.presence_thread.setParent(None)
-                except Exception:
-                    pass
-            self._stop_presence_thread()
+                    threads_to_stop.append(thread)
             if hasattr(self.refresh_controller, 'fetch_thread') and self.refresh_controller.fetch_thread:
-                try:
-                    self.refresh_controller.fetch_thread.setParent(None)
-                except Exception:
-                    pass
-            self._stop_fetch_thread()
+                threads_to_stop.append(self.refresh_controller.fetch_thread)
+            bg_loader = getattr(self, '_bg_loader', None)
+            if bg_loader:
+                threads_to_stop.append(bg_loader)
+            for thread in threads_to_stop:
+                self._safe_set_parent_none(thread)
+                self._safe_stop_thread(thread)
             for attr in ('help_thread', 'changelog_thread'):
-                thread = getattr(self, attr, None)
-                if thread:
-                    try:
-                        thread.setParent(None)
-                    except Exception:
-                        pass
-                    self._safe_stop_thread(thread)
                 worker_attr = attr.replace('_thread', '_worker')
                 worker = getattr(self, worker_attr, None)
                 if worker:
+                    self._safe_set_parent_none(worker)
                     try:
-                        worker.setParent(None)
                         worker.disconnect()
                     except Exception:
                         pass
-            bg_loader = getattr(self, '_bg_loader', None)
-            if bg_loader:
-                self._safe_stop_thread(bg_loader)
+            if self.presence_thread:
+                self._safe_set_parent_none(self.presence_thread)
+            self._stop_presence_thread()
+            self._stop_fetch_thread()
             self.game_launcher._cleanup_direct_launch_files()
             self.settings_manager.save_window_geometry(self)
-            critical_threads = [('presence_thread', self.presence_thread), ('fetch_thread', getattr(self.refresh_controller, 'fetch_thread', None)), ('monitor_thread', getattr(self.game_launcher, 'monitor_thread', None)), ('help_thread', getattr(self, 'help_thread', None)), ('changelog_thread', getattr(self, 'changelog_thread', None))]
-            for name, thread in critical_threads:
-                if thread and thread.isRunning():
-                    logging.warning(f'closeEvent: {name} still running, forcing termination')
-                    try:
-                        thread.terminate()
-                        if not thread.wait(1000):
-                            logging.error(f'closeEvent: {name} failed to terminate')
-                    except Exception as e:
-                        logging.error(f'closeEvent: error terminating {name}: {e}', exc_info=True)
             QApplication.processEvents()
             import time
             time.sleep(0.1)
+            for thread in threads_to_stop:
+                if thread and thread.isRunning():
+                    thread_name = getattr(thread, '__class__', type(thread)).__name__
+                    logging.warning(f'closeEvent: {thread_name} still running after cleanup, forcing termination')
+                    try:
+                        thread.terminate()
+                        if not thread.wait(1000):
+                            logging.error(f'closeEvent: failed to terminate {thread_name} even after force terminate')
+                        if thread.isRunning():
+                            logging.error(f'closeEvent: {thread_name} is still running after force terminate, this may cause resource leaks')
+                    except Exception as e:
+                        logging.error(f'closeEvent: error terminating {thread_name}: {e}', exc_info=True)
+            critical_threads = [('presence_thread', self.presence_thread), ('fetch_thread', getattr(self.refresh_controller, 'fetch_thread', None)), ('monitor_thread', getattr(self.game_launcher, 'monitor_thread', None)), ('help_thread', getattr(self, 'help_thread', None)), ('changelog_thread', getattr(self, 'changelog_thread', None))]
+            for thread_name, thread in critical_threads:
+                if thread and thread.isRunning():
+                    logging.warning(f'closeEvent: {thread_name} still running after cleanup, forcing termination')
+                    try:
+                        thread.terminate()
+                        if not thread.wait(1000):
+                            logging.error(f'closeEvent: failed to terminate {thread_name} even after force terminate')
+                        if thread.isRunning():
+                            logging.error(f'closeEvent: {thread_name} is still running after force terminate, this may cause resource leaks')
+                    except Exception as e:
+                        logging.error(f'closeEvent: error terminating {thread_name}: {e}', exc_info=True)
         except Exception as e:
             logging.error(f'closeEvent: error during cleanup: {e}', exc_info=True)
         finally:
@@ -1545,9 +1506,7 @@ class AppWindow(QWidget):
             self.game_launch.set_full_install_checkbox_state(bool(state))
         if platform.system() == 'Darwin' and self.app_state.is_full_install:
             self.feedback_manager.show_info('dialogs.unavailable', tr('dialogs.macos_install_unavailable'))
-            self.full_install_checkbox.blockSignals(True)
-            self.full_install_checkbox.setChecked(False)
-            self.full_install_checkbox.blockSignals(False)
+            self._set_checkbox_checked_silently(self.full_install_checkbox, False)
             return
         self.game_launch.update_button_state()
 
@@ -1688,21 +1647,10 @@ class AppWindow(QWidget):
 
     def _stop_presence_thread(self):
         if self.presence_thread:
-            try:
-                if self.presence_thread.isRunning():
-                    self.presence_thread.requestInterruption()
-                    self.presence_thread.quit()
-                    if not self.presence_thread.wait(2000):
-                        logging.warning('_stop_presence_thread: thread did not stop in time')
-                        self.presence_thread.terminate()
-                        if not self.presence_thread.wait(1000):
-                            logging.error('_stop_presence_thread: failed to terminate thread')
-            except Exception as e:
-                logging.error(f'_stop_presence_thread: failed to stop thread: {e}', exc_info=True)
-            finally:
-                if not (self.presence_thread and self.presence_thread.isRunning()):
-                    self.presence_thread = None
-                    self.presence_worker = None
+            self._safe_stop_thread(self.presence_thread, timeout=2000)
+            if not (self.presence_thread and self.presence_thread.isRunning()):
+                self.presence_thread = None
+                self.presence_worker = None
 
     def _current_tab_names(self):
         return self.app_state.game_mode.tab_names

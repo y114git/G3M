@@ -156,10 +156,8 @@ class GameLaunchController(QObject):
     def on_full_install_finished(self, success, target_dir):
         self.app_state.clear_current_task()
         self.app_state.progress_bar_visible = False
-        self.app.full_install_checkbox.blockSignals(True)
         self.app_state.progress_bar_value = 0
-        self.app.full_install_checkbox.setChecked(False)
-        self.app.full_install_checkbox.blockSignals(False)
+        self.app._set_checkbox_checked_silently(self.app.full_install_checkbox, False)
         if success:
             if isinstance(self.app_state.game_mode, DemoGameMode):
                 self.app_state.demo_game_path = target_dir
