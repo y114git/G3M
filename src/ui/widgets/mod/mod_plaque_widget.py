@@ -41,15 +41,6 @@ class ModPlaqueWidget(BaseModWidget):
             style_sheet = f'font-weight: bold; padding: 2px 5px; border-radius: 3px; {modgame_style}'
             modgame_label.setStyleSheet(style_sheet)
             tags_layout.addWidget(modgame_label)
-        is_patch = getattr(self.mod_data, 'is_xdelta', False)
-        if is_patch:
-            patching_label = QLabel(tr('ui.patching_label'))
-            patching_label.setStyleSheet('color: #2196F3; font-size: 14px;')
-            tags_layout.addWidget(patching_label)
-        else:
-            replacement_label = QLabel(tr('ui.file_replacement_label'))
-            replacement_label.setStyleSheet('color: #FF9800; font-size: 14px;')
-            tags_layout.addWidget(replacement_label)
         if self.mod_data.is_verified:
             verified_label = QLabel(tr('ui.verified_label'))
             verified_label.setStyleSheet('color: #4CAF50; font-size: 14px;')

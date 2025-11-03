@@ -35,7 +35,6 @@ class ModInfo:
     icon_url: Optional[str] = None
     tags: List[str] = field(default_factory=list)
     hide_mod: bool = False
-    is_xdelta: bool = False
     is_local_mod: bool = False
     ban_status: bool = False
     files: Dict[str, ModChapterData] = field(default_factory=dict)

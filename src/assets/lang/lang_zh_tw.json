@@ -76,10 +76,6 @@
     "launch_button": "啟動",
     "leave_empty_for_default_icon": "留空使用預設圖標",
     "library_tab": "庫",
-    "file_replacement_desc": "該模組透過直接拷貝替換原始遊戲檔案。",
-    "patching_desc": "該模組使用補丁（XDELTA）修改遊戲檔案。",
-    "file_replacement_label": "檔案替換",
-    "patching_label": "補丁",
     "main_text_color": "主文本顏色：",
     "menu_label": "選單：",
     "mod_author": "模組作者：",
@@ -232,8 +228,7 @@
   },
   "checkboxes": {
     "disable_background": "禁用背景",
-    "disable_splash": "禁用啟動畫面",
-    "xdelta_protection": "使用XDELTA代替data.win/.ios"
+    "disable_splash": "禁用啟動畫面"
   },
   "tags": {
     "gameplay": "遊戲玩法",
@@ -413,8 +408,6 @@
     "invalid_external_url": "無效的URL。連結必須是有效的網頁URL。",
     "invalid_external_url_direct_download": "無效的URL。不允許直接下載連結。",
     "install_in_progress_body": "另一個安裝正在進行中。請等待其完成。",
-    "xdelta_disable_warning_title": "責任警告",
-    "xdelta_disable_warning_body": "停用此選項意味著您的模組將直接替換遊戲檔案（例如 data.win）。此方法通常與盜版有關，我們強烈不建議使用。\n\n您將對分發遊戲檔案負全部責任。如果我們收到即便是輕微的投訴，您的模組將立即從平台下架。\n\n您確定要自行承擔風險並繼續嗎？",
     "theme_exported_success": "主題已成功導出！",
     "theme_imported_success": "主題已成功導入並應用！",
     "theme_import_failed": "主題導入失敗：{error}",
@@ -425,9 +418,7 @@
     "select_mod": "選擇模組",
     "success": "成功",
     "delete_confirmation": "確認刪除",
-    "delete_mod_confirmation": "此模組將被永久刪除。是否繼續？",
-    "file_replacement_warning_title": "檔案替換警告",
-    "file_replacement_warning_body": "此模組將透過直接拷貝替換原始遊戲檔案。確定要繼續嗎？"
+    "delete_mod_confirmation": "此模組將被永久刪除。是否繼續？"
   },
   "errors": {
     "access_permission_error": "訪問錯誤。檢查模組編輯權限。",

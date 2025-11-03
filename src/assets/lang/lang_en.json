@@ -76,10 +76,6 @@
     "launch_button": "Launch",
     "leave_empty_for_default_icon": "Leave empty for default icon",
     "library_tab": "Library",
-    "file_replacement_desc": "The mod replaces original game files with direct copying.",
-    "patching_desc": "The mod uses patching (XDELTA) to modify game files.",
-    "file_replacement_label": "File Replacement",
-    "patching_label": "Patching",
     "main_text_color": "Main Text Color:",
     "menu_label": "Menu:",
     "mod_author": "Mod author:",
@@ -232,8 +228,7 @@
   },
   "checkboxes": {
     "disable_background": "Disable background",
-    "disable_splash": "Disable splash",
-    "xdelta_protection": "XDELTA instead of data.win/.ios"
+    "disable_splash": "Disable splash"
   },
   "tags": {
     "gameplay": "Gameplay",
@@ -413,8 +408,6 @@
     "invalid_external_url": "Invalid URL. The link must be a valid web page URL.",
     "invalid_external_url_direct_download": "Invalid URL. Direct download links are not allowed.",
     "install_in_progress_body": "Another installation is already in progress. Please wait for it to complete.",
-    "xdelta_disable_warning_title": "Responsibility Warning",
-    "xdelta_disable_warning_body": "Disabling this option means your mod will directly replace game files (e.g., data.win). This method is highly discouraged.\n\nYou will be held fully responsible for distributing game files. If we receive even minor complaints, your mod will be immediately removed from the platform.\n\nAre you sure you want to proceed at your own risk?",
     "theme_exported_success": "Theme exported successfully!",
     "theme_imported_success": "Theme imported successfully and applied!",
     "theme_import_failed": "Theme import failed: {error}",
@@ -425,9 +418,7 @@
     "select_mod": "Select mod",
     "success": "Success",
     "delete_confirmation": "Delete confirmation",
-    "delete_mod_confirmation": "This will permanently delete the mod. Continue?",
-    "file_replacement_warning_title": "File Replacement Warning",
-    "file_replacement_warning_body": "This mod will replace original game files via direct copying. Are you sure you want to proceed?"
+    "delete_mod_confirmation": "This will permanently delete the mod. Continue?"
   },
   "errors": {
     "access_permission_error": "Access error. Check mod edit permissions.",
