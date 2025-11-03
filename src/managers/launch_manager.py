@@ -406,8 +406,6 @@ class GameLauncher(QObject):
             return False
 
     def _is_xdelta_mod(self, mod_info, source_dir: str, chapter_id: Optional[int] = None) -> bool:
-        if mod_info and getattr(mod_info, 'is_xdelta', False):
-            return True
         if chapter_id is not None:
             search_dir = None
             if chapter_id == -1:

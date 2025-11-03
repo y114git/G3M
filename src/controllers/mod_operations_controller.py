@@ -62,11 +62,6 @@ class ModOperationsController:
                 self.feedback_manager.show_warning('errors.mod_no_files', mod_name=mod.name)
                 return
             was_installed_before = self.mod_manager.is_mod_installed(mod.key)
-            is_xdelta_mod = getattr(mod, 'is_xdelta', False)
-            if not is_xdelta_mod and (not was_installed_before):
-                if not self.feedback_manager.ask_question('dialogs.file_replacement_warning_title', 'dialogs.file_replacement_warning_body', '', False):
-                    self.feedback_manager.update_status(tr('status.install_cancelled_by_user'), UI_COLORS['status_info'])
-                    return
             install_tasks = [(mod, chapter_id) for chapter_id in available_chapters]
             self._safe_execute(lambda: setattr(self.app_state, 'operation_cancelled', False), 'Failed to set operation_cancelled')
             self.app_state.is_installing = True

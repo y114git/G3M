@@ -61,12 +61,6 @@ class ModEditorDialog(QDialog):
         self.modgame_combo.addItem('UNDERTALE', 'undertale')
         self.modgame_combo.currentIndexChanged.connect(self._update_file_tabs)
         modgame_layout.addWidget(self.modgame_combo)
-        modgame_layout.addSpacing(12)
-        self.xdelta_checkbox = QCheckBox(tr('checkboxes.xdelta_protection'))
-        modgame_layout.addWidget(self.xdelta_checkbox)
-        if self.is_creating:
-            self.xdelta_checkbox.setChecked(True)
-        self.xdelta_checkbox.stateChanged.connect(self._on_xdelta_checkbox_changed)
         modgame_layout.addStretch()
         settings_layout.addLayout(modgame_layout)
         form_layout = QVBoxLayout()
@@ -93,11 +87,6 @@ class ModEditorDialog(QDialog):
         finally:
             combo.blockSignals(False)
 
-    def _on_xdelta_checkbox_changed(self, state):
-        if self.is_creating and state == 0:
-            reply = QMessageBox.question(self, tr('dialogs.xdelta_disable_warning_title'), tr('dialogs.xdelta_disable_warning_body'), QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No)
-            if reply != QMessageBox.StandardButton.Yes:
-                self._set_checkbox_checked_silently(self.xdelta_checkbox, True)
 
     def _create_form_fields(self, form_layout):
         form_layout.addWidget(QLabel(tr('ui.mod_name_label')))
@@ -133,7 +122,7 @@ class ModEditorDialog(QDialog):
             self.description_url_edit = QLineEdit()
             self.description_url_edit.setPlaceholderText('https://example.com/description.md')
             form_layout.addWidget(self.description_url_edit)
-            self.description_url_edit.textChanged.connect(lambda: self._trigger_validation(self.description_url_edit, self._validate_url_for_title, title_label=self.description_title_label, is_patch=False))
+            self.description_url_edit.textChanged.connect(lambda: self._trigger_validation(self.description_url_edit, self._validate_url_for_title, title_label=self.description_title_label))
             form_layout.addWidget(QLabel(tr('ui.game_version_label')))
             self.game_version_combo = QComboBox()
             self._load_game_versions()
@@ -436,74 +425,13 @@ class ModEditorDialog(QDialog):
         self.file_tabs = QTabWidget()
         self.file_tabs.setStyleSheet('QTabWidget::tab-bar { alignment: center; } QTabBar::tab { padding: 4px 8px; }')
         self.modgame_combo.currentIndexChanged.connect(self._update_file_tabs)
-        self.xdelta_checkbox.stateChanged.connect(self._update_data_file_labels)
-        self.xdelta_checkbox.stateChanged.connect(self._recreate_data_frames)
-        self.xdelta_checkbox.stateChanged.connect(self._update_data_add_button_texts)
-        if not self.is_public:
-            self.xdelta_checkbox.stateChanged.connect(self._update_file_tabs)
         files_layout.addWidget(self.file_tabs)
         parent_layout.addWidget(files_frame)
         self._update_file_tabs()
 
-    def _update_data_file_labels(self):
-        is_xdelta_protected = self.xdelta_checkbox.isChecked()
-        for tab_index in range(self.file_tabs.count()):
-            if not (tab := self.file_tabs.widget(tab_index)) or not (layout := tab.layout()):
-                continue
-            for i in range(layout.count()):
-                if not (item := layout.itemAt(i)) or not (widget := item.widget()) or (not hasattr(widget, 'layout')):
-                    continue
-                if (frame_layout := widget.layout()):
-                    for j in range(frame_layout.count()):
-                        if (frame_item := frame_layout.itemAt(j)) and (frame_widget := frame_item.widget()) and isinstance(frame_widget, QLabel):
-                            if frame_widget.text().startswith(('DATA', 'PATCH')):
-                                frame_widget.setText(tr('files.patch_file') if is_xdelta_protected else tr('files.data_file'))
-                                self._update_labels_in_frame(frame_layout, is_xdelta_protected)
-                                break
-
-    def _update_labels_in_frame(self, frame_layout, is_patch):
-        for i in range(frame_layout.count()):
-            if (item := frame_layout.itemAt(i)) and (widget := item.widget()) and isinstance(widget, QLabel):
-                field_type = detect_field_type_by_text(widget.text())
-                if field_type == 'file_path':
-                    widget.setText(tr('files.update_file_label', is_public=self.is_public, is_patch=is_patch))
-                elif field_type == 'version':
-                    widget.setText(tr('files.version_label_colon', is_patch=is_patch))
-
-    def _recreate_data_frames(self):
-        for tab_index in range(self.file_tabs.count()):
-            tab = self.file_tabs.widget(tab_index)
-            if not tab:
-                continue
-            layout = tab.layout()
-            if not layout:
-                continue
-            found = False
-            for i in range(layout.count() - 1, -1, -1):
-                item = layout.itemAt(i)
-                w = item.widget() if item else None
-                if w is None or not hasattr(w, 'layout'):
-                    continue
-                frame = w
-                frame_layout = frame.layout() if hasattr(frame, 'layout') else None
-                if not frame_layout or frame_layout.count() == 0:
-                    continue
-                first_item = frame_layout.itemAt(0)
-                first = first_item.widget() if first_item and first_item.widget() else None
-                if isinstance(first, QLabel):
-                    ftype = first.property('file_type') if hasattr(first, 'property') else None
-                    is_data_frame = ftype in ('data', 'patch')
-                    if not is_data_frame:
-                        txt = first.text() if hasattr(first, 'text') else ''
-                        is_data_frame = isinstance(txt, str) and (txt.startswith('DATA') or txt.startswith('PATCH'))
-                    if is_data_frame:
-                        found = True
-                        self._remove_data_file(None, layout, frame)
-            if found:
-                self._add_data_file(tab, layout)
 
     def _data_button_text(self) -> str:
-        return tr('ui.add_data_patch_file') if self.xdelta_checkbox.isChecked() else tr('ui.add_data_file')
+        return tr('ui.add_data_file')
 
     def _update_data_add_button_texts(self):
         for ti in range(self.file_tabs.count()):
@@ -536,7 +464,6 @@ class ModEditorDialog(QDialog):
         else:
             for tab_name in [tr('tabs.menu_root'), tr('tabs.chapter_1'), tr('tabs.chapter_2'), tr('tabs.chapter_3'), tr('tabs.chapter_4')]:
                 self._create_file_tab(tab_name)
-        self._update_data_add_button_texts()
 
     def _create_file_tab(self, tab_name):
         tab = QWidget()
@@ -554,7 +481,7 @@ class ModEditorDialog(QDialog):
         self.file_tabs.addTab(tab, tab_name)
 
     def _create_file_frame(self, tab_layout, file_type, key_name=None):
-        is_local, is_patch = (not self.is_public, self.xdelta_checkbox.isChecked())
+        is_local = not self.is_public
         if file_type == 'extra' and key_name is None:
             key_name, ok = QInputDialog.getText(self, tr('dialogs.file_group_name'), tr('dialogs.enter_file_group_key'))
             if not ok or not key_name.strip():
@@ -565,13 +492,13 @@ class ModEditorDialog(QDialog):
         frame.setFrameStyle(QFrame.Shape.Box)
         layout = QVBoxLayout(frame)
         if file_type == 'data':
-            title = tr('files.patch_file') if is_patch else tr('files.data_file')
+            title = tr('files.data_file')
             label_type = tr('files.download_link') if self.is_public else tr('files.path_to')
-            file_type_str = 'xdelta' if is_patch else 'data.win'
+            file_type_str = 'data file'
             input_label = tr('files.data_path_label', label_type=label_type, file_type=file_type_str)
-            version_label = tr('files.version_label', file_type='PATCH' if is_patch else 'DATA')
-            file_filter = get_file_filter('xdelta_files') if is_patch else get_file_filter('data_files')
-            browse_title = tr('ui.select_data_file', file_type='xdelta' if is_patch else 'data.win')
+            version_label = tr('files.version_label', file_type='DATA')
+            file_filter = get_file_filter('data_files')
+            browse_title = tr('ui.select_data_file', file_type='data')
         else:
             title = tr('files.extra_files_title', key_name=key_name)
             label_type = tr('files.archive_link') if self.is_public else tr('files.path_to')
@@ -585,7 +512,7 @@ class ModEditorDialog(QDialog):
             title_label.setProperty('clean_key', key_name)
             title_label.setProperty('file_type', 'extra')
         elif file_type == 'data':
-            title_label.setProperty('file_type', 'patch' if is_patch else 'data')
+            title_label.setProperty('file_type', 'data')
         layout.addWidget(title_label)
         layout.addWidget(QLabel(input_label))
         if is_local:
@@ -604,7 +531,7 @@ class ModEditorDialog(QDialog):
         else:
             input_edit = QLineEdit()
             layout.addWidget(input_edit)
-            input_edit.textChanged.connect(lambda: self._trigger_validation(input_edit, self._validate_url_for_title, title_label=title_label, is_patch=is_patch if file_type == 'data' else False))
+            input_edit.textChanged.connect(lambda: self._trigger_validation(input_edit, self._validate_url_for_title, title_label=title_label))
         layout.addWidget(QLabel(version_label))
         version_edit = QLineEdit()
         version_edit.setPlaceholderText('1.0.0')
@@ -698,7 +625,7 @@ class ModEditorDialog(QDialog):
                 line_edit.setText(corrected)
         line_edit.textChanged.connect(on_text_changed)
 
-    def _validate_url_for_title(self, line_edit: QLineEdit, title_label: QLabel, is_patch: bool):
+    def _validate_url_for_title(self, line_edit: QLineEdit, title_label: QLabel):
         url = line_edit.text().strip()
         line_edit.setProperty('isValid', True)
         file_type = 'data'
@@ -709,8 +636,6 @@ class ModEditorDialog(QDialog):
                 base_title, file_type = (tr('ui.full_description_link'), 'description')
             elif label_file_type == 'icon':
                 base_title, file_type = (tr('files.icon_direct_link'), 'icon')
-            elif label_file_type == 'patch' or is_patch:
-                base_title, file_type = (tr('files.patch_file'), 'data')
         if file_type == 'data' and hasattr(self, 'description_url_edit') and (line_edit == self.description_url_edit):
             base_title, file_type = (tr('ui.full_description_link'), 'description')
         elif file_type == 'data' and hasattr(self, 'icon_edit') and (line_edit == self.icon_edit):
@@ -814,7 +739,7 @@ class ModEditorDialog(QDialog):
                         potential_name = os.path.basename(unquote(path))
                         if potential_name:
                             filename = potential_name
-                data_extensions = ['.xdelta'] if is_patch or 'PATCH' in base_title else ['.win', '.ios']
+                data_extensions = ['.win', '.ios', '.xdelta', '.vcdiff', '.csx']
                 format_checks = {'icon': (None, 2), 'extra': (['.zip', '.rar', '.7z', '.tar.gz', '.lzma'], float('inf')), 'description': (['.md', '.txt'], 1), 'data': (data_extensions, 200)}
                 if file_type in format_checks:
                     valid_exts, max_size = format_checks[file_type]
@@ -834,16 +759,19 @@ class ModEditorDialog(QDialog):
                     elif 'text/html' in content_type:
                         final_text = f"{base_title}<span style='color: #FF4444;'> ({tr('errors.not_a_file_response')})</span>"
                         is_valid = False
-                    elif file_type == 'data' and (is_patch or 'PATCH' in base_title):
-                        xdelta_by_sig = first_bytes.startswith(b'VCD')
-                        xdelta_by_ext = filename.lower().endswith('.xdelta')
-                        xdelta_by_ct = any((x in content_type for x in ['xdelta', 'vcdiff'])) or content_type == 'application/octet-stream'
-                        if xdelta_by_sig or xdelta_by_ext or xdelta_by_ct:
+                    elif file_type == 'data':
+                        fn = filename.lower()
+                        correct_ext = fn.endswith(('.win', '.ios', '.xdelta', '.vcdiff', '.csx'))
+                        valid_by_signature = False
+                        if first_bytes:
+                            if content_type == 'application/octet-stream':
+                                valid_by_signature = True
+                        if (correct_ext or valid_by_signature) and size_bytes >= 0 and ('text/html' not in content_type):
                             final_text = f"{base_title}<span style='color: #44AA44;'> ({filename}, {size_text})</span>"
                             is_valid = True
                         else:
-                            final_text = f"{base_title}<span style='color: #44AA44;'> ({filename}, {size_text})</span>"
-                            is_valid = True
+                            final_text = f"{base_title}<span style='color: #FF4444;'> ({tr('errors.not_a_valid_file')})</span>"
+                            is_valid = False
                     elif file_type == 'extra':
                         is_zip = first_bytes.startswith(b'PK\x03\x04')
                         is_rar = first_bytes.startswith(b'Rar!')
@@ -859,19 +787,6 @@ class ModEditorDialog(QDialog):
                         fn = filename.lower()
                         correct_ext = fn.endswith('.md') or fn.endswith('.txt')
                         if correct_ext and size_bytes >= 0 and ('text/html' not in content_type):
-                            final_text = f"{base_title}<span style='color: #44AA44;'> ({filename}, {size_text})</span>"
-                            is_valid = True
-                        else:
-                            final_text = f"{base_title}<span style='color: #FF4444;'> ({tr('errors.not_a_valid_file')})</span>"
-                            is_valid = False
-                    elif file_type == 'data':
-                        fn = filename.lower()
-                        correct_ext = fn.endswith('.win') or fn.endswith('.ios')
-                        valid_by_signature = False
-                        if first_bytes:
-                            if content_type == 'application/octet-stream':
-                                valid_by_signature = True
-                        if (correct_ext or valid_by_signature) and size_bytes >= 0 and ('text/html' not in content_type):
                             final_text = f"{base_title}<span style='color: #44AA44;'> ({filename}, {size_text})</span>"
                             is_valid = True
                         else:
@@ -1256,8 +1171,8 @@ class ModEditorDialog(QDialog):
                         if not url:
                             continue
                         label_ftype = title_label.property('file_type') if hasattr(title_label, 'property') else None
-                        is_patch = label_ftype == 'patch'
                         is_extra = label_ftype == 'extra'
+                        is_data = label_ftype == 'data'
                         headers = {'User-Agent': 'Mozilla/5.0'}
                         content_type = ''
                         first_bytes = b''
@@ -1309,21 +1224,14 @@ class ModEditorDialog(QDialog):
                                 return ''
                         fname = _infer_filename(url, content_disp)
                         fext = (os.path.splitext(fname)[1] or '').lower()
-                        if is_patch:
-                            xdelta_by_sig = first_bytes.startswith(b'VCD')
-                            xdelta_by_ct = any((x in content_type for x in ['xdelta', 'vcdiff'])) or content_type == 'application/octet-stream'
-                            xdelta_by_ext = fext == '.xdelta'
-                            if not (xdelta_by_sig or xdelta_by_ct or xdelta_by_ext):
-                                QMessageBox.warning(self, tr('dialogs.validation_error'), '.xdelta ' + tr('errors.not_a_valid_file'))
-                                return False
-                        elif is_extra:
+                        if is_extra:
                             sig_ok = first_bytes.startswith(b'PK\x03\x04') or first_bytes.startswith(b'Rar!') or first_bytes.startswith(b"7z\xbc\xaf'\x1c") or first_bytes.startswith(b'\x1f\x8b')
                             by_ext = fext in ['.zip', '.rar', '.7z', '.tar.gz', '.lzma']
                             by_ct = any((x in content_type for x in ['zip', 'x-zip', 'rar', '7z'])) or content_type == 'application/octet-stream'
                             if not (sig_ok or by_ext or by_ct):
                                 pass
-                        else:
-                            looks_like_data = any((x in fext for x in ['.win', '.ios', '.data']))
+                        elif is_data:
+                            looks_like_data = any((x in fext for x in ['.win', '.ios', '.data', '.xdelta', '.vcdiff', '.csx']))
                             if 'text/html' in content_type and (not looks_like_data):
                                 QMessageBox.warning(self, tr('dialogs.validation_error'), tr('errors.not_a_valid_file'))
                                 return False
@@ -1669,7 +1577,7 @@ class ModEditorDialog(QDialog):
             author = tr('defaults.local_author')
         version = self.version_edit.text().strip() or '1.0.0'
         tagline = self.tagline_edit.text().strip() or tr('defaults.no_short_description')
-        return {'name': self.name_edit.text().strip(), 'version': version, 'author': author, 'tagline': tagline, 'external_url': self.external_url_edit.text().strip(), 'description_url': self.description_url_edit.text().strip(), 'icon_url': self.icon_edit.text().strip(), 'tags': tags, 'hide_mod': False, 'is_xdelta': self.xdelta_checkbox.isChecked(), 'modgame': self.modgame_combo.currentData() or 'deltarune', 'game_version': self.game_version_combo.currentText() if self.is_public else self.game_version_edit.text().strip() or '1.04', 'files': files_data, 'screenshots_url': getattr(self, 'screenshots_urls', [])}
+        return {'name': self.name_edit.text().strip(), 'version': version, 'author': author, 'tagline': tagline, 'external_url': self.external_url_edit.text().strip(), 'description_url': self.description_url_edit.text().strip(), 'icon_url': self.icon_edit.text().strip(), 'tags': tags, 'hide_mod': False, 'modgame': self.modgame_combo.currentData() or 'deltarune', 'game_version': self.game_version_combo.currentText() if self.is_public else self.game_version_edit.text().strip() or '1.04', 'files': files_data, 'screenshots_url': getattr(self, 'screenshots_urls', [])}
 
     def _save_public_mod(self):
         QMessageBox.information(self, tr('errors.save_secret_key_title'), tr('dialogs.save_secret_key_instruction'))
@@ -1884,7 +1792,7 @@ class ModEditorDialog(QDialog):
         if not hasattr(self, 'original_mod_data') or not self.original_mod_data:
             return True
         current_data, original_data = (self._collect_mod_data(), self.original_mod_data)
-        fields_to_compare = ['name', 'version', 'author', 'tagline', 'external_url', 'description_url', 'icon_url', 'tags', 'is_xdelta', 'modgame', 'game_version', 'files', 'screenshots_url']
+        fields_to_compare = ['name', 'version', 'author', 'tagline', 'external_url', 'description_url', 'icon_url', 'tags', 'modgame', 'game_version', 'files', 'screenshots_url']
         return any((current_data.get(field) != original_data.get(field) for field in fields_to_compare))
 
     def _update_local_mod(self):
@@ -2055,7 +1963,6 @@ class ModEditorDialog(QDialog):
             if self.modgame_combo.itemData(i) == modgame:
                 self.modgame_combo.setCurrentIndex(i)
                 break
-        self.xdelta_checkbox.setChecked(actual_mod_data.get('is_xdelta', False))
         tags = actual_mod_data.get('tags', [])
         self.tag_translation.setChecked('translation' in tags)
         self.tag_customization.setChecked('customization' in tags)

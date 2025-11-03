@@ -88,8 +88,7 @@ class DeltamodConverter:
             mod_key = f"local_{meta.get('name', 'unnamed')}_{uuid.uuid4().hex[:8]}"
         from datetime import datetime
         created_date = datetime.now().strftime('%d.%m.%y %H:%M')
-        has_xdelta = any((p.get('type') == 'xdelta' for p in patches))
-        config = {'is_local_mod': True, 'mod_key': mod_key, 'created_date': created_date, 'is_available_on_server': False, 'name': meta.get('name', tr('defaults.local_mod')), 'version': meta.get('version', '1.0.0'), 'author': ', '.join(meta.get('author', [tr('defaults.unknown')])), 'tagline': meta.get('description', tr('defaults.no_description')), 'external_url': meta.get('url', ''), 'game_version': self.deltamod_info.get('deltaruneTargetVersion', tr('defaults.not_specified')), 'modgame': 'deltarunedemo' if meta.get('demoMod') else 'deltarune', 'is_xdelta': has_xdelta, 'files': self._generate_files_structure(patches), 'tags': meta.get('tags', [])}
+        config = {'is_local_mod': True, 'mod_key': mod_key, 'created_date': created_date, 'is_available_on_server': False, 'name': meta.get('name', tr('defaults.local_mod')), 'version': meta.get('version', '1.0.0'), 'author': ', '.join(meta.get('author', [tr('defaults.unknown')])), 'tagline': meta.get('description', tr('defaults.no_description')), 'external_url': meta.get('url', ''), 'game_version': self.deltamod_info.get('deltaruneTargetVersion', tr('defaults.not_specified')), 'modgame': 'deltarunedemo' if meta.get('demoMod') else 'deltarune', 'files': self._generate_files_structure(patches), 'tags': meta.get('tags', [])}
         return config
 
     def _generate_files_structure(self, patches: list) -> Dict[str, Any]:

@@ -248,20 +248,11 @@ class InstallModsThread(QThread):
             components_to_update: dict[str, dict] = {}
             chapter_data = mod.get_chapter_data(chapter_id) if chapter_id != -1 else None
             if chapter_data and chapter_data.data_file_url and remote_versions.get('data'):
-                is_xdelta_mod = getattr(mod, 'is_xdelta', False)
-                local_is_xdelta = False
-                try:
-                    mod_path = os.path.join(self.main_window.app_state.mods_dir, existing_folder)
-                    local_is_xdelta = any((f.lower().endswith('.xdelta') for f in os.listdir(mod_path) if os.path.isfile(os.path.join(mod_path, f))))
-                except Exception as e:
-                    logging.debug(f'_should_update_component: local is_xdelta check failed: {e}')
-                    local_is_xdelta = False
-                type_changed = is_xdelta_mod != local_is_xdelta
                 local_data_v = local_versions.get('data')
                 remote_data_v = remote_versions.get('data')
                 from utils.file_utils import version_sort_key
-                if remote_data_v and (type_changed or version_sort_key(remote_data_v) > version_sort_key(local_data_v or '0.0.0')):
-                    components_to_update['data'] = {'url': chapter_data.data_file_url, 'local_version': local_data_v, 'remote_version': remote_data_v, 'is_xdelta': is_xdelta_mod, 'type_changed': type_changed}
+                if remote_data_v and version_sort_key(remote_data_v) > version_sort_key(local_data_v or '0.0.0'):
+                    components_to_update['data'] = {'url': chapter_data.data_file_url, 'local_version': local_data_v, 'remote_version': remote_data_v}
             if chapter_data:
                 for extra_file in chapter_data.extra_files:
                     rv = remote_versions.get(extra_file.key)
@@ -401,8 +392,7 @@ class InstallModsThread(QThread):
                     components_to_update = self._should_update_component(mod, chapter_id, existing_folder)
                     if not components_to_update:
                         if chapter_data.data_file_url:
-                            is_xdelta_mod = getattr(mod, 'is_xdelta', False)
-                            tasks.append({'mod': mod, 'url': chapter_data.data_file_url, 'chapter_id': chapter_id, 'component': 'data', 'is_xdelta': is_xdelta_mod})
+                            tasks.append({'mod': mod, 'url': chapter_data.data_file_url, 'chapter_id': chapter_id, 'component': 'data'})
                         for extra_file in chapter_data.extra_files:
                             tasks.append({'mod': mod, 'url': extra_file.url, 'chapter_id': chapter_id, 'component': extra_file.key})
                     else:
@@ -410,10 +400,7 @@ class InstallModsThread(QThread):
                             if info.get('delete'):
                                 tasks.append({'mod': mod, 'chapter_id': chapter_id, 'component': component, 'delete': True})
                                 continue
-                            is_xdelta = info.get('is_xdelta', False) if component == 'data' else False
-                            t = {'mod': mod, 'url': info['url'], 'chapter_id': chapter_id, 'component': component, 'is_xdelta': is_xdelta}
-                            if component == 'data' and info.get('type_changed'):
-                                t['type_changed'] = True
+                            t = {'mod': mod, 'url': info['url'], 'chapter_id': chapter_id, 'component': component}
                             tasks.append(t)
             if not tasks:
                 self.finished.emit(True)
@@ -501,7 +488,7 @@ class InstallModsThread(QThread):
                 self._installed_dirs.append(cache_dir)
                 chapter_data = mod.get_chapter_data(chapter_id)
                 is_data_file = chapter_data and url and (chapter_data.data_file_url == url)
-                is_xdelta = task.get('is_xdelta', False)
+                is_xdelta = url.lower().endswith(('.xdelta', '.vcdiff', '.csx')) if url else False
                 try:
                     if is_data_file:
                         if is_xdelta:
