@@ -71,6 +71,8 @@ class ThemeController:
         self.customization_manager.update_translucent_backgrounds(search_container, library_container)
         if hasattr(self.app, '_update_chapter_tabs_style'):
             self.app._update_chapter_tabs_style()
+        if hasattr(self.app, 'library_tab_builder'):
+            self.app.library_tab_builder.update_priority_button_style()
         self.app.update()
 
     def on_background_ready(self, obj):
@@ -133,6 +135,8 @@ class ThemeController:
         mod_list = getattr(self.app, 'mod_list_widget', None)
         installed_mods = getattr(self.app, 'installed_mods_widget', None)
         self.customization_manager.update_mod_plaques_styles(mod_list, installed_mods)
+        if hasattr(self.app, 'library_tab_builder'):
+            self.app.library_tab_builder.update_priority_button_style()
 
     def on_background_button_click(self):
         self.settings_manager.on_background_button_click()

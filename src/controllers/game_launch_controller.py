@@ -6,7 +6,6 @@ from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QVBoxLayout, QFil
 from managers.localization_manager import tr
 from config.constants import UI_COLORS
 from models.game_modes import DemoGameMode
-from ui.common.styling import load_mod_icon_universal
 from workers.background_workers import FullInstallThread
 
 
@@ -42,6 +41,10 @@ class GameLaunchController(QObject):
             self.app_state.action_button_text = tr('ui.cancel_button')
             self.app_state.action_button_enabled = True
             return
+        if self.app_state.is_merging:
+            self.app_state.action_button_text = tr('ui.cancel_button')
+            self.app_state.action_button_enabled = True
+            return
         if not self.app_state.initialization_completed:
             self.app_state.action_button_text = tr('status.please_wait')
             self.app_state.action_button_enabled = False
@@ -73,6 +76,21 @@ class GameLaunchController(QObject):
             self.app_state.clear_current_task()
             self.update_button_state()
             return
+        if self.app_state.is_merging or (hasattr(self.game_launcher, '_merge_thread') and self.game_launcher._merge_thread and self.game_launcher._merge_thread.isRunning()):
+            if hasattr(self.game_launcher, '_merge_thread') and self.game_launcher._merge_thread:
+                self.game_launcher._merge_thread.cancel()
+            self.app_state.is_merging = False
+            self.feedback_manager.update_status(tr('status.operation_cancelled'), UI_COLORS['status_error'])
+            try:
+                self.app_state.progress_bar_value = 0
+                self.app_state.progress_bar_visible = False
+            except (AttributeError, RuntimeError):
+                pass
+            if self.app_state.current_task and hasattr(self.app_state.current_task, 'cancel'):
+                self.app_state.current_task.cancel()
+            self.app_state.clear_current_task()
+            self.update_button_state()
+            return
         if isinstance(self.app_state.game_mode, DemoGameMode) and self._full_install_checkbox_is_checked:
             self.perform_full_install()
             return
@@ -83,7 +101,8 @@ class GameLaunchController(QObject):
             return
         if self.app_state.operation_cancelled:
             return
-        self.app_state.action_button_enabled = False
+        if not self.app_state.is_merging:
+            self.app_state.action_button_enabled = False
         self.app_state.saves_button_enabled = False
         self.app_state.progress_bar_visible = False
         self.launch_game()

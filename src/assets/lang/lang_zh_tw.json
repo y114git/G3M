@@ -184,7 +184,15 @@
     "search_tab": "搜尋模組",
     "select": "選擇",
     "steam_launch": "透過Steam啟動",
-    "steam_launch_direct_conflict": "「透過Steam啟動」與直接啟動不相容。請先禁用直接啟動（雙擊章節槽位）。"
+    "steam_launch_direct_conflict": "「透過Steam啟動」與直接啟動不相容。請先禁用直接啟動（雙擊章節槽位）。",
+    "priority": "優先級",
+    "mod_priority_title": "模組優先級",
+    "mod_priority_info": "重新排序模組以設定其應用優先級。頂部的模組將最後應用（最高優先級）。",
+    "mod_priority_instructions": "拖曳模組以重新排序，或使用向上/向下按鈕。高優先級的模組會覆蓋低優先級模組的更改。",
+    "move_up": "↑ 向上",
+    "move_down": "↓ 向下",
+    "ok": "確定",
+    "mods_active": "{count} 個模組已啟用"
   },
   "files": {
     "archive_link": "壓縮檔案連結",
@@ -524,9 +532,9 @@
     "permission_error_install": "安裝時權限錯誤：{error}",
     "xdelta_not_found": "在 {path} 未找到xdelta可執行檔案",
     "unsupported_archive_format": "不支持的壓縮格式。",
-    "deltamod_archive_invalid_redirect": "在DeltaMod壓縮檔案中發現無效重定向。",
-    "deltamod_conversion_failed": "DeltaMod轉換失敗。",
-    "deltamod_conversion_failed_url": "從URL轉換DeltaMod失敗。",
+    "deltamod_archive_invalid_redirect": "在DELTAMOD壓縮檔案中發現無效重定向。",
+    "deltamod_conversion_failed": "DELTAMOD轉換失敗。",
+    "deltamod_conversion_failed_url": "從URL轉換DELTAMOD失敗。",
     "invalid_url_scheme": "無效的URL方案。應為deltahub://",
     "unsupported_mod_format_url": "不支援從URL轉換的模組格式。",
     "launch_error": "啟動錯誤：{error}",
@@ -539,7 +547,8 @@
     "update_error": "更新錯誤",
     "permission_denied": "權限被拒絕：{path}",
     "permission_error": "權限錯誤：{path}",
-    "xdelta_patch_error": "無法套用xdelta補丁：{error}"
+    "xdelta_patch_error": "無法套用xdelta補丁：{error}",
+    "utmtcli_not_available": "UTMTCLI 不適用於平台：{platform}"
   },
   "status": {
     "shortcut_created": "捷徑已建立：{path}",
@@ -622,11 +631,20 @@
     "unpacking_mod": "正在提取模組壓縮檔案：{mod_name}...",
     "install_complete_success": "成功安裝 '{mod_name}'！",
     "beta_updates_enabled": "測試版更新已啟用",
-    "deltamod_archive_detected": "檢測到DeltaMod壓縮檔案。",
-    "deltamod_archive_detected_url": "從URL檢測到DeltaMod壓縮檔案。",
-    "deltamod_converted": "DeltaMod轉換成功。",
-    "deltamod_detected": "檢測到DeltaMod。",
-    "deltamod_redirect_found": "在DeltaMod中發現重定向。"
+    "deltamod_archive_detected": "檢測到DELTAMOD壓縮檔案。",
+    "deltamod_archive_detected_url": "從URL檢測到DELTAMOD壓縮檔案。",
+    "deltamod_converted": "DELTAMOD轉換成功。",
+    "deltamod_detected": "檢測到DELTAMOD。",
+    "deltamod_redirect_found": "在DELTAMOD中發現重定向。",
+    "preparing_mod_merge": "準備合併 {mods} 個模組用於 {chapters} 章...",
+    "merging_mods": "合併模組... {progress}%",
+    "merging_chapter": "合併第 {chapter} 章 ({current}/{total})...",
+    "chapter_merged": "第 {chapter} 章合併成功",
+    "merge_completed": "模組合併完成",
+    "merge_failed": "模組合併失敗",
+    "applying_xdelta": "應用來自 {mod} 的 xdelta 補丁 ({current}/{total})...",
+    "exporting_assets": "從 {mod} 導出資源 ({current}/{total})...",
+    "importing_assets": "從 {mod} 導入資源 ({current}/{total})..."
   },
   "startup": {
     "shortcut_settings_read_error": "啟動錯誤：讀取捷徑設置失敗 ({error})",

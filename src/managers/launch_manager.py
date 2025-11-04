@@ -13,7 +13,7 @@ import py7zr
 import zipfile
 import json
 import logging
-from typing import Dict, Optional, Any
+from typing import Dict, Optional, Any, List
 from PyQt6.QtCore import QObject, QThread, QTimer, pyqtSignal
 from managers.localization_manager import tr
 from models.game_modes import DemoGameMode, UndertaleGameMode
@@ -21,6 +21,7 @@ from utils.file_utils import ensure_writable, sanitize_filename
 from utils.game_utils import is_game_running
 from utils.path_utils import get_xdelta_path
 from workers.game_monitor import GameMonitorWorker
+from managers.multi_mod_merger import MultiModMerger
 from config.constants import UI_COLORS, SLOT_ID_UNIVERSAL, SLOT_ID_DEMO, SLOT_ID_UNDERTALE
 
 
@@ -29,6 +30,7 @@ class GameLauncher(QObject):
     progress_updated = pyqtSignal(int)
     game_launch_started = pyqtSignal()
     game_launch_finished = pyqtSignal()
+    multi_mod_merge_finished = pyqtSignal(bool)
 
     def __init__(self, app_state, feedback_manager, mod_manager, save_manager=None, parent=None):
         super().__init__(parent)
@@ -43,6 +45,13 @@ class GameLauncher(QObject):
         self._mod_dirs_to_cleanup = []
         self._direct_launch_cleanup_info = None
         self._collection_backup_info = {}
+        self.multi_mod_merger = MultiModMerger(app_state, mod_manager, parent)
+        self.multi_mod_merger.status_update.connect(self._on_merge_status)
+        self.multi_mod_merger.progress_update.connect(self._on_merge_progress)
+        self.multi_mod_merger._session_manifest_path = self._session_manifest_path()
+        self._merge_thread = None
+        self._pending_selections = None
+        self._merge_finished_callback = None
         self._ensure_backup_attributes()
 
     def _ensure_backup_attributes(self):
@@ -85,7 +94,7 @@ class GameLauncher(QObject):
         selections = self._get_used_mods_selections()
         self._launch_game_with_selections(selections, execute_plugin_hooks, restore_window_callback)
 
-    def _get_used_mods_selections(self) -> Dict[int, str]:
+    def _get_used_mods_selections(self) -> Dict[int, Any]:
         selections = {}
         try:
             parent_obj = self.parent()
@@ -94,85 +103,82 @@ class GameLauncher(QObject):
         slot_manager = getattr(parent_obj, 'slot_manager', None) if parent_obj else None
         if not slot_manager or not hasattr(slot_manager, 'used_mods') or (not slot_manager.used_mods):
             for chapter_id in range(5):
-                selections[chapter_id] = 'no_change'
+                selections[chapter_id] = []
             return selections
         is_demo_mode = isinstance(self.app_state.game_mode, DemoGameMode)
         is_undertale_mode = isinstance(self.app_state.game_mode, UndertaleGameMode)
-
-        def _get_mod_key(mod_data):
-            if not mod_data:
-                return None
-            return getattr(mod_data, 'key', None) or getattr(mod_data, 'mod_key', None) or getattr(mod_data, 'name', None)
         if is_demo_mode:
-            used_mod = slot_manager.used_mods.get(SLOT_ID_DEMO)
-            if used_mod:
-                mod_key = _get_mod_key(used_mod)
-                if mod_key:
-                    selections[-1] = mod_key
-                else:
-                    selections[-1] = 'no_change'
-            else:
-                selections[-1] = 'no_change'
+            mods_list = slot_manager.get_used_mods_list(SLOT_ID_DEMO)
+            selections[-1] = mods_list if mods_list else []
         elif is_undertale_mode:
-            used_mod = slot_manager.used_mods.get(SLOT_ID_UNDERTALE)
-            if used_mod:
-                mod_key = _get_mod_key(used_mod)
-                if mod_key:
-                    selections[-1] = mod_key
-                else:
-                    selections[-1] = 'no_change'
-            else:
-                selections[-1] = 'no_change'
+            mods_list = slot_manager.get_used_mods_list(SLOT_ID_UNDERTALE)
+            selections[-1] = mods_list if mods_list else []
         elif self.app_state.current_mode == 'normal':
-            used_mod = slot_manager.used_mods.get(SLOT_ID_UNIVERSAL)
-            if used_mod:
-                mod_key = _get_mod_key(used_mod)
-                if mod_key:
+            mods_list = slot_manager.get_used_mods_list(SLOT_ID_UNIVERSAL)
+            if mods_list:
+                for chapter_id in range(5):
+                    chapter_mods = []
+                    for mod in mods_list:
+                        if hasattr(mod, 'get_chapter_data') and mod.get_chapter_data(chapter_id):
+                            chapter_mods.append(mod)
+                    selections[chapter_id] = chapter_mods
+            else:
+                used_mod = slot_manager.get_used_mod(SLOT_ID_UNIVERSAL)
+                if used_mod:
                     for chapter_id in range(5):
-                        if used_mod.get_chapter_data(chapter_id):
-                            selections[chapter_id] = mod_key
+                        if hasattr(used_mod, 'get_chapter_data') and used_mod.get_chapter_data(chapter_id):
+                            selections[chapter_id] = [used_mod]
                         else:
-                            selections[chapter_id] = 'no_change'
+                            selections[chapter_id] = []
                 else:
                     for chapter_id in range(5):
-                        selections[chapter_id] = 'no_change'
-            else:
-                for chapter_id in range(5):
-                    selections[chapter_id] = 'no_change'
+                        selections[chapter_id] = []
         elif self.app_state.current_mode == 'chapter':
             for chapter_id in range(5):
-                used_mod = slot_manager.used_mods.get(chapter_id)
-                if used_mod:
-                    mod_key = _get_mod_key(used_mod)
-                    if mod_key:
-                        selections[chapter_id] = mod_key
-                    else:
-                        selections[chapter_id] = 'no_change'
-                else:
-                    selections[chapter_id] = 'no_change'
+                mods_list = slot_manager.get_used_mods_list(chapter_id)
+                selections[chapter_id] = mods_list if mods_list else []
         return selections
 
-    def _launch_game_with_selections(self, selections: Dict[int, str], execute_plugin_hooks=None, restore_window_callback=None):
+    def _launch_game_with_selections(self, selections: Dict[int, Any], execute_plugin_hooks=None, restore_window_callback=None):
         self.execute_plugin_hooks = execute_plugin_hooks
         self.restore_window_callback = restore_window_callback
         if execute_plugin_hooks:
             execute_plugin_hooks('on_before_game_launch')
-        self.game_launch_started.emit()
         self.status_changed.emit(tr('status.launching_game'), UI_COLORS['status_success'])
         self._ensure_backup_attributes()
         if not self._find_and_validate_game_path(selections):
             self._handle_launch_failure()
             return
-        if not self._prepare_game_files(selections):
-            self._handle_launch_failure()
+        has_list_format = any((isinstance(mods_list, list) for mods_list in selections.values()))
+        needs_multi_mod = has_list_format and any((len(mods_list) > 0 for mods_list in selections.values() if isinstance(mods_list, list)))
+        logging.info(f'Multi-mod check: needs_multi_mod={needs_multi_mod} (has_list_format={has_list_format})')
+        if needs_multi_mod:
+            logging.info('Using multi-mod merger for game launch')
+            self.app_state.progress_bar_visible = True
+            self.app_state.progress_bar_value = 0
+            self.app_state.is_merging = True
+            self.app_state.action_button_text = tr('ui.cancel_button')
+            self.app_state.action_button_enabled = True
+            self._pending_selections = selections
+            if not self._prepare_game_files_multi_mod_async(selections):
+                logging.error('Failed to start multi-mod merge')
+                self.app_state.progress_bar_visible = False
+                self.app_state.is_merging = False
+                self._handle_launch_failure()
+                return
             return
-        launch_config = self._determine_launch_config(selections)
-        if not launch_config:
-            self._handle_launch_failure()
-            return
-        self._execute_game(launch_config)
-        if execute_plugin_hooks:
-            execute_plugin_hooks('on_after_game_launch')
+        else:
+            old_selections = {}
+            for chapter_id, mods_list in selections.items():
+                if isinstance(mods_list, list) and mods_list:
+                    mod_key = getattr(mods_list[0], 'key', None) or getattr(mods_list[0], 'mod_key', None) or getattr(mods_list[0], 'name', None)
+                    old_selections[chapter_id] = mod_key if mod_key else 'no_change'
+                else:
+                    old_selections[chapter_id] = 'no_change'
+            if not self._prepare_game_files(old_selections):
+                self._handle_launch_failure()
+                return
+            self._continue_after_merge(selections, True)
 
     def _handle_launch_failure(self):
         if hasattr(self, 'restore_window_callback') and self.restore_window_callback:
@@ -264,7 +270,7 @@ class GameLauncher(QObject):
                     self.monitor_worker = None
             self.game_launch_finished.emit()
 
-    def _determine_launch_config(self, selections: Dict[int, str]) -> Optional[Dict[str, Any]]:
+    def _determine_launch_config(self, selections: Dict[int, Any]) -> Optional[Dict[str, Any]]:
         use_steam = self.app_state.local_config.get('launch_via_steam', False)
         direct_launch_slot_id = self.app_state.local_config.get('direct_launch_slot_id', SLOT_ID_UNIVERSAL)
         is_chapter_mode = self.app_state.current_mode == 'chapter'
@@ -385,6 +391,80 @@ class GameLauncher(QObject):
             self.status_changed.emit(tr('errors.chapter_folder_search_error', error=str(e)), UI_COLORS['status_error'])
             return None
 
+    def _prepare_game_files_multi_mod_async(self, selections: Dict[int, List[Any]]) -> bool:
+        import logging
+        from workers.mod_merge_thread import ModMergeThread
+        logging.info('Starting multi-mod merge in background thread')
+        chapter_mods = {chapter_id: mods_list for chapter_id, mods_list in selections.items() if isinstance(mods_list, list) and mods_list}
+        if not chapter_mods:
+            self._continue_after_merge(selections, True)
+            return True
+        session_manifest_path = self._session_manifest_path()
+        self._merge_thread = ModMergeThread(self.app_state, self.mod_manager, chapter_mods, session_manifest_path, self)
+        self._merge_thread.progress_update.connect(self._on_merge_progress)
+        self._merge_thread.status_update.connect(self._on_merge_status)
+        self._merge_thread.finished.connect(lambda success: self._on_merge_finished(selections, success))
+        self.app_state.current_task = self._merge_thread
+        self._merge_thread.start()
+        return True
+
+    def _on_merge_finished(self, selections: Dict[int, Any], success: bool):
+        self.app_state.progress_bar_visible = False
+        self.app_state.is_merging = False
+        self.app_state.clear_current_task()
+        self.app_state.action_button_text = None
+        if not success:
+            if hasattr(self, '_merge_thread') and self._merge_thread:
+                try:
+                    if self._merge_thread.isRunning():
+                        self._merge_thread.wait(5000)
+                    self._merge_thread.deleteLater()
+                except Exception as e:
+                    logging.error(f'Error cleaning up merge thread: {e}', exc_info=True)
+                finally:
+                    self._merge_thread = None
+            self._handle_launch_failure()
+            return
+        if self._merge_thread and self._merge_thread.merger:
+            self.multi_mod_merger = self._merge_thread.merger
+            self.multi_mod_merger.cleanup()
+        if self._merge_thread:
+            self._merge_thread.wait()
+            self._merge_thread.deleteLater()
+            self._merge_thread = None
+        logging.info('Multi-mod merge completed successfully')
+        self._continue_after_merge(selections, True)
+
+    def _continue_after_merge(self, selections: Dict[int, Any], merge_success: bool):
+        import logging
+        if not merge_success:
+            return
+        has_list_format = any((isinstance(mods_list, list) for mods_list in selections.values()))
+        needs_multi_mod = has_list_format and any((len(mods_list) > 0 for mods_list in selections.values() if isinstance(mods_list, list)))
+        if needs_multi_mod:
+            pass
+        elif hasattr(self, 'restore_window_callback') and self.restore_window_callback:
+            self.game_launch_started.emit()
+        launch_config = self._determine_launch_config(selections)
+        if not launch_config:
+            self._handle_launch_failure()
+            return
+        if needs_multi_mod:
+            if hasattr(self, 'restore_window_callback') and self.restore_window_callback:
+                self.game_launch_started.emit()
+        self._execute_game(launch_config)
+        if self.execute_plugin_hooks:
+            self.execute_plugin_hooks('on_after_game_launch')
+
+    def _on_merge_status(self, message: str, status_type: str):
+        color = UI_COLORS.get(f'status_{status_type}', UI_COLORS['status_error'])
+        self.status_changed.emit(message, color)
+
+    def _on_merge_progress(self, progress: int, message: str):
+        self.app_state.progress_bar_value = progress
+        if message:
+            self.status_changed.emit(message, UI_COLORS['status_info'])
+
     def _prepare_game_files(self, selections: Dict[int, str]) -> bool:
         try:
             if not selections:
@@ -418,8 +498,8 @@ class GameLauncher(QObject):
                 self.status_changed.emit(tr('status.applying_mod', mod_name=mod.name, mod_type=mod_type_str), UI_COLORS['status_warning'])
                 if chapter_id in applied_chapters:
                     continue
-                is_xdelta_mod = self._is_xdelta_mod(mod, source_dir, chapter_id)
-                if not is_xdelta_mod and (not mod.get_chapter_data(chapter_id)) and (not is_local):
+                is_data_patch_mod = self._is_data_patch_mod(mod, source_dir, chapter_id)
+                if not is_data_patch_mod and (not mod.get_chapter_data(chapter_id)) and (not is_local):
                     continue
                 target_dir = self._get_target_dir(chapter_id)
                 if not target_dir:
@@ -438,7 +518,8 @@ class GameLauncher(QObject):
             self.status_changed.emit(tr('errors.file_prep_error', error=str(e)), UI_COLORS['status_error'])
             return False
 
-    def _is_xdelta_mod(self, mod_info, source_dir: str, chapter_id: Optional[int] = None) -> bool:
+    def _is_data_patch_mod(self, mod_info, source_dir: str, chapter_id: Optional[int] = None) -> bool:
+        from config.constants import DATA_FILE_EXTENSIONS
         if chapter_id is not None:
             search_dir = None
             if chapter_id == -1:
@@ -467,7 +548,7 @@ class GameLauncher(QObject):
         if os.path.exists(search_dir):
             for root, _, files in os.walk(search_dir):
                 for file in files:
-                    if file.lower().endswith('.xdelta'):
+                    if file.lower().endswith(DATA_FILE_EXTENSIONS):
                         return True
         return False
 
@@ -479,8 +560,8 @@ class GameLauncher(QObject):
             return False
         self._ensure_backup_attributes()
         self._ensure_session_manifest()
-        is_xdelta_mod = self._is_xdelta_mod(mod_info, source_dir, chapter_id)
-        applied_xdelta_for_this_chapter = False
+        is_data_patch_mod = self._is_data_patch_mod(mod_info, source_dir, chapter_id)
+        applied_data_patch_for_this_chapter = False
         files_copied = 0
         backup_errors = []
         if chapter_id is not None:
@@ -516,7 +597,8 @@ class GameLauncher(QObject):
                 rel_path = os.path.relpath(cache_file_path, mod_source_dir)
                 file_lower = file.lower()
                 target_rel_path = rel_path
-                is_core_data_file = file_lower in ('data.win', 'data.ios', 'game.ios') or (file_lower.endswith('.win') and 'data' in file_lower) or (file_lower.endswith('.ios') and 'game' in file_lower) or (is_xdelta_mod and file_lower.endswith('.xdelta'))
+                from config.constants import DATA_FILE_EXTENSIONS
+                is_core_data_file = file_lower in ('data.win', 'data.ios', 'game.ios') or (file_lower.endswith('.win') and 'data' in file_lower) or (file_lower.endswith('.ios') and 'game' in file_lower) or (is_data_patch_mod and file_lower.endswith(DATA_FILE_EXTENSIONS))
                 if platform.system() == 'Darwin':
                     if is_core_data_file:
                         target_rel_path = os.path.join(os.path.dirname(rel_path), 'game.ios')
@@ -540,16 +622,16 @@ class GameLauncher(QObject):
                         error_msg = f'Failed to update manifest for dir {target_dirname}: {e}'
                         logging.error(f'_create_backup_and_copy_mod_files: {error_msg}', exc_info=True)
                         backup_errors.append(error_msg)
-                    if is_xdelta_mod and file_lower.endswith('.xdelta') and is_core_data_file:
-                        if applied_xdelta_for_this_chapter:
+                    if is_data_patch_mod and file_lower.endswith(DATA_FILE_EXTENSIONS) and is_core_data_file:
+                        if applied_data_patch_for_this_chapter:
                             continue
-                        if not self._apply_xdelta_patch(cache_file_path, game_file_path, target_dir):
+                        if not self._apply_data_patch(cache_file_path, game_file_path, target_dir):
                             self.status_changed.emit(tr('errors.xdelta_apply_error', file=file), UI_COLORS['status_error'])
                             return False
                         files_copied += 1
-                        applied_xdelta_for_this_chapter = True
+                        applied_data_patch_for_this_chapter = True
                         continue
-                    if file_lower.endswith('.xdelta'):
+                    if file_lower.endswith(DATA_FILE_EXTENSIONS):
                         continue
                     if os.path.exists(game_file_path) and game_file_path not in self._backup_files:
                         try:
@@ -640,7 +722,7 @@ class GameLauncher(QObject):
             self.status_changed.emit(tr('status.no_files_to_copy'), UI_COLORS['status_warning'])
         return True
 
-    def _apply_xdelta_patch(self, xdelta_file_path: str, target_game_file_path: str, target_dir: str) -> bool:
+    def _apply_data_patch(self, data_patch_file_path: str, target_game_file_path: str, target_dir: str) -> bool:
         xdelta_exe = get_xdelta_path()
         if not xdelta_exe:
             self.status_changed.emit(tr('errors.xdelta_not_found', path='xdelta'), UI_COLORS['status_error'])
@@ -672,7 +754,7 @@ class GameLauncher(QObject):
             self._backup_files[original_data_file] = backup_file_path
             self._update_session_manifest(backup_files={original_data_file: backup_file_path})
         temp_output = original_data_file + '.tmp'
-        command = ['-d', '-f', '-s', self._backup_files[original_data_file], xdelta_file_path, temp_output]
+        command = ['-d', '-f', '-s', self._backup_files[original_data_file], data_patch_file_path, temp_output]
         try:
             command_to_run = [xdelta_exe] + command
             startupinfo = None
@@ -684,7 +766,7 @@ class GameLauncher(QObject):
                 try:
                     os.replace(temp_output, original_data_file)
                     self._mod_files_to_cleanup.append(original_data_file)
-                    self.status_changed.emit(tr('status.xdelta_patch_applied', patch_name=os.path.basename(xdelta_file_path)), UI_COLORS['status_success'])
+                    self.status_changed.emit(tr('status.xdelta_patch_applied', patch_name=os.path.basename(data_patch_file_path)), UI_COLORS['status_success'])
                     return True
                 finally:
                     try:
@@ -833,6 +915,16 @@ class GameLauncher(QObject):
             return False
 
     def _cleanup_direct_launch_files(self):
+        if hasattr(self, 'multi_mod_merger') and self.multi_mod_merger:
+            try:
+                logging.info('_cleanup_direct_launch_files: restoring multi-mod backups')
+                restored = self.multi_mod_merger.restore_all_backups()
+                if restored:
+                    logging.info('_cleanup_direct_launch_files: multi-mod backups restored successfully')
+                else:
+                    logging.warning('_cleanup_direct_launch_files: no multi-mod backups to restore (this is normal if old method was used)')
+            except Exception as e:
+                logging.error(f'_cleanup_direct_launch_files: failed to restore multi-mod backups: {e}', exc_info=True)
         restore_errors = []
         files_restored = 0
         files_failed = 0
@@ -1124,7 +1216,7 @@ class GameLauncher(QObject):
             logging.error(f'recover_previous_session: {error_msg}', exc_info=True)
             self.feedback_manager.update_status(tr('errors.files_restore_error', error=str(e)), UI_COLORS['status_error'])
 
-    def _find_and_validate_game_path(self, selections: Optional[Dict[int, str]] = None, is_initial: bool = False):
+    def _find_and_validate_game_path(self, selections: Optional[Dict[int, Any]] = None, is_initial: bool = False):
         from utils.game_utils import is_valid_game_path
         from utils.file_utils import autodetect_path
         path_from_config = self._get_current_game_path()
@@ -1154,22 +1246,38 @@ class GameLauncher(QObject):
             self.status_changed.emit(tr('status.no_game_path'), UI_COLORS['status_error'])
         return False
 
-    def _has_mods_with_data_files(self, selections: Dict[int, str]) -> bool:
-        for ui_index, mod_key in selections.items():
-            if mod_key == 'no_change':
+    def _mod_has_data_files_for_chapter(self, mod, chapter_id: int) -> bool:
+        mod_key = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None) or getattr(mod, 'name', None)
+        if not mod_key:
+            return False
+        if mod_key.startswith('local_'):
+            mod_config = self.mod_manager.get_mod_config(mod_key)
+            if mod_config:
+                chapter_files = mod_config.get('files', {}).get(str(chapter_id), {})
+                if chapter_files.get('data_file_url'):
+                    return True
+        else:
+            chapter_data = mod.get_chapter_data(chapter_id)
+            if chapter_data and hasattr(chapter_data, 'data_file_url') and chapter_data.data_file_url:
+                return True
+        return False
+
+    def _has_mods_with_data_files(self, selections: Dict[int, Any]) -> bool:
+        for ui_index, mod_data in selections.items():
+            if isinstance(mod_data, list):
+                if not mod_data:
+                    continue
+                for mod in mod_data:
+                    chapter_id = self.app_state.game_mode.get_chapter_id(ui_index)
+                    if self._mod_has_data_files_for_chapter(mod, chapter_id):
+                        return True
                 continue
-            mod = next((m for m in self.app_state.all_mods if m.key == mod_key), None)
+            if mod_data == 'no_change':
+                continue
+            mod = next((m for m in self.app_state.all_mods if m.key == mod_data), None)
             if not mod:
                 continue
             chapter_id = self.app_state.game_mode.get_chapter_id(ui_index)
-            if mod_key.startswith('local_'):
-                mod_config = self.mod_manager.get_mod_config(mod_key)
-                if mod_config:
-                    chapter_files = mod_config.get('files', {}).get(str(chapter_id), {})
-                    if chapter_files.get('data_file_url'):
-                        return True
-            else:
-                chapter_data = mod.get_chapter_data(chapter_id)
-                if chapter_data and hasattr(chapter_data, 'data_file_url') and chapter_data.data_file_url:
-                    return True
+            if self._mod_has_data_files_for_chapter(mod, chapter_id):
+                return True
         return False

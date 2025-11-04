@@ -2,6 +2,8 @@ from PyQt6.QtCore import QThread
 from managers.localization_manager import tr
 from ui.common.styling import clear_layout_widgets, show_empty_message_in_layout
 from ui.widgets.mod.installed_mod_widget import InstalledModWidget
+from ui.dialogs.mod_priority_dialog import ModPriorityDialog
+from models.game_modes import DemoGameMode, UndertaleGameMode
 from config.constants import SLOT_ID_UNIVERSAL, SLOT_ID_DEMO, SLOT_ID_UNDERTALE, SLOT_ID_MENU, SLOT_ID_CHAPTER_1, SLOT_ID_CHAPTER_2, SLOT_ID_CHAPTER_3, SLOT_ID_CHAPTER_4
 
 
@@ -97,6 +99,7 @@ class LibraryDisplayController:
             chapter_names = {SLOT_ID_UNIVERSAL: tr('ui.mod_slot'), SLOT_ID_MENU: tr('chapters.menu'), SLOT_ID_CHAPTER_1: tr('tabs.chapter_1'), SLOT_ID_CHAPTER_2: tr('tabs.chapter_2'), SLOT_ID_CHAPTER_3: tr('tabs.chapter_3'), SLOT_ID_CHAPTER_4: tr('tabs.chapter_4')}
             chapter_name = chapter_names.get(selected_chapter_id, tr('ui.chapter_n', chapter=str(selected_chapter_id)))
             show_empty_message_in_layout(self.app.installed_mods_layout, tr('ui.no_mods_for_chapter', chapter_name=chapter_name), self.app_state.local_config, font_size=16)
+        self._update_priority_button_visibility(selected_chapter_id)
         self.app._updating_chapter_mods = False
 
     def refresh_async(self):
@@ -331,12 +334,9 @@ class LibraryDisplayController:
             target_chapter_id = SLOT_ID_UNDERTALE
         else:
             target_chapter_id = SLOT_ID_UNIVERSAL
-        is_currently_used = self.slot_manager.is_mod_used_for_chapter(mod_data, target_chapter_id)
-        if is_currently_used:
-            self.slot_manager.set_used_mod(target_chapter_id, None)
-        else:
-            self.slot_manager.set_used_mod(target_chapter_id, mod_data)
+        self.slot_manager.set_used_mod(target_chapter_id, mod_data)
         self.update_mod_widgets_slot_status()
+        self._update_priority_button_visibility()
         if mod_widget:
             mod_widget.set_selected(False)
 
@@ -358,12 +358,9 @@ class LibraryDisplayController:
         if status == 'needs_update':
             self.mod_manager.update_mod(mod_data)
             return
-        is_currently_used = self.slot_manager.is_mod_used_for_chapter(mod_data, chapter_id)
-        if is_currently_used:
-            self.slot_manager.set_used_mod(chapter_id, None)
-        else:
-            self.slot_manager.set_used_mod(chapter_id, mod_data)
+        self.slot_manager.set_used_mod(chapter_id, mod_data)
         self.update_mod_widgets_slot_status()
+        self._update_priority_button_visibility(chapter_id)
         self.update_for_chapter_mode(chapter_id)
 
     def clear_all_selections(self):
@@ -373,3 +370,98 @@ class LibraryDisplayController:
                 widget = item.widget()
                 if isinstance(widget, InstalledModWidget):
                     widget.set_selected(False)
+
+    def _get_current_chapter_id(self):
+        import logging
+        logging.info(f'_get_current_chapter_id: current_mode={self.app_state.current_mode}, game_mode={type(self.app_state.game_mode).__name__}')
+        if self.app_state.current_mode == 'chapter':
+            chapter_id = self.app_state.selected_chapter_id
+            logging.info(f'_get_current_chapter_id: chapter mode, selected_chapter_id={chapter_id}')
+            return chapter_id
+        elif isinstance(self.app_state.game_mode, DemoGameMode):
+            logging.info('_get_current_chapter_id: DemoGameMode, returning SLOT_ID_DEMO')
+            return SLOT_ID_DEMO
+        elif isinstance(self.app_state.game_mode, UndertaleGameMode):
+            logging.info('_get_current_chapter_id: UndertaleGameMode, returning SLOT_ID_UNDERTALE')
+            return SLOT_ID_UNDERTALE
+        else:
+            mods_universal = self.slot_manager.get_used_mods_list(SLOT_ID_UNIVERSAL)
+            logging.info(f'_get_current_chapter_id: SLOT_ID_UNIVERSAL={SLOT_ID_UNIVERSAL} has {(len(mods_universal) if mods_universal else 0)} mods')
+            if mods_universal and len(mods_universal) >= 2:
+                logging.info(f'_get_current_chapter_id: Found {len(mods_universal)} mods for SLOT_ID_UNIVERSAL')
+                return SLOT_ID_UNIVERSAL
+            for chapter_id in range(5):
+                mods_list = self.slot_manager.get_used_mods_list(chapter_id)
+                if mods_list and len(mods_list) >= 2:
+                    logging.info(f'_get_current_chapter_id: Found {len(mods_list)} mods for chapter {chapter_id}')
+                    return chapter_id
+            for slot_id in [SLOT_ID_DEMO, SLOT_ID_UNDERTALE]:
+                mods_list = self.slot_manager.get_used_mods_list(slot_id)
+                logging.info(f'_get_current_chapter_id: slot {slot_id} has {(len(mods_list) if mods_list else 0)} mods')
+                if mods_list and len(mods_list) >= 2:
+                    logging.info(f'_get_current_chapter_id: Found {len(mods_list)} mods for slot {slot_id}')
+                    return slot_id
+            if mods_universal and len(mods_universal) > 0:
+                logging.info(f'_get_current_chapter_id: Found {len(mods_universal)} mods for SLOT_ID_UNIVERSAL (less than 2, but returning anyway)')
+                return SLOT_ID_UNIVERSAL
+            if self.slot_manager.used_mods:
+                logging.debug(f'_get_current_chapter_id: All used_mods keys: {list(self.slot_manager.used_mods.keys())}')
+                for key, mods_list in self.slot_manager.used_mods.items():
+                    logging.debug(f'_get_current_chapter_id: used_mods[{key}] = {(len(mods_list) if mods_list else 0)} mods')
+            logging.debug('_get_current_chapter_id: No chapter with mods found, returning SLOT_ID_UNIVERSAL as fallback')
+            return SLOT_ID_UNIVERSAL
+
+    def _update_priority_button_visibility(self, chapter_id=None):
+        if not hasattr(self.app, 'priority_button'):
+            return
+        if chapter_id is None:
+            chapter_id = self._get_current_chapter_id()
+        if chapter_id is None:
+            self.app.priority_button.setVisible(False)
+            if hasattr(self.app, 'library_tab_builder') and 'priority_button_layout' in self.app.library_tab_builder.widgets:
+                self.app.library_tab_builder.widgets['priority_button_layout'].setContentsMargins(0, 0, 0, 0)
+            return
+        mods_list = self.slot_manager.get_used_mods_list(chapter_id)
+        mod_count = len(mods_list) if mods_list else 0
+        should_show = mod_count >= 2
+        if should_show:
+            self.app.priority_button.setVisible(True)
+            if hasattr(self.app, 'library_tab_builder'):
+                widgets = self.app.library_tab_builder.widgets
+                if 'priority_button_container' in widgets:
+                    widgets['priority_button_container'].setFixedHeight(35 + 20)
+                if 'priority_button_layout' in widgets:
+                    widgets['priority_button_layout'].setContentsMargins(0, 10, 0, 10)
+        else:
+            self.app.priority_button.setVisible(False)
+            if hasattr(self.app, 'library_tab_builder'):
+                widgets = self.app.library_tab_builder.widgets
+                if 'priority_button_container' in widgets:
+                    widgets['priority_button_container'].setFixedHeight(0)
+                if 'priority_button_layout' in widgets:
+                    widgets['priority_button_layout'].setContentsMargins(0, 0, 0, 0)
+
+    def on_priority_button_click(self):
+        if not hasattr(self.app, 'priority_button'):
+            return
+        chapter_id = self._get_current_chapter_id()
+        if chapter_id is None:
+            return
+        mods_list = self.slot_manager.get_used_mods_list(chapter_id)
+        if not mods_list or len(mods_list) < 2:
+            return
+        from PyQt6.QtWidgets import QDialog
+        try:
+            dialog = ModPriorityDialog(mods_list, chapter_id, self.app_state, parent=self.app)
+            if dialog.exec() == QDialog.DialogCode.Accepted:
+                new_order = dialog.get_result()
+                if new_order:
+                    self.slot_manager.set_mods_list(chapter_id, new_order)
+                    if self.app_state.current_mode == 'chapter':
+                        self.update_for_chapter_mode(chapter_id)
+                    else:
+                        self.update_display()
+                    self._update_priority_button_visibility(chapter_id)
+        except Exception as e:
+            import logging
+            logging.error(f'Error opening priority dialog: {e}', exc_info=True)

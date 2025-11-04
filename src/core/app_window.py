@@ -156,6 +156,7 @@ class AppWindow(QWidget):
         self.refresh_controller = RefreshController(self.app_state, self.feedback_manager, self.mod_manager, self.slot_manager, self.game_launch, self.update_checker, self.settings_manager)
         self.mod_manager.mod_list_updated.connect(self.library_display.update_display)
         self.slot_manager.used_mod_changed.connect(lambda chapter_id: self.game_launch.update_button_state())
+        self.slot_manager.used_mod_changed.connect(lambda chapter_id: self.library_display._update_priority_button_visibility(chapter_id) if hasattr(self.library_display, '_update_priority_button_visibility') else None)
         self.slot_manager.action_button_update_needed.connect(self.game_launch.update_button_state)
         self.slot_manager.mod_widgets_update_needed.connect(self.library_display.update_mod_widgets_slot_status)
         self.game_launch.window_hide_requested.connect(self.hide)
@@ -400,9 +401,11 @@ class AppWindow(QWidget):
         self.app_state.library_search_text = ''
         self._previous_mode = 'normal'
         library_builder = LibraryTabBuilder(self.app_state, self)
+        self.library_tab_builder = library_builder
         self.library_tab = library_builder.build()
         library_widgets = library_builder.get_widgets()
         self.library_filters_widget = library_widgets['library_filters_widget']
+        self.import_export_button = library_widgets.get('import_export_button')
         self.game_type_combo = library_widgets['game_type_combo']
         self.chapter_mode_checkbox = library_widgets['chapter_mode_checkbox']
         self.full_install_checkbox = library_widgets['full_install_checkbox']
@@ -413,6 +416,10 @@ class AppWindow(QWidget):
         self.installed_mods_scroll = library_widgets['installed_mods_scroll']
         self.installed_mods_widget = library_widgets['installed_mods_widget']
         self.installed_mods_layout = library_widgets['installed_mods_layout']
+        self.installed_mods_label = library_widgets.get('installed_mods_label')
+        self.priority_button = library_widgets.get('priority_button')
+        if self.priority_button:
+            self.priority_button.clicked.connect(self.library_display.on_priority_button_click)
         self.library_sort_combo = library_widgets['library_sort_combo']
         self.library_sort_order_btn = library_widgets['library_sort_order_btn']
         self.library_tags_label = library_widgets['library_tags_label']
@@ -423,6 +430,10 @@ class AppWindow(QWidget):
         self.library_tag_local = library_widgets['library_tag_local']
         self.library_tag_widgets = library_widgets['library_tag_widgets']
         self.library_search_button = library_widgets['library_search_button']
+        if self.import_export_button:
+            from controllers.mod_import_export_controller import ModImportExportController
+            self.mod_import_export_controller = ModImportExportController(self.app_state, self.mod_manager, self)
+            self.import_export_button.clicked.connect(self.mod_import_export_controller.show_import_export_dialog)
         self.game_type_combo.currentIndexChanged.connect(self.settings_ui.on_game_type_changed)
         self.chapter_mode_checkbox.stateChanged.connect(self.settings_ui.on_chapter_mode_changed)
         self.full_install_checkbox.stateChanged.connect(self._on_toggle_full_install)
@@ -465,8 +476,24 @@ class AppWindow(QWidget):
         self._setup_chapter_tabs()
         if saved_chapter_mode and hasattr(self, '_show_chapter_mode_instruction'):
             QTimer.singleShot(600, self._show_chapter_mode_instruction)
+
+            def update_priority_button():
+                if self.app_state.selected_chapter_id is not None:
+                    self.library_display._update_priority_button_visibility(self.app_state.selected_chapter_id)
+                if hasattr(self, 'chapter_tab_buttons') and self.chapter_tab_buttons:
+                    for btn in self.chapter_tab_buttons:
+                        if btn.isChecked():
+                            chapter_id = getattr(btn, '_chapter_id', None)
+                            if chapter_id is not None:
+                                self.library_display._update_priority_button_visibility(chapter_id)
+                                break
+            QTimer.singleShot(800, update_priority_button)
         elif not saved_chapter_mode:
             QTimer.singleShot(500, self.library_display.update_display)
+
+            def update_priority_button_normal():
+                self.library_display._update_priority_button_visibility()
+            QTimer.singleShot(800, update_priority_button_normal)
         QTimer.singleShot(700, self.library_display.update_mod_widgets_slot_status)
         self.manage_mods_tab = QWidget()
         self.xdelta_patch_tab = QWidget()
@@ -991,9 +1018,12 @@ class AppWindow(QWidget):
             self.custom_executable_path_label.setText(tr('ui.currently_selected', filename=os.path.basename(path)) if path else tr('ui.file_not_selected'))
 
     def _on_slot_manager_used_mods_updated(self):
+        import logging
+        logging.debug('Used mods updated, refreshing UI')
         self.save_ui.refresh_slots()
         if hasattr(self, 'library_display'):
             self.library_display.update_mod_widgets_slot_status()
+            self.library_display._update_priority_button_visibility()
         if self.app_state.current_mode == 'chapter':
             selected_chapter_id = getattr(self.app_state, 'selected_chapter_id', None)
             if selected_chapter_id is not None:
@@ -1011,12 +1041,16 @@ class AppWindow(QWidget):
         self._update_chapter_tabs_style()
 
     def _on_chapter_tab_clicked(self, chapter_id):
+        import logging
+        logging.debug(f'Chapter tab clicked: {chapter_id}')
         from config.constants import SLOT_ID_MENU, SLOT_ID_CHAPTER_1, SLOT_ID_CHAPTER_2, SLOT_ID_CHAPTER_3, SLOT_ID_CHAPTER_4
         chapter_ids = [SLOT_ID_MENU, SLOT_ID_CHAPTER_1, SLOT_ID_CHAPTER_2, SLOT_ID_CHAPTER_3, SLOT_ID_CHAPTER_4]
         for i, btn in enumerate(self.chapter_tab_buttons):
             btn.setChecked(chapter_ids[i] == chapter_id if i < len(chapter_ids) else False)
         self.app_state.selected_chapter_id = chapter_id
         self.library_display.update_display()
+        if hasattr(self.library_display, '_update_priority_button_visibility'):
+            self.library_display._update_priority_button_visibility(chapter_id)
 
     def _update_chapter_tabs_style(self):
         if not hasattr(self, 'chapter_tab_buttons'):
@@ -1083,6 +1117,37 @@ class AppWindow(QWidget):
         self.background_music_button.setText(self.customization_manager.get_background_music_button_text())
         self.startup_sound_button.setText(self.customization_manager.get_startup_sound_button_text())
         self.disable_background_checkbox.setText(tr('checkboxes.disable_background'))
+        if hasattr(self, 'priority_button') and self.priority_button:
+            self.priority_button.setText(tr('ui.priority'))
+        if hasattr(self, 'library_sort_combo') and self.library_sort_combo:
+            self.library_sort_combo.setItemText(0, tr('ui.sort_by_name'))
+            self.library_sort_combo.setItemText(1, tr('ui.sort_by_date'))
+        if hasattr(self, 'library_sort_order_btn') and self.library_sort_order_btn:
+            tooltip_text = tr('ui.ascending') if self.library_sort_ascending else tr('ui.descending')
+            self.library_sort_order_btn.setToolTip(tooltip_text)
+        if hasattr(self, 'library_tags_label') and self.library_tags_label:
+            self.library_tags_label.setText(tr('ui.tags_label'))
+        if hasattr(self, 'library_tag_translation') and self.library_tag_translation:
+            self.library_tag_translation.setText(tr('tags.translation'))
+        if hasattr(self, 'library_tag_customization') and self.library_tag_customization:
+            self.library_tag_customization.setText(tr('tags.customization'))
+        if hasattr(self, 'library_tag_gameplay') and self.library_tag_gameplay:
+            self.library_tag_gameplay.setText(tr('tags.gameplay'))
+        if hasattr(self, 'library_tag_other') and self.library_tag_other:
+            self.library_tag_other.setText(tr('tags.other'))
+        if hasattr(self, 'library_tag_local') and self.library_tag_local:
+            self.library_tag_local.setText(tr('tags.local'))
+        if hasattr(self, 'library_search_button') and self.library_search_button:
+            self.library_search_button.setToolTip(tr('ui.search_placeholder'))
+        if hasattr(self, 'chapter_tab_buttons') and self.chapter_tab_buttons:
+            chapter_tab_names = [tr('chapters.menu'), tr('tabs.chapter_1'), tr('tabs.chapter_2'), tr('tabs.chapter_3'), tr('tabs.chapter_4')]
+            for i, btn in enumerate(self.chapter_tab_buttons):
+                if i < len(chapter_tab_names):
+                    btn.setText(chapter_tab_names[i])
+        if hasattr(self, 'installed_mods_label') and self.installed_mods_label:
+            self.installed_mods_label.setText(tr('ui.installed_mods_label'))
+        if hasattr(self, 'import_export_button') and self.import_export_button:
+            self.import_export_button.setText(tr('ui.import_export_mod'))
         self.disable_splash_checkbox.setText(tr('checkboxes.disable_splash'))
         for key in self.color_widgets.keys():
             if key in self.color_labels:

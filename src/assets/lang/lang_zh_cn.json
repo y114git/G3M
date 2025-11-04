@@ -184,7 +184,15 @@
     "search_tab": "搜索模组",
     "select": "选择",
     "steam_launch": "通过Steam启动",
-    "steam_launch_direct_conflict": "「通过Steam启动」与直接启动不兼容。请先禁用直接启动（双击章节槽位）。"
+    "steam_launch_direct_conflict": "「通过Steam启动」与直接启动不兼容。请先禁用直接启动（双击章节槽位）。",
+    "priority": "优先级",
+    "mod_priority_title": "模组优先级",
+    "mod_priority_info": "重新排序模组以设置其应用优先级。顶部的模组将最后应用（最高优先级）。",
+    "mod_priority_instructions": "拖拽模组以重新排序，或使用向上/向下按钮。高优先级的模组会覆盖低优先级模组的更改。",
+    "move_up": "↑ 向上",
+    "move_down": "↓ 向下",
+    "ok": "确定",
+    "mods_active": "{count} 个模组已激活"
   },
   "files": {
     "archive_link": "压缩文件链接",
@@ -524,9 +532,9 @@
     "permission_error_install": "安装时权限错误：{error}",
     "xdelta_not_found": "在 {path} 未找到xdelta可执行文件",
     "unsupported_archive_format": "不支持的压缩格式。",
-    "deltamod_archive_invalid_redirect": "在DeltaMod压缩文件中发现无效重定向。",
-    "deltamod_conversion_failed": "DeltaMod转换失败。",
-    "deltamod_conversion_failed_url": "从URL转换DeltaMod失败。",
+    "deltamod_archive_invalid_redirect": "在DELTAMOD压缩文件中发现无效重定向。",
+    "deltamod_conversion_failed": "DELTAMOD转换失败。",
+    "deltamod_conversion_failed_url": "从URL转换DELTAMOD失败。",
     "unsupported_mod_format_url": "不支持从URL转换的模组格式。",
     "invalid_url_scheme": "无效的URL方案。应为deltahub://",
     "launch_error": "启动错误：{error}",
@@ -539,7 +547,8 @@
     "update_error": "更新错误",
     "permission_denied": "权限被拒绝：{path}",
     "permission_error": "权限错误：{path}",
-    "xdelta_patch_error": "无法应用xdelta补丁：{error}"
+    "xdelta_patch_error": "无法应用xdelta补丁：{error}",
+    "utmtcli_not_available": "UTMTCLI 不适用于平台：{platform}"
   },
   "status": {
     "shortcut_created": "快捷方式已创建：{path}",
@@ -622,11 +631,20 @@
     "unpacking_mod": "正在解压模组：{mod_name}...",
     "install_complete_success": "成功安装 '{mod_name}'！",
     "beta_updates_enabled": "测试版更新已启用",
-    "deltamod_archive_detected": "检测到DeltaMod压缩文件。",
-    "deltamod_archive_detected_url": "从URL检测到DeltaMod压缩文件。",
-    "deltamod_converted": "DeltaMod转换成功。",
-    "deltamod_detected": "检测到DeltaMod。",
-    "deltamod_redirect_found": "在DeltaMod中发现重定向。"
+    "deltamod_archive_detected": "检测到DELTAMOD压缩文件。",
+    "deltamod_archive_detected_url": "从URL检测到DELTAMOD压缩文件。",
+    "deltamod_converted": "DELTAMOD转换成功。",
+    "deltamod_detected": "检测到DELTAMOD。",
+    "deltamod_redirect_found": "在DELTAMOD中发现重定向。",
+    "preparing_mod_merge": "准备合并 {mods} 个模组用于 {chapters} 章...",
+    "merging_mods": "合并模组... {progress}%",
+    "merging_chapter": "合并第 {chapter} 章 ({current}/{total})...",
+    "chapter_merged": "第 {chapter} 章合并成功",
+    "merge_completed": "模组合并完成",
+    "merge_failed": "模组合并失败",
+    "applying_xdelta": "应用来自 {mod} 的 xdelta 补丁 ({current}/{total})...",
+    "exporting_assets": "从 {mod} 导出资源 ({current}/{total})...",
+    "importing_assets": "从 {mod} 导入资源 ({current}/{total})..."
   },
   "startup": {
     "shortcut_settings_read_error": "启动错误：读取快捷方式设置失败 ({error})",

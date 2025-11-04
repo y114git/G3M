@@ -62,6 +62,12 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential libglib2.0-dev libgl1-mesa-dev patchelf upx zip
+      - name: Install .NET runtime
+        run: |
+          wget https://dot.net/v1/dotnet-install.sh -O dotnet-install.sh
+          chmod +x dotnet-install.sh
+          ./dotnet-install.sh --channel 8.0 --runtime dotnet --install-dir $HOME/.dotnet
+          echo "$HOME/.dotnet" >> $GITHUB_PATH
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -70,6 +76,13 @@ jobs:
         run: |
           python -m pip install -U pip wheel
           pip install -r builds/requirements.txt pyinstaller
+      - name: Download and extract UTMTCLI for Linux
+        run: |
+          mkdir -p src/assets/bin/utmtcli_linux
+          curl -L -o utmtcli_linux.zip "https://github.com/UnderminersTeam/UndertaleModTool/releases/download/bleeding-edge/CLI-ubuntu-latest-Debug-isBundled-true.zip"
+          unzip -q utmtcli_linux.zip -d src/assets/bin/utmtcli_linux
+          rm utmtcli_linux.zip
+          chmod +x src/assets/bin/utmtcli_linux/* 2>/dev/null || true
       - name: Generate secrets_embed.py
         run: |
           python - <<'PY'
@@ -110,6 +123,10 @@ jobs:
           echo "archive_path=${archive_name}.zip" >> $GITHUB_OUTPUT
       - name: Extra tools
         run: brew install upx || true
+      - name: Install .NET runtime
+        run: |
+          brew install --cask dotnet
+          echo "$HOME/.dotnet" >> $GITHUB_PATH || true
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
@@ -117,6 +134,13 @@ jobs:
         run: |
           python -m pip install -U pip wheel
           pip install -r builds/requirements.txt pyinstaller
+      - name: Download and extract UTMTCLI for macOS x64
+        run: |
+          mkdir -p src/assets/bin/utmtcli_macos
+          curl -L -o utmtcli_macos.zip "https://github.com/UnderminersTeam/UndertaleModTool/releases/download/bleeding-edge/CLI-macOS-latest-Debug-isBundled-true.zip"
+          unzip -q utmtcli_macos.zip -d src/assets/bin/utmtcli_macos
+          rm utmtcli_macos.zip
+          chmod +x src/assets/bin/utmtcli_macos/* 2>/dev/null || true
       - name: Generate secrets_embed.py
         run: |
           python - <<'PY'
@@ -153,6 +177,10 @@ jobs:
           echo "archive_path=${archive_name}.zip" >> $GITHUB_OUTPUT
       - name: Extra tools
         run: brew install upx || true
+      - name: Install .NET runtime
+        run: |
+          brew install --cask dotnet
+          echo "$HOME/.dotnet" >> $GITHUB_PATH || true
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
@@ -160,6 +188,13 @@ jobs:
         run: |
           python -m pip install -U pip wheel
           pip install -r builds/requirements.txt pyinstaller
+      - name: Download and extract UTMTCLI for macOS arm64
+        run: |
+          mkdir -p src/assets/bin/utmtcli_macos
+          curl -L -o utmtcli_macos.zip "https://github.com/UnderminersTeam/UndertaleModTool/releases/download/bleeding-edge/CLI-macOS-latest-Debug-isBundled-true.zip"
+          unzip -q utmtcli_macos.zip -d src/assets/bin/utmtcli_macos
+          rm utmtcli_macos.zip
+          chmod +x src/assets/bin/utmtcli_macos/* 2>/dev/null || true
       - name: Generate secrets_embed.py
         run: |
           python - <<'PY'
@@ -208,6 +243,14 @@ jobs:
         run: |
           python -m pip install -U pip wheel
           pip install -r builds/requirements.txt pyinstaller
+      - name: Download and extract UTMTCLI for Windows
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Force -Path "src\assets\bin\utmtcli_windows" | Out-Null
+          $zipPath = "utmtcli_windows.zip"
+          Invoke-WebRequest -Uri "https://github.com/UnderminersTeam/UndertaleModTool/releases/download/bleeding-edge/CLI-windows-latest-Debug-isBundled-true.zip" -OutFile $zipPath
+          Expand-Archive -Path $zipPath -DestinationPath "src\assets\bin\utmtcli_windows" -Force
+          Remove-Item $zipPath
       - name: Generate secrets_embed.py
         shell: powershell
         run: |

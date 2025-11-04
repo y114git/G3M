@@ -7,6 +7,7 @@ from models.game_modes import GameMode, FullGameMode
 
 class AppState(QObject):
     is_installing_changed = pyqtSignal(bool)
+    is_merging_changed = pyqtSignal(bool)
     game_mode_changed = pyqtSignal(object)
     current_mode_changed = pyqtSignal(str)
     selected_chapter_changed = pyqtSignal(object)
@@ -48,6 +49,7 @@ class AppState(QObject):
         self._current_mode: str = 'normal'
         self._selected_chapter_id: Optional[int] = None
         self._is_installing: bool = False
+        self._is_merging: bool = False
         self.update_in_progress: bool = False
         self.initialization_completed: bool = False
         self.is_shown_to_user: bool = False
@@ -83,6 +85,16 @@ class AppState(QObject):
         if self._is_installing != value:
             self._is_installing = value
             self.is_installing_changed.emit(value)
+
+    @property
+    def is_merging(self) -> bool:
+        return self._is_merging
+
+    @is_merging.setter
+    def is_merging(self, value: bool) -> None:
+        if self._is_merging != value:
+            self._is_merging = value
+            self.is_merging_changed.emit(value)
 
     @property
     def game_mode(self) -> GameMode:

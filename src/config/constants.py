@@ -44,3 +44,4 @@ SLOT_ID_CHAPTER_1 = 1
 SLOT_ID_CHAPTER_2 = 2
 SLOT_ID_CHAPTER_3 = 3
 SLOT_ID_CHAPTER_4 = 4
+DATA_FILE_EXTENSIONS = ('.xdelta', '.vcdiff', '.csx', '.win')

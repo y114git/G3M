@@ -737,7 +737,8 @@ class ModEditorDialog(QDialog):
                         potential_name = os.path.basename(unquote(path))
                         if potential_name:
                             filename = potential_name
-                data_extensions = ['.win', '.ios', '.xdelta', '.vcdiff', '.csx']
+                from config.constants import DATA_FILE_EXTENSIONS
+                data_extensions = list(DATA_FILE_EXTENSIONS) + ['.win', '.ios']
                 format_checks = {'icon': (None, 2), 'extra': (['.zip', '.rar', '.7z', '.tar.gz', '.lzma'], float('inf')), 'description': (['.md', '.txt'], 1), 'data': (data_extensions, 200)}
                 if file_type in format_checks:
                     valid_exts, max_size = format_checks[file_type]
@@ -759,7 +760,8 @@ class ModEditorDialog(QDialog):
                         is_valid = False
                     elif file_type == 'data':
                         fn = filename.lower()
-                        correct_ext = fn.endswith(('.win', '.ios', '.xdelta', '.vcdiff', '.csx'))
+                        from config.constants import DATA_FILE_EXTENSIONS
+                        correct_ext = fn.endswith(tuple(DATA_FILE_EXTENSIONS) + ('.win', '.ios'))
                         valid_by_signature = False
                         if first_bytes:
                             if content_type == 'application/octet-stream':
@@ -1229,7 +1231,8 @@ class ModEditorDialog(QDialog):
                             if not (sig_ok or by_ext or by_ct):
                                 pass
                         elif is_data:
-                            looks_like_data = any((x in fext for x in ['.win', '.ios', '.data', '.xdelta', '.vcdiff', '.csx']))
+                            from config.constants import DATA_FILE_EXTENSIONS
+                            looks_like_data = any((x in fext for x in list(DATA_FILE_EXTENSIONS) + ['.win', '.ios', '.data']))
                             if 'text/html' in content_type and (not looks_like_data):
                                 QMessageBox.warning(self, tr('dialogs.validation_error'), tr('errors.not_a_valid_file'))
                                 return False

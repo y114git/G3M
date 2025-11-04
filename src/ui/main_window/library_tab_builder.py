@@ -32,6 +32,10 @@ class LibraryTabBuilder:
         layout.addWidget(library_filters_widget)
         controls_layout = QHBoxLayout()
         controls_layout.addStretch()
+        import_export_button = QPushButton(tr('ui.import_export_mod'))
+        import_export_button.setObjectName('import_export_button')
+        controls_layout.addWidget(import_export_button)
+        controls_layout.addSpacing(20)
         game_type_combo = QComboBox()
         game_type_combo.addItem('DELTARUNE', 'deltarune')
         game_type_combo.addItem('DELTARUNE DEMO', 'deltarunedemo')
@@ -44,6 +48,9 @@ class LibraryTabBuilder:
         controls_layout.addWidget(full_install_checkbox)
         controls_layout.addStretch()
         layout.addLayout(controls_layout)
+        border_color = get_theme_color(self.app_state.local_config, 'border', 'white')
+        button_color = get_theme_color(self.app_state.local_config, 'button', 'black')
+        hover_color = get_theme_color(self.app_state.local_config, 'button_hover', '#333')
         chapter_tabs_widget = QWidget()
         chapter_tabs_widget.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
         chapter_tabs_layout = QHBoxLayout(chapter_tabs_widget)
@@ -54,9 +61,6 @@ class LibraryTabBuilder:
         chapter_tabs_widget.setObjectName('chapter_tabs_container')
         chapter_tab_names = [tr('chapters.menu'), tr('tabs.chapter_1'), tr('tabs.chapter_2'), tr('tabs.chapter_3'), tr('tabs.chapter_4')]
         chapter_tab_buttons = []
-        border_color = get_theme_color(self.app_state.local_config, 'border', 'white')
-        button_color = get_theme_color(self.app_state.local_config, 'button', 'black')
-        hover_color = get_theme_color(self.app_state.local_config, 'button_hover', '#333')
         for i, chapter_name in enumerate(chapter_tab_names):
             chapter_btn = QPushButton(chapter_name)
             chapter_btn.setCheckable(True)
@@ -69,6 +73,23 @@ class LibraryTabBuilder:
         chapter_tabs_layout.addStretch()
         chapter_tabs_widget.setVisible(False)
         layout.addWidget(chapter_tabs_widget)
+        priority_button = QPushButton(tr('ui.priority'))
+        priority_button.setObjectName('priority_button')
+        priority_button.setVisible(False)
+        priority_button.setFixedSize(175, 35)
+        self._update_priority_button_style(priority_button, button_color, border_color, hover_color)
+        priority_button_container = QWidget()
+        priority_button_container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
+        priority_button_layout = QHBoxLayout(priority_button_container)
+        priority_button_layout.setContentsMargins(0, 0, 0, 0)
+        priority_button_layout.setSpacing(0)
+        priority_button_layout.addStretch()
+        priority_button_layout.addWidget(priority_button)
+        priority_button_layout.addStretch()
+        priority_button_container.setFixedHeight(0)
+        layout.addWidget(priority_button_container)
+        self.widgets['priority_button_layout'] = priority_button_layout
+        self.widgets['priority_button_container'] = priority_button_container
         installed_mods_container = QWidget()
         installed_mods_container.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
         installed_mods_container.setObjectName('mods_background')
@@ -79,6 +100,7 @@ class LibraryTabBuilder:
         installed_mods_label.setStyleSheet('font-weight: bold; font-size: 16px;')
         installed_mods_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         mods_container_layout.addWidget(installed_mods_label)
+        self.widgets['installed_mods_label'] = installed_mods_label
         installed_mods_scroll = QScrollArea()
         installed_mods_scroll.setWidgetResizable(True)
         installed_mods_scroll.setFrameShape(QFrame.Shape.NoFrame)
@@ -116,6 +138,7 @@ class LibraryTabBuilder:
         except Exception:
             pass
         self.widgets['library_filters_widget'] = library_filters_widget
+        self.widgets['import_export_button'] = import_export_button
         self.widgets['game_type_combo'] = game_type_combo
         self.widgets['chapter_mode_checkbox'] = chapter_mode_checkbox
         self.widgets['full_install_checkbox'] = full_install_checkbox
@@ -126,6 +149,8 @@ class LibraryTabBuilder:
         self.widgets['installed_mods_scroll'] = installed_mods_scroll
         self.widgets['installed_mods_widget'] = installed_mods_widget
         self.widgets['installed_mods_layout'] = installed_mods_layout
+        self.widgets['priority_button'] = priority_button
+        self.widgets['priority_button_layout'] = priority_button_layout
         return widget
 
     def _create_library_filters_widget(self) -> QFrame:
@@ -174,6 +199,17 @@ class LibraryTabBuilder:
         self.widgets['library_tag_widgets'] = library_tag_widgets
         self.widgets['library_search_button'] = library_search_button
         return filters_widget
+
+    def _update_priority_button_style(self, button, button_color, border_color, hover_color):
+        button.setStyleSheet(f'\n            QPushButton#priority_button {{\n                background-color: {button_color};\n                border: 2px solid {border_color};\n                color: white;\n                font-weight: bold;\n                font-size: 13px;\n                border-radius: 0px;\n                padding: 5px;\n            }}\n            QPushButton#priority_button:hover {{\n                background-color: {hover_color};\n            }}\n        ')
+
+    def update_priority_button_style(self):
+        if 'priority_button' in self.widgets:
+            button = self.widgets['priority_button']
+            border_color = get_theme_color(self.app_state.local_config, 'border', 'white')
+            button_color = get_theme_color(self.app_state.local_config, 'button', 'black')
+            hover_color = get_theme_color(self.app_state.local_config, 'button_hover', '#333')
+            self._update_priority_button_style(button, button_color, border_color, hover_color)
 
     def get_widgets(self) -> Dict[str, Any]:
         return self.widgets

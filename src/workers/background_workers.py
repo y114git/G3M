@@ -367,7 +367,8 @@ class InstallModsThread(QThread):
             session = get_session()
         parsed_url = urlparse(url)
         filename = unquote(os.path.basename(parsed_url.path))
-        if not filename.endswith('.xdelta'):
+        from config.constants import DATA_FILE_EXTENSIONS
+        if not filename.lower().endswith(DATA_FILE_EXTENSIONS):
             import platform
             if platform.system() == 'Darwin':
                 filename = 'game.ios.xdelta'
@@ -559,7 +560,8 @@ class InstallModsThread(QThread):
                 self._installed_dirs.append(cache_dir)
                 chapter_data = mod.get_chapter_data(chapter_id)
                 is_data_file = chapter_data and url and (chapter_data.data_file_url == url)
-                is_xdelta = url.lower().endswith(('.xdelta', '.vcdiff', '.csx')) if url else False
+                from config.constants import DATA_FILE_EXTENSIONS
+                is_xdelta = url.lower().endswith(DATA_FILE_EXTENSIONS) if url else False
                 try:
                     if is_data_file:
                         if is_xdelta:
