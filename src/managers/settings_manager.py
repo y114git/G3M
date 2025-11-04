@@ -86,7 +86,7 @@ class SettingsManager(QObject):
 
     def migrate_config_if_needed(self):
         self.app_state.local_config['cache_format_version'] = LAUNCHER_VERSION
-        defaults = {'game_path': '', 'last_selected': {}, 'use_custom_executable': False, 'demo_game_path': '', 'launch_via_steam': False, 'direct_launch_slot_id': SLOT_ID_UNIVERSAL, 'demo_mode_enabled': False, 'chapter_mode_enabled': False, 'custom_background_path': '', 'custom_executable_path': '', 'background_disabled': False, 'custom_color_background': '', 'custom_color_button': '', 'custom_color_border': '', 'custom_color_button_hover': '', 'custom_color_text': '', 'mods_dir_path': '', 'custom_color_version_text': '', 'beta_updates_enabled': False}
+        defaults = {'game_path': '', 'last_selected': {}, 'use_custom_executable': False, 'demo_game_path': '', 'launch_via_steam': False, 'direct_launch_slot_id': SLOT_ID_UNIVERSAL, 'demo_mode_enabled': False, 'chapter_mode_enabled': False, 'custom_background_path': '', 'custom_executable_path': '', 'background_disabled': False, 'custom_color_background': '', 'custom_color_button': '', 'custom_color_border': '', 'custom_color_button_hover': '', 'custom_color_text': '', 'custom_color_version_text': '', 'beta_updates_enabled': False}
         for key, value in defaults.items():
             self.app_state.local_config.setdefault(key, value)
         self.write_local_config()
@@ -188,30 +188,6 @@ class SettingsManager(QObject):
             else:
                 self.feedback_manager.show_warning('dialogs.invalid_folder', tr('dialogs.invalid_game_folder'))
         return False
-
-    def prompt_for_mods_dir(self):
-        current_mods_dir = self.app_state.mods_dir
-        new_parent_dir = QFileDialog.getExistingDirectory(self.parent_widget, tr('ui.select_new_mods_folder'), os.path.dirname(current_mods_dir))
-        if not new_parent_dir or os.path.dirname(current_mods_dir) == new_parent_dir:
-            return
-        new_mods_dir = os.path.join(new_parent_dir, 'mods')
-        if os.path.exists(new_mods_dir):
-            self.feedback_manager.show_error('errors.mods_folder_exists', dir=new_parent_dir)
-            return
-        try:
-            self.feedback_manager.update_status(tr('status.moving_mods_folder'), UI_COLORS['status_warning'])
-            QApplication.processEvents()
-            shutil.move(current_mods_dir, new_mods_dir)
-            self.app_state.mods_dir = new_mods_dir
-            self.app_state.local_config['mods_dir_path'] = new_parent_dir
-            self.write_local_config()
-            self.feedback_manager.show_info('dialogs.success', tr('dialogs.mods_folder_moved', path=new_mods_dir))
-            self.feedback_manager.update_status(tr('status.mods_folder_location_changed'), UI_COLORS['status_success'])
-            self.settings_changed.emit()
-        except Exception as e:
-            self.feedback_manager.show_error('dialogs.mods_folder_move_failed', error=str(e))
-            self.app_state.mods_dir = current_mods_dir
-            self.feedback_manager.update_status(tr('status.mods_folder_change_error'), UI_COLORS['status_error'])
 
     def on_background_button_click(self):
         if self.app_state.local_config.get('custom_background_path'):

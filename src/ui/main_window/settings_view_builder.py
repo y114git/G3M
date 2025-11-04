@@ -106,10 +106,6 @@ class SettingsViewBuilder:
         change_path_button = QPushButton()
         change_path_button.setFixedWidth(300)
         settings_center_container.addWidget(change_path_button, alignment=Qt.AlignmentFlag.AlignHCenter)
-        change_mods_dir_button = QPushButton(tr('ui.change_mods_dir'))
-        change_mods_dir_button.setFixedWidth(400)
-        change_mods_dir_button.setToolTip(tr('tooltips.change_mods_dir'))
-        settings_center_container.addWidget(change_mods_dir_button, alignment=Qt.AlignmentFlag.AlignHCenter)
         customization_button = QPushButton(tr('tags.customization'))
         customization_button.setFixedWidth(200)
         reset_button = QPushButton(tr('buttons.reset_settings'))
@@ -134,7 +130,6 @@ class SettingsViewBuilder:
         self.widgets['custom_executable_path_label'] = custom_executable_path_label
         self.widgets['custom_exe_frame'] = custom_exe_frame
         self.widgets['change_path_button'] = change_path_button
-        self.widgets['change_mods_dir_button'] = change_mods_dir_button
         self.widgets['customization_button'] = customization_button
         self.widgets['settings_customization_button'] = customization_button
         self.widgets['reset_button'] = reset_button

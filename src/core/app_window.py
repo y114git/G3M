@@ -500,7 +500,6 @@ class AppWindow(QWidget):
         self.custom_executable_path_label = settings_widgets['custom_executable_path_label']
         self.custom_exe_frame = settings_widgets['custom_exe_frame']
         self.change_path_button = settings_widgets['change_path_button']
-        self.change_mods_dir_button = settings_widgets['change_mods_dir_button']
         self.customization_button = settings_widgets['customization_button']
         self.settings_customization_button = settings_widgets['settings_customization_button']
         self.reset_button = settings_widgets['reset_button']
@@ -527,7 +526,6 @@ class AppWindow(QWidget):
         self.use_custom_executable_checkbox.stateChanged.connect(self.settings_ui.on_toggle_custom_executable)
         self.select_custom_executable_button.clicked.connect(self._select_custom_executable_file)
         self.change_path_button.clicked.connect(self._prompt_for_game_path)
-        self.change_mods_dir_button.clicked.connect(self.settings_manager.prompt_for_mods_dir)
         self.customization_button.clicked.connect(lambda: self._switch_settings_page(self.settings_customization_page))
         self.reset_button.clicked.connect(self.settings_ui.reset_settings)
         self.disable_background_checkbox.stateChanged.connect(self.settings_ui.on_toggle_disable_background)
@@ -1078,8 +1076,6 @@ class AppWindow(QWidget):
         self.use_custom_executable_checkbox.setToolTip("<html><body style='white-space: normal;'>" + tr('tooltips.custom_exe') + '</body></html>')
         self.select_custom_executable_button.setText(tr('buttons.select_file'))
         self._update_change_path_button_text()
-        self.change_mods_dir_button.setText(tr('ui.change_mods_dir'))
-        self.change_mods_dir_button.setToolTip(tr('tooltips.change_mods_dir'))
         self.customization_button.setText(tr('tags.customization'))
         self.reset_button.setText(tr('buttons.reset_settings'))
         self.back_button_cust.setText(tr('ui.back_button'))
