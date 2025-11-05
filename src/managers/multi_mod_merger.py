@@ -153,9 +153,10 @@ class MultiModMerger(QObject):
         xdelta_combiner_dir = os.path.join(output_dir, 'xDeltaCombiner', chapter_str)
         vanilla_dir = os.path.join(xdelta_combiner_dir, '0')
         os.makedirs(vanilla_dir, exist_ok=True)
-        vanilla_data_win = os.path.join(vanilla_dir, 'data.win')
+        original_filename = os.path.basename(original_data_win)
+        vanilla_data_win = os.path.join(vanilla_dir, original_filename)
         shutil.copy2(original_data_win, vanilla_data_win)
-        logging.info(f'Created vanilla copy at {vanilla_data_win}')
+        logging.info(f'Created vanilla copy at {vanilla_data_win} (from {original_data_win})')
         max_mods = len(mods_list) + 2
         for mod_num in range(max_mods):
             mod_dir = os.path.join(xdelta_combiner_dir, str(mod_num))
@@ -211,8 +212,10 @@ class MultiModMerger(QObject):
             mod_types[mod_number] = mod_type
             mod_dir = os.path.join(xdelta_combiner_dir, str(mod_number))
             os.makedirs(mod_dir, exist_ok=True)
-            mod_data_win = os.path.join(mod_dir, 'data.win')
+            original_filename = os.path.basename(original_data_win)
+            mod_data_win = os.path.join(mod_dir, original_filename)
             shutil.copy2(original_data_win, mod_data_win)
+            logging.debug(f'Copied {original_data_win} to {mod_data_win} for mod {mod_number}')
             ready_data_win_files = self._find_ready_data_win_files(mod_source_dir)
             data_patches = self._find_data_patches(mod_source_dir)
             csx_scripts = self._find_csx_scripts(mod_source_dir)
@@ -276,7 +279,8 @@ class MultiModMerger(QObject):
         base_mod_dir = os.path.join(xdelta_combiner_dir, str(base_mod_number))
         base_data_win = mod_patched_files.get(base_mod_number)
         if not base_data_win:
-            base_data_win = os.path.join(base_mod_dir, 'data.win')
+            original_filename = os.path.basename(original_data_win)
+            base_data_win = os.path.join(base_mod_dir, original_filename)
             os.makedirs(base_mod_dir, exist_ok=True)
             shutil.copy2(original_data_win, base_data_win)
             mod_patched_files[base_mod_number] = base_data_win
@@ -1171,7 +1175,8 @@ class MultiModMerger(QObject):
                 previous_mod_number = mod_number - 1
                 if previous_mod_number >= 1 and os.path.exists(vanilla_file):
                     previous_mod_dir = os.path.join(xdelta_combiner_dir, str(previous_mod_number))
-                    previous_mod_data_win = os.path.join(previous_mod_dir, 'data.win')
+                    vanilla_filename = os.path.basename(vanilla_file)
+                    previous_mod_data_win = os.path.join(previous_mod_dir, vanilla_filename)
                     if os.path.exists(previous_mod_data_win):
                         vanilla_backup = vanilla_file + '.backup'
                         if os.path.exists(vanilla_backup):

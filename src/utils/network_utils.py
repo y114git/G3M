@@ -49,10 +49,10 @@ def sanitize_log_message(message: str) -> str:
     urls = re.findall('https?://[^\\s\\)\\]\\}\\\'\\"\\;\\,]+', msg)
     for url in urls:
         msg = msg.replace(url, mask_url(url))
-    domain_patterns = re.findall('[a-zA-Z0-9.-]+\\.(cloudfunctions|net|com|org|io|cloud)[^\\s\\)\\]\\}\\\'\\"]*', msg)
+    domain_patterns = re.findall('(?:^|[^\\w.-])([a-zA-Z0-9][a-zA-Z0-9.-]*\\.(?:cloudfunctions|net|com|org|io|cloud))(?=[^\\w.-]|$)', msg)
     for domain_match in domain_patterns:
-        if '://' not in domain_match:
-            msg = msg.replace(domain_match, '[HIDDEN_DOMAIN]')
+        if '.' in domain_match and domain_match.count('.') >= 1:
+            msg = re.sub(re.escape(domain_match), '[HIDDEN_DOMAIN]', msg)
     return msg
 
 
