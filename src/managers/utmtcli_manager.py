@@ -71,6 +71,7 @@ class UTMTCLIManager:
             command = [self.utmtcli_exe] + args
         else:
             command = ['dotnet', self.utmtcli_exe] + args
+        command = [str(cmd) for cmd in command if cmd is not None]
         logging.info(f"Executing UTMTCLI command: {' '.join(command)} (cwd={cwd}, timeout={timeout}s)")
         try:
             startupinfo = None

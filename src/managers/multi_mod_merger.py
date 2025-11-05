@@ -661,6 +661,7 @@ class MultiModMerger(QObject):
                 temp_renamed_source = None
                 source_file_for_patch = data_win_path
                 is_macos_with_ios = platform.system() == 'Darwin' and data_win_path.endswith('game.ios')
+                strategy_success = False
                 if is_macos_with_ios:
                     logging.info('[_apply_xdelta_patches] macOS detected with game.ios - will try multiple strategies if patch fails')
                     logging.info('[_apply_xdelta_patches] Strategy 1: Apply patch directly to game.ios')
@@ -702,11 +703,13 @@ class MultiModMerger(QObject):
                         logging.info(f'[_apply_xdelta_patches] Strategy 2 return code: {result.returncode}')
                         logging.info(f"[_apply_xdelta_patches] Strategy 2 stdout: {(result.stdout[:500] if result.stdout else '(empty)')}")
                         logging.info(f"[_apply_xdelta_patches] Strategy 2 stderr: {(result.stderr[:500] if result.stderr else '(empty)')}")
+                        strategy_success = False
                         if result.returncode == 0:
                             logging.info('[_apply_xdelta_patches] Strategy 2 succeeded! Patch applied with data.win rename')
                             if os.path.exists(temp_output):
                                 output_size = os.path.getsize(temp_output)
                                 logging.info(f'[_apply_xdelta_patches] Patched file created: {temp_output} (size: {output_size} bytes)')
+                            strategy_success = True
                         else:
                             logging.info('[_apply_xdelta_patches] Strategy 2 failed, trying Strategy 3: Using -f (force) flag')
                             cmd_retry_force = [self.xdelta_path, '-d', '-f', '-s', temp_renamed_source, patch_path, temp_output]
@@ -717,17 +720,61 @@ class MultiModMerger(QObject):
                             logging.info(f"[_apply_xdelta_patches] Strategy 3 stderr: {(result.stderr[:500] if result.stderr else '(empty)')}")
                             if result.returncode == 0:
                                 logging.info('[_apply_xdelta_patches] Strategy 3 succeeded! Patch applied with -f flag')
+                                strategy_success = True
                             else:
-                                logging.error('[_apply_xdelta_patches] All strategies failed - patch may be incompatible')
-                                logging.error('[_apply_xdelta_patches] Possible causes:')
-                                logging.error('  1. Patch was created for a different version of the game file')
-                                logging.error('  2. Patch was created for Windows data.win and macOS game.ios differs')
-                                logging.error('  3. File corruption or incompatibility between platforms')
-                                logging.error(f'[_apply_xdelta_patches] Input file: {data_win_path} (size: {input_size} bytes)')
-                                logging.error(f'[_apply_xdelta_patches] Patch file: {patch_path} (size: {patch_size} bytes)')
+                                logging.info('[_apply_xdelta_patches] Strategy 3 failed, trying Strategy 4: Using larger buffer size (-B 67108864)')
+                                cmd_retry_buffer = [self.xdelta_path, '-d', '-B', '67108864', '-s', temp_renamed_source, patch_path, temp_output]
+                                logging.info(f"[_apply_xdelta_patches] Strategy 4 command: {' '.join(cmd_retry_buffer)}")
+                                result = subprocess.run(cmd_retry_buffer, capture_output=True, text=True, timeout=300, stdin=subprocess.DEVNULL, startupinfo=startupinfo, creationflags=creationflags)
+                                logging.info(f'[_apply_xdelta_patches] Strategy 4 return code: {result.returncode}')
+                                logging.info(f"[_apply_xdelta_patches] Strategy 4 stdout: {(result.stdout[:500] if result.stdout else '(empty)')}")
+                                logging.info(f"[_apply_xdelta_patches] Strategy 4 stderr: {(result.stderr[:500] if result.stderr else '(empty)')}")
+                                if result.returncode == 0:
+                                    logging.info('[_apply_xdelta_patches] Strategy 4 succeeded! Patch applied with larger buffer size')
+                                    strategy_success = True
+                                else:
+                                    logging.info('[_apply_xdelta_patches] Strategy 4 failed, trying Strategy 5: Using -v (verbose) flag for better diagnostics')
+                                    cmd_retry_verbose = [self.xdelta_path, '-d', '-v', '-f', '-s', temp_renamed_source, patch_path, temp_output]
+                                    logging.info(f"[_apply_xdelta_patches] Strategy 5 command: {' '.join(cmd_retry_verbose)}")
+                                    result = subprocess.run(cmd_retry_verbose, capture_output=True, text=True, timeout=300, stdin=subprocess.DEVNULL, startupinfo=startupinfo, creationflags=creationflags)
+                                    logging.info(f'[_apply_xdelta_patches] Strategy 5 return code: {result.returncode}')
+                                    logging.info(f"[_apply_xdelta_patches] Strategy 5 stdout: {(result.stdout[:500] if result.stdout else '(empty)')}")
+                                    logging.info(f"[_apply_xdelta_patches] Strategy 5 stderr: {(result.stderr[:500] if result.stderr else '(empty)')}")
+                                    if result.returncode == 0:
+                                        logging.info('[_apply_xdelta_patches] Strategy 5 succeeded! Patch applied with verbose flag')
+                                        strategy_success = True
+                                    else:
+                                        try:
+                                            import hashlib
+                                            with open(data_win_path, 'rb') as f:
+                                                sha1_hash = hashlib.sha1()
+                                                sha256_hash = hashlib.sha256()
+                                                chunk_size = 8192
+                                                while (chunk := f.read(chunk_size)):
+                                                    sha1_hash.update(chunk)
+                                                    sha256_hash.update(chunk)
+                                                file_sha1 = sha1_hash.hexdigest()
+                                                file_sha256 = sha256_hash.hexdigest()
+                                                logging.info(f'[_apply_xdelta_patches] Input file SHA1: {file_sha1}')
+                                                logging.info(f'[_apply_xdelta_patches] Input file SHA256: {file_sha256[:64]}...')
+                                        except Exception as e:
+                                            logging.warning(f'[_apply_xdelta_patches] Could not calculate SHA hashes: {e}')
+                                        logging.error('[_apply_xdelta_patches] All strategies failed - patch may be incompatible')
+                                        logging.error('[_apply_xdelta_patches] Possible causes:')
+                                        logging.error('  1. Patch was created for a different version of the game file')
+                                        logging.error('  2. Patch was created for Windows data.win and macOS game.ios differs')
+                                        logging.error('  3. File corruption or incompatibility between platforms')
+                                        logging.error('  4. Patch requires a specific version/build of data.win that differs from game.ios')
+                                        logging.error(f"[_apply_xdelta_patches] Input file: {data_win_path} (size: {input_size} bytes, MD5: {(file_md5 if 'file_md5' in locals() else 'N/A')})")
+                                        logging.error(f"[_apply_xdelta_patches] Patch file: {patch_path} (size: {patch_size} bytes, MD5: {(patch_md5 if 'patch_md5' in locals() else 'N/A')})")
+                                        strategy_success = False
                         if temp_renamed_source and os.path.exists(temp_renamed_source):
                             os.remove(temp_renamed_source)
                             logging.info(f'[_apply_xdelta_patches] Removed temporary data.win: {temp_renamed_source}')
+                        if strategy_success:
+                            logging.info('[_apply_xdelta_patches] One of the retry strategies succeeded, continuing with patch application')
+                        else:
+                            logging.error('[_apply_xdelta_patches] All retry strategies failed')
                     except Exception as e:
                         logging.error(f'[_apply_xdelta_patches] Error during retry strategies: {e}', exc_info=True)
                         if temp_renamed_source and os.path.exists(temp_renamed_source):
@@ -735,7 +782,11 @@ class MultiModMerger(QObject):
                                 os.remove(temp_renamed_source)
                             except Exception:
                                 pass
-                if result.returncode != 0:
+                        strategy_success = False
+                strategy_succeeded = False
+                if is_macos_with_ios and 'strategy_success' in locals():
+                    strategy_succeeded = strategy_success
+                if result.returncode != 0 and (not strategy_succeeded):
                     logging.error(f'[_apply_xdelta_patches] xdelta patch failed with return code {result.returncode}')
                     logging.error(f'[_apply_xdelta_patches] Full stdout: {result.stdout}')
                     logging.error(f'[_apply_xdelta_patches] Full stderr: {result.stderr}')
