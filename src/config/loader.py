@@ -67,8 +67,4 @@ def get_config_value(key: str, default: str = '') -> str:
     return _config_loader.get(key, default)
 
 
-def reload_configuration() -> None:
-    _config_loader.reload()
-
-
 load_configuration()

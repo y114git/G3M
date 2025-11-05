@@ -103,8 +103,7 @@ class InstalledModWidget(BaseModWidget):
     def _mod_needs_update(self):
         if not self.parent_app or self.is_local:
             return False
-        needs_update = any((self.parent_app.mod_manager.mod_has_files_for_chapter(self.mod_data, i) and self.parent_app.mod_manager.get_mod_status(self.mod_data, i) == 'update' for i in range(5)))
-        return needs_update
+        return self.parent_app.mod_manager.mod_has_update_available(self.mod_data)
 
     def _update_button_from_status(self):
         if not self.use_button:

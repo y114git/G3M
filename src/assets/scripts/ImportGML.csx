@@ -28,10 +28,45 @@ string CorrectCodeEntryName(string filename)
 }
 
 // Check code directory.
-string chapterNo = File.ReadAllText(@Convert.ToString(Directory.GetParent(Convert.ToString(Directory.GetParent(Convert.ToString(Assembly.GetEntryAssembly().Location)))) + "/output/Cache/running/chapterNumber.txt"));
-string importFolder = @Convert.ToString(Directory.GetParent(Convert.ToString(Directory.GetParent(Convert.ToString(Assembly.GetEntryAssembly().Location)))) + "/output/xDeltaCombiner/"+chapterNo+"/1/Objects/CodeEntries");
-if (importFolder == null)
-    throw new ScriptException("The import folder was not set.");
+// Try to find GM3P root (same approach as ExportModifiedOnly.csx)
+string gm3pRoot = null;
+{
+    // Method 1: Check current working directory
+    var probe = new DirectoryInfo(Directory.GetCurrentDirectory());
+    while (probe != null)
+    {
+        if (Directory.Exists(Path.Combine(probe.FullName, "output"))) { gm3pRoot = probe.FullName; break; }
+        probe = probe.Parent;
+    }
+    // Method 2: Try data.win location (FilePath)
+    if (gm3pRoot == null && !string.IsNullOrEmpty(FilePath))
+    {
+        var dataWinDir = new DirectoryInfo(Path.GetDirectoryName(FilePath));
+        probe = dataWinDir;
+        while (probe != null)
+        {
+            if (Directory.Exists(Path.Combine(probe.FullName, "output"))) { gm3pRoot = probe.FullName; break; }
+            probe = probe.Parent;
+        }
+    }
+    // Method 3: Fallback to Assembly location (original behavior)
+    if (gm3pRoot == null)
+    {
+        var assemblyRoot = Directory.GetParent(Directory.GetParent(Assembly.GetEntryAssembly().Location));
+        if (assemblyRoot != null && Directory.Exists(Path.Combine(assemblyRoot.FullName, "output")))
+        {
+            gm3pRoot = assemblyRoot.FullName;
+        }
+    }
+}
+
+if (gm3pRoot == null)
+    throw new ScriptException("GM3P root not found (no /output ancestor).");
+
+string chapterNo = File.ReadAllText(Path.Combine(gm3pRoot, "output", "Cache", "running", "chapterNumber.txt"));
+string importFolder = Path.Combine(gm3pRoot, "output", "xDeltaCombiner", chapterNo, "1", "Objects", "CodeEntries");
+if (importFolder == null || !Directory.Exists(importFolder))
+    throw new ScriptException("The import folder was not set or does not exist: " + importFolder);
 
 string[] dirFiles = Directory.GetFiles(@importFolder);
 if (dirFiles.Length != 0){

@@ -48,8 +48,10 @@ class ModManager(QObject):
         self._scan_thread: Optional[ModScanThread] = None
         self._scan_in_progress = False
 
-    def _scan_mods_directory(self) -> Dict[str, ModFolderInfo]:
+    def _scan_mods_directory(self, old_cache: Dict[str, ModFolderInfo] = None) -> Dict[str, ModFolderInfo]:
         cache: Dict[str, ModFolderInfo] = {}
+        if old_cache is None:
+            old_cache = {}
         if not os.path.exists(self.app_state.mods_dir):
             return cache
         try:
@@ -64,22 +66,31 @@ class ModManager(QObject):
                         continue
                     try:
                         config_mtime = os.path.getmtime(config_path)
-                        with open(config_path, 'r', encoding='utf-8') as f:
-                            config_data = json.load(f)
-                        mod_key = config_data.get('mod_key')
-                        if not mod_key:
-                            continue
-                        if mod_key in cache:
-                            existing_info = cache[mod_key]
-                            if config_mtime <= existing_info.config_mtime:
+                        mod_key = None
+                        for old_key, old_info in old_cache.items():
+                            if old_info.folder_path == folder_path:
+                                mod_key = old_key
+                                if config_mtime <= old_info.config_mtime:
+                                    cache[mod_key] = old_info
+                                    mod_name = old_info.config_data.get('name', '')
+                                    if mod_name:
+                                        if not hasattr(self, '_temp_mods_by_name'):
+                                            self._temp_mods_by_name = {}
+                                        self._temp_mods_by_name[mod_name.lower()] = mod_key
+                                break
+                        if mod_key is None or mod_key not in cache:
+                            with open(config_path, 'r', encoding='utf-8') as f:
+                                config_data = json.load(f)
+                            mod_key = config_data.get('mod_key')
+                            if not mod_key:
                                 continue
-                        mod_info = ModFolderInfo(mod_key=mod_key, folder_path=folder_path, folder_name=folder_name, config_data=config_data, config_mtime=config_mtime)
-                        cache[mod_key] = mod_info
-                        mod_name = config_data.get('name', '')
-                        if mod_name:
-                            if not hasattr(self, '_temp_mods_by_name'):
-                                self._temp_mods_by_name = {}
-                            self._temp_mods_by_name[mod_name.lower()] = mod_key
+                            mod_info = ModFolderInfo(mod_key=mod_key, folder_path=folder_path, folder_name=folder_name, config_data=config_data, config_mtime=config_mtime)
+                            cache[mod_key] = mod_info
+                            mod_name = config_data.get('name', '')
+                            if mod_name:
+                                if not hasattr(self, '_temp_mods_by_name'):
+                                    self._temp_mods_by_name = {}
+                                self._temp_mods_by_name[mod_name.lower()] = mod_key
                     except OSError as e:
                         logging.warning(f'_scan_mods_directory: failed to access config {config_path}: {e}', exc_info=True, extra={'mod_folder': folder_name, 'config_path': config_path})
                         continue
@@ -128,7 +139,7 @@ class ModManager(QObject):
                     self._scan_thread.start()
             if hasattr(self, '_temp_mods_by_name'):
                 del self._temp_mods_by_name
-            self._mods_cache = self._scan_mods_directory()
+            self._mods_cache = self._scan_mods_directory(old_cache=self._mods_cache)
             if hasattr(self, '_temp_mods_by_name'):
                 self._mods_by_name = self._temp_mods_by_name.copy()
                 del self._temp_mods_by_name
@@ -419,7 +430,7 @@ class ModManager(QObject):
                     if chapter_data:
                         available_chapters.append(chapter_id)
             if not available_chapters:
-                self.feedback_manager.show_error('errors.no_chapters_available')
+                self.feedback_manager.show_message('error', 'errors.no_chapters_available')
                 return
             self.app_state.is_installing = True
             parent = self.parent()
@@ -428,6 +439,7 @@ class ModManager(QObject):
                 if callable(set_buttons_method):
                     set_buttons_method(False)
             self.status_changed.emit(tr('status.installing_mod'), 'status_info')
+            was_installed = self.is_mod_installed(mod.key)
             install_tasks = []
             for chapter_id in available_chapters:
                 install_tasks.append((mod, chapter_id))
@@ -443,28 +455,28 @@ class ModManager(QObject):
             mod_key = getattr(mod, 'key', 'unknown')
             mod_name = getattr(mod, 'name', 'Unknown Mod')
             logging.error(f'install_mod: permission error: {e}', exc_info=True, extra={'mod_key': mod_key, 'mod_name': mod_name, 'operation': 'install'})
-            self.feedback_manager.show_error('errors.installation_failed', tr('errors.permission_denied'))
+            self.feedback_manager.show_message('error', 'errors.installation_failed', tr('errors.permission_denied'))
         except (OSError, shutil.Error) as e:
             self.app_state.is_installing = False
             self.app_state.clear_current_task()
             mod_key = getattr(mod, 'key', 'unknown')
             mod_name = getattr(mod, 'name', 'Unknown Mod')
             logging.error(f'install_mod: file operation error: {e}', exc_info=True, extra={'mod_key': mod_key, 'mod_name': mod_name, 'operation': 'install'})
-            self.feedback_manager.show_error('errors.installation_failed', tr('errors.file_operation_failed', error=str(e)))
+            self.feedback_manager.show_message('error', 'errors.installation_failed', tr('errors.file_operation_failed', error=str(e)))
         except (KeyError, AttributeError) as e:
             self.app_state.is_installing = False
             self.app_state.clear_current_task()
             mod_key = getattr(mod, 'key', 'unknown')
             mod_name = getattr(mod, 'name', 'Unknown Mod')
             logging.error(f'install_mod: data error: {e}', exc_info=True, extra={'mod_key': mod_key, 'mod_name': mod_name})
-            self.feedback_manager.show_error('errors.installation_failed', str(e))
+            self.feedback_manager.show_message('error', 'errors.installation_failed', str(e))
         except Exception as e:
             self.app_state.is_installing = False
             self.app_state.clear_current_task()
             mod_key = getattr(mod, 'key', 'unknown')
             mod_name = getattr(mod, 'name', 'Unknown Mod')
             logging.error(f'install_mod: unexpected error: {e}', exc_info=True, extra={'mod_key': mod_key, 'mod_name': mod_name})
-            self.feedback_manager.show_error('errors.installation_failed', str(e))
+            self.feedback_manager.show_message('error', 'errors.installation_failed', str(e))
 
     def install_from_url(self, url: str):
         if self.app_state.is_installing:
@@ -490,14 +502,14 @@ class ModManager(QObject):
             mod_name = mod.get('name', '') if isinstance(mod, dict) else getattr(mod, 'name', 'Unknown Mod')
             error = ModUninstallationError(f'Permission denied during uninstallation: {e}', mod_key=mod_key, mod_name=mod_name, reason='permission_error')
             logging.error(f'uninstall_mod: permission error: {e}', exc_info=True, extra={'mod_key': mod_key, 'mod_name': mod_name})
-            self.feedback_manager.show_error('errors.uninstall_failed', tr('errors.permission_denied'))
+            self.feedback_manager.show_message('error', 'errors.uninstall_failed', tr('errors.permission_denied'))
             raise error
         except (OSError, shutil.Error) as e:
             mod_key = mod.get('key', '') if isinstance(mod, dict) else getattr(mod, 'key', 'unknown')
             mod_name = mod.get('name', '') if isinstance(mod, dict) else getattr(mod, 'name', 'Unknown Mod')
             error = ModUninstallationError(f'File operation failed during uninstallation: {e}', mod_key=mod_key, mod_name=mod_name, reason='io_error')
             logging.error(f'uninstall_mod: file operation error: {e}', exc_info=True, extra={'mod_key': mod_key, 'mod_name': mod_name})
-            self.feedback_manager.show_error('errors.uninstall_failed', tr('errors.file_operation_failed', error=str(e)))
+            self.feedback_manager.show_message('error', 'errors.uninstall_failed', tr('errors.file_operation_failed', error=str(e)))
             raise error
         except (KeyError, AttributeError) as e:
             mod_key = mod.get('key', '') if isinstance(mod, dict) else getattr(mod, 'key', 'unknown')
@@ -510,7 +522,7 @@ class ModManager(QObject):
             mod_name = mod.get('name', '') if isinstance(mod, dict) else getattr(mod, 'name', 'Unknown Mod')
             error = ModUninstallationError(f'Unexpected error during uninstallation: {e}', mod_key=mod_key, mod_name=mod_name, reason='unknown')
             logging.error(f'uninstall_mod: unexpected error: {e}', exc_info=True, extra={'mod_key': mod_key, 'mod_name': mod_name})
-            self.feedback_manager.show_error('errors.uninstall_failed', str(e))
+            self.feedback_manager.show_message('error', 'errors.uninstall_failed', str(e))
             raise error
 
     def update_mod(self, mod_data):
@@ -584,6 +596,17 @@ class ModManager(QObject):
             if version_sort_key(rv) > version_sort_key(lv or '0.0.0'):
                 return 'update'
         return 'ready'
+
+    def mod_has_update_available(self, mod_data) -> bool:
+        try:
+            for chapter_id in range(5):
+                if self.mod_has_files_for_chapter(mod_data, chapter_id):
+                    if self.get_mod_status(mod_data, chapter_id) == 'update':
+                        return True
+            return False
+        except Exception as e:
+            logging.warning(f'mod_has_update_available: exception: {e}', exc_info=True)
+            return False
 
     def is_mod_installed(self, mod_key: str) -> bool:
         with self._cache_lock:

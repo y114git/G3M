@@ -6,20 +6,15 @@ import tempfile
 import hashlib
 import subprocess
 import webbrowser
-import rarfile
-import tarfile
-import lzma
-import py7zr
-import zipfile
 import json
 import logging
 from typing import Dict, Optional, Any, List
 from PyQt6.QtCore import QObject, QThread, QTimer, pyqtSignal
 from managers.localization_manager import tr
 from models.game_modes import DemoGameMode, UndertaleGameMode
-from utils.file_utils import ensure_writable, sanitize_filename
+from utils.file_utils import ensure_writable, sanitize_filename, extract_archive_with_backup
 from utils.game_utils import is_game_running
-from utils.path_utils import get_xdelta_path
+from utils.path_utils import get_xdelta_path, find_chapter_resource_dir, resolve_game_executable
 from workers.game_monitor import GameMonitorWorker
 from managers.multi_mod_merger import MultiModMerger
 from config.constants import UI_COLORS, SLOT_ID_UNIVERSAL, SLOT_ID_DEMO, SLOT_ID_UNDERTALE
@@ -290,7 +285,7 @@ class GameLauncher(QObject):
         if chapter_id == 0:
             self.status_changed.emit(tr('ui.direct_launch_menu_not_allowed'), UI_COLORS['status_warning'])
             return None
-        chapter_folder = self._get_target_dir(chapter_id)
+        chapter_folder = find_chapter_resource_dir(self._get_current_game_path(), chapter_id)
         source_exe = self._get_source_executable_path()
         use_custom_exe = self.app_state.local_config.get('use_custom_executable', False)
         if not chapter_folder or not source_exe:
@@ -321,38 +316,11 @@ class GameLauncher(QObject):
         current_game_path = self._get_current_game_path()
         if not current_game_path or not os.path.isdir(current_game_path):
             return None
-        system = platform.system()
         is_undertale = isinstance(self.app_state.game_mode, UndertaleGameMode)
-        base_exe_name = 'UNDERTALE' if is_undertale else 'DELTARUNE'
-        if system == 'Windows':
-            exe_path = os.path.join(current_game_path, f'{base_exe_name}.exe')
-            if os.path.isfile(exe_path):
-                return exe_path
-        elif system == 'Linux':
-            native_path = os.path.join(current_game_path, base_exe_name)
-            if os.path.isfile(native_path) and os.access(native_path, os.X_OK):
-                return native_path
-            exe_path = os.path.join(current_game_path, f'{base_exe_name}.exe')
-            if os.path.isfile(exe_path):
-                return exe_path
-        elif system == 'Darwin':
-            if current_game_path.endswith('.app') and os.path.isdir(current_game_path):
-                app_path = current_game_path
-            else:
-                app_path = None
-                if is_undertale:
-                    app_names = ['UNDERTALE.app']
-                else:
-                    app_names = ['DELTARUNE.app', 'DELTARUNEdemo.app']
-                for name in app_names:
-                    candidate = os.path.join(current_game_path, name)
-                    if os.path.isdir(candidate):
-                        app_path = candidate
-                        break
-            if app_path:
-                return app_path
-        self.status_changed.emit(tr('errors.executable_not_found_deltarune'), UI_COLORS['status_error'])
-        return None
+        executable = resolve_game_executable(current_game_path, is_undertale)
+        if not executable:
+            self.status_changed.emit(tr('errors.executable_not_found_deltarune'), UI_COLORS['status_error'])
+        return executable
 
     def _get_source_executable_path(self):
         if self.app_state.local_config.get('use_custom_executable', False):
@@ -362,34 +330,6 @@ class GameLauncher(QObject):
 
     def _get_current_game_path(self) -> str:
         return self.app_state.game_mode.get_game_path(self.app_state.local_config) or ''
-
-    def _get_target_dir(self, chapter_id):
-        target_base = self._get_current_game_path()
-        if not target_base:
-            return None
-        if platform.system() == 'Darwin':
-            if not target_base.endswith('.app'):
-                for app_name in ('DELTARUNE.app', 'DELTARUNEdemo.app'):
-                    candidate = os.path.join(target_base, app_name)
-                    if os.path.isdir(candidate):
-                        target_base = candidate
-                        break
-            target_base = os.path.join(target_base, 'Contents', 'Resources')
-            if not os.path.isdir(target_base):
-                return None
-        if chapter_id == -1:
-            return target_base
-        if chapter_id == 0:
-            return target_base
-        chapter_prefix = f'chapter{chapter_id}_'
-        try:
-            for entry in os.listdir(target_base):
-                if os.path.isdir(os.path.join(target_base, entry)) and entry.startswith(chapter_prefix):
-                    return os.path.join(target_base, entry)
-            return None
-        except Exception as e:
-            self.status_changed.emit(tr('errors.chapter_folder_search_error', error=str(e)), UI_COLORS['status_error'])
-            return None
 
     def _prepare_game_files_multi_mod_async(self, selections: Dict[int, List[Any]]) -> bool:
         import logging
@@ -436,7 +376,6 @@ class GameLauncher(QObject):
         self._continue_after_merge(selections, True)
 
     def _continue_after_merge(self, selections: Dict[int, Any], merge_success: bool):
-        import logging
         if not merge_success:
             return
         has_list_format = any((isinstance(mods_list, list) for mods_list in selections.values()))
@@ -501,7 +440,7 @@ class GameLauncher(QObject):
                 is_data_patch_mod = self._is_data_patch_mod(mod, source_dir, chapter_id)
                 if not is_data_patch_mod and (not mod.get_chapter_data(chapter_id)) and (not is_local):
                     continue
-                target_dir = self._get_target_dir(chapter_id)
+                target_dir = find_chapter_resource_dir(self._get_current_game_path(), chapter_id)
                 if not target_dir:
                     continue
                 if not ensure_writable(target_dir):
@@ -659,7 +598,15 @@ class GameLauncher(QObject):
                             backup_errors.append(error_msg)
                             continue
                     if file_lower.endswith(('.zip', '.rar', '.7z', '.tar.gz', '.lzma')) and (not is_core_data_file):
-                        extracted_files = self._extract_archive_to_target(cache_file_path, target_dir)
+
+                        def add_mod_dir(dir_path):
+                            if dir_path not in self._mod_dirs_to_cleanup:
+                                self._mod_dirs_to_cleanup.append(dir_path)
+                                self._update_session_manifest(mod_dirs=[dir_path])
+
+                        def status_cb(msg):
+                            self.status_changed.emit(tr('errors.archive_unpack_error', archive_name=os.path.basename(cache_file_path), error=msg), UI_COLORS['status_error'])
+                        extracted_files = extract_archive_with_backup(cache_file_path, target_dir, backup_temp_dir=self._backup_temp_dir, backup_files=self._backup_files, add_mod_dir_callback=add_mod_dir, update_manifest_callback=lambda backup_files, mod_files, mod_dirs: self._update_session_manifest(backup_files=backup_files, mod_files=mod_files, mod_dirs=mod_dirs), status_callback=status_cb)
                         if extracted_files:
                             self._mod_files_to_cleanup.extend(extracted_files)
                             self._update_session_manifest(mod_files=extracted_files)
@@ -800,77 +747,6 @@ class GameLauncher(QObject):
             except Exception as restore_e:
                 logging.error(f'_apply_xdelta_patch: restore backup failed: {restore_e}', exc_info=True)
             return False
-
-    def _extract_archive_to_target(self, archive_path: str, target_dir: str):
-        file_lower = archive_path.lower()
-        extracted_files = []
-        try:
-            with tempfile.TemporaryDirectory(prefix='deltahub-extract-') as temp_dir:
-                if file_lower.endswith('.zip'):
-                    with zipfile.ZipFile(archive_path, 'r') as zf:
-                        zf.extractall(temp_dir)
-                elif file_lower.endswith('.rar'):
-                    with rarfile.RarFile(archive_path, 'r') as rf:
-                        rf.extractall(temp_dir)
-                elif file_lower.endswith('.7z'):
-                    with py7zr.SevenZipFile(archive_path, mode='r') as zf:
-                        zf.extractall(path=temp_dir)
-                elif file_lower.endswith('.tar.gz'):
-                    with tarfile.open(archive_path, 'r:gz') as tf:
-                        tf.extractall(temp_dir)
-                elif file_lower.endswith('.lzma'):
-                    output_path = os.path.join(temp_dir, os.path.splitext(os.path.basename(archive_path))[0])
-                    with lzma.open(archive_path) as f_in, open(output_path, 'wb') as f_out:
-                        shutil.copyfileobj(f_in, f_out)
-                else:
-                    raise ValueError(f'Unsupported archive format for extraction: {archive_path}')
-                from utils.file_utils import _cleanup_extracted_archive
-                _cleanup_extracted_archive(temp_dir)
-                for root, dirs, files in os.walk(temp_dir):
-                    for file in files:
-                        source_file = os.path.join(root, file)
-                        rel_path = os.path.relpath(source_file, temp_dir)
-                        target_file = os.path.join(target_dir, rel_path)
-                        file_lower = file.lower()
-                        if platform.system() == 'Darwin':
-                            if file_lower.endswith('.win'):
-                                name_without_ext = os.path.splitext(file)[0]
-                                target_file = os.path.join(os.path.dirname(target_file), name_without_ext + '.ios')
-                        elif file_lower.endswith('.ios'):
-                            name_without_ext = os.path.splitext(file)[0]
-                            target_file = os.path.join(os.path.dirname(target_file), name_without_ext + '.win')
-                        target_dirname = os.path.dirname(target_file)
-                        os.makedirs(target_dirname, exist_ok=True)
-                        try:
-                            if target_dirname not in self._mod_dirs_to_cleanup:
-                                self._mod_dirs_to_cleanup.append(target_dirname)
-                                self._update_session_manifest(mod_dirs=[target_dirname])
-                        except Exception as e:
-                            logging.error(f'_extract_archive_to_target: manifest update failed: {e}', exc_info=True)
-                        tmp_target = target_file + '.tmp'
-                        try:
-                            shutil.copy2(source_file, tmp_target)
-                            if os.path.exists(target_file):
-                                backup_rel_path = os.path.relpath(target_file, target_dir)
-                                if self._backup_temp_dir:
-                                    backup_file_path = os.path.join(self._backup_temp_dir, backup_rel_path)
-                                    os.makedirs(os.path.dirname(backup_file_path), exist_ok=True)
-                                    shutil.move(target_file, backup_file_path)
-                                    if not hasattr(self, '_backup_files'):
-                                        self._backup_files = {}
-                                    self._backup_files[target_file] = backup_file_path
-                                    self._update_session_manifest(backup_files={target_file: backup_file_path})
-                            os.replace(tmp_target, target_file)
-                            extracted_files.append(target_file)
-                        finally:
-                            try:
-                                if os.path.exists(tmp_target):
-                                    os.remove(tmp_target)
-                            except Exception as e:
-                                logging.warning(f'_extract_archive_to_target: tmp cleanup failed: {e}', exc_info=True)
-        except Exception as e:
-            self.status_changed.emit(tr('errors.archive_unpack_error', archive_name=os.path.basename(archive_path), error=str(e)), UI_COLORS['status_error'])
-        return extracted_files
 
     def _validate_session_manifest(self, data: dict) -> bool:
         if not isinstance(data, dict):

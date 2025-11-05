@@ -4,6 +4,7 @@ from managers.localization_manager import localization_manager, tr
 from workers.fetch_mods import FetchModsThread
 from config.constants import UI_COLORS
 from utils.game_utils import is_game_running
+from utils.thread_utils import safe_stop_thread
 
 
 class RefreshController:
@@ -64,27 +65,9 @@ class RefreshController:
             logging.error(f'RefreshController.refresh_mods_list: {error_msg}', exc_info=True)
             self.feedback_manager.update_status(f"{tr('errors.update_list_failed')}: {str(e)}", UI_COLORS['status_error'])
 
-    def _safe_stop_thread(self, thread, timeout=2000):
-        if not thread:
-            return
-        try:
-            if thread.isRunning():
-                thread.requestInterruption()
-                thread.quit()
-                if not thread.wait(timeout):
-                    logging.warning(f'_safe_stop_thread: thread did not stop in {timeout}ms, terminating')
-                    thread.terminate()
-                    if not thread.wait(1000):
-                        logging.error('_safe_stop_thread: failed to terminate thread')
-            if thread.isRunning():
-                thread.terminate()
-                thread.wait(500)
-        except Exception as e:
-            logging.error(f'_safe_stop_thread: error stopping thread: {e}', exc_info=True)
-
     def _stop_fetch_thread(self):
         if self.fetch_thread:
-            self._safe_stop_thread(self.fetch_thread)
+            safe_stop_thread(self.fetch_thread)
             if not (self.fetch_thread and self.fetch_thread.isRunning()):
                 self.fetch_thread = None
 

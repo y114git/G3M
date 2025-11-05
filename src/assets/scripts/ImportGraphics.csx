@@ -97,7 +97,7 @@ try
                 texturePageItem.BoundingHeight = (ushort)n.Texture.BoundingHeight;
                 texturePageItem.TexturePage = texture;
 
-                // Add this texture to UMT
+                // Add this texture to UTMT
                 Data.TexturePageItems.Add(texturePageItem);
 
                 // String processing - extract just the filename without the full path

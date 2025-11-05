@@ -10,13 +10,14 @@ import argparse
 from typing import Callable, Optional
 import logging
 import requests
-from PyQt6.QtCore import QTranslator, Qt, QEvent, QThread, QTimer, pyqtSignal
-from PyQt6.QtGui import QColor, QIcon, QPainter, QPixmap
+from PyQt6.QtCore import QTranslator, Qt, QEvent, QThread, QTimer, pyqtSignal, QUrl
+from PyQt6.QtGui import QColor, QIcon, QPainter, QPixmap, QDesktopServices
 from PyQt6.QtWidgets import QApplication, QCheckBox, QDialog, QFrame, QLabel, QLineEdit, QMessageBox, QProgressBar, QPushButton, QTabWidget, QVBoxLayout, QWidget, QHBoxLayout, QSizePolicy, QInputDialog, QColorDialog
 from managers.localization_manager import localization_manager, tr
 from models.game_modes import FullGameMode, DemoGameMode, UndertaleGameMode
 from config.constants import UI_COLORS, SOCIAL_LINKS, ARCH, ONLINE_UPDATE_INTERVAL, INITIALIZATION_TIMEOUT, LEGACY_CLEANUP_DELAY, THREAD_WAIT_TIMEOUT, SLOT_ID_UNIVERSAL
 from utils.game_utils import is_game_running
+from utils.thread_utils import safe_stop_thread
 from utils.path_utils import get_user_data_root, resource_path, get_launcher_dir, get_legacy_ylauncher_path, get_user_plugins_dir
 from utils.network_utils import check_internet_connection
 from workers.background_workers import PresenceWorker, FetchChangelogWorker, FetchHelpContentWorker
@@ -118,7 +119,7 @@ class AppWindow(QWidget):
         self.pending_updates = []
         self.feedback_manager.status_updated.connect(self.update_status_signal.emit)
         self.settings_manager.language_changed.connect(lambda _: self._retranslate_ui())
-        self.settings_manager.restart_required.connect(lambda msg: self.feedback_manager.show_info('dialogs.restart_required', msg))
+        self.settings_manager.restart_required.connect(lambda msg: self.feedback_manager.show_message('info', 'dialogs.restart_required', msg))
         self.settings_manager.status_changed.connect(self.update_status_signal.emit)
         self.mod_manager = ModManager(self.app_state, self.feedback_manager, self)
         self.mod_manager.progress_updated.connect(self.set_progress_signal.emit)
@@ -136,7 +137,7 @@ class AppWindow(QWidget):
         self.update_checker.status_changed.connect(self.update_status_signal.emit)
         self.update_checker.progress_updated.connect(self.set_progress_signal.emit)
         self.update_checker.update_finished.connect(self._on_update_cleanup)
-        self.update_checker.update_error.connect(lambda msg: self.feedback_manager.show_error('errors.error', msg))
+        self.update_checker.update_error.connect(lambda msg: self.feedback_manager.show_message('error', 'errors.error', msg))
         self.update_checker.quit_requested.connect(QApplication.quit)
         self.plugin_manager = PluginManager(self.app_state, self)
         self.customization_manager = CustomizationManager(self.app_state, self)
@@ -211,7 +212,7 @@ class AppWindow(QWidget):
         self.activateWindow()
         self.raise_()
         if self.app_state.is_installing:
-            self.feedback_manager.show_warning('dialogs.install_in_progress_title', tr('dialogs.install_in_progress_body'))
+            self.feedback_manager.show_message('warning', 'dialogs.install_in_progress_title', tr('dialogs.install_in_progress_body'))
             return
         self.mod_manager.install_from_url(url)
 
@@ -283,7 +284,7 @@ class AppWindow(QWidget):
         return button
 
     def _handle_permission_error(self, path: str):
-        self.feedback_manager.show_error('errors.access_denied', path=path)
+        self.feedback_manager.show_message('error', 'errors.access_denied', path=path)
 
     def _get_current_game_path(self) -> str:
         return self.app_state.game_mode.get_game_path(self.app_state.local_config) or ''
@@ -420,6 +421,9 @@ class AppWindow(QWidget):
         self.priority_button = library_widgets.get('priority_button')
         if self.priority_button:
             self.priority_button.clicked.connect(self.library_display.on_priority_button_click)
+        self.create_modpack_button = library_widgets.get('create_modpack_button')
+        if self.create_modpack_button:
+            self.create_modpack_button.clicked.connect(self.library_display.on_create_modpack_button_click)
         self.library_sort_combo = library_widgets['library_sort_combo']
         self.library_sort_order_btn = library_widgets['library_sort_order_btn']
         self.library_tags_label = library_widgets['library_tags_label']
@@ -527,6 +531,7 @@ class AppWindow(QWidget):
         self.custom_executable_path_label = settings_widgets['custom_executable_path_label']
         self.custom_exe_frame = settings_widgets['custom_exe_frame']
         self.change_path_button = settings_widgets['change_path_button']
+        self.open_deltahub_folder_button = settings_widgets['open_deltahub_folder_button']
         self.customization_button = settings_widgets['customization_button']
         self.settings_customization_button = settings_widgets['settings_customization_button']
         self.reset_button = settings_widgets['reset_button']
@@ -553,6 +558,7 @@ class AppWindow(QWidget):
         self.use_custom_executable_checkbox.stateChanged.connect(self.settings_ui.on_toggle_custom_executable)
         self.select_custom_executable_button.clicked.connect(self._select_custom_executable_file)
         self.change_path_button.clicked.connect(self._prompt_for_game_path)
+        self.open_deltahub_folder_button.clicked.connect(self._open_deltahub_folder)
         self.customization_button.clicked.connect(lambda: self._switch_settings_page(self.settings_customization_page))
         self.reset_button.clicked.connect(self.settings_ui.reset_settings)
         self.disable_background_checkbox.stateChanged.connect(self.settings_ui.on_toggle_disable_background)
@@ -903,13 +909,13 @@ class AppWindow(QWidget):
                 except (OSError, shutil.Error) as e:
                     import logging
                     logging.debug(f'Failed to remove legacy path: {e}')
-                self.feedback_manager.show_info('dialogs.legacy_cleanup_title', tr('dialogs.legacy_cleanup_message'))
+                self.feedback_manager.show_message('info', 'dialogs.legacy_cleanup_title', tr('dialogs.legacy_cleanup_message'))
         except (OSError, AttributeError) as e:
             import logging
             logging.debug(f'Legacy cleanup failed: {e}', exc_info=True)
 
     def _perform_update_ui_prep(self):
-        for widget in [self.action_button, self.saves_button, self.shortcut_button, self.change_path_button, self.change_background_button]:
+        for widget in [self.action_button, self.saves_button, self.shortcut_button, self.change_path_button, self.open_deltahub_folder_button, self.change_background_button]:
             widget.setEnabled(False)
         try:
             if hasattr(self, 'top_refresh_button') and self.top_refresh_button:
@@ -931,7 +937,7 @@ class AppWindow(QWidget):
         try:
             if not self.app_state.is_settings_view:
                 self.tab_widget.setEnabled(True)
-            for w in [self.action_button, self.saves_button, self.shortcut_button, self.change_path_button, self.change_background_button]:
+            for w in [self.action_button, self.saves_button, self.shortcut_button, self.change_path_button, self.open_deltahub_folder_button, self.change_background_button]:
                 w.setEnabled(True)
             try:
                 if hasattr(self, 'top_refresh_button') and self.top_refresh_button:
@@ -1110,6 +1116,7 @@ class AppWindow(QWidget):
         self.use_custom_executable_checkbox.setToolTip("<html><body style='white-space: normal;'>" + tr('tooltips.custom_exe') + '</body></html>')
         self.select_custom_executable_button.setText(tr('buttons.select_file'))
         self._update_change_path_button_text()
+        self.open_deltahub_folder_button.setText(tr('buttons.open_deltahub_folder'))
         self.customization_button.setText(tr('tags.customization'))
         self.reset_button.setText(tr('buttons.reset_settings'))
         self.back_button_cust.setText(tr('ui.back_button'))
@@ -1119,6 +1126,8 @@ class AppWindow(QWidget):
         self.disable_background_checkbox.setText(tr('checkboxes.disable_background'))
         if hasattr(self, 'priority_button') and self.priority_button:
             self.priority_button.setText(tr('ui.priority'))
+        if hasattr(self, 'create_modpack_button') and self.create_modpack_button:
+            self.create_modpack_button.setText(tr('ui.create_modpack_button'))
         if hasattr(self, 'library_sort_combo') and self.library_sort_combo:
             self.library_sort_combo.setItemText(0, tr('ui.sort_by_name'))
             self.library_sort_combo.setItemText(1, tr('ui.sort_by_date'))
@@ -1220,7 +1229,7 @@ class AppWindow(QWidget):
             dialog = XdeltaDialog(self)
             dialog.exec()
         except Exception as e:
-            self.feedback_manager.show_error('errors.error', tr('errors.patching_window_failed', error=str(e)))
+            self.feedback_manager.show_message('error', 'errors.error', tr('errors.patching_window_failed', error=str(e)))
 
     def _show_main_mod_management_dialog(self):
         has_internet = check_internet_connection()
@@ -1302,7 +1311,7 @@ class AppWindow(QWidget):
     def _create_mod(self, parent_dialog, public: bool):
         parent_dialog.accept()
         if public and (not check_internet_connection()):
-            self.feedback_manager.show_error('errors.no_internet', tr('errors.public_mod_internet'))
+            self.feedback_manager.show_message('error', 'errors.no_internet', tr('errors.public_mod_internet'))
             return
         editor = ModEditorDialog(self, is_creating=True, is_public=public)
         editor.exec()
@@ -1311,7 +1320,7 @@ class AppWindow(QWidget):
     def _edit_public_mod(self, parent_dialog):
         parent_dialog.accept()
         if not check_internet_connection():
-            self.feedback_manager.show_error('errors.no_internet', tr('errors.edit_mod_internet'))
+            self.feedback_manager.show_message('error', 'errors.no_internet', tr('errors.edit_mod_internet'))
             return
         secret_key, ok = QInputDialog.getText(self, tr('dialogs.enter_secret_key'), tr('ui.secret_key_label'), QLineEdit.EchoMode.Password)
         if not ok or not secret_key.strip():
@@ -1320,48 +1329,48 @@ class AppWindow(QWidget):
             mod_data, hashed_key, found_in_pending = self.mod_manager.fetch_mod_data_by_secret(secret_key)
         except requests.RequestException as e:
             error_msg = tr('errors.key_check_failed', error=str(e))
-            self.feedback_manager.show_error('errors.error', error_msg)
+            self.feedback_manager.show_message('error', 'errors.error', error_msg)
             return
         except Exception as e:
             logging.error(f'Unexpected error fetching mod data: {e}', exc_info=True)
-            self.feedback_manager.show_error('errors.error', tr('errors.key_check_failed', error=str(e)))
+            self.feedback_manager.show_message('error', 'errors.error', tr('errors.key_check_failed', error=str(e)))
             return
         if not mod_data:
-            self.feedback_manager.show_warning('errors.mod_not_found', tr('errors.secret_key_invalid'))
+            self.feedback_manager.show_message('warning', 'errors.mod_not_found', tr('errors.secret_key_invalid'))
             return
         if not hashed_key:
-            self.feedback_manager.show_warning('errors.mod_not_found', tr('errors.secret_key_invalid'))
+            self.feedback_manager.show_message('warning', 'errors.mod_not_found', tr('errors.secret_key_invalid'))
             return
         if mod_data.get('ban_status', False):
             ban_reason = mod_data.get('ban_reason', tr('defaults.not_specified'))
-            self.feedback_manager.show_error('dialogs.mod_blocked_title', tr('dialogs.mod_blocked_message', ban_reason=ban_reason, error_message=tr('dialogs.error_occurred')))
+            self.feedback_manager.show_message('error', 'dialogs.mod_blocked_title', tr('dialogs.mod_blocked_message', ban_reason=ban_reason, error_message=tr('dialogs.error_occurred')))
             return
         if found_in_pending:
             result = self.feedback_manager.ask_custom_question(QMessageBox.Icon.Information, 'dialogs.mod_on_moderation', 'dialogs.mod_on_moderation_message', [('buttons.withdraw_request', QMessageBox.ButtonRole.DestructiveRole, 'withdraw'), ('buttons.ok', QMessageBox.ButtonRole.AcceptRole, 'ok')], 'ok')
             if result == 'withdraw':
                 try:
                     self.mod_manager.withdraw_pending_mod(hashed_key)
-                    self.feedback_manager.show_info('dialogs.request_withdrawn', tr('dialogs.withdrawal_success'))
+                    self.feedback_manager.show_message('info', 'dialogs.request_withdrawn', tr('dialogs.withdrawal_success'))
                 except requests.RequestException as e:
                     error_msg = tr('errors.request_revoke_failed', error=str(e))
-                    self.feedback_manager.show_error('errors.error', error_msg)
+                    self.feedback_manager.show_message('error', 'errors.error', error_msg)
                 except Exception as e:
                     logging.error(f'Unexpected error withdrawing pending mod: {e}', exc_info=True)
-                    self.feedback_manager.show_error('errors.error', tr('errors.request_revoke_failed', error=str(e)))
+                    self.feedback_manager.show_message('error', 'errors.error', tr('errors.request_revoke_failed', error=str(e)))
             return
         if self.mod_manager.has_pending_changes(hashed_key):
             result = self.feedback_manager.ask_custom_question(QMessageBox.Icon.Information, 'dialogs.changes_under_review', 'dialogs.request_pending', [('buttons.withdraw_request', QMessageBox.ButtonRole.DestructiveRole, 'withdraw')])
             if result == 'withdraw':
                 try:
                     self.mod_manager.withdraw_pending_change(hashed_key)
-                    self.feedback_manager.show_info('dialogs.request_withdrawn', tr('dialogs.withdrawal_success'))
+                    self.feedback_manager.show_message('info', 'dialogs.request_withdrawn', tr('dialogs.withdrawal_success'))
                 except (requests.RequestException, Exception) as e:
                     if isinstance(e, requests.RequestException):
                         error_msg = tr('errors.request_revoke_failed', error=str(e))
                     else:
                         logging.error(f'Unexpected error withdrawing pending change: {e}', exc_info=True)
                         error_msg = tr('errors.request_revoke_failed', error=str(e))
-                    self.feedback_manager.show_error('errors.error', error_msg)
+                    self.feedback_manager.show_message('error', 'errors.error', error_msg)
                     return
             else:
                 return
@@ -1373,7 +1382,7 @@ class AppWindow(QWidget):
         parent_dialog.accept()
         local_mods = self.mod_manager.list_local_mods()
         if not local_mods:
-            self.feedback_manager.show_info('dialogs.no_local_mods_title', tr('dialogs.no_local_mods_message'))
+            self.feedback_manager.show_message('info', 'dialogs.no_local_mods_title', tr('dialogs.no_local_mods_message'))
             return
         mod_names = [mod_info['name'] for mod_info in local_mods]
         selected_name, ok = QInputDialog.getItem(self, tr('dialogs.select_mod'), tr('dialogs.local_mods'), mod_names, 0, False)
@@ -1381,7 +1390,7 @@ class AppWindow(QWidget):
             return
         selected_mod = next((mod_info for mod_info in local_mods if mod_info['name'] == selected_name), None)
         if not selected_mod:
-            self.feedback_manager.show_warning('errors.error', tr('errors.selected_mod_not_found'))
+            self.feedback_manager.show_message('warning', 'errors.error', tr('errors.selected_mod_not_found'))
             return
         mod_data = selected_mod['data'].copy()
         mod_data['key'] = selected_mod['key']
@@ -1411,7 +1420,7 @@ class AppWindow(QWidget):
                 threads_to_stop.append(bg_loader)
             for thread in threads_to_stop:
                 self._safe_set_parent_none(thread)
-                self._safe_stop_thread(thread)
+                safe_stop_thread(thread, timeout=THREAD_WAIT_TIMEOUT)
             for attr in ('help_thread', 'changelog_thread'):
                 worker_attr = attr.replace('_thread', '_worker')
                 worker = getattr(self, worker_attr, None)
@@ -1543,6 +1552,13 @@ class AppWindow(QWidget):
             self.customization_manager.start_background_music()
         return result
 
+    def _open_deltahub_folder(self):
+        deltahub_path = get_user_data_root()
+        if os.path.exists(deltahub_path):
+            QDesktopServices.openUrl(QUrl.fromLocalFile(deltahub_path))
+        else:
+            logging.warning(f'DELTAHUB folder not found: {deltahub_path}')
+
     def _install_single_mod(self, mod, force=False):
         self.mod_ops.install_mod(mod, force)
 
@@ -1584,7 +1600,7 @@ class AppWindow(QWidget):
         if hasattr(self, 'game_launch'):
             self.game_launch.set_full_install_checkbox_state(bool(state))
         if platform.system() == 'Darwin' and self.app_state.is_full_install:
-            self.feedback_manager.show_info('dialogs.unavailable', tr('dialogs.macos_install_unavailable'))
+            self.feedback_manager.show_message('info', 'dialogs.unavailable', tr('dialogs.macos_install_unavailable'))
             self._set_checkbox_checked_silently(self.full_install_checkbox, False)
             return
         self.game_launch.update_button_state()
@@ -1656,7 +1672,7 @@ class AppWindow(QWidget):
                             self.main_tab_widget.setCurrentIndex(self.previous_tab_index)
                     except Exception as e:
                         logging.error(f"Error running plugin '{plugin['name_key']}': {e}")
-                        self.feedback_manager.show_error('errors.error', f"Failed to run plugin '{tr(plugin['name_key'])}':\n{e}")
+                        self.feedback_manager.show_message('error', 'errors.error', f"Failed to run plugin '{tr(plugin['name_key'])}':\n{e}")
                         self.main_tab_widget.setCurrentIndex(self.previous_tab_index)
                     finally:
                         self._handling_plugin_tab = False
@@ -1711,31 +1727,9 @@ class AppWindow(QWidget):
     def _stop_fetch_thread(self):
         self.refresh_controller._stop_fetch_thread()
 
-    def _safe_stop_thread(self, thread, timeout=THREAD_WAIT_TIMEOUT):
-        if not thread:
-            return
-        if isinstance(thread, QThread):
-            try:
-                if thread.isRunning():
-                    thread.requestInterruption()
-                    thread.quit()
-                    if not thread.wait(timeout):
-                        logging.warning(f'_safe_stop_thread: thread {type(thread).__name__} did not stop in {timeout}ms, terminating')
-                        thread.terminate()
-                        if not thread.wait(1000):
-                            logging.error(f'_safe_stop_thread: failed to terminate thread {type(thread).__name__}')
-                if thread.isRunning():
-                    logging.warning(f'_safe_stop_thread: {type(thread).__name__} still running, forcing termination')
-                    thread.terminate()
-                    thread.wait(1000)
-                    if thread.isRunning():
-                        logging.error(f'_safe_stop_thread: {type(thread).__name__} failed to stop even after terminate')
-            except Exception as e:
-                logging.error(f'_safe_stop_thread: error stopping thread {type(thread).__name__}: {e}', exc_info=True)
-
     def _stop_presence_thread(self):
         if self.presence_thread:
-            self._safe_stop_thread(self.presence_thread, timeout=2000)
+            safe_stop_thread(self.presence_thread, timeout=2000)
             if not (self.presence_thread and self.presence_thread.isRunning()):
                 self.presence_thread = None
                 self.presence_worker = None

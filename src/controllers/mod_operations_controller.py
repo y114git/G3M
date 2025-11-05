@@ -33,7 +33,7 @@ class ModOperationsController:
         self.app.activateWindow()
         self.app.raise_()
         if self.app_state.is_installing:
-            self.feedback_manager.show_warning('dialogs.install_in_progress_title', tr('dialogs.install_in_progress_body'))
+            self.feedback_manager.show_message('warning', 'dialogs.install_in_progress_title', tr('dialogs.install_in_progress_body'))
             return
         self.mod_manager.install_from_url(url)
 
@@ -59,7 +59,7 @@ class ModOperationsController:
                     if chapter_data:
                         available_chapters.append(chapter_id)
             if not available_chapters:
-                self.feedback_manager.show_warning('errors.mod_no_files', mod_name=mod.name)
+                self.feedback_manager.show_message('warning', 'errors.mod_no_files', mod_name=mod.name)
                 return
             was_installed_before = self.mod_manager.is_mod_installed(mod.key)
             install_tasks = [(mod, chapter_id) for chapter_id in available_chapters]
@@ -140,7 +140,7 @@ class ModOperationsController:
                 self.app.library_display.update_display()
             QTimer.singleShot(100, self.refresh_specific_mod_widget_after_update)
             if not was_installed_before:
-                self._safe_execute(lambda: self.feedback_manager.show_info('dialogs.mod_installed_apply_info'), 'Failed to show mod installed info')
+                self._safe_execute(lambda: self.feedback_manager.show_message('info', 'dialogs.mod_installed_apply_info'), 'Failed to show mod installed info')
             self.feedback_manager.update_status(tr('status.mod_installed_success'), UI_COLORS['status_success'])
         self.app.game_launch.update_button_state()
 
@@ -154,7 +154,7 @@ class ModOperationsController:
         self._safe_execute(lambda: self.mod_manager.load_local_mods(), 'load_local_mods failed', default_return=None)
         self._safe_execute(lambda: QTimer.singleShot(0, self.app.library_display.update_display) if hasattr(self.app, 'library_display') else None, 'update_library_display failed')
         if success:
-            self._safe_execute(lambda: QTimer.singleShot(0, lambda: self.feedback_manager.show_info('dialogs.mod_installed_apply_info')), 'Failed to show mod installed info')
+            self._safe_execute(lambda: QTimer.singleShot(0, lambda: self.feedback_manager.show_message('info', 'dialogs.mod_installed_apply_info')), 'Failed to show mod installed info')
         self.app.game_launch.update_button_state()
         if success and getattr(self.app, 'pending_updates', None):
             next_mod = self.app.pending_updates.pop(0)

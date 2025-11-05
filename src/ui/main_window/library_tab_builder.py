@@ -78,18 +78,25 @@ class LibraryTabBuilder:
         priority_button.setVisible(False)
         priority_button.setFixedSize(175, 35)
         self._update_priority_button_style(priority_button, button_color, border_color, hover_color)
+        create_modpack_button = QPushButton(tr('ui.create_modpack_button'))
+        create_modpack_button.setObjectName('create_modpack_button')
+        create_modpack_button.setVisible(False)
+        create_modpack_button.setFixedSize(175, 35)
+        self._update_priority_button_style(create_modpack_button, button_color, border_color, hover_color)
         priority_button_container = QWidget()
         priority_button_container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
         priority_button_layout = QHBoxLayout(priority_button_container)
         priority_button_layout.setContentsMargins(0, 0, 0, 0)
-        priority_button_layout.setSpacing(0)
+        priority_button_layout.setSpacing(10)
         priority_button_layout.addStretch()
         priority_button_layout.addWidget(priority_button)
+        priority_button_layout.addWidget(create_modpack_button)
         priority_button_layout.addStretch()
         priority_button_container.setFixedHeight(0)
         layout.addWidget(priority_button_container)
         self.widgets['priority_button_layout'] = priority_button_layout
         self.widgets['priority_button_container'] = priority_button_container
+        self.widgets['create_modpack_button'] = create_modpack_button
         installed_mods_container = QWidget()
         installed_mods_container.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
         installed_mods_container.setObjectName('mods_background')
@@ -201,14 +208,18 @@ class LibraryTabBuilder:
         return filters_widget
 
     def _update_priority_button_style(self, button, button_color, border_color, hover_color):
-        button.setStyleSheet(f'\n            QPushButton#priority_button {{\n                background-color: {button_color};\n                border: 2px solid {border_color};\n                color: white;\n                font-weight: bold;\n                font-size: 13px;\n                border-radius: 0px;\n                padding: 5px;\n            }}\n            QPushButton#priority_button:hover {{\n                background-color: {hover_color};\n            }}\n        ')
+        button_obj_name = button.objectName()
+        button.setStyleSheet(f'\n            QPushButton#{button_obj_name} {{\n                background-color: {button_color};\n                border: 2px solid {border_color};\n                color: white;\n                font-weight: bold;\n                font-size: 13px;\n                border-radius: 0px;\n                padding: 5px;\n            }}\n            QPushButton#{button_obj_name}:hover {{\n                background-color: {hover_color};\n            }}\n        ')
 
     def update_priority_button_style(self):
+        border_color = get_theme_color(self.app_state.local_config, 'border', 'white')
+        button_color = get_theme_color(self.app_state.local_config, 'button', 'black')
+        hover_color = get_theme_color(self.app_state.local_config, 'button_hover', '#333')
         if 'priority_button' in self.widgets:
             button = self.widgets['priority_button']
-            border_color = get_theme_color(self.app_state.local_config, 'border', 'white')
-            button_color = get_theme_color(self.app_state.local_config, 'button', 'black')
-            hover_color = get_theme_color(self.app_state.local_config, 'button_hover', '#333')
+            self._update_priority_button_style(button, button_color, border_color, hover_color)
+        if 'create_modpack_button' in self.widgets:
+            button = self.widgets['create_modpack_button']
             self._update_priority_button_style(button, button_color, border_color, hover_color)
 
     def get_widgets(self) -> Dict[str, Any]:

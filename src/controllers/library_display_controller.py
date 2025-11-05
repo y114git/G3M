@@ -418,6 +418,8 @@ class LibraryDisplayController:
             chapter_id = self._get_current_chapter_id()
         if chapter_id is None:
             self.app.priority_button.setVisible(False)
+            if hasattr(self.app, 'create_modpack_button'):
+                self.app.create_modpack_button.setVisible(False)
             if hasattr(self.app, 'library_tab_builder') and 'priority_button_layout' in self.app.library_tab_builder.widgets:
                 self.app.library_tab_builder.widgets['priority_button_layout'].setContentsMargins(0, 0, 0, 0)
             return
@@ -426,6 +428,8 @@ class LibraryDisplayController:
         should_show = mod_count >= 2
         if should_show:
             self.app.priority_button.setVisible(True)
+            if hasattr(self.app, 'create_modpack_button'):
+                self.app.create_modpack_button.setVisible(True)
             if hasattr(self.app, 'library_tab_builder'):
                 widgets = self.app.library_tab_builder.widgets
                 if 'priority_button_container' in widgets:
@@ -434,6 +438,8 @@ class LibraryDisplayController:
                     widgets['priority_button_layout'].setContentsMargins(0, 10, 0, 10)
         else:
             self.app.priority_button.setVisible(False)
+            if hasattr(self.app, 'create_modpack_button'):
+                self.app.create_modpack_button.setVisible(False)
             if hasattr(self.app, 'library_tab_builder'):
                 widgets = self.app.library_tab_builder.widgets
                 if 'priority_button_container' in widgets:
@@ -465,3 +471,103 @@ class LibraryDisplayController:
         except Exception as e:
             import logging
             logging.error(f'Error opening priority dialog: {e}', exc_info=True)
+
+    def on_create_modpack_button_click(self):
+        if not hasattr(self.app, 'create_modpack_button'):
+            return
+        import logging
+        from ui.dialogs.create_modpack_dialog import CreateModpackDialog
+        from PyQt6.QtWidgets import QDialog
+        from utils.file_utils import get_unique_mod_dir
+        import os
+        is_chapter_mode = self.app_state.current_mode == 'chapter'
+        chapter_mods = {}
+        if is_chapter_mode:
+            chapter_id = self._get_current_chapter_id()
+            if chapter_id is None:
+                return
+            mods_list = self.slot_manager.get_used_mods_list(chapter_id)
+            if not mods_list or len(mods_list) < 2:
+                return
+            chapter_mods = {chapter_id: mods_list}
+        else:
+            is_demo_mode = isinstance(self.app_state.game_mode, DemoGameMode)
+            is_undertale_mode = isinstance(self.app_state.game_mode, UndertaleGameMode)
+            if is_demo_mode:
+                mods_list = self.slot_manager.get_used_mods_list(SLOT_ID_DEMO)
+                if mods_list and len(mods_list) >= 2:
+                    chapter_mods = {-1: mods_list}
+            elif is_undertale_mode:
+                mods_list = self.slot_manager.get_used_mods_list(SLOT_ID_UNDERTALE)
+                if mods_list and len(mods_list) >= 2:
+                    chapter_mods = {-1: mods_list}
+            else:
+                mods_list = self.slot_manager.get_used_mods_list(SLOT_ID_UNIVERSAL)
+                if mods_list and len(mods_list) >= 2:
+                    for chapter_id in range(5):
+                        chapter_mods_for_chapter = []
+                        for mod in mods_list:
+                            if hasattr(mod, 'get_chapter_data') and mod.get_chapter_data(chapter_id):
+                                chapter_mods_for_chapter.append(mod)
+                        if chapter_mods_for_chapter:
+                            chapter_mods[chapter_id] = chapter_mods_for_chapter
+        if not chapter_mods:
+            return
+        try:
+            dialog = CreateModpackDialog(self.app_state, parent=self.app)
+            if dialog.exec() != QDialog.DialogCode.Accepted:
+                return
+            modpack_name = dialog.get_modpack_name()
+            if not modpack_name:
+                return
+            unique_mod_folder = get_unique_mod_dir(self.app_state.mods_dir, modpack_name)
+            modpack_dir = os.path.join(self.app_state.mods_dir, unique_mod_folder)
+            from workers.create_modpack_thread import CreateModpackThread
+            thread = CreateModpackThread(chapter_mods, modpack_name, modpack_dir, self.app_state, self.mod_manager, self.app)
+            thread.progress_update.connect(self._on_modpack_progress)
+            thread.status_update.connect(self._on_modpack_status)
+            thread.finished.connect(lambda success: self._on_modpack_finished(success, modpack_dir))
+            self.app_state.current_task = thread
+            self.app_state.progress_bar_visible = True
+            self.app_state.progress_bar_value = 0
+            self.app_state.is_merging = True
+            self.app_state.action_button_text = tr('ui.cancel_button')
+            self.app_state.action_button_enabled = True
+            self._modpack_thread = thread
+            self._modpack_dir = modpack_dir
+            thread.start()
+        except Exception as e:
+            import logging
+            logging.error(f'Error creating modpack: {e}', exc_info=True)
+            self.feedback_manager.show_message('error', 'errors.error', str(e))
+
+    def _on_modpack_progress(self, progress: int, message: str):
+        self.app_state.progress_bar_value = progress
+        if message:
+            from config.constants import UI_COLORS
+            self.feedback_manager.update_status(message, UI_COLORS['status_info'])
+
+    def _on_modpack_status(self, message: str, status_type: str):
+        from config.constants import UI_COLORS
+        color = UI_COLORS.get(f'status_{status_type}', UI_COLORS['status_error'])
+        self.feedback_manager.update_status(message, color)
+
+    def _on_modpack_finished(self, success: bool, modpack_dir: str):
+        import os
+        self.app_state.is_merging = False
+        self.app_state.progress_bar_visible = False
+        self.app_state.action_button_text = tr('ui.launch_button')
+        self.app_state.action_button_enabled = True
+        self.app_state.clear_current_task()
+        if success:
+            self.mod_manager.load_local_mods()
+            self.update_display()
+            self.feedback_manager.show_message('success', 'dialogs.modpack_created_title', tr('dialogs.modpack_created_message', modpack_dir=modpack_dir))
+        else:
+            if os.path.exists(modpack_dir):
+                try:
+                    import shutil
+                    shutil.rmtree(modpack_dir, ignore_errors=True)
+                except Exception:
+                    pass
+            self.feedback_manager.show_message('error', 'errors.error', tr('errors.modpack_creation_failed'))

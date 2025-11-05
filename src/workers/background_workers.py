@@ -11,7 +11,7 @@ import requests
 from utils.network_utils import get_session
 from PyQt6.QtCore import QObject, QThread, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QImage
-from config.constants import CLOUD_FUNCTIONS_BASE_URL, UI_COLORS, NETWORK_TIMEOUT_MEDIUM, NETWORK_TIMEOUT_HEAD, NETWORK_TIMEOUT_LONG
+from config.constants import CLOUD_FUNCTIONS_BASE_URL, UI_COLORS, NETWORK_TIMEOUT_MEDIUM, NETWORK_TIMEOUT_HEAD
 from managers.localization_manager import tr
 from utils.file_utils import get_unique_mod_dir
 from utils.deltamod_converter import DeltamodConverter
@@ -820,8 +820,13 @@ class UrlInstallThread(QThread):
 
     def _download_archive(self, url: str, temp_dir: str) -> str:
         from urllib.parse import urlparse, unquote
+        from utils.network_utils import download_file, get_filename_from_url
+        from config.constants import NETWORK_TIMEOUT_HEAD
         parsed_url = urlparse(url)
         filename = unquote(os.path.basename(parsed_url.path))
+        if not filename or '.' not in filename:
+            session = get_session()
+            filename = get_filename_from_url(session, url)
         if not filename:
             filename = 'mod.zip'
         if not any((filename.lower().endswith(ext) for ext in ['.zip', '.rar', '.7z', '.tar.gz', '.lzma'])):
@@ -829,22 +834,20 @@ class UrlInstallThread(QThread):
         archive_path = os.path.join(temp_dir, filename)
         session = get_session()
         self._session = session
-        response = self._session.get(url, stream=True, timeout=NETWORK_TIMEOUT_LONG)
-        self._active_response = response
-        response.raise_for_status()
-        total_size = int(response.headers.get('content-length', 0))
-        downloaded_size = 0
-        with open(archive_path, 'wb') as f:
-            for chunk in response.iter_content(chunk_size=8192):
-                if self._cancelled:
-                    raise RuntimeError('download_cancelled')
-                if not chunk:
-                    continue
-                f.write(chunk)
-                downloaded_size += len(chunk)
-                if total_size > 0:
-                    progress = int(downloaded_size * 100 / total_size)
-                    self.progress.emit(progress)
+        downloaded_ref = [0]
+        total_size = 0
+        try:
+            head_response = session.head(url, allow_redirects=True, timeout=NETWORK_TIMEOUT_HEAD)
+            total_size = int(head_response.headers.get('content-length', 0))
+        except (requests.RequestException, ValueError):
+            pass
+
+        def progress_callback(progress):
+            self.progress.emit(progress)
+
+        def on_response(r):
+            self._active_response = r
+        download_file(session, url, archive_path, progress_callback=progress_callback, total_size=total_size, downloaded_ref=downloaded_ref, cancel_check=lambda: self._cancelled, on_response=on_response)
         self.progress.emit(100)
         return archive_path
 

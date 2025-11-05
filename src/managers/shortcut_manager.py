@@ -31,7 +31,7 @@ class ShortcutManager(QObject):
     def create_shortcut_flow(self):
         settings = self._gather_shortcut_settings()
         if not settings:
-            self.feedback_manager.show_warning('dialogs.cannot_create_shortcut_title', tr('dialogs.path_not_specified'))
+            self.feedback_manager.show_message('warning', 'dialogs.cannot_create_shortcut_title', tr('dialogs.path_not_specified'))
             return
         description_lines = [tr('dialogs.shortcut_description'), '', tr('dialogs.current_shortcut_settings'), '']
         game_name = tr('ui.undertale') if settings.get('is_undertale_mode', False) else tr('ui.deltarunedemo') if settings.get('is_demo_mode', False) else tr('ui.deltarune')
@@ -270,8 +270,8 @@ class ShortcutManager(QObject):
                 f.write(content)
             if system in ['Linux', 'Darwin']:
                 os.chmod(shortcut_path, 493)
-            self.feedback_manager.show_info('dialogs.success', tr('dialogs.shortcut_created_successfully', path=shortcut_path))
+            self.feedback_manager.show_message('info', 'dialogs.success', tr('dialogs.shortcut_created_successfully', path=shortcut_path))
             self.shortcut_created.emit(shortcut_path)
         except Exception as e:
             self.status_changed.emit(tr('status.shortcut_creation_error', error=str(e)), UI_COLORS['status_error'])
-            self.feedback_manager.show_error('errors.error', tr('errors.shortcut_creation_failed', error=str(e)))
+            self.feedback_manager.show_message('error', 'errors.error', tr('errors.shortcut_creation_failed', error=str(e)))

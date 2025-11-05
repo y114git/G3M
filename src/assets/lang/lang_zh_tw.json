@@ -186,6 +186,7 @@
     "steam_launch": "透過Steam啟動",
     "steam_launch_direct_conflict": "「透過Steam啟動」與直接啟動不相容。請先禁用直接啟動（雙擊章節槽位）。",
     "priority": "優先級",
+    "create_modpack_button": "建立模組包",
     "mod_priority_title": "模組優先級",
     "mod_priority_info": "重新排序模組以設定其應用優先級。頂部的模組將最後應用（最高優先級）。",
     "mod_priority_instructions": "拖曳模組以重新排序，或使用向上/向下按鈕。高優先級的模組會覆蓋低優先級模組的更改。",
@@ -243,6 +244,7 @@
     "change_demo_path": "更改DRdemo資料夾路徑",
     "change_save_path": "更改存檔資料夾",
     "change_undertale_path": "更改UT資料夾路徑",
+    "open_deltahub_folder": "開啟DELTAHUB資料夾",
     "changelog": "更新日誌",
     "copy_from_main": "從主存檔拷貝 →",
     "copy_to_main": "← 覆寫主存檔",
@@ -413,12 +415,19 @@
     "select_mod": "選擇模組",
     "success": "成功",
     "delete_confirmation": "確認刪除",
-    "delete_mod_confirmation": "此模組將被永久刪除。是否繼續？"
+    "delete_mod_confirmation": "此模組將被永久刪除。是否繼續？",
+    "create_modpack_title": "建立模組包",
+    "create_modpack_info": "這將根據當前優先級順序合併所選模組，並建立一個包含合併後的data.win檔案的新本地模組。合併後的模組包可以立即啟動，無需再次等待合併。",
+    "modpack_name_label": "模組包名稱：",
+    "modpack_default_name": "我的模組包",
+    "modpack_created_title": "模組包已建立",
+    "modpack_created_message": "模組包已成功建立於：\n{modpack_dir}"
   },
   "errors": {
     "access_permission_error": "訪問錯誤。檢查模組編輯權限。",
     "app_not_found_after_unpack": "提取壓縮檔後未找到DELTAHUB.app。",
     "archive_unpack_error": "提取壓縮檔案 {archive_name} 時出錯：{error}",
+    "modpack_creation_failed": "建立模組包失敗",
     "changelog_load_failed": "加載更新日誌失敗",
     "chapter_folder_search_error": "搜尋章節資料夾時出錯：{error}",
     "data_structure_error": "數據結構錯誤。檢查所有必填字段。",
@@ -531,6 +540,8 @@
     "installation_error": "安裝錯誤：{error}",
     "permission_error_install": "安裝時權限錯誤：{error}",
     "xdelta_not_found": "在 {path} 未找到xdelta可執行檔案",
+    "xdelta_patch_failed": "應用xdelta補丁失敗: {patch}",
+    "csx_script_failed": "執行CSX腳本失敗: {script}",
     "unsupported_archive_format": "不支持的壓縮格式。",
     "deltamod_archive_invalid_redirect": "在DELTAMOD壓縮檔案中發現無效重定向。",
     "deltamod_conversion_failed": "DELTAMOD轉換失敗。",
@@ -547,8 +558,7 @@
     "update_error": "更新錯誤",
     "permission_denied": "權限被拒絕：{path}",
     "permission_error": "權限錯誤：{path}",
-    "xdelta_patch_error": "無法套用xdelta補丁：{error}",
-    "utmtcli_not_available": "UTMTCLI 不適用於平台：{platform}"
+    "xdelta_patch_error": "無法套用xdelta補丁：{error}"
   },
   "status": {
     "shortcut_created": "捷徑已建立：{path}",
@@ -657,7 +667,8 @@
     "no_short_description": "無簡短描述",
     "not_specified": "未指定",
     "local_mod": "本地模組",
-    "unknown": "未知"
+    "unknown": "未知",
+    "multiple_authors": "多位作者"
   },
   "file_descriptions": {
     "all_files": "所有檔案",

@@ -1,6 +1,6 @@
-from typing import Dict, Any, Callable
+from typing import Dict, Any
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QFrame, QLabel, QPushButton, QCheckBox, QLineEdit, QTextBrowser, QSizePolicy, QColorDialog
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QFrame, QLabel, QPushButton, QCheckBox, QLineEdit, QTextBrowser, QSizePolicy
 from managers.localization_manager import localization_manager, tr
 from ui.widgets.common.custom_controls import NoScrollComboBox
 
@@ -106,6 +106,9 @@ class SettingsViewBuilder:
         change_path_button = QPushButton()
         change_path_button.setFixedWidth(300)
         settings_center_container.addWidget(change_path_button, alignment=Qt.AlignmentFlag.AlignHCenter)
+        open_deltahub_folder_button = QPushButton(tr('buttons.open_deltahub_folder'))
+        open_deltahub_folder_button.setFixedWidth(300)
+        settings_center_container.addWidget(open_deltahub_folder_button, alignment=Qt.AlignmentFlag.AlignHCenter)
         customization_button = QPushButton(tr('tags.customization'))
         customization_button.setFixedWidth(200)
         reset_button = QPushButton(tr('buttons.reset_settings'))
@@ -130,6 +133,7 @@ class SettingsViewBuilder:
         self.widgets['custom_executable_path_label'] = custom_executable_path_label
         self.widgets['custom_exe_frame'] = custom_exe_frame
         self.widgets['change_path_button'] = change_path_button
+        self.widgets['open_deltahub_folder_button'] = open_deltahub_folder_button
         self.widgets['customization_button'] = customization_button
         self.widgets['settings_customization_button'] = customization_button
         self.widgets['reset_button'] = reset_button

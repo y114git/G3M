@@ -73,7 +73,7 @@ class SaveManager(QObject):
         if not (path := QFileDialog.getExistingDirectory(self.parent_widget, tr('ui.select_deltarune_saves_folder'))):
             return False
         if not is_valid_save_path(path):
-            self.feedback_manager.show_warning('errors.empty_folder_title', tr('errors.empty_folder_message'))
+            self.feedback_manager.show_message('warning', 'errors.empty_folder_title', tr('errors.empty_folder_message'))
             return False
         self.app_state.save_path = path
         self.app_state.local_config['save_path'] = self.app_state.save_path
@@ -143,9 +143,9 @@ class SaveManager(QObject):
                 else:
                     backup_path = f'{native_save_path}_backup_{int(time.time())}'
                     os.rename(native_save_path, backup_path)
-                    self.feedback_manager.show_info('dialogs.backup', tr('dialogs.backup_created_for_steam_deck', backup_path=backup_path))
+                    self.feedback_manager.show_message('info', 'dialogs.backup', tr('dialogs.backup_created_for_steam_deck', backup_path=backup_path))
             os.symlink(proton_save_path, native_save_path)
-            self.feedback_manager.show_info('dialogs.steam_deck_setup', tr('dialogs.steam_deck_compatibility_configured'))
+            self.feedback_manager.show_message('info', 'dialogs.steam_deck_setup', tr('dialogs.steam_deck_compatibility_configured'))
         except Exception as e:
             logging.error(f'Steam Deck setup error: {e}')
 
@@ -210,7 +210,7 @@ class SaveManager(QObject):
             os.makedirs(os.path.join(self.app_state.save_path, folder), exist_ok=False)
             return True
         except Exception as e:
-            self.feedback_manager.show_error('errors.folder_creation_failed', error=str(e))
+            self.feedback_manager.show_message('error', 'errors.folder_creation_failed', error=str(e))
             return False
 
     def prompt_collection_name(self, default: str = 'Collection') -> Optional[str]:
@@ -245,7 +245,7 @@ class SaveManager(QObject):
             self.slots_updated.emit()
             return True
         except Exception as e:
-            self.feedback_manager.show_error('errors.rename_failed', error=str(e))
+            self.feedback_manager.show_message('error', 'errors.rename_failed', error=str(e))
             return False
 
     def delete_current_collection(self, idx: int) -> bool:
@@ -270,7 +270,7 @@ class SaveManager(QObject):
             self.slots_updated.emit()
             return True
         except Exception as e:
-            self.feedback_manager.show_error('errors.deletion_failed', error=str(e))
+            self.feedback_manager.show_message('error', 'errors.deletion_failed', error=str(e))
             return False
 
     def copy_between_storages(self, chapter: int, to_collection: bool, selected_slot: Optional[tuple[int, int]] = None):
@@ -320,7 +320,7 @@ class SaveManager(QObject):
             self.slots_updated.emit()
             self.status_changed.emit(tr('status.copying_completed'), UI_COLORS['status_success'])
         except Exception as e:
-            self.feedback_manager.show_error('errors.copy_failed', error=str(e))
+            self.feedback_manager.show_message('error', 'errors.copy_failed', error=str(e))
             self.status_changed.emit(tr('status.copying_error'), UI_COLORS['status_error'])
 
     def action_show_save(self, chapter: int, slot: int):
@@ -341,7 +341,7 @@ class SaveManager(QObject):
             self.slots_updated.emit()
             return True
         except Exception as e:
-            self.feedback_manager.show_error('errors.error', str(e))
+            self.feedback_manager.show_message('error', 'errors.error', str(e))
             return False
 
     def action_import_export(self, chapter: int, slot: int, is_import: bool) -> bool:
@@ -357,7 +357,7 @@ class SaveManager(QObject):
                 if not fp:
                     return False
                 if not re.fullmatch(f'filech{chapter}_[0-2]', os.path.basename(fp)):
-                    self.feedback_manager.show_warning('errors.invalid_file', tr('errors.wrong_save_file'))
+                    self.feedback_manager.show_message('warning', 'errors.invalid_file', tr('errors.wrong_save_file'))
                     return False
                 shutil.copy2(fp, src_fp)
                 fin_idx = SAVE_SLOT_FINISH_MAP.get(slot, -1)
@@ -371,7 +371,7 @@ class SaveManager(QObject):
                 if not dir_:
                     return False
                 if not os.path.exists(src_fp):
-                    self.feedback_manager.show_warning('errors.no_save', tr('errors.empty_slot'))
+                    self.feedback_manager.show_message('warning', 'errors.no_save', tr('errors.empty_slot'))
                     return False
                 shutil.copy2(src_fp, dir_)
                 fin_idx = SAVE_SLOT_FINISH_MAP.get(slot, -1)
@@ -401,7 +401,7 @@ class SaveManager(QObject):
             target_fin_fp = os.path.join(target_base, fin_name)
             if is_import:
                 if not os.path.exists(target_main_fp):
-                    self.feedback_manager.show_warning('errors.no_save', tr('errors.no_import_save'))
+                    self.feedback_manager.show_message('warning', 'errors.no_save', tr('errors.no_import_save'))
                     return False
                 shutil.copy2(target_main_fp, src_main_fp)
                 if os.path.exists(target_fin_fp):
@@ -410,7 +410,7 @@ class SaveManager(QObject):
                     os.remove(src_fin_fp)
             else:
                 if not os.path.exists(src_main_fp):
-                    self.feedback_manager.show_warning('errors.no_save', tr('errors.empty_slot'))
+                    self.feedback_manager.show_message('warning', 'errors.no_save', tr('errors.empty_slot'))
                     return False
                 shutil.copy2(src_main_fp, target_main_fp)
                 if os.path.exists(src_fin_fp):

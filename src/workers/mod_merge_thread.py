@@ -20,22 +20,26 @@ class ModMergeThread(QThread):
 
     def cancel(self):
         self._cancelled = True
+        self.requestInterruption()
         if self.merger:
             self.merger._cancelled = True
         self.status_update.emit('Operation cancelled', 'error')
 
     def run(self):
         try:
+            if self.isInterruptionRequested() or self._cancelled:
+                self.finished.emit(False)
+                return
             self.merger = MultiModMerger(self.app_state, self.mod_manager, None)
             self.merger.progress_update.connect(self.progress_update.emit)
             self.merger.status_update.connect(self.status_update.emit)
             self.merger._session_manifest_path = self.session_manifest_path
             self.merger._cancelled = False
-            if self._cancelled:
+            if self.isInterruptionRequested() or self._cancelled:
                 self.finished.emit(False)
                 return
             success = self.merger.merge_mods_for_chapters(self.chapter_mods)
-            if self._cancelled:
+            if self.isInterruptionRequested() or self._cancelled:
                 self.merger._cancelled = True
                 if self.merger:
                     for chapter_id in self.chapter_mods.keys():

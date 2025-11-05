@@ -171,7 +171,7 @@ class SettingsUiController:
             direct_launch_slot_id = self.app_state.local_config.get('direct_launch_slot_id', SLOT_ID_UNIVERSAL)
             is_chapter_mode = self.app_state.current_mode == 'chapter'
             if direct_launch_slot_id >= 0 and is_chapter_mode:
-                self.feedback_manager.show_warning('ui.steam_launch', tr('ui.steam_launch_direct_conflict'))
+                self.feedback_manager.show_message('warning', 'ui.steam_launch', tr('ui.steam_launch_direct_conflict'))
                 self.app.launch_via_steam_checkbox.setChecked(False)
                 return
         self.settings_manager.on_toggle_steam_launch(is_steam_launch)

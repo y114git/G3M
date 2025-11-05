@@ -83,8 +83,8 @@ class UpdateChecker(QObject):
                 extraction_dir = os.path.join(tmp_dir, 'extracted')
                 os.makedirs(extraction_dir, exist_ok=True)
                 if system != 'Darwin':
-                    from utils.file_utils import _extract_archive
-                    _extract_archive(archive_path, extraction_dir, os.path.basename(archive_path))
+                    from utils.file_utils import extract_archive
+                    extract_archive(archive_path, extraction_dir, os.path.basename(archive_path))
                 if system == 'Windows':
                     new_exe_path = next((os.path.join(root, f) for root, _, files in os.walk(extraction_dir) for f in files if f.lower().endswith('.exe')), None)
                     if not new_exe_path:

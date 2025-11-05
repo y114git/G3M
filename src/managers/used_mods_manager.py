@@ -290,14 +290,14 @@ class UsedModsManager(QObject):
             for mod_data in mods_list:
                 if getattr(mod_data, 'is_local_mod', False):
                     continue
-                needs_update = any((self.mod_manager.mod_has_files_for_chapter(mod_data, i) and self.mod_manager.get_mod_status(mod_data, i) == 'update' for i in range(5)))
+                needs_update = self.mod_manager.mod_has_update_available(mod_data)
                 if needs_update and mod_data not in mods_to_update:
                     mods_to_update.append(mod_data)
         return mods_to_update
 
     def toggle_direct_launch_for_chapter(self, chapter_id: int):
         if chapter_id == 0:
-            self.feedback_manager.show_info('ui.direct_launch', tr('ui.direct_launch_menu_not_allowed'))
+            self.feedback_manager.show_message('info', 'ui.direct_launch', tr('ui.direct_launch_menu_not_allowed'))
             return
         current_direct_launch = self.app_state.local_config.get('direct_launch_slot_id', -1)
         is_currently_enabled = current_direct_launch == chapter_id

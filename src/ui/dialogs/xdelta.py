@@ -1,48 +1,17 @@
 import os
 import shutil
-import sys
 import tempfile
 import logging
-import platform
 import subprocess
 from PyQt6.QtWidgets import QDialog, QVBoxLayout, QPushButton, QFileDialog, QMessageBox, QLineEdit, QWidget
 from managers.localization_manager import tr
 from utils.file_utils import get_file_filter
 from PyQt6.QtWidgets import QTabWidget
 from ui.common.styling import create_file_group_universal
-from utils.path_utils import resource_path
+from utils.path_utils import get_xdelta_path
 
 
 class XdeltaDialog(QDialog):
-
-    def _get_xdelta_path(self):
-        system = platform.system()
-        if system == 'Windows':
-            exe_names = ['xdelta3.exe', 'xdelta.exe']
-        elif system == 'Darwin':
-            exe_names = ['xdelta3_mac']
-        else:
-            exe_names = ['xdelta3']
-        path_to_check = None
-        for exe_name in exe_names:
-            path = resource_path(f'assets/bin/{exe_name}')
-            if os.path.exists(path):
-                path_to_check = path
-                break
-        if not path_to_check and (not getattr(sys, 'frozen', False)):
-            for exe_name in exe_names:
-                dev_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'resources', 'bin', exe_name))
-                if os.path.exists(dev_path):
-                    path_to_check = dev_path
-                    break
-        if path_to_check:
-            if system != 'Windows':
-                try:
-                    os.chmod(path_to_check, 493)
-                except Exception as e:
-                    logging.warning(f'Could not set executable permission on {path_to_check}: {e}')
-            return path_to_check
-        return None
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -128,7 +97,7 @@ class XdeltaDialog(QDialog):
         msg_box.exec()
 
     def create_patch(self):
-        xdelta_path = self._get_xdelta_path()
+        xdelta_path = get_xdelta_path()
         if not xdelta_path:
             self._show_message(tr('errors.error'), tr('errors.xdelta_unavailable'), QMessageBox.Icon.Critical)
             return
@@ -171,7 +140,7 @@ class XdeltaDialog(QDialog):
                     logging.debug(f'Failed to remove temp dir {temp_dir}: {e}')
 
     def apply_patch(self):
-        xdelta_path = self._get_xdelta_path()
+        xdelta_path = get_xdelta_path()
         if not xdelta_path:
             self._show_message(tr('errors.error'), tr('errors.xdelta_unavailable'), QMessageBox.Icon.Critical)
             return

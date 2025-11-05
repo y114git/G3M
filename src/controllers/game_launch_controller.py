@@ -77,8 +77,26 @@ class GameLaunchController(QObject):
             self.update_button_state()
             return
         if self.app_state.is_merging or (hasattr(self.game_launcher, '_merge_thread') and self.game_launcher._merge_thread and self.game_launcher._merge_thread.isRunning()):
+            is_modpack_creation = False
+            modpack_dir = None
+            if hasattr(self.app, 'library_display') and hasattr(self.app.library_display, '_modpack_thread'):
+                is_modpack_creation = self.app.library_display._modpack_thread == self.app_state.current_task
+                if is_modpack_creation:
+                    modpack_dir = getattr(self.app.library_display, '_modpack_dir', None)
             if hasattr(self.game_launcher, '_merge_thread') and self.game_launcher._merge_thread:
                 self.game_launcher._merge_thread.cancel()
+            if is_modpack_creation and modpack_dir and os.path.exists(modpack_dir):
+                try:
+                    import shutil
+                    shutil.rmtree(modpack_dir, ignore_errors=True)
+                    logging.info(f'Cancelled modpack creation, removed directory: {modpack_dir}')
+                except Exception as e:
+                    logging.error(f'Failed to remove cancelled modpack directory: {e}')
+            if is_modpack_creation and hasattr(self.app, 'library_display'):
+                if hasattr(self.app.library_display, '_modpack_thread'):
+                    self.app.library_display._modpack_thread = None
+                if hasattr(self.app.library_display, '_modpack_dir'):
+                    self.app.library_display._modpack_dir = None
             self.app_state.is_merging = False
             self.feedback_manager.update_status(tr('status.operation_cancelled'), UI_COLORS['status_error'])
             try:
@@ -159,7 +177,7 @@ class GameLaunchController(QObject):
         try:
             os.makedirs(target_dir, exist_ok=True)
         except (OSError, PermissionError) as e:
-            self.feedback_manager.show_error('errors.error', tr('errors.folder_creation_failed', error=str(e)))
+            self.feedback_manager.show_message('error', 'errors.error', tr('errors.folder_creation_failed', error=str(e)))
             self.app_state.action_button_enabled = True
             return
         self.app_state.progress_bar_visible = True

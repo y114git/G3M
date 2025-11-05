@@ -79,7 +79,7 @@ class SettingsManager(QObject):
         if self.parent_widget and hasattr(self.parent_widget, '_handle_permission_error'):
             self.parent_widget._handle_permission_error(directory)
         else:
-            self.feedback_manager.show_error('errors.permission_denied', directory)
+            self.feedback_manager.show_message('error', 'errors.permission_denied', directory)
 
     def write_local_config(self):
         self.write_json(self.app_state.config_path, self.app_state.local_config)
@@ -156,7 +156,7 @@ class SettingsManager(QObject):
             title = tr('dialogs.select_deltarune_folder')
             message = tr('dialogs.deltarune_not_found')
         if is_initial:
-            self.feedback_manager.show_info('dialogs.path_not_found', tr('dialogs.game_path_instruction', message=message))
+            self.feedback_manager.show_message('info', 'dialogs.path_not_found', tr('dialogs.game_path_instruction', message=message))
         if platform.system() == 'Darwin':
             path, _ = QFileDialog.getOpenFileName(self.parent_widget, title, '', 'Application bundle (*.app);;All files (*)')
             if not path:
@@ -186,7 +186,7 @@ class SettingsManager(QObject):
                 self.settings_changed.emit()
                 return True
             else:
-                self.feedback_manager.show_warning('dialogs.invalid_folder', tr('dialogs.invalid_game_folder'))
+                self.feedback_manager.show_message('warning', 'dialogs.invalid_folder', tr('dialogs.invalid_game_folder'))
         return False
 
     def on_background_button_click(self):
@@ -212,26 +212,26 @@ class SettingsManager(QObject):
                             os.remove(p)
                     except Exception:
                         pass
-                self.feedback_manager.show_info('dialogs.success', tr('dialogs.background_music_removed'))
+                self.feedback_manager.show_message('info', 'dialogs.success', tr('dialogs.background_music_removed'))
                 self.theme_changed.emit()
             except Exception:
-                self.feedback_manager.show_warning('errors.error', tr('errors.remove_background_music_failed'))
+                self.feedback_manager.show_message('warning', 'errors.error', tr('errors.remove_background_music_failed'))
         else:
             file_path, _ = QFileDialog.getOpenFileName(self.parent_widget, tr('dialogs.select_background_music'), '', 'Audio Files (*.mp3 *.wav)')
             if file_path:
                 lower = file_path.lower()
                 if not (lower.endswith('.mp3') or lower.endswith('.wav')):
-                    self.feedback_manager.show_warning('errors.error', tr('errors.can_select_only_mp3_wav'))
+                    self.feedback_manager.show_message('warning', 'errors.error', tr('errors.can_select_only_mp3_wav'))
                     return
                 try:
                     os.makedirs(self.app_state.config_dir, exist_ok=True)
                     ext = '.mp3' if lower.endswith('.mp3') else '.wav'
                     dest_path = os.path.join(self.app_state.config_dir, f'custom_background_music{ext}')
                     shutil.copy2(file_path, dest_path)
-                    self.feedback_manager.show_info('dialogs.success', tr('dialogs.background_music_selected'))
+                    self.feedback_manager.show_message('info', 'dialogs.success', tr('dialogs.background_music_selected'))
                     self.theme_changed.emit()
                 except Exception:
-                    self.feedback_manager.show_warning('errors.error', tr('errors.copy_background_music_failed'))
+                    self.feedback_manager.show_message('warning', 'errors.error', tr('errors.copy_background_music_failed'))
 
     def on_startup_sound_button_click(self):
         mp3 = os.path.join(self.app_state.config_dir, 'custom_startup_sound.mp3')
@@ -251,26 +251,26 @@ class SettingsManager(QObject):
                             os.remove(p)
                     except Exception:
                         pass
-                self.feedback_manager.show_info('dialogs.success', tr('dialogs.startup_sound_removed'))
+                self.feedback_manager.show_message('info', 'dialogs.success', tr('dialogs.startup_sound_removed'))
                 self.theme_changed.emit()
             except Exception:
-                self.feedback_manager.show_warning('errors.error', tr('errors.remove_startup_sound_failed'))
+                self.feedback_manager.show_message('warning', 'errors.error', tr('errors.remove_startup_sound_failed'))
         else:
             file_path, _ = QFileDialog.getOpenFileName(self.parent_widget, tr('dialogs.select_startup_sound'), '', 'Audio Files (*.mp3 *.wav)')
             if file_path:
                 lower = file_path.lower()
                 if not (lower.endswith('.mp3') or lower.endswith('.wav')):
-                    self.feedback_manager.show_warning('errors.error', tr('errors.can_select_only_mp3_wav'))
+                    self.feedback_manager.show_message('warning', 'errors.error', tr('errors.can_select_only_mp3_wav'))
                     return
                 try:
                     os.makedirs(self.app_state.config_dir, exist_ok=True)
                     ext = '.mp3' if lower.endswith('.mp3') else '.wav'
                     dest = os.path.join(self.app_state.config_dir, f'custom_startup_sound{ext}')
                     shutil.copy2(file_path, dest)
-                    self.feedback_manager.show_info('dialogs.success', tr('dialogs.startup_sound_selected'))
+                    self.feedback_manager.show_message('info', 'dialogs.success', tr('dialogs.startup_sound_selected'))
                     self.theme_changed.emit()
                 except Exception:
-                    self.feedback_manager.show_warning('errors.error', tr('errors.copy_startup_sound_failed'))
+                    self.feedback_manager.show_message('warning', 'errors.error', tr('errors.copy_startup_sound_failed'))
 
     def is_valid_hex_color(self, s: str) -> bool:
         return bool(re.fullmatch('#[0-9a-fA-F]{6}', s or ''))
@@ -305,7 +305,7 @@ class SettingsManager(QObject):
                 zipf.write(music_path, f'background_music{os.path.splitext(music_path)[1]}')
             if sound_path and os.path.exists(sound_path):
                 zipf.write(sound_path, f'startup_sound{os.path.splitext(sound_path)[1]}')
-        self.feedback_manager.show_info('dialogs.success', tr('dialogs.theme_exported_success'))
+        self.feedback_manager.show_message('info', 'dialogs.success', tr('dialogs.theme_exported_success'))
 
     def import_theme(self):
         theme_file_path, _ = QFileDialog.getOpenFileName(self.parent_widget, tr('dialogs.import_theme_title'), '', f"{tr('file_descriptions.theme_files')} (*.dhtheme)")
@@ -342,9 +342,9 @@ class SettingsManager(QObject):
             self.write_local_config()
             self.theme_changed.emit()
             self.settings_changed.emit()
-            self.feedback_manager.show_info('dialogs.success', tr('dialogs.theme_imported_success'))
+            self.feedback_manager.show_message('info', 'dialogs.success', tr('dialogs.theme_imported_success'))
         except Exception as e:
-            self.feedback_manager.show_error('dialogs.error', tr('dialogs.theme_import_failed', error=str(e)))
+            self.feedback_manager.show_message('error', 'dialogs.error', tr('dialogs.theme_import_failed', error=str(e)))
 
     def on_reset_settings_click(self, callbacks: dict):
         if not self.feedback_manager.ask_question('dialogs.reset_settings_confirm_title', 'dialogs.reset_settings_confirm_text', '', False):
@@ -365,7 +365,7 @@ class SettingsManager(QObject):
             callbacks['migrate_config']()
         self.theme_changed.emit()
         self.settings_changed.emit()
-        self.feedback_manager.show_info('dialogs.success', tr('status.settings_reset_success'))
+        self.feedback_manager.show_message('info', 'dialogs.success', tr('status.settings_reset_success'))
 
     def disable_direct_launch(self):
         self.app_state.local_config['direct_launch_slot_id'] = SLOT_ID_UNIVERSAL

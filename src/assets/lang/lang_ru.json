@@ -186,6 +186,7 @@
     "steam_launch": "Запускать через Steam",
     "steam_launch_direct_conflict": "'Запуск через Steam' несовместим с прямым запуском. Пожалуйста, сначала отключите прямой запуск (дважды кликните на слот главы).",
     "priority": "Приоритет",
+    "create_modpack_button": "Создать модпак",
     "mod_priority_title": "Приоритет модов",
     "mod_priority_info": "Измените порядок модов, чтобы установить их приоритет применения. Моды вверху будут применены последними (высший приоритет).",
     "mod_priority_instructions": "Перетащите моды для изменения порядка или используйте кнопки Вверх/Вниз. Моды с высшим приоритетом перезаписывают изменения модов с низшим приоритетом.",
@@ -253,6 +254,7 @@
     "change_demo_path": "Сменить путь к папке DRdemo",
     "change_save_path": "Сменить папку сохранений",
     "change_undertale_path": "Сменить путь к папке UT",
+    "open_deltahub_folder": "Открыть папку DELTAHUB",
     "changelog": "Список изменений",
     "copy_from_main": "Скопировать из главных →",
     "copy_to_main": "← Заменить в главных",
@@ -423,12 +425,19 @@
     "select_mod": "Выберите мод",
     "success": "Успешно",
     "delete_confirmation": "Подтвердите удаление",
-    "delete_mod_confirmation": "Мод будет полностью удалён. Это действие нельзя отменить."
+    "delete_mod_confirmation": "Мод будет полностью удалён. Это действие нельзя отменить.",
+    "create_modpack_title": "Создать модпак",
+    "create_modpack_info": "Это объединит выбранные моды согласно их текущему порядку приоритета и создаст новый локальный мод, содержащий слитый файл data.win. Слитый модпак можно запустить сразу, без повторного ожидания слияния.",
+    "modpack_name_label": "Название модпака:",
+    "modpack_default_name": "Мой модпак",
+    "modpack_created_title": "Модпак создан",
+    "modpack_created_message": "Модпак успешно создан по адресу:\n{modpack_dir}"
   },
   "errors": {
     "access_permission_error": "Ошибка доступа. Проверьте права на редактирование мода.",
     "app_not_found_after_unpack": "DELTAHUB.app не найден после распаковки.",
     "archive_unpack_error": "Ошибка распаковки архива {archive_name}: {error}",
+    "modpack_creation_failed": "Не удалось создать модпак",
     "changelog_load_failed": "Не удалось загрузить журнал изменений",
     "chapter_folder_search_error": "Ошибка при поиске папки главы: {error}",
     "data_structure_error": "Ошибка в структуре данных. Проверьте заполнение всех обязательных полей.",
@@ -541,6 +550,8 @@
     "installation_error": "Ошибка установки: {error}",
     "permission_error_install": "Ошибка прав доступа при установке: {error}",
     "xdelta_not_found": "Исполняемый файл xdelta не найден по пути: {path}",
+    "xdelta_patch_failed": "Не удалось применить патч xdelta: {patch}",
+    "csx_script_failed": "Не удалось выполнить CSX скрипт: {script}",
     "unsupported_archive_format": "Неподдерживаемый формат архива.",
     "deltamod_archive_invalid_redirect": "В архиве DELTAMOD обнаружено неверное перенаправление.",
     "deltamod_conversion_failed": "Ошибка конвертации DELTAMOD.",
@@ -561,8 +572,7 @@
     "permission_denied": "Доступ запрещён: {path}",
     "permission_error": "Ошибка доступа: {path}",
     "update_error": "Ошибка обновления",
-    "xdelta_patch_error": "Не удалось применить xdelta патч: {error}",
-    "utmtcli_not_available": "UTMTCLI недоступен для платформы: {platform}"
+    "xdelta_patch_error": "Не удалось применить xdelta патч: {error}"
   },
   "status": {
     "shortcut_created": "Ярлык создан: {path}",
@@ -670,7 +680,8 @@
     "no_short_description": "Нет краткого описания",
     "not_specified": "Не указана",
     "local_mod": "Локальный мод",
-    "unknown": "Неизвестно"
+    "unknown": "Неизвестно",
+    "multiple_authors": "Несколько авторов"
   },
   "file_descriptions": {
     "all_files": "Все файлы",

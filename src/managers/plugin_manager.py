@@ -2,7 +2,7 @@ import os
 import sys
 import logging
 import importlib.util
-from typing import Any, Dict, List
+from typing import Any, Dict
 from PyQt6.QtCore import QObject, pyqtSignal
 from PyQt6.QtWidgets import QWidget, QTabWidget
 from managers.localization_manager import localization_manager, tr
@@ -97,9 +97,3 @@ class PluginManager(QObject):
                 except Exception as e:
                     logging.error(f"Error executing {hook_name} hook for plugin '{plugin.get('name_key')}': {e}", exc_info=True)
                     self.plugin_error.emit(plugin.get('name_key', 'Unknown'), str(e))
-
-    def get_ui_plugins(self) -> List[Dict[str, Any]]:
-        return [p for p in self.app_state.plugins if not p.get('tab_hide', False)]
-
-    def get_background_plugins(self) -> List[Dict[str, Any]]:
-        return [p for p in self.app_state.plugins if any((callable(p.get(hook)) for hook in ['on_before_game_launch', 'on_after_game_launch', 'on_before_game_exit', 'on_after_game_exit']))]

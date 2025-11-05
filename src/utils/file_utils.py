@@ -10,10 +10,6 @@ import tarfile
 import lzma
 import logging
 from pathlib import Path
-import requests
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
-from config.constants import BROWSER_HEADERS
 from utils.network_utils import download_file, get_filename_from_url, get_session
 import errno
 
@@ -50,6 +46,72 @@ def extract_archive(archive_path: str, target_dir: str, fname: str | None = None
                 raise IOError('extracted_content_too_large')
         _move_tree_safely(temp_out, target_dir)
         _cleanup_extracted_archive(target_dir, is_game_installation)
+
+
+def extract_archive_with_backup(archive_path: str, target_dir: str, backup_temp_dir: str | None = None, backup_files: dict | None = None, add_mod_dir_callback=None, backup_file_callback=None, update_manifest_callback=None, status_callback=None) -> list[str]:
+    import platform
+    extracted_files = []
+    file_lower = archive_path.lower()
+    try:
+        with tempfile.TemporaryDirectory(prefix='deltahub-extract-') as temp_dir:
+            _extract_archive_raw(archive_path, file_lower, temp_dir)
+            _cleanup_extracted_archive(temp_dir, False)
+            for root, dirs, files in os.walk(temp_dir):
+                for file in files:
+                    source_file = os.path.join(root, file)
+                    rel_path = os.path.relpath(source_file, temp_dir)
+                    target_file = os.path.join(target_dir, rel_path)
+                    file_lower = file.lower()
+                    if platform.system() == 'Darwin':
+                        if file_lower.endswith('.win'):
+                            name_without_ext = os.path.splitext(file)[0]
+                            target_file = os.path.join(os.path.dirname(target_file), name_without_ext + '.ios')
+                    elif file_lower.endswith('.ios'):
+                        name_without_ext = os.path.splitext(file)[0]
+                        target_file = os.path.join(os.path.dirname(target_file), name_without_ext + '.win')
+                    target_dirname = os.path.dirname(target_file)
+                    os.makedirs(target_dirname, exist_ok=True)
+                    if add_mod_dir_callback:
+                        try:
+                            add_mod_dir_callback(target_dirname)
+                        except Exception as e:
+                            logging.error(f'extract_archive_with_backup: add_mod_dir_callback failed: {e}', exc_info=True)
+                    tmp_target = target_file + '.tmp'
+                    try:
+                        shutil.copy2(source_file, tmp_target)
+                        if os.path.exists(target_file) and backup_temp_dir and (backup_files is not None):
+                            backup_rel_path = os.path.relpath(target_file, target_dir)
+                            backup_file_path = os.path.join(backup_temp_dir, backup_rel_path)
+                            os.makedirs(os.path.dirname(backup_file_path), exist_ok=True)
+                            shutil.move(target_file, backup_file_path)
+                            backup_files[target_file] = backup_file_path
+                            if backup_file_callback:
+                                try:
+                                    backup_file_callback(target_file, backup_file_path)
+                                except Exception as e:
+                                    logging.error(f'extract_archive_with_backup: backup_file_callback failed: {e}', exc_info=True)
+                            if update_manifest_callback:
+                                try:
+                                    update_manifest_callback({target_file: backup_file_path}, None, None)
+                                except Exception as e:
+                                    logging.error(f'extract_archive_with_backup: update_manifest_callback failed: {e}', exc_info=True)
+                        os.replace(tmp_target, target_file)
+                        extracted_files.append(target_file)
+                    finally:
+                        try:
+                            if os.path.exists(tmp_target):
+                                os.remove(tmp_target)
+                        except Exception as e:
+                            logging.warning(f'extract_archive_with_backup: tmp cleanup failed: {e}', exc_info=True)
+    except Exception as e:
+        error_msg = f'Archive unpack error: {os.path.basename(archive_path)}: {e}'
+        if status_callback:
+            try:
+                status_callback(error_msg)
+            except Exception:
+                pass
+        logging.error(f'extract_archive_with_backup: {error_msg}', exc_info=True)
+    return extracted_files
 
 
 def _extract_archive_raw(src_path: str, fname_lower: str, out_dir: str) -> None:
