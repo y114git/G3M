@@ -592,18 +592,54 @@ class MultiModMerger(QObject):
                     logging.error(f'[_apply_xdelta_patches] Temp directory is not writable: {temp_dir}')
                     self.status_update.emit(tr('errors.xdelta_patch_failed', patch=os.path.basename(patch_path)), 'error')
                     return False
-                cmd = [self.xdelta_path, '-d', '-s', data_win_path, patch_path, temp_output]
+                temp_renamed_source = None
+                source_file_for_patch = data_win_path
+                if platform.system() == 'Darwin' and data_win_path.endswith('game.ios'):
+                    logging.info('[_apply_xdelta_patches] macOS detected with game.ios - will try data.win rename if patch fails')
+                    temp_renamed_source = data_win_path.replace('game.ios', 'data.win')
+                cmd = [self.xdelta_path, '-d', '-s', source_file_for_patch, patch_path, temp_output]
                 logging.info(f"[_apply_xdelta_patches] Command: {' '.join(cmd)}")
                 logging.info('[_apply_xdelta_patches] Command arguments:')
                 logging.info(f'  - xdelta_path: {cmd[0]}')
                 logging.info(f"  - source: {cmd[3]} (exists: {os.path.exists(cmd[3])}, size: {(os.path.getsize(cmd[3]) if os.path.exists(cmd[3]) else 'N/A')})")
                 logging.info(f"  - patch: {cmd[4]} (exists: {os.path.exists(cmd[4])}, size: {(os.path.getsize(cmd[4]) if os.path.exists(cmd[4]) else 'N/A')})")
                 logging.info(f'  - output: {cmd[5]}')
-                result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+                startupinfo = None
+                creationflags = 0
+                if platform.system() == 'Windows':
+                    import subprocess as sp
+                    startupinfo = sp.STARTUPINFO()
+                    startupinfo.dwFlags |= sp.STARTF_USESHOWWINDOW
+                    startupinfo.wShowWindow = sp.SW_HIDE
+                    creationflags = sp.CREATE_NO_WINDOW
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=300, stdin=subprocess.DEVNULL, startupinfo=startupinfo, creationflags=creationflags)
                 logging.info('[_apply_xdelta_patches] Command completed')
                 logging.info(f'[_apply_xdelta_patches] Return code: {result.returncode}')
                 logging.info(f"[_apply_xdelta_patches] stdout: {(result.stdout[:500] if result.stdout else '(empty)')}")
                 logging.info(f"[_apply_xdelta_patches] stderr: {(result.stderr[:500] if result.stderr else '(empty)')}")
+                if result.returncode != 0 and temp_renamed_source and os.path.exists(data_win_path):
+                    logging.warning('[_apply_xdelta_patches] Patch failed with game.ios, trying with data.win rename')
+                    try:
+                        shutil.copy2(data_win_path, temp_renamed_source)
+                        logging.info(f'[_apply_xdelta_patches] Created temporary data.win copy: {temp_renamed_source}')
+                        cmd_retry = [self.xdelta_path, '-d', '-s', temp_renamed_source, patch_path, temp_output]
+                        logging.info(f"[_apply_xdelta_patches] Retry command: {' '.join(cmd_retry)}")
+                        result = subprocess.run(cmd_retry, capture_output=True, text=True, timeout=300, stdin=subprocess.DEVNULL, startupinfo=startupinfo, creationflags=creationflags)
+                        logging.info(f'[_apply_xdelta_patches] Retry return code: {result.returncode}')
+                        logging.info(f"[_apply_xdelta_patches] Retry stdout: {(result.stdout[:500] if result.stdout else '(empty)')}")
+                        logging.info(f"[_apply_xdelta_patches] Retry stderr: {(result.stderr[:500] if result.stderr else '(empty)')}")
+                        if result.returncode == 0:
+                            logging.info('[_apply_xdelta_patches] Patch succeeded with data.win rename')
+                        if os.path.exists(temp_renamed_source):
+                            os.remove(temp_renamed_source)
+                            logging.info(f'[_apply_xdelta_patches] Removed temporary data.win: {temp_renamed_source}')
+                    except Exception as e:
+                        logging.error(f'[_apply_xdelta_patches] Error during data.win retry: {e}', exc_info=True)
+                        if os.path.exists(temp_renamed_source):
+                            try:
+                                os.remove(temp_renamed_source)
+                            except Exception:
+                                pass
                 if result.returncode != 0:
                     logging.error(f'[_apply_xdelta_patches] xdelta patch failed with return code {result.returncode}')
                     logging.error(f'[_apply_xdelta_patches] Full stdout: {result.stdout}')

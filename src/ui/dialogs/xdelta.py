@@ -122,7 +122,14 @@ class XdeltaDialog(QDialog):
             shutil.copy2(original_file, temp_original)
             shutil.copy2(modified_file, temp_modified)
             command = [xdelta_path, '-e', '-s', temp_original, temp_modified, temp_output]
-            result = subprocess.run(command, capture_output=True, text=True, encoding='utf-8')
+            startupinfo = None
+            creationflags = 0
+            if platform.system() == 'Windows':
+                startupinfo = subprocess.STARTUPINFO()
+                startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                startupinfo.wShowWindow = subprocess.SW_HIDE
+                creationflags = subprocess.CREATE_NO_WINDOW
+            result = subprocess.run(command, capture_output=True, text=True, encoding='utf-8', stdin=subprocess.DEVNULL, startupinfo=startupinfo, creationflags=creationflags)
             if result.returncode == 0:
                 shutil.move(temp_output, output_patch)
                 self._show_message(tr('dialogs.success'), tr('ui.patch_success', path=output_patch))
@@ -165,7 +172,14 @@ class XdeltaDialog(QDialog):
             shutil.copy2(original_file, temp_original)
             shutil.copy2(patch_file, temp_patch)
             command = [xdelta_path, '-d', '-s', temp_original, temp_patch, temp_output]
-            result = subprocess.run(command, capture_output=True, text=True, encoding='utf-8')
+            startupinfo = None
+            creationflags = 0
+            if platform.system() == 'Windows':
+                startupinfo = subprocess.STARTUPINFO()
+                startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                startupinfo.wShowWindow = subprocess.SW_HIDE
+                creationflags = subprocess.CREATE_NO_WINDOW
+            result = subprocess.run(command, capture_output=True, text=True, encoding='utf-8', stdin=subprocess.DEVNULL, startupinfo=startupinfo, creationflags=creationflags)
             if result.returncode == 0:
                 shutil.move(temp_output, output_file)
                 self._show_message(tr('dialogs.success'), tr('ui.patch_apply_success', path=output_file))

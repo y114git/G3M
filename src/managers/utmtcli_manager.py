@@ -72,7 +72,14 @@ class UTMTCLIManager:
             command = ['dotnet', self.utmtcli_exe] + args
         logging.info(f"Executing UTMTCLI command: {' '.join(command)} (cwd={cwd}, timeout={timeout}s)")
         try:
-            result = subprocess.run(command, cwd=cwd, env=env if env is not None else None, capture_output=True, text=True, timeout=timeout, encoding='utf-8', errors='replace')
+            startupinfo = None
+            creationflags = 0
+            if platform.system() == 'Windows':
+                startupinfo = subprocess.STARTUPINFO()
+                startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                startupinfo.wShowWindow = subprocess.SW_HIDE
+                creationflags = subprocess.CREATE_NO_WINDOW
+            result = subprocess.run(command, cwd=cwd, env=env if env is not None else None, capture_output=True, text=True, timeout=timeout, encoding='utf-8', errors='replace', stdin=subprocess.DEVNULL, startupinfo=startupinfo, creationflags=creationflags)
             logging.info(f'UTMTCLI command completed with return code {result.returncode}')
             if result.returncode != 0:
                 logging.warning(f'UTMTCLI command failed: {result.stderr[:200]}')
