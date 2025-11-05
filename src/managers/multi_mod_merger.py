@@ -663,12 +663,14 @@ class MultiModMerger(QObject):
                 is_macos_with_ios = platform.system() == 'Darwin' and data_win_path.endswith('game.ios')
                 strategy_success = False
                 if is_macos_with_ios:
-                    logging.info('[_apply_xdelta_patches] macOS detected with game.ios - will try multiple strategies if patch fails')
-                    logging.info('[_apply_xdelta_patches] Strategy 1: Apply patch directly to game.ios')
-                    logging.info('[_apply_xdelta_patches] Strategy 2: Rename game.ios to data.win and apply')
-                    logging.info('[_apply_xdelta_patches] Strategy 3: Use -f (force) flag with data.win rename')
+                    logging.info('[_apply_xdelta_patches] macOS detected with game.ios - will try multiple strategies')
+                    logging.info('[_apply_xdelta_patches] Strategy 1: Apply patch directly to game.ios with -f (force) flag (old version method)')
+                    logging.info('[_apply_xdelta_patches] Strategy 2: Rename game.ios to data.win and apply with -f')
+                    logging.info('[_apply_xdelta_patches] Strategy 3: Apply with larger buffer size')
                     temp_renamed_source = data_win_path.replace('game.ios', 'data.win')
-                cmd = [self.xdelta_path, '-d', '-s', source_file_for_patch, patch_path, temp_output]
+                    cmd = [self.xdelta_path, '-d', '-f', '-s', source_file_for_patch, patch_path, data_win_path]
+                else:
+                    cmd = [self.xdelta_path, '-d', '-s', source_file_for_patch, patch_path, temp_output]
                 logging.info(f"[_apply_xdelta_patches] Command: {' '.join(cmd)}")
                 logging.info('[_apply_xdelta_patches] Command arguments:')
                 logging.info(f'  - xdelta_path: {cmd[0]}')
@@ -792,6 +794,16 @@ class MultiModMerger(QObject):
                     logging.error(f'[_apply_xdelta_patches] Full stderr: {result.stderr}')
                     self.status_update.emit(tr('errors.xdelta_patch_failed', patch=os.path.basename(patch_path)), 'error')
                     return False
+                if is_macos_with_ios and strategy_succeeded and (result.returncode == 0):
+                    if os.path.exists(data_win_path):
+                        output_size = os.path.getsize(data_win_path)
+                        logging.info(f'[_apply_xdelta_patches] File patched in place: {data_win_path}, size: {output_size} bytes')
+                        logging.info(f'[_apply_xdelta_patches] Patch {idx + 1}/{len(data_patches)} applied successfully')
+                        continue
+                    else:
+                        logging.error(f'[_apply_xdelta_patches] Patched file does not exist: {data_win_path}')
+                        self.status_update.emit(tr('errors.xdelta_patch_failed', patch=os.path.basename(patch_path)), 'error')
+                        return False
                 if not os.path.exists(temp_output):
                     logging.error(f'[_apply_xdelta_patches] Temp output file was not created: {temp_output}')
                     self.status_update.emit(tr('errors.xdelta_patch_failed', patch=os.path.basename(patch_path)), 'error')

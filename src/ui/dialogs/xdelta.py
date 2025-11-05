@@ -3,6 +3,7 @@ import shutil
 import tempfile
 import logging
 import subprocess
+import platform
 from PyQt6.QtWidgets import QDialog, QVBoxLayout, QPushButton, QFileDialog, QMessageBox, QLineEdit, QWidget
 from managers.localization_manager import tr
 from utils.file_utils import get_file_filter
