@@ -113,7 +113,7 @@ jobs:
 
   macos-x64:
     name: macOS · x86_64 (spec)
-    runs-on: macos-13
+    runs-on: macos-15-intel
     steps:
       - uses: actions/checkout@v4
       - name: Set Archive Name
@@ -123,10 +123,8 @@ jobs:
           echo "archive_path=${archive_name}.zip" >> $GITHUB_OUTPUT
       - name: Extra tools
         run: brew install upx || true
-      - name: Install .NET runtime
-        run: |
-          brew install --cask dotnet
-          echo "$HOME/.dotnet" >> $GITHUB_PATH || true
+      - name: Check .NET runtime
+        run: dotnet --version || echo ".NET not found, but continuing..."
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
@@ -167,7 +165,7 @@ jobs:
 
   macos-arm64:
     name: macOS · arm64 (spec)
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
       - name: Set Archive Name
@@ -177,10 +175,8 @@ jobs:
           echo "archive_path=${archive_name}.zip" >> $GITHUB_OUTPUT
       - name: Extra tools
         run: brew install upx || true
-      - name: Install .NET runtime
-        run: |
-          brew install --cask dotnet
-          echo "$HOME/.dotnet" >> $GITHUB_PATH || true
+      - name: Check .NET runtime
+        run: dotnet --version || echo ".NET not found, but continuing..."
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}

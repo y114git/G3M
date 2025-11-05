@@ -18,11 +18,22 @@ else:
     if vcredist_dll and os.path.exists(vcredist_dll):
         binaries_extra.append((vcredist_dll, '.'))
 
+
+datas_extra = []
+try:
+    spec_dir = os.path.dirname(os.path.abspath(__file__))
+except NameError:
+    spec_dir = os.path.join(os.getcwd(), 'builds')
+project_root = os.path.dirname(spec_dir)
+secrets_embed_path = os.path.join(project_root, 'secrets_embed.py')
+if os.path.exists(secrets_embed_path):
+    datas_extra.append((secrets_embed_path, '.'))
+
 a = Analysis(
     ['../src/main.py'],
     pathex=['..'],
     binaries=binaries_extra,
-    datas=[('../src', 'src')],
+    datas=[('../src', 'src')] + datas_extra,
     hiddenimports=[
         'psutil',
         'packaging',
