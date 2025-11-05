@@ -11,6 +11,7 @@ class UTMTCLIManager:
     def __init__(self):
         self.platform = self._detect_platform()
         self.utmtcli_path = None
+        self.utmtcli_exe = None
         self._initialize_paths()
 
     def _detect_platform(self) -> str:

@@ -541,6 +541,7 @@
     "permission_error_install": "安裝時權限錯誤：{error}",
     "xdelta_not_found": "在 {path} 未找到xdelta可執行檔案",
     "xdelta_patch_failed": "應用xdelta補丁失敗: {patch}",
+    "merge_failed": "模組合併失敗: {error}",
     "csx_script_failed": "執行CSX腳本失敗: {script}",
     "unsupported_archive_format": "不支持的壓縮格式。",
     "deltamod_archive_invalid_redirect": "在DELTAMOD壓縮檔案中發現無效重定向。",

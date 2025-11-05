@@ -549,6 +549,7 @@
     "permission_error_install": "Permission error during installation: {error}",
     "xdelta_not_found": "xdelta executable not found at: {path}",
     "xdelta_patch_failed": "Failed to apply xdelta patch: {patch}",
+    "merge_failed": "Mod merge failed: {error}",
     "csx_script_failed": "Failed to execute CSX script: {script}",
     "unsupported_archive_format": "Unsupported archive format.",
     "deltamod_archive_invalid_redirect": "Invalid redirect found in DELTAMOD archive.",

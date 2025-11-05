@@ -176,17 +176,22 @@ class MultiModMerger(QObject):
                 data_patches = self._find_data_patches(mod_source_dir)
                 csx_scripts = self._find_csx_scripts(mod_source_dir)
                 if ready_data_win_files and (not data_patches) and (not csx_scripts):
-                    logging.info(f'Single mod {mod_name} with only ready data.win - copying directly')
+                    logging.info(f'Single mod {mod_name} with only ready data.win/game.ios - copying directly')
                     ready_file = ready_data_win_files[0]
+                    logging.info(f'Copying ready file: {ready_file} -> {output_data_win_path}')
                     try:
+                        if os.path.exists(output_data_win_path):
+                            extracted_chapter_id = self._extract_chapter_id_from_path(target_dir)
+                            if extracted_chapter_id is not None:
+                                self._backup_file(extracted_chapter_id, output_data_win_path)
                         shutil.copy2(ready_file, output_data_win_path)
-                        logging.info(f'Copied ready data.win from {mod_name} to {output_data_win_path}')
+                        logging.info(f'Copied ready data.win/game.ios from {mod_name} to {output_data_win_path}')
                         used_archive_names = set()
                         if not self._apply_file_overrides(mod_source_dir, target_dir, used_archive_names):
                             logging.warning(f'Failed to apply file overrides from {mod_name}')
                         return True
                     except Exception as e:
-                        logging.error(f'Failed to copy ready data.win file: {e}')
+                        logging.error(f'Failed to copy ready data.win file: {e}', exc_info=True)
                         if not is_modpack:
                             self._restore_backups(chapter_id)
                         return False
@@ -214,39 +219,67 @@ class MultiModMerger(QObject):
             os.makedirs(mod_dir, exist_ok=True)
             original_filename = os.path.basename(original_data_win)
             mod_data_win = os.path.join(mod_dir, original_filename)
-            shutil.copy2(original_data_win, mod_data_win)
-            logging.debug(f'Copied {original_data_win} to {mod_data_win} for mod {mod_number}')
+            if mod_number > 1:
+                previous_mod_number = mod_number - 1
+                previous_mod_dir = os.path.join(xdelta_combiner_dir, str(previous_mod_number))
+                previous_mod_data_win = os.path.join(previous_mod_dir, original_filename)
+                if os.path.exists(previous_mod_data_win):
+                    shutil.copy2(previous_mod_data_win, mod_data_win)
+                    logging.debug(f'Copied previous mod {previous_mod_number} result to {mod_data_win} for mod {mod_number}')
+                else:
+                    shutil.copy2(original_data_win, mod_data_win)
+                    logging.debug(f'Previous mod {previous_mod_number} result not found, using vanilla copy for mod {mod_number}')
+            else:
+                shutil.copy2(original_data_win, mod_data_win)
+                logging.debug(f'Copied {original_data_win} to {mod_data_win} for mod {mod_number}')
             ready_data_win_files = self._find_ready_data_win_files(mod_source_dir)
             data_patches = self._find_data_patches(mod_source_dir)
             csx_scripts = self._find_csx_scripts(mod_source_dir)
             if ready_data_win_files:
-                logging.info(f'Found {len(ready_data_win_files)} ready data.win file(s) from {mod_name}, merging')
+                logging.info(f'Found {len(ready_data_win_files)} ready data.win/game.ios file(s) from {mod_name} (mod {mod_number}), merging')
+                for rf in ready_data_win_files:
+                    logging.info(f'  - Ready file: {rf}')
                 if not self._handle_ready_data_win(mod_data_win, ready_data_win_files, mod_dir):
                     logging.error(f'Failed to merge ready data.win files from {mod_name}')
                     if not is_modpack:
                         self._restore_backups(chapter_id)
                     return False
-                logging.info(f'Successfully merged ready data.win files from {mod_name}')
+                logging.info(f'Successfully merged ready data.win files from {mod_name} (mod {mod_number})')
+                target_dir_result = self._get_target_dir(chapter_id)
+                if target_dir_result is not None and mod_source_dir:
+                    used_archive_names = set()
+                    if not self._apply_file_overrides(mod_source_dir, target_dir_result, used_archive_names):
+                        logging.warning(f'Failed to apply file overrides from {mod_name} after ready data.win merge')
                 if not data_patches and (not csx_scripts):
                     mods_already_exported.add(mod_number)
                     logging.info(f'Mod {mod_name} (number {mod_number}) has only ready data.win, will skip ExportModifiedOnly')
+                mod_patched_files[mod_number] = mod_data_win
             if data_patches:
-                logging.info(f'Found {len(data_patches)} data patch(es) from {mod_name}, applying to original')
+                logging.info(f'Found {len(data_patches)} data patch(es) from {mod_name} (mod {mod_number}), applying to original')
                 if not self._apply_xdelta_patches(mod_data_win, data_patches):
                     logging.error(f'Failed to apply data patches from {mod_name}')
                     if not is_modpack:
                         self._restore_backups(chapter_id)
                     return False
-                logging.info(f'Successfully applied data patches from {mod_name}')
+                logging.info(f'Successfully applied data patches from {mod_name} (mod {mod_number})')
+                mod_patched_files[mod_number] = mod_data_win
             if csx_scripts:
-                logging.info(f'Found {len(csx_scripts)} CSX script(s) from {mod_name}, executing')
+                logging.info(f'Found {len(csx_scripts)} CSX script(s) from {mod_name} (mod {mod_number}), executing')
                 if not self._apply_csx_scripts(mod_data_win, csx_scripts):
                     logging.error(f'Failed to execute CSX scripts from {mod_name}')
                     if not is_modpack:
                         self._restore_backups(chapter_id)
                     return False
-                logging.info(f'Successfully executed CSX scripts from {mod_name}')
-            mod_patched_files[mod_number] = mod_data_win
+                logging.info(f'Successfully executed CSX scripts from {mod_name} (mod {mod_number})')
+                mod_patched_files[mod_number] = mod_data_win
+            if not ready_data_win_files and (not data_patches) and (not csx_scripts):
+                target_dir_result = self._get_target_dir(chapter_id)
+                if target_dir_result is not None and mod_source_dir:
+                    used_archive_names = set()
+                    if self._apply_file_overrides(mod_source_dir, target_dir_result, used_archive_names):
+                        logging.info(f'Applied file overrides from {mod_name} (mod {mod_number})')
+            if mod_number not in mod_patched_files:
+                mod_patched_files[mod_number] = mod_data_win
         mods_to_export = [m for i, m in enumerate(mods_to_apply) if mods_count - i != 1 and mods_count - i not in mods_already_exported]
         for idx, mod_data in enumerate(mods_to_export):
             if self._cancelled:
@@ -541,11 +574,25 @@ class MultiModMerger(QObject):
     def _apply_xdelta_patches(self, data_win_path: str, data_patches: List[str]) -> bool:
         import platform
         import stat
-        logging.info('[_apply_xdelta_patches] Starting xdelta patch application')
+        import hashlib
+        logging.info('[_apply_xdelta_patches] ========== Starting xdelta patch application ==========')
         logging.info(f'[_apply_xdelta_patches] Platform: {platform.system()}')
+        logging.info(f'[_apply_xdelta_patches] Platform release: {platform.release()}')
+        logging.info(f'[_apply_xdelta_patches] Platform version: {platform.version()}')
         logging.info(f'[_apply_xdelta_patches] xdelta_path: {self.xdelta_path}')
         logging.info(f'[_apply_xdelta_patches] data_win_path: {data_win_path}')
         logging.info(f'[_apply_xdelta_patches] Number of patches: {len(data_patches)}')
+        if os.path.exists(data_win_path):
+            try:
+                with open(data_win_path, 'rb') as f:
+                    file_hash = hashlib.md5()
+                    chunk_size = 8192
+                    while (chunk := f.read(chunk_size)):
+                        file_hash.update(chunk)
+                    file_md5 = file_hash.hexdigest()
+                    logging.info(f'[_apply_xdelta_patches] Input file MD5: {file_md5}')
+            except Exception as e:
+                logging.warning(f'[_apply_xdelta_patches] Could not calculate file hash: {e}')
         if not self.xdelta_path:
             logging.error('[_apply_xdelta_patches] xdelta executable not found')
             self.status_update.emit(tr('errors.xdelta_not_found'), 'error')
@@ -585,6 +632,16 @@ class MultiModMerger(QObject):
             patch_size = os.path.getsize(patch_path)
             logging.info(f'[_apply_xdelta_patches] Patch file size: {patch_size} bytes')
             try:
+                with open(patch_path, 'rb') as f:
+                    patch_hash = hashlib.md5()
+                    chunk_size = 8192
+                    while (chunk := f.read(chunk_size)):
+                        patch_hash.update(chunk)
+                    patch_md5 = patch_hash.hexdigest()
+                    logging.info(f'[_apply_xdelta_patches] Patch file MD5: {patch_md5}')
+            except Exception as e:
+                logging.warning(f'[_apply_xdelta_patches] Could not calculate patch hash: {e}')
+            try:
                 temp_output = data_win_path + '.tmp'
                 logging.info(f'[_apply_xdelta_patches] Temporary output file: {temp_output}')
                 temp_dir = os.path.dirname(temp_output)
@@ -592,10 +649,23 @@ class MultiModMerger(QObject):
                     logging.error(f'[_apply_xdelta_patches] Temp directory is not writable: {temp_dir}')
                     self.status_update.emit(tr('errors.xdelta_patch_failed', patch=os.path.basename(patch_path)), 'error')
                     return False
+                try:
+                    if hasattr(os, 'statvfs'):
+                        statvfs = os.statvfs(temp_dir)
+                        free_space = statvfs.f_frsize * statvfs.f_bavail
+                        logging.info(f'[_apply_xdelta_patches] Available disk space: {free_space / (1024 * 1024):.2f} MB')
+                        if free_space < input_size * 2:
+                            logging.warning(f'[_apply_xdelta_patches] Low disk space warning: {free_space / (1024 * 1024):.2f} MB available')
+                except Exception as e:
+                    logging.debug(f'[_apply_xdelta_patches] Could not check disk space: {e}')
                 temp_renamed_source = None
                 source_file_for_patch = data_win_path
-                if platform.system() == 'Darwin' and data_win_path.endswith('game.ios'):
-                    logging.info('[_apply_xdelta_patches] macOS detected with game.ios - will try data.win rename if patch fails')
+                is_macos_with_ios = platform.system() == 'Darwin' and data_win_path.endswith('game.ios')
+                if is_macos_with_ios:
+                    logging.info('[_apply_xdelta_patches] macOS detected with game.ios - will try multiple strategies if patch fails')
+                    logging.info('[_apply_xdelta_patches] Strategy 1: Apply patch directly to game.ios')
+                    logging.info('[_apply_xdelta_patches] Strategy 2: Rename game.ios to data.win and apply')
+                    logging.info('[_apply_xdelta_patches] Strategy 3: Use -f (force) flag with data.win rename')
                     temp_renamed_source = data_win_path.replace('game.ios', 'data.win')
                 cmd = [self.xdelta_path, '-d', '-s', source_file_for_patch, patch_path, temp_output]
                 logging.info(f"[_apply_xdelta_patches] Command: {' '.join(cmd)}")
@@ -617,25 +687,50 @@ class MultiModMerger(QObject):
                 logging.info(f'[_apply_xdelta_patches] Return code: {result.returncode}')
                 logging.info(f"[_apply_xdelta_patches] stdout: {(result.stdout[:500] if result.stdout else '(empty)')}")
                 logging.info(f"[_apply_xdelta_patches] stderr: {(result.stderr[:500] if result.stderr else '(empty)')}")
-                if result.returncode != 0 and temp_renamed_source and os.path.exists(data_win_path):
-                    logging.warning('[_apply_xdelta_patches] Patch failed with game.ios, trying with data.win rename')
+                if result.returncode != 0 and is_macos_with_ios and temp_renamed_source and os.path.exists(data_win_path):
+                    logging.warning('[_apply_xdelta_patches] ========== Strategy 1 failed, trying alternative strategies ==========')
+                    logging.info('[_apply_xdelta_patches] Strategy 2: Renaming game.ios to data.win')
                     try:
                         shutil.copy2(data_win_path, temp_renamed_source)
-                        logging.info(f'[_apply_xdelta_patches] Created temporary data.win copy: {temp_renamed_source}')
+                        renamed_size = os.path.getsize(temp_renamed_source)
+                        logging.info(f'[_apply_xdelta_patches] Created temporary data.win copy: {temp_renamed_source} (size: {renamed_size} bytes)')
+                        if os.path.getsize(data_win_path) == renamed_size:
+                            logging.info('[_apply_xdelta_patches] File sizes match - files should be identical')
                         cmd_retry = [self.xdelta_path, '-d', '-s', temp_renamed_source, patch_path, temp_output]
-                        logging.info(f"[_apply_xdelta_patches] Retry command: {' '.join(cmd_retry)}")
+                        logging.info(f"[_apply_xdelta_patches] Strategy 2 command: {' '.join(cmd_retry)}")
                         result = subprocess.run(cmd_retry, capture_output=True, text=True, timeout=300, stdin=subprocess.DEVNULL, startupinfo=startupinfo, creationflags=creationflags)
-                        logging.info(f'[_apply_xdelta_patches] Retry return code: {result.returncode}')
-                        logging.info(f"[_apply_xdelta_patches] Retry stdout: {(result.stdout[:500] if result.stdout else '(empty)')}")
-                        logging.info(f"[_apply_xdelta_patches] Retry stderr: {(result.stderr[:500] if result.stderr else '(empty)')}")
+                        logging.info(f'[_apply_xdelta_patches] Strategy 2 return code: {result.returncode}')
+                        logging.info(f"[_apply_xdelta_patches] Strategy 2 stdout: {(result.stdout[:500] if result.stdout else '(empty)')}")
+                        logging.info(f"[_apply_xdelta_patches] Strategy 2 stderr: {(result.stderr[:500] if result.stderr else '(empty)')}")
                         if result.returncode == 0:
-                            logging.info('[_apply_xdelta_patches] Patch succeeded with data.win rename')
-                        if os.path.exists(temp_renamed_source):
+                            logging.info('[_apply_xdelta_patches] Strategy 2 succeeded! Patch applied with data.win rename')
+                            if os.path.exists(temp_output):
+                                output_size = os.path.getsize(temp_output)
+                                logging.info(f'[_apply_xdelta_patches] Patched file created: {temp_output} (size: {output_size} bytes)')
+                        else:
+                            logging.info('[_apply_xdelta_patches] Strategy 2 failed, trying Strategy 3: Using -f (force) flag')
+                            cmd_retry_force = [self.xdelta_path, '-d', '-f', '-s', temp_renamed_source, patch_path, temp_output]
+                            logging.info(f"[_apply_xdelta_patches] Strategy 3 command: {' '.join(cmd_retry_force)}")
+                            result = subprocess.run(cmd_retry_force, capture_output=True, text=True, timeout=300, stdin=subprocess.DEVNULL, startupinfo=startupinfo, creationflags=creationflags)
+                            logging.info(f'[_apply_xdelta_patches] Strategy 3 return code: {result.returncode}')
+                            logging.info(f"[_apply_xdelta_patches] Strategy 3 stdout: {(result.stdout[:500] if result.stdout else '(empty)')}")
+                            logging.info(f"[_apply_xdelta_patches] Strategy 3 stderr: {(result.stderr[:500] if result.stderr else '(empty)')}")
+                            if result.returncode == 0:
+                                logging.info('[_apply_xdelta_patches] Strategy 3 succeeded! Patch applied with -f flag')
+                            else:
+                                logging.error('[_apply_xdelta_patches] All strategies failed - patch may be incompatible')
+                                logging.error('[_apply_xdelta_patches] Possible causes:')
+                                logging.error('  1. Patch was created for a different version of the game file')
+                                logging.error('  2. Patch was created for Windows data.win and macOS game.ios differs')
+                                logging.error('  3. File corruption or incompatibility between platforms')
+                                logging.error(f'[_apply_xdelta_patches] Input file: {data_win_path} (size: {input_size} bytes)')
+                                logging.error(f'[_apply_xdelta_patches] Patch file: {patch_path} (size: {patch_size} bytes)')
+                        if temp_renamed_source and os.path.exists(temp_renamed_source):
                             os.remove(temp_renamed_source)
                             logging.info(f'[_apply_xdelta_patches] Removed temporary data.win: {temp_renamed_source}')
                     except Exception as e:
-                        logging.error(f'[_apply_xdelta_patches] Error during data.win retry: {e}', exc_info=True)
-                        if os.path.exists(temp_renamed_source):
+                        logging.error(f'[_apply_xdelta_patches] Error during retry strategies: {e}', exc_info=True)
+                        if temp_renamed_source and os.path.exists(temp_renamed_source):
                             try:
                                 os.remove(temp_renamed_source)
                             except Exception:
@@ -1083,13 +1178,35 @@ class MultiModMerger(QObject):
         ready_files = []
         if not os.path.isdir(mod_source_dir):
             return ready_files
-        import platform
-        system = platform.system()
-        data_file_name = 'game.ios' if system == 'Darwin' else 'data.win'
+        data_file_names = ['data.win', 'game.ios']
+        info_datawinmod_dir = None
+        if mod_source_dir:
+            mod_root = os.path.dirname(mod_source_dir) if os.path.basename(mod_source_dir).startswith('chapter_') else mod_source_dir
+            info_datawinmod_path = os.path.join(mod_root, 'INFO', 'datawinmod')
+            if os.path.isdir(info_datawinmod_path):
+                info_datawinmod_dir = info_datawinmod_path
+                logging.debug(f'Found INFO/datawinmod directory: {info_datawinmod_path}')
         for root, dirs, files in os.walk(mod_source_dir):
             for file in files:
-                if file.lower() == data_file_name.lower():
+                file_lower = file.lower()
+                if file_lower in [name.lower() for name in data_file_names]:
                     ready_files.append(os.path.join(root, file))
+                    logging.debug(f'Found ready data file: {os.path.join(root, file)}')
+                elif file_lower.endswith('.win') and file_lower != 'data.win':
+                    ready_files.append(os.path.join(root, file))
+                    logging.debug(f'Found ready .win file: {os.path.join(root, file)}')
+        if info_datawinmod_dir:
+            chapter_name = os.path.basename(mod_source_dir)
+            datawinmod_chapter_dir = os.path.join(info_datawinmod_dir, chapter_name)
+            if os.path.isdir(datawinmod_chapter_dir):
+                logging.debug(f'Searching for ready files in INFO/datawinmod: {datawinmod_chapter_dir}')
+                for root, dirs, files in os.walk(datawinmod_chapter_dir):
+                    for file in files:
+                        file_lower = file.lower()
+                        if file_lower in [name.lower() for name in data_file_names] or file_lower.endswith('.win'):
+                            ready_files.append(os.path.join(root, file))
+                            logging.debug(f'Found ready data file in INFO/datawinmod: {os.path.join(root, file)}')
+        logging.info(f'_find_ready_data_win_files: found {len(ready_files)} ready data file(s) in {mod_source_dir}')
         return ready_files
 
     def _find_csx_scripts(self, mod_source_dir: str) -> List[str]:

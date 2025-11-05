@@ -551,6 +551,7 @@
     "permission_error_install": "Ошибка прав доступа при установке: {error}",
     "xdelta_not_found": "Исполняемый файл xdelta не найден по пути: {path}",
     "xdelta_patch_failed": "Не удалось применить патч xdelta: {patch}",
+    "merge_failed": "Слияние модов не удалось: {error}",
     "csx_script_failed": "Не удалось выполнить CSX скрипт: {script}",
     "unsupported_archive_format": "Неподдерживаемый формат архива.",
     "deltamod_archive_invalid_redirect": "В архиве DELTAMOD обнаружено неверное перенаправление.",

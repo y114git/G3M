@@ -302,11 +302,11 @@ class LibraryDisplayController:
         except (OSError, IOError, PermissionError) as e:
             import logging
             logging.error(f'File operation failed during mod removal: {e}', exc_info=True)
-            self.feedback_manager.show_error('errors.mod_removal_failed', error=str(e))
+            self.feedback_manager.show_message('error', 'errors.mod_removal_failed', error=str(e))
         except Exception as e:
             import logging
             logging.error(f'Unexpected error during mod removal: {e}', exc_info=True)
-            self.feedback_manager.show_error('errors.mod_removal_failed', error=str(e))
+            self.feedback_manager.show_message('error', 'errors.mod_removal_failed', error=str(e))
 
     def on_mod_use(self, mod_data):
         from models.game_modes import DemoGameMode
