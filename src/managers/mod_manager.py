@@ -14,6 +14,7 @@ from models.mod_models import ModChapterData
 import models.mod_models as mod_models
 from workers.background_workers import InstallModsThread, UrlInstallThread, ModScanThread
 from utils.file_utils import sanitize_filename
+from utils.mod_utils import get_mod_key, get_mod_name
 from config.constants import UI_COLORS
 import requests
 import time
@@ -422,10 +423,10 @@ class ModManager(QObject):
                     try:
                         chapter_data = mod.get_chapter_data(chapter_id)
                     except (AttributeError, KeyError, TypeError) as e:
-                        logging.debug(f'install_mod: failed to get chapter {chapter_id} data: {e}', extra={'chapter_id': chapter_id, 'mod_key': getattr(mod, 'key', None)})
+                        logging.debug(f'install_mod: failed to get chapter {chapter_id} data: {e}', extra={'chapter_id': chapter_id, 'mod_key': get_mod_key(mod)})
                         chapter_data = None
                     except Exception as e:
-                        logging.warning(f'install_mod: unexpected error getting chapter {chapter_id} data: {e}', exc_info=True, extra={'chapter_id': chapter_id, 'mod_key': getattr(mod, 'key', None)})
+                        logging.warning(f'install_mod: unexpected error getting chapter {chapter_id} data: {e}', exc_info=True, extra={'chapter_id': chapter_id, 'mod_key': get_mod_key(mod)})
                         chapter_data = None
                     if chapter_data:
                         available_chapters.append(chapter_id)
@@ -452,29 +453,29 @@ class ModManager(QObject):
         except PermissionError as e:
             self.app_state.is_installing = False
             self.app_state.clear_current_task()
-            mod_key = getattr(mod, 'key', 'unknown')
-            mod_name = getattr(mod, 'name', 'Unknown Mod')
+            mod_key = get_mod_key(mod) or 'unknown'
+            mod_name = get_mod_name(mod, 'Unknown Mod')
             logging.error(f'install_mod: permission error: {e}', exc_info=True, extra={'mod_key': mod_key, 'mod_name': mod_name, 'operation': 'install'})
             self.feedback_manager.show_message('error', 'errors.installation_failed', tr('errors.permission_denied'))
         except (OSError, shutil.Error) as e:
             self.app_state.is_installing = False
             self.app_state.clear_current_task()
-            mod_key = getattr(mod, 'key', 'unknown')
-            mod_name = getattr(mod, 'name', 'Unknown Mod')
+            mod_key = get_mod_key(mod) or 'unknown'
+            mod_name = get_mod_name(mod, 'Unknown Mod')
             logging.error(f'install_mod: file operation error: {e}', exc_info=True, extra={'mod_key': mod_key, 'mod_name': mod_name, 'operation': 'install'})
             self.feedback_manager.show_message('error', 'errors.installation_failed', tr('errors.file_operation_failed', error=str(e)))
         except (KeyError, AttributeError) as e:
             self.app_state.is_installing = False
             self.app_state.clear_current_task()
-            mod_key = getattr(mod, 'key', 'unknown')
-            mod_name = getattr(mod, 'name', 'Unknown Mod')
+            mod_key = get_mod_key(mod) or 'unknown'
+            mod_name = get_mod_name(mod, 'Unknown Mod')
             logging.error(f'install_mod: data error: {e}', exc_info=True, extra={'mod_key': mod_key, 'mod_name': mod_name})
             self.feedback_manager.show_message('error', 'errors.installation_failed', str(e))
         except Exception as e:
             self.app_state.is_installing = False
             self.app_state.clear_current_task()
-            mod_key = getattr(mod, 'key', 'unknown')
-            mod_name = getattr(mod, 'name', 'Unknown Mod')
+            mod_key = get_mod_key(mod) or 'unknown'
+            mod_name = get_mod_name(mod, 'Unknown Mod')
             logging.error(f'install_mod: unexpected error: {e}', exc_info=True, extra={'mod_key': mod_key, 'mod_name': mod_name})
             self.feedback_manager.show_message('error', 'errors.installation_failed', str(e))
 
@@ -498,28 +499,28 @@ class ModManager(QObject):
             self.mod_list_updated.emit()
             self.status_changed.emit(tr('status.mod_uninstalled'), 'status_success')
         except PermissionError as e:
-            mod_key = mod.get('key', '') if isinstance(mod, dict) else getattr(mod, 'key', 'unknown')
-            mod_name = mod.get('name', '') if isinstance(mod, dict) else getattr(mod, 'name', 'Unknown Mod')
+            mod_key = get_mod_key(mod) or 'unknown'
+            mod_name = get_mod_name(mod, 'Unknown Mod')
             error = ModUninstallationError(f'Permission denied during uninstallation: {e}', mod_key=mod_key, mod_name=mod_name, reason='permission_error')
             logging.error(f'uninstall_mod: permission error: {e}', exc_info=True, extra={'mod_key': mod_key, 'mod_name': mod_name})
             self.feedback_manager.show_message('error', 'errors.uninstall_failed', tr('errors.permission_denied'))
             raise error
         except (OSError, shutil.Error) as e:
-            mod_key = mod.get('key', '') if isinstance(mod, dict) else getattr(mod, 'key', 'unknown')
-            mod_name = mod.get('name', '') if isinstance(mod, dict) else getattr(mod, 'name', 'Unknown Mod')
+            mod_key = get_mod_key(mod) or 'unknown'
+            mod_name = get_mod_name(mod, 'Unknown Mod')
             error = ModUninstallationError(f'File operation failed during uninstallation: {e}', mod_key=mod_key, mod_name=mod_name, reason='io_error')
             logging.error(f'uninstall_mod: file operation error: {e}', exc_info=True, extra={'mod_key': mod_key, 'mod_name': mod_name})
             self.feedback_manager.show_message('error', 'errors.uninstall_failed', tr('errors.file_operation_failed', error=str(e)))
             raise error
         except (KeyError, AttributeError) as e:
-            mod_key = mod.get('key', '') if isinstance(mod, dict) else getattr(mod, 'key', 'unknown')
-            mod_name = mod.get('name', '') if isinstance(mod, dict) else getattr(mod, 'name', 'Unknown Mod')
+            mod_key = get_mod_key(mod) or 'unknown'
+            mod_name = get_mod_name(mod, 'Unknown Mod')
             error = ModUninstallationError(f'Missing required data: {e}', mod_key=mod_key, mod_name=mod_name, reason='missing_data')
             logging.error(f'uninstall_mod: data error: {e}', exc_info=True, extra={'mod_key': mod_key, 'mod_name': mod_name})
             raise error
         except Exception as e:
-            mod_key = mod.get('key', '') if isinstance(mod, dict) else getattr(mod, 'key', 'unknown')
-            mod_name = mod.get('name', '') if isinstance(mod, dict) else getattr(mod, 'name', 'Unknown Mod')
+            mod_key = get_mod_key(mod) or 'unknown'
+            mod_name = get_mod_name(mod, 'Unknown Mod')
             error = ModUninstallationError(f'Unexpected error during uninstallation: {e}', mod_key=mod_key, mod_name=mod_name, reason='unknown')
             logging.error(f'uninstall_mod: unexpected error: {e}', exc_info=True, extra={'mod_key': mod_key, 'mod_name': mod_name})
             self.feedback_manager.show_message('error', 'errors.uninstall_failed', str(e))
@@ -640,7 +641,7 @@ class ModManager(QObject):
 
     def mod_has_files_for_chapter(self, mod_data, chapter_id):
         try:
-            mod_key = getattr(mod_data, 'key', None) or getattr(mod_data, 'mod_key', None)
+            mod_key = get_mod_key(mod_data)
             if not mod_key:
                 return True
             cache = self._get_mods_cache()

@@ -1,9 +1,9 @@
 from PyQt6.QtWidgets import QInputDialog
 from managers.localization_manager import tr
-from managers.mod_manager import parse_mod_date
 from ui.common.styling import clear_layout_widgets
 from ui.dialogs.mod_details import open_mod_details_dialog
 from ui.widgets.mod.mod_plaque_widget import ModPlaqueWidget
+from utils.mod_filter_utils import filter_and_sort_mods
 
 
 class SearchDisplayController:
@@ -40,67 +40,38 @@ class SearchDisplayController:
                 self.app.search_button.setToolTip(tr('ui.clear_search_tooltip', search_text=self.app_state.search_text))
                 self.update_filtered_mods()
 
+    def _build_filters_and_sort(self):
+        selected_tags = []
+        tag_checkboxes = {'tag_translation': 'translation', 'tag_customization': 'customization', 'tag_gameplay': 'gameplay', 'tag_other': 'other'}
+        for attr_name, tag_value in tag_checkboxes.items():
+            if hasattr(self.app, attr_name) and getattr(self.app, attr_name).isChecked():
+                selected_tags.append(tag_value)
+        selected_modgame = ''
+        if hasattr(self.app, 'modgame_combo'):
+            selected_modgame = self.app.modgame_combo.currentData() or ''
+        filters = {'tags': selected_tags, 'modgame': selected_modgame, 'search_text': self.app_state.search_text, 'hide_banned': True, 'hide_local': True, 'status_filter': ['approved', 'pending']}
+        sort_config = None
+        if hasattr(self.app, 'sort_combo'):
+            sort_type = self.app.sort_combo.currentIndex()
+            reverse = not self.app.sort_ascending
+            sort_config = {'sort_type': sort_type, 'reverse': reverse}
+        return (filters, sort_config)
+
     def update_filtered_mods(self):
         if not hasattr(self.app_state, 'all_mods') or not self.app_state.all_mods:
             self.app_state.filtered_mods = []
             self.update_display()
             return
-        selected_tags = []
-        if hasattr(self.app, 'tag_translation') and self.app.tag_translation.isChecked():
-            selected_tags.append('translation')
-        if hasattr(self.app, 'tag_customization') and self.app.tag_customization.isChecked():
-            selected_tags.append('customization')
-        if hasattr(self.app, 'tag_gameplay') and self.app.tag_gameplay.isChecked():
-            selected_tags.append('gameplay')
-        if hasattr(self.app, 'tag_other') and self.app.tag_other.isChecked():
-            selected_tags.append('other')
-        selected_modgame = ''
-        if hasattr(self.app, 'modgame_combo'):
-            selected_modgame = self.app.modgame_combo.currentData() or ''
-        filtered_list = []
-        for mod in self.app_state.all_mods:
-            if getattr(mod, 'hide_mod', False) in [True, 'true', 'True', 1]:
-                continue
-            if getattr(mod, 'ban_status', False) in [True, 'true', 'True', 1]:
-                continue
-            mod_status = getattr(mod, 'status', 'approved')
-            if mod_status not in ['approved', 'pending']:
-                continue
-            if getattr(mod, 'is_local_mod', False):
-                continue
-            if selected_tags:
-                mod_tags = getattr(mod, 'tags', []) or []
-                if not all((tag in mod_tags for tag in selected_tags)):
-                    continue
-            if selected_modgame:
-                mod_modgame = getattr(mod, 'modgame', 'deltarune')
-                if mod_modgame != selected_modgame:
-                    continue
-            if self.app_state.search_text:
-                search_text_lower = self.app_state.search_text.lower()
-                mod_name = getattr(mod, 'name', '').lower()
-                mod_tagline = getattr(mod, 'tagline', '').lower()
-                if search_text_lower not in mod_name and search_text_lower not in mod_tagline:
-                    continue
-            filtered_list.append(mod)
-        self.app_state.filtered_mods = filtered_list
-        self.sort_filtered_mods()
+        filters, sort_config = self._build_filters_and_sort()
+        self.app_state.filtered_mods = filter_and_sort_mods(self.app_state.all_mods, filters, sort_config)
         self.app_state.current_page = 1
         self.update_display()
 
     def sort_filtered_mods(self):
         if not hasattr(self.app, 'sort_combo') or not self.app_state.filtered_mods:
             return
-        sort_type = self.app.sort_combo.currentIndex()
-        reverse = not self.app.sort_ascending
-        filtered_list = list(self.app_state.filtered_mods)
-        if sort_type == 0:
-            filtered_list.sort(key=lambda mod: getattr(mod, 'downloads', 0), reverse=reverse)
-        elif sort_type == 1:
-            filtered_list.sort(key=lambda mod: parse_mod_date(getattr(mod, 'last_updated', '')), reverse=reverse)
-        elif sort_type == 2:
-            filtered_list.sort(key=lambda mod: parse_mod_date(getattr(mod, 'created_date', '')), reverse=reverse)
-        self.app_state.filtered_mods = filtered_list
+        filters, sort_config = self._build_filters_and_sort()
+        self.app_state.filtered_mods = filter_and_sort_mods(self.app_state.all_mods, filters, sort_config)
 
     def update_display(self):
         clear_layout_widgets(self.app.mod_list_layout, keep_last_n=1)

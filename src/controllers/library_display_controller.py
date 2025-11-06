@@ -3,8 +3,10 @@ from managers.localization_manager import tr
 from ui.common.styling import clear_layout_widgets, show_empty_message_in_layout
 from ui.widgets.mod.installed_mod_widget import InstalledModWidget
 from ui.dialogs.mod_priority_dialog import ModPriorityDialog
-from models.game_modes import DemoGameMode, UndertaleGameMode
 from config.constants import SLOT_ID_UNIVERSAL, SLOT_ID_DEMO, SLOT_ID_UNDERTALE, SLOT_ID_MENU, SLOT_ID_CHAPTER_1, SLOT_ID_CHAPTER_2, SLOT_ID_CHAPTER_3, SLOT_ID_CHAPTER_4
+from utils.mod_filter_utils import filter_and_sort_mods
+from utils.mod_utils import get_mod_key, get_mod_name
+from utils.game_utils import is_demo_mode, is_undertale_mode
 
 
 class LibraryDisplayController:
@@ -43,19 +45,6 @@ class LibraryDisplayController:
         self.app._updating_chapter_mods = True
         clear_layout_widgets(self.app.installed_mods_layout, keep_last_n=1)
         installed_mods = self.mod_manager.get_installed_mods_list()
-        if hasattr(self.app, 'library_sort_combo'):
-            sort_type = self.app.library_sort_combo.currentIndex()
-            reverse = not self.app.library_sort_ascending
-            if sort_type == 0:
-                installed_mods.sort(key=lambda mod: mod.get('name', '').lower(), reverse=reverse)
-            elif sort_type == 1:
-
-                def get_sort_date(mod):
-                    if mod.get('is_local_mod'):
-                        return mod.get('created_date', '0')
-                    else:
-                        return mod.get('updated_date') or mod.get('installed_date', '0')
-                installed_mods.sort(key=get_sort_date, reverse=reverse)
         current_game_type = 'deltarune'
         if hasattr(self.app, 'game_type_combo'):
             current_game_type = self.app.game_type_combo.currentData() or 'deltarune'
@@ -66,21 +55,20 @@ class LibraryDisplayController:
                 if checkbox.isChecked():
                     selected_tags.append(tag)
         search_text = getattr(self.app, 'library_search_text', '').lower()
-        for mod_info in installed_mods:
-            mod_modgame = mod_info.get('modgame', 'deltarune')
-            if mod_modgame != current_game_type:
-                continue
-            mod_tags = mod_info.get('tags', [])
-            if mod_info.get('is_local_mod'):
-                if 'local' not in mod_tags:
-                    mod_tags.append('local')
-            if selected_tags and (not all((tag in mod_tags for tag in selected_tags))):
-                continue
-            if search_text:
-                mod_name_lower = mod_info.get('name', '').lower()
-                mod_tagline = mod_info.get('tagline', '').lower()
-                if search_text not in mod_name_lower and search_text not in mod_tagline:
-                    continue
+        filters = {'tags': selected_tags, 'modgame': current_game_type, 'search_text': search_text, 'hide_banned': False, 'hide_local': False, 'show_only_local': False, 'status_filter': ['approved', 'pending', 'unknown']}
+        sort_config = None
+        if hasattr(self.app, 'library_sort_combo'):
+            sort_type = self.app.library_sort_combo.currentIndex()
+            reverse = not self.app.library_sort_ascending
+            if sort_type == 1:
+                sort_config = {'sort_type': 1, 'reverse': reverse}
+        filtered_mods = filter_and_sort_mods(installed_mods, filters, sort_config)
+        if hasattr(self.app, 'library_sort_combo'):
+            sort_type = self.app.library_sort_combo.currentIndex()
+            if sort_type == 0:
+                reverse = not self.app.library_sort_ascending
+                filtered_mods.sort(key=lambda mod: mod.get('name', '').lower(), reverse=reverse)
+        for mod_info in filtered_mods:
             mod_data_check = self.mod_manager.create_mod_object_from_info(mod_info, getattr(self.app_state, 'all_mods', None))
             if mod_data_check and (not self.mod_manager.mod_has_files_for_chapter(mod_data_check, selected_chapter_id)):
                 continue
@@ -154,19 +142,7 @@ class LibraryDisplayController:
             self.app.installed_mods_container.setUpdatesEnabled(False)
             clear_layout_widgets(self.app.installed_mods_layout, keep_last_n=1)
             self.cleanup_missing_mods(installed_mods)
-            if hasattr(self.app, 'library_sort_combo'):
-                sort_type = self.app.library_sort_combo.currentIndex()
-                reverse = not self.app.library_sort_ascending
-                if sort_type == 0:
-                    installed_mods.sort(key=lambda mod: mod.get('name', '').lower(), reverse=reverse)
-                elif sort_type == 1:
-
-                    def get_sort_date(mod):
-                        if mod.get('is_local_mod'):
-                            return mod.get('created_date', '0')
-                        else:
-                            return mod.get('updated_date') or mod.get('installed_date', '0')
-                    installed_mods.sort(key=get_sort_date, reverse=reverse)
+            existing_mods = [mod_info for mod_info in installed_mods if self.mod_manager.check_mod_exists(mod_info)]
             selected_tags = []
             if hasattr(self.app, 'library_tag_widgets'):
                 tag_map = {self.app.library_tag_translation: 'translation', self.app.library_tag_customization: 'customization', self.app.library_tag_gameplay: 'gameplay', self.app.library_tag_other: 'other', self.app.library_tag_local: 'local'}
@@ -177,24 +153,20 @@ class LibraryDisplayController:
             current_game_type = 'deltarune'
             if hasattr(self.app, 'game_type_combo'):
                 current_game_type = self.app.game_type_combo.currentData() or 'deltarune'
-            for idx, mod_info in enumerate(installed_mods):
-                mod_exists = self.mod_manager.check_mod_exists(mod_info)
-                if not mod_exists:
-                    continue
-                mod_modgame = mod_info.get('modgame', 'deltarune')
-                if mod_modgame != current_game_type:
-                    continue
-                mod_tags = mod_info.get('tags', [])
-                if mod_info.get('is_local_mod'):
-                    if 'local' not in mod_tags:
-                        mod_tags.append('local')
-                if selected_tags and (not all((tag in mod_tags for tag in selected_tags))):
-                    continue
-                if search_text:
-                    mod_name_lower = mod_info.get('name', '').lower()
-                    mod_tagline = mod_info.get('tagline', '').lower()
-                    if search_text not in mod_name_lower and search_text not in mod_tagline:
-                        continue
+            filters = {'tags': selected_tags, 'modgame': current_game_type, 'search_text': search_text, 'hide_banned': False, 'hide_local': False, 'show_only_local': False, 'status_filter': ['approved', 'pending', 'unknown']}
+            sort_config = None
+            if hasattr(self.app, 'library_sort_combo'):
+                sort_type = self.app.library_sort_combo.currentIndex()
+                reverse = not self.app.library_sort_ascending
+                if sort_type == 1:
+                    sort_config = {'sort_type': 1, 'reverse': reverse}
+            filtered_mods = filter_and_sort_mods(existing_mods, filters, sort_config)
+            if hasattr(self.app, 'library_sort_combo'):
+                sort_type = self.app.library_sort_combo.currentIndex()
+                if sort_type == 0:
+                    reverse = not self.app.library_sort_ascending
+                    filtered_mods.sort(key=lambda mod: mod.get('name', '').lower(), reverse=reverse)
+            for idx, mod_info in enumerate(filtered_mods):
                 is_local = mod_info.get('is_local_mod', False)
                 is_available = mod_info.get('is_available_on_server', True)
                 has_update = False
@@ -260,12 +232,9 @@ class LibraryDisplayController:
                     if selected_chapter_id is not None:
                         is_used = self.slot_manager.is_mod_used_for_chapter(widget.mod_data, selected_chapter_id)
                     else:
-                        from models.game_modes import DemoGameMode, UndertaleGameMode
-                        is_demo_mode = isinstance(self.app_state.game_mode, DemoGameMode)
-                        is_undertale_mode = isinstance(self.app_state.game_mode, UndertaleGameMode)
-                        if is_demo_mode:
+                        if is_demo_mode(self.app_state.game_mode):
                             check_chapter_id = SLOT_ID_DEMO
-                        elif is_undertale_mode:
+                        elif is_undertale_mode(self.app_state.game_mode):
                             check_chapter_id = SLOT_ID_UNDERTALE
                         else:
                             check_chapter_id = SLOT_ID_UNIVERSAL
@@ -279,8 +248,8 @@ class LibraryDisplayController:
                 if item:
                     widget = item.widget()
                     if isinstance(widget, InstalledModWidget):
-                        widget_mod_key = getattr(widget.mod_data, 'key', None)
-                        mod_data_key = getattr(mod_data, 'key', None)
+                        widget_mod_key = get_mod_key(widget.mod_data)
+                        mod_data_key = get_mod_key(mod_data)
                         if widget_mod_key == mod_data_key:
                             self.clear_all_selections()
                             widget.set_selected(True)
@@ -290,7 +259,7 @@ class LibraryDisplayController:
 
     def on_mod_remove(self, mod_data):
         try:
-            if self.feedback_manager.ask_question('dialogs.delete_confirmation', 'dialogs.delete_mod_confirmation', '', False, mod_name=getattr(mod_data, 'name', getattr(mod_data, 'key', 'Unknown'))):
+            if self.feedback_manager.ask_question('dialogs.delete_confirmation', 'dialogs.delete_mod_confirmation', '', False, mod_name=get_mod_name(mod_data)):
                 self.mod_manager.delete_mod_files(mod_data)
                 self.slot_manager.remove_mod_from_all_chapters(mod_data)
                 self.update_display()
@@ -309,8 +278,6 @@ class LibraryDisplayController:
             self.feedback_manager.show_message('error', 'errors.mod_removal_failed', error=str(e))
 
     def on_mod_use(self, mod_data):
-        from models.game_modes import DemoGameMode
-        is_demo_mode = isinstance(self.app_state.game_mode, DemoGameMode)
         mod_widget = None
         for i in range(self.app.installed_mods_layout.count()):
             item = self.app.installed_mods_layout.itemAt(i)
@@ -319,8 +286,8 @@ class LibraryDisplayController:
                 if hasattr(widget, 'mod_data') and hasattr(widget, 'use_button'):
                     widget_mod_data = getattr(widget, 'mod_data', None)
                     if widget_mod_data:
-                        widget_mod_key = getattr(widget_mod_data, 'key', None) or getattr(widget_mod_data, 'mod_key', None) or getattr(widget_mod_data, 'name', None)
-                        current_mod_key = getattr(mod_data, 'key', None) or getattr(mod_data, 'mod_key', None) or getattr(mod_data, 'name', None)
+                        widget_mod_key = get_mod_key(widget_mod_data)
+                        current_mod_key = get_mod_key(mod_data)
                         if widget_mod_key == current_mod_key:
                             mod_widget = widget
                             break
@@ -328,7 +295,7 @@ class LibraryDisplayController:
         if status == 'needs_update':
             self.mod_manager.update_mod(mod_data)
             return
-        if is_demo_mode:
+        if is_demo_mode(self.app_state.game_mode):
             target_chapter_id = SLOT_ID_DEMO
         elif hasattr(mod_data, 'modgame') and mod_data.modgame == 'undertale':
             target_chapter_id = SLOT_ID_UNDERTALE
@@ -349,8 +316,8 @@ class LibraryDisplayController:
                 if hasattr(widget, 'mod_data') and hasattr(widget, 'use_button'):
                     widget_mod_data = getattr(widget, 'mod_data', None)
                     if widget_mod_data:
-                        widget_mod_key = getattr(widget_mod_data, 'key', None) or getattr(widget_mod_data, 'mod_key', None) or getattr(widget_mod_data, 'name', None)
-                        current_mod_key = getattr(mod_data, 'key', None) or getattr(mod_data, 'mod_key', None) or getattr(mod_data, 'name', None)
+                        widget_mod_key = get_mod_key(widget_mod_data)
+                        current_mod_key = get_mod_key(mod_data)
                         if widget_mod_key == current_mod_key:
                             mod_widget = widget
                             break
@@ -378,38 +345,39 @@ class LibraryDisplayController:
             chapter_id = self.app_state.selected_chapter_id
             logging.info(f'_get_current_chapter_id: chapter mode, selected_chapter_id={chapter_id}')
             return chapter_id
-        elif isinstance(self.app_state.game_mode, DemoGameMode):
+        elif is_demo_mode(self.app_state.game_mode):
             logging.info('_get_current_chapter_id: DemoGameMode, returning SLOT_ID_DEMO')
             return SLOT_ID_DEMO
-        elif isinstance(self.app_state.game_mode, UndertaleGameMode):
+        elif is_undertale_mode(self.app_state.game_mode):
             logging.info('_get_current_chapter_id: UndertaleGameMode, returning SLOT_ID_UNDERTALE')
             return SLOT_ID_UNDERTALE
-        else:
-            mods_universal = self.slot_manager.get_used_mods_list(SLOT_ID_UNIVERSAL)
-            logging.info(f'_get_current_chapter_id: SLOT_ID_UNIVERSAL={SLOT_ID_UNIVERSAL} has {(len(mods_universal) if mods_universal else 0)} mods')
-            if mods_universal and len(mods_universal) >= 2:
-                logging.info(f'_get_current_chapter_id: Found {len(mods_universal)} mods for SLOT_ID_UNIVERSAL')
-                return SLOT_ID_UNIVERSAL
-            for chapter_id in range(5):
-                mods_list = self.slot_manager.get_used_mods_list(chapter_id)
-                if mods_list and len(mods_list) >= 2:
-                    logging.info(f'_get_current_chapter_id: Found {len(mods_list)} mods for chapter {chapter_id}')
-                    return chapter_id
-            for slot_id in [SLOT_ID_DEMO, SLOT_ID_UNDERTALE]:
-                mods_list = self.slot_manager.get_used_mods_list(slot_id)
-                logging.info(f'_get_current_chapter_id: slot {slot_id} has {(len(mods_list) if mods_list else 0)} mods')
-                if mods_list and len(mods_list) >= 2:
-                    logging.info(f'_get_current_chapter_id: Found {len(mods_list)} mods for slot {slot_id}')
-                    return slot_id
-            if mods_universal and len(mods_universal) > 0:
-                logging.info(f'_get_current_chapter_id: Found {len(mods_universal)} mods for SLOT_ID_UNIVERSAL (less than 2, but returning anyway)')
-                return SLOT_ID_UNIVERSAL
-            if self.slot_manager.used_mods:
-                logging.debug(f'_get_current_chapter_id: All used_mods keys: {list(self.slot_manager.used_mods.keys())}')
-                for key, mods_list in self.slot_manager.used_mods.items():
-                    logging.debug(f'_get_current_chapter_id: used_mods[{key}] = {(len(mods_list) if mods_list else 0)} mods')
-            logging.debug('_get_current_chapter_id: No chapter with mods found, returning SLOT_ID_UNIVERSAL as fallback')
+
+        def _check_slot_for_mods(slot_id, min_count=2):
+            mods_list = self.slot_manager.get_used_mods_list(slot_id)
+            count = len(mods_list) if mods_list else 0
+            if count >= min_count:
+                logging.info(f'_get_current_chapter_id: Found {count} mod(s) for slot {slot_id}')
+                return True
+            return False
+        mods_universal = self.slot_manager.get_used_mods_list(SLOT_ID_UNIVERSAL)
+        logging.info(f'_get_current_chapter_id: SLOT_ID_UNIVERSAL={SLOT_ID_UNIVERSAL} has {(len(mods_universal) if mods_universal else 0)} mods')
+        if _check_slot_for_mods(SLOT_ID_UNIVERSAL):
             return SLOT_ID_UNIVERSAL
+        for chapter_id in range(5):
+            if _check_slot_for_mods(chapter_id):
+                return chapter_id
+        for slot_id in [SLOT_ID_DEMO, SLOT_ID_UNDERTALE]:
+            if _check_slot_for_mods(slot_id):
+                return slot_id
+        if mods_universal and len(mods_universal) > 0:
+            logging.info(f'_get_current_chapter_id: Found {len(mods_universal)} mod(s) for SLOT_ID_UNIVERSAL (less than 2, but returning anyway)')
+            return SLOT_ID_UNIVERSAL
+        if self.slot_manager.used_mods:
+            logging.debug(f'_get_current_chapter_id: All used_mods keys: {list(self.slot_manager.used_mods.keys())}')
+            for key, mods_list in self.slot_manager.used_mods.items():
+                logging.debug(f'_get_current_chapter_id: used_mods[{key}] = {(len(mods_list) if mods_list else 0)} mod(s)')
+        logging.debug('_get_current_chapter_id: No chapter with mods found, returning SLOT_ID_UNIVERSAL as fallback')
+        return SLOT_ID_UNIVERSAL
 
     def _update_priority_button_visibility(self, chapter_id=None):
         if not hasattr(self.app, 'priority_button'):
@@ -490,27 +458,24 @@ class LibraryDisplayController:
             if not mods_list or len(mods_list) < 2:
                 return
             chapter_mods = {chapter_id: mods_list}
+        elif is_demo_mode(self.app_state.game_mode):
+            mods_list = self.slot_manager.get_used_mods_list(SLOT_ID_DEMO)
+            if mods_list and len(mods_list) >= 2:
+                chapter_mods = {-1: mods_list}
+        elif is_undertale_mode(self.app_state.game_mode):
+            mods_list = self.slot_manager.get_used_mods_list(SLOT_ID_UNDERTALE)
+            if mods_list and len(mods_list) >= 2:
+                chapter_mods = {-1: mods_list}
         else:
-            is_demo_mode = isinstance(self.app_state.game_mode, DemoGameMode)
-            is_undertale_mode = isinstance(self.app_state.game_mode, UndertaleGameMode)
-            if is_demo_mode:
-                mods_list = self.slot_manager.get_used_mods_list(SLOT_ID_DEMO)
-                if mods_list and len(mods_list) >= 2:
-                    chapter_mods = {-1: mods_list}
-            elif is_undertale_mode:
-                mods_list = self.slot_manager.get_used_mods_list(SLOT_ID_UNDERTALE)
-                if mods_list and len(mods_list) >= 2:
-                    chapter_mods = {-1: mods_list}
-            else:
-                mods_list = self.slot_manager.get_used_mods_list(SLOT_ID_UNIVERSAL)
-                if mods_list and len(mods_list) >= 2:
-                    for chapter_id in range(5):
-                        chapter_mods_for_chapter = []
-                        for mod in mods_list:
-                            if hasattr(mod, 'get_chapter_data') and mod.get_chapter_data(chapter_id):
-                                chapter_mods_for_chapter.append(mod)
-                        if chapter_mods_for_chapter:
-                            chapter_mods[chapter_id] = chapter_mods_for_chapter
+            mods_list = self.slot_manager.get_used_mods_list(SLOT_ID_UNIVERSAL)
+            if mods_list and len(mods_list) >= 2:
+                for chapter_id in range(5):
+                    chapter_mods_for_chapter = []
+                    for mod in mods_list:
+                        if hasattr(mod, 'get_chapter_data') and mod.get_chapter_data(chapter_id):
+                            chapter_mods_for_chapter.append(mod)
+                    if chapter_mods_for_chapter:
+                        chapter_mods[chapter_id] = chapter_mods_for_chapter
         if not chapter_mods:
             return
         try:

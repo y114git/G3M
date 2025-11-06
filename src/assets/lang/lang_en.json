@@ -474,6 +474,7 @@
     "local_mod_update_failed": "Failed to update local mod: {error}",
     "mod_apply_error": "Error applying mods: {error}",
     "mod_creation_error": "Mod Creation Error",
+    "parent_widget_not_found": "Error: parent widget not found",
     "mod_creation_failed": "Failed to create mod: {error}",
     "mod_deleted_message": "The mod has been successfully deleted from the database.",
     "mod_deleted_title": "Mod deleted",

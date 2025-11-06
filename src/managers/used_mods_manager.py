@@ -10,6 +10,8 @@ from managers.settings_manager import SettingsManager
 from models.game_modes import DemoGameMode, UndertaleGameMode
 from managers.localization_manager import tr
 from config.constants import SLOT_ID_UNIVERSAL, SLOT_ID_DEMO, SLOT_ID_UNDERTALE, SLOT_ID_MENU, SLOT_ID_CHAPTER_1, SLOT_ID_CHAPTER_2, SLOT_ID_CHAPTER_3, SLOT_ID_CHAPTER_4
+from utils.mod_utils import get_mod_key, get_mod_name
+from utils.game_utils import is_demo_mode, is_undertale_mode
 
 
 class UsedModsManager(QObject):
@@ -36,10 +38,8 @@ class UsedModsManager(QObject):
 
     def set_used_mod(self, chapter_id: int, mod_data: Optional[Any], save_state: bool = True) -> None:
         import logging
-        mod_key = None
-        if mod_data:
-            mod_key = getattr(mod_data, 'key', None) or getattr(mod_data, 'mod_key', None) or getattr(mod_data, 'name', None)
-        mod_name = getattr(mod_data, 'name', 'Unknown') if mod_data else 'None'
+        mod_key = get_mod_key(mod_data) if mod_data else None
+        mod_name = get_mod_name(mod_data, 'None') if mod_data else 'None'
         logging.debug(f'set_used_mod: chapter_id={chapter_id}, mod={mod_name} (key={mod_key})')
         current_mods = self.used_mods.get(chapter_id, [])
         if mod_data is None:
@@ -49,7 +49,7 @@ class UsedModsManager(QObject):
         elif mod_key:
             found_index = None
             for i, existing_mod in enumerate(current_mods):
-                existing_key = getattr(existing_mod, 'key', None) or getattr(existing_mod, 'mod_key', None) or getattr(existing_mod, 'name', None)
+                existing_key = get_mod_key(existing_mod)
                 if existing_key == mod_key:
                     found_index = i
                     break
@@ -76,7 +76,7 @@ class UsedModsManager(QObject):
 
     def set_mods_list(self, chapter_id: int, mods_list: List[Any], save_state: bool = True) -> None:
         import logging
-        mod_names = [getattr(m, 'name', 'Unknown') for m in mods_list] if mods_list else []
+        mod_names = [get_mod_name(m, 'Unknown') for m in mods_list] if mods_list else []
         logging.info(f'set_mods_list: chapter_id={chapter_id}, mods={mod_names}, count={(len(mods_list) if mods_list else 0)}')
         if not mods_list:
             if chapter_id in self.used_mods:
@@ -96,14 +96,14 @@ class UsedModsManager(QObject):
     def is_mod_used_for_chapter(self, mod_data, chapter_id: int) -> bool:
         if not mod_data:
             return False
-        mod_key = getattr(mod_data, 'key', None) or getattr(mod_data, 'mod_key', None) or getattr(mod_data, 'name', None)
+        mod_key = get_mod_key(mod_data)
         if not mod_key:
             return False
         used_mods_list = self.used_mods.get(chapter_id, [])
         if not used_mods_list:
             return False
         for used_mod in used_mods_list:
-            used_mod_key = getattr(used_mod, 'key', None) or getattr(used_mod, 'mod_key', None) or getattr(used_mod, 'name', None)
+            used_mod_key = get_mod_key(used_mod)
             if used_mod_key == mod_key:
                 return True
         return False
@@ -111,25 +111,25 @@ class UsedModsManager(QObject):
     def is_mod_used_anywhere(self, mod_data) -> bool:
         if not mod_data:
             return False
-        mod_key = getattr(mod_data, 'key', None) or getattr(mod_data, 'mod_key', None) or getattr(mod_data, 'name', None)
+        mod_key = get_mod_key(mod_data)
         if not mod_key:
             return False
         for used_mods_list in self.used_mods.values():
             for used_mod in used_mods_list:
-                used_mod_key = getattr(used_mod, 'key', None) or getattr(used_mod, 'mod_key', None) or getattr(used_mod, 'name', None)
+                used_mod_key = get_mod_key(used_mod)
                 if used_mod_key == mod_key:
                     return True
         return False
 
     def remove_mod_from_all_chapters(self, mod_data):
-        mod_key = getattr(mod_data, 'key', None) or getattr(mod_data, 'mod_key', None) or getattr(mod_data, 'name', None)
+        mod_key = get_mod_key(mod_data)
         if not mod_key:
             return
         chapters_changed = []
         for chapter_id, used_mods_list in list(self.used_mods.items()):
             updated_list = []
             for used_mod in used_mods_list:
-                used_mod_key = getattr(used_mod, 'key', None) or getattr(used_mod, 'mod_key', None) or getattr(used_mod, 'name', None)
+                used_mod_key = get_mod_key(used_mod)
                 if used_mod_key != mod_key:
                     updated_list.append(used_mod)
             if len(updated_list) != len(used_mods_list):
@@ -162,7 +162,7 @@ class UsedModsManager(QObject):
         for chapter_id, mods_list in self.used_mods.items():
             mod_keys = []
             for mod_data in mods_list:
-                mod_key = getattr(mod_data, 'key', None) or getattr(mod_data, 'mod_key', None) or getattr(mod_data, 'name', None)
+                mod_key = get_mod_key(mod_data)
                 if mod_key:
                     mod_keys.append(mod_key)
             if mod_keys:
@@ -193,10 +193,10 @@ class UsedModsManager(QObject):
             except ValueError:
                 continue
             is_chapter_mode = self.app_state.current_mode == 'chapter'
-            if isinstance(self.app_state.game_mode, DemoGameMode):
+            if is_demo_mode(self.app_state.game_mode):
                 if chapter_id != SLOT_ID_DEMO:
                     continue
-            elif isinstance(self.app_state.game_mode, UndertaleGameMode):
+            elif is_undertale_mode(self.app_state.game_mode):
                 if chapter_id != SLOT_ID_UNDERTALE:
                     continue
             elif is_chapter_mode:
@@ -244,7 +244,7 @@ class UsedModsManager(QObject):
                     needs_save = True
             if mods_list:
                 self.used_mods[chapter_id] = mods_list
-                logging.info(f"Loaded {len(mods_list)} mod(s) for chapter {chapter_id}: {[getattr(m, 'name', 'Unknown') for m in mods_list]}")
+                logging.info(f"Loaded {len(mods_list)} mod(s) for chapter {chapter_id}: {[get_mod_name(m, 'Unknown') for m in mods_list]}")
             elif chapter_id_str in used_mods_data:
                 logging.warning(f'Removing invalid mod data for chapter {chapter_id} (mods not found)')
                 del used_mods_data[chapter_id_str]
@@ -273,12 +273,10 @@ class UsedModsManager(QObject):
     def collect_mods_needing_update(self) -> list:
         if getattr(self.app_state, 'is_installing', False):
             return []
-        is_demo_mode = isinstance(self.app_state.game_mode, DemoGameMode)
-        is_undertale_mode = isinstance(self.app_state.game_mode, UndertaleGameMode)
         is_chapter_mode = self.app_state.current_mode == 'chapter'
-        if is_demo_mode:
+        if is_demo_mode(self.app_state.game_mode):
             active_chapter_ids = [SLOT_ID_DEMO]
-        elif is_undertale_mode:
+        elif is_undertale_mode(self.app_state.game_mode):
             active_chapter_ids = [SLOT_ID_UNDERTALE]
         elif is_chapter_mode:
             active_chapter_ids = [SLOT_ID_MENU, SLOT_ID_CHAPTER_1, SLOT_ID_CHAPTER_2, SLOT_ID_CHAPTER_3, SLOT_ID_CHAPTER_4]

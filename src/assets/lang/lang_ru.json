@@ -201,8 +201,6 @@
     "filter_by_game": "Фильтровать по выбранной игре",
     "select_mod_to_export": "Выберите мод для экспорта",
     "select_export_location": "Выберите место для экспорта",
-    "mod_imported_success": "Мод успешно импортирован!",
-    "mod_exported_success": "Мод успешно экспортирован!",
     "no_mod_selected": "Мод не выбран"
   },
   "files": {
@@ -481,6 +479,7 @@
     "local_mod_update_failed": "Не удалось обновить локальный мод: {error}",
     "mod_apply_error": "Ошибка применения модов: {error}",
     "mod_creation_error": "Ошибка создания мода",
+    "parent_widget_not_found": "Ошибка: родительский виджет не найден",
     "mod_creation_failed": "Не удалось создать мод: {error}",
     "mod_deleted_message": "Мод был успешно удалён из базы данных.",
     "mod_deleted_title": "Мод удалён",
@@ -668,7 +667,9 @@
     "merge_failed": "Слияние модов не удалось",
     "applying_xdelta": "Применение xdelta патчей из {mod} ({current}/{total})...",
     "exporting_assets": "Экспорт ассетов из {mod} ({current}/{total})...",
-    "importing_assets": "Импорт ассетов из {mod} ({current}/{total})..."
+    "importing_assets": "Импорт ассетов из {mod} ({current}/{total})...",
+    "mod_imported_success": "Мод успешно импортирован!",
+    "mod_exported_success": "Мод успешно экспортирован!"
   },
   "startup": {
     "shortcut_settings_read_error": "Ошибка запуска: Не удалось прочитать настройки ярлыка ({error})",

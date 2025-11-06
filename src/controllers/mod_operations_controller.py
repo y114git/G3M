@@ -6,6 +6,7 @@ from managers.localization_manager import tr
 from config.constants import UI_COLORS
 from ui.widgets.mod.installed_mod_widget import InstalledModWidget
 from workers.background_workers import InstallModsThread
+from utils.mod_utils import get_mod_key, get_mod_name
 
 
 class ModOperationsController:
@@ -64,6 +65,16 @@ class ModOperationsController:
             was_installed_before = self.mod_manager.is_mod_installed(mod.key)
             install_tasks = [(mod, chapter_id) for chapter_id in available_chapters]
             self._safe_execute(lambda: setattr(self.app_state, 'operation_cancelled', False), 'Failed to set operation_cancelled')
+            if self.app_state.current_task:
+                try:
+                    if hasattr(self.app_state.current_task, 'progress'):
+                        self.app_state.current_task.progress.disconnect()
+                    if hasattr(self.app_state.current_task, 'status'):
+                        self.app_state.current_task.status.disconnect()
+                    if hasattr(self.app_state.current_task, 'finished'):
+                        self.app_state.current_task.finished.disconnect()
+                except (TypeError, RuntimeError) as e:
+                    logging.debug(f'Failed to disconnect signals from previous task: {e}')
             self.app_state.is_installing = True
             self.set_install_buttons_enabled(False)
             self.app.action_button.setText(tr('ui.cancel_button'))
@@ -81,18 +92,18 @@ class ModOperationsController:
             install_thread.start()
         except (IOError, OSError) as e:
             from core.exceptions import ModInstallationError
-            mod_key = getattr(mod, 'key', None)
-            mod_name = getattr(mod, 'name', 'Unknown Mod')
+            mod_key = get_mod_key(mod)
+            mod_name = get_mod_name(mod, 'Unknown Mod')
             raise ModInstallationError(f'File operation failed during installation: {e}', mod_key=mod_key, mod_name=mod_name, reason='io_error') from e
         except KeyError as e:
             from core.exceptions import ModInstallationError
-            mod_key = getattr(mod, 'key', None)
-            mod_name = getattr(mod, 'name', 'Unknown Mod')
+            mod_key = get_mod_key(mod)
+            mod_name = get_mod_name(mod, 'Unknown Mod')
             raise ModInstallationError(f'Missing required data: {e}', mod_key=mod_key, mod_name=mod_name, reason='missing_data') from e
         except Exception as e:
             from core.exceptions import ModInstallationError
-            mod_key = getattr(mod, 'key', None)
-            mod_name = getattr(mod, 'name', 'Unknown Mod')
+            mod_key = get_mod_key(mod)
+            mod_name = get_mod_name(mod, 'Unknown Mod')
             raise ModInstallationError(f'Unexpected error during installation: {e}', mod_key=mod_key, mod_name=mod_name, reason='unknown') from e
 
     def on_install_progress_token(self, value: int, op_id: int):
@@ -108,57 +119,54 @@ class ModOperationsController:
             return
         self.on_install_finished(success)
 
-    def on_install_finished(self, success: bool):
-        was_installed_before = False
-        if self.app_state.current_task:
-            was_installed_before = getattr(self.app_state.current_task, 'was_installed_before', False)
+    def _on_install_complete(self, success: bool, message: str = '', was_installed_before: bool = False):
+        current_task = self.app_state.current_task
         self.app.progress_bar.setValue(0)
         self.app.progress_bar.setVisible(False)
-        if success:
-            self.feedback_manager.update_status(tr('status.mod_installed_success'), UI_COLORS['status_success'])
-        else:
+        self.app_state.is_installing = False
+        self.app_state.clear_current_task()
+        self.set_install_buttons_enabled(True)
+        if not success:
             if self.app_state.operation_cancelled:
                 self._safe_execute(lambda: setattr(self.app_state, 'operation_cancelled', False), 'Failed to set operation_cancelled')
             else:
                 self.feedback_manager.update_status(tr('status.mod_install_error'), UI_COLORS['status_error'])
             try:
-                if self.app_state.current_task:
-                    temp_root = getattr(self.app_state.current_task, 'temp_root', None)
+                if current_task:
+                    temp_root = getattr(current_task, 'temp_root', None)
                     if temp_root and os.path.isdir(temp_root):
                         shutil.rmtree(temp_root, ignore_errors=True)
             except (AttributeError, OSError, shutil.Error) as e:
-                import logging
                 logging.debug(f'Failed to clean temp root: {e}', exc_info=True)
-        self.app_state.is_installing = False
-        self.app_state.clear_current_task()
-        self.set_install_buttons_enabled(True)
-        if success:
-            self.mod_manager.invalidate_mods_cache()
-            self.mod_manager.load_local_mods()
-            self.app.search_display.update_search_plaques()
-            if hasattr(self.app, 'library_display'):
-                self.app.library_display.update_display()
-            QTimer.singleShot(100, self.refresh_specific_mod_widget_after_update)
-            if not was_installed_before:
-                self._safe_execute(lambda: self.feedback_manager.show_message('info', 'dialogs.mod_installed_apply_info'), 'Failed to show mod installed info')
-            self.feedback_manager.update_status(tr('status.mod_installed_success'), UI_COLORS['status_success'])
-        self.app.game_launch.update_button_state()
-
-    def on_mod_installation_finished(self, success: bool, message: str):
-        self.app_state.is_installing = False
-        self.set_install_buttons_enabled(True)
-        self.app.progress_bar.setVisible(False)
-        if success:
-            self._safe_execute(lambda: self.mod_manager.invalidate_mods_cache(), 'invalidate_mods_cache failed', default_return=None)
-        self._safe_execute(lambda: QTimer.singleShot(0, self.app.search_display.update_search_plaques), 'update_search_plaques failed')
+            self.app.game_launch.update_button_state()
+            return
+        self._safe_execute(lambda: self.mod_manager.invalidate_mods_cache(), 'invalidate_mods_cache failed', default_return=None)
         self._safe_execute(lambda: self.mod_manager.load_local_mods(), 'load_local_mods failed', default_return=None)
+        self._safe_execute(lambda: QTimer.singleShot(0, self.app.search_display.update_search_plaques), 'update_search_plaques failed')
         self._safe_execute(lambda: QTimer.singleShot(0, self.app.library_display.update_display) if hasattr(self.app, 'library_display') else None, 'update_library_display failed')
-        if success:
+        if current_task:
+            self.app_state.current_task = current_task
+            QTimer.singleShot(100, self.refresh_specific_mod_widget_after_update)
+            self.app_state.clear_current_task()
+        if message:
+            self.feedback_manager.update_status(message, UI_COLORS['status_success'])
+        else:
+            self.feedback_manager.update_status(tr('status.mod_installed_success'), UI_COLORS['status_success'])
+        if not was_installed_before:
             self._safe_execute(lambda: QTimer.singleShot(0, lambda: self.feedback_manager.show_message('info', 'dialogs.mod_installed_apply_info')), 'Failed to show mod installed info')
-        self.app.game_launch.update_button_state()
-        if success and getattr(self.app, 'pending_updates', None):
+        if getattr(self.app, 'pending_updates', None):
             next_mod = self.app.pending_updates.pop(0)
             QTimer.singleShot(0, lambda: self.mod_manager.update_mod(next_mod))
+        self.app.game_launch.update_button_state()
+
+    def on_install_finished(self, success: bool):
+        was_installed_before = False
+        if self.app_state.current_task:
+            was_installed_before = getattr(self.app_state.current_task, 'was_installed_before', False)
+        self._on_install_complete(success, '', was_installed_before)
+
+    def on_mod_installation_finished(self, success: bool, message: str):
+        self._on_install_complete(success, message, False)
 
     def refresh_specific_mod_widget_after_update(self):
         if not self.app_state.current_task:
@@ -168,7 +176,7 @@ class ModOperationsController:
             return
         mod_data_tuple = install_tasks[0]
         mod_to_update = mod_data_tuple[0]
-        mod_key_to_find = getattr(mod_to_update, 'key', None)
+        mod_key_to_find = get_mod_key(mod_to_update)
         if not mod_key_to_find:
             return
         if hasattr(self.app, 'installed_mods_layout'):
@@ -177,7 +185,7 @@ class ModOperationsController:
                 if item and item.widget():
                     widget = item.widget()
                     if isinstance(widget, InstalledModWidget):
-                        widget_mod_key = getattr(widget.mod_data, 'key', None)
+                        widget_mod_key = get_mod_key(widget.mod_data)
                         if widget_mod_key == mod_key_to_find:
                             widget.update_status()
                             break

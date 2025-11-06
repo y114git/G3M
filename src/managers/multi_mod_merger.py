@@ -10,6 +10,8 @@ from utils.path_utils import get_xdelta_path, find_chapter_resource_dir
 from utils.file_utils import ensure_writable, sanitize_filename
 from managers.localization_manager import tr
 from models.game_modes import DemoGameMode, UndertaleGameMode
+from utils.mod_utils import get_mod_key, get_mod_name
+from utils.game_utils import is_demo_mode, is_undertale_mode
 
 
 class MultiModMerger(QObject):
@@ -574,109 +576,41 @@ class MultiModMerger(QObject):
     def _apply_xdelta_patches(self, data_win_path: str, data_patches: List[str]) -> bool:
         import platform
         import stat
-        import hashlib
-        logging.info('[_apply_xdelta_patches] ========== Starting xdelta patch application ==========')
-        logging.info(f'[_apply_xdelta_patches] Platform: {platform.system()}')
-        logging.info(f'[_apply_xdelta_patches] Platform release: {platform.release()}')
-        logging.info(f'[_apply_xdelta_patches] Platform version: {platform.version()}')
-        logging.info(f'[_apply_xdelta_patches] xdelta_path: {self.xdelta_path}')
-        logging.info(f'[_apply_xdelta_patches] data_win_path: {data_win_path}')
-        logging.info(f'[_apply_xdelta_patches] Number of patches: {len(data_patches)}')
-        if os.path.exists(data_win_path):
-            try:
-                with open(data_win_path, 'rb') as f:
-                    file_hash = hashlib.md5()
-                    chunk_size = 8192
-                    while (chunk := f.read(chunk_size)):
-                        file_hash.update(chunk)
-                    file_md5 = file_hash.hexdigest()
-                    logging.info(f'[_apply_xdelta_patches] Input file MD5: {file_md5}')
-            except Exception as e:
-                logging.warning(f'[_apply_xdelta_patches] Could not calculate file hash: {e}')
         if not self.xdelta_path:
-            logging.error('[_apply_xdelta_patches] xdelta executable not found')
+            logging.error('xdelta executable not found')
             self.status_update.emit(tr('errors.xdelta_not_found'), 'error')
             return False
         if not os.path.exists(self.xdelta_path):
-            logging.error(f'[_apply_xdelta_patches] xdelta path does not exist: {self.xdelta_path}')
+            logging.error(f'xdelta path does not exist: {self.xdelta_path}')
             self.status_update.emit(tr('errors.xdelta_not_found'), 'error')
             return False
-        logging.info(f'[_apply_xdelta_patches] xdelta executable exists: {self.xdelta_path}')
         if platform.system() != 'Windows':
             try:
                 file_stat = os.stat(self.xdelta_path)
                 is_executable = bool(file_stat.st_mode & stat.S_IEXEC)
-                logging.info(f'[_apply_xdelta_patches] xdelta executable permissions: {oct(file_stat.st_mode)} (executable: {is_executable})')
                 if not is_executable:
-                    logging.warning('[_apply_xdelta_patches] xdelta is not executable, attempting to fix permissions')
                     os.chmod(self.xdelta_path, 493)
-                    file_stat = os.stat(self.xdelta_path)
-                    is_executable = bool(file_stat.st_mode & stat.S_IEXEC)
-                    logging.info(f'[_apply_xdelta_patches] After chmod: {oct(file_stat.st_mode)} (executable: {is_executable})')
             except Exception as e:
-                logging.error(f'[_apply_xdelta_patches] Failed to check/set xdelta permissions: {e}', exc_info=True)
+                logging.error(f'Failed to check/set xdelta permissions: {e}', exc_info=True)
         if not os.path.exists(data_win_path):
-            logging.error(f'[_apply_xdelta_patches] Input file does not exist: {data_win_path}')
+            logging.error(f'Input file does not exist: {data_win_path}')
             return False
-        input_size = os.path.getsize(data_win_path)
-        logging.info(f'[_apply_xdelta_patches] Input file size: {input_size} bytes')
         for idx, patch_path in enumerate(data_patches):
             if self._cancelled:
-                logging.info('[_apply_xdelta_patches] Operation cancelled')
                 return False
-            logging.info(f'[_apply_xdelta_patches] Processing patch {idx + 1}/{len(data_patches)}: {patch_path}')
+            logging.info(f'Applying xdelta patch {idx + 1}/{len(data_patches)}: {os.path.basename(patch_path)}')
             if not os.path.exists(patch_path):
-                logging.error(f'[_apply_xdelta_patches] Patch file does not exist: {patch_path}')
+                logging.error(f'Patch file does not exist: {patch_path}')
                 self.status_update.emit(tr('errors.xdelta_patch_failed', patch=os.path.basename(patch_path)), 'error')
                 return False
-            patch_size = os.path.getsize(patch_path)
-            logging.info(f'[_apply_xdelta_patches] Patch file size: {patch_size} bytes')
-            try:
-                with open(patch_path, 'rb') as f:
-                    patch_hash = hashlib.md5()
-                    chunk_size = 8192
-                    while (chunk := f.read(chunk_size)):
-                        patch_hash.update(chunk)
-                    patch_md5 = patch_hash.hexdigest()
-                    logging.info(f'[_apply_xdelta_patches] Patch file MD5: {patch_md5}')
-            except Exception as e:
-                logging.warning(f'[_apply_xdelta_patches] Could not calculate patch hash: {e}')
             try:
                 temp_output = data_win_path + '.tmp'
-                logging.info(f'[_apply_xdelta_patches] Temporary output file: {temp_output}')
                 temp_dir = os.path.dirname(temp_output)
                 if not os.access(temp_dir, os.W_OK):
-                    logging.error(f'[_apply_xdelta_patches] Temp directory is not writable: {temp_dir}')
+                    logging.error(f'Temp directory is not writable: {temp_dir}')
                     self.status_update.emit(tr('errors.xdelta_patch_failed', patch=os.path.basename(patch_path)), 'error')
                     return False
-                try:
-                    if hasattr(os, 'statvfs'):
-                        statvfs = os.statvfs(temp_dir)
-                        free_space = statvfs.f_frsize * statvfs.f_bavail
-                        logging.info(f'[_apply_xdelta_patches] Available disk space: {free_space / (1024 * 1024):.2f} MB')
-                        if free_space < input_size * 2:
-                            logging.warning(f'[_apply_xdelta_patches] Low disk space warning: {free_space / (1024 * 1024):.2f} MB available')
-                except Exception as e:
-                    logging.debug(f'[_apply_xdelta_patches] Could not check disk space: {e}')
-                temp_renamed_source = None
-                source_file_for_patch = data_win_path
-                is_macos_with_ios = platform.system() == 'Darwin' and data_win_path.endswith('game.ios')
-                strategy_success = False
-                if is_macos_with_ios:
-                    logging.info('[_apply_xdelta_patches] macOS detected with game.ios - will try multiple strategies')
-                    logging.info('[_apply_xdelta_patches] Strategy 1: Apply patch directly to game.ios with -f (force) flag (old version method)')
-                    logging.info('[_apply_xdelta_patches] Strategy 2: Rename game.ios to data.win and apply with -f')
-                    logging.info('[_apply_xdelta_patches] Strategy 3: Apply with larger buffer size')
-                    temp_renamed_source = data_win_path.replace('game.ios', 'data.win')
-                    cmd = [self.xdelta_path, '-d', '-f', '-s', source_file_for_patch, patch_path, data_win_path]
-                else:
-                    cmd = [self.xdelta_path, '-d', '-s', source_file_for_patch, patch_path, temp_output]
-                logging.info(f"[_apply_xdelta_patches] Command: {' '.join(cmd)}")
-                logging.info('[_apply_xdelta_patches] Command arguments:')
-                logging.info(f'  - xdelta_path: {cmd[0]}')
-                logging.info(f"  - source: {cmd[3]} (exists: {os.path.exists(cmd[3])}, size: {(os.path.getsize(cmd[3]) if os.path.exists(cmd[3]) else 'N/A')})")
-                logging.info(f"  - patch: {cmd[4]} (exists: {os.path.exists(cmd[4])}, size: {(os.path.getsize(cmd[4]) if os.path.exists(cmd[4]) else 'N/A')})")
-                logging.info(f'  - output: {cmd[5]}')
+                cmd = [self.xdelta_path, '-d', '-s', data_win_path, patch_path, temp_output]
                 startupinfo = None
                 creationflags = 0
                 if platform.system() == 'Windows':
@@ -686,148 +620,23 @@ class MultiModMerger(QObject):
                     startupinfo.wShowWindow = sp.SW_HIDE
                     creationflags = sp.CREATE_NO_WINDOW
                 result = subprocess.run(cmd, capture_output=True, text=True, timeout=300, stdin=subprocess.DEVNULL, startupinfo=startupinfo, creationflags=creationflags)
-                logging.info('[_apply_xdelta_patches] Command completed')
-                logging.info(f'[_apply_xdelta_patches] Return code: {result.returncode}')
-                logging.info(f"[_apply_xdelta_patches] stdout: {(result.stdout[:500] if result.stdout else '(empty)')}")
-                logging.info(f"[_apply_xdelta_patches] stderr: {(result.stderr[:500] if result.stderr else '(empty)')}")
-                if result.returncode != 0 and is_macos_with_ios and temp_renamed_source and os.path.exists(data_win_path):
-                    logging.warning('[_apply_xdelta_patches] ========== Strategy 1 failed, trying alternative strategies ==========')
-                    logging.info('[_apply_xdelta_patches] Strategy 2: Renaming game.ios to data.win')
-                    try:
-                        shutil.copy2(data_win_path, temp_renamed_source)
-                        renamed_size = os.path.getsize(temp_renamed_source)
-                        logging.info(f'[_apply_xdelta_patches] Created temporary data.win copy: {temp_renamed_source} (size: {renamed_size} bytes)')
-                        if os.path.getsize(data_win_path) == renamed_size:
-                            logging.info('[_apply_xdelta_patches] File sizes match - files should be identical')
-                        cmd_retry = [self.xdelta_path, '-d', '-s', temp_renamed_source, patch_path, temp_output]
-                        logging.info(f"[_apply_xdelta_patches] Strategy 2 command: {' '.join(cmd_retry)}")
-                        result = subprocess.run(cmd_retry, capture_output=True, text=True, timeout=300, stdin=subprocess.DEVNULL, startupinfo=startupinfo, creationflags=creationflags)
-                        logging.info(f'[_apply_xdelta_patches] Strategy 2 return code: {result.returncode}')
-                        logging.info(f"[_apply_xdelta_patches] Strategy 2 stdout: {(result.stdout[:500] if result.stdout else '(empty)')}")
-                        logging.info(f"[_apply_xdelta_patches] Strategy 2 stderr: {(result.stderr[:500] if result.stderr else '(empty)')}")
-                        strategy_success = False
-                        if result.returncode == 0:
-                            logging.info('[_apply_xdelta_patches] Strategy 2 succeeded! Patch applied with data.win rename')
-                            if os.path.exists(temp_output):
-                                output_size = os.path.getsize(temp_output)
-                                logging.info(f'[_apply_xdelta_patches] Patched file created: {temp_output} (size: {output_size} bytes)')
-                            strategy_success = True
-                        else:
-                            logging.info('[_apply_xdelta_patches] Strategy 2 failed, trying Strategy 3: Using -f (force) flag')
-                            cmd_retry_force = [self.xdelta_path, '-d', '-f', '-s', temp_renamed_source, patch_path, temp_output]
-                            logging.info(f"[_apply_xdelta_patches] Strategy 3 command: {' '.join(cmd_retry_force)}")
-                            result = subprocess.run(cmd_retry_force, capture_output=True, text=True, timeout=300, stdin=subprocess.DEVNULL, startupinfo=startupinfo, creationflags=creationflags)
-                            logging.info(f'[_apply_xdelta_patches] Strategy 3 return code: {result.returncode}')
-                            logging.info(f"[_apply_xdelta_patches] Strategy 3 stdout: {(result.stdout[:500] if result.stdout else '(empty)')}")
-                            logging.info(f"[_apply_xdelta_patches] Strategy 3 stderr: {(result.stderr[:500] if result.stderr else '(empty)')}")
-                            if result.returncode == 0:
-                                logging.info('[_apply_xdelta_patches] Strategy 3 succeeded! Patch applied with -f flag')
-                                strategy_success = True
-                            else:
-                                logging.info('[_apply_xdelta_patches] Strategy 3 failed, trying Strategy 4: Using larger buffer size (-B 67108864)')
-                                cmd_retry_buffer = [self.xdelta_path, '-d', '-B', '67108864', '-s', temp_renamed_source, patch_path, temp_output]
-                                logging.info(f"[_apply_xdelta_patches] Strategy 4 command: {' '.join(cmd_retry_buffer)}")
-                                result = subprocess.run(cmd_retry_buffer, capture_output=True, text=True, timeout=300, stdin=subprocess.DEVNULL, startupinfo=startupinfo, creationflags=creationflags)
-                                logging.info(f'[_apply_xdelta_patches] Strategy 4 return code: {result.returncode}')
-                                logging.info(f"[_apply_xdelta_patches] Strategy 4 stdout: {(result.stdout[:500] if result.stdout else '(empty)')}")
-                                logging.info(f"[_apply_xdelta_patches] Strategy 4 stderr: {(result.stderr[:500] if result.stderr else '(empty)')}")
-                                if result.returncode == 0:
-                                    logging.info('[_apply_xdelta_patches] Strategy 4 succeeded! Patch applied with larger buffer size')
-                                    strategy_success = True
-                                else:
-                                    logging.info('[_apply_xdelta_patches] Strategy 4 failed, trying Strategy 5: Using -v (verbose) flag for better diagnostics')
-                                    cmd_retry_verbose = [self.xdelta_path, '-d', '-v', '-f', '-s', temp_renamed_source, patch_path, temp_output]
-                                    logging.info(f"[_apply_xdelta_patches] Strategy 5 command: {' '.join(cmd_retry_verbose)}")
-                                    result = subprocess.run(cmd_retry_verbose, capture_output=True, text=True, timeout=300, stdin=subprocess.DEVNULL, startupinfo=startupinfo, creationflags=creationflags)
-                                    logging.info(f'[_apply_xdelta_patches] Strategy 5 return code: {result.returncode}')
-                                    logging.info(f"[_apply_xdelta_patches] Strategy 5 stdout: {(result.stdout[:500] if result.stdout else '(empty)')}")
-                                    logging.info(f"[_apply_xdelta_patches] Strategy 5 stderr: {(result.stderr[:500] if result.stderr else '(empty)')}")
-                                    if result.returncode == 0:
-                                        logging.info('[_apply_xdelta_patches] Strategy 5 succeeded! Patch applied with verbose flag')
-                                        strategy_success = True
-                                    else:
-                                        try:
-                                            import hashlib
-                                            with open(data_win_path, 'rb') as f:
-                                                sha1_hash = hashlib.sha1()
-                                                sha256_hash = hashlib.sha256()
-                                                chunk_size = 8192
-                                                while (chunk := f.read(chunk_size)):
-                                                    sha1_hash.update(chunk)
-                                                    sha256_hash.update(chunk)
-                                                file_sha1 = sha1_hash.hexdigest()
-                                                file_sha256 = sha256_hash.hexdigest()
-                                                logging.info(f'[_apply_xdelta_patches] Input file SHA1: {file_sha1}')
-                                                logging.info(f'[_apply_xdelta_patches] Input file SHA256: {file_sha256[:64]}...')
-                                        except Exception as e:
-                                            logging.warning(f'[_apply_xdelta_patches] Could not calculate SHA hashes: {e}')
-                                        logging.error('[_apply_xdelta_patches] All strategies failed - patch may be incompatible')
-                                        logging.error('[_apply_xdelta_patches] Possible causes:')
-                                        logging.error('  1. Patch was created for a different version of the game file')
-                                        logging.error('  2. Patch was created for Windows data.win and macOS game.ios differs')
-                                        logging.error('  3. File corruption or incompatibility between platforms')
-                                        logging.error('  4. Patch requires a specific version/build of data.win that differs from game.ios')
-                                        logging.error(f"[_apply_xdelta_patches] Input file: {data_win_path} (size: {input_size} bytes, MD5: {(file_md5 if 'file_md5' in locals() else 'N/A')})")
-                                        logging.error(f"[_apply_xdelta_patches] Patch file: {patch_path} (size: {patch_size} bytes, MD5: {(patch_md5 if 'patch_md5' in locals() else 'N/A')})")
-                                        strategy_success = False
-                        if temp_renamed_source and os.path.exists(temp_renamed_source):
-                            os.remove(temp_renamed_source)
-                            logging.info(f'[_apply_xdelta_patches] Removed temporary data.win: {temp_renamed_source}')
-                        if strategy_success:
-                            logging.info('[_apply_xdelta_patches] One of the retry strategies succeeded, continuing with patch application')
-                        else:
-                            logging.error('[_apply_xdelta_patches] All retry strategies failed')
-                    except Exception as e:
-                        logging.error(f'[_apply_xdelta_patches] Error during retry strategies: {e}', exc_info=True)
-                        if temp_renamed_source and os.path.exists(temp_renamed_source):
-                            try:
-                                os.remove(temp_renamed_source)
-                            except Exception:
-                                pass
-                        strategy_success = False
-                strategy_succeeded = False
-                if is_macos_with_ios and 'strategy_success' in locals():
-                    strategy_succeeded = strategy_success
-                if result.returncode != 0 and (not strategy_succeeded):
-                    logging.error(f'[_apply_xdelta_patches] xdelta patch failed with return code {result.returncode}')
-                    logging.error(f'[_apply_xdelta_patches] Full stdout: {result.stdout}')
-                    logging.error(f'[_apply_xdelta_patches] Full stderr: {result.stderr}')
+                if result.returncode != 0:
+                    logging.error(f'xdelta patch failed: {result.stderr}')
                     self.status_update.emit(tr('errors.xdelta_patch_failed', patch=os.path.basename(patch_path)), 'error')
                     return False
-                if is_macos_with_ios and strategy_succeeded and (result.returncode == 0):
-                    if os.path.exists(data_win_path):
-                        output_size = os.path.getsize(data_win_path)
-                        logging.info(f'[_apply_xdelta_patches] File patched in place: {data_win_path}, size: {output_size} bytes')
-                        logging.info(f'[_apply_xdelta_patches] Patch {idx + 1}/{len(data_patches)} applied successfully')
-                        continue
-                    else:
-                        logging.error(f'[_apply_xdelta_patches] Patched file does not exist: {data_win_path}')
-                        self.status_update.emit(tr('errors.xdelta_patch_failed', patch=os.path.basename(patch_path)), 'error')
-                        return False
                 if not os.path.exists(temp_output):
-                    logging.error(f'[_apply_xdelta_patches] Temp output file was not created: {temp_output}')
+                    logging.error(f'Temp output file was not created: {temp_output}')
                     self.status_update.emit(tr('errors.xdelta_patch_failed', patch=os.path.basename(patch_path)), 'error')
                     return False
-                output_size = os.path.getsize(temp_output)
-                logging.info(f'[_apply_xdelta_patches] Output file created: {temp_output}, size: {output_size} bytes')
-                logging.info(f'[_apply_xdelta_patches] Moving {temp_output} to {data_win_path}')
                 shutil.move(temp_output, data_win_path)
-                if os.path.exists(data_win_path):
-                    final_size = os.path.getsize(data_win_path)
-                    logging.info(f'[_apply_xdelta_patches] Final file size: {final_size} bytes')
-                    logging.info(f'[_apply_xdelta_patches] Patch {idx + 1}/{len(data_patches)} applied successfully')
-                else:
-                    logging.error(f'[_apply_xdelta_patches] Final file does not exist after move: {data_win_path}')
-                    self.status_update.emit(tr('errors.xdelta_patch_failed', patch=os.path.basename(patch_path)), 'error')
-                    return False
+                logging.info(f'Patch {idx + 1}/{len(data_patches)} applied successfully')
             except subprocess.TimeoutExpired:
-                logging.error(f'[_apply_xdelta_patches] xdelta patch timed out after 300 seconds: {patch_path}')
+                logging.error(f'xdelta patch timed out after 300 seconds: {patch_path}')
                 return False
             except Exception as e:
-                logging.error(f'[_apply_xdelta_patches] xdelta patch error: {e}', exc_info=True)
-                logging.error(f'[_apply_xdelta_patches] Exception type: {type(e).__name__}')
+                logging.error(f'xdelta patch error: {e}', exc_info=True)
                 return False
-        logging.info('[_apply_xdelta_patches] All patches applied successfully')
+        logging.info('All patches applied successfully')
         return True
 
     def _apply_csx_scripts(self, data_win_path: str, csx_scripts: List[str]) -> bool:
@@ -1425,7 +1234,7 @@ class MultiModMerger(QObject):
                     logging.error(f'Failed to restore vanilla file: {restore_error}', exc_info=True)
 
     def _get_mod_source_dir(self, mod_data: Any, chapter_id: int) -> Optional[str]:
-        mod_key = getattr(mod_data, 'key', None) or getattr(mod_data, 'mod_key', None) or getattr(mod_data, 'name', None)
+        mod_key = get_mod_key(mod_data)
         if not mod_key:
             return None
         is_local = getattr(mod_data, 'is_local_mod', False)
@@ -1434,10 +1243,10 @@ class MultiModMerger(QObject):
             if mod_folder_path:
                 source_dir = mod_folder_path
             else:
-                folder_name = sanitize_filename(getattr(mod_data, 'name', mod_key))
+                folder_name = sanitize_filename(get_mod_name(mod_data, mod_key))
                 source_dir = os.path.join(self.app_state.mods_dir, folder_name)
         else:
-            folder_name = sanitize_filename(getattr(mod_data, 'name', mod_key))
+            folder_name = sanitize_filename(get_mod_name(mod_data, mod_key))
             source_dir = os.path.join(self.app_state.mods_dir, folder_name)
         if not os.path.isdir(source_dir):
             return None
@@ -1454,9 +1263,9 @@ class MultiModMerger(QObject):
         return chapter_dir
 
     def _get_target_dir(self, chapter_id: int) -> Optional[str]:
-        if isinstance(self.app_state.game_mode, DemoGameMode):
+        if is_demo_mode(self.app_state.game_mode):
             base_path = self.app_state.demo_game_path
-        elif isinstance(self.app_state.game_mode, UndertaleGameMode):
+        elif is_undertale_mode(self.app_state.game_mode):
             base_path = self.app_state.undertale_game_path
         else:
             base_path = self.app_state.game_path

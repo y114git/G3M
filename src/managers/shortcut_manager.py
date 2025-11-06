@@ -5,16 +5,19 @@ import base64
 import platform
 import webbrowser
 import subprocess
+import logging
 from typing import Dict, Any, Optional
 from PyQt6.QtCore import QObject, pyqtSignal
 from PyQt6.QtWidgets import QFileDialog
 from core.app_state import AppState
 from ui.common.feedback import FeedbackManager
 from managers.mod_manager import ModManager
-from models.game_modes import DemoGameMode, FullGameMode, UndertaleGameMode
+from models.game_modes import FullGameMode
 from config.constants import LAUNCHER_VERSION, UI_COLORS, SLOT_ID_UNIVERSAL, SLOT_ID_DEMO, SLOT_ID_UNDERTALE
 from managers.localization_manager import tr
 from utils.path_utils import resource_path
+from utils.mod_utils import get_mod_key
+from utils.game_utils import is_demo_mode, is_undertale_mode
 
 
 class ShortcutManager(QObject):
@@ -97,15 +100,16 @@ class ShortcutManager(QObject):
         current_path = self.parent_widget._get_current_game_path()
         if not current_path:
             return None
-        is_demo_mode = isinstance(self.app_state.game_mode, DemoGameMode)
+        is_demo = is_demo_mode(self.app_state.game_mode)
         is_chapter_mode = hasattr(self.parent_widget, 'chapter_mode_checkbox') and self.parent_widget.chapter_mode_checkbox.isChecked()
-        is_undertale_mode = isinstance(self.app_state.game_mode, UndertaleGameMode)
-        settings = {'launcher_version': LAUNCHER_VERSION, 'game_path': self.app_state.game_path, 'demo_game_path': self.app_state.demo_game_path, 'is_demo_mode': is_demo_mode, 'is_chapter_mode': is_chapter_mode, 'is_undertale_mode': is_undertale_mode, 'launch_via_steam': self.parent_widget.launch_via_steam_checkbox.isChecked(), 'use_custom_executable': self.parent_widget.use_custom_executable_checkbox.isChecked(), 'custom_executable_path': self.app_state.local_config.get(FullGameMode().get_custom_exec_config_key(), ''), 'demo_custom_executable_path': self.app_state.local_config.get(DemoGameMode().get_custom_exec_config_key(), ''), 'direct_launch_slot_id': self.app_state.local_config.get('direct_launch_slot_id', SLOT_ID_UNIVERSAL), 'mods': {}}
+        is_undertale = is_undertale_mode(self.app_state.game_mode)
+        from models.game_modes import DemoGameMode
+        settings = {'launcher_version': LAUNCHER_VERSION, 'game_path': self.app_state.game_path, 'demo_game_path': self.app_state.demo_game_path, 'is_demo_mode': is_demo, 'is_chapter_mode': is_chapter_mode, 'is_undertale_mode': is_undertale, 'launch_via_steam': self.parent_widget.launch_via_steam_checkbox.isChecked(), 'use_custom_executable': self.parent_widget.use_custom_executable_checkbox.isChecked(), 'custom_executable_path': self.app_state.local_config.get(FullGameMode().get_custom_exec_config_key(), ''), 'demo_custom_executable_path': self.app_state.local_config.get(DemoGameMode().get_custom_exec_config_key(), ''), 'direct_launch_slot_id': self.app_state.local_config.get('direct_launch_slot_id', SLOT_ID_UNIVERSAL), 'mods': {}}
         slot_manager = getattr(self.parent_widget, 'slot_manager', None) if self.parent_widget else None
         if not slot_manager or not hasattr(slot_manager, 'used_mods'):
-            if is_demo_mode:
+            if is_demo:
                 settings['mods']['demo'] = None
-            elif is_undertale_mode:
+            elif is_undertale:
                 settings['mods']['undertale'] = None
             elif is_chapter_mode:
                 for chapter_id in range(5):
@@ -113,33 +117,21 @@ class ShortcutManager(QObject):
             else:
                 settings['mods']['universal'] = None
             return settings
-        if is_demo_mode:
+        if is_demo:
             demo_mod = slot_manager.get_used_mod(SLOT_ID_DEMO)
-            demo_mod_key = None
-            if demo_mod:
-                demo_mod_key = getattr(demo_mod, 'key', None) or getattr(demo_mod, 'mod_key', None)
-            settings['mods']['demo'] = demo_mod_key
-        elif is_undertale_mode:
+            settings['mods']['demo'] = get_mod_key(demo_mod) if demo_mod else None
+        elif is_undertale:
             undertale_mod = slot_manager.get_used_mod(SLOT_ID_UNDERTALE)
-            undertale_mod_key = None
-            if undertale_mod:
-                undertale_mod_key = getattr(undertale_mod, 'key', None) or getattr(undertale_mod, 'mod_key', None)
-            settings['mods']['undertale'] = undertale_mod_key
+            settings['mods']['undertale'] = get_mod_key(undertale_mod) if undertale_mod else None
         elif is_chapter_mode:
             from config.constants import SLOT_ID_MENU, SLOT_ID_CHAPTER_1, SLOT_ID_CHAPTER_2, SLOT_ID_CHAPTER_3, SLOT_ID_CHAPTER_4
             chapter_ids = [SLOT_ID_MENU, SLOT_ID_CHAPTER_1, SLOT_ID_CHAPTER_2, SLOT_ID_CHAPTER_3, SLOT_ID_CHAPTER_4]
             for chapter_id in chapter_ids:
                 mod = slot_manager.get_used_mod(chapter_id)
-                mod_key = None
-                if mod:
-                    mod_key = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
-                settings['mods'][str(chapter_id)] = mod_key
+                settings['mods'][str(chapter_id)] = get_mod_key(mod) if mod else None
         else:
             universal_mod = slot_manager.get_used_mod(SLOT_ID_UNIVERSAL)
-            universal_mod_key = None
-            if universal_mod:
-                universal_mod_key = getattr(universal_mod, 'key', None) or getattr(universal_mod, 'mod_key', None)
-            settings['mods']['universal'] = universal_mod_key
+            settings['mods']['universal'] = get_mod_key(universal_mod) if universal_mod else None
         return settings
 
     def apply_shortcut_mods(self, mods_settings: Dict[str, str]):
@@ -152,15 +144,13 @@ class ShortcutManager(QObject):
             if not game_launcher:
                 raise Exception('game_launcher not found')
             selections = {}
-            is_demo_mode = isinstance(self.app_state.game_mode, DemoGameMode)
-            is_undertale_mode = isinstance(self.app_state.game_mode, UndertaleGameMode)
-            if is_demo_mode:
+            if is_demo_mode(self.app_state.game_mode):
                 mod_key = mods_settings.get('demo')
                 if mod_key and mod_key != 'no_change':
                     selections[-1] = mod_key
                 else:
                     selections[-1] = 'no_change'
-            elif is_undertale_mode:
+            elif is_undertale_mode(self.app_state.game_mode):
                 mod_key = mods_settings.get('undertale')
                 if mod_key and mod_key != 'no_change':
                     selections[-1] = mod_key
@@ -180,9 +170,10 @@ class ShortcutManager(QObject):
                             chapter_id = int(key)
                             selections[chapter_id] = 'no_change'
             if selections:
-                success = game_launcher._prepare_game_files(selections)
-                if not success:
-                    raise Exception(tr('errors.mod_apply_error', error='Failed to prepare game files'))
+                all_vanilla = all((mod_key == 'no_change' for mod_key in selections.values()))
+                if all_vanilla:
+                    return
+                logging.info('Shortcut mods will be applied during game launch via launch system')
         except Exception as e:
             raise Exception(tr('errors.mod_apply_error', error=str(e)))
 
@@ -206,19 +197,19 @@ class ShortcutManager(QObject):
                 else:
                     raise Exception(tr('errors.direct_launch_error'))
             else:
-                is_demo_mode = isinstance(self.app_state.game_mode, DemoGameMode)
+                is_demo = is_demo_mode(self.app_state.game_mode)
                 current_game_path = self.parent_widget._get_current_game_path()
                 if not current_game_path or not os.path.exists(current_game_path):
                     raise Exception(tr('errors.game_files_not_found'))
                 executable_path = None
                 if use_custom_executable:
-                    exec_path = demo_custom_exec_path if is_demo_mode else custom_exec_path
+                    exec_path = demo_custom_exec_path if is_demo else custom_exec_path
                     if exec_path and os.path.exists(exec_path):
                         executable_path = exec_path
                     else:
                         raise Exception(tr('errors.specified_executable_not_found'))
                 else:
-                    if isinstance(self.app_state.game_mode, UndertaleGameMode):
+                    if is_undertale_mode(self.app_state.game_mode):
                         possible_names = ['UNDERTALE.exe', 'undertale.exe']
                     else:
                         possible_names = ['DELTARUNE.exe', 'deltarune.exe', 'SURVEY_PROGRAM.exe', 'survey_program.exe']

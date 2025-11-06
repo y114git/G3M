@@ -2,7 +2,11 @@ import os
 import platform
 import psutil
 from pathlib import Path
+from typing import TYPE_CHECKING
 from config.constants import GAME_PROCESS_NAMES
+if TYPE_CHECKING:
+    from models.game_modes import GameMode
+    from core.app_state import AppState
 
 
 def is_game_running():
@@ -49,3 +53,26 @@ def is_valid_game_path(path: str, skip_data_check: bool = False, game_type: str 
         return is_valid_mac_game_path(path, skip_data_check, game_type)
     executables = ('UNDERTALE.exe', 'UNDERTALE') if game_type == 'undertale' else ('DELTARUNE.exe', 'DELTARUNE')
     return any((os.path.isfile(os.path.join(path, exe)) for exe in executables))
+
+
+def is_demo_mode(game_mode: 'GameMode') -> bool:
+    from models.game_modes import DemoGameMode
+    return isinstance(game_mode, DemoGameMode)
+
+
+def is_undertale_mode(game_mode: 'GameMode') -> bool:
+    from models.game_modes import UndertaleGameMode
+    return isinstance(game_mode, UndertaleGameMode)
+
+
+def get_target_chapter_id(app_state: 'AppState', slot_id: int) -> int:
+    from models.game_modes import DemoGameMode, UndertaleGameMode
+    from config.constants import SLOT_ID_DEMO, SLOT_ID_UNDERTALE, SLOT_ID_UNIVERSAL
+    if isinstance(app_state.game_mode, DemoGameMode):
+        return SLOT_ID_DEMO
+    elif isinstance(app_state.game_mode, UndertaleGameMode):
+        return SLOT_ID_UNDERTALE
+    elif app_state.current_mode == 'chapter':
+        return slot_id
+    else:
+        return SLOT_ID_UNIVERSAL
