@@ -31,10 +31,10 @@ def download_and_extract_archive(url: str, target_dir: str, progress_callback=No
 
 def extract_archive(archive_path: str, target_dir: str, fname: str | None = None, is_game_installation: bool = False, size_cap_bytes: int | None = None) -> None:
     os.makedirs(target_dir, exist_ok=True)
-    low = (fname or os.path.basename(archive_path)).lower()
-    with tempfile.TemporaryDirectory(prefix='deltahub-extract-') as temp_out:
-        _extract_archive_raw(archive_path, low, temp_out)
-        if size_cap_bytes is not None:
+    if size_cap_bytes is not None:
+        low = (fname or os.path.basename(archive_path)).lower()
+        with tempfile.TemporaryDirectory(prefix='deltahub-extract-') as temp_out:
+            _extract_archive_raw(archive_path, low, temp_out)
             total = 0
             for root, _, files in os.walk(temp_out):
                 for f in files:
@@ -44,8 +44,10 @@ def extract_archive(archive_path: str, target_dir: str, fname: str | None = None
                         pass
             if total > size_cap_bytes:
                 raise IOError('extracted_content_too_large')
-        _move_tree_safely(temp_out, target_dir)
-        _cleanup_extracted_archive(target_dir, is_game_installation)
+            _move_tree_safely(temp_out, target_dir)
+            _cleanup_extracted_archive(target_dir, is_game_installation)
+    else:
+        extract_archive_with_backup(archive_path, target_dir, backup_temp_dir=None, backup_files=None, add_mod_dir_callback=None, backup_file_callback=None, update_manifest_callback=None, status_callback=None)
 
 
 def extract_archive_with_backup(archive_path: str, target_dir: str, backup_temp_dir: str | None = None, backup_files: dict | None = None, add_mod_dir_callback=None, backup_file_callback=None, update_manifest_callback=None, status_callback=None) -> list[str]:

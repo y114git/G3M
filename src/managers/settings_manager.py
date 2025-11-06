@@ -224,13 +224,18 @@ class SettingsManager(QObject):
                     self.feedback_manager.show_message('warning', 'errors.error', tr('errors.can_select_only_mp3_wav'))
                     return
                 try:
+                    import logging
                     os.makedirs(self.app_state.config_dir, exist_ok=True)
                     ext = '.mp3' if lower.endswith('.mp3') else '.wav'
                     dest_path = os.path.join(self.app_state.config_dir, f'custom_background_music{ext}')
+                    logging.info(f'[SettingsManager] Copying background music from {file_path} to {dest_path}')
                     shutil.copy2(file_path, dest_path)
+                    logging.info(f'[SettingsManager] Background music copied successfully, file exists: {os.path.exists(dest_path)}')
                     self.feedback_manager.show_message('info', 'dialogs.success', tr('dialogs.background_music_selected'))
                     self.theme_changed.emit()
-                except Exception:
+                except Exception as e:
+                    import logging
+                    logging.error(f'[SettingsManager] Failed to copy background music: {e}', exc_info=True)
                     self.feedback_manager.show_message('warning', 'errors.error', tr('errors.copy_background_music_failed'))
 
     def on_startup_sound_button_click(self):

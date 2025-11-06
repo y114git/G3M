@@ -11,14 +11,13 @@ import logging
 import requests
 from PyQt6.QtCore import QTranslator, Qt, QEvent, QThread, QTimer, pyqtSignal, QUrl
 from PyQt6.QtGui import QColor, QIcon, QPainter, QPixmap, QDesktopServices
-from PyQt6.QtWidgets import QApplication, QCheckBox, QDialog, QFrame, QLabel, QLineEdit, QMessageBox, QProgressBar, QPushButton, QTabWidget, QVBoxLayout, QWidget, QHBoxLayout, QSizePolicy, QInputDialog, QColorDialog
+from PyQt6.QtWidgets import QApplication, QCheckBox, QFrame, QLabel, QProgressBar, QPushButton, QTabWidget, QVBoxLayout, QWidget, QHBoxLayout, QSizePolicy, QColorDialog
 from managers.localization_manager import localization_manager, tr
 from models.game_modes import FullGameMode, DemoGameMode, UndertaleGameMode
 from config.constants import UI_COLORS, SOCIAL_LINKS, ONLINE_UPDATE_INTERVAL, INITIALIZATION_TIMEOUT, LEGACY_CLEANUP_DELAY, THREAD_WAIT_TIMEOUT, SLOT_ID_UNIVERSAL
 from utils.game_utils import is_game_running
 from utils.thread_utils import safe_stop_thread
 from utils.path_utils import get_user_data_root, resource_path, get_launcher_dir, get_legacy_ylauncher_path, get_user_plugins_dir
-from utils.network_utils import check_internet_connection
 from workers.background_workers import PresenceWorker, FetchChangelogWorker
 from controllers.mod_operations_controller import ModOperationsController
 from controllers.library_display_controller import LibraryDisplayController
@@ -27,8 +26,6 @@ from controllers.save_ui_controller import SaveUiController
 from controllers.settings_ui_controller import SettingsUiController
 from controllers.theme_controller import ThemeController
 from controllers.game_launch_controller import GameLaunchController
-from ui.dialogs.xdelta import XdeltaDialog
-from ui.dialogs.mod_editor import ModEditorDialog
 from ui.common.feedback import FeedbackManager
 from core.startup import SingleInstanceServer, ShortcutLaunchError
 from core.app_state import AppState
@@ -123,7 +120,6 @@ class AppWindow(QWidget):
         self.mod_manager = ModManager(self.app_state, self.feedback_manager, self.settings_manager, self)
         self.mod_manager.progress_updated.connect(self.set_progress_signal.emit)
         self.mod_manager.status_changed.connect(self.update_status_signal.emit)
-        self.mod_manager.installation_finished.connect(self._on_mod_installation_finished)
         self.mod_manager.url_prompt_required.connect(self._handle_url_install_prompt)
         self.game_launcher = GameLauncher(self.app_state, self.feedback_manager, self.mod_manager, self.save_manager, self)
         self.game_launcher.status_changed.connect(self.update_status_signal.emit)
@@ -170,6 +166,7 @@ class AppWindow(QWidget):
         self.settings_manager.theme_changed.connect(self.theme.apply_theme)
         self.settings_manager.theme_changed.connect(self._on_theme_changed_by_manager)
         self.initialization_finished.connect(self.game_launch.update_button_state)
+        self.initialization_finished.connect(self._try_start_background_music)
         if self.is_shortcut_launch:
             self._shortcut_launch(args)
             return
@@ -386,8 +383,8 @@ class AppWindow(QWidget):
         self.tag_gameplay.stateChanged.connect(lambda: (setattr(self.app_state, 'current_page', 1), self.search_display.update_filtered_mods()))
         self.tag_other.stateChanged.connect(lambda: (setattr(self.app_state, 'current_page', 1), self.search_display.update_filtered_mods()))
         self.search_button.clicked.connect(self.search_display.show_search_dialog)
-        self.prev_page_btn.clicked.connect(self._prev_page)
-        self.next_page_btn.clicked.connect(self._next_page)
+        self.prev_page_btn.clicked.connect(self.search_display.prev_page)
+        self.next_page_btn.clicked.connect(self.search_display.next_page)
         self.library_sort_ascending = False
         self.app_state.library_search_text = ''
         self._previous_mode = 'normal'
@@ -489,11 +486,11 @@ class AppWindow(QWidget):
                 self.library_display._update_priority_button_visibility()
             QTimer.singleShot(800, update_priority_button_normal)
         QTimer.singleShot(700, self.library_display.update_mod_widgets_slot_status)
-        self.manage_mods_tab = QWidget()
-        self.xdelta_patch_tab = QWidget()
         self.main_tab_widget.addTab(self.search_mods_tab, tr('ui.search_tab'))
         self.main_tab_widget.addTab(self.library_tab, tr('ui.library_tab'))
+        self.manage_mods_tab = QWidget()
         self.main_tab_widget.addTab(self.manage_mods_tab, tr('ui.mod_management'))
+        self.xdelta_patch_tab = QWidget()
         self.main_tab_widget.addTab(self.xdelta_patch_tab, tr('ui.patching_tab'))
         self._update_plugin_tabs()
         self.previous_tab_index = 0
@@ -635,7 +632,6 @@ class AppWindow(QWidget):
             self.initialization_timer.stop()
         self.app_state.initialization_completed = True
         self.initialization_finished.emit()
-        self.customization_manager.maybe_start_background_music(self.app_state.is_shown_to_user, self.isVisible())
 
     def _force_finish_initialization(self):
         if self.app_state.initialization_completed:
@@ -643,8 +639,16 @@ class AppWindow(QWidget):
         self.app_state.mods_loaded = True
         self.app_state.initialization_completed = True
         self.initialization_finished.emit()
-        if not is_game_running():
-            self.customization_manager.maybe_start_background_music(self.app_state.is_shown_to_user, self.isVisible())
+
+    def _try_start_background_music(self):
+        import logging
+        logging.info(f"[AppWindow] _try_start_background_music called, is_shown_to_user: {getattr(self, 'is_shown_to_user', False)}, isVisible: {self.isVisible()}")
+        if getattr(self, 'is_shown_to_user', False) and self.isVisible():
+            logging.info('[AppWindow] Conditions met, calling maybe_start_background_music')
+            self.customization_manager.maybe_start_background_music(force=True)
+        else:
+            logging.debug('[AppWindow] Conditions not met yet, will retry when window is shown')
+            QTimer.singleShot(100, self._try_start_background_music)
 
     def _update_saves_button_state(self):
         game_type = self.game_type_combo.currentData()
@@ -702,13 +706,7 @@ class AppWindow(QWidget):
             pass
 
     def _update_pagination_controls(self):
-        if not hasattr(self, 'page_label') or not hasattr(self, 'prev_page_btn') or (not hasattr(self, 'next_page_btn')):
-            return
-        total_mods = len(self.app_state.filtered_mods)
-        total_pages = max(1, (total_mods - 1) // self.app_state.mods_per_page + 1) if total_mods > 0 else 1
-        self.page_label.setText(tr('ui.page_label', current=self.app_state.current_page, total=total_pages))
-        self.prev_page_btn.setEnabled(self.app_state.current_page > 1)
-        self.next_page_btn.setEnabled(self.app_state.current_page < total_pages)
+        self.search_display.update_pagination()
 
     def _update_change_path_button_text(self):
         self.change_path_button.setText(self.app_state.game_mode.path_change_button_text)
@@ -992,8 +990,10 @@ class AppWindow(QWidget):
         self.saves_button.setText(tr('ui.saves_button'))
         self.main_tab_widget.setTabText(0, tr('ui.search_tab'))
         self.main_tab_widget.setTabText(1, tr('ui.library_tab'))
-        self.main_tab_widget.setTabText(2, tr('ui.mod_management'))
-        self.main_tab_widget.setTabText(3, tr('ui.patching_tab'))
+        if hasattr(self, 'manage_mods_tab'):
+            self.main_tab_widget.setTabText(2, tr('ui.mod_management'))
+        if hasattr(self, 'xdelta_patch_tab'):
+            self.main_tab_widget.setTabText(3, tr('ui.patching_tab'))
         self.sort_combo.setItemText(0, tr('ui.sort_by_downloads'))
         self.sort_combo.setItemText(1, tr('ui.sort_by_update_date'))
         self.sort_combo.setItemText(2, tr('ui.sort_by_creation_date'))
@@ -1131,183 +1131,6 @@ class AppWindow(QWidget):
         finally:
             self._suppress_tab_handlers = False
 
-    def _on_xdelta_patch_click(self):
-        try:
-            dialog = XdeltaDialog(self)
-            dialog.exec()
-        except Exception as e:
-            self.feedback_manager.show_message('error', 'errors.error', tr('errors.patching_window_failed', error=str(e)))
-
-    def _show_main_mod_management_dialog(self):
-        has_internet = check_internet_connection()
-        dialog = QDialog(self)
-        dialog.setWindowTitle(tr('ui.mod_management'))
-        dialog.setModal(True)
-        dialog.resize(400, 300)
-        layout = QVBoxLayout(dialog)
-        layout.setSpacing(20)
-        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        title = QLabel(tr('dialogs.what_do_you_want_to_do'))
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        title.setStyleSheet('font-size: 18px; font-weight: bold; margin-bottom: 20px;')
-        layout.addWidget(title)
-        buttons_layout = QHBoxLayout()
-        buttons_layout.setSpacing(15)
-        create_button = QPushButton(tr('ui.create_mod'))
-        create_button.setFixedSize(180, 50)
-        create_button.clicked.connect(lambda: self._on_create_mod_choice(dialog, has_internet))
-        edit_button = QPushButton(tr('ui.edit_mod'))
-        edit_button.setFixedSize(180, 50)
-        edit_button.clicked.connect(lambda: self._on_edit_mod_choice(dialog, has_internet))
-        buttons_layout.addWidget(create_button)
-        buttons_layout.addWidget(edit_button)
-        layout.addLayout(buttons_layout)
-        layout.addSpacing(30)
-        cancel_button = QPushButton(tr('ui.cancel_button'))
-        cancel_button.clicked.connect(dialog.reject)
-        layout.addWidget(cancel_button)
-        dialog.exec()
-
-    def _show_mod_choice_dialog(self, title_key, public_callback, local_callback, has_internet):
-        dialog = QDialog(self)
-        dialog.setWindowTitle(tr('ui.create_mod') if 'create' in title_key else tr('ui.edit_mod'))
-        dialog.setModal(True)
-        dialog.resize(300, 200)
-        layout = QVBoxLayout(dialog)
-        layout.setSpacing(20)
-        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        title = QLabel(tr(title_key))
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        title.setStyleSheet('font-size: 16px; font-weight: bold;')
-        layout.addWidget(title)
-        buttons_layout = QHBoxLayout()
-        buttons_layout.setSpacing(15)
-        public_button = QPushButton(tr('buttons.public'))
-        public_button.setFixedSize(130, 40)
-        public_button.clicked.connect(lambda: (dialog.accept(), public_callback(dialog)))
-        public_button.setEnabled(has_internet)
-        if not has_internet:
-            public_button.setToolTip(tr('errors.internet_required'))
-        local_button = QPushButton(tr('tags.local'))
-        local_button.setFixedSize(130, 40)
-        local_button.clicked.connect(lambda: (dialog.accept(), local_callback(dialog)))
-        buttons_layout.addWidget(public_button)
-        buttons_layout.addWidget(local_button)
-        layout.addLayout(buttons_layout)
-        cancel_button = QPushButton(tr('ui.cancel_button'))
-        cancel_button.clicked.connect(dialog.reject)
-        layout.addWidget(cancel_button)
-        dialog.exec()
-
-    def _on_create_mod_choice(self, parent_dialog, has_internet):
-        parent_dialog.accept()
-        self._show_mod_choice_dialog('ui.how_to_create_mod', lambda d: self._create_mod(d, public=True), lambda d: self._create_mod(d, public=False), has_internet)
-
-    def _on_edit_mod_choice(self, parent_dialog, has_internet):
-        parent_dialog.accept()
-        self._show_mod_choice_dialog('dialogs.what_mod_type_to_change', self._edit_public_mod, self._edit_local_mod, has_internet)
-
-    def _activate_window_safe(self):
-        try:
-            self.activateWindow()
-            self.raise_()
-            self.setFocus()
-        except Exception:
-            pass
-
-    def _create_mod(self, parent_dialog, public: bool):
-        parent_dialog.accept()
-        if public and (not check_internet_connection()):
-            self.feedback_manager.show_message('error', 'errors.no_internet', tr('errors.public_mod_internet'))
-            return
-        editor = ModEditorDialog(self, is_creating=True, is_public=public)
-        editor.exec()
-        self._activate_window_safe()
-
-    def _edit_public_mod(self, parent_dialog):
-        parent_dialog.accept()
-        if not check_internet_connection():
-            self.feedback_manager.show_message('error', 'errors.no_internet', tr('errors.edit_mod_internet'))
-            return
-        secret_key, ok = QInputDialog.getText(self, tr('dialogs.enter_secret_key'), tr('ui.secret_key_label'), QLineEdit.EchoMode.Password)
-        if not ok or not secret_key.strip():
-            return
-        try:
-            mod_data, hashed_key, found_in_pending = self.mod_manager.fetch_mod_data_by_secret(secret_key)
-        except requests.RequestException as e:
-            error_msg = tr('errors.key_check_failed', error=str(e))
-            self.feedback_manager.show_message('error', 'errors.error', error_msg)
-            return
-        except Exception as e:
-            logging.error(f'Unexpected error fetching mod data: {e}', exc_info=True)
-            self.feedback_manager.show_message('error', 'errors.error', tr('errors.key_check_failed', error=str(e)))
-            return
-        if not mod_data:
-            self.feedback_manager.show_message('warning', 'errors.mod_not_found', tr('errors.secret_key_invalid'))
-            return
-        if not hashed_key:
-            self.feedback_manager.show_message('warning', 'errors.mod_not_found', tr('errors.secret_key_invalid'))
-            return
-        if mod_data.get('ban_status', False):
-            ban_reason = mod_data.get('ban_reason', tr('defaults.not_specified'))
-            self.feedback_manager.show_message('error', 'dialogs.mod_blocked_title', tr('dialogs.mod_blocked_message', ban_reason=ban_reason, error_message=tr('dialogs.error_occurred')))
-            return
-        if found_in_pending:
-            result = self.feedback_manager.ask_custom_question(QMessageBox.Icon.Information, 'dialogs.mod_on_moderation', 'dialogs.mod_on_moderation_message', [('buttons.withdraw_request', QMessageBox.ButtonRole.DestructiveRole, 'withdraw'), ('buttons.ok', QMessageBox.ButtonRole.AcceptRole, 'ok')], 'ok')
-            if result == 'withdraw':
-                try:
-                    self.mod_manager.withdraw_pending_mod(hashed_key)
-                    self.feedback_manager.show_message('info', 'dialogs.request_withdrawn', tr('dialogs.withdrawal_success'))
-                except requests.RequestException as e:
-                    error_msg = tr('errors.request_revoke_failed', error=str(e))
-                    self.feedback_manager.show_message('error', 'errors.error', error_msg)
-                except Exception as e:
-                    logging.error(f'Unexpected error withdrawing pending mod: {e}', exc_info=True)
-                    self.feedback_manager.show_message('error', 'errors.error', tr('errors.request_revoke_failed', error=str(e)))
-            return
-        if self.mod_manager.has_pending_changes(hashed_key):
-            result = self.feedback_manager.ask_custom_question(QMessageBox.Icon.Information, 'dialogs.changes_under_review', 'dialogs.request_pending', [('buttons.withdraw_request', QMessageBox.ButtonRole.DestructiveRole, 'withdraw')])
-            if result == 'withdraw':
-                try:
-                    self.mod_manager.withdraw_pending_change(hashed_key)
-                    self.feedback_manager.show_message('info', 'dialogs.request_withdrawn', tr('dialogs.withdrawal_success'))
-                except (requests.RequestException, Exception) as e:
-                    if isinstance(e, requests.RequestException):
-                        error_msg = tr('errors.request_revoke_failed', error=str(e))
-                    else:
-                        logging.error(f'Unexpected error withdrawing pending change: {e}', exc_info=True)
-                        error_msg = tr('errors.request_revoke_failed', error=str(e))
-                    self.feedback_manager.show_message('error', 'errors.error', error_msg)
-                    return
-            else:
-                return
-        editor = ModEditorDialog(self, is_creating=False, is_public=True, mod_data=mod_data)
-        editor.exec()
-        self._activate_window_safe()
-
-    def _edit_local_mod(self, parent_dialog):
-        parent_dialog.accept()
-        local_mods = self.mod_manager.list_local_mods()
-        if not local_mods:
-            self.feedback_manager.show_message('info', 'dialogs.no_local_mods_title', tr('dialogs.no_local_mods_message'))
-            return
-        mod_names = [mod_info['name'] for mod_info in local_mods]
-        selected_name, ok = QInputDialog.getItem(self, tr('dialogs.select_mod'), tr('dialogs.local_mods'), mod_names, 0, False)
-        if not ok:
-            return
-        selected_mod = next((mod_info for mod_info in local_mods if mod_info['name'] == selected_name), None)
-        if not selected_mod:
-            self.feedback_manager.show_message('warning', 'errors.error', tr('errors.selected_mod_not_found'))
-            return
-        mod_data = selected_mod['data'].copy()
-        mod_data['key'] = selected_mod['key']
-        mod_data['folder_name'] = os.path.basename(selected_mod['folder_path']) if selected_mod.get('folder_path') else ''
-        if selected_mod.get('folder_path'):
-            mod_data['folder_path'] = selected_mod['folder_path']
-        editor = ModEditorDialog(self, is_creating=False, is_public=False, mod_data=mod_data)
-        editor.exec()
-        self._activate_window_safe()
-
     def closeEvent(self, event):
         self.customization_manager.stop_background_music()
         self._online_timer.stop()
@@ -1341,8 +1164,15 @@ class AppWindow(QWidget):
                         pass
             if self.presence_thread:
                 self._safe_set_parent_none(self.presence_thread)
-            self._stop_presence_thread()
-            self._stop_fetch_thread()
+                safe_stop_thread(self.presence_thread, timeout=2000)
+                if not (self.presence_thread and self.presence_thread.isRunning()):
+                    self.presence_thread = None
+                    self.presence_worker = None
+            if hasattr(self.refresh_controller, 'fetch_thread') and self.refresh_controller.fetch_thread:
+                self._safe_set_parent_none(self.refresh_controller.fetch_thread)
+                safe_stop_thread(self.refresh_controller.fetch_thread, timeout=THREAD_WAIT_TIMEOUT)
+                if not (self.refresh_controller.fetch_thread and self.refresh_controller.fetch_thread.isRunning()):
+                    self.refresh_controller.fetch_thread = None
             self.game_launcher._cleanup_direct_launch_files()
             self.settings_manager.save_window_geometry(self)
             QApplication.processEvents()
@@ -1435,12 +1265,6 @@ class AppWindow(QWidget):
     def _on_theme_changed_by_manager(self):
         self.theme.on_theme_changed_by_manager()
 
-    def _prev_page(self):
-        self.search_display.prev_page()
-
-    def _next_page(self):
-        self.search_display.next_page()
-
     def _show_library_search_dialog(self):
         self.app_state.library_search_text = ''
         self.library_search_button.setText('🔍')
@@ -1472,10 +1296,10 @@ class AppWindow(QWidget):
         self.mod_ops.install_mod(mod, force)
 
     def _on_single_mod_install_finished(self, success):
-        self.mod_ops.on_install_finished(success)
-
-    def _on_mod_installation_finished(self, success, message):
-        self.mod_ops.on_mod_installation_finished(success, message)
+        was_installed_before = False
+        if self.app_state.current_task:
+            was_installed_before = getattr(self.app_state.current_task, 'was_installed_before', False)
+        self.mod_ops._on_install_complete(success, '', was_installed_before)
 
     def _show_chapter_mode_instruction(self):
         if not hasattr(self, 'installed_mods_layout'):
@@ -1525,6 +1349,14 @@ class AppWindow(QWidget):
         if getattr(self, '_suppress_tab_handlers', False):
             self.previous_tab_index = index
             return
+        if index == 2:
+            self.main_tab_widget.setCurrentIndex(self.previous_tab_index)
+            self.mod_ops.show_mod_management_dialog()
+            return
+        if index == 3:
+            self.main_tab_widget.setCurrentIndex(self.previous_tab_index)
+            self.mod_ops.show_xdelta_patch_dialog()
+            return
         if index >= num_original_tabs:
             visible_plugins = [p for p in self.app_state.plugins if not p.get('tab_hide', False)]
             plugin_index = index - num_original_tabs
@@ -1573,13 +1405,7 @@ class AppWindow(QWidget):
                     return
             self.previous_tab_index = index
             return
-        if index == 2:
-            self._show_main_mod_management_dialog()
-            self.main_tab_widget.setCurrentIndex(self.previous_tab_index)
-        elif index == 3:
-            self._on_xdelta_patch_click()
-            self.main_tab_widget.setCurrentIndex(self.previous_tab_index)
-        elif index == 1:
+        if index == 1:
             self.library_display.update_display()
             self.previous_tab_index = index
         else:
@@ -1617,13 +1443,3 @@ class AppWindow(QWidget):
         for dialog_type, dialog_data in pending:
             if dialog_type == 'update':
                 self._prompt_for_update(dialog_data)
-
-    def _stop_fetch_thread(self):
-        self.refresh_controller._stop_fetch_thread()
-
-    def _stop_presence_thread(self):
-        if self.presence_thread:
-            safe_stop_thread(self.presence_thread, timeout=2000)
-            if not (self.presence_thread and self.presence_thread.isRunning()):
-                self.presence_thread = None
-                self.presence_worker = None

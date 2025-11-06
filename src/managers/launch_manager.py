@@ -2,22 +2,19 @@ import os
 import sys
 import platform
 import shutil
-import tempfile
-import hashlib
 import subprocess
 import webbrowser
-import json
 import logging
 from typing import Dict, Optional, Any, List
 from PyQt6.QtCore import QObject, QThread, QTimer, pyqtSignal
 from managers.localization_manager import tr
-from utils.file_utils import ensure_writable, sanitize_filename, extract_archive_with_backup
+from utils.file_utils import ensure_writable
 from utils.game_utils import is_game_running, is_demo_mode, is_undertale_mode
-from utils.path_utils import get_xdelta_path, find_chapter_resource_dir, resolve_game_executable
+from utils.path_utils import find_chapter_resource_dir, resolve_game_executable
 from utils.mod_utils import get_mod_key
 from workers.game_monitor import GameMonitorWorker
 from managers.multi_mod_merger import MultiModMerger
-from config.constants import UI_COLORS, SLOT_ID_UNIVERSAL, SLOT_ID_DEMO, SLOT_ID_UNDERTALE
+from config.constants import UI_COLORS, SLOT_ID_UNIVERSAL
 
 
 class GameLauncher(QObject):
@@ -43,7 +40,7 @@ class GameLauncher(QObject):
         self.multi_mod_merger = MultiModMerger(app_state, mod_manager, parent)
         self.multi_mod_merger.status_update.connect(self._on_merge_status)
         self.multi_mod_merger.progress_update.connect(self._on_merge_progress)
-        self.multi_mod_merger._session_manifest_path = self._session_manifest_path()
+        self.multi_mod_merger._session_manifest_path = os.path.join(self.app_state.config_dir, 'session.lock')
         self._merge_thread = None
         self._pending_selections = None
         self._merge_finished_callback = None
@@ -81,47 +78,17 @@ class GameLauncher(QObject):
         self._launch_game_with_selections(selections, execute_plugin_hooks, restore_window_callback)
 
     def _get_used_mods_selections(self) -> Dict[int, Any]:
-        selections = {}
         try:
             parent_obj = self.parent()
         except (AttributeError, TypeError):
             parent_obj = None
         slot_manager = getattr(parent_obj, 'slot_manager', None) if parent_obj else None
-        if not slot_manager or not hasattr(slot_manager, 'used_mods') or (not slot_manager.used_mods):
+        if not slot_manager or not hasattr(slot_manager, 'get_active_mod_selections'):
+            selections = {}
             for chapter_id in range(5):
                 selections[chapter_id] = []
             return selections
-        if is_demo_mode(self.app_state.game_mode):
-            mods_list = slot_manager.get_used_mods_list(SLOT_ID_DEMO)
-            selections[-1] = mods_list if mods_list else []
-        elif is_undertale_mode(self.app_state.game_mode):
-            mods_list = slot_manager.get_used_mods_list(SLOT_ID_UNDERTALE)
-            selections[-1] = mods_list if mods_list else []
-        elif self.app_state.current_mode == 'normal':
-            mods_list = slot_manager.get_used_mods_list(SLOT_ID_UNIVERSAL)
-            if mods_list:
-                for chapter_id in range(5):
-                    chapter_mods = []
-                    for mod in mods_list:
-                        if hasattr(mod, 'get_chapter_data') and mod.get_chapter_data(chapter_id):
-                            chapter_mods.append(mod)
-                    selections[chapter_id] = chapter_mods
-            else:
-                used_mod = slot_manager.get_used_mod(SLOT_ID_UNIVERSAL)
-                if used_mod:
-                    for chapter_id in range(5):
-                        if hasattr(used_mod, 'get_chapter_data') and used_mod.get_chapter_data(chapter_id):
-                            selections[chapter_id] = [used_mod]
-                        else:
-                            selections[chapter_id] = []
-                else:
-                    for chapter_id in range(5):
-                        selections[chapter_id] = []
-        elif self.app_state.current_mode == 'chapter':
-            for chapter_id in range(5):
-                mods_list = slot_manager.get_used_mods_list(chapter_id)
-                selections[chapter_id] = mods_list if mods_list else []
-        return selections
+        return slot_manager.get_active_mod_selections()
 
     def _launch_game_with_selections(self, selections: Dict[int, Any], execute_plugin_hooks=None, restore_window_callback=None):
         self.execute_plugin_hooks = execute_plugin_hooks
@@ -279,7 +246,6 @@ class GameLauncher(QObject):
                 target_exe = os.path.join(chapter_folder, exe_name)
             shutil.copy2(source_exe, target_exe)
             self._direct_launch_cleanup_info = {'target_exe': target_exe, 'source_exe': source_exe, 'chapter_folder': chapter_folder, 'use_custom_exe': use_custom_exe}
-            self._update_session_manifest(direct_launch=self._direct_launch_cleanup_info)
             return {'target': target_exe, 'cwd': chapter_folder, 'type': 'subprocess'}
         except PermissionError:
             self.status_changed.emit(tr('errors.permission_denied'), UI_COLORS['status_error'])
@@ -317,7 +283,7 @@ class GameLauncher(QObject):
         if not chapter_mods:
             self._continue_after_merge(selections, True)
             return True
-        session_manifest_path = self._session_manifest_path()
+        session_manifest_path = os.path.join(self.app_state.config_dir, 'session.lock')
         self._merge_thread = ModMergeThread(self.app_state, self.mod_manager, chapter_mods, session_manifest_path, self)
         self._merge_thread.progress_update.connect(self._on_merge_progress)
         self._merge_thread.status_update.connect(self._on_merge_status)
@@ -331,25 +297,24 @@ class GameLauncher(QObject):
         self.app_state.is_merging = False
         self.app_state.clear_current_task()
         self.app_state.action_button_text = None
+        merge_thread = self._merge_thread
+        if merge_thread:
+            try:
+                if merge_thread.isRunning():
+                    merge_thread.wait(5000)
+                if merge_thread.merger:
+                    self.multi_mod_merger = merge_thread.merger
+                merge_thread.deleteLater()
+            except Exception as e:
+                logging.error(f'Error cleaning up merge thread: {e}', exc_info=True)
+            finally:
+                self._merge_thread = None
         if not success:
-            if hasattr(self, '_merge_thread') and self._merge_thread:
-                try:
-                    if self._merge_thread.isRunning():
-                        self._merge_thread.wait(5000)
-                    self._merge_thread.deleteLater()
-                except Exception as e:
-                    logging.error(f'Error cleaning up merge thread: {e}', exc_info=True)
-                finally:
-                    self._merge_thread = None
-            self._handle_launch_failure()
+            if merge_thread and (merge_thread.isInterruptionRequested() or getattr(merge_thread, '_cancelled', False)):
+                logging.info('Multi-mod merge was cancelled by user')
+            else:
+                self._handle_launch_failure()
             return
-        if self._merge_thread and self._merge_thread.merger:
-            self.multi_mod_merger = self._merge_thread.merger
-            self.multi_mod_merger.cleanup()
-        if self._merge_thread:
-            self._merge_thread.wait()
-            self._merge_thread.deleteLater()
-            self._merge_thread = None
         logging.info('Multi-mod merge completed successfully')
         self._continue_after_merge(selections, True)
 
@@ -382,29 +347,6 @@ class GameLauncher(QObject):
         if message:
             self.status_changed.emit(message, UI_COLORS['status_info'])
 
-    def _validate_session_manifest(self, data: dict) -> bool:
-        if not isinstance(data, dict):
-            logging.error('_validate_session_manifest: manifest is not a dict', exc_info=True)
-            return False
-        required_keys = ['backup_files', 'mod_files_to_cleanup', 'mod_dirs_to_cleanup']
-        for key in required_keys:
-            if key not in data:
-                data[key] = [] if key.endswith('_to_cleanup') or key == 'mod_dirs_to_cleanup' else {}
-        if isinstance(data.get('backup_files'), dict):
-            for original_path, backup_path in list(data['backup_files'].items()):
-                if not isinstance(original_path, str) or not isinstance(backup_path, str):
-                    logging.warning(f'_validate_session_manifest: invalid backup entry: {original_path} -> {backup_path}')
-                    data['backup_files'].pop(original_path, None)
-                elif not os.path.isabs(original_path) or not os.path.isabs(backup_path):
-                    logging.warning(f'_validate_session_manifest: non-absolute path in backup entry: {original_path} -> {backup_path}')
-        for file_path in data.get('mod_files_to_cleanup', []):
-            if not isinstance(file_path, str) or not os.path.isabs(file_path):
-                logging.warning(f'_validate_session_manifest: invalid mod file path: {file_path}')
-        for dir_path in data.get('mod_dirs_to_cleanup', []):
-            if not isinstance(dir_path, str) or not os.path.isabs(dir_path):
-                logging.warning(f'_validate_session_manifest: invalid mod dir path: {dir_path}')
-        return True
-
     def _verify_file_integrity(self, file_path: str, expected_size: Optional[int] = None) -> bool:
         try:
             if not os.path.exists(file_path):
@@ -425,155 +367,54 @@ class GameLauncher(QObject):
             return False
 
     def _cleanup_direct_launch_files(self):
-        if hasattr(self, 'multi_mod_merger') and self.multi_mod_merger:
-            try:
-                logging.info('_cleanup_direct_launch_files: restoring multi-mod backups')
-                restored = self.multi_mod_merger.restore_all_backups()
-                if restored:
-                    logging.info('_cleanup_direct_launch_files: multi-mod backups restored successfully')
-                else:
-                    logging.warning('_cleanup_direct_launch_files: no multi-mod backups to restore (this is normal if old method was used)')
-            except Exception as e:
-                logging.error(f'_cleanup_direct_launch_files: failed to restore multi-mod backups: {e}', exc_info=True)
         restore_errors = []
-        files_restored = 0
-        files_failed = 0
         try:
-            session_data = self._load_session_manifest()
-            if not self._validate_session_manifest(session_data):
-                logging.warning('_cleanup_direct_launch_files: session manifest validation failed or incomplete, attempting cleanup with available data')
-            cleanup_info = session_data.get('direct_launch')
-            if cleanup_info and cleanup_info.get('save_collection_swap'):
-                logging.info('_cleanup_direct_launch_files: restoring save collection swap')
-                collection_path = cleanup_info.get('collection_path')
-                backup_path = cleanup_info.get('backup_path')
-                current_save_path = self.app_state.save_path
-                if not os.path.exists(current_save_path):
-                    from utils.game_utils import get_default_save_path
-                    current_save_path = self.app_state.local_config.get('save_path') or get_default_save_path()
-                if collection_path and backup_path and os.path.exists(current_save_path):
-                    try:
-                        if os.path.exists(collection_path):
-                            shutil.rmtree(collection_path)
-                        os.makedirs(collection_path, exist_ok=True)
-                        import re
-                        ignore_pattern = shutil.ignore_patterns('*_*_*')
-                        shutil.copytree(current_save_path, collection_path, dirs_exist_ok=True, ignore=ignore_pattern)
-                        for item in os.listdir(current_save_path):
-                            item_path = os.path.join(current_save_path, item)
-                            if not (os.path.isdir(item_path) and re.match('(.+?)_(\\d+)_(\\d+)$', item)):
-                                if os.path.isdir(item_path):
-                                    shutil.rmtree(item_path)
-                                else:
-                                    os.remove(item_path)
-                        if os.path.exists(backup_path):
-                            shutil.copytree(backup_path, current_save_path, dirs_exist_ok=True)
-                            shutil.rmtree(backup_path)
-                        logging.info('_cleanup_direct_launch_files: save collection swap restored successfully')
-                    except Exception as e:
-                        error_msg = f'Save collection swap restore failed: {e}'
-                        logging.error(f'_cleanup_direct_launch_files: {error_msg}', exc_info=True)
-                        restore_errors.append(error_msg)
-            backed_up_targets = set(self._backup_files.keys()) if self._backup_files else set()
-            if not backed_up_targets and session_data.get('backup_files'):
-                self._backup_files = session_data.get('backup_files', {})
-                backed_up_targets = set(self._backup_files.keys())
-            if self._backup_files:
-                logging.info(f'_cleanup_direct_launch_files: restoring {len(self._backup_files)} backed up files')
-                for original_path, backup_path in list(self._backup_files.items()):
-                    try:
-                        if not os.path.exists(backup_path):
-                            error_msg = f'Backup file not found: {backup_path}'
-                            logging.error(f'_cleanup_direct_launch_files: {error_msg}', exc_info=True)
-                            restore_errors.append(f'{original_path}: {error_msg}')
-                            files_failed += 1
-                            continue
-                        backup_size = os.path.getsize(backup_path)
-                        if not self._verify_file_integrity(backup_path, backup_size):
-                            error_msg = f'Backup file integrity check failed: {backup_path}'
-                            logging.error(f'_cleanup_direct_launch_files: {error_msg}', exc_info=True)
-                            restore_errors.append(f'{original_path}: {error_msg}')
-                            files_failed += 1
-                            continue
-                        original_dir = os.path.dirname(original_path)
-                        if original_dir and (not os.path.exists(original_dir)):
-                            os.makedirs(original_dir, exist_ok=True)
-                            logging.info(f'_cleanup_direct_launch_files: created directory: {original_dir}')
-                        if os.path.exists(original_path):
-                            os.remove(original_path)
-                        shutil.move(backup_path, original_path)
-                        if not self._verify_file_integrity(original_path, backup_size):
-                            error_msg = f'Restored file integrity check failed: {original_path}'
-                            logging.error(f'_cleanup_direct_launch_files: {error_msg}', exc_info=True)
-                            restore_errors.append(error_msg)
-                            files_failed += 1
-                        else:
-                            logging.info(f'_cleanup_direct_launch_files: restored file: {original_path}')
-                            files_restored += 1
-                    except PermissionError as e:
-                        error_msg = f'Permission denied restoring {original_path}: {e}'
-                        logging.error(f'_cleanup_direct_launch_files: {error_msg}', exc_info=True)
-                        restore_errors.append(error_msg)
-                        files_failed += 1
-                    except Exception as e:
-                        error_msg = f'Failed to restore {original_path}: {e}'
-                        logging.error(f'_cleanup_direct_launch_files: {error_msg}', exc_info=True)
-                        restore_errors.append(error_msg)
-                        files_failed += 1
-                self._backup_files = {}
-            if self._mod_files_to_cleanup:
-                mod_files_list = self._mod_files_to_cleanup.copy()
-                if not mod_files_list and session_data.get('mod_files_to_cleanup'):
-                    mod_files_list = session_data.get('mod_files_to_cleanup', [])
-                logging.info(f'_cleanup_direct_launch_files: cleaning up {len(mod_files_list)} mod files')
-                for file_path in mod_files_list:
-                    if file_path in backed_up_targets:
-                        continue
-                    try:
-                        if os.path.exists(file_path):
-                            os.remove(file_path)
-                            logging.debug(f'_cleanup_direct_launch_files: removed mod file: {file_path}')
-                    except PermissionError as e:
-                        error_msg = f'Permission denied removing {file_path}: {e}'
-                        logging.error(f'_cleanup_direct_launch_files: {error_msg}', exc_info=True)
-                        restore_errors.append(error_msg)
-                        files_failed += 1
-                    except Exception as e:
-                        error_msg = f'Failed to remove {file_path}: {e}'
-                        logging.warning(f'_cleanup_direct_launch_files: {error_msg}', exc_info=True)
-                        restore_errors.append(error_msg)
-                self._mod_files_to_cleanup = []
-            backup_temp_dir = self._backup_temp_dir or session_data.get('backup_temp_dir')
-            if backup_temp_dir and os.path.exists(backup_temp_dir):
+            if hasattr(self, 'multi_mod_merger') and self.multi_mod_merger:
                 try:
-                    shutil.rmtree(backup_temp_dir)
-                    self._backup_temp_dir = None
-                    logging.info(f'_cleanup_direct_launch_files: removed backup temp dir: {backup_temp_dir}')
+                    logging.info('_cleanup_direct_launch_files: restoring multi-mod backups')
+                    restored = self.multi_mod_merger.restore_all_backups()
+                    if restored:
+                        logging.info('_cleanup_direct_launch_files: multi-mod backups restored successfully')
+                        self.status_changed.emit(tr('status.files_restored'), UI_COLORS['status_success'])
+                    else:
+                        logging.debug('_cleanup_direct_launch_files: no multi-mod backups to restore')
                 except Exception as e:
-                    error_msg = f'Failed to remove backup temp dir {backup_temp_dir}: {e}'
+                    error_msg = f'Failed to restore multi-mod backups: {e}'
                     logging.error(f'_cleanup_direct_launch_files: {error_msg}', exc_info=True)
                     restore_errors.append(error_msg)
-                    files_failed += 1
-            try:
-                dirs = []
-                if self._mod_dirs_to_cleanup:
-                    dirs = sorted(set(self._mod_dirs_to_cleanup), key=lambda p: len(p.split(os.sep)), reverse=True)
-                else:
-                    dirs = sorted(set(session_data.get('mod_dirs_to_cleanup', [])), key=lambda p: len(p.split(os.sep)), reverse=True)
-                for d in dirs:
-                    try:
-                        if os.path.isdir(d) and (not os.listdir(d)):
-                            os.rmdir(d)
-                            logging.debug(f'_cleanup_direct_launch_files: removed empty dir: {d}')
-                    except Exception as e:
-                        logging.debug(f'_cleanup_direct_launch_files: failed to remove empty dir {d}: {e}')
-                self._mod_dirs_to_cleanup = []
-            except Exception as e:
-                error_msg = f'Failed to cleanup directories: {e}'
-                logging.warning(f'_cleanup_direct_launch_files: {error_msg}', exc_info=True)
-            if not cleanup_info:
-                cleanup_info = self._direct_launch_cleanup_info
+            cleanup_info = self._direct_launch_cleanup_info
             if cleanup_info:
+                if cleanup_info.get('save_collection_swap'):
+                    logging.info('_cleanup_direct_launch_files: restoring save collection swap')
+                    collection_path = cleanup_info.get('collection_path')
+                    backup_path = cleanup_info.get('backup_path')
+                    current_save_path = self.app_state.save_path
+                    if not os.path.exists(current_save_path):
+                        from utils.game_utils import get_default_save_path
+                        current_save_path = self.app_state.local_config.get('save_path') or get_default_save_path()
+                    if collection_path and backup_path and os.path.exists(current_save_path):
+                        try:
+                            if os.path.exists(collection_path):
+                                shutil.rmtree(collection_path)
+                            os.makedirs(collection_path, exist_ok=True)
+                            import re
+                            ignore_pattern = shutil.ignore_patterns('*_*_*')
+                            shutil.copytree(current_save_path, collection_path, dirs_exist_ok=True, ignore=ignore_pattern)
+                            for item in os.listdir(current_save_path):
+                                item_path = os.path.join(current_save_path, item)
+                                if not (os.path.isdir(item_path) and re.match('(.+?)_(\\d+)_(\\d+)$', item)):
+                                    if os.path.isdir(item_path):
+                                        shutil.rmtree(item_path)
+                                    else:
+                                        os.remove(item_path)
+                            if os.path.exists(backup_path):
+                                shutil.copytree(backup_path, current_save_path, dirs_exist_ok=True)
+                                shutil.rmtree(backup_path)
+                            logging.info('_cleanup_direct_launch_files: save collection swap restored successfully')
+                        except Exception as e:
+                            error_msg = f'Save collection swap restore failed: {e}'
+                            logging.error(f'_cleanup_direct_launch_files: {error_msg}', exc_info=True)
+                            restore_errors.append(error_msg)
                 if 'target_exe' in cleanup_info and os.path.exists(cleanup_info['target_exe']):
                     try:
                         os.remove(cleanup_info['target_exe'])
@@ -584,143 +425,29 @@ class GameLauncher(QObject):
                         restore_errors.append(error_msg)
                 self._direct_launch_cleanup_info = None
             if restore_errors:
-                error_summary = f'Restored {files_restored} files, {files_failed} failures. See logs for details.'
+                error_summary = f'Errors during cleanup: {len(restore_errors)} failure(s). See logs for details.'
                 logging.error(f'_cleanup_direct_launch_files: {error_summary}. Errors: {restore_errors[:3]}')
-                if files_restored > 0:
-                    self.status_changed.emit(tr('status.files_restored') + f' ({files_restored}/{files_restored + files_failed})', UI_COLORS['status_warning'])
-                else:
-                    self.status_changed.emit(tr('errors.files_restore_error', error=f'{files_failed} files failed'), UI_COLORS['status_error'])
-            else:
-                logging.info(f'_cleanup_direct_launch_files: successfully restored {files_restored} files')
-                self.status_changed.emit(tr('status.files_restored'), UI_COLORS['status_success'])
-            self._clear_session_manifest()
+                self.status_changed.emit(tr('errors.files_restore_error', error=str(restore_errors[0])), UI_COLORS['status_error'])
         except Exception as e:
             error_msg = f'Critical error during file restoration: {e}'
             logging.error(f'_cleanup_direct_launch_files: {error_msg}', exc_info=True)
             self.status_changed.emit(tr('errors.files_restore_error', error=str(e)), UI_COLORS['status_error'])
 
-    def _session_manifest_path(self):
-        return os.path.join(self.app_state.config_dir, 'session.lock')
-
-    def _load_session_manifest(self) -> dict:
-        manifest_path = self._session_manifest_path()
-        try:
-            if not os.path.exists(manifest_path):
-                logging.debug(f'_load_session_manifest: manifest does not exist: {manifest_path}')
-                return {}
-            with open(manifest_path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-            if not isinstance(data, dict):
-                logging.error(f'_load_session_manifest: manifest is not a dict: {type(data)}', exc_info=True)
-                return {}
-            logging.debug(f"_load_session_manifest: loaded manifest with {len(data.get('backup_files', {}))} backups")
-            return data
-        except json.JSONDecodeError as e:
-            error_msg = f'Invalid JSON in session manifest: {e}'
-            logging.error(f'_load_session_manifest: {error_msg}', exc_info=True)
-            try:
-                corrupted_path = manifest_path + '.corrupted'
-                if os.path.exists(manifest_path):
-                    shutil.move(manifest_path, corrupted_path)
-                    logging.warning(f'_load_session_manifest: moved corrupted manifest to {corrupted_path}')
-            except Exception:
-                pass
-            return {}
-        except PermissionError as e:
-            error_msg = f'Permission denied reading session manifest: {e}'
-            logging.error(f'_load_session_manifest: {error_msg}', exc_info=True)
-            return {}
-        except Exception as e:
-            error_msg = f'Failed to load session manifest: {e}'
-            logging.error(f'_load_session_manifest: {error_msg}', exc_info=True)
-            return {}
-
-    def _write_session_manifest(self, data: dict):
-        manifest_path = self._session_manifest_path()
-        temp_path = manifest_path + '.tmp'
-        try:
-            if not isinstance(data, dict):
-                logging.error(f'_write_session_manifest: data is not a dict: {type(data)}', exc_info=True)
-                return False
-            with open(temp_path, 'w', encoding='utf-8') as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
-            if os.path.exists(manifest_path):
-                os.replace(temp_path, manifest_path)
-            else:
-                shutil.move(temp_path, manifest_path)
-            logging.debug(f"_write_session_manifest: wrote manifest with {len(data.get('backup_files', {}))} backups")
-            return True
-        except PermissionError as e:
-            error_msg = f'Permission denied writing session manifest: {e}'
-            logging.error(f'_write_session_manifest: {error_msg}', exc_info=True)
-            try:
-                if os.path.exists(temp_path):
-                    os.remove(temp_path)
-            except Exception:
-                pass
-            return False
-        except Exception as e:
-            error_msg = f'Failed to write session manifest: {e}'
-            logging.error(f'_write_session_manifest: {error_msg}', exc_info=True)
-            try:
-                if os.path.exists(temp_path):
-                    os.remove(temp_path)
-            except Exception:
-                pass
-            return False
-
-    def _ensure_session_manifest(self) -> dict:
-        data = self._load_session_manifest()
-        if not data:
-            data = {'backup_files': {}, 'mod_files_to_cleanup': [], 'mod_dirs_to_cleanup': [], 'backup_temp_dir': None, 'direct_launch': None}
-            self._write_session_manifest(data)
-        return data
-
-    def _update_session_manifest(self, backup_files: Optional[dict] = None, mod_files: Optional[list] = None, backup_temp_dir: Optional[str] = None, direct_launch: Optional[dict] = None, mod_dirs: Optional[list] = None):
-        data = self._ensure_session_manifest()
-        if backup_files:
-            data.setdefault('backup_files', {}).update(backup_files)
-        if mod_files:
-            existing = set(data.get('mod_files_to_cleanup', []))
-            for p in mod_files:
-                if p not in existing:
-                    data.setdefault('mod_files_to_cleanup', []).append(p)
-        if mod_dirs:
-            existing_dirs = set(data.get('mod_dirs_to_cleanup', []))
-            for d in mod_dirs:
-                if d not in existing_dirs:
-                    data.setdefault('mod_dirs_to_cleanup', []).append(d)
-        if backup_temp_dir is not None:
-            data['backup_temp_dir'] = backup_temp_dir
-        if direct_launch is not None:
-            data['direct_launch'] = direct_launch
-        self._write_session_manifest(data)
-
-    def _clear_session_manifest(self):
-        manifest_path = self._session_manifest_path()
-        try:
-            if os.path.exists(manifest_path):
-                os.remove(manifest_path)
-                logging.debug(f'_clear_session_manifest: removed manifest: {manifest_path}')
-        except PermissionError as e:
-            error_msg = f'Permission denied removing session manifest: {e}'
-            logging.error(f'_clear_session_manifest: {error_msg}', exc_info=True)
-        except Exception as e:
-            error_msg = f'Failed to clear session manifest: {e}'
-            logging.error(f'_clear_session_manifest: {error_msg}', exc_info=True)
-
     def recover_previous_session(self):
         try:
-            data = self._load_session_manifest()
-            if not data:
-                return
-            self._backup_files = data.get('backup_files', {})
-            self._mod_files_to_cleanup = data.get('mod_files_to_cleanup', [])
-            self._backup_temp_dir = data.get('backup_temp_dir')
-            self._direct_launch_cleanup_info = data.get('direct_launch')
             self.feedback_manager.update_status(tr('status.recovering_previous_session'), UI_COLORS['status_warning'])
-            self._cleanup_direct_launch_files()
-            self._clear_session_manifest()
+            if hasattr(self, 'multi_mod_merger') and self.multi_mod_merger:
+                try:
+                    restored = self.multi_mod_merger.restore_all_backups()
+                    if restored:
+                        logging.info('recover_previous_session: backups restored successfully')
+                        self.feedback_manager.update_status(tr('status.files_restored'), UI_COLORS['status_success'])
+                    else:
+                        logging.debug('recover_previous_session: no backups to restore')
+                except Exception as e:
+                    error_msg = f'Failed to restore backups: {e}'
+                    logging.error(f'recover_previous_session: {error_msg}', exc_info=True)
+                    self.feedback_manager.update_status(tr('errors.files_restore_error', error=str(e)), UI_COLORS['status_error'])
         except Exception as e:
             error_msg = f'Failed to recover previous session: {e}'
             logging.error(f'recover_previous_session: {error_msg}', exc_info=True)

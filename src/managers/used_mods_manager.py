@@ -293,6 +293,44 @@ class UsedModsManager(QObject):
                     mods_to_update.append(mod_data)
         return mods_to_update
 
+    def get_active_mod_selections(self) -> Dict[int, List[Any]]:
+        selections = {}
+        if not self.used_mods:
+            for chapter_id in range(5):
+                selections[chapter_id] = []
+            return selections
+        if is_demo_mode(self.app_state.game_mode):
+            mods_list = self.get_used_mods_list(SLOT_ID_DEMO)
+            selections[-1] = mods_list if mods_list else []
+        elif is_undertale_mode(self.app_state.game_mode):
+            mods_list = self.get_used_mods_list(SLOT_ID_UNDERTALE)
+            selections[-1] = mods_list if mods_list else []
+        elif self.app_state.current_mode == 'normal':
+            mods_list = self.get_used_mods_list(SLOT_ID_UNIVERSAL)
+            if mods_list:
+                for chapter_id in range(5):
+                    chapter_mods = []
+                    for mod in mods_list:
+                        if hasattr(mod, 'get_chapter_data') and mod.get_chapter_data(chapter_id):
+                            chapter_mods.append(mod)
+                    selections[chapter_id] = chapter_mods
+            else:
+                used_mod = self.get_used_mod(SLOT_ID_UNIVERSAL)
+                if used_mod:
+                    for chapter_id in range(5):
+                        if hasattr(used_mod, 'get_chapter_data') and used_mod.get_chapter_data(chapter_id):
+                            selections[chapter_id] = [used_mod]
+                        else:
+                            selections[chapter_id] = []
+                else:
+                    for chapter_id in range(5):
+                        selections[chapter_id] = []
+        elif self.app_state.current_mode == 'chapter':
+            for chapter_id in range(5):
+                mods_list = self.get_used_mods_list(chapter_id)
+                selections[chapter_id] = mods_list if mods_list else []
+        return selections
+
     def toggle_direct_launch_for_chapter(self, chapter_id: int):
         if chapter_id == 0:
             self.feedback_manager.show_message('info', 'ui.direct_launch', tr('ui.direct_launch_menu_not_allowed'))

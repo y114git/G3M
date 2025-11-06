@@ -45,7 +45,7 @@ class CreateModpackThread(QThread):
             if self.isInterruptionRequested() or self._cancelled:
                 self.finished.emit(False)
                 return
-            success = self.merger.create_modpack_from_merge(self.chapter_mods, self.modpack_dir)
+            success = self.merger.process_mod_merge(self.chapter_mods, is_modpack=True, modpack_dir=self.modpack_dir)
             if self.isInterruptionRequested() or self._cancelled:
                 self.merger._cancelled = True
                 success = False
@@ -62,6 +62,9 @@ class CreateModpackThread(QThread):
             logging.error(f'CreateModpackThread failed: {e}', exc_info=True)
             self.status_update.emit(f'Modpack creation failed: {str(e)}', 'error')
             self.finished.emit(False)
+        finally:
+            if self.merger:
+                self.merger.cleanup(force=True)
 
     def _create_config_json(self):
         try:

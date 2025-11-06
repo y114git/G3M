@@ -38,7 +38,7 @@ class ModMergeThread(QThread):
             if self.isInterruptionRequested() or self._cancelled:
                 self.finished.emit(False)
                 return
-            success = self.merger.merge_mods_for_chapters(self.chapter_mods)
+            success = self.merger.process_mod_merge(self.chapter_mods, is_modpack=False)
             if self.isInterruptionRequested() or self._cancelled:
                 self.merger._cancelled = True
                 if self.merger:
@@ -50,3 +50,9 @@ class ModMergeThread(QThread):
             logging.error(f'ModMergeThread failed: {e}', exc_info=True)
             self.status_update.emit(f'Merge failed: {str(e)}', 'error')
             self.finished.emit(False)
+        finally:
+            if self.merger:
+                if self.isInterruptionRequested() or self._cancelled:
+                    self.merger.cleanup(force=True)
+                else:
+                    self.merger.cleanup(force=False)

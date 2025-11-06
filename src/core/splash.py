@@ -11,20 +11,21 @@ class CustomSplashScreen(QSplashScreen):
         if pixmap:
             super().__init__(pixmap)
         else:
-            super().__init__()
+            empty_pixmap = QPixmap(550, 309)
+            empty_pixmap.fill(Qt.GlobalColor.transparent)
+            super().__init__(empty_pixmap)
         self.setWindowFlags(Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.FramelessWindowHint)
-        self.animation = None
+        self._current_frame_pixmap = None
         if gif_path:
             self.setup_gif_animation(gif_path)
 
     def setup_gif_animation(self, gif_path):
         try:
             from PyQt6.QtGui import QMovie
-            from PyQt6.QtWidgets import QLabel
             self.movie = QMovie(gif_path)
             if not self.movie.isValid():
                 return False
-            self.movie.setCacheMode(QMovie.CacheMode.CacheNone)
+            self.movie.setCacheMode(QMovie.CacheMode.CacheAll)
             self.movie.setSpeed(100)
             self.movie.jumpToFrame(0)
             gif_size = self.movie.currentPixmap().size()
@@ -39,13 +40,6 @@ class CustomSplashScreen(QSplashScreen):
             target_height = int(target_width * ratio)
             size = QPixmap(target_width, target_height).size()
             self.movie.setScaledSize(size)
-            self.gif_label = QLabel(self)
-            self.gif_label.setFixedSize(target_width, target_height)
-            self.gif_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            self.gif_label.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-            self.gif_label.setStyleSheet('background: transparent;')
-            self.gif_label.hide()
-            self.gif_label.setMovie(self.movie)
             self.setFixedSize(target_width, target_height)
             self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
             self.setStyleSheet('background: transparent;')
@@ -53,16 +47,31 @@ class CustomSplashScreen(QSplashScreen):
                 self.move((screen_geom.width() - target_width) // 2, (screen_geom.height() - target_height) // 2)
             else:
                 self.move(100, 100)
+            self.movie.frameChanged.connect(self._on_frame_changed)
             self.movie.finished.connect(self.on_gif_finished)
             return True
         except Exception:
             return False
 
+    def _on_frame_changed(self, frame_number):
+        if hasattr(self, 'movie') and self.movie.isValid():
+            self._current_frame_pixmap = self.movie.currentPixmap()
+            if self._current_frame_pixmap and (not self._current_frame_pixmap.isNull()):
+                self.repaint()
+
+    def drawContents(self, painter):
+        if painter is not None and hasattr(self, '_current_frame_pixmap') and self._current_frame_pixmap and (not self._current_frame_pixmap.isNull()):
+            painter.drawPixmap(0, 0, self._current_frame_pixmap)
+        else:
+            super().drawContents(painter)
+
     def start_gif_animation(self):
-        if hasattr(self, 'movie'):
-            if hasattr(self, 'gif_label'):
-                self.gif_label.show()
+        if hasattr(self, 'movie') and self.movie.isValid():
+            self._current_frame_pixmap = self.movie.currentPixmap()
+            if self._current_frame_pixmap and (not self._current_frame_pixmap.isNull()):
+                self.repaint()
             self.movie.start()
+            self.repaint()
 
     def stop_gif_animation(self):
         if hasattr(self, 'movie'):
@@ -96,6 +105,6 @@ def create_splash():
     gif_path = resource_path('assets/images/splash.gif')
     if os.path.exists(gif_path):
         splash = CustomSplashScreen(gif_path=gif_path)
-        return splash
-    else:
-        return create_png_splash()
+        if hasattr(splash, 'movie') and splash.movie.isValid():
+            return splash
+    return create_png_splash()

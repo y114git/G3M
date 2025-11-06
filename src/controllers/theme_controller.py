@@ -106,7 +106,7 @@ class ThemeController:
         self.app.background_music_button.setText(self.customization_manager.get_background_music_button_text())
         self.app.startup_sound_button.setText(self.customization_manager.get_startup_sound_button_text())
         self.customization_manager.stop_background_music()
-        self.customization_manager.maybe_start_background_music(getattr(self.app, 'is_shown_to_user', False), self.app.isVisible())
+        self.customization_manager.maybe_start_background_music(force=True)
         try:
             self.app.initialization_finished.disconnect(self.app._handle_first_launch_settings)
         except TypeError:
@@ -151,7 +151,7 @@ class ThemeController:
         self.customization_manager.stop_background_music()
         self.settings_manager.on_background_music_button_click()
         self.app.background_music_button.setText(self.customization_manager.get_background_music_button_text())
-        self.customization_manager.maybe_start_background_music(getattr(self.app, 'is_shown_to_user', False), self.app.isVisible())
+        self.customization_manager.maybe_start_background_music(force=True)
 
     def on_startup_sound_button_click(self):
         self.settings_manager.on_startup_sound_button_click()

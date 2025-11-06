@@ -32,6 +32,26 @@ class LibraryDisplayController:
                 return
         self.refresh_async()
 
+    def _build_library_filters_and_sort(self):
+        selected_tags = []
+        if hasattr(self.app, 'library_tag_widgets'):
+            tag_map = {self.app.library_tag_translation: 'translation', self.app.library_tag_customization: 'customization', self.app.library_tag_gameplay: 'gameplay', self.app.library_tag_other: 'other', self.app.library_tag_local: 'local'}
+            for checkbox, tag in tag_map.items():
+                if checkbox.isChecked():
+                    selected_tags.append(tag)
+        search_text = getattr(self.app, 'library_search_text', '').lower()
+        current_game_type = 'deltarune'
+        if hasattr(self.app, 'game_type_combo'):
+            current_game_type = self.app.game_type_combo.currentData() or 'deltarune'
+        filters = {'tags': selected_tags, 'modgame': current_game_type, 'search_text': search_text, 'hide_banned': False, 'hide_local': False, 'show_only_local': False, 'status_filter': ['approved', 'pending', 'unknown']}
+        sort_config = None
+        if hasattr(self.app, 'library_sort_combo'):
+            sort_type = self.app.library_sort_combo.currentIndex()
+            reverse = not self.app.library_sort_ascending
+            if sort_type == 1:
+                sort_config = {'sort_type': 1, 'reverse': reverse}
+        return (filters, sort_config)
+
     def update_for_chapter_mode(self, selected_chapter_id):
         if not hasattr(self.app, 'installed_mods_layout'):
             return
@@ -45,23 +65,7 @@ class LibraryDisplayController:
         self.app._updating_chapter_mods = True
         clear_layout_widgets(self.app.installed_mods_layout, keep_last_n=1)
         installed_mods = self.mod_manager.get_installed_mods_list()
-        current_game_type = 'deltarune'
-        if hasattr(self.app, 'game_type_combo'):
-            current_game_type = self.app.game_type_combo.currentData() or 'deltarune'
-        selected_tags = []
-        if hasattr(self.app, 'library_tag_widgets'):
-            tag_map = {self.app.library_tag_translation: 'translation', self.app.library_tag_customization: 'customization', self.app.library_tag_gameplay: 'gameplay', self.app.library_tag_other: 'other', self.app.library_tag_local: 'local'}
-            for checkbox, tag in tag_map.items():
-                if checkbox.isChecked():
-                    selected_tags.append(tag)
-        search_text = getattr(self.app, 'library_search_text', '').lower()
-        filters = {'tags': selected_tags, 'modgame': current_game_type, 'search_text': search_text, 'hide_banned': False, 'hide_local': False, 'show_only_local': False, 'status_filter': ['approved', 'pending', 'unknown']}
-        sort_config = None
-        if hasattr(self.app, 'library_sort_combo'):
-            sort_type = self.app.library_sort_combo.currentIndex()
-            reverse = not self.app.library_sort_ascending
-            if sort_type == 1:
-                sort_config = {'sort_type': 1, 'reverse': reverse}
+        filters, sort_config = self._build_library_filters_and_sort()
         filtered_mods = filter_and_sort_mods(installed_mods, filters, sort_config)
         if hasattr(self.app, 'library_sort_combo'):
             sort_type = self.app.library_sort_combo.currentIndex()
@@ -143,23 +147,7 @@ class LibraryDisplayController:
             clear_layout_widgets(self.app.installed_mods_layout, keep_last_n=1)
             self.cleanup_missing_mods(installed_mods)
             existing_mods = [mod_info for mod_info in installed_mods if self.mod_manager.check_mod_exists(mod_info)]
-            selected_tags = []
-            if hasattr(self.app, 'library_tag_widgets'):
-                tag_map = {self.app.library_tag_translation: 'translation', self.app.library_tag_customization: 'customization', self.app.library_tag_gameplay: 'gameplay', self.app.library_tag_other: 'other', self.app.library_tag_local: 'local'}
-                for checkbox, tag in tag_map.items():
-                    if checkbox.isChecked():
-                        selected_tags.append(tag)
-            search_text = getattr(self.app, 'library_search_text', '').lower()
-            current_game_type = 'deltarune'
-            if hasattr(self.app, 'game_type_combo'):
-                current_game_type = self.app.game_type_combo.currentData() or 'deltarune'
-            filters = {'tags': selected_tags, 'modgame': current_game_type, 'search_text': search_text, 'hide_banned': False, 'hide_local': False, 'show_only_local': False, 'status_filter': ['approved', 'pending', 'unknown']}
-            sort_config = None
-            if hasattr(self.app, 'library_sort_combo'):
-                sort_type = self.app.library_sort_combo.currentIndex()
-                reverse = not self.app.library_sort_ascending
-                if sort_type == 1:
-                    sort_config = {'sort_type': 1, 'reverse': reverse}
+            filters, sort_config = self._build_library_filters_and_sort()
             filtered_mods = filter_and_sort_mods(existing_mods, filters, sort_config)
             if hasattr(self.app, 'library_sort_combo'):
                 sort_type = self.app.library_sort_combo.currentIndex()

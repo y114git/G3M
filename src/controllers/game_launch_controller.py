@@ -82,8 +82,10 @@ class GameLaunchController(QObject):
                 is_modpack_creation = self.app.library_display._modpack_thread == self.app_state.current_task
                 if is_modpack_creation:
                     modpack_dir = getattr(self.app.library_display, '_modpack_dir', None)
+            merge_thread = None
             if hasattr(self.game_launcher, '_merge_thread') and self.game_launcher._merge_thread:
-                self.game_launcher._merge_thread.cancel()
+                merge_thread = self.game_launcher._merge_thread
+                merge_thread.cancel()
             if is_modpack_creation and modpack_dir and os.path.exists(modpack_dir):
                 try:
                     import shutil
@@ -97,6 +99,24 @@ class GameLaunchController(QObject):
                 if hasattr(self.app.library_display, '_modpack_dir'):
                     self.app.library_display._modpack_dir = None
             self.app_state.is_merging = False
+            self.app_state.progress_bar_visible = False
+            self.app_state.progress_bar_value = 0
+            self.app_state.clear_current_task()
+            self.app_state.action_button_text = None
+            if merge_thread:
+                try:
+                    if merge_thread.isRunning():
+                        if not merge_thread.wait(3000):
+                            logging.warning('Merge thread did not finish in time, requesting termination')
+                            merge_thread.terminate()
+                            merge_thread.wait(1000)
+                    if merge_thread.merger:
+                        merge_thread.merger.cleanup(force=True)
+                    merge_thread.deleteLater()
+                except Exception as e:
+                    logging.error(f'Error cleaning up cancelled merge thread: {e}', exc_info=True)
+                finally:
+                    self.game_launcher._merge_thread = None
             self.feedback_manager.update_status(tr('status.operation_cancelled'), UI_COLORS['status_error'])
             try:
                 self.app_state.progress_bar_value = 0
@@ -144,7 +164,7 @@ class GameLaunchController(QObject):
         self.update_geometry_requested.emit()
         self.library_display_update_requested.emit()
         self.search_display_update_requested.emit()
-        self.customization_manager.maybe_start_background_music(self.app_state.is_shown_to_user, True)
+        self.customization_manager.maybe_start_background_music()
         self.show_pending_dialogs_requested.emit()
         self.plugin_manager.execute_hooks('on_after_game_exit', self.app)
 

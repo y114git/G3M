@@ -209,21 +209,6 @@ class InstallModsThread(QThread):
         except Exception as e:
             logging.warning(f'InstallModsThread.cancel: cleanup failed: {e}', exc_info=True)
 
-    def _find_existing_mod_folder(self, mod_key: str) -> str:
-        if not os.path.exists(self.main_window.app_state.mods_dir):
-            return ''
-        for folder_name in os.listdir(self.main_window.app_state.mods_dir):
-            config_path = os.path.join(self.main_window.app_state.mods_dir, folder_name, 'config.json')
-            if os.path.exists(config_path):
-                try:
-                    config_data = self.main_window.settings_manager.read_json(config_path)
-                    if config_data.get('mod_key') == mod_key:
-                        return folder_name
-                except Exception as e:
-                    logging.warning(f'_find_existing_mod_folder: failed reading {config_path}: {e}', exc_info=True)
-                    continue
-        return ''
-
     def _collect_remote_versions_for_chapter(self, mod, chapter_id: int) -> dict:
         versions: dict[str, str] = {}
         if chapter_id == -1:
@@ -290,14 +275,22 @@ class InstallModsThread(QThread):
             logging.debug(f'_increment_mod_downloads_on_server: failed: {e}')
             return False
 
-    def _download_archive_file(self, url: str, target_dir: str, progress_callback, total_size: int, downloaded_ref: list[int], session=None):
+    def _download_component_file(self, url: str, target_dir: str, component_type: str, progress_callback, total_size: int, downloaded_ref: list[int], session=None):
         import os
+        import platform
         from urllib.parse import urlparse, unquote
         if session is None:
             session = get_session()
         parsed_url = urlparse(url)
         filename = unquote(os.path.basename(parsed_url.path))
-        if not filename or '.' not in filename:
+        if component_type == 'data':
+            from config.constants import DATA_FILE_EXTENSIONS
+            if not filename.lower().endswith(DATA_FILE_EXTENSIONS):
+                if platform.system() == 'Darwin':
+                    filename = 'game.ios.xdelta'
+                else:
+                    filename = 'data.win.xdelta'
+        elif not filename or '.' not in filename:
             filename = f'extra_file_{hash(url) % 10000}.zip'
         os.makedirs(target_dir, exist_ok=True)
         target_path = os.path.join(target_dir, filename)
@@ -311,9 +304,9 @@ class InstallModsThread(QThread):
                 try:
                     os.remove(target_path)
                 except OSError as rm_e:
-                    logging.debug(f'_download_archive_file: cleanup failed: {rm_e}')
+                    logging.debug(f'_download_component_file: cleanup failed: {rm_e}')
             from utils.network_utils import sanitize_log_message
-            safe_msg = sanitize_log_message(f'_download_archive_file: network error downloading file: {e}')
+            safe_msg = sanitize_log_message(f'_download_component_file: network error downloading file: {e}')
             logging.error(safe_msg, exc_info=True)
             raise
         except requests.RequestException as e:
@@ -321,10 +314,10 @@ class InstallModsThread(QThread):
                 try:
                     os.remove(target_path)
                 except OSError as rm_e:
-                    logging.debug(f'_download_archive_file: cleanup failed: {rm_e}')
+                    logging.debug(f'_download_component_file: cleanup failed: {rm_e}')
             from utils.network_utils import sanitize_log_message
             status_code = getattr(e.response, 'status_code', None)
-            safe_msg = sanitize_log_message(f'_download_archive_file: request error downloading file: {e}')
+            safe_msg = sanitize_log_message(f'_download_component_file: request error downloading file: {e}')
             if status_code:
                 safe_msg = f'{safe_msg} [HTTP {status_code}]'
             logging.error(safe_msg, exc_info=True)
@@ -335,15 +328,15 @@ class InstallModsThread(QThread):
                     try:
                         os.remove(target_path)
                     except OSError as rm_e:
-                        logging.debug(f'_download_archive_file: cleanup failed: {rm_e}')
+                        logging.debug(f'_download_component_file: cleanup failed: {rm_e}')
                 raise
             if os.path.exists(target_path):
                 try:
                     os.remove(target_path)
                 except OSError as rm_e:
-                    logging.debug(f'_download_archive_file: cleanup failed: {rm_e}')
+                    logging.debug(f'_download_component_file: cleanup failed: {rm_e}')
             from utils.network_utils import sanitize_log_message
-            safe_msg = sanitize_log_message(f'_download_archive_file: unexpected error downloading file: {e}')
+            safe_msg = sanitize_log_message(f'_download_component_file: unexpected error downloading file: {e}')
             logging.error(safe_msg, exc_info=True)
             raise
         except Exception as e:
@@ -351,81 +344,9 @@ class InstallModsThread(QThread):
                 try:
                     os.remove(target_path)
                 except OSError as rm_e:
-                    logging.debug(f'_download_archive_file: cleanup failed: {rm_e}')
+                    logging.debug(f'_download_component_file: cleanup failed: {rm_e}')
             from utils.network_utils import sanitize_log_message
-            safe_msg = sanitize_log_message(f'_download_archive_file: unexpected error downloading file: {e}')
-            logging.error(safe_msg, exc_info=True)
-            raise
-
-    def _download_xdelta_file(self, url: str, target_dir: str, progress_callback, total_size: int, downloaded_ref: list[int], session=None):
-        import os
-        from urllib.parse import urlparse, unquote
-        if session is None:
-            session = get_session()
-        parsed_url = urlparse(url)
-        filename = unquote(os.path.basename(parsed_url.path))
-        from config.constants import DATA_FILE_EXTENSIONS
-        if not filename.lower().endswith(DATA_FILE_EXTENSIONS):
-            import platform
-            if platform.system() == 'Darwin':
-                filename = 'game.ios.xdelta'
-            else:
-                filename = 'data.win.xdelta'
-        os.makedirs(target_dir, exist_ok=True)
-        target_path = os.path.join(target_dir, filename)
-        try:
-
-            def on_response(r):
-                self._active_response = r
-            download_file(session, url, target_path, progress_callback, total_size, downloaded_ref, cancel_check=lambda: self._cancelled, on_response=on_response)
-        except (requests.Timeout, requests.ConnectionError) as e:
-            if os.path.exists(target_path):
-                try:
-                    os.remove(target_path)
-                except OSError as rm_e:
-                    logging.debug(f'_download_xdelta_file: cleanup failed: {rm_e}')
-            from utils.network_utils import sanitize_log_message
-            safe_msg = sanitize_log_message(f'_download_xdelta_file: network error downloading file: {e}')
-            logging.error(safe_msg, exc_info=True)
-            raise
-        except requests.RequestException as e:
-            if os.path.exists(target_path):
-                try:
-                    os.remove(target_path)
-                except OSError as rm_e:
-                    logging.debug(f'_download_xdelta_file: cleanup failed: {rm_e}')
-            from utils.network_utils import sanitize_log_message
-            status_code = getattr(e.response, 'status_code', None)
-            safe_msg = sanitize_log_message(f'_download_xdelta_file: request error downloading file: {e}')
-            if status_code:
-                safe_msg = f'{safe_msg} [HTTP {status_code}]'
-            logging.error(safe_msg, exc_info=True)
-            raise
-        except RuntimeError as e:
-            if str(e) == 'download_cancelled':
-                if os.path.exists(target_path):
-                    try:
-                        os.remove(target_path)
-                    except OSError as rm_e:
-                        logging.debug(f'_download_xdelta_file: cleanup failed: {rm_e}')
-                raise
-            if os.path.exists(target_path):
-                try:
-                    os.remove(target_path)
-                except OSError as rm_e:
-                    logging.debug(f'_download_xdelta_file: cleanup failed: {rm_e}')
-            from utils.network_utils import sanitize_log_message
-            safe_msg = sanitize_log_message(f'_download_xdelta_file: unexpected error downloading file: {e}')
-            logging.error(safe_msg, exc_info=True)
-            raise
-        except Exception as e:
-            if os.path.exists(target_path):
-                try:
-                    os.remove(target_path)
-                except OSError as rm_e:
-                    logging.debug(f'_download_xdelta_file: cleanup failed: {rm_e}')
-            from utils.network_utils import sanitize_log_message
-            safe_msg = sanitize_log_message(f'_download_xdelta_file: unexpected error downloading file: {e}')
+            safe_msg = sanitize_log_message(f'_download_component_file: unexpected error downloading file: {e}')
             logging.error(safe_msg, exc_info=True)
             raise
 
@@ -437,8 +358,9 @@ class InstallModsThread(QThread):
             mod_folders = {}
             for mod, chapter_id in self.install_tasks:
                 if mod.key not in mod_folders:
-                    existing_folder = self._find_existing_mod_folder(mod.key)
-                    if existing_folder:
+                    mod_folder_path = self.main_window.mod_manager.get_mod_folder_path(mod.key)
+                    if mod_folder_path:
+                        existing_folder = os.path.basename(mod_folder_path)
                         mod_folders[mod.key] = existing_folder
                     else:
                         mod_folders[mod.key] = get_unique_mod_dir(self.main_window.app_state.mods_dir, mod.name)
@@ -565,7 +487,7 @@ class InstallModsThread(QThread):
 
                             def progress_callback(progress):
                                 self.progress.emit(progress)
-                            self._download_xdelta_file(url, cache_dir, progress_callback, total_bytes, downloaded_ref, session)
+                            self._download_component_file(url, cache_dir, 'data', progress_callback, total_bytes, downloaded_ref, session)
                         else:
                             from utils.file_utils import download_and_extract_archive
 
@@ -579,7 +501,7 @@ class InstallModsThread(QThread):
 
                         def progress_callback(progress):
                             self.progress.emit(progress)
-                        self._download_archive_file(url, cache_dir, progress_callback, total_bytes, downloaded_ref, session)
+                        self._download_component_file(url, cache_dir, 'extra', progress_callback, total_bytes, downloaded_ref, session)
                 except RuntimeError as e:
                     if str(e) == 'download_cancelled':
                         raise

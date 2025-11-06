@@ -13,7 +13,7 @@ from core.app_state import AppState
 from ui.common.feedback import FeedbackManager
 from managers.mod_manager import ModManager
 from models.game_modes import FullGameMode
-from config.constants import LAUNCHER_VERSION, UI_COLORS, SLOT_ID_UNIVERSAL, SLOT_ID_DEMO, SLOT_ID_UNDERTALE
+from config.constants import LAUNCHER_VERSION, UI_COLORS, SLOT_ID_UNIVERSAL
 from managers.localization_manager import tr
 from utils.path_utils import resource_path
 from utils.mod_utils import get_mod_key
@@ -106,7 +106,7 @@ class ShortcutManager(QObject):
         from models.game_modes import DemoGameMode
         settings = {'launcher_version': LAUNCHER_VERSION, 'game_path': self.app_state.game_path, 'demo_game_path': self.app_state.demo_game_path, 'is_demo_mode': is_demo, 'is_chapter_mode': is_chapter_mode, 'is_undertale_mode': is_undertale, 'launch_via_steam': self.parent_widget.launch_via_steam_checkbox.isChecked(), 'use_custom_executable': self.parent_widget.use_custom_executable_checkbox.isChecked(), 'custom_executable_path': self.app_state.local_config.get(FullGameMode().get_custom_exec_config_key(), ''), 'demo_custom_executable_path': self.app_state.local_config.get(DemoGameMode().get_custom_exec_config_key(), ''), 'direct_launch_slot_id': self.app_state.local_config.get('direct_launch_slot_id', SLOT_ID_UNIVERSAL), 'mods': {}}
         slot_manager = getattr(self.parent_widget, 'slot_manager', None) if self.parent_widget else None
-        if not slot_manager or not hasattr(slot_manager, 'used_mods'):
+        if not slot_manager or not hasattr(slot_manager, 'get_active_mod_selections'):
             if is_demo:
                 settings['mods']['demo'] = None
             elif is_undertale:
@@ -117,21 +117,22 @@ class ShortcutManager(QObject):
             else:
                 settings['mods']['universal'] = None
             return settings
+        selections = slot_manager.get_active_mod_selections()
         if is_demo:
-            demo_mod = slot_manager.get_used_mod(SLOT_ID_DEMO)
-            settings['mods']['demo'] = get_mod_key(demo_mod) if demo_mod else None
+            demo_mods = selections.get(-1, [])
+            settings['mods']['demo'] = get_mod_key(demo_mods[0]) if demo_mods else None
         elif is_undertale:
-            undertale_mod = slot_manager.get_used_mod(SLOT_ID_UNDERTALE)
-            settings['mods']['undertale'] = get_mod_key(undertale_mod) if undertale_mod else None
+            undertale_mods = selections.get(-1, [])
+            settings['mods']['undertale'] = get_mod_key(undertale_mods[0]) if undertale_mods else None
         elif is_chapter_mode:
             from config.constants import SLOT_ID_MENU, SLOT_ID_CHAPTER_1, SLOT_ID_CHAPTER_2, SLOT_ID_CHAPTER_3, SLOT_ID_CHAPTER_4
             chapter_ids = [SLOT_ID_MENU, SLOT_ID_CHAPTER_1, SLOT_ID_CHAPTER_2, SLOT_ID_CHAPTER_3, SLOT_ID_CHAPTER_4]
             for chapter_id in chapter_ids:
-                mod = slot_manager.get_used_mod(chapter_id)
-                settings['mods'][str(chapter_id)] = get_mod_key(mod) if mod else None
+                mods = selections.get(chapter_id, [])
+                settings['mods'][str(chapter_id)] = get_mod_key(mods[0]) if mods else None
         else:
-            universal_mod = slot_manager.get_used_mod(SLOT_ID_UNIVERSAL)
-            settings['mods']['universal'] = get_mod_key(universal_mod) if universal_mod else None
+            universal_mods = selections.get(0, [])
+            settings['mods']['universal'] = get_mod_key(universal_mods[0]) if universal_mods else None
         return settings
 
     def apply_shortcut_mods(self, mods_settings: Dict[str, str]):

@@ -9,7 +9,6 @@ from managers.utmtcli_manager import UTMTCLIManager
 from utils.path_utils import get_xdelta_path, find_chapter_resource_dir
 from utils.file_utils import ensure_writable, sanitize_filename
 from managers.localization_manager import tr
-from models.game_modes import DemoGameMode, UndertaleGameMode
 from utils.mod_utils import get_mod_key, get_mod_name
 from utils.game_utils import is_demo_mode, is_undertale_mode
 
@@ -41,9 +40,12 @@ class MultiModMerger(QObject):
         self._session_manifest_path = None
         self._cancelled = False
 
-    def merge_mods_for_chapters(self, chapter_mods: Dict[int, List[Any]]) -> bool:
+    def process_mod_merge(self, chapter_mods: Dict[int, List[Any]], is_modpack: bool, modpack_dir: Optional[str] = None) -> bool:
         import logging
-        logging.info(f'Starting multi-mod merge for {len(chapter_mods)} chapter(s)')
+        if is_modpack:
+            logging.info(f'Starting modpack creation for {len(chapter_mods)} chapter(s)')
+        else:
+            logging.info(f'Starting multi-mod merge for {len(chapter_mods)} chapter(s)')
         for chapter_id, mods_list in chapter_mods.items():
             mod_names = [getattr(m, 'name', 'Unknown') for m in mods_list]
             logging.info(f'Chapter {chapter_id}: {len(mods_list)} mod(s) - {mod_names}')
@@ -51,33 +53,54 @@ class MultiModMerger(QObject):
             logging.error(f'UTMTCLI not available for platform: {self.utmtcli.get_platform()}')
             self.status_update.emit(tr('errors.utmtcli_not_available', platform=self.utmtcli.get_platform()), 'error')
             return False
-        logging.info('UTMTCLI is available, proceeding with merge')
+        if is_modpack:
+            logging.info('UTMTCLI is available, proceeding with modpack creation')
+        else:
+            logging.info('UTMTCLI is available, proceeding with merge')
         try:
+            if is_modpack and modpack_dir:
+                os.makedirs(modpack_dir, exist_ok=True)
             total_chapters = len([c for c in chapter_mods.values() if c])
             total_mods = sum((len(mods_list) for mods_list in chapter_mods.values()))
             current_progress = 0
             try:
-                merge_msg = tr('status.preparing_mod_merge', chapters=total_chapters, mods=total_mods)
+                if is_modpack:
+                    merge_msg = tr('status.preparing_mod_merge', chapters=total_chapters, mods=total_mods)
+                else:
+                    merge_msg = tr('status.preparing_mod_merge', chapters=total_chapters, mods=total_mods)
             except BaseException:
-                merge_msg = f'Preparing to merge {total_mods} mod(s) for {total_chapters} chapter(s)...'
+                if is_modpack:
+                    merge_msg = f'Preparing to create modpack with {total_mods} mod(s) for {total_chapters} chapter(s)...'
+                else:
+                    merge_msg = f'Preparing to merge {total_mods} mod(s) for {total_chapters} chapter(s)...'
             self.progress_update.emit(0, merge_msg)
-            self.temp_merge_dir = tempfile.mkdtemp(prefix='deltahub_multimod_')
+            if is_modpack:
+                self.temp_merge_dir = tempfile.mkdtemp(prefix='deltahub_modpack_')
+            else:
+                self.temp_merge_dir = tempfile.mkdtemp(prefix='deltahub_multimod_')
             self.backup_dir = os.path.join(self.temp_merge_dir, 'backups')
             os.makedirs(self.backup_dir, exist_ok=True)
             logging.info(f'Created temp merge directory: {self.temp_merge_dir}')
             current_progress += 5
             try:
-                merge_msg = tr('status.merging_mods', progress=current_progress)
+                if is_modpack:
+                    merge_msg = tr('status.merging_mods', progress=current_progress)
+                else:
+                    merge_msg = tr('status.merging_mods', progress=current_progress)
             except BaseException:
-                merge_msg = f'Merging mods... {current_progress}%'
+                if is_modpack:
+                    merge_msg = f'Creating modpack... {current_progress}%'
+                else:
+                    merge_msg = f'Merging mods... {current_progress}%'
             self.progress_update.emit(min(current_progress, 95), merge_msg)
             chapter_index = 0
             for chapter_id, mods_list in chapter_mods.items():
                 if not mods_list:
                     continue
                 if self._cancelled:
-                    for cid in chapter_mods.keys():
-                        self._restore_backups(cid)
+                    if not is_modpack:
+                        for cid in chapter_mods.keys():
+                            self._restore_backups(cid)
                     return False
                 chapter_index += 1
                 chapter_progress_base = (chapter_index - 1) * (100 // total_chapters) if total_chapters > 0 else 0
@@ -85,9 +108,23 @@ class MultiModMerger(QObject):
                 try:
                     chapter_msg = tr('status.merging_chapter', chapter=chapter_id, current=chapter_index, total=total_chapters)
                 except BaseException:
-                    chapter_msg = f'Merging chapter {chapter_id} ({chapter_index}/{total_chapters})...'
+                    if is_modpack:
+                        chapter_msg = f'Processing chapter {chapter_id} ({chapter_index}/{total_chapters})...'
+                    else:
+                        chapter_msg = f'Merging chapter {chapter_id} ({chapter_index}/{total_chapters})...'
                 self.progress_update.emit(min(chapter_progress_base + 5, 95), chapter_msg)
-                if not self._merge_mods_for_chapter(chapter_id, mods_list, chapter_progress_base, total_chapters):
+                if is_modpack and modpack_dir:
+                    chapter_folder_name = {-1: 'demo', 0: 'chapter_0'}.get(chapter_id, f'chapter_{chapter_id}')
+                    chapter_modpack_dir = os.path.join(modpack_dir, chapter_folder_name)
+                    if not self._merge_mods_for_chapter_to_dir(chapter_id, mods_list, chapter_modpack_dir, chapter_progress_base, total_chapters):
+                        logging.error(f'Failed to merge mods for chapter {chapter_id}')
+                        try:
+                            failed_msg = tr('status.merge_failed')
+                        except BaseException:
+                            failed_msg = 'Modpack creation failed'
+                        self.progress_update.emit(0, failed_msg)
+                        return False
+                elif not self._merge_mods_for_chapter(chapter_id, mods_list, chapter_progress_base, total_chapters):
                     logging.error(f'Failed to merge mods for chapter {chapter_id}, restoring backups')
                     self._restore_backups(chapter_id)
                     try:
@@ -100,21 +137,37 @@ class MultiModMerger(QObject):
                 try:
                     merged_msg = tr('status.chapter_merged', chapter=chapter_id)
                 except BaseException:
-                    merged_msg = f'Chapter {chapter_id} merged successfully'
+                    if is_modpack:
+                        merged_msg = f'Chapter {chapter_id} processed successfully'
+                    else:
+                        merged_msg = f'Chapter {chapter_id} merged successfully'
                 self.progress_update.emit(min(chapter_progress, 95), merged_msg)
-                logging.info(f'Successfully merged mods for chapter {chapter_id}')
+                if is_modpack:
+                    logging.info(f'Successfully processed mods for chapter {chapter_id}')
+                else:
+                    logging.info(f'Successfully merged mods for chapter {chapter_id}')
             try:
                 completed_msg = tr('status.merge_completed')
             except BaseException:
-                completed_msg = 'Mod merge completed successfully'
+                if is_modpack:
+                    completed_msg = 'Modpack creation completed successfully'
+                else:
+                    completed_msg = 'Mod merge completed successfully'
             self.progress_update.emit(100, completed_msg)
-            logging.info('Multi-mod merge completed successfully')
+            if is_modpack:
+                logging.info('Modpack creation completed successfully')
+            else:
+                logging.info('Multi-mod merge completed successfully')
             return True
         except Exception as e:
-            logging.error(f'Multi-mod merge failed: {e}', exc_info=True)
+            if is_modpack:
+                logging.error(f'Modpack creation failed: {e}', exc_info=True)
+            else:
+                logging.error(f'Multi-mod merge failed: {e}', exc_info=True)
             self.status_update.emit(tr('errors.merge_failed', error=str(e)), 'error')
-            for chapter_id in chapter_mods.keys():
-                self._restore_backups(chapter_id)
+            if not is_modpack:
+                for chapter_id in chapter_mods.keys():
+                    self._restore_backups(chapter_id)
             return False
 
     def _merge_mods_for_chapter(self, chapter_id: int, mods_list: List[Any], progress_base: int = 0, total_chapters: int = 1) -> bool:
@@ -189,7 +242,7 @@ class MultiModMerger(QObject):
                         shutil.copy2(ready_file, output_data_win_path)
                         logging.info(f'Copied ready data.win/game.ios from {mod_name} to {output_data_win_path}')
                         used_archive_names = set()
-                        if not self._apply_file_overrides(mod_source_dir, target_dir, used_archive_names):
+                        if not self._apply_file_overrides(mod_source_dir, target_dir, used_archive_names, False):
                             logging.warning(f'Failed to apply file overrides from {mod_name}')
                         return True
                     except Exception as e:
@@ -250,7 +303,7 @@ class MultiModMerger(QObject):
                 target_dir_result = self._get_target_dir(chapter_id)
                 if target_dir_result is not None and mod_source_dir:
                     used_archive_names = set()
-                    if not self._apply_file_overrides(mod_source_dir, target_dir_result, used_archive_names):
+                    if not self._apply_file_overrides(mod_source_dir, target_dir_result, used_archive_names, False):
                         logging.warning(f'Failed to apply file overrides from {mod_name} after ready data.win merge')
                 if not data_patches and (not csx_scripts):
                     mods_already_exported.add(mod_number)
@@ -278,7 +331,7 @@ class MultiModMerger(QObject):
                 target_dir_result = self._get_target_dir(chapter_id)
                 if target_dir_result is not None and mod_source_dir:
                     used_archive_names = set()
-                    if self._apply_file_overrides(mod_source_dir, target_dir_result, used_archive_names):
+                    if self._apply_file_overrides(mod_source_dir, target_dir_result, used_archive_names, False):
                         logging.info(f'Applied file overrides from {mod_name} (mod {mod_number})')
             if mod_number not in mod_patched_files:
                 mod_patched_files[mod_number] = mod_data_win
@@ -410,7 +463,7 @@ class MultiModMerger(QObject):
             for mod_data in mods_to_apply:
                 mod_source_dir = self._get_mod_source_dir(mod_data, chapter_id)
                 if mod_source_dir:
-                    if not self._apply_file_overrides_to_dir(mod_source_dir, modpack_dir, chapter_id, mods_list):
+                    if not self._apply_file_overrides(mod_source_dir, modpack_dir, set(), True):
                         logging.warning(f"Failed to apply file overrides from {getattr(mod_data, 'name', 'Unknown')}")
         else:
             used_archive_names = set()
@@ -420,84 +473,10 @@ class MultiModMerger(QObject):
                     return False
                 mod_source_dir = self._get_mod_source_dir(mod_data, chapter_id)
                 if mod_source_dir:
-                    if not self._apply_file_overrides(mod_source_dir, target_dir, used_archive_names):
+                    if not self._apply_file_overrides(mod_source_dir, target_dir, used_archive_names, False):
                         logging.warning(f"Failed to apply file overrides from {getattr(mod_data, 'name', 'Unknown')}")
         logging.info('Multi-mod merge completed successfully')
         return True
-
-    def create_modpack_from_merge(self, chapter_mods: Dict[int, List[Any]], modpack_dir: str) -> bool:
-        import logging
-        logging.info(f'Starting modpack creation for {len(chapter_mods)} chapter(s)')
-        for chapter_id, mods_list in chapter_mods.items():
-            mod_names = [getattr(m, 'name', 'Unknown') for m in mods_list]
-            logging.info(f'Chapter {chapter_id}: {len(mods_list)} mod(s) - {mod_names}')
-        if not self.utmtcli.is_available():
-            logging.error(f'UTMTCLI not available for platform: {self.utmtcli.get_platform()}')
-            self.status_update.emit(tr('errors.utmtcli_not_available', platform=self.utmtcli.get_platform()), 'error')
-            return False
-        logging.info('UTMTCLI is available, proceeding with modpack creation')
-        try:
-            os.makedirs(modpack_dir, exist_ok=True)
-            total_chapters = len([c for c in chapter_mods.values() if c])
-            total_mods = sum((len(mods_list) for mods_list in chapter_mods.values()))
-            current_progress = 0
-            try:
-                merge_msg = tr('status.preparing_mod_merge', chapters=total_chapters, mods=total_mods)
-            except BaseException:
-                merge_msg = f'Preparing to create modpack with {total_mods} mod(s) for {total_chapters} chapter(s)...'
-            self.progress_update.emit(0, merge_msg)
-            self.temp_merge_dir = tempfile.mkdtemp(prefix='deltahub_modpack_')
-            self.backup_dir = os.path.join(self.temp_merge_dir, 'backups')
-            os.makedirs(self.backup_dir, exist_ok=True)
-            logging.info(f'Created temp merge directory: {self.temp_merge_dir}')
-            current_progress += 5
-            try:
-                merge_msg = tr('status.merging_mods', progress=current_progress)
-            except BaseException:
-                merge_msg = f'Creating modpack... {current_progress}%'
-            self.progress_update.emit(min(current_progress, 95), merge_msg)
-            chapter_index = 0
-            for chapter_id, mods_list in chapter_mods.items():
-                if not mods_list:
-                    continue
-                if self._cancelled:
-                    return False
-                chapter_index += 1
-                chapter_progress_base = (chapter_index - 1) * (100 // total_chapters) if total_chapters > 0 else 0
-                logging.info(f'Processing chapter {chapter_id} with {len(mods_list)} mod(s)')
-                try:
-                    chapter_msg = tr('status.merging_chapter', chapter=chapter_id, current=chapter_index, total=total_chapters)
-                except BaseException:
-                    chapter_msg = f'Processing chapter {chapter_id} ({chapter_index}/{total_chapters})...'
-                self.progress_update.emit(min(chapter_progress_base + 5, 95), chapter_msg)
-                chapter_folder_name = {-1: 'demo', 0: 'chapter_0'}.get(chapter_id, f'chapter_{chapter_id}')
-                chapter_modpack_dir = os.path.join(modpack_dir, chapter_folder_name)
-                if not self._merge_mods_for_chapter_to_dir(chapter_id, mods_list, chapter_modpack_dir, chapter_progress_base, total_chapters):
-                    logging.error(f'Failed to merge mods for chapter {chapter_id}')
-                    try:
-                        failed_msg = tr('status.merge_failed')
-                    except BaseException:
-                        failed_msg = 'Modpack creation failed'
-                    self.progress_update.emit(0, failed_msg)
-                    return False
-                chapter_progress = chapter_index * (100 // total_chapters) if total_chapters > 0 else 100
-                try:
-                    merged_msg = tr('status.chapter_merged', chapter=chapter_id)
-                except BaseException:
-                    merged_msg = f'Chapter {chapter_id} processed successfully'
-                self.progress_update.emit(min(chapter_progress, 95), merged_msg)
-                logging.info(f'Successfully processed mods for chapter {chapter_id}')
-            try:
-                completed_msg = tr('status.merge_completed')
-            except BaseException:
-                completed_msg = 'Modpack creation completed successfully'
-            self.progress_update.emit(100, completed_msg)
-            logging.info('Modpack creation completed successfully')
-            return True
-        except Exception as e:
-            logging.error(f'Modpack creation failed: {e}', exc_info=True)
-            self.status_update.emit(tr('errors.merge_failed', error=str(e)), 'error')
-            return False
 
     def _merge_mods_for_chapter_to_dir(self, chapter_id: int, mods_list: List[Any], modpack_dir: str, progress_base: int = 0, total_chapters: int = 1) -> bool:
         import logging
@@ -518,48 +497,7 @@ class MultiModMerger(QObject):
         for mod_data in mods_to_apply:
             mod_source_dir = self._get_mod_source_dir(mod_data, chapter_id)
             if mod_source_dir:
-                if not self._apply_file_overrides_to_dir(mod_source_dir, modpack_dir, chapter_id, mods_list):
-                    return False
-        return True
-
-    def _apply_file_overrides_to_dir(self, mod_source_dir: str, modpack_dir: str, chapter_id: int, mods_list: List[Any]) -> bool:
-        if not os.path.isdir(mod_source_dir):
-            return True
-        from config.constants import DATA_FILE_EXTENSIONS
-        xdelta_extensions = DATA_FILE_EXTENSIONS
-        archive_extensions = ('.zip', '.7z', '.rar', '.tar.gz', '.lzma')
-        for root, dirs, files in os.walk(mod_source_dir):
-            for file in files:
-                if file.lower() in ('config.json', '_icon.png'):
-                    continue
-                if file.lower().endswith(xdelta_extensions):
-                    continue
-                source_path = os.path.join(root, file)
-                file_lower = file.lower()
-                if file_lower.endswith(archive_extensions):
-                    archive_name = os.path.basename(file)
-                    target_archive_path = os.path.join(modpack_dir, archive_name)
-                    if os.path.exists(target_archive_path):
-                        base_name, ext = os.path.splitext(archive_name)
-                        mod_index = 1
-                        while os.path.exists(target_archive_path):
-                            target_archive_name = f'{base_name}_mod{mod_index}{ext}'
-                            target_archive_path = os.path.join(modpack_dir, target_archive_name)
-                            mod_index += 1
-                    logging.debug(f'Copying archive: {archive_name} -> {os.path.basename(target_archive_path)}')
-                    try:
-                        shutil.copy2(source_path, target_archive_path)
-                    except Exception as e:
-                        logging.error(f'Failed to copy archive {source_path}: {e}')
-                        return False
-                    continue
-                rel_path = os.path.relpath(source_path, mod_source_dir)
-                target_path = os.path.join(modpack_dir, rel_path)
-                os.makedirs(os.path.dirname(target_path), exist_ok=True)
-                try:
-                    shutil.copy2(source_path, target_path)
-                except Exception as e:
-                    logging.error(f'Failed to copy override file {source_path}: {e}')
+                if not self._apply_file_overrides(mod_source_dir, modpack_dir, set(), True):
                     return False
         return True
 
@@ -569,7 +507,7 @@ class MultiModMerger(QObject):
         for mod_data in mods_to_apply:
             mod_source_dir = self._get_mod_source_dir(mod_data, chapter_id)
             if mod_source_dir:
-                if not self._apply_file_overrides(mod_source_dir, target_dir, used_archive_names):
+                if not self._apply_file_overrides(mod_source_dir, target_dir, used_archive_names, False):
                     return False
         return True
 
@@ -875,7 +813,7 @@ class MultiModMerger(QObject):
                     return True
         return False
 
-    def _apply_file_overrides(self, mod_source_dir: str, target_dir: str, used_archive_names: Optional[set] = None) -> bool:
+    def _apply_file_overrides(self, mod_source_dir: str, target_dir: str, used_archive_names: set, is_modpack: bool) -> bool:
         if not os.path.isdir(mod_source_dir):
             return True
         if used_archive_names is None:
@@ -892,22 +830,40 @@ class MultiModMerger(QObject):
                 source_path = os.path.join(root, file)
                 file_lower = file.lower()
                 if file_lower.endswith(archive_extensions):
-                    logging.debug(f'Extracting archive contents: {os.path.basename(file)}')
-                    if not self._extract_archive_to_target(source_path, target_dir):
-                        logging.warning(f'Failed to extract archive {source_path}, continuing...')
+                    if is_modpack:
+                        archive_name = os.path.basename(file)
+                        target_archive_path = os.path.join(target_dir, archive_name)
+                        if os.path.exists(target_archive_path):
+                            base_name, ext = os.path.splitext(archive_name)
+                            mod_index = 1
+                            while os.path.exists(target_archive_path):
+                                target_archive_name = f'{base_name}_mod{mod_index}{ext}'
+                                target_archive_path = os.path.join(target_dir, target_archive_name)
+                                mod_index += 1
+                        logging.debug(f'Copying archive: {archive_name} -> {os.path.basename(target_archive_path)}')
+                        try:
+                            shutil.copy2(source_path, target_archive_path)
+                        except Exception as e:
+                            logging.error(f'Failed to copy archive {source_path}: {e}')
+                            return False
+                    else:
+                        logging.debug(f'Extracting archive contents: {os.path.basename(file)}')
+                        if not self._extract_archive_to_target(source_path, target_dir):
+                            logging.warning(f'Failed to extract archive {source_path}, continuing...')
                     continue
                 rel_path = os.path.relpath(source_path, mod_source_dir)
                 target_path = os.path.join(target_dir, rel_path)
-                chapter_id = self._extract_chapter_id_from_path(target_dir)
-                is_new_file = not os.path.exists(target_path)
-                if not is_new_file:
-                    if chapter_id is not None:
-                        self._backup_file(chapter_id, target_path)
-                elif chapter_id is not None:
-                    if chapter_id not in self.added_files:
-                        self.added_files[chapter_id] = set()
-                    self.added_files[chapter_id].add(target_path)
-                    self._save_backups_to_manifest()
+                if not is_modpack:
+                    chapter_id = self._extract_chapter_id_from_path(target_dir)
+                    is_new_file = not os.path.exists(target_path)
+                    if not is_new_file:
+                        if chapter_id is not None:
+                            self._backup_file(chapter_id, target_path)
+                    elif chapter_id is not None:
+                        if chapter_id not in self.added_files:
+                            self.added_files[chapter_id] = set()
+                        self.added_files[chapter_id].add(target_path)
+                        self._save_backups_to_manifest()
                 os.makedirs(os.path.dirname(target_path), exist_ok=True)
                 try:
                     shutil.copy2(source_path, target_path)
@@ -1362,18 +1318,18 @@ class MultiModMerger(QObject):
             return -1
         return None
 
-    def cleanup(self) -> None:
-        if self.temp_merge_dir and os.path.exists(self.temp_merge_dir):
-            try:
-                for item in os.listdir(self.temp_merge_dir):
-                    item_path = os.path.join(self.temp_merge_dir, item)
-                    if item_path != self.backup_dir:
-                        if os.path.isdir(item_path):
-                            shutil.rmtree(item_path)
-                        else:
-                            os.remove(item_path)
-            except Exception as e:
-                logging.warning(f'Failed to cleanup temp merge dir: {e}')
+    def cleanup(self, force: bool = False) -> None:
+        if force or not self.original_files:
+            if self.temp_merge_dir and os.path.exists(self.temp_merge_dir):
+                try:
+                    shutil.rmtree(self.temp_merge_dir)
+                    logging.info(f'Cleaned up temp merge directory: {self.temp_merge_dir}')
+                except Exception as e:
+                    logging.warning(f'Failed to cleanup temp merge dir {self.temp_merge_dir}: {e}')
+            self.temp_merge_dir = None
+            self.backup_dir = None
+        else:
+            logging.debug('Skipping cleanup - backups still needed (will be cleaned up after restoration)')
 
     def restore_all_backups(self) -> bool:
         import json
@@ -1388,18 +1344,27 @@ class MultiModMerger(QObject):
                 backup_dir = manifest_data.get('multimod_backup_dir')
                 if multimod_backups and backup_dir:
                     logging.info(f'Loading backup info from session manifest: {len(multimod_backups)} chapter(s)')
+                    if not os.path.exists(backup_dir):
+                        logging.debug(f'Backup directory from manifest does not exist: {backup_dir}')
+                        logging.debug('Backups were already restored in previous session, cleaning up manifest')
+                        try:
+                            if os.path.exists(self._session_manifest_path):
+                                os.remove(self._session_manifest_path)
+                                logging.debug('Removed stale session manifest')
+                        except Exception as e:
+                            logging.debug(f'Failed to remove stale manifest: {e}')
+                        return False
+                    self.backup_dir = backup_dir
                     for chapter_key, files_dict in multimod_backups.items():
                         chapter_id = int(chapter_key)
                         self.original_files[chapter_id] = files_dict
                     for chapter_key, files_list in multimod_added_files.items():
                         chapter_id = int(chapter_key)
                         self.added_files[chapter_id] = set(files_list)
-                    if backup_dir and os.path.exists(backup_dir):
-                        self.backup_dir = backup_dir
             except Exception as e:
                 logging.warning(f'Failed to load backups from manifest: {e}')
         if not self.original_files:
-            logging.warning('No backup files found to restore (original_files is empty)')
+            logging.debug('No backup files found to restore (original_files is empty)')
             return False
         logging.info(f'Restoring backups for {len(self.original_files)} chapter(s)')
         for chapter_id, files_dict in self.original_files.items():
@@ -1444,6 +1409,12 @@ class MultiModMerger(QObject):
                 logging.info('Cleaned up multi-mod merge directory and backups')
             except Exception as e:
                 logging.warning(f'Failed to cleanup temp merge dir: {e}')
+        if self._session_manifest_path and os.path.exists(self._session_manifest_path):
+            try:
+                os.remove(self._session_manifest_path)
+                logging.debug('Removed session manifest after backup restoration')
+            except Exception as e:
+                logging.debug(f'Failed to remove session manifest: {e}')
         self.original_files = {}
         self.added_files = {}
         self.backup_dir = None
