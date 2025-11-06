@@ -381,3 +381,17 @@ def get_file_filter(filter_type: str) -> str:
     description = FILTER_DESCRIPTIONS.get(filter_type, filter_type)
     all_files_desc = FILTER_DESCRIPTIONS.get('all_files', 'All files')
     return f'{description} ({extensions});;{all_files_desc} (*)'
+
+
+def run_as_admin_windows(path: str, feedback_manager) -> bool:
+    import subprocess
+    from managers.localization_manager import tr
+    from config.constants import UI_COLORS
+    script = f"import os, stat; p = r'{path}'; [os.chmod(os.path.join(r, f), os.stat(os.path.join(r, f)).st_mode | stat.S_IWRITE) for r, _, fs in os.walk(p) for f in fs] if os.path.isdir(p) else os.chmod(p, os.stat(p).st_mode | stat.S_IWRITE) if os.path.exists(p) else None"
+    command = f'Start-Process python -ArgumentList "-c \\"{script}\\"" -Verb RunAs -WindowStyle Hidden'
+    try:
+        subprocess.run(['powershell', '-Command', command], check=True, capture_output=True)
+        return True
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        feedback_manager.update_status(tr('status.permission_change_failed'), UI_COLORS['status_error'])
+        return False

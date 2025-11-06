@@ -68,7 +68,6 @@ class GameLaunchController(QObject):
                 self.app_state.progress_bar_value = 0
                 self.app_state.progress_bar_visible = False
             except (AttributeError, RuntimeError):
-                import logging
                 logging.debug('Progress bar update failed', exc_info=True)
             if self.app_state.current_task and hasattr(self.app_state.current_task, 'cancel'):
                 self.app_state.current_task.cancel()
@@ -241,14 +240,3 @@ class GameLaunchController(QObject):
                     updated_mod = self.mod_manager.create_mod_object_from_info(mod_config, getattr(self.app_state, 'all_mods', None))
             if updated_mod:
                 self.slot_manager.used_mods[chapter_id] = updated_mod
-
-    def run_as_admin_windows(self, path: str) -> bool:
-        import subprocess
-        script = f"import os, stat; p = r'{path}'; [os.chmod(os.path.join(r, f), os.stat(os.path.join(r, f)).st_mode | stat.S_IWRITE) for r, _, fs in os.walk(p) for f in fs] if os.path.isdir(p) else os.chmod(p, os.stat(p).st_mode | stat.S_IWRITE) if os.path.exists(p) else None"
-        command = f'Start-Process python -ArgumentList "-c \\"{script}\\"" -Verb RunAs -WindowStyle Hidden'
-        try:
-            subprocess.run(['powershell', '-Command', command], check=True, capture_output=True)
-            return True
-        except (subprocess.CalledProcessError, FileNotFoundError):
-            self.feedback_manager.update_status(tr('status.permission_change_failed'), UI_COLORS['status_error'])
-            return False

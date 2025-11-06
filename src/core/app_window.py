@@ -4,10 +4,9 @@ import os
 import platform
 import shutil
 import uuid
-import subprocess
 import webbrowser
 import argparse
-from typing import Callable, Optional
+from typing import Optional
 import logging
 import requests
 from PyQt6.QtCore import QTranslator, Qt, QEvent, QThread, QTimer, pyqtSignal, QUrl
@@ -15,12 +14,12 @@ from PyQt6.QtGui import QColor, QIcon, QPainter, QPixmap, QDesktopServices
 from PyQt6.QtWidgets import QApplication, QCheckBox, QDialog, QFrame, QLabel, QLineEdit, QMessageBox, QProgressBar, QPushButton, QTabWidget, QVBoxLayout, QWidget, QHBoxLayout, QSizePolicy, QInputDialog, QColorDialog
 from managers.localization_manager import localization_manager, tr
 from models.game_modes import FullGameMode, DemoGameMode, UndertaleGameMode
-from config.constants import UI_COLORS, SOCIAL_LINKS, ARCH, ONLINE_UPDATE_INTERVAL, INITIALIZATION_TIMEOUT, LEGACY_CLEANUP_DELAY, THREAD_WAIT_TIMEOUT, SLOT_ID_UNIVERSAL
+from config.constants import UI_COLORS, SOCIAL_LINKS, ONLINE_UPDATE_INTERVAL, INITIALIZATION_TIMEOUT, LEGACY_CLEANUP_DELAY, THREAD_WAIT_TIMEOUT, SLOT_ID_UNIVERSAL
 from utils.game_utils import is_game_running
 from utils.thread_utils import safe_stop_thread
 from utils.path_utils import get_user_data_root, resource_path, get_launcher_dir, get_legacy_ylauncher_path, get_user_plugins_dir
 from utils.network_utils import check_internet_connection
-from workers.background_workers import PresenceWorker, FetchChangelogWorker, FetchHelpContentWorker
+from workers.background_workers import PresenceWorker, FetchChangelogWorker
 from controllers.mod_operations_controller import ModOperationsController
 from controllers.library_display_controller import LibraryDisplayController
 from controllers.search_display_controller import SearchDisplayController
@@ -121,7 +120,7 @@ class AppWindow(QWidget):
         self.settings_manager.language_changed.connect(lambda _: self._retranslate_ui())
         self.settings_manager.restart_required.connect(lambda msg: self.feedback_manager.show_message('info', 'dialogs.restart_required', msg))
         self.settings_manager.status_changed.connect(self.update_status_signal.emit)
-        self.mod_manager = ModManager(self.app_state, self.feedback_manager, self)
+        self.mod_manager = ModManager(self.app_state, self.feedback_manager, self.settings_manager, self)
         self.mod_manager.progress_updated.connect(self.set_progress_signal.emit)
         self.mod_manager.status_changed.connect(self.update_status_signal.emit)
         self.mod_manager.installation_finished.connect(self._on_mod_installation_finished)
@@ -273,15 +272,6 @@ class AppWindow(QWidget):
         except Exception as e:
             logging.error(f'Launch error: {e}')
             raise ShortcutLaunchError(str(e) or 'Shortcut launch failed')
-
-    def _create_settings_nav_button(self, text: str, on_click: Callable, style_sheet: str = '', fixed_width: int = 400) -> QPushButton:
-        button = QPushButton(text)
-        button.setFixedWidth(fixed_width)
-        base_style = f'width: {fixed_width}px;'
-        button.setStyleSheet(f'{base_style} {style_sheet}' if style_sheet else base_style)
-        if on_click:
-            button.clicked.connect(on_click)
-        return button
 
     def _handle_permission_error(self, path: str):
         self.feedback_manager.show_message('error', 'errors.access_denied', path=path)
@@ -720,13 +710,6 @@ class AppWindow(QWidget):
         self.prev_page_btn.setEnabled(self.app_state.current_page > 1)
         self.next_page_btn.setEnabled(self.app_state.current_page < total_pages)
 
-    def _on_mod_install_finished(self, success, from_gb=False):
-        self.app_state.is_installing = False
-        self.app_state.clear_current_task()
-        self.mod_ops.set_install_buttons_enabled(True)
-        self.progress_bar.setVisible(False)
-        self.game_launch.update_button_state()
-
     def _update_change_path_button_text(self):
         self.change_path_button.setText(self.app_state.game_mode.path_change_button_text)
 
@@ -762,9 +745,6 @@ class AppWindow(QWidget):
                 return True
         return super().eventFilter(obj, ev)
 
-    def _return_from_save_manager(self):
-        self.save_ui.return_from_save_manager()
-
     def paintEvent(self, event):
         painter = QPainter(self)
         if self.background_movie is not None:
@@ -780,26 +760,6 @@ class AppWindow(QWidget):
                 logging.debug(f"Failed to parse color '{bg_color_str}': {e}")
                 painter.fillRect(self.rect(), QColor('rgba(0, 0, 0, 200)'))
         super().paintEvent(event)
-
-    def _load_help_content(self):
-        if localization_manager.get_current_language() == 'ru':
-            help_url = self.app_state.global_settings.get('help_ru_url', self.app_state.global_settings.get('help_url', ''))
-        else:
-            help_url = self.app_state.global_settings.get('help_en_url', self.app_state.global_settings.get('help_url', ''))
-        if not help_url:
-            self.help_text_edit.setMarkdown(f"<i>{tr('dialogs.help_not_available')}</i>")
-            return
-        self.help_text_edit.setMarkdown(f"<i>{tr('status.loading')}</i>")
-        self.help_thread = QThread(self)
-        self.help_worker = FetchHelpContentWorker(help_url.strip())
-        self.help_worker.moveToThread(self.help_thread)
-        self.help_worker.finished.connect(self.help_text_edit.setMarkdown)
-        self.help_thread.started.connect(self.help_worker.run)
-        self.help_thread.start()
-
-    def _disable_direct_launch(self):
-        self.settings_manager.disable_direct_launch()
-        self.launch_via_steam_checkbox.setEnabled(True)
 
     def _initialize_mutual_exclusions(self):
         is_direct_launch = self.app_state.local_config.get('direct_launch_slot_id', SLOT_ID_UNIVERSAL) >= 0 and self.app_state.game_mode.direct_launch_allowed and (platform.system() != 'Darwin')
@@ -876,15 +836,6 @@ class AppWindow(QWidget):
         if not self.game_launcher._find_and_validate_game_path(is_initial=True):
             self.action_button.setEnabled(False)
 
-    def _get_platform_string(self) -> str:
-        system = platform.system()
-        if system == 'Windows':
-            return 'setup'
-        elif system == 'Darwin':
-            return f'macOS-{ARCH}'
-        else:
-            return 'Linux'
-
     def _handle_update_info(self, update_info):
         if self.app_state.initialization_completed and self.app_state.is_shown_to_user:
             self.show_update_prompt.emit(update_info)
@@ -949,44 +900,6 @@ class AppWindow(QWidget):
         except Exception:
             pass
 
-    def _on_install_finished(self, success):
-        self.progress_bar.setValue(0)
-        self.progress_bar.setVisible(False)
-        if not success:
-            try:
-                if self.app_state.current_task:
-                    temp_root = getattr(self.app_state.current_task, 'temp_root', None)
-                    if temp_root and os.path.isdir(temp_root):
-                        shutil.rmtree(temp_root, ignore_errors=True)
-            except (OSError, shutil.Error) as e:
-                logging.debug(f'_on_url_install_finished: temp cleanup failed: {e}')
-        self.app_state.is_installing = False
-        self.app_state.clear_current_task()
-        self.mod_ops.set_install_buttons_enabled(True)
-        if success:
-            self.mod_manager.invalidate_mods_cache()
-            self.mod_manager.load_local_mods()
-            self.search_display.update_search_plaques()
-            self.feedback_manager.update_status(tr('status.installation_complete'), UI_COLORS['status_success'])
-            self.library_display.update_display()
-        self.game_launch.update_button_state()
-        if hasattr(self, 'full_install_checkbox') and self.full_install_checkbox is not None and isinstance(self.app_state.game_mode, DemoGameMode):
-            self.full_install_checkbox.setEnabled(True)
-        self.game_launch.update_button_state()
-
-    def _run_as_admin_windows(self, path: str) -> bool:
-        script = f"import os, stat; p = r'{path}'; [os.chmod(os.path.join(r, f), os.stat(os.path.join(r, f)).st_mode | stat.S_IWRITE) for r, _, fs in os.walk(p) for f in fs] if os.path.isdir(p) else os.chmod(p, os.stat(p).st_mode | stat.S_IWRITE) if os.path.exists(p) else None"
-        command = f'Start-Process python -ArgumentList "-c \\"{script}\\"" -Verb RunAs -WindowStyle Hidden'
-        try:
-            subprocess.run(['powershell', '-Command', command], check=True, capture_output=True)
-            return True
-        except (subprocess.CalledProcessError, FileNotFoundError):
-            self.feedback_manager.update_status(tr('status.permission_change_failed'), UI_COLORS['status_error'])
-            return False
-
-    def _launch_game_with_all_mods(self):
-        self.game_launcher.launch_game_with_all_mods(execute_plugin_hooks=lambda hook_name: self.plugin_manager.execute_hooks(hook_name, self), restore_window_callback=self.restore_window_signal.emit)
-
     def _on_progress_update(self, value: int):
         self.progress_bar.setValue(value)
         if value > 0 and (not self.progress_bar.isVisible()):
@@ -998,12 +911,6 @@ class AppWindow(QWidget):
             actual_color = UI_COLORS.get(color, color)
             self.status_label.setText(message)
             self.status_label.setStyleSheet(f'color: {actual_color};')
-
-    def _run_presence_tick(self):
-        if self.is_shortcut_launch:
-            return
-        if hasattr(self, 'presence_worker') and self.presence_worker:
-            self.presence_worker.run()
 
     def _update_online_label(self, count: int):
         if not self.is_shortcut_launch and hasattr(self, 'online_label') and (self.online_label is not None):
@@ -1395,6 +1302,8 @@ class AppWindow(QWidget):
         mod_data = selected_mod['data'].copy()
         mod_data['key'] = selected_mod['key']
         mod_data['folder_name'] = os.path.basename(selected_mod['folder_path']) if selected_mod.get('folder_path') else ''
+        if selected_mod.get('folder_path'):
+            mod_data['folder_path'] = selected_mod['folder_path']
         editor = ModEditorDialog(self, is_creating=False, is_public=False, mod_data=mod_data)
         editor.exec()
         self._activate_window_safe()
@@ -1562,26 +1471,11 @@ class AppWindow(QWidget):
     def _install_single_mod(self, mod, force=False):
         self.mod_ops.install_mod(mod, force)
 
-    def _on_mod_install_requested(self, mod):
-        self.mod_ops.on_mod_install_requested(mod)
-
     def _on_single_mod_install_finished(self, success):
         self.mod_ops.on_install_finished(success)
 
-    def _on_mod_uninstall_requested(self, mod):
-        self.mod_ops.on_mod_uninstall_requested(mod)
-
-    def _uninstall_single_mod(self, mod):
-        self.mod_ops.uninstall_mod(mod)
-
-    def _on_mod_clicked(self, mod):
-        self.search_display.on_mod_clicked(mod)
-
     def _on_mod_installation_finished(self, success, message):
         self.mod_ops.on_mod_installation_finished(success, message)
-
-    def _show_mod_details_dialog(self, mod_data):
-        self.search_display.show_details(mod_data)
 
     def _show_chapter_mode_instruction(self):
         if not hasattr(self, 'installed_mods_layout'):
@@ -1733,6 +1627,3 @@ class AppWindow(QWidget):
             if not (self.presence_thread and self.presence_thread.isRunning()):
                 self.presence_thread = None
                 self.presence_worker = None
-
-    def _current_tab_names(self):
-        return self.app_state.game_mode.tab_names

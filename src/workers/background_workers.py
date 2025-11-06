@@ -1,12 +1,9 @@
 import json
 import os
-import rarfile
 import shutil
 import tempfile
 import threading
 import time
-import zipfile
-import py7zr
 import requests
 from utils.network_utils import get_session
 from PyQt6.QtCore import QObject, QThread, pyqtSignal, pyqtSlot
@@ -812,12 +809,6 @@ class UrlInstallThread(QThread):
                 else:
                     raise ValueError(tr('errors.deltamod_archive_invalid_redirect'))
 
-    def _ask_user(self, title: str, message: str) -> bool:
-        self.prompt_event.clear()
-        self.prompt_required.emit(title, message)
-        self.prompt_event.wait()
-        return self.prompt_result
-
     def _download_archive(self, url: str, temp_dir: str) -> str:
         from urllib.parse import urlparse, unquote
         from utils.network_utils import download_file, get_filename_from_url
@@ -850,66 +841,6 @@ class UrlInstallThread(QThread):
         download_file(session, url, archive_path, progress_callback=progress_callback, total_size=total_size, downloaded_ref=downloaded_ref, cancel_check=lambda: self._cancelled, on_response=on_response)
         self.progress.emit(100)
         return archive_path
-
-    def _extract_and_read_config(self, archive_path: str) -> dict | None:
-        archive_path_lower = archive_path.lower()
-        config_content = None
-        try:
-            if archive_path_lower.endswith('.zip'):
-                with zipfile.ZipFile(archive_path, 'r') as zf:
-                    if 'config.json' in zf.namelist():
-                        config_content = zf.read('config.json')
-            elif archive_path_lower.endswith('.rar'):
-                with rarfile.RarFile(archive_path, 'r') as rf:
-                    if 'config.json' in rf.namelist():
-                        config_content = rf.read('config.json')
-            elif archive_path_lower.endswith('.7z'):
-                with py7zr.SevenZipFile(archive_path, mode='r') as zf:
-                    if 'config.json' in zf.getnames():
-                        extract_dir = os.path.join(os.path.dirname(archive_path), '7z_config')
-                        zf.extract(path=extract_dir, targets=['config.json'])
-                        config_file_path = os.path.join(extract_dir, 'config.json')
-                        if os.path.exists(config_file_path):
-                            with open(config_file_path, 'rb') as f:
-                                config_content = f.read()
-            elif archive_path_lower.endswith('.tar.gz'):
-                import tarfile
-                with tarfile.open(archive_path, 'r:gz') as tf:
-                    if 'config.json' in tf.getnames():
-                        extracted_file = tf.extractfile('config.json')
-                        if extracted_file:
-                            config_content = extracted_file.read()
-            if config_content:
-                return json.loads(config_content)
-        except Exception as e:
-            from utils.network_utils import sanitize_log_message
-            safe_msg = sanitize_log_message(f'UrlInstallThread._read_config_from_archive: failed to read config.json from {archive_path}: {e}')
-            logging.warning(safe_msg, exc_info=True)
-            return None
-        return None
-
-    def _is_metadata_only(self, archive_path: str) -> bool:
-        archive_path_lower = archive_path.lower()
-        try:
-            if archive_path_lower.endswith('.zip'):
-                with zipfile.ZipFile(archive_path, 'r') as zf:
-                    return len(zf.namelist()) == 1 and zf.namelist()[0] == 'config.json'
-            elif archive_path_lower.endswith('.rar'):
-                with rarfile.RarFile(archive_path, 'r') as rf:
-                    return len(rf.namelist()) == 1 and rf.namelist()[0] == 'config.json'
-            elif archive_path_lower.endswith('.7z'):
-                with py7zr.SevenZipFile(archive_path, mode='r') as zf:
-                    return len(zf.getnames()) == 1 and zf.getnames()[0] == 'config.json'
-            elif archive_path_lower.endswith('.tar.gz'):
-                import tarfile
-                with tarfile.open(archive_path, 'r:gz') as tf:
-                    return len(tf.getnames()) == 1 and 'config.json' in tf.getnames()
-        except Exception as e:
-            from utils.network_utils import sanitize_log_message
-            safe_msg = sanitize_log_message(f'UrlInstallThread._is_single_config_archive: archive structure probe failed for {archive_path}: {e}')
-            logging.warning(safe_msg, exc_info=True)
-            return False
-        return False
 
 
 class FetchHelpContentWorker(QObject):

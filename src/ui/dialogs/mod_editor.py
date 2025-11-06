@@ -431,26 +431,6 @@ class ModEditorDialog(QDialog):
     def _data_button_text(self) -> str:
         return tr('ui.add_data_file')
 
-    def _update_data_add_button_texts(self):
-        for ti in range(self.file_tabs.count()):
-            tab = self.file_tabs.widget(ti)
-            if not tab:
-                continue
-            layout = tab.layout()
-            if not layout:
-                continue
-            for i in range(layout.count()):
-                item = layout.itemAt(i)
-                btn_layout = item.layout() if item else None
-                if not btn_layout:
-                    continue
-                for j in range(btn_layout.count()):
-                    btn_item = btn_layout.itemAt(j)
-                    w = btn_item.widget() if btn_item and btn_item.widget() else None
-                    if w is not None and isinstance(w, QPushButton) and w.property('is_data_button'):
-                        w.setText(self._data_button_text())
-                break
-
     def _update_file_tabs(self):
         while self.file_tabs.count():
             self.file_tabs.removeTab(0)
@@ -1345,46 +1325,6 @@ class ModEditorDialog(QDialog):
                         return False
         return True
 
-    def _select_local_extra_files(self, tab, tab_layout):
-        msg = QMessageBox(self)
-        msg.setWindowTitle(tr('ui.select'))
-        msg.setText(tr('ui.select_file_or_folder'))
-        archive_button = msg.addButton(tr('file_descriptions.archives'), QMessageBox.ButtonRole.AcceptRole)
-        msg.setDefaultButton(archive_button)
-        msg.exec()
-        if msg.clickedButton() == archive_button:
-            file_paths, _ = QFileDialog.getOpenFileNames(self, tr('ui.select_additional_files'), '', get_file_filter('extended_archives'))
-        else:
-            folder_path = QFileDialog.getExistingDirectory(self, tr('ui.select_additional_files'), '')
-            if folder_path:
-                file_paths = [folder_path]
-        if file_paths:
-            key_name, ok = QInputDialog.getText(self, tr('dialogs.file_group_name'), tr('dialogs.enter_file_group_key'))
-            if not ok or not key_name.strip():
-                key_name = 'extra'
-            extra_frame = QFrame()
-            extra_frame.setFrameStyle(QFrame.Shape.Box)
-            extra_layout = QVBoxLayout(extra_frame)
-            title = QLabel(tr('files.extra_files_title', key_name=key_name))
-            title.setStyleSheet('font-weight: bold;')
-            title.setProperty('clean_key', key_name)
-            extra_layout.addWidget(title)
-            for file_path in file_paths:
-                filename = os.path.basename(file_path)
-                file_label = QLabel(f'• {filename}')
-                file_label.setStyleSheet('color: gray; font-size: 10px;')
-                extra_layout.addWidget(file_label)
-                path_edit = QLineEdit()
-                path_edit.setText(file_path)
-                path_edit.hide()
-                path_edit.setProperty('is_local_extra_path', True)
-                path_edit.setProperty('extra_key', key_name)
-                extra_layout.addWidget(path_edit)
-            delete_button = QPushButton(tr('buttons.delete'))
-            delete_button.clicked.connect(lambda: self._remove_local_extra_files(tab_layout, extra_frame))
-            extra_layout.addWidget(delete_button)
-            tab_layout.insertWidget(tab_layout.count() - 1, extra_frame)
-
     def _remove_local_extra_files(self, tab_layout, extra_frame):
         extra_frame.hide()
         tab_layout.removeWidget(extra_frame)
@@ -1709,7 +1649,8 @@ class ModEditorDialog(QDialog):
             config_path = os.path.join(mod_dir, 'config.json')
             self.parent_app.settings_manager.write_json(config_path, config_data)
             self.parent_app.mod_manager.load_local_mods()
-            self.parent_app._update_installed_mods_display()
+            if hasattr(self.parent_app, 'library_display'):
+                self.parent_app.library_display.update_display()
             QMessageBox.information(self, tr('dialogs.local_mod_created_title'), tr('dialogs.local_mod_created_message', mod_name=mod_data['name']))
             self.accept()
         except Exception as e:
@@ -1872,7 +1813,8 @@ class ModEditorDialog(QDialog):
             config_data.update({'name': updated_data.get('name', ''), 'version': updated_data.get('version', '1.0.0'), 'author': updated_data.get('author', ''), 'tagline': updated_data.get('tagline', ''), 'external_url': updated_data.get('external_url', ''), 'game_version': updated_data.get('game_version', tr('defaults.not_specified')), 'modgame': updated_data.get('modgame', 'deltarune'), 'files': files_data, 'tags': updated_data.get('tags', [])})
             self.parent_app.settings_manager.write_json(config_path, config_data)
             self.parent_app.mod_manager.load_local_mods()
-            self.parent_app._update_installed_mods_display()
+            if hasattr(self.parent_app, 'library_display'):
+                self.parent_app.library_display.update_display()
             QMessageBox.information(self, tr('dialogs.local_mod_updated_title'), tr('dialogs.local_mod_updated_message', mod_name=updated_data['name']))
             self.accept()
         except Exception as e:
@@ -1931,7 +1873,8 @@ class ModEditorDialog(QDialog):
                 return
             shutil.rmtree(mod_folder_path)
             self.parent_app.mod_manager.load_local_mods()
-            self.parent_app._update_installed_mods_display()
+            if hasattr(self.parent_app, 'library_display'):
+                self.parent_app.library_display.update_display()
             QMessageBox.information(self, tr('errors.local_mod_deleted_title'), tr('errors.local_mod_deleted_message'))
             self.accept()
         except Exception as e:
@@ -1948,6 +1891,25 @@ class ModEditorDialog(QDialog):
         self.tagline_edit.setText(actual_mod_data.get('tagline', ''))
         self.external_url_edit.setText(actual_mod_data.get('external_url', ''))
         icon_value = actual_mod_data.get('icon_url', '')
+        if not self.is_public and (not icon_value):
+            mod_folder_path = None
+            if 'folder_path' in self.mod_data:
+                mod_folder_path = self.mod_data['folder_path']
+            elif self.mod_key:
+                mod_folder_path = self.parent_app.mod_manager.get_mod_folder_path(self.mod_key)
+            if not mod_folder_path and 'folder_name' in self.mod_data:
+                folder_name = self.mod_data['folder_name']
+                if folder_name and hasattr(self.parent_app, 'app_state'):
+                    mods_dir = self.parent_app.app_state.mods_dir
+                    potential_folder = os.path.join(mods_dir, folder_name)
+                    if os.path.exists(potential_folder):
+                        mod_folder_path = potential_folder
+            if mod_folder_path:
+                for ext in ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.ico']:
+                    potential_icon = os.path.join(mod_folder_path, f'_icon{ext}')
+                    if os.path.exists(potential_icon):
+                        icon_value = potential_icon
+                        break
         self.icon_edit.setText(icon_value)
         if icon_value:
             if self.is_public:

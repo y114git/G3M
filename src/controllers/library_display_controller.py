@@ -79,7 +79,7 @@ class LibraryDisplayController:
                 mod_widget = InstalledModWidget(mod_data, is_local, is_available, parent=self.app)
                 mod_widget.clicked.connect(self.on_mod_clicked)
                 mod_widget.remove_requested.connect(self.on_mod_remove)
-                mod_widget.use_requested.connect(lambda mod_data=mod_data: self.on_chapter_mode_mod_use(mod_data, selected_chapter_id))
+                mod_widget.use_requested.connect(lambda mod_data=mod_data: self._handle_mod_use(mod_data, selected_chapter_id))
                 is_used = self.slot_manager.is_mod_used_for_chapter(mod_data, selected_chapter_id)
                 mod_widget.set_in_slot(is_used)
                 self.app.installed_mods_layout.insertWidget(self.app.installed_mods_layout.count() - 1, mod_widget)
@@ -278,36 +278,15 @@ class LibraryDisplayController:
             self.feedback_manager.show_message('error', 'errors.mod_removal_failed', error=str(e))
 
     def on_mod_use(self, mod_data):
-        mod_widget = None
-        for i in range(self.app.installed_mods_layout.count()):
-            item = self.app.installed_mods_layout.itemAt(i)
-            if item and item.widget():
-                widget = item.widget()
-                if hasattr(widget, 'mod_data') and hasattr(widget, 'use_button'):
-                    widget_mod_data = getattr(widget, 'mod_data', None)
-                    if widget_mod_data:
-                        widget_mod_key = get_mod_key(widget_mod_data)
-                        current_mod_key = get_mod_key(mod_data)
-                        if widget_mod_key == current_mod_key:
-                            mod_widget = widget
-                            break
-        status = getattr(mod_widget, 'status', 'ready') if mod_widget else 'ready'
-        if status == 'needs_update':
-            self.mod_manager.update_mod(mod_data)
-            return
         if is_demo_mode(self.app_state.game_mode):
             target_chapter_id = SLOT_ID_DEMO
         elif hasattr(mod_data, 'modgame') and mod_data.modgame == 'undertale':
             target_chapter_id = SLOT_ID_UNDERTALE
         else:
             target_chapter_id = SLOT_ID_UNIVERSAL
-        self.slot_manager.set_used_mod(target_chapter_id, mod_data)
-        self.update_mod_widgets_slot_status()
-        self._update_priority_button_visibility()
-        if mod_widget:
-            mod_widget.set_selected(False)
+        self._handle_mod_use(mod_data, target_chapter_id)
 
-    def on_chapter_mode_mod_use(self, mod_data, chapter_id):
+    def _handle_mod_use(self, mod_data, chapter_id):
         mod_widget = None
         for i in range(self.app.installed_mods_layout.count()):
             item = self.app.installed_mods_layout.itemAt(i)
@@ -328,7 +307,10 @@ class LibraryDisplayController:
         self.slot_manager.set_used_mod(chapter_id, mod_data)
         self.update_mod_widgets_slot_status()
         self._update_priority_button_visibility(chapter_id)
-        self.update_for_chapter_mode(chapter_id)
+        if mod_widget:
+            mod_widget.set_selected(False)
+        if hasattr(self.app, 'chapter_mode_checkbox') and self.app.chapter_mode_checkbox.isChecked():
+            self.update_for_chapter_mode(chapter_id)
 
     def clear_all_selections(self):
         for i in range(self.app.installed_mods_layout.count() - 1):

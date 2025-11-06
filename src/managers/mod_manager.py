@@ -38,10 +38,11 @@ class ModManager(QObject):
     installation_finished = pyqtSignal(bool, str)
     url_prompt_required = pyqtSignal(str, str)
 
-    def __init__(self, app_state, feedback_manager, parent=None):
+    def __init__(self, app_state, feedback_manager, settings_manager=None, parent=None):
         super().__init__(parent)
         self.app_state = app_state
         self.feedback_manager = feedback_manager
+        self.settings_manager = settings_manager
         self._cache_lock = threading.RLock()
         self._mods_cache: Dict[str, ModFolderInfo] = {}
         self._mods_by_name: Dict[str, str] = {}
@@ -49,7 +50,7 @@ class ModManager(QObject):
         self._scan_thread: Optional[ModScanThread] = None
         self._scan_in_progress = False
 
-    def _scan_mods_directory(self, old_cache: Dict[str, ModFolderInfo] = None) -> Dict[str, ModFolderInfo]:
+    def _scan_mods_directory(self, old_cache: Optional[Dict[str, ModFolderInfo]] = None) -> Dict[str, ModFolderInfo]:
         cache: Dict[str, ModFolderInfo] = {}
         if old_cache is None:
             old_cache = {}
@@ -294,8 +295,7 @@ class ModManager(QObject):
                             for ef_data in ch_info.get('extra_files', []):
                                 if isinstance(ef_data, dict):
                                     try:
-                                        ExtraFileClass = globals()['ModExtraFile']
-                                        extra_files_list.append(ExtraFileClass(key=ef_data.get('key', ''), version=ef_data.get('version', ''), url=ef_data.get('url', '')))
+                                        extra_files_list.append(mod_models.ModExtraFile(key=ef_data.get('key', ''), version=ef_data.get('version', ''), url=ef_data.get('url', '')))
                                     except (KeyError, TypeError, ValueError) as e:
                                         logging.debug(f'load_local_mods: failed to parse extra_file: {e}')
                             valid_chapter_fields = {'description': ch_info.get('description'), 'data_file_url': ch_info.get('data_file_url'), 'data_file_version': ch_info.get('data_file_version'), 'extra_files': extra_files_list}
@@ -679,8 +679,11 @@ class ModManager(QObject):
             if not os.path.exists(self.app_state.mods_metadata_path):
                 return {}
             try:
-                with open(self.app_state.mods_metadata_path, 'r', encoding='utf-8') as f:
-                    return json.load(f) or {}
+                if self.settings_manager:
+                    return self.settings_manager.read_json(self.app_state.mods_metadata_path) or {}
+                else:
+                    with open(self.app_state.mods_metadata_path, 'r', encoding='utf-8') as f:
+                        return json.load(f) or {}
             except Exception as e:
                 logging.warning(f'_read_metadata: failed: {e}', exc_info=True)
                 return {}
@@ -688,8 +691,11 @@ class ModManager(QObject):
     def _write_metadata(self, data: Dict):
         with self.app_state._mods_metadata_lock:
             try:
-                with open(self.app_state.mods_metadata_path, 'w', encoding='utf-8') as f:
-                    json.dump(data, f, ensure_ascii=False, indent=2)
+                if self.settings_manager:
+                    self.settings_manager.write_json(self.app_state.mods_metadata_path, data)
+                else:
+                    with open(self.app_state.mods_metadata_path, 'w', encoding='utf-8') as f:
+                        json.dump(data, f, ensure_ascii=False, indent=2)
             except Exception as e:
                 logging.error(f'_write_metadata: failed: {e}', exc_info=True)
 
