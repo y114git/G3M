@@ -327,13 +327,13 @@ class PluginManager(QObject):
             if status == 'enabled':
                 loaded_plugin = next((p for p in self.app_state.plugins if p.get('name') == item_name), None)
                 if loaded_plugin:
-                    if loaded_plugin.get('name_key'):
+                    if not plugin_info.get('name_key') and loaded_plugin.get('name_key'):
                         plugin_info['name_key'] = loaded_plugin.get('name_key')
-                    if loaded_plugin.get('version'):
+                    if not plugin_info.get('version') and loaded_plugin.get('version'):
                         plugin_info['version'] = loaded_plugin.get('version')
-                    if loaded_plugin.get('author'):
+                    if not plugin_info.get('author') and loaded_plugin.get('author'):
                         plugin_info['author'] = loaded_plugin.get('author')
-                    if loaded_plugin.get('description'):
+                    if not plugin_info.get('description') and loaded_plugin.get('description'):
                         plugin_info['description'] = loaded_plugin.get('description')
                     plugin_info['tab_hide'] = loaded_plugin.get('tab_hide', False)
             all_plugins.append(plugin_info)

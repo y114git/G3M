@@ -42,22 +42,23 @@ class PluginWidget(QFrame):
         self.name_label = QLabel(name_text)
         self.name_label.setStyleSheet('font-size: 16px; font-weight: bold;')
         title_layout.addWidget(self.name_label)
-        version_container = QWidget()
-        version_container_layout = QHBoxLayout(version_container)
+        self.version_container = QWidget()
+        version_container_layout = QHBoxLayout(self.version_container)
         version_container_layout.setContentsMargins(0, 0, 0, 0)
         version_container_layout.setSpacing(5)
         version = self.plugin_info.get('version')
+        self.version_label = None
         if version:
-            version_label = QLabel(f'({version})')
-            version_label.setObjectName('versionLabel')
-            version_label.setStyleSheet('font-size: 16px;')
-            version_container_layout.addWidget(version_label)
+            self.version_label = QLabel(f'({version})')
+            self.version_label.setObjectName('versionLabel')
+            self.version_label.setStyleSheet('font-size: 16px;')
+            version_container_layout.addWidget(self.version_label)
         self.status_indicator = QLabel('●')
         self.status_indicator.setFixedSize(16, 16)
         self.status_indicator.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._update_status_indicator()
         version_container_layout.addWidget(self.status_indicator)
-        title_layout.addWidget(version_container)
+        title_layout.addWidget(self.version_container)
         title_layout.addStretch()
         info_layout.addLayout(title_layout)
         metadata_layout = QHBoxLayout()
@@ -203,6 +204,24 @@ class PluginWidget(QFrame):
         self.plugin_info = plugin_info
         self._update_status_indicator()
         self._update_toggle_button()
+        if hasattr(self, 'name_label'):
+            name_key = self.plugin_info.get('name_key', self.plugin_name)
+            name_text = tr(name_key) if name_key else self.plugin_name
+            self.name_label.setText(name_text)
+        version = self.plugin_info.get('version')
+        if hasattr(self, 'version_label') and self.version_label:
+            if version:
+                self.version_label.setText(f'({version})')
+                self.version_label.setVisible(True)
+            else:
+                self.version_label.setVisible(False)
+        elif version and hasattr(self, 'version_container'):
+            version_container_layout = self.version_container.layout()
+            if version_container_layout and isinstance(version_container_layout, QHBoxLayout):
+                self.version_label = QLabel(f'({version})')
+                self.version_label.setObjectName('versionLabel')
+                self.version_label.setStyleSheet('font-size: 16px;')
+                version_container_layout.insertWidget(0, self.version_label)
         author = self.plugin_info.get('author')
         if hasattr(self, 'author_container') and self.author_container:
             if author:

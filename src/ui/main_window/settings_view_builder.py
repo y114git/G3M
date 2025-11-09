@@ -1,4 +1,5 @@
 from typing import Dict, Any
+import platform
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QFrame, QLabel, QPushButton, QCheckBox, QLineEdit, QTextBrowser, QSizePolicy
 from managers.localization_manager import localization_manager, tr
