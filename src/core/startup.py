@@ -279,6 +279,8 @@ def run_app():
                     return
                 ex.show()
                 ex.is_shown_to_user = True
+                if hasattr(ex, 'app_state'):
+                    ex.app_state.is_shown_to_user = True
                 ex.activateWindow()
                 ex.raise_()
                 ex.setWindowState(ex.windowState() & ~Qt.WindowState.WindowMinimized | Qt.WindowState.WindowActive)

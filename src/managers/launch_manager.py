@@ -168,8 +168,16 @@ class GameLauncher(QObject):
                 command = [target_path]
                 if system == 'Linux' and target_path.lower().endswith('.exe'):
                     is_steam_launch = self.app_state.local_config.get('launch_via_steam', False)
+                    use_portproton = self.app_state.local_config.get('use_portproton', False)
                     if not is_steam_launch:
-                        command.insert(0, 'wine')
+                        if use_portproton:
+                            portproton_path = self.app_state.local_config.get('portproton_path', '')
+                            if portproton_path:
+                                command = [portproton_path, 'run', target_path]
+                            else:
+                                command = ['portproton', 'run', target_path]
+                        else:
+                            command.insert(0, 'wine')
                 creationflags = 0
                 if system == 'Windows':
                     creationflags = 8

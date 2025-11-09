@@ -5,6 +5,8 @@ from PyQt6.QtCore import Qt
 
 # --- Plugin Metadata ---
 PLUGIN_NAME = "system_monitor_tab_title"
+VERSION = "1.0.0"
+DESCRIPTION = "Displays system monitoring information in a tab"
 TAB_HIDE = False
 
 # --- Localization ---

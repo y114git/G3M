@@ -3,6 +3,8 @@ import logging
 
 # --- Plugin Metadata ---
 PLUGIN_NAME = "background_logger_name"
+VERSION = "1.0.0"
+DESCRIPTION = "Logs game launch and exit events to a file"
 TAB_HIDE = True
 
 # --- Localization ---

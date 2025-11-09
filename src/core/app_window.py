@@ -36,6 +36,7 @@ from managers.settings_manager import SettingsManager
 from managers.save_manager import SaveManager
 from ui.main_window.search_tab_builder import SearchTabBuilder
 from ui.main_window.library_tab_builder import LibraryTabBuilder
+from ui.main_window.plugin_tab_builder import PluginTabBuilder
 from ui.main_window.settings_view_builder import SettingsViewBuilder
 from ui.main_window.save_manager_view_builder import SaveManagerViewBuilder
 from managers.plugin_manager import PluginManager
@@ -69,6 +70,7 @@ class AppWindow(QWidget):
         self.app_state.mods_dir = get_user_mods_dir()
         self.app_state.plugins_dir = get_user_plugins_dir()
         self.app_state.mods_metadata_path = os.path.join(self.app_state.mods_dir, 'metadata.json')
+        self.app_state.plugins_metadata_path = os.path.join(self.app_state.plugins_dir, 'metadata.json')
         os.makedirs(self.app_state.config_dir, exist_ok=True)
         os.makedirs(self.app_state.mods_dir, exist_ok=True)
         os.makedirs(self.app_state.plugins_dir, exist_ok=True)
@@ -134,7 +136,8 @@ class AppWindow(QWidget):
         self.update_checker.update_finished.connect(self._on_update_cleanup)
         self.update_checker.update_error.connect(lambda msg: self.feedback_manager.show_message('error', 'errors.error', msg))
         self.update_checker.quit_requested.connect(QApplication.quit)
-        self.plugin_manager = PluginManager(self.app_state, self)
+        self.plugin_manager = PluginManager(self.app_state, self.settings_manager, self)
+        self.plugin_manager.app_window = self
         self.customization_manager = CustomizationManager(self.app_state, self)
         self.slot_manager = UsedModsManager(self.app_state, self.mod_manager, self.feedback_manager, self.settings_manager, self)
         self.slot_manager.used_mods_updated.connect(self._on_slot_manager_used_mods_updated)
@@ -214,7 +217,37 @@ class AppWindow(QWidget):
         if self.app_state.is_installing:
             self.feedback_manager.show_message('warning', 'dialogs.install_in_progress_title', tr('dialogs.install_in_progress_body'))
             return
-        self.mod_manager.install_from_url(url)
+        if url.startswith('deltahub://'):
+            content = url[len('deltahub://'):].split(',')[0].strip().rstrip('/')
+            if not content.startswith(('http://', 'https://')):
+                content = content.replace('https//', 'https://').replace('http//', 'http://')
+            download_url = content
+            from workers.plugin_install_worker import PluginInstallWorker
+            worker = PluginInstallWorker(download_url, self.app_state.plugins_dir, self.plugin_manager, self)
+            worker.status.connect(lambda msg, color: self.feedback_manager.update_status(msg, color))
+            worker.progress.connect(lambda p: setattr(self.app_state, 'progress_bar_value', p))
+
+            def on_finished(success, message):
+                self.app_state.is_installing = False
+                self.app_state.progress_bar_visible = False
+                self.app_state.progress_bar_value = 0
+                self.app_state.clear_current_task()
+                if success:
+                    self.feedback_manager.update_status(message, UI_COLORS['status_success'])
+                    if hasattr(self, '_update_plugin_tabs'):
+                        self._update_plugin_tabs()
+                    if hasattr(self, 'plugin_display'):
+                        self.plugin_display.update_display()
+                else:
+                    self.mod_manager.install_from_url(url)
+            worker.finished.connect(on_finished)
+            self.app_state.is_installing = True
+            self.app_state.progress_bar_visible = True
+            self.app_state.progress_bar_value = 0
+            self.app_state.current_task = worker
+            worker.start()
+        else:
+            self.mod_manager.install_from_url(url)
 
     def _on_url_install_finished(self, success: bool, message: str):
         self.app_state.is_installing = False
@@ -431,6 +464,20 @@ class AppWindow(QWidget):
         self.create_modpack_button = library_widgets.get('create_modpack_button')
         if self.create_modpack_button:
             self.create_modpack_button.clicked.connect(self.library_display.on_create_modpack_button_click)
+        plugin_builder = PluginTabBuilder(self.app_state, self)
+        self.plugin_tab_builder = plugin_builder
+        self.plugins_tab = plugin_builder.build()
+        plugin_widgets = plugin_builder.get_widgets()
+        self.plugins_search_button = plugin_widgets['search_button']
+        self.plugins_import_button = plugin_widgets['import_button']
+        self.plugins_container = plugin_widgets['plugins_container']
+        self.plugins_scroll = plugin_widgets['plugins_scroll']
+        self.plugins_widget = plugin_widgets['plugins_widget']
+        self.plugins_layout = plugin_widgets['plugins_layout']
+        from controllers.plugin_display_controller import PluginDisplayController
+        self.plugin_display = PluginDisplayController(self.app_state, self.feedback_manager, self.plugin_manager, self)
+        self.plugins_search_button.clicked.connect(self.plugin_display.on_search_plugins)
+        self.plugins_import_button.clicked.connect(self.plugin_display.on_import_plugin)
         self.library_sort_combo = library_widgets['library_sort_combo']
         self.library_sort_order_btn = library_widgets['library_sort_order_btn']
         self.library_tags_label = library_widgets['library_tags_label']
@@ -512,6 +559,7 @@ class AppWindow(QWidget):
         QTimer.singleShot(700, self.library_display.update_mod_widgets_slot_status)
         self.main_tab_widget.addTab(self.search_mods_tab, tr('ui.search_tab'))
         self.main_tab_widget.addTab(self.library_tab, tr('ui.library_tab'))
+        self.main_tab_widget.addTab(self.plugins_tab, tr('ui.plugins_tab'))
         self.manage_mods_tab = QWidget()
         self.main_tab_widget.addTab(self.manage_mods_tab, tr('ui.mod_management'))
         self.xdelta_patch_tab = QWidget()
@@ -537,6 +585,10 @@ class AppWindow(QWidget):
         self.fullscreen_checkbox = settings_widgets['fullscreen_checkbox']
         self.hide_library_filters_checkbox = settings_widgets['hide_library_filters_checkbox']
         self.launch_via_steam_checkbox = settings_widgets['launch_via_steam_checkbox']
+        self.use_portproton_checkbox = settings_widgets.get('use_portproton_checkbox')
+        self.select_portproton_path_button = settings_widgets.get('select_portproton_path_button')
+        self.portproton_path_label = settings_widgets.get('portproton_path_label')
+        self.portproton_frame = settings_widgets.get('portproton_frame')
         self.use_custom_executable_checkbox = settings_widgets['use_custom_executable_checkbox']
         self.select_custom_executable_button = settings_widgets['select_custom_executable_button']
         self.custom_executable_path_label = settings_widgets['custom_executable_path_label']
@@ -566,6 +618,11 @@ class AppWindow(QWidget):
         self.fullscreen_checkbox.stateChanged.connect(self.settings_ui.on_toggle_fullscreen)
         self.hide_library_filters_checkbox.stateChanged.connect(self.settings_ui.on_toggle_hide_library_filters)
         self.launch_via_steam_checkbox.stateChanged.connect(self.settings_ui.on_toggle_steam_launch)
+        if self.use_portproton_checkbox:
+            self.use_portproton_checkbox.stateChanged.connect(self.settings_ui.on_toggle_portproton)
+            self.use_portproton_checkbox.stateChanged.connect(self._update_portproton_ui)
+        if self.select_portproton_path_button:
+            self.select_portproton_path_button.clicked.connect(self._select_portproton_path)
         self.use_custom_executable_checkbox.stateChanged.connect(self.settings_ui.on_toggle_custom_executable)
         self.select_custom_executable_button.clicked.connect(self._select_custom_executable_file)
         self.change_path_button.clicked.connect(self._prompt_for_game_path)
@@ -936,6 +993,9 @@ class AppWindow(QWidget):
         self.settings_manager.migrate_config_if_needed()
         self.use_custom_executable_checkbox.setChecked(self.app_state.local_config.get('use_custom_executable', False))
         self.launch_via_steam_checkbox.setChecked(self.app_state.local_config.get('launch_via_steam', False))
+        if self.use_portproton_checkbox:
+            self.use_portproton_checkbox.setChecked(self.app_state.local_config.get('use_portproton', False))
+            self._update_portproton_ui()
         self._initialize_mutual_exclusions()
         self.settings_ui.on_toggle_steam_launch()
         self.theme.apply_theme()
@@ -953,12 +1013,21 @@ class AppWindow(QWidget):
 
     def _handle_update_info(self, update_info, retry_count=0):
         max_retries = 15
-        if self.app_state.initialization_completed and self.app_state.is_shown_to_user:
+        init_completed = self.app_state.initialization_completed
+        is_shown = self.app_state.is_shown_to_user
+        is_visible = self.isVisible() if hasattr(self, 'isVisible') else False
+        logging.info(f'_handle_update_info: retry_count={retry_count}, initialization_completed={init_completed}, is_shown_to_user={is_shown}, is_visible={is_visible}')
+        if init_completed and (is_shown or is_visible):
+            logging.info(f"_handle_update_info: Conditions met, showing update prompt for version {update_info.get('version', 'unknown')}")
+            if is_visible and (not is_shown):
+                self.app_state.is_shown_to_user = True
+                logging.info('_handle_update_info: Set app_state.is_shown_to_user=True because window is visible')
             self.show_update_prompt.emit(update_info)
         elif retry_count < max_retries:
+            logging.debug(f'_handle_update_info: Conditions not met, retrying in 1 second (retry {retry_count + 1}/{max_retries})')
             QTimer.singleShot(1000, lambda: self._handle_update_info(update_info, retry_count + 1))
         else:
-            logging.warning('Update dialog: conditions not met after max retries, showing dialog anyway')
+            logging.warning(f'Update dialog: conditions not met after max retries (init_completed={init_completed}, is_shown={is_shown}, is_visible={is_visible}), showing dialog anyway')
             self.show_update_prompt.emit(update_info)
 
     def _maybe_run_legacy_cleanup(self):
@@ -1049,6 +1118,25 @@ class AppWindow(QWidget):
         if self.custom_exe_frame.isVisible():
             self.custom_executable_path_label.setText(tr('ui.currently_selected', filename=os.path.basename(path)) if path else tr('ui.file_not_selected'))
 
+    def _select_portproton_path(self):
+        if not self.select_portproton_path_button:
+            return
+        filepath = self.settings_manager.select_portproton_path()
+        if filepath:
+            self._update_portproton_ui()
+
+    def _update_portproton_ui(self):
+        if not self.portproton_frame or not self.portproton_path_label:
+            return
+        use_portproton = self.app_state.local_config.get('use_portproton', False)
+        path = self.app_state.local_config.get('portproton_path', '')
+        self.portproton_frame.setVisible(use_portproton and (self.use_portproton_checkbox.isEnabled() if self.use_portproton_checkbox else False))
+        if self.portproton_frame.isVisible():
+            if path:
+                self.portproton_path_label.setText(tr('ui.currently_selected', filename=os.path.basename(path)))
+            else:
+                self.portproton_path_label.setText(tr('ui.file_not_selected') + ' (using PATH)')
+
     def _on_slot_manager_used_mods_updated(self):
         import logging
         logging.debug('Used mods updated, refreshing UI')
@@ -1111,10 +1199,12 @@ class AppWindow(QWidget):
         self.saves_button.setText(tr('ui.saves_button'))
         self.main_tab_widget.setTabText(0, tr('ui.search_tab'))
         self.main_tab_widget.setTabText(1, tr('ui.library_tab'))
-        if hasattr(self, 'manage_mods_tab'):
-            self.main_tab_widget.setTabText(2, tr('ui.mod_management'))
-        if hasattr(self, 'xdelta_patch_tab'):
-            self.main_tab_widget.setTabText(3, tr('ui.patching_tab'))
+        if hasattr(self, 'plugins_tab') and self.main_tab_widget.count() > 2:
+            self.main_tab_widget.setTabText(2, tr('ui.plugins_tab'))
+        if hasattr(self, 'manage_mods_tab') and self.main_tab_widget.count() > 3:
+            self.main_tab_widget.setTabText(3, tr('ui.mod_management'))
+        if hasattr(self, 'xdelta_patch_tab') and self.main_tab_widget.count() > 4:
+            self.main_tab_widget.setTabText(4, tr('ui.patching_tab'))
         self.sort_combo.setItemText(0, tr('ui.sort_by_downloads'))
         self.sort_combo.setItemText(1, tr('ui.sort_by_update_date'))
         self.sort_combo.setItemText(2, tr('ui.sort_by_creation_date'))
@@ -1149,6 +1239,11 @@ class AppWindow(QWidget):
         self.fullscreen_checkbox.setToolTip(tr('tooltips.fullscreen_tooltip'))
         self.launch_via_steam_checkbox.setText(tr('ui.steam_launch'))
         self.launch_via_steam_checkbox.setToolTip("<html><body style='white-space: normal;'>" + tr('tooltips.steam') + '</body></html>')
+        if self.use_portproton_checkbox:
+            self.use_portproton_checkbox.setText(tr('ui.use_portproton'))
+            self.use_portproton_checkbox.setToolTip("<html><body style='white-space: normal;'>" + tr('tooltips.portproton') + '</body></html>')
+        if self.select_portproton_path_button:
+            self.select_portproton_path_button.setText(tr('buttons.select_portproton_path'))
         self.use_custom_executable_checkbox.setText(tr('ui.custom_executable'))
         self.use_custom_executable_checkbox.setToolTip("<html><body style='white-space: normal;'>" + tr('tooltips.custom_exe') + '</body></html>')
         self.select_custom_executable_button.setText(tr('buttons.select_file'))
@@ -1227,12 +1322,21 @@ class AppWindow(QWidget):
                         if isinstance(w, QWidget) and w.layout() is None:
                             handler = current_plugin.get('page_init') if callable(current_plugin.get('page_init')) else current_plugin.get('on_tab_open')
                             try:
-                                new_widget = handler(self) if callable(handler) else None
-                                if isinstance(new_widget, QWidget):
-                                    self.main_tab_widget.removeTab(current_index)
-                                    self.main_tab_widget.insertTab(current_index, new_widget, tr(current_plugin['name_key']))
-                                    self.main_tab_widget.setCurrentIndex(current_index)
+                                plugin_api = current_plugin.get('api')
+                                if plugin_api:
+                                    setattr(self, 'plugin_api', plugin_api)
+                                try:
+                                    new_widget = handler(self) if callable(handler) else None
+                                    if isinstance(new_widget, QWidget):
+                                        self.main_tab_widget.removeTab(current_index)
+                                        self.main_tab_widget.insertTab(current_index, new_widget, tr(current_plugin['name_key']))
+                                        self.main_tab_widget.setCurrentIndex(current_index)
+                                finally:
+                                    if hasattr(self, 'plugin_api'):
+                                        delattr(self, 'plugin_api')
                             except Exception:
+                                if hasattr(self, 'plugin_api'):
+                                    delattr(self, 'plugin_api')
                                 pass
             except Exception:
                 pass
@@ -1257,6 +1361,16 @@ class AppWindow(QWidget):
             if self.app_state.is_save_manager_view:
                 self.save_ui.refresh_slots()
             self.game_launch.update_button_state()
+            if hasattr(self, 'plugins_search_button'):
+                self.plugins_search_button.setText(tr('plugins.search_plugins'))
+            if hasattr(self, 'plugins_import_button'):
+                self.plugins_import_button.setText(tr('plugins.import_plugins'))
+            if hasattr(self, 'plugin_tab_builder') and hasattr(self.plugin_tab_builder, 'widgets'):
+                widgets = self.plugin_tab_builder.widgets
+                if 'installed_plugins_label' in widgets:
+                    widgets['installed_plugins_label'].setText(tr('plugins.installed_plugins'))
+            if hasattr(self, 'plugin_display'):
+                self.plugin_display.retranslate_plugin_widgets()
             self.update()
         finally:
             self._suppress_tab_handlers = False
@@ -1476,19 +1590,24 @@ class AppWindow(QWidget):
         if self._handling_plugin_tab:
             return
         self._handling_plugin_tab = True
-        self._plugin_tab_map = self.plugin_manager.update_plugin_tabs(self.main_tab_widget, num_original_tabs=4)
+        self._plugin_tab_map = self.plugin_manager.update_plugin_tabs(self.main_tab_widget, num_original_tabs=5)
         self._handling_plugin_tab = False
 
     def _on_tab_changed(self, index):
-        num_original_tabs = 4
+        num_original_tabs = 5
         if getattr(self, '_suppress_tab_handlers', False):
             self.previous_tab_index = index
             return
         if index == 2:
+            if hasattr(self, 'plugin_display'):
+                self.plugin_display.update_display()
+            self.previous_tab_index = index
+            return
+        if index == 3:
             self.main_tab_widget.setCurrentIndex(self.previous_tab_index)
             self.mod_ops.show_mod_management_dialog()
             return
-        if index == 3:
+        if index == 4:
             self.main_tab_widget.setCurrentIndex(self.previous_tab_index)
             self.mod_ops.show_xdelta_patch_dialog()
             return
@@ -1523,7 +1642,14 @@ class AppWindow(QWidget):
                         new_widget = None
                         handler = plugin.get('page_init') if callable(plugin.get('page_init')) else plugin.get('on_tab_open')
                         if callable(handler):
-                            new_widget = handler(self)
+                            plugin_api = plugin.get('api')
+                            if plugin_api:
+                                setattr(self, 'plugin_api', plugin_api)
+                            try:
+                                new_widget = handler(self)
+                            finally:
+                                if hasattr(self, 'plugin_api'):
+                                    delattr(self, 'plugin_api')
                         if isinstance(new_widget, QWidget):
                             self.main_tab_widget.removeTab(index)
                             self.main_tab_widget.insertTab(index, new_widget, tr(plugin['name_key']))
@@ -1535,6 +1661,8 @@ class AppWindow(QWidget):
                         logging.error(f"Error running plugin '{plugin['name_key']}': {e}")
                         self.feedback_manager.show_message('error', 'errors.error', f"Failed to run plugin '{tr(plugin['name_key'])}':\n{e}")
                         self.main_tab_widget.setCurrentIndex(self.previous_tab_index)
+                        if hasattr(self, 'plugin_api'):
+                            delattr(self, 'plugin_api')
                     finally:
                         self._handling_plugin_tab = False
                     return
@@ -1548,11 +1676,15 @@ class AppWindow(QWidget):
 
     def _prompt_for_update(self, update_info):
         from config.constants import LAUNCHER_VERSION, UI_COLORS
+        logging.info(f"_prompt_for_update called with version {update_info.get('version', 'unknown')}")
         if self.app_state.update_in_progress:
+            logging.warning('_prompt_for_update: Update already in progress, ignoring')
             return
         if self.app_state.game_is_running:
+            logging.info('_prompt_for_update: Game is running, adding to pending dialogs')
             self.app_state.pending_dialogs.append(('update', update_info))
             return
+        logging.info('_prompt_for_update: Showing update dialog')
         self.app_state.update_in_progress = True
         update_message = f"<b>{tr('dialogs.new_version_banner', version=update_info['version']).replace('<br>', '')}</b><br>"
         update_message += tr('dialogs.current_version_banner', current_version=LAUNCHER_VERSION).replace('<br><br>', '') + '<br><br>'
@@ -1563,10 +1695,12 @@ class AppWindow(QWidget):
         update_message += f"<b>{tr('dialogs.whats_new')}</b><br>{message_text}<br><br>"
         update_message += tr('dialogs.want_download_install_now') + tr('dialogs.app_will_restart')
         if self.feedback_manager.ask_question('status.update_available', 'status.update_available', update_message, True):
+            logging.info('_prompt_for_update: User accepted update')
             if hasattr(self, '_perform_update_ui_prep'):
                 self._perform_update_ui_prep()
             self.update_checker.perform_update(update_info)
         else:
+            logging.info('_prompt_for_update: User rejected update')
             self.app_state.update_in_progress = False
             self.feedback_manager.update_status(tr('status.update_rejected'), UI_COLORS['status_info'])
 

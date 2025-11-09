@@ -36,6 +36,7 @@ class AppState(QObject):
         self.mods_dir: str = ''
         self.plugins_dir: str = ''
         self.mods_metadata_path: str = ''
+        self.plugins_metadata_path: str = ''
         self.config_path: str = ''
         self.save_path: str = ''
         self.all_mods: List[ModInfo] = []

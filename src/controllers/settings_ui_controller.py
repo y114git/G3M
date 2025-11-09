@@ -84,6 +84,10 @@ class SettingsUiController:
         callbacks = {'migrate_config': lambda: (self.app._load_local_data(), self.settings_manager.migrate_config_if_needed())}
         self.settings_manager.on_reset_settings_click(callbacks)
         self.app.launch_via_steam_checkbox.setChecked(False)
+        if hasattr(self.app, 'use_portproton_checkbox') and self.app.use_portproton_checkbox:
+            self.app.use_portproton_checkbox.setChecked(False)
+            if hasattr(self.app, '_update_portproton_ui'):
+                self.app._update_portproton_ui()
         self.app.use_custom_executable_checkbox.setChecked(False)
         self.app.chapter_mode_checkbox.setChecked(False)
         self.app.beta_updates_checkbox.setChecked(False)
@@ -183,6 +187,12 @@ class SettingsUiController:
                 return
         self.settings_manager.on_toggle_steam_launch(is_steam_launch)
         self.app._update_custom_executable_ui()
+
+    def on_toggle_portproton(self):
+        use_portproton = self.app.use_portproton_checkbox.isChecked() if hasattr(self.app, 'use_portproton_checkbox') and self.app.use_portproton_checkbox else False
+        self.settings_manager.on_toggle_portproton(use_portproton)
+        if hasattr(self.app, '_update_portproton_ui'):
+            self.app._update_portproton_ui()
 
     def on_toggle_custom_executable(self):
         use_custom = self.app.use_custom_executable_checkbox.isChecked()

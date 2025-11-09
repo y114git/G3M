@@ -2,6 +2,8 @@ from PyQt6.QtWidgets import QMessageBox
 
 # --- Plugin Metadata ---
 PLUGIN_NAME = "window_opener_tab_title"
+VERSION = "1.0.0"
+DESCRIPTION = "Opens a message box when the plugin tab is clicked"
 TAB_HIDE = False
 
 # --- Localization ---
