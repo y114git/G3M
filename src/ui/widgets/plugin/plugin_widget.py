@@ -62,6 +62,21 @@ class PluginWidget(QFrame):
         info_layout.addLayout(title_layout)
         metadata_layout = QHBoxLayout()
         metadata_layout.setSpacing(10)
+        author = self.plugin_info.get('author')
+        self.author_container = None
+        self.author_label_value = None
+        if author:
+            self.author_container = QWidget()
+            author_container_layout = QHBoxLayout(self.author_container)
+            author_container_layout.setContentsMargins(0, 0, 0, 0)
+            author_container_layout.setSpacing(0)
+            self.author_label_title = QLabel(tr('ui.author_label'))
+            self.author_label_title.setObjectName('primaryText')
+            self.author_label_value = QLabel(f' {author}')
+            self.author_label_value.setObjectName('secondaryText')
+            author_container_layout.addWidget(self.author_label_title)
+            author_container_layout.addWidget(self.author_label_value)
+            metadata_layout.addWidget(self.author_container)
         installed_date = self.plugin_info.get('installed_date')
         self.installed_container = None
         self.installed_label_title = None
@@ -188,6 +203,35 @@ class PluginWidget(QFrame):
         self.plugin_info = plugin_info
         self._update_status_indicator()
         self._update_toggle_button()
+        author = self.plugin_info.get('author')
+        if hasattr(self, 'author_container') and self.author_container:
+            if author:
+                self.author_container.setVisible(True)
+                if hasattr(self, 'author_label_value') and self.author_label_value:
+                    self.author_label_value.setText(f' {author}')
+            else:
+                self.author_container.setVisible(False)
+        elif author:
+            for i in range(self.layout().count()):
+                item = self.layout().itemAt(i)
+                if item and item.layout():
+                    metadata_layout = item.layout()
+                    if isinstance(metadata_layout, QHBoxLayout):
+                        self.author_container = QWidget()
+                        author_container_layout = QHBoxLayout(self.author_container)
+                        author_container_layout.setContentsMargins(0, 0, 0, 0)
+                        author_container_layout.setSpacing(0)
+                        self.author_label_title = QLabel(tr('ui.author_label'))
+                        self.author_label_title.setObjectName('primaryText')
+                        self.author_label_value = QLabel(f' {author}')
+                        self.author_label_value.setObjectName('secondaryText')
+                        author_container_layout.addWidget(self.author_label_title)
+                        author_container_layout.addWidget(self.author_label_value)
+                        if hasattr(self, 'installed_container') and self.installed_container:
+                            metadata_layout.insertWidget(metadata_layout.indexOf(self.installed_container), self.author_container)
+                        else:
+                            metadata_layout.insertWidget(0, self.author_container)
+                        break
         if hasattr(self, 'description_label'):
             description = self.plugin_info.get('description')
             description_text = None
@@ -212,6 +256,8 @@ class PluginWidget(QFrame):
             name_key = self.plugin_info.get('name_key', self.plugin_name)
             name_text = tr(name_key) if name_key else self.plugin_name
             self.name_label.setText(name_text)
+        if hasattr(self, 'author_label_title') and self.author_label_title:
+            self.author_label_title.setText(tr('ui.author_label'))
         if hasattr(self, 'installed_label_title') and self.installed_label_title:
             self.installed_label_title.setText(tr('ui.installed_label'))
         if hasattr(self, 'delete_button'):

@@ -82,6 +82,9 @@ class PluginManager(QObject):
             version_match = re.search('VERSION\\s*=\\s*["\\\']([^"\\\']+)["\\\']', content)
             if version_match:
                 plugin_info['version'] = version_match.group(1)
+            author_match = re.search('AUTHOR\\s*=\\s*["\\\']([^"\\\']+)["\\\']', content)
+            if author_match:
+                plugin_info['author'] = author_match.group(1)
             desc_patterns = ['DESCRIPTION\\s*=\\s*["\\\']([^"\\\']+)["\\\']', 'DESCRIPTION\\s*=\\s*"""([^"]*)"""', "DESCRIPTION\\s*=\\s*'''([^']*)'''"]
             for pattern in desc_patterns:
                 desc_match = re.search(pattern, content, re.DOTALL)
@@ -222,6 +225,7 @@ class PluginManager(QObject):
                     spec.loader.exec_module(plugin_module)
                     plugin_display_name_key = getattr(plugin_module, 'PLUGIN_NAME', None)
                     version = getattr(plugin_module, 'VERSION', None)
+                    author = getattr(plugin_module, 'AUTHOR', None)
                     description = getattr(plugin_module, 'DESCRIPTION', None)
                     on_tab_open_function = getattr(plugin_module, 'on_tab_open', None)
                     page_init_function = getattr(plugin_module, 'page_init', None)
@@ -258,7 +262,7 @@ class PluginManager(QObject):
                     if self.app_window:
                         plugin_api = PluginAPI(self.app_state, self.app_window, plugin_name, self)
                         self._plugin_apis[plugin_name] = plugin_api
-                    plugin_info = {'name': plugin_name, 'name_key': plugin_display_name_key, 'version': version, 'description': description, 'module': plugin_module, 'on_tab_open': on_tab_open_function, 'page_init': page_init_function, 'tab_hide': tab_hide, 'path': plugin_path, 'installed_date': plugin_meta.get('installed_date'), 'status': 'enabled', 'api': plugin_api, **hooks}
+                    plugin_info = {'name': plugin_name, 'name_key': plugin_display_name_key, 'version': version, 'author': author, 'description': description, 'module': plugin_module, 'on_tab_open': on_tab_open_function, 'page_init': page_init_function, 'tab_hide': tab_hide, 'path': plugin_path, 'installed_date': plugin_meta.get('installed_date'), 'status': 'enabled', 'api': plugin_api, **hooks}
                     self.app_state.plugins.append(plugin_info)
                     logging.info(f'Successfully loaded plugin: {plugin_name}')
             except Exception as e:
@@ -327,6 +331,8 @@ class PluginManager(QObject):
                         plugin_info['name_key'] = loaded_plugin.get('name_key')
                     if loaded_plugin.get('version'):
                         plugin_info['version'] = loaded_plugin.get('version')
+                    if loaded_plugin.get('author'):
+                        plugin_info['author'] = loaded_plugin.get('author')
                     if loaded_plugin.get('description'):
                         plugin_info['description'] = loaded_plugin.get('description')
                     plugin_info['tab_hide'] = loaded_plugin.get('tab_hide', False)
