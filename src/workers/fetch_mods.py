@@ -1,75 +1,219 @@
 import json
 import os
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 import requests
 from utils.network_utils import get_session
 import logging
-from PyQt6.QtCore import QThread, pyqtSignal
-from config.constants import CLOUD_FUNCTIONS_BASE_URL, UI_COLORS
+from PyQt6.QtCore import QThread, pyqtSignal, QTimer
+from config.constants import CLOUD_FUNCTIONS_BASE_URL, UI_COLORS, GAMEBANANA_GAME_IDS, GAMEBANANA_PER_PAGE
 from managers.localization_manager import tr
 from models.mod_models import ModChapterData, ModExtraFile, ModInfo
 from utils.file_utils import version_sort_key
+logger = logging.getLogger(__name__)
 
 
 class FetchModsThread(QThread):
     result = pyqtSignal(bool)
     status = pyqtSignal(str, str)
 
-    def __init__(self, main_window, force_update=False, parent=None):
+    def __init__(self, main_window_or_context, force_update=False, parent=None):
         super().__init__(parent)
-        self.main_window = main_window
+        if hasattr(main_window_or_context, 'app_state'):
+            self.main_window = main_window_or_context
+        else:
+            self.main_window = type('MainWindowProxy', (), {'app_state': main_window_or_context.app_state, 'settings_manager': main_window_or_context.settings_manager})()
         self.force_update = force_update
 
     def run(self):
         try:
-            if not CLOUD_FUNCTIONS_BASE_URL:
-                self.status.emit('Cloud Functions URL not configured', 'red')
-                self.result.emit(False)
-                return
-            session = get_session()
-            response = session.get(f'{CLOUD_FUNCTIONS_BASE_URL}/getMods', timeout=15)
-            response.raise_for_status()
-            mods_json = response.json() or {}
-            all_mods = self._parse_mods(mods_json)
+            logger.info('FetchModsThread: Starting mod fetch')
+            all_mods = []
+            if CLOUD_FUNCTIONS_BASE_URL:
+                try:
+                    logger.info('FetchModsThread: Fetching mods from database')
+                    session = get_session()
+                    response = session.get(f'{CLOUD_FUNCTIONS_BASE_URL}/getMods', timeout=15)
+                    response.raise_for_status()
+                    mods_json = response.json() or {}
+                    all_mods = self._parse_mods(mods_json)
+                    logger.info(f'FetchModsThread: Parsed {len(all_mods)} mods from database')
+                except requests.RequestException as e:
+                    logger.warning(f'FetchModsThread: Failed to fetch from database: {e}')
+                    error_msg = tr('errors.update_list_failed').format(str(e))
+                    self.status.emit(error_msg, UI_COLORS['status_warning'])
+                except Exception as e:
+                    logger.error(f'FetchModsThread: Error parsing database mods: {e}', exc_info=True)
+            else:
+                logger.warning('FetchModsThread: CLOUD_FUNCTIONS_BASE_URL not configured')
+            try:
+                logger.info('FetchModsThread: Starting GameBanana fetch')
+                sort_param = getattr(self.main_window.app_state, 'gamebanana_sort', 'default')
+                metadata_cache = None
+                if hasattr(self.main_window, 'app_state') and hasattr(self.main_window.app_state, 'config_dir'):
+                    try:
+                        from utils.gamebanana_cache import GameBananaMetadataCache
+                        cache_dir = self.main_window.app_state.config_dir
+                        metadata_cache = GameBananaMetadataCache(cache_dir)
+                        logger.info(f'FetchModsThread: Initialized metadata cache in {cache_dir}')
+                    except Exception as e:
+                        logger.warning(f'FetchModsThread: Failed to initialize metadata cache: {e}', exc_info=True)
+
+                class GameBananaFetcher:
+
+                    def __init__(self, sort_param='default', metadata_cache=None):
+                        self.all_mods = []
+                        self.all_mods_needing_metadata = []
+                        self.api = None
+                        self.sort_param = sort_param
+                        self.metadata_cache = metadata_cache
+
+                    def fetch_mods(self, initial_pages: int = 3):
+                        from utils.gamebanana_api import GameBananaAPI
+                        from config.constants import GAMEBANANA_GAME_IDS
+                        self.api = GameBananaAPI()
+                        logger.info(f'GameBananaFetcher.fetch_mods: Starting fetch with sort={self.sort_param}, initial_pages={initial_pages}')
+                        for game_name, game_id in GAMEBANANA_GAME_IDS.items():
+                            if hasattr(self, 'status') and self.status:
+                                self.status(tr('status.fetching_gamebanana_mods', game=game_name.upper()), UI_COLORS['status_info'])
+                            game_mods, game_mods_needing_metadata = self._fetch_game_mods(game_name, game_id, start_page=1, num_pages=initial_pages, sort=self.sort_param)
+                            if game_mods:
+                                self.all_mods.extend(game_mods)
+                                self.all_mods_needing_metadata.extend(game_mods_needing_metadata)
+                                logger.info(f'GameBananaFetcher: Fetched {len(game_mods)} mods for {game_name} (pages 1-{initial_pages}), {len(game_mods_needing_metadata)} need metadata')
+                        logger.info(f'GameBananaFetcher.fetch_mods: Total fetched {len(self.all_mods)} mods')
+                        return (self.all_mods, self.all_mods_needing_metadata)
+
+                    def _fetch_game_mods(self, game_name: str, game_id: int, start_page: int = 1, num_pages: int = 3, sort: str = 'default') -> Tuple[List[ModInfo], List[str]]:
+                        mods = []
+                        mods_needing_metadata = []
+                        from config.constants import GAMEBANANA_PER_PAGE
+                        try:
+                            for page in range(start_page, start_page + num_pages):
+                                mods_data, page_mods_needing_metadata = self.api.get_game_mods(game_id, page=page, per_page=GAMEBANANA_PER_PAGE, sort=sort, metadata_cache=self.metadata_cache)
+                                if not mods_data:
+                                    logger.debug(f'No mods data for {game_name} page {page}')
+                                    break
+                                mods_needing_metadata.extend(page_mods_needing_metadata)
+                                for mod_data in mods_data:
+                                    try:
+                                        from utils.gamebanana_api import GameBananaAPI
+                                        mod_info = GameBananaAPI.mod_data_dict_to_mod_info(mod_data, game_name)
+                                        if mod_info:
+                                            mods.append(mod_info)
+                                    except Exception as e:
+                                        logger.warning(f'Error converting mod data: {e}', exc_info=True)
+                                        continue
+                                if len(mods_data) < GAMEBANANA_PER_PAGE:
+                                    break
+                                logger.debug(f'Fetched page {page} for {game_name}: {len(mods_data)} mods, {len(page_mods_needing_metadata)} need metadata')
+                        except Exception as e:
+                            logger.error(f'Error fetching mods for {game_name}: {e}', exc_info=True)
+                        return (mods, mods_needing_metadata)
+                fetcher = GameBananaFetcher(sort_param=sort_param, metadata_cache=metadata_cache)
+
+                def emit_status(msg, color):
+                    self.status.emit(msg, color)
+                fetcher.status = emit_status
+                initial_pages = 3
+                gamebanana_mods, mods_needing_metadata = fetcher.fetch_mods(initial_pages=initial_pages)
+                if gamebanana_mods:
+                    all_mods.extend(gamebanana_mods)
+                    logger.info(f'FetchModsThread: Added {len(gamebanana_mods)} GameBanana mods to list, {len(mods_needing_metadata)} need metadata')
+                    unique_mods_needing_metadata = list(set(mods_needing_metadata))
+                    if unique_mods_needing_metadata and metadata_cache:
+                        if hasattr(self.main_window, 'app_state'):
+                            if not hasattr(self.main_window.app_state, 'gamebanana_mods_needing_metadata'):
+                                self.main_window.app_state.gamebanana_mods_needing_metadata = []
+                            self.main_window.app_state.gamebanana_mods_needing_metadata = unique_mods_needing_metadata
+                    if hasattr(self.main_window, 'app_state'):
+                        for game_name, game_id in GAMEBANANA_GAME_IDS.items():
+                            game_mods_count = len([m for m in gamebanana_mods if hasattr(m, 'modgame') and m.modgame == game_name])
+                            pages_loaded = (game_mods_count - 1) // GAMEBANANA_PER_PAGE + 1 if game_mods_count > 0 else initial_pages
+                            self.main_window.app_state.gamebanana_loaded_pages[game_id] = pages_loaded
+            except Exception as e:
+                logger.error(f'FetchModsThread: Failed to fetch GameBanana mods: {e}', exc_info=True)
+            logger.info('FetchModsThread: Getting local mods')
             local_mods = self._get_local_mods()
-            self.main_window.app_state.all_mods = all_mods + local_mods
+            logger.info(f'FetchModsThread: Found {len(local_mods)} local mods to preserve')
+            installed_gamebanana_mod_keys = set()
+            installed_gamebanana_mod_ids = {}
+            if hasattr(self.main_window, 'mod_manager'):
+                try:
+                    installed_mods = self.main_window.mod_manager.get_installed_mods_list()
+                    for installed_mod in installed_mods:
+                        if installed_mod.get('is_gamebanana_mod') and installed_mod.get('gamebanana_mod_id'):
+                            mod_key = installed_mod.get('mod_key')
+                            mod_id = installed_mod.get('gamebanana_mod_id')
+                            if mod_key:
+                                installed_gamebanana_mod_keys.add(mod_key)
+                            if mod_id:
+                                installed_gamebanana_mod_ids[str(mod_id)] = mod_key
+                    logger.info(f'FetchModsThread: Found {len(installed_gamebanana_mod_keys)} installed GameBanana mods')
+                except Exception as e:
+                    logger.warning(f'FetchModsThread: Error getting installed GameBanana mods: {e}')
+            all_mods_filtered = []
+            for mod in all_mods:
+                if hasattr(mod, 'is_local_mod') and mod.is_local_mod:
+                    continue
+                all_mods_filtered.append(mod)
+            self.main_window.app_state.all_mods = all_mods_filtered + local_mods
             self._update_remote_exists_flags(all_mods)
+            logger.info('FetchModsThread: Mod fetch completed successfully')
             self.result.emit(True)
-        except requests.RequestException as e:
-            error_msg = tr('errors.update_list_failed').format(str(e))
-            self.status.emit(error_msg, UI_COLORS['status_error'])
-            self.result.emit(False)
         except Exception as e:
+            logger.error(f'FetchModsThread: Error in run: {e}', exc_info=True)
             self.status.emit(str(e), UI_COLORS['status_error'])
             self.result.emit(False)
 
     def _parse_mods(self, mods_json: Dict[str, Any]) -> List[ModInfo]:
         all_mods = []
+        logger.debug(f'_parse_mods: Parsing {len(mods_json)} mods from JSON')
+        parsed_count = 0
+        skipped_count = 0
         for key, data in mods_json.items():
             if not isinstance(data, dict):
+                skipped_count += 1
                 continue
-            mod = self._parse_single_mod(key, data)
-            if mod:
-                all_mods.append(mod)
+            try:
+                mod = self._parse_single_mod(key, data)
+                if mod:
+                    all_mods.append(mod)
+                    parsed_count += 1
+                else:
+                    skipped_count += 1
+                    logger.debug(f'_parse_mods: Skipped mod {key} - validation failed')
+            except Exception as e:
+                skipped_count += 1
+                logger.warning(f'_parse_mods: Error parsing mod {key}: {e}')
+        logger.info(f'_parse_mods: Parsed {parsed_count} mods, skipped {skipped_count}')
         return all_mods
 
     def _parse_single_mod(self, key: str, data: Dict[str, Any]) -> Optional[ModInfo]:
-        files_data = self._extract_files_data(data)
-        composite_version = self._aggregate_versions(files_data)
-        base_version = data.get('version')
-        modgame = data.get('modgame', 'deltarune')
-        if modgame == 'deltarune' and data.get('is_demo_mod', False):
-            modgame = 'deltarunedemo'
-        screens_list = data.get('screenshots_url', [])
-        if isinstance(screens_list, str):
-            screens_list = [s.strip() for s in screens_list.split(',') if s.strip()]
-        elif not isinstance(screens_list, list):
-            screens_list = []
-        mod = ModInfo(key=key, name=data.get('name', tr('status.unknown_mod')), author=data.get('author', tr('defaults.unknown')), version=f'{base_version}|{composite_version}' if base_version else composite_version, tagline=data.get('tagline', tr('status.no_description_status')), game_version=data.get('game_version', tr('defaults.not_specified')), description_url=data.get('description_url', ''), downloads=data.get('downloads', 0), modgame=modgame, is_verified=data.get('is_verified', False), icon_url=data.get('icon_url'), tags=data.get('tags', []), hide_mod=data.get('hide_mod', False), ban_status=data.get('ban_status', False), demo_url=files_data.get('demo', {}).get('url') if files_data else None, demo_version=files_data.get('demo', {}).get('version', '1.0.0') if files_data else '1.0.0', created_date=data.get('created_date'), last_updated=data.get('last_updated'), external_url=data.get('external_url'), screenshots_url=screens_list)
-        if self._process_mod_chapters(mod, files_data):
-            return mod
-        return None
+        try:
+            files_data = self._extract_files_data(data)
+            composite_version = self._aggregate_versions(files_data)
+            base_version = data.get('version')
+            modgame = data.get('modgame', 'deltarune')
+            if modgame == 'deltarune' and data.get('is_demo_mod', False):
+                modgame = 'deltarunedemo'
+            screens_list = data.get('screenshots_url', [])
+            if isinstance(screens_list, str):
+                screens_list = [s.strip() for s in screens_list.split(',') if s.strip()]
+            elif not isinstance(screens_list, list):
+                screens_list = []
+            tags = data.get('tags', [])
+            if isinstance(tags, list):
+                tags = ['textedit' if tag == 'translation' else tag for tag in tags]
+            elif tags == 'translation':
+                tags = 'textedit'
+            mod = ModInfo(key=key, name=data.get('name', tr('status.unknown_mod')), author=data.get('author', tr('defaults.unknown')), version=f'{base_version}|{composite_version}' if base_version else composite_version, tagline=data.get('tagline', tr('status.no_description_status')), game_version=data.get('game_version', tr('defaults.not_specified')), description_url=data.get('description_url', ''), downloads=data.get('downloads', 0), modgame=modgame, is_verified=data.get('is_verified', False), icon_url=data.get('icon_url'), tags=tags, hide_mod=data.get('hide_mod', False), ban_status=data.get('ban_status', False), demo_url=files_data.get('demo', {}).get('url') if files_data else None, demo_version=files_data.get('demo', {}).get('version', '1.0.0') if files_data else '1.0.0', created_date=data.get('created_date'), last_updated=data.get('last_updated'), external_url=data.get('external_url'), screenshots_url=screens_list, is_gamebanana_mod=False, gamebanana_mod_id=None, gamebanana_mod_type=None, gamebanana_last_update_timestamp=None)
+            if self._process_mod_chapters(mod, files_data):
+                return mod
+            return None
+        except Exception as e:
+            logger.error(f'_parse_single_mod: Error parsing mod {key}: {e}', exc_info=True)
+            return None
 
     def _extract_files_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
         files_data = {}
@@ -139,26 +283,11 @@ class FetchModsThread(QThread):
 
     def _get_local_mods(self) -> List[ModInfo]:
         local_mods = []
-        if not hasattr(self.main_window.app_state, 'mods_dir') or not os.path.exists(self.main_window.app_state.mods_dir):
-            return local_mods
-        existing_local_keys = set()
-        for folder_name in os.listdir(self.main_window.app_state.mods_dir):
-            folder_path = os.path.join(self.main_window.app_state.mods_dir, folder_name)
-            if not os.path.isdir(folder_path):
-                continue
-            config_path = os.path.join(folder_path, 'config.json')
-            if os.path.exists(config_path):
-                try:
-                    config_data = self.main_window.settings_manager.read_json(config_path)
-                    if config_data and config_data.get('is_local_mod'):
-                        key = config_data.get('mod_key')
-                        if key:
-                            existing_local_keys.add(key)
-                except (IOError, json.JSONDecodeError):
-                    continue
-        for mod in self.main_window.app_state.all_mods:
-            if hasattr(mod, 'key') and mod.key.startswith('local_') and (mod.key in existing_local_keys):
-                local_mods.append(mod)
+        if hasattr(self.main_window.app_state, 'all_mods'):
+            for mod in self.main_window.app_state.all_mods:
+                if hasattr(mod, 'is_local_mod') and mod.is_local_mod:
+                    local_mods.append(mod)
+            logger.debug(f'_get_local_mods: Found {len(local_mods)} local mods in app_state')
         return local_mods
 
     def _aggregate_versions(self, node: Any) -> str:

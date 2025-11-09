@@ -44,6 +44,13 @@ class ModInfo:
     last_updated: Optional[str] = None
     external_url: Optional[str] = None
     screenshots_url: List[str] = field(default_factory=list)
+    full_description: Optional[str] = None
+    is_gamebanana_mod: bool = False
+    gamebanana_mod_id: Optional[str] = None
+    gamebanana_mod_type: Optional[str] = None
+    gamebanana_last_update_timestamp: Optional[int] = None
+    gamebanana_has_compatible_file: Optional[bool] = None
+    gamebanana_category: Optional[str] = None
 
     def get_chapter_data(self, chapter_id: int) -> Optional[ModChapterData]:
         chapter_map = {0: '0', 1: '1', 2: '2', 3: '3', 4: '4', -1: 'demo'}

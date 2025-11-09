@@ -58,14 +58,22 @@ def clear_layout_widgets(layout, keep_last_n=1):
     if not layout:
         return
     end_index = layout.count() - keep_last_n
+    widgets_to_remove = []
     for i in reversed(range(end_index)):
         item = layout.itemAt(i)
         if item:
             widget = item.widget()
             if widget:
-                widget.setParent(None)
+                widgets_to_remove.append(widget)
             else:
                 layout.removeItem(item)
+    for widget in widgets_to_remove:
+        try:
+            layout.removeWidget(widget)
+            widget.setParent(None)
+            widget.deleteLater()
+        except (RuntimeError, AttributeError):
+            pass
 
 
 def load_mod_icon_universal(icon_label, mod_data, size=80):

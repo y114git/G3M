@@ -1,4 +1,3 @@
-import logging
 from PyQt6.QtCore import QObject, pyqtSignal, QTimer
 from typing import Dict, Optional, Any, List, TYPE_CHECKING
 if TYPE_CHECKING:
@@ -7,11 +6,11 @@ from core.app_state import AppState
 from ui.common.feedback import FeedbackManager
 from managers.mod_manager import ModManager
 from managers.settings_manager import SettingsManager
-from models.game_modes import DemoGameMode, UndertaleGameMode
+from models.game_modes import DemoGameMode, UndertaleGameMode, UndertaleYellowGameMode
 from managers.localization_manager import tr
-from config.constants import SLOT_ID_UNIVERSAL, SLOT_ID_DEMO, SLOT_ID_UNDERTALE, SLOT_ID_MENU, SLOT_ID_CHAPTER_1, SLOT_ID_CHAPTER_2, SLOT_ID_CHAPTER_3, SLOT_ID_CHAPTER_4
+from config.constants import SLOT_ID_UNIVERSAL, SLOT_ID_DEMO, SLOT_ID_UNDERTALE, SLOT_ID_UNDERTALE_YELLOW, SLOT_ID_MENU, SLOT_ID_CHAPTER_1, SLOT_ID_CHAPTER_2, SLOT_ID_CHAPTER_3, SLOT_ID_CHAPTER_4
 from utils.mod_utils import get_mod_key, get_mod_name
-from utils.game_utils import is_demo_mode, is_undertale_mode
+from utils.game_utils import is_demo_mode, is_undertale_mode, is_undertale_yellow_mode
 
 
 class UsedModsManager(QObject):
@@ -152,6 +151,8 @@ class UsedModsManager(QObject):
             return 'used_mods_deltarunedemo'
         elif isinstance(game_mode_instance, UndertaleGameMode):
             return 'used_mods_undertale'
+        elif isinstance(game_mode_instance, UndertaleYellowGameMode):
+            return 'used_mods_undertaleyellow'
         else:
             return 'used_mods_deltarune_chapter' if is_chapter_mode else 'used_mods_deltarune'
 
@@ -198,6 +199,9 @@ class UsedModsManager(QObject):
                     continue
             elif is_undertale_mode(self.app_state.game_mode):
                 if chapter_id != SLOT_ID_UNDERTALE:
+                    continue
+            elif is_undertale_yellow_mode(self.app_state.game_mode):
+                if chapter_id != SLOT_ID_UNDERTALE_YELLOW:
                     continue
             elif is_chapter_mode:
                 if chapter_id not in [SLOT_ID_MENU, SLOT_ID_CHAPTER_1, SLOT_ID_CHAPTER_2, SLOT_ID_CHAPTER_3, SLOT_ID_CHAPTER_4]:
@@ -263,11 +267,8 @@ class UsedModsManager(QObject):
                 is_local_mod = getattr(mod_data, 'is_local_mod', False)
                 if is_local_mod:
                     continue
-                for i in range(5):
-                    if self.mod_manager.mod_has_files_for_chapter(mod_data, i):
-                        status = self.mod_manager.get_mod_status(mod_data, i)
-                        if status == 'update':
-                            return True
+                if self.mod_manager.mod_has_update_available(mod_data):
+                    return True
         return False
 
     def collect_mods_needing_update(self) -> list:

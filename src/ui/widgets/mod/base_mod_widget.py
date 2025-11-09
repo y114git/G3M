@@ -73,10 +73,10 @@ class BaseModWidget(QFrame):
         tagline_text = self.mod_data.tagline or tr('ui.no_description')
         if len(tagline_text) > 200:
             tagline_text = tagline_text[:197] + '...'
-        tagline_label = QLabel(tagline_text)
-        tagline_label.setWordWrap(True)
-        tagline_label.setObjectName('secondaryText')
-        info_layout.addWidget(tagline_label)
+        self.tagline_label = QLabel(tagline_text)
+        self.tagline_label.setWordWrap(True)
+        self.tagline_label.setObjectName('secondaryText')
+        info_layout.addWidget(self.tagline_label)
         self._create_tags_layout_if_needed(info_layout)
         info_layout.addStretch()
         main_layout.addLayout(info_layout, 1)

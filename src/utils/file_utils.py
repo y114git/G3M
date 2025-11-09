@@ -203,6 +203,29 @@ def _extract_lzma(tmp_path, target_dir, fname):
 
 def _cleanup_extracted_archive(target_dir: str, is_game_installation: bool = False):
     if is_game_installation:
+        try:
+            entries = list(os.listdir(target_dir))
+            if len(entries) == 1:
+                single_entry = os.path.join(target_dir, entries[0])
+                if os.path.isdir(single_entry):
+                    import logging
+                    logging.info(f'Moving contents from nested folder {single_entry} to {target_dir}')
+                    for item in os.listdir(single_entry):
+                        src = os.path.join(single_entry, item)
+                        dst = os.path.join(target_dir, item)
+                        if os.path.exists(dst):
+                            if os.path.isdir(dst):
+                                shutil.rmtree(dst)
+                            else:
+                                os.remove(dst)
+                        shutil.move(src, dst)
+                    try:
+                        os.rmdir(single_entry)
+                    except OSError:
+                        pass
+        except Exception as e:
+            import logging
+            logging.warning(f'Failed to handle nested folder structure: {e}')
         cleanup_dir_pattern = re.compile('^chapter\\d+_(windows|mac)$', re.I)
         for root, dirs, _ in os.walk(target_dir, topdown=False):
             for dir_name in dirs[:]:
@@ -248,6 +271,8 @@ def ensure_writable(path: str) -> bool:
 
 
 def autodetect_path(game_name: str) -> str | None:
+    if game_name == 'UNDERTALE YELLOW' or game_name == 'UndertaleYellow' or game_name == 'undertaleyellow':
+        return None
     system = platform.system()
     paths = []
     if system == 'Windows':

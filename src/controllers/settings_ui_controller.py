@@ -1,7 +1,7 @@
 from PyQt6.QtWidgets import QWidget
 from managers.localization_manager import tr
 from config.constants import UI_COLORS, SLOT_ID_UNIVERSAL
-from models.game_modes import DemoGameMode, UndertaleGameMode, FullGameMode
+from models.game_modes import DemoGameMode, UndertaleGameMode, UndertaleYellowGameMode, FullGameMode
 
 
 class SettingsUiController:
@@ -115,10 +115,16 @@ class SettingsUiController:
             self.app_state.game_mode = DemoGameMode()
         elif game_type == 'undertale':
             self.app_state.game_mode = UndertaleGameMode()
+        elif game_type == 'undertaleyellow':
+            self.app_state.game_mode = UndertaleYellowGameMode()
         else:
             self.app_state.game_mode = FullGameMode()
         self.app_state.local_config['selected_game_type'] = game_type
         self.settings_manager.write_local_config()
+        if hasattr(self.app, '_update_saves_button_state'):
+            self.app._update_saves_button_state()
+        if hasattr(self.app, '_update_checkbox_visibility'):
+            self.app._update_checkbox_visibility()
 
     def on_chapter_mode_changed(self, state):
         game_type = self.app.game_type_combo.currentData()
@@ -164,6 +170,7 @@ class SettingsUiController:
             self.app.showFullScreen()
         else:
             self.app.showNormal()
+        self.settings_manager.save_window_geometry(self.app)
 
     def on_toggle_steam_launch(self, state=None):
         is_steam_launch = self.app.launch_via_steam_checkbox.isChecked()

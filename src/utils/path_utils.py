@@ -77,21 +77,31 @@ def resolve_game_executable(base_dir: str, is_undertale: bool) -> str | None:
         if not base_dir or not os.path.isdir(base_dir):
             return None
         system = platform.system()
-        base_exe_name = 'UNDERTALE' if is_undertale else 'DELTARUNE'
+        if is_undertale:
+            exe_names_windows = ['Undertale Yellow.exe', 'Undertale Yellow', 'UNDERTALE.exe']
+            exe_names_linux = ['Undertale Yellow', 'UNDERTALE', 'Undertale Yellow.exe', 'UNDERTALE.exe']
+            app_names_mac = ['UNDERTALE.app']
+        else:
+            exe_names_windows = ['DELTARUNE.exe']
+            exe_names_linux = ['DELTARUNE', 'DELTARUNE.exe']
+            app_names_mac = ['DELTARUNE.app', 'DELTARUNEdemo.app']
         if system == 'Windows':
-            exe_path = os.path.join(base_dir, f'{base_exe_name}.exe')
-            return exe_path if os.path.isfile(exe_path) else None
+            for exe_name in exe_names_windows:
+                exe_path = os.path.join(base_dir, exe_name)
+                if os.path.isfile(exe_path):
+                    return exe_path
+            return None
         if system == 'Linux':
-            native_path = os.path.join(base_dir, base_exe_name)
-            if os.path.isfile(native_path) and os.access(native_path, os.X_OK):
-                return native_path
-            exe_path = os.path.join(base_dir, f'{base_exe_name}.exe')
-            return exe_path if os.path.isfile(exe_path) else None
+            for exe_name in exe_names_linux:
+                exe_path = os.path.join(base_dir, exe_name)
+                if os.path.isfile(exe_path):
+                    if exe_name.endswith('.exe') or os.access(exe_path, os.X_OK):
+                        return exe_path
+            return None
         if system == 'Darwin':
             app_path = base_dir if base_dir.endswith('.app') and os.path.isdir(base_dir) else None
             if not app_path:
-                app_names = ['UNDERTALE.app'] if is_undertale else ['DELTARUNE.app', 'DELTARUNEdemo.app']
-                for name in app_names:
+                for name in app_names_mac:
                     candidate = os.path.join(base_dir, name)
                     if os.path.isdir(candidate):
                         app_path = candidate

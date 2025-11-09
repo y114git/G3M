@@ -75,6 +75,10 @@ class AppState(QObject):
         self._saves_button_enabled: bool = True
         self._progress_bar_visible: bool = False
         self._progress_bar_value: int = 0
+        self.gamebanana_loaded_pages: Dict[int, int] = {}
+        self.gamebanana_loading: bool = False
+        self.gamebanana_sort: str = 'default'
+        self.gamebanana_mods_needing_metadata: List[str] = []
 
     @property
     def is_installing(self) -> bool:
@@ -208,6 +212,22 @@ class AppState(QObject):
 
     def clear_current_task(self) -> None:
         self.current_task = None
+
+    def cancel_current_operation(self):
+        import logging
+        self.operation_cancelled = True
+        logging.info('AppState: Cancel button clicked')
+        if self.current_task:
+            if hasattr(self.current_task, 'cancel'):
+                logging.info(f'AppState: Calling cancel() on current_task: {type(self.current_task).__name__}')
+                try:
+                    self.current_task.cancel()
+                except Exception as e:
+                    logging.error(f'AppState: Error calling cancel() on task: {e}', exc_info=True)
+            else:
+                logging.warning(f'AppState: current_task {type(self.current_task).__name__} does not have cancel() method')
+        else:
+            logging.warning('AppState: No current_task to cancel')
 
     @property
     def action_button_text(self) -> str:

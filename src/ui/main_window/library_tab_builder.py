@@ -40,6 +40,7 @@ class LibraryTabBuilder:
         game_type_combo.addItem('DELTARUNE', 'deltarune')
         game_type_combo.addItem('DELTARUNE DEMO', 'deltarunedemo')
         game_type_combo.addItem('UNDERTALE', 'undertale')
+        game_type_combo.addItem('UNDERTALE Yellow', 'undertaleyellow')
         controls_layout.addWidget(game_type_combo)
         controls_layout.addSpacing(20)
         chapter_mode_checkbox = QCheckBox(tr('ui.chapter_mode'))
@@ -178,13 +179,13 @@ class LibraryTabBuilder:
         filters_layout.addSpacing(20)
         library_tags_label = QLabel(tr('ui.tags_label'))
         filters_layout.addWidget(library_tags_label)
-        library_tag_translation = QCheckBox(tr('tags.translation'))
+        library_tag_textedit = QCheckBox(tr('tags.textedit'))
         library_tag_customization = QCheckBox(tr('tags.customization'))
         library_tag_gameplay = QCheckBox(tr('tags.gameplay'))
         library_tag_other = QCheckBox(tr('tags.other'))
         library_tag_local = QCheckBox(tr('tags.local'))
         tag_style = '\n            QCheckBox {\n                color: white;\n                font-size: 12px;\n                spacing: 5px;\n            }\n            QCheckBox::indicator {\n                width: 16px;\n                height: 16px;\n            }\n        '
-        library_tag_widgets = [library_tag_translation, library_tag_customization, library_tag_gameplay, library_tag_other, library_tag_local]
+        library_tag_widgets = [library_tag_textedit, library_tag_customization, library_tag_gameplay, library_tag_other, library_tag_local]
         for tag in library_tag_widgets:
             tag.setStyleSheet(tag_style)
             filters_layout.addWidget(tag)
@@ -198,7 +199,7 @@ class LibraryTabBuilder:
         self.widgets['library_sort_combo'] = library_sort_combo
         self.widgets['library_sort_order_btn'] = library_sort_order_btn
         self.widgets['library_tags_label'] = library_tags_label
-        self.widgets['library_tag_translation'] = library_tag_translation
+        self.widgets['library_tag_textedit'] = library_tag_textedit
         self.widgets['library_tag_customization'] = library_tag_customization
         self.widgets['library_tag_gameplay'] = library_tag_gameplay
         self.widgets['library_tag_other'] = library_tag_other

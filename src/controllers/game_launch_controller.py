@@ -5,7 +5,7 @@ from PyQt6.QtCore import QObject, pyqtSignal
 from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QVBoxLayout, QFileDialog, QWidget
 from managers.localization_manager import tr
 from config.constants import UI_COLORS
-from models.game_modes import DemoGameMode
+from models.game_modes import DemoGameMode, UndertaleYellowGameMode
 from workers.background_workers import FullInstallThread
 
 
@@ -62,17 +62,14 @@ class GameLaunchController(QObject):
 
     def on_action_button_click(self):
         if self.app_state.is_installing:
-            self.app_state.operation_cancelled = True
+            logging.info('GameLaunchController: Cancel button clicked during installation')
+            self.app_state.cancel_current_operation()
             self.feedback_manager.update_status(tr('status.operation_cancelled'), UI_COLORS['status_error'])
             try:
                 self.app_state.progress_bar_value = 0
                 self.app_state.progress_bar_visible = False
             except (AttributeError, RuntimeError):
                 logging.debug('Progress bar update failed', exc_info=True)
-            if self.app_state.current_task and hasattr(self.app_state.current_task, 'cancel'):
-                self.app_state.current_task.cancel()
-            self.app_state.is_installing = False
-            self.app_state.clear_current_task()
             self.update_button_state()
             return
         if self.app_state.is_merging or (hasattr(self.game_launcher, '_merge_thread') and self.game_launcher._merge_thread and self.game_launcher._merge_thread.isRunning()):
@@ -128,7 +125,7 @@ class GameLaunchController(QObject):
             self.app_state.clear_current_task()
             self.update_button_state()
             return
-        if isinstance(self.app_state.game_mode, DemoGameMode) and self._full_install_checkbox_is_checked:
+        if (isinstance(self.app_state.game_mode, DemoGameMode) or isinstance(self.app_state.game_mode, UndertaleYellowGameMode)) and self._full_install_checkbox_is_checked:
             self.perform_full_install()
             return
         if self.app_state.is_installing:
@@ -152,6 +149,7 @@ class GameLaunchController(QObject):
             self.customization_manager.stop_background_music()
         except Exception as e:
             logging.debug(f'stop_background_music failed: {e}')
+        self.settings_manager.save_window_geometry(self.app)
         self.app_state.game_is_running = True
         self.window_hide_requested.emit()
 
@@ -176,7 +174,14 @@ class GameLaunchController(QObject):
         self.app_state.action_button_enabled = False
         self.app_state.saves_button_enabled = False
         dlg = QDialog(cast(QWidget, self.app))
-        dlg.setWindowTitle(tr('dialogs.full_demo_install'))
+        if isinstance(self.app_state.game_mode, UndertaleYellowGameMode):
+            dlg.setWindowTitle(tr('dialogs.full_yellow_install'))
+            install_location_key = 'dialogs.install_yellow_location'
+            folder_name = 'UNDERTALE Yellow'
+        else:
+            dlg.setWindowTitle(tr('dialogs.full_demo_install'))
+            install_location_key = 'dialogs.install_demo_location'
+            folder_name = 'DELTARUNEdemo'
         v = QVBoxLayout(dlg)
         lbl = QLabel(self.app._full_install_tooltip())
         lbl.setWordWrap(True)
@@ -188,11 +193,11 @@ class GameLaunchController(QObject):
         if dlg.exec() != QDialog.DialogCode.Accepted:
             self.app_state.action_button_enabled = True
             return
-        base_dir = QFileDialog.getExistingDirectory(cast(QWidget, self.app), tr('dialogs.install_demo_location'))
+        base_dir = QFileDialog.getExistingDirectory(cast(QWidget, self.app), tr(install_location_key))
         if not base_dir:
             self.app_state.action_button_enabled = True
             return
-        target_dir = os.path.join(base_dir, 'DELTARUNEdemo')
+        target_dir = os.path.join(base_dir, folder_name)
         try:
             os.makedirs(target_dir, exist_ok=True)
         except (OSError, PermissionError) as e:
@@ -218,6 +223,8 @@ class GameLaunchController(QObject):
             if isinstance(self.app_state.game_mode, DemoGameMode):
                 self.app_state.demo_game_path = target_dir
                 self.app_state.local_config['demo_game_path'] = target_dir
+            elif isinstance(self.app_state.game_mode, UndertaleYellowGameMode):
+                self.app_state.game_mode.set_game_path(self.app_state.local_config, target_dir)
             else:
                 self.app_state.game_path = target_dir
                 self.app_state.local_config['game_path'] = target_dir

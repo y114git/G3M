@@ -9,7 +9,7 @@ import threading
 import zipfile
 from typing import Optional
 from PyQt6.QtCore import QObject, pyqtSignal, QTimer, QByteArray
-from PyQt6.QtWidgets import QFileDialog, QApplication, QWidget
+from PyQt6.QtWidgets import QFileDialog, QWidget
 from managers.localization_manager import tr, LocalizationManager
 from config.constants import LAUNCHER_VERSION, UI_COLORS, SLOT_ID_UNIVERSAL
 from models.game_modes import DemoGameMode, UndertaleGameMode
@@ -48,6 +48,16 @@ class SettingsManager(QObject):
                         data['modgame'] = 'deltarune'
                     del data['is_demo_mod']
                     needs_migration = True
+                if 'tags' in data:
+                    tags = data['tags']
+                    if isinstance(tags, list):
+                        if 'translation' in tags:
+                            tags = ['textedit' if tag == 'translation' else tag for tag in tags]
+                            data['tags'] = tags
+                            needs_migration = True
+                    elif tags == 'translation':
+                        data['tags'] = 'textedit'
+                        needs_migration = True
                 if needs_migration:
                     self.write_json(path, data)
             return data
@@ -86,7 +96,7 @@ class SettingsManager(QObject):
 
     def migrate_config_if_needed(self):
         self.app_state.local_config['cache_format_version'] = LAUNCHER_VERSION
-        defaults = {'game_path': '', 'last_selected': {}, 'use_custom_executable': False, 'demo_game_path': '', 'launch_via_steam': False, 'direct_launch_slot_id': SLOT_ID_UNIVERSAL, 'demo_mode_enabled': False, 'chapter_mode_enabled': False, 'custom_background_path': '', 'custom_executable_path': '', 'background_disabled': False, 'custom_color_background': '', 'custom_color_button': '', 'custom_color_border': '', 'custom_color_button_hover': '', 'custom_color_text': '', 'custom_color_version_text': '', 'beta_updates_enabled': False}
+        defaults = {'game_path': '', 'last_selected': {}, 'use_custom_executable': False, 'demo_game_path': '', 'launch_via_steam': False, 'direct_launch_slot_id': SLOT_ID_UNIVERSAL, 'demo_mode_enabled': False, 'chapter_mode_enabled': False, 'custom_background_path': '', 'custom_executable_path': '', 'background_disabled': False, 'custom_color_background': '', 'custom_color_button': '', 'custom_color_border': '', 'custom_color_button_hover': '', 'custom_color_text': '', 'custom_color_version_text': '', 'beta_updates_enabled': False, 'disable_splash': False}
         for key, value in defaults.items():
             self.app_state.local_config.setdefault(key, value)
         self.write_local_config()
@@ -146,12 +156,16 @@ class SettingsManager(QObject):
         self.write_local_config()
 
     def prompt_for_game_path(self, is_initial=False) -> bool:
+        from models.game_modes import UndertaleYellowGameMode
         if isinstance(self.app_state.game_mode, DemoGameMode):
             title = tr('dialogs.select_demo_folder')
             message = tr('dialogs.demo_not_found')
         elif isinstance(self.app_state.game_mode, UndertaleGameMode):
             title = tr('dialogs.select_undertale_folder')
             message = tr('dialogs.undertale_not_found')
+        elif isinstance(self.app_state.game_mode, UndertaleYellowGameMode):
+            title = tr('dialogs.select_undertaleyellow_folder')
+            message = tr('dialogs.undertaleyellow_not_found')
         else:
             title = tr('dialogs.select_deltarune_folder')
             message = tr('dialogs.deltarune_not_found')
@@ -166,7 +180,7 @@ class SettingsManager(QObject):
         if path:
             corrected_path = path
             if platform.system() == 'Darwin' and (not path.endswith('.app')):
-                if isinstance(self.app_state.game_mode, UndertaleGameMode):
+                if isinstance(self.app_state.game_mode, UndertaleGameMode) or isinstance(self.app_state.game_mode, UndertaleYellowGameMode):
                     app_names = ('UNDERTALE.app',)
                 else:
                     app_names = ('DELTARUNE.app', 'DELTARUNEdemo.app')
@@ -177,6 +191,8 @@ class SettingsManager(QObject):
                         break
             if isinstance(self.app_state.game_mode, UndertaleGameMode):
                 game_type = 'undertale'
+            elif isinstance(self.app_state.game_mode, UndertaleYellowGameMode):
+                game_type = 'undertaleyellow'
             else:
                 game_type = 'deltarune'
             if is_valid_game_path(corrected_path, False, game_type):
@@ -242,7 +258,7 @@ class SettingsManager(QObject):
         mp3 = os.path.join(self.app_state.config_dir, 'custom_startup_sound.mp3')
         wav = os.path.join(self.app_state.config_dir, 'custom_startup_sound.wav')
         existing = ''
-        if hasattr(self.parent_widget, 'customization_manager'):
+        if self.parent_widget and hasattr(self.parent_widget, 'customization_manager'):
             existing = self.parent_widget.customization_manager.get_startup_sound_path()
         elif os.path.exists(mp3):
             existing = mp3
@@ -303,7 +319,7 @@ class SettingsManager(QObject):
                 zipf.write(bg_path, f'background{os.path.splitext(bg_path)[1]}')
             music_path = None
             sound_path = None
-            if hasattr(self.parent_widget, 'customization_manager'):
+            if self.parent_widget and hasattr(self.parent_widget, 'customization_manager'):
                 music_path = self.parent_widget.customization_manager.get_background_music_path() or None
                 sound_path = self.parent_widget.customization_manager.get_startup_sound_path() or None
             if music_path and os.path.exists(music_path):
@@ -343,7 +359,10 @@ class SettingsManager(QObject):
                             shutil.copy2(src_path, os.path.join(self.app_state.config_dir, f'custom_startup_sound{os.path.splitext(filename)[1]}'))
             self.write_local_config()
             self.app_state.local_config['first_launch_splash_shown'] = True
-            self.app_state.local_config['disable_splash'] = True
+            if 'disable_splash' in theme_settings:
+                self.app_state.local_config['disable_splash'] = theme_settings['disable_splash']
+            elif 'disable_splash' not in self.app_state.local_config:
+                self.app_state.local_config['disable_splash'] = True
             self.write_local_config()
             self.theme_changed.emit()
             self.settings_changed.emit()

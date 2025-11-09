@@ -143,7 +143,11 @@ class FullInstallThread(QThread):
             self.status.emit(tr('status.operation_cancelled'), UI_COLORS['status_error'])
 
     def run(self):
-        full_install_url = self.main_window.global_settings.get('full_install_url')
+        from models.game_modes import UndertaleYellowGameMode
+        if isinstance(self.main_window.app_state.game_mode, UndertaleYellowGameMode):
+            full_install_url = self.main_window.app_state.global_settings.get('full_yellow_install_url')
+        else:
+            full_install_url = self.main_window.app_state.global_settings.get('full_install_url')
         if not full_install_url:
             self.status.emit(tr('errors.files_not_found'), UI_COLORS['status_error'])
             self.finished.emit(False, self.target_dir)

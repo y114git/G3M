@@ -263,8 +263,25 @@ class ModManager(QObject):
                     mod_key = config_data.get('mod_key')
                     if mod_key:
                         installed_mods[mod_key] = config_data
+                    elif config_data.get('is_gamebanana_mod') and config_data.get('gamebanana_mod_id'):
+                        mod_id = config_data.get('gamebanana_mod_id')
+                        recovered_key = f'gb_{mod_id}'
+                        logging.warning(f'load_local_mods: Found GameBanana mod with empty mod_key in {item_path}, recovering as {recovered_key} (ID: {mod_id})')
+                        config_data['mod_key'] = recovered_key
+                        installed_mods[recovered_key] = config_data
+                    else:
+                        logging.warning(f'load_local_mods: Found mod with empty mod_key in {item_path}, skipping')
                 except (OSError, json.JSONDecodeError, KeyError) as e:
                     logging.debug(f'load_local_mods: failed to load mod from {item_path}: {e}')
+            installed_gamebanana_by_id = {}
+            installed_gamebanana_by_key = {}
+            for mod_key, config_data in installed_mods.items():
+                if config_data.get('is_gamebanana_mod') and config_data.get('gamebanana_mod_id'):
+                    gb_id = str(config_data.get('gamebanana_mod_id'))
+                    installed_gamebanana_by_id[gb_id] = (mod_key, config_data)
+                    installed_gamebanana_by_key[mod_key] = config_data
+                    logging.debug(f'load_local_mods: Registered installed GameBanana mod - key={mod_key}, id={gb_id}')
+            updated_count = 0
             for mod in list(self.app_state.all_mods):
                 if mod.key in installed_mods:
                     config_data = installed_mods[mod.key]
@@ -275,103 +292,198 @@ class ModManager(QObject):
                             if os.path.exists(potential_icon):
                                 mod.icon_url = potential_icon
                                 break
-            existing_keys = {mod.key for mod in self.app_state.all_mods}
-            for mod_key, config_data in list(installed_mods.items()):
-                if not config_data.get('is_local_mod') and mod_key not in existing_keys:
-                    try:
+                    if config_data.get('is_gamebanana_mod'):
+                        updated_count += 1
+                elif hasattr(mod, 'is_gamebanana_mod') and mod.is_gamebanana_mod and hasattr(mod, 'gamebanana_mod_id') and mod.gamebanana_mod_id:
+                    gb_id = str(mod.gamebanana_mod_id)
+                    if gb_id in installed_gamebanana_by_id:
+                        mod_key, config_data = installed_gamebanana_by_id[gb_id]
+                        if mod.key != mod_key:
+                            logging.debug(f'load_local_mods: Updating mod.key from {mod.key} to {mod_key} for GameBanana mod {gb_id}')
+                            mod.key = mod_key
                         mod_folder_path = self.get_mod_folder_path(mod_key)
-                        icon_path = ''
                         if mod_folder_path:
                             for ext in ['.png', '.jpg', '.jpeg', '.gif']:
                                 potential_icon = os.path.join(mod_folder_path, f'_icon{ext}')
                                 if os.path.exists(potential_icon):
-                                    icon_path = potential_icon
+                                    mod.icon_url = potential_icon
                                     break
-                        safe_mod_info = {'key': mod_key, 'name': config_data.get('name', 'Installed Mod'), 'version': config_data.get('version', '1.0.0'), 'author': config_data.get('author', tr('defaults.unknown')), 'tagline': config_data.get('tagline', tr('defaults.no_description')), 'game_version': config_data.get('game_version', tr('defaults.not_specified')), 'description_url': '', 'downloads': 0, 'modgame': config_data.get('modgame', 'deltarune'), 'is_verified': False, 'icon_url': icon_path, 'tags': [], 'hide_mod': False, 'is_local_mod': False, 'ban_status': False, 'demo_url': None, 'demo_version': '1.0.0', 'created_date': config_data.get('created_date', 'N/A'), 'last_updated': config_data.get('created_date', 'N/A'), 'external_url': config_data.get('external_url')}
-                        mod = mod_models.ModInfo(**safe_mod_info)
-                        files_data = config_data.get('files', {})
-                        for file_key, ch_info in list(files_data.items()):
-                            extra_files_list = []
-                            for ef_data in ch_info.get('extra_files', []):
-                                if isinstance(ef_data, dict):
-                                    try:
-                                        extra_files_list.append(mod_models.ModExtraFile(key=ef_data.get('key', ''), version=ef_data.get('version', ''), url=ef_data.get('url', '')))
-                                    except (KeyError, TypeError, ValueError) as e:
-                                        logging.debug(f'load_local_mods: failed to parse extra_file: {e}')
-                            valid_chapter_fields = {'description': ch_info.get('description'), 'data_file_url': ch_info.get('data_file_url'), 'data_file_version': ch_info.get('data_file_version'), 'extra_files': extra_files_list}
-                            mod.files[file_key] = ModChapterData(**valid_chapter_fields)
-                        self.app_state.all_mods.append(mod)
-                    except Exception as e:
-                        logging.warning(f'Failed to create ModInfo for installed mod {mod_key}: {e}')
-            self.app_state.all_mods = [mod for mod in self.app_state.all_mods if not hasattr(mod, 'tags') or 'local' not in mod.tags]
+                        updated_count += 1
+            logging.debug(f'load_local_mods: Updated {updated_count} existing GameBanana mods in all_mods')
+            existing_keys = {mod.key for mod in self.app_state.all_mods}
+            existing_gamebanana_ids = {}
+            for mod in self.app_state.all_mods:
+                if hasattr(mod, 'is_gamebanana_mod') and mod.is_gamebanana_mod and hasattr(mod, 'gamebanana_mod_id') and mod.gamebanana_mod_id:
+                    gb_id = str(mod.gamebanana_mod_id)
+                    existing_gamebanana_ids[gb_id] = mod.key
             for mod_key, config_data in list(installed_mods.items()):
                 if config_data.get('is_local_mod'):
-                    try:
-                        mod_folder_for_icon = self.get_mod_folder_path(mod_key)
-                        icon_path = ''
-                        if mod_folder_for_icon:
-                            for ext in ['.png', '.jpg', '.jpeg', '.gif']:
-                                potential_icon = os.path.join(mod_folder_for_icon, f'_icon{ext}')
-                                if os.path.exists(potential_icon):
-                                    icon_path = potential_icon
-                                    break
-                        safe_mod_info = {'key': mod_key, 'name': config_data.get('name', tr('defaults.local_mod')), 'version': config_data.get('version', '1.0.0'), 'author': config_data.get('author', tr('defaults.unknown')), 'tagline': config_data.get('tagline', tr('defaults.no_description')), 'game_version': config_data.get('game_version', tr('defaults.not_specified')), 'description_url': '', 'downloads': 0, 'modgame': config_data.get('modgame', 'deltarune'), 'is_verified': False, 'icon_url': icon_path, 'tags': ['local'], 'hide_mod': False, 'is_local_mod': config_data.get('is_local_mod', True), 'ban_status': False, 'demo_url': None, 'demo_version': '1.0.0', 'created_date': config_data.get('created_date', 'N/A'), 'last_updated': config_data.get('created_date', 'N/A'), 'external_url': config_data.get('external_url')}
-                        mod = mod_models.ModInfo(**safe_mod_info)
-                        files_data = config_data.get('files', {})
-                        mod_folder_path = None
-                        for folder_name in os.listdir(self.app_state.mods_dir):
-                            folder_path = os.path.join(self.app_state.mods_dir, folder_name)
-                            test_config_path = os.path.join(folder_path, 'config.json')
-                            if os.path.isfile(test_config_path):
+                    continue
+                is_gamebanana_mod = config_data.get('is_gamebanana_mod', False)
+                gamebanana_mod_id = config_data.get('gamebanana_mod_id')
+                if is_gamebanana_mod and gamebanana_mod_id:
+                    gb_id_str = str(gamebanana_mod_id)
+                    if mod_key in existing_keys:
+                        continue
+                    if gb_id_str in existing_gamebanana_ids:
+                        existing_mod_key = existing_gamebanana_ids[gb_id_str]
+                        for mod in self.app_state.all_mods:
+                            if hasattr(mod, 'gamebanana_mod_id') and str(mod.gamebanana_mod_id) == gb_id_str:
+                                if mod.key != mod_key:
+                                    logging.debug(f'load_local_mods: Updating mod.key from {mod.key} to {mod_key} for GameBanana mod {gb_id_str}')
+                                    mod.key = mod_key
+                                    existing_keys.discard(existing_mod_key)
+                                    existing_keys.add(mod_key)
+                                break
+                        continue
+                elif mod_key in existing_keys:
+                    logging.debug(f'load_local_mods: Non-GameBanana mod {mod_key} already in all_mods, skipping')
+                    continue
+                try:
+                    mod_folder_path = self.get_mod_folder_path(mod_key)
+                    icon_path = ''
+                    if mod_folder_path:
+                        for ext in ['.png', '.jpg', '.jpeg', '.gif']:
+                            potential_icon = os.path.join(mod_folder_path, f'_icon{ext}')
+                            if os.path.exists(potential_icon):
+                                icon_path = potential_icon
+                                break
+                    icon_url = icon_path
+                    if config_data.get('is_gamebanana_mod') and config_data.get('gamebanana_mod_id') and (not icon_path):
+                        try:
+                            from utils.gamebanana_api import GameBananaAPI
+                            api = GameBananaAPI()
+                            mod_id = int(config_data.get('gamebanana_mod_id'))
+                            preview_media = api.get_mod_preview_media(mod_id)
+                            if preview_media:
+                                icon_url_from_api = api.extract_icon_url(preview_media)
+                                if icon_url_from_api:
+                                    icon_url = icon_url_from_api
+                                    logging.debug(f'Loaded icon_url from API for GameBanana mod {mod_id}: {icon_url_from_api}')
+                        except Exception as e:
+                            logging.debug(f"Failed to load icon_url for GameBanana mod {config_data.get('gamebanana_mod_id')}: {e}")
+                    safe_mod_info = {'key': mod_key, 'name': config_data.get('name', 'Installed Mod'), 'version': config_data.get('version', '1.0.0'), 'author': config_data.get('author', tr('defaults.unknown')), 'tagline': config_data.get('tagline', tr('defaults.no_description')), 'game_version': config_data.get('game_version', tr('defaults.not_specified')), 'description_url': '', 'downloads': 0, 'modgame': config_data.get('modgame', 'deltarune'), 'is_verified': False, 'icon_url': icon_url, 'tags': [], 'hide_mod': False, 'is_local_mod': False, 'ban_status': False, 'demo_url': None, 'demo_version': '1.0.0', 'created_date': config_data.get('created_date', 'N/A'), 'last_updated': config_data.get('created_date', 'N/A'), 'external_url': config_data.get('external_url'), 'is_gamebanana_mod': config_data.get('is_gamebanana_mod', False), 'gamebanana_mod_id': config_data.get('gamebanana_mod_id'), 'gamebanana_mod_type': config_data.get('gamebanana_mod_type'), 'gamebanana_last_update_timestamp': config_data.get('gamebanana_last_update_timestamp')}
+                    mod = mod_models.ModInfo(**safe_mod_info)
+                    files_data = config_data.get('files', {})
+                    for file_key, ch_info in list(files_data.items()):
+                        extra_files_list = []
+                        for ef_data in ch_info.get('extra_files', []):
+                            if isinstance(ef_data, dict):
                                 try:
-                                    with open(test_config_path, 'r', encoding='utf-8') as f:
-                                        test_config = json.load(f)
-                                    if test_config.get('mod_key') == mod_key:
-                                        mod_folder_path = folder_path
-                                        break
-                                except Exception as e:
-                                    logging.warning(f'Failed reading config {test_config_path}: {e}')
-                                    continue
-                        for file_key, ch_info in list(files_data.items()):
-                            chapter_files = ch_info
-                            if mod_folder_path:
-                                if file_key == 'demo':
-                                    chapter_folder = os.path.join(mod_folder_path, 'demo')
-                                elif file_key == 'undertale':
-                                    chapter_folder = os.path.join(mod_folder_path, 'undertale')
-                                elif file_key in ['0', '1', '2', '3', '4']:
-                                    if file_key == '0':
+                                    extra_files_list.append(mod_models.ModExtraFile(key=ef_data.get('key', ''), version=ef_data.get('version', ''), url=ef_data.get('url', '')))
+                                except (KeyError, TypeError, ValueError) as e:
+                                    logging.debug(f'load_local_mods: failed to parse extra_file: {e}')
+                        valid_chapter_fields = {'description': ch_info.get('description'), 'data_file_url': ch_info.get('data_file_url'), 'data_file_version': ch_info.get('data_file_version'), 'extra_files': extra_files_list}
+                        mod.files[file_key] = ModChapterData(**valid_chapter_fields)
+                    self.app_state.all_mods.append(mod)
+                except Exception as e:
+                    logging.warning(f'Failed to create ModInfo for installed mod {mod_key}: {e}', exc_info=True)
+            all_mods_filtered = []
+            for mod in self.app_state.all_mods:
+                if hasattr(mod, 'is_local_mod') and mod.is_local_mod:
+                    if hasattr(mod, 'tags') and 'local' in mod.tags:
+                        continue
+                all_mods_filtered.append(mod)
+            self.app_state.all_mods = all_mods_filtered
+            for mod_key, config_data in list(installed_mods.items()):
+                if config_data.get('is_gamebanana_mod'):
+                    gb_id = config_data.get('gamebanana_mod_id')
+                    if gb_id:
+                        gb_id_str = str(gb_id)
+                        if gb_id_str in existing_gamebanana_ids:
+                            continue
+                    continue
+                if not config_data.get('is_local_mod'):
+                    continue
+                if mod_key in existing_keys:
+                    logging.debug(f'load_local_mods: Skipping local mod {mod_key} - already in all_mods')
+                    continue
+                try:
+                    mod_folder_for_icon = self.get_mod_folder_path(mod_key)
+                    icon_path = ''
+                    if mod_folder_for_icon:
+                        for ext in ['.png', '.jpg', '.jpeg', '.gif']:
+                            potential_icon = os.path.join(mod_folder_for_icon, f'_icon{ext}')
+                            if os.path.exists(potential_icon):
+                                icon_path = potential_icon
+                                break
+                    safe_mod_info = {'key': mod_key, 'name': config_data.get('name', tr('defaults.local_mod')), 'version': config_data.get('version', '1.0.0'), 'author': config_data.get('author', tr('defaults.unknown')), 'tagline': config_data.get('tagline', tr('defaults.no_description')), 'game_version': config_data.get('game_version', tr('defaults.not_specified')), 'description_url': '', 'downloads': 0, 'modgame': config_data.get('modgame', 'deltarune'), 'is_verified': False, 'icon_url': icon_path, 'tags': ['local'], 'hide_mod': False, 'is_local_mod': config_data.get('is_local_mod', True), 'ban_status': False, 'demo_url': None, 'demo_version': '1.0.0', 'created_date': config_data.get('created_date', 'N/A'), 'last_updated': config_data.get('created_date', 'N/A'), 'external_url': config_data.get('external_url'), 'is_gamebanana_mod': config_data.get('is_gamebanana_mod', False), 'gamebanana_mod_id': config_data.get('gamebanana_mod_id'), 'gamebanana_mod_type': config_data.get('gamebanana_mod_type'), 'gamebanana_last_update_timestamp': config_data.get('gamebanana_last_update_timestamp')}
+                    mod = mod_models.ModInfo(**safe_mod_info)
+                    files_data = config_data.get('files', {})
+                    mod_folder_path = None
+                    for folder_name in os.listdir(self.app_state.mods_dir):
+                        folder_path = os.path.join(self.app_state.mods_dir, folder_name)
+                        test_config_path = os.path.join(folder_path, 'config.json')
+                        if os.path.isfile(test_config_path):
+                            try:
+                                with open(test_config_path, 'r', encoding='utf-8') as f:
+                                    test_config = json.load(f)
+                                if test_config.get('mod_key') == mod_key:
+                                    mod_folder_path = folder_path
+                                    break
+                            except Exception as e:
+                                logging.warning(f'Failed reading config {test_config_path}: {e}')
+                                continue
+                    for file_key, ch_info in list(files_data.items()):
+                        chapter_files = ch_info
+                        if mod_folder_path:
+                            if file_key == 'demo':
+                                chapter_folder = os.path.join(mod_folder_path, 'demo')
+                            elif file_key == 'undertale':
+                                chapter_folder = os.path.join(mod_folder_path, 'undertale')
+                            elif file_key in ['0', '1', '2', '3', '4']:
+                                if file_key == '0':
+                                    chapter_folder = os.path.join(mod_folder_path, 'chapter_0')
+                                else:
+                                    chapter_folder = os.path.join(mod_folder_path, f'chapter_{file_key}')
+                            else:
+                                try:
+                                    ch_id = int(file_key)
+                                    if ch_id == -1:
+                                        chapter_folder = os.path.join(mod_folder_path, 'demo')
+                                    elif ch_id == 0:
                                         chapter_folder = os.path.join(mod_folder_path, 'chapter_0')
                                     else:
-                                        chapter_folder = os.path.join(mod_folder_path, f'chapter_{file_key}')
-                                else:
-                                    try:
-                                        ch_id = int(file_key)
-                                        if ch_id == -1:
-                                            chapter_folder = os.path.join(mod_folder_path, 'demo')
-                                        elif ch_id == 0:
-                                            chapter_folder = os.path.join(mod_folder_path, 'chapter_0')
-                                        else:
-                                            chapter_folder = os.path.join(mod_folder_path, f'chapter_{ch_id}')
-                                    except ValueError:
-                                        continue
-                            data_file_url = ''
-                            if chapter_files.get('data_file_url') and mod_folder_path:
-                                data_file_url = os.path.join(chapter_folder, chapter_files['data_file_url'])
-                            from models.mod_models import ModExtraFile
-                            extra_files = []
-                            if chapter_files.get('extra_files') and mod_folder_path:
-                                for group_key, filenames in list(chapter_files['extra_files'].items()):
-                                    for filename in filenames:
-                                        file_path = os.path.join(chapter_folder, filename)
-                                        extra_files.append(ModExtraFile(key=group_key, url=file_path, version='1.0.0'))
-                            mod_chapter = ModChapterData(description=config_data.get('tagline', ''), data_file_url=data_file_url, data_file_version=chapter_files.get('data_file_version', (ch_info.get('versions', {}) or {}).get('data', '1.0.0')), extra_files=extra_files)
-                            mod.files[file_key] = mod_chapter
-                        if mod.files:
-                            self.app_state.all_mods.append(mod)
-                    except Exception as e:
-                        logging.warning(f'Failed to build local ModInfo: {e}')
-                        continue
+                                        chapter_folder = os.path.join(mod_folder_path, f'chapter_{ch_id}')
+                                except ValueError:
+                                    continue
+                        data_file_url = ''
+                        if chapter_files.get('data_file_url') and mod_folder_path:
+                            data_file_url = os.path.join(chapter_folder, chapter_files['data_file_url'])
+                        from models.mod_models import ModExtraFile
+                        extra_files = []
+                        if chapter_files.get('extra_files') and mod_folder_path:
+                            for group_key, filenames in list(chapter_files['extra_files'].items()):
+                                for filename in filenames:
+                                    file_path = os.path.join(chapter_folder, filename)
+                                    extra_files.append(ModExtraFile(key=group_key, url=file_path, version='1.0.0'))
+                        mod_chapter = ModChapterData(description=config_data.get('tagline', ''), data_file_url=data_file_url, data_file_version=chapter_files.get('data_file_version', (ch_info.get('versions', {}) or {}).get('data', '1.0.0')), extra_files=extra_files)
+                        mod.files[file_key] = mod_chapter
+                    if mod.files:
+                        self.app_state.all_mods.append(mod)
+                except Exception as e:
+                    logging.warning(f'Failed to build local ModInfo: {e}')
+                    continue
+            installed_gamebanana_mod_ids = set()
+            for mod_key, config_data in installed_mods.items():
+                if config_data.get('is_gamebanana_mod') and config_data.get('gamebanana_mod_id'):
+                    installed_gamebanana_mod_ids.add(str(config_data.get('gamebanana_mod_id')))
+            for mod in self.app_state.all_mods:
+                if hasattr(mod, 'is_gamebanana_mod') and mod.is_gamebanana_mod and hasattr(mod, 'gamebanana_mod_id') and mod.gamebanana_mod_id:
+                    mod_id_str = str(mod.gamebanana_mod_id)
+                    if mod_id_str in installed_gamebanana_mod_ids:
+                        current_downloads = getattr(mod, 'downloads', 0) or 0
+                        if current_downloads <= 0:
+                            try:
+                                from utils.gamebanana_api import GameBananaAPI
+                                api = GameBananaAPI()
+                                downloaded_count = api.get_mod_downloads_only(int(mod.gamebanana_mod_id))
+                                if downloaded_count is not None and downloaded_count > 0:
+                                    mod.downloads = downloaded_count
+                                elif downloaded_count is not None:
+                                    mod.downloads = 0
+                            except Exception as e:
+                                logging.debug(f'load_local_mods: Failed to load downloads from API for mod {mod.key}: {e}')
             metadata = self._read_metadata()
             cleanup_files = metadata.get('mod_files_to_cleanup', [])
             cleanup_dirs = metadata.get('mod_dirs_to_cleanup', [])
@@ -531,6 +643,16 @@ class ModManager(QObject):
 
     def mod_has_update_available(self, mod_data) -> bool:
         try:
+            if hasattr(mod_data, 'is_gamebanana_mod') and mod_data.is_gamebanana_mod:
+                try:
+                    from managers.gamebanana_update_manager import GameBananaUpdateManager
+                    update_manager = GameBananaUpdateManager(self.app_state.mods_dir)
+                    has_update = update_manager.check_mod_for_updates(mod_data)
+                    if has_update:
+                        logging.info(f'mod_has_update_available: GameBanana mod {mod_data.name} has update available')
+                    return has_update
+                except Exception as e:
+                    logging.warning(f'mod_has_update_available: Error checking GameBanana update for {mod_data.name}: {e}', exc_info=True)
             for chapter_id in range(5):
                 if self.mod_has_files_for_chapter(mod_data, chapter_id):
                     if self.get_mod_status(mod_data, chapter_id) == 'update':
@@ -654,7 +776,7 @@ class ModManager(QObject):
             for mod in all_mods:
                 if hasattr(mod, 'key') and mod.key == mod_key:
                     return mod
-        return mod_models.ModInfo(key=mod_key, name=mod_info.get('name', mod_key), version=mod_info.get('version', '1.0.0'), author=mod_info.get('author', tr('defaults.unknown')), tagline=mod_info.get('tagline', tr('defaults.no_description')), game_version=mod_info.get('game_version', '1.04'), description_url='', downloads=0, modgame=mod_info.get('modgame', 'deltarune'), is_verified=False, is_local_mod=mod_info.get('is_local_mod', False))
+        return mod_models.ModInfo(key=mod_key, name=mod_info.get('name', mod_key), version=mod_info.get('version', '1.0.0'), author=mod_info.get('author', tr('defaults.unknown')), tagline=mod_info.get('tagline', tr('defaults.no_description')), game_version=mod_info.get('game_version', '1.04'), description_url='', downloads=0, modgame=mod_info.get('modgame', 'deltarune'), is_verified=False, icon_url=None, tags=[], hide_mod=False, is_local_mod=mod_info.get('is_local_mod', False), ban_status=False, files={})
 
     def fetch_mod_data_by_secret(self, secret_key: str) -> Tuple[Optional[dict], Optional[str], bool]:
         from utils.crypto_utils import possible_secret_hashes

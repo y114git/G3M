@@ -9,8 +9,20 @@ class ModPlaqueWidget(BaseModWidget):
     uninstall_requested = pyqtSignal(object)
     details_requested = pyqtSignal(object)
 
-    def __init__(self, mod_data, parent=None):
+    def __init__(self, mod_data, parent=None, parent_app=None):
         super().__init__(mod_data, parent)
+        if parent_app:
+            self.parent_app = parent_app
+        elif parent and hasattr(parent, 'parent_app'):
+            self.parent_app = parent.parent_app
+        elif parent:
+            from PyQt6.QtWidgets import QWidget
+            current = parent
+            while current:
+                if hasattr(current, 'mod_manager') or hasattr(current, 'app_state'):
+                    self.parent_app = current
+                    break
+                current = current.parent() if hasattr(current, 'parent') else None
         self.is_installed = False
         self.frame_selector = 'modPlaque'
         self.setObjectName('modPlaque')
@@ -36,6 +48,9 @@ class ModPlaqueWidget(BaseModWidget):
         elif modgame == 'undertale':
             modgame_text = 'UNDERTALE'
             modgame_style = 'background-color: red; color: white; border: 1px solid red;'
+        elif modgame == 'undertaleyellow':
+            modgame_text = 'UNDERTALE Yellow'
+            modgame_style = 'background-color: #FFD700; color: white; border: none;'
         if modgame_text:
             modgame_label = QLabel(modgame_text)
             style_sheet = f'font-weight: bold; padding: 2px 5px; border-radius: 3px; {modgame_style}'
@@ -45,16 +60,21 @@ class ModPlaqueWidget(BaseModWidget):
             verified_label = QLabel(tr('ui.verified_label'))
             verified_label.setStyleSheet('color: #4CAF50; font-size: 14px;')
             tags_layout.addWidget(verified_label)
+        if hasattr(self.mod_data, 'is_gamebanana_mod') and self.mod_data.is_gamebanana_mod:
+            gb_label = QLabel('GameBanana 🍌')
+            gb_label.setStyleSheet('color: yellow; font-size: 14px;')
+            gb_label.setToolTip(tr('ui.gamebanana_mod_tooltip'))
+            tags_layout.addWidget(gb_label)
         tags_layout.addStretch()
         info_layout.addLayout(tags_layout)
 
     def _init_ui(self):
         super()._init_ui()
-        downloads_label = QLabel(f'⤓ {self.mod_data.downloads}')
-        downloads_label.setObjectName('secondaryText')
-        downloads_label.setToolTip(tr('ui.downloads_tooltip'))
-        downloads_label.setAlignment(Qt.AlignmentFlag.AlignRight)
-        self.title_layout.addWidget(downloads_label)
+        self.downloads_label = QLabel(f'⤓ {self.mod_data.downloads}')
+        self.downloads_label.setObjectName('secondaryText')
+        self.downloads_label.setToolTip(tr('ui.downloads_tooltip'))
+        self.downloads_label.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self.title_layout.addWidget(self.downloads_label)
         created_date_text = self.mod_data.created_date or 'N/A'
         created_container = QWidget()
         created_container_layout = QHBoxLayout(created_container)
@@ -111,8 +131,38 @@ class ModPlaqueWidget(BaseModWidget):
 
     def _check_installation_status(self):
         if self.parent_app and hasattr(self.parent_app, 'mod_manager'):
-            self.is_installed = self.parent_app.mod_manager.is_mod_installed(self.mod_data.key)
-            self._update_install_button()
+            if hasattr(self.mod_data, 'is_gamebanana_mod') and self.mod_data.is_gamebanana_mod:
+                mod_key = getattr(self.mod_data, 'key', '')
+                mod_id = getattr(self.mod_data, 'gamebanana_mod_id', '')
+                try:
+                    self.is_installed = self.parent_app.mod_manager.is_mod_installed(mod_key)
+                except Exception as e:
+                    import logging
+                    logging.error(f'ModPlaqueWidget: Error checking installation by key {mod_key}: {e}', exc_info=True)
+                    self.is_installed = False
+                if not self.is_installed and mod_id:
+                    try:
+                        cache = self.parent_app.mod_manager._get_mods_cache()
+                        for cached_mod_key, mod_info in cache.items():
+                            config_data = mod_info.config_data
+                            cached_mod_id = str(config_data.get('gamebanana_mod_id', ''))
+                            if config_data.get('is_gamebanana_mod') and cached_mod_id == str(mod_id):
+                                self.is_installed = True
+                                break
+                    except Exception as e:
+                        import logging
+                        logging.warning(f'ModPlaqueWidget: Error checking cache for mod_id {mod_id}: {e}', exc_info=True)
+            else:
+                mod_key = getattr(self.mod_data, 'key', '')
+                try:
+                    self.is_installed = self.parent_app.mod_manager.is_mod_installed(mod_key)
+                except Exception as e:
+                    import logging
+                    logging.error(f'ModPlaqueWidget: Error checking installation for mod (key={mod_key}): {e}', exc_info=True)
+                    self.is_installed = False
+        else:
+            self.is_installed = False
+        self._update_install_button()
 
     def _update_install_button(self):
         if self.is_installed:
@@ -132,3 +182,17 @@ class ModPlaqueWidget(BaseModWidget):
 
     def update_installation_status(self):
         self._check_installation_status()
+
+    def update_mod_data(self):
+        try:
+            if hasattr(self, 'downloads_label'):
+                downloads = getattr(self.mod_data, 'downloads', 0) or 0
+                self.downloads_label.setText(f'⤓ {downloads}')
+            if hasattr(self, 'tagline_label'):
+                tagline = getattr(self.mod_data, 'tagline', '') or tr('ui.no_description')
+                if len(tagline) > 200:
+                    tagline = tagline[:197] + '...'
+                self.tagline_label.setText(tagline)
+        except Exception as e:
+            import logging
+            logging.warning(f'ModPlaqueWidget: Error updating mod data: {e}', exc_info=True)

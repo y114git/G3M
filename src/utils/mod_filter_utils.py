@@ -1,5 +1,6 @@
 from typing import List, Dict, Any, Optional, Callable
 from managers.mod_manager import parse_mod_date
+from utils.gamebanana_api import GameBananaAPI
 
 
 def _get_mod_attr(mod: Any, attr: str, default: Any = None) -> Any:
@@ -45,9 +46,23 @@ def filter_and_sort_mods(mods_list: List[Any], filters: Dict[str, Any], sort_con
             continue
         if selected_tags:
             mod_tags = _get_mod_attr(mod, 'tags', []) or []
+            if not isinstance(mod_tags, list):
+                mod_tags = []
             if isinstance(mod, dict) and _get_mod_attr(mod, 'is_local_mod') and ('local' not in mod_tags):
-                mod_tags = mod_tags.copy()
+                mod_tags = mod_tags.copy() if isinstance(mod_tags, list) else []
                 mod_tags.append('local')
+            is_gamebanana_mod = _get_mod_attr(mod, 'is_gamebanana_mod', False)
+            if is_gamebanana_mod:
+                gamebanana_category = _get_mod_attr(mod, 'gamebanana_category')
+                if gamebanana_category:
+                    category_tag = GameBananaAPI.category_to_tag(gamebanana_category)
+                    if category_tag and category_tag not in mod_tags:
+                        if not isinstance(mod_tags, list):
+                            mod_tags = []
+                        mod_tags = mod_tags.copy() if isinstance(mod_tags, list) else []
+                        mod_tags.append(category_tag)
+            if not isinstance(mod_tags, list):
+                mod_tags = []
             if not all((tag in mod_tags for tag in selected_tags)):
                 continue
         if selected_modgame:
@@ -56,25 +71,43 @@ def filter_and_sort_mods(mods_list: List[Any], filters: Dict[str, Any], sort_con
                 continue
         if search_text:
             search_text_lower = search_text.lower()
-            mod_name = _get_mod_attr(mod, 'name', '').lower()
-            mod_tagline = _get_mod_attr(mod, 'tagline', '').lower()
-            if search_text_lower not in mod_name and search_text_lower not in mod_tagline:
+            mod_name_lower = _get_mod_attr(mod, 'name', '').lower()
+            mod_tagline_lower = _get_mod_attr(mod, 'tagline', '').lower()
+            if search_text_lower not in mod_name_lower and search_text_lower not in mod_tagline_lower:
                 continue
         filtered_list.append(item)
     if sort_config:
         sort_type = sort_config.get('sort_type', 0)
         reverse = sort_config.get('reverse', False)
 
+        def date_tuple_to_sortable(date_tuple):
+            if not date_tuple or date_tuple == (0, 0, 0, 0, 0):
+                return 0
+            try:
+                year, month, day, hour, minute = date_tuple
+                return year * 100000000 + month * 1000000 + day * 10000 + hour * 100 + minute
+            except (ValueError, TypeError, IndexError):
+                return 0
+
         def get_sort_key(item):
             mod = mod_accessor(item) if mod_accessor else item
             if sort_type == 0:
-                return _get_mod_attr(mod, 'downloads', 0)
+                downloads = _get_mod_attr(mod, 'downloads', None)
+                if downloads is None or downloads == 0:
+                    return 0
+                try:
+                    downloads = int(downloads) if downloads is not None else 0
+                except (ValueError, TypeError):
+                    downloads = 0
+                return downloads
             elif sort_type == 1:
                 date_str = _get_mod_attr(mod, 'last_updated') or _get_mod_attr(mod, 'updated_date') or '0'
-                return parse_mod_date(date_str)
+                date_tuple = parse_mod_date(date_str)
+                return date_tuple_to_sortable(date_tuple)
             elif sort_type == 2:
                 date_str = _get_mod_attr(mod, 'created_date') or _get_mod_attr(mod, 'installed_date') or '0'
-                return parse_mod_date(date_str)
+                date_tuple = parse_mod_date(date_str)
+                return date_tuple_to_sortable(date_tuple)
             return 0
         filtered_list.sort(key=get_sort_key, reverse=reverse)
     return filtered_list

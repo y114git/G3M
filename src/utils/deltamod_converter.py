@@ -7,6 +7,7 @@ import logging
 import xml.etree.ElementTree as ET
 from typing import Optional, Dict, Any
 from managers.localization_manager import tr
+from utils.file_utils import get_unique_mod_dir
 
 
 class DeltamodConverter:
@@ -24,8 +25,10 @@ class DeltamodConverter:
             config_data = self._generate_config_json()
             if not config_data:
                 return None
-            mod_key = config_data['mod_key']
-            target_mod_dir = os.path.join(self.mods_dir, mod_key)
+            config_data['mod_key']
+            mod_name = config_data.get('name', 'unnamed_mod')
+            folder_name = get_unique_mod_dir(self.mods_dir, mod_name)
+            target_mod_dir = os.path.join(self.mods_dir, folder_name)
             if os.path.exists(target_mod_dir):
                 shutil.rmtree(target_mod_dir)
             os.makedirs(target_mod_dir)

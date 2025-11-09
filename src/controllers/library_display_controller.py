@@ -3,10 +3,10 @@ from managers.localization_manager import tr
 from ui.common.styling import clear_layout_widgets, show_empty_message_in_layout
 from ui.widgets.mod.installed_mod_widget import InstalledModWidget
 from ui.dialogs.mod_priority_dialog import ModPriorityDialog
-from config.constants import SLOT_ID_UNIVERSAL, SLOT_ID_DEMO, SLOT_ID_UNDERTALE, SLOT_ID_MENU, SLOT_ID_CHAPTER_1, SLOT_ID_CHAPTER_2, SLOT_ID_CHAPTER_3, SLOT_ID_CHAPTER_4
+from config.constants import SLOT_ID_UNIVERSAL, SLOT_ID_DEMO, SLOT_ID_UNDERTALE, SLOT_ID_UNDERTALE_YELLOW, SLOT_ID_MENU, SLOT_ID_CHAPTER_1, SLOT_ID_CHAPTER_2, SLOT_ID_CHAPTER_3, SLOT_ID_CHAPTER_4
 from utils.mod_filter_utils import filter_and_sort_mods
 from utils.mod_utils import get_mod_key, get_mod_name
-from utils.game_utils import is_demo_mode, is_undertale_mode
+from utils.game_utils import is_demo_mode, is_undertale_mode, is_undertale_yellow_mode
 
 
 class LibraryDisplayController:
@@ -35,7 +35,7 @@ class LibraryDisplayController:
     def _build_library_filters_and_sort(self):
         selected_tags = []
         if hasattr(self.app, 'library_tag_widgets'):
-            tag_map = {self.app.library_tag_translation: 'translation', self.app.library_tag_customization: 'customization', self.app.library_tag_gameplay: 'gameplay', self.app.library_tag_other: 'other', self.app.library_tag_local: 'local'}
+            tag_map = {self.app.library_tag_textedit: 'textedit', self.app.library_tag_customization: 'customization', self.app.library_tag_gameplay: 'gameplay', self.app.library_tag_other: 'other', self.app.library_tag_local: 'local'}
             for checkbox, tag in tag_map.items():
                 if checkbox.isChecked():
                     selected_tags.append(tag)
@@ -224,6 +224,8 @@ class LibraryDisplayController:
                             check_chapter_id = SLOT_ID_DEMO
                         elif is_undertale_mode(self.app_state.game_mode):
                             check_chapter_id = SLOT_ID_UNDERTALE
+                        elif is_undertale_yellow_mode(self.app_state.game_mode):
+                            check_chapter_id = SLOT_ID_UNDERTALE_YELLOW
                         else:
                             check_chapter_id = SLOT_ID_UNIVERSAL
                         is_used = self.slot_manager.is_mod_used_for_chapter(widget.mod_data, check_chapter_id)
@@ -268,6 +270,10 @@ class LibraryDisplayController:
     def on_mod_use(self, mod_data):
         if is_demo_mode(self.app_state.game_mode):
             target_chapter_id = SLOT_ID_DEMO
+        elif is_undertale_mode(self.app_state.game_mode):
+            target_chapter_id = SLOT_ID_UNDERTALE
+        elif is_undertale_yellow_mode(self.app_state.game_mode):
+            target_chapter_id = SLOT_ID_UNDERTALE_YELLOW
         elif hasattr(mod_data, 'modgame') and mod_data.modgame == 'undertale':
             target_chapter_id = SLOT_ID_UNDERTALE
         else:
@@ -321,6 +327,9 @@ class LibraryDisplayController:
         elif is_undertale_mode(self.app_state.game_mode):
             logging.info('_get_current_chapter_id: UndertaleGameMode, returning SLOT_ID_UNDERTALE')
             return SLOT_ID_UNDERTALE
+        elif is_undertale_yellow_mode(self.app_state.game_mode):
+            logging.info('_get_current_chapter_id: UndertaleYellowGameMode, returning SLOT_ID_UNDERTALE_YELLOW')
+            return SLOT_ID_UNDERTALE_YELLOW
 
         def _check_slot_for_mods(slot_id, min_count=2):
             mods_list = self.slot_manager.get_used_mods_list(slot_id)
@@ -336,7 +345,7 @@ class LibraryDisplayController:
         for chapter_id in range(5):
             if _check_slot_for_mods(chapter_id):
                 return chapter_id
-        for slot_id in [SLOT_ID_DEMO, SLOT_ID_UNDERTALE]:
+        for slot_id in [SLOT_ID_DEMO, SLOT_ID_UNDERTALE, SLOT_ID_UNDERTALE_YELLOW]:
             if _check_slot_for_mods(slot_id):
                 return slot_id
         if mods_universal and len(mods_universal) > 0:
@@ -434,6 +443,10 @@ class LibraryDisplayController:
                 chapter_mods = {-1: mods_list}
         elif is_undertale_mode(self.app_state.game_mode):
             mods_list = self.slot_manager.get_used_mods_list(SLOT_ID_UNDERTALE)
+            if mods_list and len(mods_list) >= 2:
+                chapter_mods = {-1: mods_list}
+        elif is_undertale_yellow_mode(self.app_state.game_mode):
+            mods_list = self.slot_manager.get_used_mods_list(SLOT_ID_UNDERTALE_YELLOW)
             if mods_list and len(mods_list) >= 2:
                 chapter_mods = {-1: mods_list}
         else:

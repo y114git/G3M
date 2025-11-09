@@ -9,7 +9,7 @@ from typing import Dict, Optional, Any, List
 from PyQt6.QtCore import QObject, QThread, QTimer, pyqtSignal
 from managers.localization_manager import tr
 from utils.file_utils import ensure_writable
-from utils.game_utils import is_game_running, is_demo_mode, is_undertale_mode
+from utils.game_utils import is_game_running, is_demo_mode, is_undertale_mode, is_undertale_yellow_mode
 from utils.path_utils import find_chapter_resource_dir, resolve_game_executable
 from utils.mod_utils import get_mod_key
 from workers.game_monitor import GameMonitorWorker
@@ -64,7 +64,7 @@ class GameLauncher(QObject):
 
     def launch_game_with_all_mods(self, execute_plugin_hooks=None, restore_window_callback=None):
         if self.save_manager:
-            if is_undertale_mode(self.app_state.game_mode):
+            if is_undertale_mode(self.app_state.game_mode) or is_undertale_yellow_mode(self.app_state.game_mode):
                 collection_idx = -1
             else:
                 collection_idx = self.save_manager.prompt_for_save_collection_on_launch()
@@ -215,7 +215,7 @@ class GameLauncher(QObject):
         direct_launch_slot_id = self.app_state.local_config.get('direct_launch_slot_id', SLOT_ID_UNIVERSAL)
         is_chapter_mode = self.app_state.current_mode == 'chapter'
         direct_launch = direct_launch_slot_id >= 0 and direct_launch_slot_id != 0 and is_chapter_mode and self.app_state.game_mode.direct_launch_allowed and (platform.system() != 'Darwin')
-        if use_steam:
+        if use_steam and self.app_state.game_mode.steam_id:
             return {'target': f'steam://rungameid/{self.app_state.game_mode.steam_id}', 'cwd': None, 'type': 'webbrowser'}
         if direct_launch:
             return self._handle_direct_launch(direct_launch_slot_id)
@@ -242,7 +242,10 @@ class GameLauncher(QObject):
             if use_custom_exe:
                 target_exe = os.path.join(chapter_folder, os.path.basename(source_exe))
             else:
-                exe_name = 'UNDERTALE.exe' if is_undertale_mode(self.app_state.game_mode) else 'DELTARUNE.exe'
+                if is_undertale_mode(self.app_state.game_mode) or is_undertale_yellow_mode(self.app_state.game_mode):
+                    exe_name = 'UNDERTALE.exe' if is_undertale_mode(self.app_state.game_mode) else 'Undertale Yellow.exe'
+                else:
+                    exe_name = 'DELTARUNE.exe'
                 target_exe = os.path.join(chapter_folder, exe_name)
             shutil.copy2(source_exe, target_exe)
             self._direct_launch_cleanup_info = {'target_exe': target_exe, 'source_exe': source_exe, 'chapter_folder': chapter_folder, 'use_custom_exe': use_custom_exe}
@@ -260,7 +263,8 @@ class GameLauncher(QObject):
         current_game_path = self._get_current_game_path()
         if not current_game_path or not os.path.isdir(current_game_path):
             return None
-        is_undertale = is_undertale_mode(self.app_state.game_mode)
+        from utils.game_utils import is_undertale_yellow_mode
+        is_undertale = is_undertale_mode(self.app_state.game_mode) or is_undertale_yellow_mode(self.app_state.game_mode)
         executable = resolve_game_executable(current_game_path, is_undertale)
         if not executable:
             self.status_changed.emit(tr('errors.executable_not_found_deltarune'), UI_COLORS['status_error'])
@@ -464,6 +468,9 @@ class GameLauncher(QObject):
         elif is_undertale_mode(self.app_state.game_mode):
             game_type = 'undertale'
             game_name = 'UNDERTALE'
+        elif is_undertale_yellow_mode(self.app_state.game_mode):
+            game_type = 'undertaleyellow'
+            game_name = 'UNDERTALE Yellow'
         else:
             game_type = 'deltarune'
             game_name = 'DELTARUNE'

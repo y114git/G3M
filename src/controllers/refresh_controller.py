@@ -9,7 +9,7 @@ from utils.thread_utils import safe_stop_thread
 
 class RefreshController:
 
-    def __init__(self, app_state, feedback_manager, mod_manager, slot_manager, game_launch_controller, update_checker, settings_manager=None):
+    def __init__(self, app_state, feedback_manager, mod_manager, slot_manager, game_launch_controller, update_checker, settings_manager=None, app_window=None):
         self.app_state = app_state
         self.feedback_manager = feedback_manager
         self.mod_manager = mod_manager
@@ -17,7 +17,10 @@ class RefreshController:
         self.game_launch_controller = game_launch_controller
         self.update_checker = update_checker
         self.settings_manager = settings_manager
+        self.app_window = app_window
         self.fetch_thread = None
+        self.details_thread = None
+        self.metadata_thread = None
 
     def _set_combo_silently(self, combo, operation):
         combo.blockSignals(True)
@@ -28,6 +31,25 @@ class RefreshController:
 
     def refresh_mods_list(self, is_initial=False, language_combo=None, retranslate_callback=None, on_fetch_finished_kwargs=None):
         try:
+            if hasattr(self.app_state, 'config_dir') and self.app_state.config_dir:
+                try:
+                    from utils.gamebanana_cache import GameBananaMetadataCache
+                    metadata_cache = GameBananaMetadataCache(self.app_state.config_dir)
+                    if hasattr(self.app_state, 'all_mods') and self.app_state.all_mods:
+                        for mod in self.app_state.all_mods:
+                            if hasattr(mod, 'is_gamebanana_mod') and mod.is_gamebanana_mod and mod.gamebanana_mod_id:
+                                mod_id = str(mod.gamebanana_mod_id)
+                                if not metadata_cache.is_valid(mod_id):
+                                    downloads = getattr(mod, 'downloads', None)
+                                    tagline = getattr(mod, 'tagline', None)
+                                    full_description = getattr(mod, 'full_description', None)
+                                    screenshots = getattr(mod, 'screenshots_url', None) if hasattr(mod, 'screenshots_url') else None
+                                    category = getattr(mod, 'gamebanana_category', None)
+                                    if downloads is not None or tagline or full_description or screenshots or category:
+                                        metadata_cache.set(mod_id, downloads=downloads, tagline=tagline, full_description=full_description, screenshots=screenshots, category=category)
+                                        logging.debug(f'RefreshController: Saved metadata to cache for mod {mod_id}')
+                except Exception as e:
+                    logging.warning(f'RefreshController: Error saving metadata to cache: {e}', exc_info=True)
             if language_combo is not None:
                 current_lang_code = localization_manager.get_current_language()
                 localization_manager.rescan_languages()
@@ -70,10 +92,91 @@ class RefreshController:
             safe_stop_thread(self.fetch_thread)
             if not (self.fetch_thread and self.fetch_thread.isRunning()):
                 self.fetch_thread = None
+        if self.details_thread:
+            try:
+                try:
+                    self.details_thread.mod_updated.disconnect()
+                    self.details_thread.finished.disconnect()
+                    self.details_thread.progress.disconnect()
+                except (TypeError, RuntimeError):
+                    pass
+                if hasattr(self.details_thread, 'cancel'):
+                    self.details_thread.cancel()
+                if self.details_thread.isRunning():
+                    self.details_thread.wait(2000)
+                    if self.details_thread.isRunning():
+                        logging.warning('RefreshController: Details thread still running, terminating')
+                        self.details_thread.terminate()
+                        self.details_thread.wait(1000)
+                self.details_thread.deleteLater()
+            except Exception as e:
+                logging.warning(f'RefreshController: Error stopping details thread: {e}')
+            finally:
+                self.details_thread = None
+        if self.metadata_thread:
+            try:
+                try:
+                    self.metadata_thread.mod_updated.disconnect()
+                    self.metadata_thread.finished.disconnect()
+                    self.metadata_thread.progress.disconnect()
+                except (TypeError, RuntimeError):
+                    pass
+                if hasattr(self.metadata_thread, 'cancel'):
+                    self.metadata_thread.cancel()
+                if self.metadata_thread.isRunning():
+                    self.metadata_thread.wait(2000)
+                    if self.metadata_thread.isRunning():
+                        logging.warning('RefreshController: Metadata thread still running, terminating')
+                        self.metadata_thread.terminate()
+                        self.metadata_thread.wait(1000)
+                self.metadata_thread.deleteLater()
+            except Exception as e:
+                logging.warning(f'RefreshController: Error stopping metadata thread: {e}')
+            finally:
+                self.metadata_thread = None
 
-    def _on_fetch_finished(self, success: bool, retranslate_callback=None, update_filtered_mods_callback=None, update_installed_mods_callback=None, update_action_button_callback=None, update_plugin_tabs_callback=None, mods_loaded_signal=None):
+    def _on_fetch_finished(self, success: bool, retranslate_callback=None, update_filtered_mods_callback=None, update_installed_mods_callback=None, update_action_button_callback=None, update_plugin_tabs_callback=None, mods_loaded_signal=None, fetch_thread=None):
         try:
             self.mod_manager.load_local_mods()
+            if hasattr(self.app_state, 'all_mods') and self.app_state.all_mods:
+                installed_gb_mods = []
+                for mod in self.app_state.all_mods:
+                    if hasattr(mod, 'is_gamebanana_mod') and mod.is_gamebanana_mod and hasattr(mod, 'gamebanana_mod_id') and mod.gamebanana_mod_id:
+                        installed_gb_mods.append(f'{mod.name} (key={mod.key}, id={mod.gamebanana_mod_id})')
+                logging.info(f'RefreshController: Found {len(installed_gb_mods)} GameBanana mods in all_mods after load_local_mods')
+                for mod_info in installed_gb_mods[:10]:
+                    logging.debug(f'RefreshController: GameBanana mod in all_mods: {mod_info}')
+            if hasattr(self.app_state, 'config_dir') and self.app_state.config_dir:
+                try:
+                    from utils.gamebanana_cache import GameBananaMetadataCache
+                    metadata_cache = GameBananaMetadataCache(self.app_state.config_dir)
+                    restored_count = 0
+                    if hasattr(self.app_state, 'all_mods') and self.app_state.all_mods:
+                        for mod in self.app_state.all_mods:
+                            if hasattr(mod, 'is_gamebanana_mod') and mod.is_gamebanana_mod and mod.gamebanana_mod_id:
+                                mod_id = str(mod.gamebanana_mod_id)
+                                if metadata_cache.is_valid(mod_id):
+                                    downloads = metadata_cache.get_downloads(mod_id)
+                                    tagline = metadata_cache.get_tagline(mod_id)
+                                    full_description = metadata_cache.get_full_description(mod_id)
+                                    screenshots = metadata_cache.get_screenshots(mod_id)
+                                    category = metadata_cache.get_category(mod_id)
+                                    if downloads is not None:
+                                        mod.downloads = downloads
+                                    if tagline:
+                                        mod.tagline = tagline
+                                    if full_description:
+                                        mod.full_description = full_description
+                                    if screenshots:
+                                        mod.screenshots_url = screenshots
+                                    if category:
+                                        if not hasattr(mod, 'gamebanana_category') or mod.gamebanana_category != category:
+                                            mod.gamebanana_category = category
+                                            logging.info(f'RefreshController: Restored category for mod {mod_id}: {category}')
+                                    restored_count += 1
+                                    logging.debug(f'RefreshController: Restored metadata from cache for mod {mod_id} - downloads: {downloads}, has_desc: {bool(full_description)}, has_screenshots: {bool(screenshots)}, has_tagline: {bool(tagline)}, category: {category}')
+                except Exception as e:
+                    logging.warning(f'RefreshController: Error restoring metadata from cache: {e}', exc_info=True)
             if update_filtered_mods_callback:
                 update_filtered_mods_callback()
             if not self.app_state.mods_loaded:
@@ -93,7 +196,80 @@ class RefreshController:
             QTimer.singleShot(100, self.slot_manager.load_used_mods_state)
             if update_plugin_tabs_callback:
                 update_plugin_tabs_callback()
+            self._start_metadata_loading()
+            self._validate_metadata_cache()
         except Exception as e:
             error_msg = f'Error processing mod list: {e}'
             logging.error(f'RefreshController._on_fetch_finished: {error_msg}', exc_info=True)
             self.feedback_manager.update_status(tr('errors.mod_list_processing_error', error=str(e)), UI_COLORS['status_error'])
+
+    def _validate_metadata_cache(self):
+        try:
+            if not hasattr(self.app_state, 'config_dir') or not self.app_state.config_dir:
+                return
+            from utils.gamebanana_cache import GameBananaMetadataCache
+            metadata_cache = GameBananaMetadataCache(self.app_state.config_dir)
+            stale_count = metadata_cache.clear_stale()
+            if stale_count > 0:
+                logging.info(f'RefreshController: Cleared {stale_count} stale metadata cache entries')
+        except Exception as e:
+            logging.warning(f'RefreshController: Error validating metadata cache: {e}', exc_info=True)
+
+    def _start_metadata_loading(self):
+        try:
+            if not hasattr(self.app_state, 'gamebanana_mods_needing_metadata') or not self.app_state.gamebanana_mods_needing_metadata:
+                logging.debug('RefreshController: No mods need metadata loading')
+                return
+            mod_ids = list(self.app_state.gamebanana_mods_needing_metadata)
+            if not mod_ids:
+                return
+            if self.metadata_thread and self.metadata_thread.isRunning():
+                try:
+                    logging.debug(f'RefreshController: Metadata thread is already running, {len(mod_ids)} mods will be loaded after current batch completes')
+                    return
+                except Exception as e:
+                    logging.warning(f'RefreshController: Error checking metadata thread: {e}')
+            if self.metadata_thread:
+                try:
+                    if hasattr(self.metadata_thread, 'cancel'):
+                        self.metadata_thread.cancel()
+                    if self.metadata_thread.isRunning():
+                        self.metadata_thread.wait(1000)
+                    self.metadata_thread.deleteLater()
+                except Exception as e:
+                    logging.warning(f'RefreshController: Error stopping metadata thread: {e}')
+                finally:
+                    self.metadata_thread = None
+            try:
+                from utils.gamebanana_cache import GameBananaMetadataCache
+                if not hasattr(self.app_state, 'config_dir') or not self.app_state.config_dir:
+                    logging.warning('RefreshController: config_dir not available, cannot load metadata')
+                    return
+                metadata_cache = GameBananaMetadataCache(self.app_state.config_dir)
+                mod_ids_to_load = list(self.app_state.gamebanana_mods_needing_metadata)
+                if not mod_ids_to_load:
+                    return
+                self.app_state.gamebanana_mods_needing_metadata = []
+                from workers.load_gamebanana_metadata import LoadGameBananaMetadataThread
+                self.metadata_thread = LoadGameBananaMetadataThread(mod_ids_to_load, metadata_cache, parent=self.app_window)
+                if self.app_window and hasattr(self.app_window, 'search_display'):
+                    self.metadata_thread.mod_updated.connect(self.app_window.search_display.on_metadata_updated)
+                self.metadata_thread.finished.connect(self._on_metadata_loading_finished)
+                self.metadata_thread.start()
+                logging.info(f'RefreshController: Started metadata loading for {len(mod_ids_to_load)} mods')
+            except Exception as e:
+                logging.error(f'RefreshController: Failed to start metadata loading: {e}', exc_info=True)
+        except Exception as e:
+            logging.error(f'RefreshController: Error in _start_metadata_loading: {e}', exc_info=True)
+
+    def _on_metadata_loading_finished(self):
+        try:
+            logging.info('RefreshController: Metadata loading finished')
+            if hasattr(self.app_state, 'gamebanana_mods_needing_metadata') and self.app_state.gamebanana_mods_needing_metadata:
+                logging.info(f'RefreshController: Found {len(self.app_state.gamebanana_mods_needing_metadata)} more mods needing metadata, starting another batch')
+                QTimer.singleShot(100, self._start_metadata_loading)
+            if self.metadata_thread:
+                self.metadata_thread.deleteLater()
+                self.metadata_thread = None
+        except Exception as e:
+            logging.warning(f'RefreshController: Error in _on_metadata_loading_finished: {e}')

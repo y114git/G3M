@@ -59,6 +59,7 @@ class ModEditorDialog(QDialog):
         self.modgame_combo.addItem('DELTARUNE', 'deltarune')
         self.modgame_combo.addItem('DELTARUNE DEMO', 'deltarunedemo')
         self.modgame_combo.addItem('UNDERTALE', 'undertale')
+        self.modgame_combo.addItem('UNDERTALE Yellow', 'undertaleyellow')
         self.modgame_combo.currentIndexChanged.connect(self._update_file_tabs)
         modgame_layout.addWidget(self.modgame_combo)
         modgame_layout.addStretch()
@@ -165,11 +166,11 @@ class ModEditorDialog(QDialog):
     def _create_tags_section(self, form_layout):
         form_layout.addWidget(QLabel(tr('ui.mod_tags_label')))
         tags_layout = QHBoxLayout()
-        self.tag_translation = QCheckBox(tr('tags.translation_text'))
+        self.tag_textedit = QCheckBox(tr('tags.textedit_text'))
         self.tag_customization = QCheckBox(tr('tags.customization'))
         self.tag_gameplay = QCheckBox(tr('tags.gameplay'))
         self.tag_other = QCheckBox(tr('tags.other'))
-        for tag in [self.tag_translation, self.tag_customization, self.tag_gameplay, self.tag_other]:
+        for tag in [self.tag_textedit, self.tag_customization, self.tag_gameplay, self.tag_other]:
             tags_layout.addWidget(tag)
         form_layout.addLayout(tags_layout)
         if not self.is_public and self.is_creating:
@@ -1085,7 +1086,7 @@ class ModEditorDialog(QDialog):
             return False
         if self.is_public:
             pass
-        if hasattr(self, 'tag_other') and (not any([self.tag_translation.isChecked(), self.tag_customization.isChecked(), self.tag_gameplay.isChecked(), self.tag_other.isChecked()])):
+        if hasattr(self, 'tag_other') and (not any([self.tag_textedit.isChecked(), self.tag_customization.isChecked(), self.tag_gameplay.isChecked(), self.tag_other.isChecked()])):
             self.tag_other.setChecked(True)
         return self._validate_file_data()
 
@@ -1504,8 +1505,8 @@ class ModEditorDialog(QDialog):
 
     def _collect_mod_data(self):
         tags = []
-        if self.tag_translation.isChecked():
-            tags.append('translation')
+        if self.tag_textedit.isChecked():
+            tags.append('textedit')
         if self.tag_customization.isChecked():
             tags.append('customization')
         if self.tag_gameplay.isChecked():
@@ -1927,7 +1928,7 @@ class ModEditorDialog(QDialog):
                 self.modgame_combo.setCurrentIndex(i)
                 break
         tags = actual_mod_data.get('tags', [])
-        self.tag_translation.setChecked('translation' in tags)
+        self.tag_textedit.setChecked('textedit' in tags or 'translation' in tags)
         self.tag_customization.setChecked('customization' in tags)
         self.tag_gameplay.setChecked('gameplay' in tags)
         self.tag_other.setChecked('other' in tags)

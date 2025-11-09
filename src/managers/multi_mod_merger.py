@@ -789,19 +789,14 @@ class MultiModMerger(QObject):
                         if returncode == 0:
                             logging.info('Successfully merged two data.win files using UTMTCLI scripts')
                             return True
-            logging.warning('UTMTCLI merge failed, using fallback: other file will be used as base')
-            logging.warning('Note: This means previous mod changes may be lost if they conflict')
-            shutil.copy2(other_file, base_file)
-            return True
+            logging.error('UTMTCLI merge failed: Cannot merge data.win files')
+            logging.error('Fallback copy would overwrite base_file and lose previous mod changes')
+            logging.error('This mod cannot be merged and will be skipped to prevent data loss')
+            return False
         except Exception as e:
             logging.error(f'Failed to merge two data.win files: {e}', exc_info=True)
-            try:
-                logging.warning('Using final fallback: copying other file as base')
-                shutil.copy2(other_file, base_file)
-                return True
-            except Exception as e2:
-                logging.error(f'Fallback copy also failed: {e2}')
-                return False
+            logging.error('Cannot use fallback copy as it would cause irreversible data loss')
+            return False
 
     def _mod_has_assets(self, mod_source_dir: str) -> bool:
         if not os.path.isdir(mod_source_dir):
@@ -1253,7 +1248,14 @@ class MultiModMerger(QObject):
             logging.error('Backup directory not set')
             return False
         try:
-            backup_path = os.path.join(self.backup_dir, f'chapter_{chapter_id}_{os.path.basename(file_path)}_{hash(file_path) % 10000}')
+            import hashlib
+            import time
+            file_path_abs = os.path.abspath(file_path)
+            path_hash = hashlib.sha256(file_path_abs.encode('utf-8')).hexdigest()[:16]
+            timestamp = int(time.time() * 1000000)
+            file_basename = sanitize_filename(os.path.basename(file_path))
+            backup_filename = f'chapter_{chapter_id}_{file_basename}_{path_hash}_{timestamp}'
+            backup_path = os.path.join(self.backup_dir, backup_filename)
             shutil.copy2(file_path, backup_path)
             self.original_files[chapter_id][file_path] = backup_path
             self._save_backups_to_manifest()

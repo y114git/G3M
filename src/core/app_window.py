@@ -149,7 +149,7 @@ class AppWindow(QWidget):
         self.theme = ThemeController(self.app_state, self.feedback_manager, self.settings_manager, self.customization_manager, self)
         self.game_launch = GameLaunchController(self.app_state, self.feedback_manager, self.mod_manager, self.slot_manager, self.settings_manager, self.game_launcher, self.customization_manager, self.plugin_manager, self)
         from controllers.refresh_controller import RefreshController
-        self.refresh_controller = RefreshController(self.app_state, self.feedback_manager, self.mod_manager, self.slot_manager, self.game_launch, self.update_checker, self.settings_manager)
+        self.refresh_controller = RefreshController(self.app_state, self.feedback_manager, self.mod_manager, self.slot_manager, self.game_launch, self.update_checker, self.settings_manager, app_window=self)
         self.mod_manager.mod_list_updated.connect(self.library_display.update_display)
         self.slot_manager.used_mod_changed.connect(lambda chapter_id: self.game_launch.update_button_state())
         self.slot_manager.used_mod_changed.connect(lambda chapter_id: self.library_display._update_priority_button_visibility(chapter_id) if hasattr(self.library_display, '_update_priority_button_visibility') else None)
@@ -198,7 +198,11 @@ class AppWindow(QWidget):
             self._pending_install_url = None
 
     def _on_window_restore_requested(self):
-        self.showNormal()
+        geometry_restored = self.settings_manager.load_window_geometry(self)
+        if geometry_restored:
+            self.show()
+        else:
+            self.showNormal()
         self.activateWindow()
         self.raise_()
 
@@ -250,7 +254,13 @@ class AppWindow(QWidget):
             use_custom_executable = settings.get('use_custom_executable', False)
             custom_exec_path = settings.get('custom_executable_path', '')
             demo_custom_exec_path = settings.get('demo_custom_executable_path', '')
+            undertaleyellow_custom_exec_path = settings.get('undertaleyellow_custom_executable_path', '')
             direct_launch_slot_id = settings.get('direct_launch_slot_id', SLOT_ID_UNIVERSAL)
+            is_chapter_mode = settings.get('is_chapter_mode', False)
+            if is_chapter_mode:
+                self.app_state.current_mode = 'chapter'
+            else:
+                self.app_state.current_mode = 'normal'
             current_game_path = self._get_current_game_path()
             if not current_game_path or not os.path.exists(current_game_path):
                 logging.error('Game files not found for launch')
@@ -258,8 +268,8 @@ class AppWindow(QWidget):
             mods_settings = settings.get('mods', {})
             if not mods_settings:
                 mods_settings = settings.get('selections', {})
-            self.shortcut_manager.apply_shortcut_mods(mods_settings)
-            self.shortcut_manager.launch_game_from_shortcut(launch_via_steam=launch_via_steam, use_custom_executable=use_custom_executable, custom_exec_path=custom_exec_path, demo_custom_exec_path=demo_custom_exec_path, direct_launch_slot_id=direct_launch_slot_id)
+            self.shortcut_manager.apply_shortcut_mods(mods_settings, is_chapter_mode=is_chapter_mode)
+            self.shortcut_manager.launch_game_from_shortcut(launch_via_steam=launch_via_steam, use_custom_executable=use_custom_executable, custom_exec_path=custom_exec_path, demo_custom_exec_path=demo_custom_exec_path, undertaleyellow_custom_exec_path=undertaleyellow_custom_exec_path, direct_launch_slot_id=direct_launch_slot_id)
         except (OSError, FileNotFoundError) as e:
             logging.error(f'Launch error (file system): {e}')
             raise ShortcutLaunchError(f'File system error: {e}')
@@ -352,7 +362,9 @@ class AppWindow(QWidget):
         self.main_tab_widget = QTabWidget()
         self.main_tab_widget.setTabPosition(QTabWidget.TabPosition.North)
         self.app_state.current_page = 1
-        self.app_state.mods_per_page = 15
+        default_mods_per_page = self.app_state.local_config.get('mods_per_page', 20)
+        self.app_state.mods_per_page = default_mods_per_page
+        self.app_state.gamebanana_sort = 'default'
         self.app_state.filtered_mods = []
         self.sort_ascending = False
         self.app_state.search_text = ''
@@ -367,7 +379,7 @@ class AppWindow(QWidget):
         self.sort_order_btn = search_widgets['sort_order_btn']
         self.modgame_combo = search_widgets['modgame_combo']
         self.tags_label = search_widgets['tags_label']
-        self.tag_translation = search_widgets['tag_translation']
+        self.tag_textedit = search_widgets['tag_textedit']
         self.tag_customization = search_widgets['tag_customization']
         self.tag_gameplay = search_widgets['tag_gameplay']
         self.tag_other = search_widgets['tag_other']
@@ -375,10 +387,18 @@ class AppWindow(QWidget):
         self.prev_page_btn = search_widgets['prev_page_btn']
         self.page_label = search_widgets['page_label']
         self.next_page_btn = search_widgets['next_page_btn']
-        self.sort_combo.currentIndexChanged.connect(lambda: self.search_display.update_filtered_mods())
+        self.mods_per_page_spinbox = search_widgets['mods_per_page_spinbox']
+        self.mods_per_page_label = search_widgets['mods_per_page_label']
+        self.gb_sort_combo = search_widgets['gb_sort_combo']
+        self.gb_sort_label = search_widgets['gb_sort_label']
+        self.mods_per_page_spinbox.setValue(self.app_state.mods_per_page)
+        self.mods_per_page_spinbox.valueChanged.connect(self._on_mods_per_page_changed)
+        self.gb_sort_combo.setCurrentIndex(0)
+        self.gb_sort_combo.currentIndexChanged.connect(self._on_gamebanana_sort_changed)
+        self.sort_combo.currentIndexChanged.connect(self._on_search_sort_changed)
         self.sort_order_btn.clicked.connect(self._toggle_sort_order)
         self.modgame_combo.currentIndexChanged.connect(lambda: (setattr(self.app_state, 'current_page', 1), self.search_display.update_filtered_mods()))
-        self.tag_translation.stateChanged.connect(lambda: (setattr(self.app_state, 'current_page', 1), self.search_display.update_filtered_mods()))
+        self.tag_textedit.stateChanged.connect(lambda: (setattr(self.app_state, 'current_page', 1), self.search_display.update_filtered_mods()))
         self.tag_customization.stateChanged.connect(lambda: (setattr(self.app_state, 'current_page', 1), self.search_display.update_filtered_mods()))
         self.tag_gameplay.stateChanged.connect(lambda: (setattr(self.app_state, 'current_page', 1), self.search_display.update_filtered_mods()))
         self.tag_other.stateChanged.connect(lambda: (setattr(self.app_state, 'current_page', 1), self.search_display.update_filtered_mods()))
@@ -414,7 +434,7 @@ class AppWindow(QWidget):
         self.library_sort_combo = library_widgets['library_sort_combo']
         self.library_sort_order_btn = library_widgets['library_sort_order_btn']
         self.library_tags_label = library_widgets['library_tags_label']
-        self.library_tag_translation = library_widgets['library_tag_translation']
+        self.library_tag_textedit = library_widgets['library_tag_textedit']
         self.library_tag_customization = library_widgets['library_tag_customization']
         self.library_tag_gameplay = library_widgets['library_tag_gameplay']
         self.library_tag_other = library_widgets['library_tag_other']
@@ -458,10 +478,14 @@ class AppWindow(QWidget):
             self.app_state.game_mode = DemoGameMode()
         elif saved_game_type == 'undertale':
             self.app_state.game_mode = UndertaleGameMode()
+        elif saved_game_type == 'undertaleyellow':
+            from models.game_modes import UndertaleYellowGameMode
+            self.app_state.game_mode = UndertaleYellowGameMode()
         else:
             self.app_state.game_mode = FullGameMode()
         self.app_state.game_mode_changed.connect(self._on_game_mode_updated_by_state)
         self._update_checkbox_visibility()
+        QTimer.singleShot(0, self._update_saves_button_state)
         self._update_saves_button_state()
         QTimer.singleShot(400, self.slot_manager.load_used_mods_state)
         self._setup_chapter_tabs()
@@ -652,10 +676,31 @@ class AppWindow(QWidget):
 
     def _update_saves_button_state(self):
         game_type = self.game_type_combo.currentData()
-        self.saves_button.setEnabled(game_type != 'undertale')
+        if not game_type:
+            from utils.game_utils import is_undertale_mode, is_undertale_yellow_mode
+            if is_undertale_mode(self.app_state.game_mode) or is_undertale_yellow_mode(self.app_state.game_mode):
+                self.saves_button.setEnabled(False)
+                return
+        self.saves_button.setEnabled(game_type != 'undertale' and game_type != 'undertaleyellow')
 
     def _on_library_filter_changed(self):
         self.library_display.update_display()
+
+    def _on_search_sort_changed(self):
+        if not hasattr(self, 'search_display'):
+            return
+        self.search_display.update_filtered_mods()
+
+    def _on_sort_refresh_complete(self):
+        try:
+            logging.debug('AppWindow: _on_sort_refresh_complete called (deprecated, sort is now non-blocking)')
+            self.app_state.gamebanana_loading = False
+            if hasattr(self, 'search_display'):
+                if hasattr(self.search_display, '_update_display_in_progress'):
+                    self.search_display._update_display_in_progress = False
+        except Exception as e:
+            logging.warning(f'Error in _on_sort_refresh_complete: {e}', exc_info=True)
+            self.app_state.gamebanana_loading = False
 
     def _toggle_library_sort_order(self):
         self.library_sort_ascending = not self.library_sort_ascending
@@ -677,12 +722,81 @@ class AppWindow(QWidget):
             self.sort_order_btn.setToolTip(tr('ui.descending'))
         self.search_display.update_filtered_mods()
 
+    def _on_mods_per_page_changed(self, value: int):
+        try:
+            self.app_state.mods_per_page = value
+            self.app_state.local_config['mods_per_page'] = value
+            self.settings_manager.write_local_config()
+            self.app_state.current_page = 1
+            self.search_display.update_filtered_mods()
+            logging.info(f'Mods per page changed to {value}')
+        except Exception as e:
+            logging.error(f'Error in _on_mods_per_page_changed: {e}', exc_info=True)
+
+    def _on_gamebanana_sort_changed(self, index: int):
+        try:
+            if not hasattr(self, 'gb_sort_combo'):
+                return
+            new_sort = self.gb_sort_combo.currentData()
+            if not new_sort:
+                return
+            old_sort = getattr(self.app_state, 'gamebanana_sort', 'default')
+            if old_sort == new_sort:
+                return
+            self.app_state.gamebanana_sort = new_sort
+            self.app_state.gamebanana_loaded_pages.clear()
+            if hasattr(self.app_state, 'all_mods') and self.app_state.all_mods:
+                self.app_state.all_mods = [mod for mod in self.app_state.all_mods if not (hasattr(mod, 'is_gamebanana_mod') and mod.is_gamebanana_mod)]
+            self.app_state.current_page = 1
+            if hasattr(self.app_state, 'filtered_mods'):
+                self.app_state.filtered_mods = []
+            try:
+                if hasattr(self, 'search_display'):
+                    if hasattr(self.search_display, '_cleanup_details_threads'):
+                        self.search_display._cleanup_details_threads()
+                    if hasattr(self.search_display, '_load_more_threads'):
+                        for thread in list(self.search_display._load_more_threads):
+                            if thread and thread.isRunning():
+                                if hasattr(thread, 'cancel'):
+                                    thread.cancel()
+                        self.search_display._load_more_threads.clear()
+            except Exception:
+                pass
+            try:
+                if hasattr(self, 'refresh_controller') and hasattr(self.refresh_controller, 'fetch_thread'):
+                    if self.refresh_controller.fetch_thread and self.refresh_controller.fetch_thread.isRunning():
+                        self.refresh_controller._stop_fetch_thread()
+            except Exception:
+                pass
+            from PyQt6.QtCore import QTimer
+
+            def trigger_refresh():
+                try:
+                    self.app_state.gamebanana_loading = False
+                    if not hasattr(self.app_state, 'mods_loaded') or not self.app_state.mods_loaded:
+                        self.app_state.mods_loaded = True
+                    if hasattr(self, 'refresh_controller'):
+
+                        def update_callback():
+                            if hasattr(self, 'search_display'):
+                                self.search_display.update_filtered_mods()
+                                self.app_state.current_page = 1
+                                self.search_display.update_display()
+                        self.refresh_controller.refresh_mods_list(is_initial=False, on_fetch_finished_kwargs={'update_filtered_mods_callback': update_callback})
+                    elif hasattr(self, 'search_display'):
+                        self.search_display.update_filtered_mods()
+                except Exception:
+                    pass
+            QTimer.singleShot(300, trigger_refresh)
+        except Exception:
+            pass
+
     def _update_checkbox_visibility(self):
         game_type = self.game_type_combo.currentData()
         if game_type == 'deltarune':
             self.chapter_mode_checkbox.setVisible(True)
             self.full_install_checkbox.setVisible(False)
-        elif game_type == 'deltarunedemo':
+        elif game_type == 'deltarunedemo' or game_type == 'undertaleyellow':
             self.chapter_mode_checkbox.setVisible(False)
             self.full_install_checkbox.setVisible(True)
         else:
@@ -714,6 +828,9 @@ class AppWindow(QWidget):
     def _full_install_tooltip(self) -> str:
         if platform.system() == 'Darwin':
             return tr('tooltips.macos_install_unavailable')
+        from models.game_modes import UndertaleYellowGameMode
+        if isinstance(self.app_state.game_mode, UndertaleYellowGameMode):
+            return tr('tooltips.full_yellow_install_instructions')
         return tr('tooltips.full_install_instructions')
 
     def _safe_set_parent_none(self, obj):
@@ -834,11 +951,15 @@ class AppWindow(QWidget):
         if not self.game_launcher._find_and_validate_game_path(is_initial=True):
             self.action_button.setEnabled(False)
 
-    def _handle_update_info(self, update_info):
+    def _handle_update_info(self, update_info, retry_count=0):
+        max_retries = 15
         if self.app_state.initialization_completed and self.app_state.is_shown_to_user:
             self.show_update_prompt.emit(update_info)
+        elif retry_count < max_retries:
+            QTimer.singleShot(1000, lambda: self._handle_update_info(update_info, retry_count + 1))
         else:
-            QTimer.singleShot(1000, lambda: self._handle_update_info(update_info))
+            logging.warning('Update dialog: conditions not met after max retries, showing dialog anyway')
+            self.show_update_prompt.emit(update_info)
 
     def _maybe_run_legacy_cleanup(self):
         if self._legacy_cleanup_done:
@@ -1002,13 +1123,22 @@ class AppWindow(QWidget):
         self.modgame_combo.setItemText(2, tr('ui.deltarunedemo'))
         self.modgame_combo.setItemText(3, tr('ui.undertale'))
         self.tags_label.setText(tr('ui.tags_label'))
-        self.tag_translation.setText(tr('tags.translation'))
+        self.tag_textedit.setText(tr('tags.textedit'))
         self.tag_customization.setText(tr('tags.customization'))
         self.tag_gameplay.setText(tr('tags.gameplay'))
         self.tag_other.setText(tr('tags.other'))
         self.search_button.setToolTip(tr('ui.search_placeholder'))
         self.prev_page_btn.setText(tr('ui.prev_page'))
         self.next_page_btn.setText(tr('ui.next_page'))
+        if hasattr(self, 'mods_per_page_label'):
+            self.mods_per_page_label.setText(tr('ui.mods_per_page_label'))
+            self.mods_per_page_spinbox.setToolTip(tr('ui.mods_per_page_tooltip'))
+        if hasattr(self, 'gb_sort_label'):
+            self.gb_sort_label.setText(tr('ui.gamebanana_sort_label'))
+            self.gb_sort_combo.setItemText(0, tr('ui.gamebanana_sort_default'))
+            self.gb_sort_combo.setItemText(1, tr('ui.gamebanana_sort_new'))
+            self.gb_sort_combo.setItemText(2, tr('ui.gamebanana_sort_updated'))
+            self.gb_sort_combo.setToolTip(tr('ui.gamebanana_sort_tooltip'))
         self.chapter_mode_checkbox.setText(tr('ui.chapter_mode'))
         self.full_install_checkbox.setText(tr('ui.full_install'))
         self.full_install_checkbox.setToolTip(self._full_install_tooltip())
@@ -1043,8 +1173,8 @@ class AppWindow(QWidget):
             self.library_sort_order_btn.setToolTip(tooltip_text)
         if hasattr(self, 'library_tags_label') and self.library_tags_label:
             self.library_tags_label.setText(tr('ui.tags_label'))
-        if hasattr(self, 'library_tag_translation') and self.library_tag_translation:
-            self.library_tag_translation.setText(tr('tags.translation'))
+        if hasattr(self, 'library_tag_textedit') and self.library_tag_textedit:
+            self.library_tag_textedit.setText(tr('tags.textedit'))
         if hasattr(self, 'library_tag_customization') and self.library_tag_customization:
             self.library_tag_customization.setText(tr('tags.customization'))
         if hasattr(self, 'library_tag_gameplay') and self.library_tag_gameplay:
@@ -1147,6 +1277,10 @@ class AppWindow(QWidget):
                     threads_to_stop.append(thread)
             if hasattr(self.refresh_controller, 'fetch_thread') and self.refresh_controller.fetch_thread:
                 threads_to_stop.append(self.refresh_controller.fetch_thread)
+            if hasattr(self.refresh_controller, 'details_thread') and self.refresh_controller.details_thread:
+                threads_to_stop.append(self.refresh_controller.details_thread)
+            if hasattr(self.refresh_controller, 'metadata_thread') and self.refresh_controller.metadata_thread:
+                threads_to_stop.append(self.refresh_controller.metadata_thread)
             bg_loader = getattr(self, '_bg_loader', None)
             if bg_loader:
                 threads_to_stop.append(bg_loader)
@@ -1190,7 +1324,7 @@ class AppWindow(QWidget):
                             logging.error(f'closeEvent: {thread_name} is still running after force terminate, this may cause resource leaks')
                     except Exception as e:
                         logging.error(f'closeEvent: error terminating {thread_name}: {e}', exc_info=True)
-            critical_threads = [('presence_thread', self.presence_thread), ('fetch_thread', getattr(self.refresh_controller, 'fetch_thread', None)), ('monitor_thread', getattr(self.game_launcher, 'monitor_thread', None)), ('help_thread', getattr(self, 'help_thread', None)), ('changelog_thread', getattr(self, 'changelog_thread', None))]
+            critical_threads = [('presence_thread', self.presence_thread), ('fetch_thread', getattr(self.refresh_controller, 'fetch_thread', None)), ('details_thread', getattr(self.refresh_controller, 'details_thread', None)), ('metadata_thread', getattr(self.refresh_controller, 'metadata_thread', None)), ('monitor_thread', getattr(self.game_launcher, 'monitor_thread', None)), ('help_thread', getattr(self, 'help_thread', None)), ('changelog_thread', getattr(self, 'changelog_thread', None))]
             for thread_name, thread in critical_threads:
                 if thread and thread.isRunning():
                     logging.warning(f'closeEvent: {thread_name} still running after cleanup, forcing termination')
@@ -1255,7 +1389,8 @@ class AppWindow(QWidget):
 
     def _handle_first_launch_settings(self):
         self.app_state.local_config['first_launch_splash_shown'] = True
-        self.app_state.local_config['disable_splash'] = True
+        if 'disable_splash' not in self.app_state.local_config:
+            self.app_state.local_config['disable_splash'] = True
         self.settings_manager.write_local_config()
         try:
             self.initialization_finished.disconnect(self._handle_first_launch_settings)
