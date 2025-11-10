@@ -415,6 +415,8 @@
     "select_save_collection_question": "Which save collection would you like to use for this game session?",
     "new_name": "New name:",
     "new_version_available_simple": "New version available!",
+    "announce_title": "Announcement",
+    "announce_details_button": "Learn More",
     "new_version_banner": "New launcher version ({version}) available!<br>",
     "legacy_cleanup_message": "The launcher has undergone major changes. Some settings were added, others removed or reworked. You will need to reconfigure the launcher to your preferences and re-download or load your mods.",
     "no_local_mods_message": "You have no locally created mods.\nCreate a local mod first.",

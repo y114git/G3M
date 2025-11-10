@@ -93,6 +93,20 @@ class BaseModWidget(QFrame):
         if self.frame_selector:
             update_mod_widget_style(self, self.frame_selector, self.parent_app)
 
+    def update_labels_text(self):
+        if hasattr(self, 'author_container') and self.author_container:
+            author_container_layout = self.author_container.layout()
+            if author_container_layout and author_container_layout.count() >= 1:
+                author_label_title = author_container_layout.itemAt(0).widget()
+                if isinstance(author_label_title, QLabel):
+                    author_label_title.setText(tr('ui.author_label'))
+        if hasattr(self, 'game_version_container') and self.game_version_container:
+            game_version_container_layout = self.game_version_container.layout()
+            if game_version_container_layout and game_version_container_layout.count() >= 1:
+                game_version_label_title = game_version_container_layout.itemAt(0).widget()
+                if isinstance(game_version_label_title, QLabel):
+                    game_version_label_title.setText(tr('ui.game_version_label'))
+
     def set_selected(self, selected):
         self.is_selected = selected
         if hasattr(self, '_update_actions_visibility'):

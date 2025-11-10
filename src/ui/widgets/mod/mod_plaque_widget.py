@@ -93,6 +93,8 @@ class ModPlaqueWidget(BaseModWidget):
         created_label_value.setObjectName('secondaryText')
         created_container_layout.addWidget(created_label_title)
         created_container_layout.addWidget(created_label_value)
+        self.created_container = created_container
+        self.created_label_title = created_label_title
         updated_date_text = self.mod_data.last_updated or 'N/A'
         updated_container = QWidget()
         updated_container_layout = QHBoxLayout(updated_container)
@@ -104,6 +106,8 @@ class ModPlaqueWidget(BaseModWidget):
         updated_label_value.setObjectName('secondaryText')
         updated_container_layout.addWidget(updated_label_title)
         updated_container_layout.addWidget(updated_label_value)
+        self.updated_container = updated_container
+        self.updated_label_title = updated_label_title
         containers = [self.author_container, self.game_version_container, updated_container, created_container]
         for i, container in enumerate(containers):
             self.metadata_layout.addWidget(container)
@@ -211,3 +215,17 @@ class ModPlaqueWidget(BaseModWidget):
         except Exception as e:
             import logging
             logging.warning(f'ModPlaqueWidget: Error updating mod data: {e}', exc_info=True)
+
+    def update_labels_text(self):
+        super().update_labels_text()
+        if hasattr(self, 'created_label_title'):
+            self.created_label_title.setText(tr('ui.created_label'))
+        if hasattr(self, 'updated_label_title'):
+            self.updated_label_title.setText(tr('ui.updated_label'))
+        if hasattr(self, 'details_button'):
+            self.details_button.setText(tr('ui.details_button'))
+        if hasattr(self, 'install_button'):
+            if self.is_installed:
+                self.install_button.setText(tr('buttons.delete'))
+            else:
+                self.install_button.setText(tr('buttons.install'))

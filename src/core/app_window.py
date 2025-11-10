@@ -654,6 +654,8 @@ class AppWindow(QWidget):
             self.initialization_timer.stop()
         self.app_state.initialization_completed = True
         self.initialization_finished.emit()
+        if hasattr(self.app_state, 'pending_announce_check') and self.app_state.pending_announce_check and (not self.app_state.update_in_progress):
+            QTimer.singleShot(500, self._check_and_show_announce)
 
     def _force_finish_initialization(self):
         if self.app_state.initialization_completed:
@@ -661,6 +663,8 @@ class AppWindow(QWidget):
         self.app_state.mods_loaded = True
         self.app_state.initialization_completed = True
         self.initialization_finished.emit()
+        if hasattr(self.app_state, 'pending_announce_check') and self.app_state.pending_announce_check and (not self.app_state.update_in_progress):
+            QTimer.singleShot(500, self._check_and_show_announce)
 
     def _try_start_background_music(self):
         import logging
@@ -884,6 +888,8 @@ class AppWindow(QWidget):
             except requests.RequestException:
                 self.feedback_manager.update_status(tr('status.global_settings_load_failed'), UI_COLORS['status_warning'])
                 self.app_state.has_internet = False
+        if not self.is_shortcut_launch and self.app_state.has_internet:
+            self.app_state.pending_announce_check = True
         if localization_manager.get_current_language() == 'ru':
             changelog_url = self.app_state.global_settings.get('changelog_ru_url', self.app_state.global_settings.get('changelog_url'))
         else:
@@ -1284,6 +1290,7 @@ class AppWindow(QWidget):
             except Exception:
                 pass
             self.search_display.update_filtered_mods()
+            self.search_display.update_all_plaques_labels()
             self.library_display.update_display()
             self._update_pagination_controls()
             self.game_launch.update_button_state()
@@ -1505,6 +1512,9 @@ class AppWindow(QWidget):
         self.game_launch.update_button_state()
 
     def _on_refresh_clicked(self, is_initial=False):
+        if not is_initial and (not self.is_shortcut_launch) and self.app_state.has_internet:
+            if self._reload_global_settings():
+                QTimer.singleShot(500, lambda: self._check_and_show_announce(force_check=True))
 
         def update_installed_mods_callback():
             is_chapter_mode = self.app_state.current_mode == 'chapter'
@@ -1615,6 +1625,70 @@ class AppWindow(QWidget):
         else:
             self.previous_tab_index = index
 
+    def _reload_global_settings(self):
+        if not self.app_state.has_internet:
+            return
+        try:
+            from config.constants import CLOUD_FUNCTIONS_BASE_URL
+            from utils.network_utils import get_session
+            response = get_session().get(f'{CLOUD_FUNCTIONS_BASE_URL}/getGlobalSettings', timeout=5)
+            if response.status_code == 200:
+                self.app_state.global_settings = response.json() or {}
+                logging.info('_reload_global_settings: Global settings reloaded successfully')
+                return True
+        except requests.RequestException as e:
+            logging.warning(f'_reload_global_settings: Failed to reload global settings: {e}')
+        return False
+
+    def _check_and_show_announce(self, retry_count=0, force_check=False):
+        max_retries = 15
+        init_completed = self.app_state.initialization_completed
+        is_shown = self.app_state.is_shown_to_user
+        is_visible = self.isVisible() if hasattr(self, 'isVisible') else False
+        logging.info(f'_check_and_show_announce: retry_count={retry_count}, initialization_completed={init_completed}, is_shown_to_user={is_shown}, is_visible={is_visible}, force_check={force_check}')
+        if init_completed and (is_shown or is_visible or force_check):
+            if not self.app_state.global_settings:
+                return
+            announce = self.app_state.global_settings.get('announce', {})
+            announce_version = announce.get('version', 0)
+            if announce_version == 0:
+                logging.info('_check_and_show_announce: Announce version is 0, announcements disabled')
+                return
+            saved_version = self.app_state.local_config.get('announce_version', 0)
+            if saved_version == -1:
+                logging.info('_check_and_show_announce: User has disabled announcements (version -1)')
+                return
+            if announce_version == saved_version:
+                logging.info(f'_check_and_show_announce: Announce version {announce_version} already shown')
+                return
+            if localization_manager.get_current_language() == 'ru':
+                announce_message = announce.get('message_ru', '')
+            else:
+                announce_message = announce.get('message_en', '')
+            if not announce_message:
+                logging.info('_check_and_show_announce: No message for current language')
+                return
+            announce_link = announce.get('link', '')
+            logging.info(f'_check_and_show_announce: Conditions met, showing announce dialog (version {announce_version}, saved {saved_version})')
+            if is_visible and (not is_shown):
+                self.app_state.is_shown_to_user = True
+                logging.info('_check_and_show_announce: Set app_state.is_shown_to_user=True because window is visible')
+            from ui.dialogs.announce_dialog import AnnounceDialog
+            dialog = AnnounceDialog(announce_message, announce_link, self)
+            dialog.accepted_with_ok.connect(lambda: self._save_announce(announce_version))
+            dialog.exec()
+            self.app_state.pending_announce_check = False
+        elif retry_count < max_retries:
+            logging.debug(f'_check_and_show_announce: Conditions not met, retrying in 1 second (retry {retry_count + 1}/{max_retries})')
+            QTimer.singleShot(1000, lambda: self._check_and_show_announce(retry_count + 1, force_check))
+        else:
+            logging.warning(f'Announce dialog: conditions not met after max retries (init_completed={init_completed}, is_shown={is_shown}, is_visible={is_visible}), skipping announce')
+
+    def _save_announce(self, version: int):
+        self.app_state.local_config['announce_version'] = version
+        self.settings_manager.write_local_config()
+        logging.info(f'_save_announce: Saved announce version {version} to config')
+
     def _prompt_for_update(self, update_info):
         from config.constants import LAUNCHER_VERSION, UI_COLORS
         logging.info(f"_prompt_for_update called with version {update_info.get('version', 'unknown')}")
@@ -1644,6 +1718,8 @@ class AppWindow(QWidget):
             logging.info('_prompt_for_update: User rejected update')
             self.app_state.update_in_progress = False
             self.feedback_manager.update_status(tr('status.update_rejected'), UI_COLORS['status_info'])
+            if hasattr(self.app_state, 'pending_announce_check') and self.app_state.pending_announce_check:
+                QTimer.singleShot(500, self._check_and_show_announce)
 
     def _open_chat(self):
         if not check_internet_connection():

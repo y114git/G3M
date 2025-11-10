@@ -512,3 +512,25 @@ class SearchDisplayController:
                                     logger.warning(f'SearchDisplayController: Error updating plaque for mod {mod_id}: {e}')
         except Exception as e:
             logger.error(f'SearchDisplayController: Error in _update_plaques_for_mods: {e}', exc_info=True)
+
+    def update_all_plaques_labels(self):
+        try:
+            for cache_key, plaque in self.plaque_widget_cache.items():
+                try:
+                    if hasattr(plaque, 'update_labels_text'):
+                        plaque.update_labels_text()
+                except Exception as e:
+                    logger.warning(f'SearchDisplayController: Error updating labels for plaque {cache_key}: {e}')
+            if hasattr(self.app, 'mod_list_layout'):
+                for i in range(self.app.mod_list_layout.count() - 1):
+                    item = self.app.mod_list_layout.itemAt(i)
+                    if item:
+                        widget = item.widget()
+                        if isinstance(widget, ModPlaqueWidget):
+                            try:
+                                if hasattr(widget, 'update_labels_text'):
+                                    widget.update_labels_text()
+                            except Exception as e:
+                                logger.warning(f'SearchDisplayController: Error updating labels for widget in layout: {e}')
+        except Exception as e:
+            logger.error(f'SearchDisplayController: Error in update_all_plaques_labels: {e}', exc_info=True)

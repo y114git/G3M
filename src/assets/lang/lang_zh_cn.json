@@ -414,6 +414,8 @@
     "select_save_collection_question": "您想使用哪个存档集来启动游戏？",
     "new_name": "新名称：",
     "new_version_available_simple": "有新版本可用！",
+    "announce_title": "公告",
+    "announce_details_button": "了解更多",
     "new_version_banner": "有新启动器版本 ({version}) 可用！<br>",
     "legacy_cleanup_message": "启动器经历了重大更改。一些设置被添加，其他设置被删除或重新设计。您需要重新配置启动器以适应您的偏好，并重新下载或加载您的模组。",
     "no_local_mods_message": "您没有本地创建的模组。\\n请先创建一个本地模组。",
