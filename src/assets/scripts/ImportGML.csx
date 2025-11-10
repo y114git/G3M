@@ -28,7 +28,7 @@ string CorrectCodeEntryName(string filename)
 }
 
 // Check code directory.
-// Try to find GM3P root (same approach as ExportModifiedOnly.csx)
+// Try to find DELTAHUB root (same approach as ExportModifiedOnly.csx)
 string gm3pRoot = null;
 {
     // Method 1: Check current working directory
@@ -61,7 +61,7 @@ string gm3pRoot = null;
 }
 
 if (gm3pRoot == null)
-    throw new ScriptException("GM3P root not found (no /output ancestor).");
+    throw new ScriptException("DELTAHUB root not found (no /output ancestor).");
 
 string chapterNo = File.ReadAllText(Path.Combine(gm3pRoot, "output", "Cache", "running", "chapterNumber.txt"));
 string importFolder = Path.Combine(gm3pRoot, "output", "xDeltaCombiner", chapterNo, "1", "Objects", "CodeEntries");

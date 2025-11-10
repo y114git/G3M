@@ -8,6 +8,7 @@ from managers.localization_manager import tr
 from config.constants import UI_COLORS
 from ui.widgets.plugin.plugin_widget import PluginWidget
 from ui.common.styling import clear_layout_widgets, show_empty_message_in_layout
+from workers.plugin_install_worker import PluginInstallWorker
 
 
 class PluginDisplayController:
@@ -130,7 +131,6 @@ class PluginDisplayController:
 
     def on_import_plugin(self):
         from ui.dialogs.plugin_import_dialog import PluginImportDialog
-        from workers.plugin_install_worker import PluginInstallWorker
         dialog = PluginImportDialog(self.app, self.plugin_manager, self.app_state, self.feedback_manager)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             if dialog.import_method == 'file' and dialog.selected_file:
@@ -174,6 +174,9 @@ class PluginDisplayController:
         self.app_state.progress_bar_value = 0
         self.app_state.clear_current_task()
         if success:
+            if self.plugin_manager:
+                self.plugin_manager.convert_plugin_archives()
+                self.plugin_manager.load_plugins()
             self.feedback_manager.update_status(message, UI_COLORS['status_success'])
             if hasattr(self.app, '_update_plugin_tabs'):
                 self.app._update_plugin_tabs()

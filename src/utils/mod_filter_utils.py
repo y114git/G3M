@@ -93,13 +93,13 @@ def filter_and_sort_mods(mods_list: List[Any], filters: Dict[str, Any], sort_con
             mod = mod_accessor(item) if mod_accessor else item
             if sort_type == 0:
                 downloads = _get_mod_attr(mod, 'downloads', None)
-                if downloads is None or downloads == 0:
+                if downloads is None:
                     return 0
                 try:
-                    downloads = int(downloads) if downloads is not None else 0
+                    downloads_int = int(downloads) if downloads is not None else 0
                 except (ValueError, TypeError):
-                    downloads = 0
-                return downloads
+                    downloads_int = 0
+                return downloads_int
             elif sort_type == 1:
                 date_str = _get_mod_attr(mod, 'last_updated') or _get_mod_attr(mod, 'updated_date') or '0'
                 date_tuple = parse_mod_date(date_str)

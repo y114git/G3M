@@ -1,4 +1,4 @@
-// ExportModifiedOnly.csx — GM3P Script.
+// ExportModifiedOnly.csx — Original made for GM3P, modified by Y114 for DELTAHUB.
 
 using System;
 using System.IO;
@@ -12,7 +12,7 @@ using UndertaleModLib.Models;
 using UndertaleModLib.Util;
 
 void PrintLine(string s) => Console.WriteLine(s);
-bool DEBUG = Environment.GetEnvironmentVariable("GM3P_DEBUG") == "1";
+bool DEBUG = Environment.GetEnvironmentVariable("DELTAHUB_DEBUG") == "1";
 void DebugLog(string s) { if (DEBUG) PrintLine($"[DEBUG] {s}"); }
 
 string FixEventNameCasing(string codeName)
@@ -74,7 +74,7 @@ if (Data.IsYYC())
     return;
 }
 
-// ── locate GM3P root (ancestor holding /output)
+// ── locate DELTAHUB root (ancestor holding /output)
 string gm3pRoot = null;
 {
     var probe = new DirectoryInfo(Directory.GetCurrentDirectory());
@@ -83,10 +83,10 @@ string gm3pRoot = null;
         if (Directory.Exists(Path.Combine(probe.FullName, "output"))) { gm3pRoot = probe.FullName; break; }
         probe = probe.Parent;
     }
-        // If UTMT was called but not as a child of GM3P 
+        // If UTMT was called but not as a child of DELTAHUB 
         if (gm3pRoot == null)
         {
-            // Resolve GM3P root → output/xDeltaCombiner/<chapter>/1/Objects (no prompts)
+            // Resolve DELTAHUB root → output/xDeltaCombiner/<chapter>/1/Objects (no prompts)
             string TryRoot(string root)
             {
                 if (string.IsNullOrWhiteSpace(root)) return null;
@@ -99,10 +99,10 @@ string gm3pRoot = null;
 
         }
     
-    if (gm3pRoot == null) throw new ScriptException("GM3P root not found (no /output ancestor).");
+    if (gm3pRoot == null) throw new ScriptException("DELTAHUB root not found (no /output ancestor).");
 }
 
-// ── run context provided by GM3P
+// ── run context provided by DELTAHUB
 string chapterNo = ReadAllTextSafe(Path.Combine(gm3pRoot, "output", "Cache", "running", "chapterNumber.txt"));
 string modNo     = ReadAllTextSafe(Path.Combine(gm3pRoot, "output", "Cache", "running", "modNumbersCache.txt"));
 if (string.IsNullOrWhiteSpace(chapterNo) || string.IsNullOrWhiteSpace(modNo))

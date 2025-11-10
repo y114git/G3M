@@ -137,12 +137,14 @@ class GameLaunchController(QObject):
             return
         if not self.app_state.is_merging:
             self.app_state.action_button_enabled = False
-        self.app_state.saves_button_enabled = False
         self.app_state.progress_bar_visible = False
         self.launch_game()
 
     def launch_game(self):
-        self.game_launcher.launch_game_with_all_mods(execute_plugin_hooks=lambda hook_name: self.plugin_manager.execute_hooks(hook_name, self.app), restore_window_callback=self.app.restore_window_signal.emit)
+
+        def execute_plugin_hooks(hook_name):
+            return self.plugin_manager.execute_hooks(hook_name, self.app)
+        self.game_launcher.launch_game_with_all_mods(execute_plugin_hooks=execute_plugin_hooks, restore_window_callback=self.app.restore_window_signal.emit)
 
     def hide_window(self):
         try:
@@ -156,7 +158,6 @@ class GameLaunchController(QObject):
     def restore_window(self):
         self.app_state.game_is_running = False
         self.window_restore_requested.emit()
-        self.app_state.saves_button_enabled = True
         self.app_state.progress_bar_visible = False
         self.update_button_state()
         self.update_geometry_requested.emit()
@@ -172,7 +173,6 @@ class GameLaunchController(QObject):
         if self.app_state.current_task and self.app_state.current_task.isRunning():
             return
         self.app_state.action_button_enabled = False
-        self.app_state.saves_button_enabled = False
         dlg = QDialog(cast(QWidget, self.app))
         if isinstance(self.app_state.game_mode, UndertaleYellowGameMode):
             dlg.setWindowTitle(tr('dialogs.full_yellow_install'))

@@ -37,8 +37,24 @@ class PluginWidget(QFrame):
         info_layout = QVBoxLayout()
         info_layout.setSpacing(2)
         title_layout = QHBoxLayout()
-        name_key = self.plugin_info.get('name_key', self.plugin_name)
-        name_text = tr(name_key) if name_key else self.plugin_name
+        name_key = self.plugin_info.get('name_key')
+        if name_key:
+            name_text = tr(name_key)
+            if name_text.startswith('[') and name_text.endswith(']'):
+                plugin_id = self.plugin_info.get('plugin_id', '')
+                if plugin_id and name_key.startswith(f'{plugin_id}.'):
+                    plugin_name_key = name_key[len(f'{plugin_id}.'):]
+                    plugin_tr = self.parent_app.lang_manager.get_plugin_tr(plugin_id) if self.parent_app and hasattr(self.parent_app, 'lang_manager') else None
+                    if plugin_tr:
+                        name_text = plugin_tr(plugin_name_key)
+                        if name_text.startswith('[') and name_text.endswith(']'):
+                            name_text = plugin_name_key
+                    else:
+                        name_text = plugin_name_key
+                else:
+                    name_text = name_key
+        else:
+            name_text = self.plugin_info.get('plugin_id', self.plugin_name)
         self.name_label = QLabel(name_text)
         self.name_label.setStyleSheet('font-size: 16px; font-weight: bold;')
         title_layout.addWidget(self.name_label)
@@ -205,8 +221,24 @@ class PluginWidget(QFrame):
         self._update_status_indicator()
         self._update_toggle_button()
         if hasattr(self, 'name_label'):
-            name_key = self.plugin_info.get('name_key', self.plugin_name)
-            name_text = tr(name_key) if name_key else self.plugin_name
+            name_key = self.plugin_info.get('name_key')
+            if name_key:
+                name_text = tr(name_key)
+                if name_text.startswith('[') and name_text.endswith(']'):
+                    plugin_id = self.plugin_info.get('plugin_id', '')
+                    if plugin_id and name_key.startswith(f'{plugin_id}.'):
+                        plugin_name_key = name_key[len(f'{plugin_id}.'):]
+                        plugin_tr = self.parent_app.lang_manager.get_plugin_tr(plugin_id) if self.parent_app and hasattr(self.parent_app, 'lang_manager') else None
+                        if plugin_tr:
+                            name_text = plugin_tr(plugin_name_key)
+                            if name_text.startswith('[') and name_text.endswith(']'):
+                                name_text = plugin_name_key
+                        else:
+                            name_text = plugin_name_key
+                    else:
+                        name_text = name_key
+            else:
+                name_text = self.plugin_info.get('plugin_id', self.plugin_name)
             self.name_label.setText(name_text)
         version = self.plugin_info.get('version')
         if hasattr(self, 'version_label') and self.version_label:
@@ -272,8 +304,24 @@ class PluginWidget(QFrame):
 
     def retranslate_texts(self):
         if hasattr(self, 'name_label'):
-            name_key = self.plugin_info.get('name_key', self.plugin_name)
-            name_text = tr(name_key) if name_key else self.plugin_name
+            name_key = self.plugin_info.get('name_key')
+            if name_key:
+                name_text = tr(name_key)
+                if name_text.startswith('[') and name_text.endswith(']'):
+                    plugin_id = self.plugin_info.get('plugin_id', '')
+                    if plugin_id and name_key.startswith(f'{plugin_id}.'):
+                        plugin_name_key = name_key[len(f'{plugin_id}.'):]
+                        plugin_tr = self.parent_app.lang_manager.get_plugin_tr(plugin_id) if self.parent_app and hasattr(self.parent_app, 'lang_manager') else None
+                        if plugin_tr:
+                            name_text = plugin_tr(plugin_name_key)
+                            if name_text.startswith('[') and name_text.endswith(']'):
+                                name_text = plugin_name_key
+                        else:
+                            name_text = plugin_name_key
+                    else:
+                        name_text = name_key
+            else:
+                name_text = self.plugin_info.get('plugin_id', self.plugin_name)
             self.name_label.setText(name_text)
         if hasattr(self, 'author_label_title') and self.author_label_title:
             self.author_label_title.setText(tr('ui.author_label'))

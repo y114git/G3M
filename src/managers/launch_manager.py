@@ -24,19 +24,17 @@ class GameLauncher(QObject):
     game_launch_finished = pyqtSignal()
     multi_mod_merge_finished = pyqtSignal(bool)
 
-    def __init__(self, app_state, feedback_manager, mod_manager, save_manager=None, parent=None):
+    def __init__(self, app_state, feedback_manager, mod_manager, parent=None):
         super().__init__(parent)
         self.app_state = app_state
         self.feedback_manager = feedback_manager
         self.mod_manager = mod_manager
-        self.save_manager = save_manager
         self.monitor_thread = None
         self._backup_temp_dir = None
         self._backup_files = {}
         self._mod_files_to_cleanup = []
         self._mod_dirs_to_cleanup = []
         self._direct_launch_cleanup_info = None
-        self._collection_backup_info = {}
         self.multi_mod_merger = MultiModMerger(app_state, mod_manager, parent)
         self.multi_mod_merger.status_update.connect(self._on_merge_status)
         self.multi_mod_merger.progress_update.connect(self._on_merge_progress)
@@ -63,17 +61,6 @@ class GameLauncher(QObject):
             logging.error(f'monitor thread cleanup failed: {e}', exc_info=True)
 
     def launch_game_with_all_mods(self, execute_plugin_hooks=None, restore_window_callback=None):
-        if self.save_manager:
-            if is_undertale_mode(self.app_state.game_mode) or is_undertale_yellow_mode(self.app_state.game_mode):
-                collection_idx = -1
-            else:
-                collection_idx = self.save_manager.prompt_for_save_collection_on_launch()
-            if collection_idx is None:
-                if restore_window_callback:
-                    restore_window_callback()
-                return
-            if collection_idx != -1:
-                self._collection_backup_info = self.save_manager.apply_collection_saves_for_launch(collection_idx)
         selections = self._get_used_mods_selections()
         self._launch_game_with_selections(selections, execute_plugin_hooks, restore_window_callback)
 
@@ -94,7 +81,12 @@ class GameLauncher(QObject):
         self.execute_plugin_hooks = execute_plugin_hooks
         self.restore_window_callback = restore_window_callback
         if execute_plugin_hooks:
-            execute_plugin_hooks('on_before_game_launch')
+            hook_result = execute_plugin_hooks('on_before_game_launch')
+            if hook_result is False:
+                if restore_window_callback:
+                    restore_window_callback()
+                return
+            self._hook_result = hook_result
         self.status_changed.emit(tr('status.launching_game'), UI_COLORS['status_success'])
         if not self._find_and_validate_game_path(selections):
             self._handle_launch_failure()
@@ -208,9 +200,6 @@ class GameLauncher(QObject):
         else:
             self.status_changed.emit(tr('status.game_closed_restoring_files'), UI_COLORS['status_info'])
             self._cleanup_direct_launch_files()
-            if self.save_manager and self._collection_backup_info:
-                self.save_manager.restore_original_saves_after_launch(self._collection_backup_info)
-                self._collection_backup_info = {}
             if self.monitor_thread:
                 self._stop_monitor_thread()
                 self.monitor_thread = None
@@ -396,37 +385,6 @@ class GameLauncher(QObject):
                     restore_errors.append(error_msg)
             cleanup_info = self._direct_launch_cleanup_info
             if cleanup_info:
-                if cleanup_info.get('save_collection_swap'):
-                    logging.info('_cleanup_direct_launch_files: restoring save collection swap')
-                    collection_path = cleanup_info.get('collection_path')
-                    backup_path = cleanup_info.get('backup_path')
-                    current_save_path = self.app_state.save_path
-                    if not os.path.exists(current_save_path):
-                        from utils.game_utils import get_default_save_path
-                        current_save_path = self.app_state.local_config.get('save_path') or get_default_save_path()
-                    if collection_path and backup_path and os.path.exists(current_save_path):
-                        try:
-                            if os.path.exists(collection_path):
-                                shutil.rmtree(collection_path)
-                            os.makedirs(collection_path, exist_ok=True)
-                            import re
-                            ignore_pattern = shutil.ignore_patterns('*_*_*')
-                            shutil.copytree(current_save_path, collection_path, dirs_exist_ok=True, ignore=ignore_pattern)
-                            for item in os.listdir(current_save_path):
-                                item_path = os.path.join(current_save_path, item)
-                                if not (os.path.isdir(item_path) and re.match('(.+?)_(\\d+)_(\\d+)$', item)):
-                                    if os.path.isdir(item_path):
-                                        shutil.rmtree(item_path)
-                                    else:
-                                        os.remove(item_path)
-                            if os.path.exists(backup_path):
-                                shutil.copytree(backup_path, current_save_path, dirs_exist_ok=True)
-                                shutil.rmtree(backup_path)
-                            logging.info('_cleanup_direct_launch_files: save collection swap restored successfully')
-                        except Exception as e:
-                            error_msg = f'Save collection swap restore failed: {e}'
-                            logging.error(f'_cleanup_direct_launch_files: {error_msg}', exc_info=True)
-                            restore_errors.append(error_msg)
                 if 'target_exe' in cleanup_info and os.path.exists(cleanup_info['target_exe']):
                     try:
                         os.remove(cleanup_info['target_exe'])

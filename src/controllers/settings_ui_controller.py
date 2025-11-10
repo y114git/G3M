@@ -20,8 +20,6 @@ class SettingsUiController:
         else:
             self.app_state.is_settings_view = not self.app_state.is_settings_view
             if not self.app_state.is_settings_view:
-                if self.app_state.is_save_manager_view:
-                    self.app.save_ui.show_save_manager()
                 if self.app_state.is_changelog_view:
                     self.app_state.is_changelog_view = False
         if self.app_state.is_settings_view:

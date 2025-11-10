@@ -15,12 +15,47 @@ if (Data.IsYYC())
     return;
 }
 
-string chapterNo = File.ReadAllText(@Convert.ToString(Directory.GetParent(Convert.ToString(Directory.GetParent(Convert.ToString(Assembly.GetEntryAssembly().Location)))) + "/output/Cache/running/chapterNumber.txt"));
-string modNo = File.ReadAllText(@Convert.ToString(Directory.GetParent(Convert.ToString(Directory.GetParent(Convert.ToString(Assembly.GetEntryAssembly().Location)))) + "/output/Cache/running/modNumbersCache.txt"));
-string codeFolder = @Convert.ToString(Directory.GetParent(Convert.ToString(Directory.GetParent(Convert.ToString(Assembly.GetEntryAssembly().Location)))) + "/output/xDeltaCombiner/"+chapterNo+"/"+modNo+"/Objects/CodeEntries");
-if (codeFolder is null)
+// Try to find DELTAHUB root (same approach as ExportModifiedOnly.csx)
+string gm3pRoot = null;
 {
-    return;
+    // Method 1: Check current working directory
+    var probe = new DirectoryInfo(Directory.GetCurrentDirectory());
+    while (probe != null)
+    {
+        if (Directory.Exists(Path.Combine(probe.FullName, "output"))) { gm3pRoot = probe.FullName; break; }
+        probe = probe.Parent;
+    }
+    // Method 2: Try data.win location (FilePath)
+    if (gm3pRoot == null && !string.IsNullOrEmpty(FilePath))
+    {
+        var dataWinDir = new DirectoryInfo(Path.GetDirectoryName(FilePath));
+        probe = dataWinDir;
+        while (probe != null)
+        {
+            if (Directory.Exists(Path.Combine(probe.FullName, "output"))) { gm3pRoot = probe.FullName; break; }
+            probe = probe.Parent;
+        }
+    }
+    // Method 3: Fallback to Assembly location (original behavior)
+    if (gm3pRoot == null)
+    {
+        var assemblyRoot = Directory.GetParent(Directory.GetParent(Assembly.GetEntryAssembly().Location));
+        if (assemblyRoot != null && Directory.Exists(Path.Combine(assemblyRoot.FullName, "output")))
+        {
+            gm3pRoot = assemblyRoot.FullName;
+        }
+    }
+}
+
+if (gm3pRoot == null)
+    throw new ScriptException("DELTAHUB root not found (no /output ancestor).");
+
+string chapterNo = File.ReadAllText(Path.Combine(gm3pRoot, "output", "Cache", "running", "chapterNumber.txt"));
+string modNo = File.ReadAllText(Path.Combine(gm3pRoot, "output", "Cache", "running", "modNumbersCache.txt"));
+string codeFolder = Path.Combine(gm3pRoot, "output", "xDeltaCombiner", chapterNo, modNo, "Objects", "CodeEntries");
+if (string.IsNullOrEmpty(codeFolder) || !Directory.Exists(codeFolder))
+{
+    throw new ScriptException("Code folder not found: " + codeFolder);
 }
 
 GlobalDecompileContext globalDecompileContext = new(Data);

@@ -17,7 +17,7 @@ if (Data.IsVersionAtLeast(2024, 11))
     ScriptWarning("This script may act erroneously on GameMaker version 2024.11 and later.");
 }
 
-// Try to find GM3P root (same approach as ExportModifiedOnly.csx)
+// Try to find DELTAHUB root (same approach as ExportModifiedOnly.csx)
 string gm3pRoot = null;
 {
     // Method 1: Check current working directory
@@ -50,10 +50,11 @@ string gm3pRoot = null;
 }
 
 if (gm3pRoot == null)
-    throw new ScriptException("GM3P root not found (no /output ancestor).");
+    throw new ScriptException("DELTAHUB root not found (no /output ancestor).");
 
 string chapterNo = File.ReadAllText(Path.Combine(gm3pRoot, "output", "Cache", "running", "chapterNumber.txt"));
-string assetNamePath = Path.Combine(gm3pRoot, "output", "xDeltaCombiner", chapterNo, "1", "Objects", "AssetOrder.txt");
+string modNo = File.ReadAllText(Path.Combine(gm3pRoot, "output", "Cache", "running", "modNumbersCache.txt"));
+string assetNamePath = Path.Combine(gm3pRoot, "output", "xDeltaCombiner", chapterNo, modNo, "Objects", "AssetOrder.txt");
 if (assetNamePath == null || !File.Exists(assetNamePath))
     throw new ScriptException("The asset name text file was not chosen or does not exist: " + assetNamePath);
 

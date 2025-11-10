@@ -5,22 +5,32 @@ from PyQt6.QtCore import QObject
 
 class PluginAPI(QObject):
 
-    def __init__(self, app_state, app_window, plugin_name: str, parent=None):
+    def __init__(self, app_state, app_window, plugin_id: str, parent=None):
         super().__init__(parent)
         self.app_state = app_state
         self.app_window = app_window
-        self.plugin_name = plugin_name
+        self.plugin_id = plugin_id
         self._config = {}
         self._load_config()
 
     def _load_config(self):
         plugin_configs = self.app_state.local_config.get('plugin_configs', {})
-        self._config = plugin_configs.get(self.plugin_name, {}).copy()
+        prefixed_config = plugin_configs.get(self.plugin_id, {})
+        self._config = {}
+        for key, value in prefixed_config.items():
+            if key.startswith(f'{self.plugin_id}.'):
+                self._config[key[len(f'{self.plugin_id}.'):]] = value
+            else:
+                self._config[key] = value
 
     def _save_config(self):
         if 'plugin_configs' not in self.app_state.local_config:
             self.app_state.local_config['plugin_configs'] = {}
-        self.app_state.local_config['plugin_configs'][self.plugin_name] = self._config.copy()
+        prefixed_config = {}
+        for key, value in self._config.items():
+            prefixed_key = f'{self.plugin_id}.{key}'
+            prefixed_config[prefixed_key] = value
+        self.app_state.local_config['plugin_configs'][self.plugin_id] = prefixed_config
         if hasattr(self.app_window, 'settings_manager'):
             self.app_window.settings_manager.write_local_config()
 
@@ -47,11 +57,11 @@ class PluginAPI(QObject):
         if hasattr(self.app_window, 'feedback_manager'):
             self.app_window.feedback_manager.show_message(message_type, title, message)
         else:
-            logging.warning(f'Plugin {self.plugin_name}: Cannot show message - feedback_manager not available')
+            logging.warning(f'Plugin {self.plugin_id}: Cannot show message - feedback_manager not available')
 
     def log(self, level: str, message: str):
         log_level = getattr(logging, level.upper(), logging.INFO)
-        logging.log(log_level, f'[Plugin {self.plugin_name}] {message}')
+        logging.log(log_level, f'[Plugin {self.plugin_id}] {message}')
 
     def get_app_state(self) -> Any:
         return self.app_state

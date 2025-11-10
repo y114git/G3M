@@ -671,19 +671,19 @@ string CheckValidity()
 {
     string importFolder = null;
     
-    // Method 1: Check if we're being run from GM3P context
-    // When GM3P runs scripts, the data.win is in xDeltaCombiner structure
+    // Method 1: Check if we're being run from DELTAHUB context
+    // When DELTAHUB runs scripts, the data.win is in xDeltaCombiner structure
     string dataWinDir = Path.GetDirectoryName(FilePath);
     
     // Check if we're in the xDeltaCombiner structure
     if (dataWinDir.Contains("xDeltaCombiner"))
     {
-        // We're in GM3P context, Objects folder should be right here
+        // We're in DELTAHUB context, Objects folder should be right here
         string objectsPath = Path.Combine(dataWinDir, "Objects");
         if (Directory.Exists(objectsPath))
         {
             importFolder = objectsPath;
-            ScriptMessage($"Detected GM3P context: {importFolder}");
+            ScriptMessage($"Detected DELTAHUB context: {importFolder}");
             return importFolder;
         }
     }
@@ -698,7 +698,7 @@ string CheckValidity()
     }
     
     // Method 3: Manual fallback
-    ScriptMessage("Could not automatically detect GM3P Objects folder.");
+    ScriptMessage("Could not automatically detect DELTAHUB Objects folder.");
     ScriptMessage("Please select the Objects folder containing sprites to import");
     importFolder = PromptChooseDirectory();  // No arguments
     

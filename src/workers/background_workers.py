@@ -19,15 +19,19 @@ import logging
 class PresenceWorker(QObject):
     finished, update_online_count = (pyqtSignal(), pyqtSignal(int))
 
-    def __init__(self, session_id):
+    def __init__(self, session_id, app_state=None):
         super().__init__()
         self.session_id = session_id
+        self.app_state = app_state
         self._busy = False
 
     @pyqtSlot()
     def run(self):
         try:
             if self._busy:
+                return
+            if not self.app_state or not getattr(self.app_state, 'has_internet', True):
+                self.update_online_count.emit(-1)
                 return
             self._busy = True
             url = f'{CLOUD_FUNCTIONS_BASE_URL}/presenceHeartbeat'
@@ -725,7 +729,7 @@ class UrlInstallThread(QThread):
                 if len(unpacked_items) == 1 and os.path.isdir(os.path.join(unpack_dir, unpacked_items[0])):
                     content_path = os.path.join(unpack_dir, unpacked_items[0])
                 if '_deltamodInfo.json' in os.listdir(content_path):
-                    converter = DeltamodConverter(content_path, self.main_window.app_state.mods_dir)
+                    converter = LegacyModConverter(content_path, self.main_window.app_state.mods_dir)
                     new_mod_path = converter.convert()
                     if new_mod_path:
                         mod_name = os.path.basename(new_mod_path)

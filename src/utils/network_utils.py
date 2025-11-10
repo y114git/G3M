@@ -195,13 +195,17 @@ def download_file(session, url, tmp_path, progress_callback=None, total_size: in
                 logging.debug(f'download_file: sleep failed: {sleep_e}')
 
 
-def check_internet_connection() -> bool:
-    try:
-        session = get_session()
-        session.get('https://www.google.com', timeout=NETWORK_TIMEOUT_SHORT)
-        return True
-    except requests.RequestException:
-        return False
+def check_internet_connection(max_attempts: int = 2) -> bool:
+    for attempt in range(max_attempts):
+        try:
+            session = get_session()
+            session.get('https://www.google.com', timeout=NETWORK_TIMEOUT_SHORT)
+            return True
+        except requests.RequestException:
+            if attempt < max_attempts - 1:
+                continue
+            return False
+    return False
 
 
 def increment_launch_counter() -> None:

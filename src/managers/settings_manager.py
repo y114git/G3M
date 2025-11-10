@@ -89,7 +89,7 @@ class SettingsManager(QObject):
         if self.parent_widget and hasattr(self.parent_widget, '_handle_permission_error'):
             self.parent_widget._handle_permission_error(directory)
         else:
-            self.feedback_manager.show_message('error', 'errors.permission_denied', directory)
+            self.feedback_manager.show_message('error', 'errors.no_write_permission_for', path=directory)
 
     def write_local_config(self):
         self.write_json(self.app_state.config_path, self.app_state.local_config)
