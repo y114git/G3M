@@ -243,6 +243,16 @@ def sanitize_filename(name: str) -> str:
     return re.sub('[\\\\/*?:"<>|]', '', name).strip()
 
 
+def remove_archive_extension(filename: str) -> str:
+    filename_lower = filename.lower()
+    if filename_lower.endswith('.tar.gz'):
+        return filename[:-7]
+    elif filename_lower.endswith('.tar.lzma'):
+        return filename[:-9]
+    else:
+        return os.path.splitext(filename)[0]
+
+
 def get_unique_mod_dir(mods_dir, mod_name):
     sanitized_name = sanitize_filename(mod_name)
     base_dir = os.path.join(mods_dir, sanitized_name)

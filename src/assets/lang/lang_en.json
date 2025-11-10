@@ -909,5 +909,27 @@
     "installation_error": "Installation error: {error}",
     "open_page_error": "Failed to open plugins page",
     "no_plugins_installed": "No plugins installed"
+  },
+  "chat": {
+    "window_title": "Chat",
+    "channel_english": "English",
+    "channel_russian": "Russian",
+    "channel_chinese": "Chinese",
+    "channel_international": "International",
+    "channel_spanish": "Spanish",
+    "message_input_placeholder": "Type your message (max 100 characters)...",
+    "send_button": "Send",
+    "wait_before_send": "Please wait {seconds} seconds before sending another message",
+    "no_internet": "No internet connection. Please check your connection and try again.",
+    "error_loading": "Failed to load messages",
+    "error_sending": "Failed to send message",
+    "message_too_long": "Message is too long (max 100 characters)",
+    "contains_url": "Messages cannot contain links or URLs",
+    "max_messages_reached": "Maximum number of messages reached",
+    "config_error": "Chat is not configured. Please check your settings.",
+    "channel_error": "Failed to access chat channel. Please try again.",
+    "select_channel_first": "Please select a channel first",
+    "loading_messages": "Loading messages...",
+    "message_limit_label": "Max messages:"
   }
 }

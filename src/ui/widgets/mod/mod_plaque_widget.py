@@ -2,6 +2,7 @@ from PyQt6.QtCore import pyqtSignal, Qt
 from PyQt6.QtWidgets import QLabel, QPushButton, QHBoxLayout, QVBoxLayout, QFrame, QWidget
 from .base_mod_widget import BaseModWidget
 from managers.localization_manager import tr
+from ui.common.styling import get_theme_color
 
 
 class ModPlaqueWidget(BaseModWidget):
@@ -29,7 +30,6 @@ class ModPlaqueWidget(BaseModWidget):
         self.setFrameShape(QFrame.Shape.StyledPanel)
         self.setFixedHeight(120)
         self._init_ui()
-        self._update_style()
         self._check_installation_status()
 
     def _create_tags_layout_if_needed(self, info_layout):
@@ -39,18 +39,25 @@ class ModPlaqueWidget(BaseModWidget):
         modgame = getattr(self.mod_data, 'modgame', 'deltarune')
         modgame_text = ''
         modgame_style = ''
+        config = None
+        if self.parent_app:
+            if hasattr(self.parent_app, 'local_config'):
+                config = self.parent_app.local_config
+            elif hasattr(self.parent_app, 'app_state') and hasattr(self.parent_app.app_state, 'local_config'):
+                config = self.parent_app.app_state.local_config
+        text_color = get_theme_color(config, 'text', 'white') if config else 'white'
         if modgame == 'deltarune':
             modgame_text = 'DELTARUNE'
-            modgame_style = 'background-color: black; color: white; border: 1px solid white;'
+            modgame_style = f'background-color: black; color: {text_color}; border: 1px solid white;'
         elif modgame == 'deltarunedemo':
             modgame_text = 'DELTARUNE DEMO'
-            modgame_style = 'background-color: black; color: white; border: 1px solid lightgreen;'
+            modgame_style = f'background-color: black; color: {text_color}; border: 1px solid lightgreen;'
         elif modgame == 'undertale':
             modgame_text = 'UNDERTALE'
-            modgame_style = 'background-color: red; color: white; border: 1px solid red;'
+            modgame_style = f'background-color: red; color: {text_color}; border: 1px solid red;'
         elif modgame == 'undertaleyellow':
             modgame_text = 'UNDERTALE Yellow'
-            modgame_style = 'background-color: #FFD700; color: white; border: none;'
+            modgame_style = f'background-color: #FFD700; color: {text_color}; border: none;'
         if modgame_text:
             modgame_label = QLabel(modgame_text)
             style_sheet = f'font-weight: bold; padding: 2px 5px; border-radius: 3px; {modgame_style}'
@@ -120,6 +127,7 @@ class ModPlaqueWidget(BaseModWidget):
         actions_layout.addWidget(self.install_button)
         self.actions_widget.setVisible(False)
         self.main_layout.addWidget(self.actions_widget)
+        self._update_style()
 
     def _update_actions_visibility(self):
         if not hasattr(self, 'actions_widget'):
@@ -168,7 +176,14 @@ class ModPlaqueWidget(BaseModWidget):
         if self.is_installed:
             self.install_button.setText(tr('buttons.delete'))
             self.install_button.setObjectName('plaqueButtonUninstall')
-            self.install_button.setStyleSheet('\n                QPushButton#plaqueButtonUninstall {\n                    background-color: #F44336;\n                    color: white;\n                    font-weight: bold;\n                    min-width: 110px;\n                    max-width: 110px;\n                    min-height: 35px;\n                    max-height: 35px;\n                    font-size: 15px;\n                    padding: 1px;\n                }\n                QPushButton#plaqueButtonUninstall:hover {\n                    background-color: #d32f2f;\n                }\n            ')
+            config = None
+            if self.parent_app:
+                if hasattr(self.parent_app, 'local_config'):
+                    config = self.parent_app.local_config
+                elif hasattr(self.parent_app, 'app_state') and hasattr(self.parent_app.app_state, 'local_config'):
+                    config = self.parent_app.app_state.local_config
+            text_color = get_theme_color(config, 'text', 'white') if config else 'white'
+            self.install_button.setStyleSheet(f'\n                QPushButton#plaqueButtonUninstall {{\n                    background-color: #F44336;\n                    color: {text_color};\n                    font-weight: bold;\n                    min-width: 110px;\n                    max-width: 110px;\n                    min-height: 35px;\n                    max-height: 35px;\n                    font-size: 15px;\n                    padding: 1px;\n                }}\n                QPushButton#plaqueButtonUninstall:hover {{\n                    background-color: #d32f2f;\n                }}\n            ')
         else:
             self.install_button.setText(tr('buttons.install'))
             self.install_button.setObjectName('plaqueButtonInstall')

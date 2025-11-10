@@ -40,6 +40,8 @@ from managers.plugin_manager import PluginManager
 from managers.customization_manager import CustomizationManager
 from managers.used_mods_manager import UsedModsManager
 from managers.shortcut_manager import ShortcutManager
+from ui.dialogs.chat_window import ChatWindow
+from utils.network_utils import check_internet_connection
 _translator = QTranslator()
 _lock_file = None
 
@@ -374,7 +376,7 @@ class AppWindow(QWidget):
         self.app_state.is_installing = False
         self.pending_updates = []
         self.chat_button = QPushButton(tr('ui.chat_button'))
-        self.chat_button.clicked.connect(lambda: None)
+        self.chat_button.clicked.connect(self._open_chat)
         self.action_frame.addWidget(self.shortcut_button)
         self.action_frame.addWidget(self.action_button)
         self.action_frame.addWidget(self.chat_button)
@@ -1114,7 +1116,8 @@ class AppWindow(QWidget):
         for i, (chapter_id, btn) in enumerate(zip(chapter_ids, self.chapter_tab_buttons)):
             is_direct_launch = direct_launch_chapter_id == chapter_id
             border_style = 'dashed' if is_direct_launch else 'solid'
-            btn.setStyleSheet(f'\n                QPushButton#chapter_tab_{i} {{\n                    background-color: {button_color};\n                    border: 2px {border_style} {border_color};\n                    color: white;\n                    font-weight: bold;\n                    font-size: 13px;\n                    border-radius: 0px;\n                    padding: 5px;\n                }}\n                QPushButton#chapter_tab_{i}:checked {{\n                    background-color: {hover_color};\n                    border: 3px {border_style} {border_color};\n                }}\n                QPushButton#chapter_tab_{i}:hover {{\n                    background-color: {hover_color};\n                }}\n            ')
+            text_color = get_theme_color(self.app_state.local_config, 'text', 'white')
+            btn.setStyleSheet(f'\n                QPushButton#chapter_tab_{i} {{\n                    background-color: {button_color};\n                    border: 2px {border_style} {border_color};\n                    color: {text_color};\n                    font-weight: bold;\n                    font-size: 13px;\n                    border-radius: 0px;\n                    padding: 5px;\n                }}\n                QPushButton#chapter_tab_{i}:checked {{\n                    background-color: {hover_color};\n                    border: 3px {border_style} {border_color};\n                }}\n                QPushButton#chapter_tab_{i}:hover {{\n                    background-color: {hover_color};\n                }}\n            ')
 
     def _retranslate_texts(self):
         self.color_config = {'background': tr('ui.background_color'), 'button': tr('ui.elements_color'), 'border': tr('ui.border_color'), 'button_hover': tr('ui.hover_color'), 'text': tr('ui.main_text_color'), 'version_text': tr('ui.secondary_text_color')}
@@ -1483,7 +1486,10 @@ class AppWindow(QWidget):
         clear_layout_widgets(self.installed_mods_layout, keep_last_n=1)
         instruction_widget = QLabel(tr('ui.chapter_mode_instruction'))
         instruction_widget.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        instruction_widget.setStyleSheet('\n            QLabel {\n                color: #CCCCCC;\n                font-size: 14px;\n                font-style: italic;\n                padding: 20px;\n                border: 2px dashed #666666;\n                background-color: rgba(255, 255, 255, 0.1);\n            }\n        ')
+        from ui.common.styling import get_theme_color
+        secondary_text_color = get_theme_color(self.app_state.local_config, 'version_text', '#CCCCCC')
+        border_color = get_theme_color(self.app_state.local_config, 'border', '#666666')
+        instruction_widget.setStyleSheet(f'\n            QLabel {{\n                color: {secondary_text_color};\n                font-size: 14px;\n                font-style: italic;\n                padding: 20px;\n                border: 2px dashed {border_color};\n                background-color: rgba(255, 255, 255, 0.1);\n            }}\n        ')
         instruction_widget.setWordWrap(True)
         instruction_widget.setMinimumHeight(80)
         self.installed_mods_layout.insertWidget(self.installed_mods_layout.count() - 1, instruction_widget)
@@ -1638,6 +1644,13 @@ class AppWindow(QWidget):
             logging.info('_prompt_for_update: User rejected update')
             self.app_state.update_in_progress = False
             self.feedback_manager.update_status(tr('status.update_rejected'), UI_COLORS['status_info'])
+
+    def _open_chat(self):
+        if not check_internet_connection():
+            self.feedback_manager.show_message('warning', 'chat.no_internet', tr('chat.no_internet'))
+            return
+        chat_window = ChatWindow(self.app_state, self)
+        chat_window.exec()
 
     def _show_pending_dialogs(self):
         if not self.app_state.pending_dialogs:

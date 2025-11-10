@@ -159,7 +159,8 @@ class PluginManager(QObject):
                             except (OSError, ImportError) as e:
                                 logging.warning(f'convert_plugin_archives: failed to check 7z archive {item_name}: {e}', exc_info=True)
                         if has_main_py:
-                            plugin_folder_name = os.path.splitext(item_name)[0]
+                            from utils.file_utils import remove_archive_extension
+                            plugin_folder_name = remove_archive_extension(item_name)
                             plugin_folder_path = os.path.join(self.app_state.plugins_dir, plugin_folder_name)
                             if os.path.exists(plugin_folder_path):
                                 logging.warning(f'convert_plugin_archives: plugin folder already exists: {plugin_folder_name}')

@@ -27,7 +27,7 @@ class ModPriorityDialog(QDialog):
         layout.addWidget(info_label)
         instructions = QLabel(tr('ui.mod_priority_instructions'))
         instructions.setWordWrap(True)
-        instructions.setStyleSheet('color: #888; font-size: 11px;')
+        instructions.setObjectName('instructionsLabel')
         layout.addWidget(instructions)
         self.list_widget = QListWidget()
         self.list_widget.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
@@ -88,4 +88,16 @@ class ModPriorityDialog(QDialog):
         border_color = get_theme_color(self.app_state.local_config, 'border', 'white')
         button_color = get_theme_color(self.app_state.local_config, 'button', 'black')
         hover_color = get_theme_color(self.app_state.local_config, 'button_hover', '#333')
-        self.setStyleSheet(f'\n            QDialog {{\n                background-color: {bg_color};\n                color: white;\n            }}\n            QListWidget {{\n                background-color: {bg_color};\n                border: 2px solid {border_color};\n                color: white;\n                padding: 5px;\n            }}\n            QListWidget::item {{\n                padding: 8px;\n                border-bottom: 1px solid {border_color};\n            }}\n            QListWidget::item:selected {{\n                background-color: {hover_color};\n            }}\n            QPushButton {{\n                background-color: {button_color};\n                border: 2px solid {border_color};\n                color: white;\n                padding: 8px 15px;\n                font-weight: bold;\n            }}\n            QPushButton:hover {{\n                background-color: {hover_color};\n            }}\n            QPushButton:pressed {{\n                background-color: {hover_color};\n            }}\n            QLabel {{\n                color: white;\n            }}\n        ')
+        text_color = get_theme_color(self.app_state.local_config, 'text', 'white')
+        secondary_text_color = get_theme_color(self.app_state.local_config, 'version_text', '#888888')
+        self.setStyleSheet(f'\n            QDialog {{\n                background-color: {bg_color};\n                color: {text_color};\n            }}\n            QListWidget {{\n                background-color: {bg_color};\n                border: 2px solid {border_color};\n                color: {text_color};\n                padding: 5px;\n            }}\n            QListWidget::item {{\n                padding: 8px;\n                border-bottom: 1px solid {border_color};\n            }}\n            QListWidget::item:selected {{\n                background-color: {hover_color};\n            }}\n            QPushButton {{\n                background-color: {button_color};\n                border: 2px solid {border_color};\n                color: {text_color};\n                padding: 8px 15px;\n                font-weight: bold;\n            }}\n            QPushButton:hover {{\n                background-color: {hover_color};\n            }}\n            QPushButton:pressed {{\n                background-color: {hover_color};\n            }}\n            QLabel {{\n                color: {text_color};\n            }}\n        ')
+        instructions = None
+        for i in range(self.layout().count()):
+            item = self.layout().itemAt(i)
+            if item and item.widget() and isinstance(item.widget(), QLabel):
+                widget = item.widget()
+                if widget.objectName() == 'instructionsLabel':
+                    instructions = widget
+                    break
+        if instructions:
+            instructions.setStyleSheet(f'color: {secondary_text_color}; font-size: 11px;')

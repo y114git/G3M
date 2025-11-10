@@ -829,7 +829,15 @@ class MultiModMerger(QObject):
                         archive_name = os.path.basename(file)
                         target_archive_path = os.path.join(target_dir, archive_name)
                         if os.path.exists(target_archive_path):
-                            base_name, ext = os.path.splitext(archive_name)
+                            from utils.file_utils import remove_archive_extension
+                            base_name = remove_archive_extension(archive_name)
+                            archive_name_lower = archive_name.lower()
+                            if archive_name_lower.endswith('.tar.gz'):
+                                ext = '.tar.gz'
+                            elif archive_name_lower.endswith('.tar.lzma'):
+                                ext = '.tar.lzma'
+                            else:
+                                _, ext = os.path.splitext(archive_name)
                             mod_index = 1
                             while os.path.exists(target_archive_path):
                                 target_archive_name = f'{base_name}_mod{mod_index}{ext}'

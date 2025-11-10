@@ -28,6 +28,7 @@ class BaseModWidget(QFrame):
         info_layout.setSpacing(2)
         title_layout = QHBoxLayout()
         name_label = QLabel(self.mod_data.name)
+        name_label.setObjectName('primaryText')
         name_label.setStyleSheet('font-size: 16px; font-weight: bold;')
         title_layout.addWidget(name_label)
         if self.mod_data.version and '|' in self.mod_data.version:

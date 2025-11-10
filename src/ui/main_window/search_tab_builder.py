@@ -77,7 +77,8 @@ class SearchTabBuilder:
         tag_customization = QCheckBox(tr('tags.customization'))
         tag_gameplay = QCheckBox(tr('tags.gameplay'))
         tag_other = QCheckBox(tr('tags.other'))
-        tag_style = '\n            QCheckBox {\n                color: white;\n                font-size: 12px;\n                spacing: 5px;\n            }\n            QCheckBox::indicator {\n                width: 16px;\n                height: 16px;\n            }\n        '
+        text_color = get_theme_color(self.app_state.local_config, 'text', 'white')
+        tag_style = f'\n            QCheckBox {{\n                color: {text_color};\n                font-size: 12px;\n                spacing: 5px;\n            }}\n            QCheckBox::indicator {{\n                width: 16px;\n                height: 16px;\n            }}\n        '
         for tag in [tag_textedit, tag_customization, tag_gameplay, tag_other]:
             tag.setStyleSheet(tag_style)
             filters_layout.addWidget(tag)

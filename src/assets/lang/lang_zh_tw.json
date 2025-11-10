@@ -912,5 +912,27 @@
     "installation_error": "安裝錯誤: {error}",
     "open_page_error": "無法打開插件頁面",
     "no_plugins_installed": "未安裝插件"
+  },
+  "chat": {
+    "window_title": "聊天",
+    "channel_english": "英語",
+    "channel_russian": "俄語",
+    "channel_chinese": "中文",
+    "channel_international": "國際",
+    "channel_spanish": "西班牙語",
+    "message_input_placeholder": "輸入您的訊息（最多100個字元）...",
+    "send_button": "發送",
+    "wait_before_send": "請等待 {seconds} 秒後再發送下一條訊息",
+    "no_internet": "無網路連線。請檢查您的連線並重試。",
+    "error_loading": "載入訊息失敗",
+    "error_sending": "發送訊息失敗",
+    "message_too_long": "訊息太長（最多100個字元）",
+    "contains_url": "訊息不能包含連結或URL",
+    "max_messages_reached": "已達到最大訊息數",
+    "config_error": "聊天未配置。請檢查您的設定。",
+    "channel_error": "無法存取聊天頻道。請重試。",
+    "select_channel_first": "請先選擇頻道",
+    "loading_messages": "正在載入訊息...",
+    "message_limit_label": "最大訊息數:"
   }
 }

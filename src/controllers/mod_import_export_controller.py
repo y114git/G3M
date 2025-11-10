@@ -65,8 +65,8 @@ class ModImportExportController:
                     if not mod_key:
                         QMessageBox.critical(self.app_window, tr('errors.error'), tr('errors.invalid_mod_format'))
                         return
-                    archive_name = os.path.splitext(os.path.basename(archive_path))[0]
-                    from utils.file_utils import sanitize_filename
+                    from utils.file_utils import remove_archive_extension, sanitize_filename
+                    archive_name = remove_archive_extension(os.path.basename(archive_path))
                     folder_name = sanitize_filename(archive_name)
                     target_mod_dir = os.path.join(self.app_state.mods_dir, folder_name)
                     counter = 1

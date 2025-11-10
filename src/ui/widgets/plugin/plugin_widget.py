@@ -3,6 +3,7 @@ from PyQt6.QtCore import pyqtSignal, Qt
 from PyQt6.QtWidgets import QLabel, QPushButton, QHBoxLayout, QVBoxLayout, QFrame, QWidget
 from PyQt6.QtGui import QPixmap, QColor
 from managers.localization_manager import tr
+from ui.common.styling import get_theme_color
 
 
 class PluginWidget(QFrame):
@@ -123,13 +124,12 @@ class PluginWidget(QFrame):
             self.description_label = QLabel(description_text)
             self.description_label.setWordWrap(True)
             self.description_label.setObjectName('secondaryText')
-            self.description_label.setStyleSheet('color: #888;')
             info_layout.addWidget(self.description_label)
         else:
             self.description_label = QLabel(tr('ui.no_description'))
             self.description_label.setWordWrap(True)
             self.description_label.setObjectName('secondaryText')
-            self.description_label.setStyleSheet('color: #666; font-style: italic;')
+            self.description_label.setStyleSheet('font-style: italic;')
             info_layout.addWidget(self.description_label)
         error = self.plugin_info.get('error')
         if error:
@@ -152,7 +152,8 @@ class PluginWidget(QFrame):
         actions_layout.addWidget(self.toggle_button)
         self.delete_button = QPushButton(tr('buttons.delete'))
         self.delete_button.setObjectName('plaqueButton')
-        self.delete_button.setStyleSheet('\n            QPushButton#plaqueButton {\n                background-color: #F44336;\n                color: white;\n            }\n            QPushButton#plaqueButton:hover {\n                background-color: #da190b;\n            }\n        ')
+        text_color = get_theme_color(self.parent_app.app_state.local_config, 'text', 'white') if self.parent_app and hasattr(self.parent_app, 'app_state') else 'white'
+        self.delete_button.setStyleSheet(f'\n            QPushButton#plaqueButton {{\n                background-color: #F44336;\n                color: {text_color};\n            }}\n            QPushButton#plaqueButton:hover {{\n                background-color: #da190b;\n            }}\n        ')
         self.delete_button.clicked.connect(lambda: self.delete_requested.emit(self.plugin_name))
         actions_layout.addWidget(self.delete_button)
         self.actions_widget.setVisible(False)
@@ -184,24 +185,31 @@ class PluginWidget(QFrame):
 
     def _update_style(self):
         from ui.common.styling import get_theme_color
-        if self.parent_app and hasattr(self.parent_app, 'app_state'):
-            config = self.parent_app.app_state.local_config
-            plaque_bg_color = get_theme_color(config, 'button', 'black')
+        config = None
+        if self.parent_app:
+            if hasattr(self.parent_app, 'local_config'):
+                config = self.parent_app.local_config
+            elif hasattr(self.parent_app, 'app_state') and hasattr(self.parent_app.app_state, 'local_config'):
+                config = self.parent_app.app_state.local_config
+        if config:
+            plaque_bg_color = get_theme_color(config, 'background', '#000000')
             border_color = get_theme_color(config, 'border', '#fff')
             hover_border_color = get_theme_color(config, 'button_hover', '#fff')
+            text_color = get_theme_color(config, 'text', '#ffffff')
             version_text_color = get_theme_color(config, 'version_text', 'rgba(255, 255, 255, 178)')
         else:
-            plaque_bg_color = 'black'
+            plaque_bg_color = '#000000'
             border_color = '#fff'
             hover_border_color = '#fff'
+            text_color = '#ffffff'
             version_text_color = 'rgba(255, 255, 255, 178)'
         if self.is_selected:
             border_width = '2px'
-            current_border_color = '#fff'
+            current_border_color = border_color
         else:
             border_width = '1px'
             current_border_color = border_color
-        self.setStyleSheet(f'\n            QFrame#{self.frame_selector} {{\n                background-color: {plaque_bg_color};\n                border: {border_width} solid {current_border_color};\n            }}\n            QFrame#{self.frame_selector}:hover {{\n                border-color: {hover_border_color};\n            }}\n            QLabel#pluginIcon {{\n                border: 2px solid #fff;\n            }}\n            QLabel#versionLabel {{\n                color: {version_text_color};\n            }}\n            QLabel#secondaryText {{\n                color: {version_text_color};\n                font-size: 12px;\n            }}\n            QLabel#primaryText {{\n                color: white;\n                font-size: 12px;\n            }}\n            QPushButton#plaqueButton, QPushButton#plaqueButtonInstall {{\n                min-width: 110px;\n                max-width: 110px;\n                min-height: 35px;\n                max-height: 35px;\n                font-size: 15px;\n                padding: 1px;\n            }}\n            QPushButton#plaqueButtonInstall {{\n                background-color: #4CAF50;\n                font-weight: bold;\n            }}\n            QPushButton#plaqueButtonInstall:hover {{\n                background-color: #5cb85c;\n            }}\n        ')
+        self.setStyleSheet(f'\n            QFrame#{self.frame_selector} {{\n                background-color: {plaque_bg_color};\n                border: {border_width} solid {current_border_color};\n            }}\n            QFrame#{self.frame_selector}:hover {{\n                border-color: {hover_border_color};\n            }}\n            QLabel#pluginIcon {{\n                border: 2px solid {border_color};\n            }}\n            QLabel#versionLabel {{\n                color: {version_text_color};\n            }}\n            QLabel#secondaryText {{\n                color: {version_text_color};\n                font-size: 12px;\n            }}\n            QLabel#primaryText {{\n                color: {text_color};\n                font-size: 12px;\n            }}\n            QPushButton#plaqueButton, QPushButton#plaqueButtonInstall {{\n                min-width: 110px;\n                max-width: 110px;\n                min-height: 35px;\n                max-height: 35px;\n                font-size: 15px;\n                padding: 1px;\n            }}\n            QPushButton#plaqueButtonInstall {{\n                background-color: #4CAF50;\n                font-weight: bold;\n            }}\n            QPushButton#plaqueButtonInstall:hover {{\n                background-color: #5cb85c;\n            }}\n        ')
 
     def set_selected(self, selected: bool):
         self.is_selected = selected
@@ -294,12 +302,13 @@ class PluginWidget(QFrame):
                 if len(description_text) > 200:
                     description_text = description_text[:197] + '...'
                 self.description_label.setText(description_text)
-                self.description_label.setStyleSheet('color: #888;')
+                self.description_label.setStyleSheet('')
                 self.description_label.setVisible(True)
             else:
                 self.description_label.setText(tr('ui.no_description'))
-                self.description_label.setStyleSheet('color: #666; font-style: italic;')
+                self.description_label.setStyleSheet('font-style: italic;')
                 self.description_label.setVisible(True)
+            self._update_style()
         self._load_icon()
 
     def retranslate_texts(self):

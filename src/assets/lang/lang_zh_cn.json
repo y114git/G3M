@@ -909,5 +909,27 @@
     "installation_error": "安装错误: {error}",
     "open_page_error": "无法打开插件页面",
     "no_plugins_installed": "未安装插件"
+  },
+  "chat": {
+    "window_title": "聊天",
+    "channel_english": "英语",
+    "channel_russian": "俄语",
+    "channel_chinese": "中文",
+    "channel_international": "国际",
+    "channel_spanish": "西班牙语",
+    "message_input_placeholder": "输入您的消息（最多100个字符）...",
+    "send_button": "发送",
+    "wait_before_send": "请等待 {seconds} 秒后再发送下一条消息",
+    "no_internet": "无网络连接。请检查您的连接并重试。",
+    "error_loading": "加载消息失败",
+    "error_sending": "发送消息失败",
+    "message_too_long": "消息太长（最多100个字符）",
+    "contains_url": "消息不能包含链接或URL",
+    "max_messages_reached": "已达到最大消息数",
+    "config_error": "聊天未配置。请检查您的设置。",
+    "channel_error": "无法访问聊天频道。请重试。",
+    "select_channel_first": "请先选择频道",
+    "loading_messages": "正在加载消息...",
+    "message_limit_label": "最大消息数:"
   }
 }
