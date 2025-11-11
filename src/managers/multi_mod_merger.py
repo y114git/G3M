@@ -10,7 +10,6 @@ from utils.path_utils import get_xdelta_path, find_chapter_resource_dir
 from utils.file_utils import ensure_writable, sanitize_filename
 from managers.localization_manager import tr
 from utils.mod_utils import get_mod_key, get_mod_name
-from utils.game_utils import is_demo_mode, is_undertale_mode, is_undertale_yellow_mode
 
 
 class MultiModMerger(QObject):
@@ -116,8 +115,12 @@ class MultiModMerger(QObject):
                 if is_modpack and modpack_dir:
                     chapter_folder_name = {-1: 'demo', 0: 'chapter_0'}.get(chapter_id, f'chapter_{chapter_id}')
                     chapter_modpack_dir = os.path.join(modpack_dir, chapter_folder_name)
+                    target_dir = self._get_target_dir(chapter_id)
+                    if not target_dir:
+                        logging.warning(f'Target directory not found for chapter {chapter_id}, skipping mods for this chapter in modpack')
+                        continue
                     if not self._merge_mods_for_chapter_to_dir(chapter_id, mods_list, chapter_modpack_dir, chapter_progress_base, total_chapters):
-                        logging.error(f'Failed to merge mods for chapter {chapter_id}')
+                        logging.error(f'Failed to merge mods for chapter {chapter_id} in modpack')
                         try:
                             failed_msg = tr('status.merge_failed')
                         except BaseException:
@@ -125,6 +128,10 @@ class MultiModMerger(QObject):
                         self.progress_update.emit(0, failed_msg)
                         return False
                 elif not self._merge_mods_for_chapter(chapter_id, mods_list, chapter_progress_base, total_chapters):
+                    target_dir = self._get_target_dir(chapter_id)
+                    if not target_dir:
+                        logging.warning(f'Target directory not found for chapter {chapter_id}, skipping mods for this chapter. The game may not have this chapter installed.')
+                        continue
                     logging.error(f'Failed to merge mods for chapter {chapter_id}, restoring backups')
                     self._restore_backups(chapter_id)
                     try:
@@ -257,13 +264,14 @@ class MultiModMerger(QObject):
                 return False
             mod_name = getattr(mod_data, 'name', 'Unknown')
             mod_number = mods_count - idx
-            xdelta_step = idx / mods_count * xdelta_progress if mods_count > 0 else 0
-            current_progress = progress_base + int(xdelta_step)
+            mod_progress_start = progress_base + int(idx / mods_count * xdelta_progress) if mods_count > 0 else progress_base
+            mod_progress_end = progress_base + int((idx + 1) / mods_count * xdelta_progress) if mods_count > 0 else progress_base + xdelta_progress
+            mod_progress_range = mod_progress_end - mod_progress_start
             try:
                 xdelta_msg = tr('status.applying_xdelta', mod=mod_name, current=idx + 1, total=mods_count)
             except BaseException:
                 xdelta_msg = f'Applying mod {mod_name} ({idx + 1}/{mods_count})...'
-            self.progress_update.emit(min(current_progress, 95), xdelta_msg)
+            self.progress_update.emit(min(mod_progress_start, 95), xdelta_msg)
             mod_source_dir = self._get_mod_source_dir(mod_data, chapter_id)
             if not mod_source_dir:
                 logging.warning(f'Mod source directory not found for {mod_name}, skipping')
@@ -280,20 +288,17 @@ class MultiModMerger(QObject):
                 previous_mod_data_win = os.path.join(previous_mod_dir, original_filename)
                 if os.path.exists(previous_mod_data_win):
                     shutil.copy2(previous_mod_data_win, mod_data_win)
-                    logging.debug(f'Copied previous mod {previous_mod_number} result to {mod_data_win} for mod {mod_number}')
                 else:
                     shutil.copy2(original_data_win, mod_data_win)
-                    logging.debug(f'Previous mod {previous_mod_number} result not found, using vanilla copy for mod {mod_number}')
             else:
                 shutil.copy2(original_data_win, mod_data_win)
-                logging.debug(f'Copied {original_data_win} to {mod_data_win} for mod {mod_number}')
             ready_data_win_files = self._find_ready_data_win_files(mod_source_dir)
             data_patches = self._find_data_patches(mod_source_dir)
             csx_scripts = self._find_csx_scripts(mod_source_dir)
             if ready_data_win_files:
                 logging.info(f'Found {len(ready_data_win_files)} ready data.win/game.ios file(s) from {mod_name} (mod {mod_number}), merging')
-                for rf in ready_data_win_files:
-                    logging.info(f'  - Ready file: {rf}')
+                patch_progress = mod_progress_start + int(mod_progress_range * 0.5)
+                self.progress_update.emit(min(patch_progress, 95), f'Merging ready data.win from {mod_name}...')
                 if not self._handle_ready_data_win(mod_data_win, ready_data_win_files, mod_dir):
                     logging.error(f'Failed to merge ready data.win files from {mod_name}')
                     if not is_modpack:
@@ -311,7 +316,9 @@ class MultiModMerger(QObject):
                 mod_patched_files[mod_number] = mod_data_win
             if data_patches:
                 logging.info(f'Found {len(data_patches)} data patch(es) from {mod_name} (mod {mod_number}), applying to original')
-                if not self._apply_xdelta_patches(mod_data_win, data_patches):
+                patch_progress = mod_progress_start + int(mod_progress_range * 0.3)
+                self.progress_update.emit(min(patch_progress, 95), f'Applying patches from {mod_name}...')
+                if not self._apply_xdelta_patches(mod_data_win, data_patches, progress_callback=lambda p: self.progress_update.emit(min(mod_progress_start + int(mod_progress_range * (0.3 + p * 0.4)), 95), f'Applying patches from {mod_name}...')):
                     logging.error(f'Failed to apply data patches from {mod_name}')
                     if not is_modpack:
                         self._restore_backups(chapter_id)
@@ -320,6 +327,8 @@ class MultiModMerger(QObject):
                 mod_patched_files[mod_number] = mod_data_win
             if csx_scripts:
                 logging.info(f'Found {len(csx_scripts)} CSX script(s) from {mod_name} (mod {mod_number}), executing')
+                script_progress = mod_progress_start + int(mod_progress_range * 0.7)
+                self.progress_update.emit(min(script_progress, 95), f'Executing scripts from {mod_name}...')
                 if not self._apply_csx_scripts(mod_data_win, csx_scripts):
                     logging.error(f'Failed to execute CSX scripts from {mod_name}')
                     if not is_modpack:
@@ -335,6 +344,7 @@ class MultiModMerger(QObject):
                         logging.info(f'Applied file overrides from {mod_name} (mod {mod_number})')
             if mod_number not in mod_patched_files:
                 mod_patched_files[mod_number] = mod_data_win
+            self.progress_update.emit(min(mod_progress_end, 95), f'Completed {mod_name}')
         mods_to_export = [m for i, m in enumerate(mods_to_apply) if mods_count - i != 1 and mods_count - i not in mods_already_exported]
         for idx, mod_data in enumerate(mods_to_export):
             if self._cancelled:
@@ -511,7 +521,7 @@ class MultiModMerger(QObject):
                     return False
         return True
 
-    def _apply_xdelta_patches(self, data_win_path: str, data_patches: List[str]) -> bool:
+    def _apply_xdelta_patches(self, data_win_path: str, data_patches: List[str], progress_callback=None) -> bool:
         import platform
         import stat
         if not self.xdelta_path:
@@ -533,10 +543,13 @@ class MultiModMerger(QObject):
         if not os.path.exists(data_win_path):
             logging.error(f'Input file does not exist: {data_win_path}')
             return False
+        total_patches = len(data_patches)
         for idx, patch_path in enumerate(data_patches):
             if self._cancelled:
                 return False
-            logging.info(f'Applying xdelta patch {idx + 1}/{len(data_patches)}: {os.path.basename(patch_path)}')
+            logging.info(f'Applying xdelta patch {idx + 1}/{total_patches}: {os.path.basename(patch_path)}')
+            if progress_callback:
+                progress_callback(idx / total_patches if total_patches > 0 else 0)
             if not os.path.exists(patch_path):
                 logging.error(f'Patch file does not exist: {patch_path}')
                 self.status_update.emit(tr('errors.xdelta_patch_failed', patch=os.path.basename(patch_path)), 'error')
@@ -558,6 +571,8 @@ class MultiModMerger(QObject):
                     startupinfo.wShowWindow = sp.SW_HIDE
                     creationflags = sp.CREATE_NO_WINDOW
                 result = subprocess.run(cmd, capture_output=True, text=True, timeout=300, stdin=subprocess.DEVNULL, startupinfo=startupinfo, creationflags=creationflags)
+                if progress_callback:
+                    progress_callback((idx + 1) / total_patches if total_patches > 0 else 1.0)
                 if result.returncode != 0:
                     logging.error(f'xdelta patch failed: {result.stderr}')
                     self.status_update.emit(tr('errors.xdelta_patch_failed', patch=os.path.basename(patch_path)), 'error')
@@ -567,7 +582,7 @@ class MultiModMerger(QObject):
                     self.status_update.emit(tr('errors.xdelta_patch_failed', patch=os.path.basename(patch_path)), 'error')
                     return False
                 shutil.move(temp_output, data_win_path)
-                logging.info(f'Patch {idx + 1}/{len(data_patches)} applied successfully')
+                logging.info(f'Patch {idx + 1}/{total_patches} applied successfully')
             except subprocess.TimeoutExpired:
                 logging.error(f'xdelta patch timed out after 300 seconds: {patch_path}')
                 return False
@@ -1195,20 +1210,35 @@ class MultiModMerger(QObject):
     def _get_mod_source_dir(self, mod_data: Any, chapter_id: int) -> Optional[str]:
         mod_key = get_mod_key(mod_data)
         if not mod_key:
+            logging.warning('_get_mod_source_dir: mod_data has no mod_key')
             return None
-        is_local = getattr(mod_data, 'is_local_mod', False)
-        if is_local:
-            mod_folder_path = self.mod_manager.get_mod_folder_path(mod_key)
-            if mod_folder_path:
-                source_dir = mod_folder_path
-            else:
-                folder_name = sanitize_filename(get_mod_name(mod_data, mod_key))
-                source_dir = os.path.join(self.app_state.mods_dir, folder_name)
+        mod_folder_path = self.mod_manager.get_mod_folder_path(mod_key)
+        if mod_folder_path and os.path.isdir(mod_folder_path):
+            source_dir = mod_folder_path
         else:
-            folder_name = sanitize_filename(get_mod_name(mod_data, mod_key))
+            mod_name = get_mod_name(mod_data, mod_key)
+            folder_name = sanitize_filename(mod_name)
             source_dir = os.path.join(self.app_state.mods_dir, folder_name)
-        if not os.path.isdir(source_dir):
-            return None
+            if not os.path.isdir(source_dir):
+                source_dir = None
+                if os.path.exists(self.app_state.mods_dir):
+                    for folder_name in os.listdir(self.app_state.mods_dir):
+                        folder_path = os.path.join(self.app_state.mods_dir, folder_name)
+                        if not os.path.isdir(folder_path):
+                            continue
+                        config_path = os.path.join(folder_path, 'mod_config.json')
+                        if os.path.exists(config_path):
+                            try:
+                                with open(config_path, 'r', encoding='utf-8') as f:
+                                    import json
+                                    config_data = json.load(f)
+                                    if config_data.get('mod_key') == mod_key:
+                                        source_dir = folder_path
+                                        break
+                            except Exception:
+                                pass
+                if not source_dir:
+                    return None
         chapter_folder_name = {-1: 'demo', 0: 'chapter_0'}.get(chapter_id, f'chapter_{chapter_id}')
         chapter_dir = os.path.join(source_dir, chapter_folder_name)
         if not os.path.isdir(chapter_dir):

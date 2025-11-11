@@ -340,20 +340,52 @@ class ModManager(QObject):
                 if is_gamebanana_mod and gamebanana_mod_id:
                     gb_id_str = str(gamebanana_mod_id)
                     if mod_key in existing_keys:
-                        continue
+                        existing_mod = None
+                        for mod in self.app_state.all_mods:
+                            if hasattr(mod, 'key') and mod.key == mod_key:
+                                existing_mod = mod
+                                break
+                        if existing_mod:
+                            if (not hasattr(existing_mod, 'files') or not existing_mod.files) and config_data.get('files'):
+                                try:
+                                    new_mod = self.create_mod_object_from_info(config_data, self.app_state.all_mods)
+                                    for i, mod in enumerate(self.app_state.all_mods):
+                                        if hasattr(mod, 'key') and mod.key == mod_key:
+                                            self.app_state.all_mods[i] = new_mod
+                                            break
+                                except Exception as e:
+                                    logging.warning(f'load_local_mods: Failed to reload mod {mod_key} from config: {e}', exc_info=True)
+                            continue
                     if gb_id_str in existing_gamebanana_ids:
                         existing_mod_key = existing_gamebanana_ids[gb_id_str]
                         for mod in self.app_state.all_mods:
                             if hasattr(mod, 'gamebanana_mod_id') and str(mod.gamebanana_mod_id) == gb_id_str:
-                                if mod.key != mod_key:
-                                    logging.debug(f'load_local_mods: Updating mod.key from {mod.key} to {mod_key} for GameBanana mod {gb_id_str}')
+                                if hasattr(mod, 'files') and mod.files:
+                                    mod.key = mod_key
+                                    existing_keys.discard(existing_mod_key)
+                                    existing_keys.add(mod_key)
+                                else:
                                     mod.key = mod_key
                                     existing_keys.discard(existing_mod_key)
                                     existing_keys.add(mod_key)
                                 break
                         continue
                 elif mod_key in existing_keys:
-                    logging.debug(f'load_local_mods: Non-GameBanana mod {mod_key} already in all_mods, skipping')
+                    existing_mod = None
+                    for mod in self.app_state.all_mods:
+                        if hasattr(mod, 'key') and mod.key == mod_key:
+                            existing_mod = mod
+                            break
+                    if existing_mod:
+                        if (not hasattr(existing_mod, 'files') or not existing_mod.files) and config_data.get('files'):
+                            try:
+                                new_mod = self.create_mod_object_from_info(config_data, self.app_state.all_mods)
+                                for i, mod in enumerate(self.app_state.all_mods):
+                                    if hasattr(mod, 'key') and mod.key == mod_key:
+                                        self.app_state.all_mods[i] = new_mod
+                                        break
+                            except Exception as e:
+                                logging.warning(f'load_local_mods: Failed to reload mod {mod_key}: {e}', exc_info=True)
                     continue
                 try:
                     mod_folder_path = self.get_mod_folder_path(mod_key)
@@ -382,16 +414,31 @@ class ModManager(QObject):
                     mod = mod_models.ModInfo(**safe_mod_info)
                     files_data = config_data.get('files', {})
                     for file_key, ch_info in list(files_data.items()):
+                        if not isinstance(ch_info, dict):
+                            continue
                         extra_files_list = []
-                        for ef_data in ch_info.get('extra_files', []):
-                            if isinstance(ef_data, dict):
-                                try:
-                                    extra_files_list.append(mod_models.ModExtraFile(key=ef_data.get('key', ''), version=ef_data.get('version', ''), url=ef_data.get('url', '')))
-                                except (KeyError, TypeError, ValueError) as e:
-                                    logging.debug(f'load_local_mods: failed to parse extra_file: {e}')
-                        valid_chapter_fields = {'description': ch_info.get('description'), 'data_file_url': ch_info.get('data_file_url'), 'data_file_version': ch_info.get('data_file_version'), 'extra_files': extra_files_list}
+                        extra_files_raw = ch_info.get('extra_files', [])
+                        if isinstance(extra_files_raw, list):
+                            for ef_data in extra_files_raw:
+                                if isinstance(ef_data, dict):
+                                    try:
+                                        extra_files_list.append(mod_models.ModExtraFile(key=ef_data.get('key', ''), version=ef_data.get('version', '1.0.0'), url=ef_data.get('url', '')))
+                                    except (KeyError, TypeError, ValueError):
+                                        pass
+                        elif isinstance(extra_files_raw, dict):
+                            for group_key, filenames in extra_files_raw.items():
+                                if isinstance(filenames, list):
+                                    for filename in filenames:
+                                        extra_files_list.append(mod_models.ModExtraFile(key=group_key, version=ch_info.get('versions', {}).get(group_key, '1.0.0') if isinstance(ch_info.get('versions'), dict) else '1.0.0', url=filename))
+                        data_file_version = ch_info.get('data_file_version')
+                        if not data_file_version and isinstance(ch_info.get('versions'), dict):
+                            data_file_version = ch_info.get('versions', {}).get('data')
+                        if not data_file_version:
+                            data_file_version = '1.0.0'
+                        valid_chapter_fields = {'description': ch_info.get('description'), 'data_file_url': ch_info.get('data_file_url'), 'data_file_version': data_file_version, 'extra_files': extra_files_list}
                         mod.files[file_key] = ModChapterData(**valid_chapter_fields)
-                    self.app_state.all_mods.append(mod)
+                    if mod.files:
+                        self.app_state.all_mods.append(mod)
                 except Exception as e:
                     logging.warning(f'Failed to create ModInfo for installed mod {mod_key}: {e}', exc_info=True)
             all_mods_filtered = []
@@ -805,8 +852,31 @@ class ModManager(QObject):
         if all_mods:
             for mod in all_mods:
                 if hasattr(mod, 'key') and mod.key == mod_key:
-                    return mod
-        return mod_models.ModInfo(key=mod_key, name=mod_info.get('name', mod_key), version=mod_info.get('version', '1.0.0'), author=mod_info.get('author', tr('defaults.unknown')), tagline=mod_info.get('tagline', tr('defaults.no_description')), game_version=mod_info.get('game_version', '1.04'), description_url='', downloads=0, modgame=mod_info.get('modgame', 'deltarune'), is_verified=False, icon_url=None, tags=[], hide_mod=False, is_local_mod=mod_info.get('is_local_mod', False), ban_status=False, files={})
+                    if hasattr(mod, 'files') and mod.files:
+                        return mod
+        files_dict = {}
+        files_data = mod_info.get('files', {})
+        if files_data:
+            for file_key, ch_info in files_data.items():
+                if not isinstance(ch_info, dict):
+                    continue
+                extra_files_list = []
+                extra_files_raw = ch_info.get('extra_files', [])
+                if isinstance(extra_files_raw, list):
+                    for ef_data in extra_files_raw:
+                        if isinstance(ef_data, dict):
+                            try:
+                                extra_files_list.append(mod_models.ModExtraFile(key=ef_data.get('key', ''), version=ef_data.get('version', '1.0.0'), url=ef_data.get('url', '')))
+                            except (KeyError, TypeError, ValueError):
+                                pass
+                elif isinstance(extra_files_raw, dict):
+                    for group_key, filenames in extra_files_raw.items():
+                        if isinstance(filenames, list):
+                            for filename in filenames:
+                                extra_files_list.append(mod_models.ModExtraFile(key=group_key, version=ch_info.get('versions', {}).get(group_key, '1.0.0') if isinstance(ch_info.get('versions'), dict) else '1.0.0', url=filename))
+                valid_chapter_fields = {'description': ch_info.get('description'), 'data_file_url': ch_info.get('data_file_url'), 'data_file_version': ch_info.get('data_file_version') or (ch_info.get('versions', {}).get('data') if isinstance(ch_info.get('versions'), dict) else None) or '1.0.0', 'extra_files': extra_files_list}
+                files_dict[file_key] = mod_models.ModChapterData(**valid_chapter_fields)
+        return mod_models.ModInfo(key=mod_key, name=mod_info.get('name', mod_key), version=mod_info.get('version', '1.0.0'), author=mod_info.get('author', tr('defaults.unknown')), tagline=mod_info.get('tagline', tr('defaults.no_description')), game_version=mod_info.get('game_version', '1.04'), description_url='', downloads=0, modgame=mod_info.get('modgame', 'deltarune'), is_verified=False, icon_url=None, tags=[], hide_mod=False, is_local_mod=mod_info.get('is_local_mod', False), ban_status=False, files=files_dict)
 
     def fetch_mod_data_by_secret(self, secret_key: str) -> Tuple[Optional[dict], Optional[str], bool]:
         from utils.crypto_utils import possible_secret_hashes

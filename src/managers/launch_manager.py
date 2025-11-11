@@ -11,7 +11,7 @@ from managers.localization_manager import tr
 from utils.file_utils import ensure_writable
 from utils.game_utils import is_game_running, is_demo_mode, is_undertale_mode, is_undertale_yellow_mode
 from utils.path_utils import find_chapter_resource_dir, resolve_game_executable
-from utils.mod_utils import get_mod_key
+from utils.mod_utils import get_mod_key, get_mod_name
 from workers.game_monitor import GameMonitorWorker
 from managers.multi_mod_merger import MultiModMerger
 from config.constants import UI_COLORS, SLOT_ID_UNIVERSAL
@@ -284,6 +284,8 @@ class GameLauncher(QObject):
         if not chapter_mods:
             self._continue_after_merge(selections, True)
             return True
+        self.app_state.progress_bar_visible = True
+        self.app_state.progress_bar_value = 0
         session_manifest_path = os.path.join(self.app_state.config_dir, 'session.lock')
         self._merge_thread = ModMergeThread(self.app_state, self.mod_manager, chapter_mods, session_manifest_path, self)
         self._merge_thread.progress_update.connect(self._on_merge_progress)
@@ -344,7 +346,9 @@ class GameLauncher(QObject):
         self.status_changed.emit(message, color)
 
     def _on_merge_progress(self, progress: int, message: str):
+        from config.constants import UI_COLORS
         self.app_state.progress_bar_value = progress
+        self.app_state.progress_bar_visible = True
         if message:
             self.status_changed.emit(message, UI_COLORS['status_info'])
 
