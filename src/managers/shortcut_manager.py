@@ -323,7 +323,6 @@ class ShortcutManager(QObject):
                 self.app_state.local_config['direct_launch_slot_id'] = direct_launch_slot_id
             if launch_via_steam:
                 self.app_state.local_config['launch_via_steam'] = True
-            # Set custom executable path based on game mode
             if use_custom_executable:
                 is_demo = is_demo_mode(self.app_state.game_mode)
                 is_undertale = is_undertale_mode(self.app_state.game_mode)

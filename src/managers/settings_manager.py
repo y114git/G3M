@@ -344,9 +344,16 @@ class SettingsManager(QObject):
         self.feedback_manager.show_message('info', 'dialogs.success', tr('dialogs.theme_exported_success'))
 
     def import_theme(self):
-        theme_file_path, _ = QFileDialog.getOpenFileName(self.parent_widget, tr('dialogs.import_theme_title'), '', f"{tr('file_descriptions.theme_files')} (*.dhtheme)")
-        if not theme_file_path:
-            return
+        from ui.dialogs.import_dialog import ImportDialog
+        from PyQt6.QtWidgets import QDialog
+        dialog = ImportDialog(self.parent_widget, self.feedback_manager, 'themes', '*.dhtheme')
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            if dialog.import_method == 'file' and dialog.selected_file:
+                self._install_theme_from_file(dialog.selected_file)
+            elif dialog.import_method == 'url' and dialog.selected_url:
+                self._install_theme_from_url(dialog.selected_url)
+
+    def _install_theme_from_file(self, theme_file_path: str):
         try:
             with zipfile.ZipFile(theme_file_path, 'r') as zipf:
                 if 'theme.json' not in zipf.namelist():
@@ -384,6 +391,39 @@ class SettingsManager(QObject):
             self.feedback_manager.show_message('info', 'dialogs.success', tr('dialogs.theme_imported_success'))
         except Exception as e:
             self.feedback_manager.show_message('error', 'dialogs.error', tr('dialogs.theme_import_failed', error=str(e)))
+
+    def _install_theme_from_url(self, url: str):
+        try:
+            from workers.theme_install_worker import ThemeInstallWorker
+            worker = ThemeInstallWorker(url, self.app_state.config_dir, self.app_state, self, self.parent_widget)
+            worker.status.connect(lambda msg, color: self.feedback_manager.update_status(msg, color))
+            worker.progress.connect(lambda p: setattr(self.app_state, 'progress_bar_value', p))
+            worker.finished.connect(self._on_theme_install_finished)
+            self.app_state.is_installing = True
+            self.app_state.progress_bar_visible = True
+            self.app_state.progress_bar_value = 0
+            self.app_state.current_task = worker
+            worker.start()
+        except Exception as e:
+            import logging
+            logging.error(f'SettingsManager: Error installing theme from URL: {e}', exc_info=True)
+            self.feedback_manager.show_message('error', 'errors.error', tr('themes.installation_error', error=str(e)))
+
+    def _on_theme_install_finished(self, success: bool, message: str):
+        self.app_state.is_installing = False
+        self.app_state.progress_bar_visible = False
+        self.app_state.progress_bar_value = 0
+        self.app_state.clear_current_task()
+        if success:
+            self.theme_changed.emit()
+            self.settings_changed.emit()
+            self.feedback_manager.update_status(message, 'green')
+            self.feedback_manager.show_message('info', 'dialogs.success', message)
+        else:
+            import logging
+            logging.warning(f'Theme installation failed: {message}')
+            self.feedback_manager.update_status(message or tr('errors.error'), 'red')
+            self.feedback_manager.show_message('error', 'errors.error', message)
 
     def on_reset_settings_click(self, callbacks: dict):
         if not self.feedback_manager.ask_question('dialogs.reset_settings_confirm_title', 'dialogs.reset_settings_confirm_text', '', False):

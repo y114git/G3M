@@ -1,16 +1,13 @@
 import os
 import shutil
 import logging
-import requests
-from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QInputDialog, QLineEdit, QMessageBox
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import QTimer
 from managers.localization_manager import tr
 from config.constants import UI_COLORS
 from ui.widgets.mod.installed_mod_widget import InstalledModWidget
 from workers.background_workers import InstallModsThread
 from workers.install_gamebanana_mod import InstallGameBananaModThread
 from utils.mod_utils import get_mod_key, get_mod_name
-from utils.network_utils import check_internet_connection
 
 
 class ModOperationsController:
@@ -334,7 +331,6 @@ class ModOperationsController:
                                 if installed_mod_page != self.app_state.current_page:
                                     logging.info(f'ModOperationsController: Navigating to page {installed_mod_page} to show installed mod')
                                     self.app_state.current_page = installed_mod_page
-                                from PyQt6.QtCore import QTimer
                                 QTimer.singleShot(100, lambda: self._safe_execute(lambda: self.app.search_display.update_display(), 'Failed to update display after installation'))
                             elif not installed_mod_found:
                                 logging.error('ModOperationsController: Installed mod was not found in filtered_mods after installation! This is a bug.')
@@ -384,10 +380,8 @@ class ModOperationsController:
         self._safe_execute(lambda: QTimer.singleShot(300, update_library_with_retry), 'update_library_display failed')
         self._safe_execute(lambda: QTimer.singleShot(1000, update_plaques_with_retry), 'update_search_plaques failed')
         self._safe_execute(lambda: QTimer.singleShot(1000, update_library_with_retry), 'update_library_display failed')
-        if current_task:
-            self.app_state.current_task = current_task
-            QTimer.singleShot(100, self.refresh_specific_mod_widget_after_update)
-            self.app_state.clear_current_task()
+        if current_task and installed_mod_info:
+            QTimer.singleShot(100, lambda: self.refresh_specific_mod_widget_after_update(installed_mod_info))
         if message:
             self.feedback_manager.update_status(message, UI_COLORS['status_success'])
         else:
@@ -399,14 +393,16 @@ class ModOperationsController:
             QTimer.singleShot(0, lambda: self.mod_manager.update_mod(next_mod))
         self.app.game_launch.update_button_state()
 
-    def refresh_specific_mod_widget_after_update(self):
-        if not self.app_state.current_task:
-            return
-        install_tasks = getattr(self.app_state.current_task, 'install_tasks', [])
-        if not install_tasks:
-            return
-        mod_data_tuple = install_tasks[0]
-        mod_to_update = mod_data_tuple[0]
+    def refresh_specific_mod_widget_after_update(self, mod_info=None):
+        mod_to_update = mod_info
+        if mod_to_update is None:
+            if not self.app_state.current_task:
+                return
+            install_tasks = getattr(self.app_state.current_task, 'install_tasks', [])
+            if not install_tasks:
+                return
+            mod_data_tuple = install_tasks[0]
+            mod_to_update = mod_data_tuple[0]
         mod_key_to_find = get_mod_key(mod_to_update)
         if not mod_key_to_find:
             return

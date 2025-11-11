@@ -94,7 +94,7 @@ def filter_and_sort_mods(mods_list: List[Any], filters: Dict[str, Any], sort_con
             if sort_type == 0:
                 downloads = _get_mod_attr(mod, 'downloads', None)
                 if downloads is None:
-                    return 0
+                    downloads = 0
                 try:
                     downloads_int = int(downloads) if downloads is not None else 0
                 except (ValueError, TypeError):

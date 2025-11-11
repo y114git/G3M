@@ -37,12 +37,18 @@ class ModImportExportController:
         dialog.exec()
 
     def _show_import_dialog(self):
-        archive_path, _ = QFileDialog.getOpenFileName(self.app_window, tr('ui.select_mod_archive'), '', 'Archives (*.zip *.rar *.7z *.tar.gz *.lzma);;All Files (*)')
-        if not archive_path:
-            return
+        from ui.dialogs.import_dialog import ImportDialog
+        dialog = ImportDialog(self.app_window, self.app_window.feedback_manager, 'mods')
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            if dialog.import_method == 'file' and dialog.selected_file:
+                self._install_mod_from_file(dialog.selected_file)
+            elif dialog.import_method == 'url' and dialog.selected_url:
+                self._install_mod_from_url(dialog.selected_url)
+
+    def _install_mod_from_file(self, file_path: str):
         try:
             with tempfile.TemporaryDirectory(prefix='deltahub_import_') as temp_dir:
-                extract_archive(archive_path, temp_dir)
+                extract_archive(file_path, temp_dir)
                 content_path = temp_dir
                 contents = os.listdir(temp_dir)
                 if len(contents) == 1 and os.path.isdir(os.path.join(temp_dir, contents[0])):
@@ -69,7 +75,7 @@ class ModImportExportController:
                         QMessageBox.critical(self.app_window, tr('errors.error'), tr('errors.invalid_mod_format'))
                         return
                     from utils.file_utils import remove_archive_extension, sanitize_filename
-                    archive_name = remove_archive_extension(os.path.basename(archive_path))
+                    archive_name = remove_archive_extension(os.path.basename(file_path))
                     folder_name = sanitize_filename(archive_name)
                     target_mod_dir = os.path.join(self.app_state.mods_dir, folder_name)
                     counter = 1
@@ -121,6 +127,38 @@ class ModImportExportController:
         except Exception as e:
             logging.error(f'Mod import failed: {e}', exc_info=True)
             QMessageBox.critical(self.app_window, tr('errors.error'), tr('errors.mod_import_failed', error=str(e)))
+
+    def _install_mod_from_url(self, url: str):
+        try:
+            from workers.mod_install_worker import ModInstallWorker
+            worker = ModInstallWorker(url, self.app_state.mods_dir, self.mod_manager, self.app_window)
+            worker.status.connect(lambda msg, color: self.app_window.feedback_manager.update_status(msg, color))
+            worker.progress.connect(lambda p: setattr(self.app_state, 'progress_bar_value', p))
+            worker.finished.connect(self._on_mod_install_finished)
+            self.app_state.is_installing = True
+            self.app_state.progress_bar_visible = True
+            self.app_state.progress_bar_value = 0
+            self.app_state.current_task = worker
+            worker.start()
+        except Exception as e:
+            logging.error(f'ModImportExportController: Error installing mod from URL: {e}', exc_info=True)
+            self.app_window.feedback_manager.show_message('error', 'errors.error', tr('mods.installation_error', error=str(e)))
+
+    def _on_mod_install_finished(self, success: bool, message: str):
+        self.app_state.is_installing = False
+        self.app_state.progress_bar_visible = False
+        self.app_state.progress_bar_value = 0
+        self.app_state.clear_current_task()
+        if success:
+            self.mod_manager.invalidate_mods_cache()
+            self.mod_manager.load_local_mods(_skip_conversion=True)
+            self.mod_manager.mod_list_updated.emit()
+            self.app_window.feedback_manager.update_status(message, 'green')
+            QMessageBox.information(self.app_window, tr('dialogs.success'), message)
+        else:
+            logging.warning(f'Mod installation failed: {message}')
+            self.app_window.feedback_manager.update_status(message or tr('errors.error'), 'red')
+            self.app_window.feedback_manager.show_message('error', 'errors.error', message)
 
     def _show_export_dialog(self):
         dialog = QDialog(self.app_window)

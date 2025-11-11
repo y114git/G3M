@@ -194,7 +194,7 @@ class LibraryDisplayController:
             if not dummy_mod_data:
                 continue
             self.slot_manager.remove_mod_from_all_chapters(dummy_mod_data)
-            config_keys = ['used_mods_deltarune', 'used_mods_deltarune_chapter', 'used_mods_deltarunedemo', 'used_mods_undertale']
+            config_keys = ['used_mods_deltarune', 'used_mods_deltarune_chapter', 'used_mods_deltarunedemo', 'used_mods_undertale', 'used_mods_undertaleyellow']
             for config_key in config_keys:
                 used_mods_data = self.app_state.local_config.get(config_key, {})
                 chapters_to_clear = []

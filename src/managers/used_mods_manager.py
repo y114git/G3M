@@ -1,3 +1,4 @@
+import logging
 from PyQt6.QtCore import QObject, pyqtSignal, QTimer
 from typing import Dict, Optional, Any, List, TYPE_CHECKING
 if TYPE_CHECKING:
@@ -36,7 +37,6 @@ class UsedModsManager(QObject):
         return self.used_mods.get(chapter_id, [])
 
     def set_used_mod(self, chapter_id: int, mod_data: Optional[Any], save_state: bool = True) -> None:
-        import logging
         mod_key = get_mod_key(mod_data) if mod_data else None
         mod_name = get_mod_name(mod_data, 'None') if mod_data else 'None'
         logging.debug(f'set_used_mod: chapter_id={chapter_id}, mod={mod_name} (key={mod_key})')
@@ -74,7 +74,6 @@ class UsedModsManager(QObject):
                 logging.warning(f'set_used_mod: save_state failed: {e}')
 
     def set_mods_list(self, chapter_id: int, mods_list: List[Any], save_state: bool = True) -> None:
-        import logging
         mod_names = [get_mod_name(m, 'Unknown') for m in mods_list] if mods_list else []
         logging.info(f'set_mods_list: chapter_id={chapter_id}, mods={mod_names}, count={(len(mods_list) if mods_list else 0)}')
         if not mods_list:
@@ -175,7 +174,6 @@ class UsedModsManager(QObject):
         self.settings_manager.write_local_config()
 
     def load_used_mods_state(self, mode=None):
-        import logging
         logging.info('Loading used mods state')
         is_chapter_mode = self.app_state.current_mode == 'chapter'
         config_key = self.get_used_mods_config_key(self.app_state.game_mode, is_chapter_mode)

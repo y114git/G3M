@@ -45,11 +45,13 @@ class GameBananaAPI:
                         mapped_data = self._map_mod_data(record, game_name)
                         if mapped_data:
                             downloads_from_gb = record.get('_nDownloadCount')
+                            downloads_value = 0
                             if downloads_from_gb is not None:
                                 try:
-                                    mapped_data['downloads'] = int(downloads_from_gb)
+                                    downloads_value = int(downloads_from_gb)
                                 except (ValueError, TypeError):
-                                    mapped_data['downloads'] = 0
+                                    downloads_value = 0
+                            mapped_data['downloads'] = downloads_value
                             cache_valid = False
                             cached_category = None
                             if metadata_cache:
@@ -58,21 +60,29 @@ class GameBananaAPI:
                                     cached_downloads = metadata_cache.get_downloads(mod_id_str)
                                     cached_tagline = metadata_cache.get_tagline(mod_id_str)
                                     cached_category = metadata_cache.get_category(mod_id_str)
-                                    if cached_downloads is not None:
+                                    if cached_downloads is not None and cached_downloads > 0:
                                         mapped_data['downloads'] = cached_downloads
+                                    elif downloads_value > 0:
+                                        mapped_data['downloads'] = downloads_value
                                     if cached_tagline:
                                         mapped_data['tagline'] = cached_tagline
                                     if cached_category:
                                         mapped_data['gamebanana_category'] = cached_category
-                            current_downloads = mapped_data.get('downloads', 0) or 0
+                            current_downloads = mapped_data.get('downloads', 0)
+                            if current_downloads is None:
+                                current_downloads = 0
+                            else:
+                                try:
+                                    current_downloads = int(current_downloads)
+                                except (ValueError, TypeError):
+                                    current_downloads = 0
+                            mapped_data['downloads'] = current_downloads
                             current_tagline = mapped_data.get('tagline', '')
                             current_category = mapped_data.get('gamebanana_category')
-                            needs_downloads = current_downloads == 0
+                            needs_downloads = current_downloads == 0 or current_downloads is None
                             needs_tagline = not current_tagline or current_tagline == 'No description' or len(current_tagline) < 10
                             needs_category = not current_category
-                            if needs_category:
-                                mods_needing_metadata.append(mod_id_str)
-                            elif (needs_downloads or needs_tagline) and (not cache_valid):
+                            if (needs_downloads or needs_tagline or needs_category) and (not cache_valid):
                                 mods_needing_metadata.append(mod_id_str)
                             mapped_mods.append(mapped_data)
             return (mapped_mods, mods_needing_metadata)
@@ -657,6 +667,8 @@ class GameBananaAPI:
                 downloads = int(downloads_from_gb)
             except (ValueError, TypeError):
                 downloads = 0
+        else:
+            downloads = 0
         screenshots = []
         created_timestamp = gb_data.get('_tsDateAdded')
         updated_timestamp = gb_data.get('_tsDateModified')

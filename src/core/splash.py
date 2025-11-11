@@ -1,6 +1,6 @@
 import os
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QPixmap
+from PyQt6.QtGui import QPixmap, QMovie, QPainter
 from PyQt6.QtWidgets import QSplashScreen
 from utils.path_utils import resource_path
 
@@ -15,7 +15,7 @@ class CustomSplashScreen(QSplashScreen):
             empty_pixmap.fill(Qt.GlobalColor.transparent)
             super().__init__(empty_pixmap)
         self.setWindowFlags(Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.FramelessWindowHint)
-        self._current_frame_pixmap = None
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         if gif_path:
             self.setup_gif_animation(gif_path)
 
@@ -38,10 +38,10 @@ class CustomSplashScreen(QSplashScreen):
                 target_width = 550
             ratio = gif_size.height() / gif_size.width()
             target_height = int(target_width * ratio)
-            size = QPixmap(target_width, target_height).size()
-            self.movie.setScaledSize(size)
+            if gif_size.width() != target_width or gif_size.height() != target_height:
+                size = QPixmap(target_width, target_height).size()
+                self.movie.setScaledSize(size)
             self.setFixedSize(target_width, target_height)
-            self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
             self.setStyleSheet('background: transparent;')
             if screen:
                 self.move((screen_geom.width() - target_width) // 2, (screen_geom.height() - target_height) // 2)
@@ -54,24 +54,11 @@ class CustomSplashScreen(QSplashScreen):
             return False
 
     def _on_frame_changed(self, frame_number):
-        if hasattr(self, 'movie') and self.movie.isValid():
-            self._current_frame_pixmap = self.movie.currentPixmap()
-            if self._current_frame_pixmap and (not self._current_frame_pixmap.isNull()):
-                self.repaint()
-
-    def drawContents(self, painter):
-        if painter is not None and hasattr(self, '_current_frame_pixmap') and self._current_frame_pixmap and (not self._current_frame_pixmap.isNull()):
-            painter.drawPixmap(0, 0, self._current_frame_pixmap)
-        else:
-            super().drawContents(painter)
+        self.update()
 
     def start_gif_animation(self):
         if hasattr(self, 'movie') and self.movie.isValid():
-            self._current_frame_pixmap = self.movie.currentPixmap()
-            if self._current_frame_pixmap and (not self._current_frame_pixmap.isNull()):
-                self.repaint()
             self.movie.start()
-            self.repaint()
 
     def stop_gif_animation(self):
         if hasattr(self, 'movie'):
@@ -80,6 +67,16 @@ class CustomSplashScreen(QSplashScreen):
     def on_gif_finished(self):
         if hasattr(self, 'movie'):
             self.movie.stop()
+
+    def paintEvent(self, event):
+        if hasattr(self, 'movie') and self.movie:
+            pixmap = self.movie.currentPixmap()
+            if pixmap:
+                painter = QPainter(self)
+                painter.setRenderHint(QPainter.RenderHint.Antialiasing, False)
+                painter.drawPixmap(0, 0, pixmap)
+                return
+        super().paintEvent(event)
 
     def mousePressEvent(self, event):
         pass

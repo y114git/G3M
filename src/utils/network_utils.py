@@ -204,7 +204,6 @@ def check_internet_connection(max_attempts: int = 2) -> bool:
         except requests.RequestException:
             if attempt < max_attempts - 1:
                 continue
-            return False
     return False
 
 

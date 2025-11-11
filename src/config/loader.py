@@ -51,10 +51,6 @@ class ConfigLoader:
         config = self.load_config()
         return config.get(key, default)
 
-    def reload(self) -> None:
-        self._config_cache = None
-        self.load_config()
-
 
 _config_loader = ConfigLoader()
 

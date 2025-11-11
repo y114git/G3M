@@ -63,8 +63,18 @@ string gm3pRoot = null;
 if (gm3pRoot == null)
     throw new ScriptException("DELTAHUB root not found (no /output ancestor).");
 
-string chapterNo = File.ReadAllText(Path.Combine(gm3pRoot, "output", "Cache", "running", "chapterNumber.txt"));
-string importFolder = Path.Combine(gm3pRoot, "output", "xDeltaCombiner", chapterNo, "1", "Objects", "CodeEntries");
+string ReadAllTextSafe(string path)
+{
+    try { return File.ReadAllText(path).Trim(); } catch { return null; }
+}
+
+string chapterNo = ReadAllTextSafe(Path.Combine(gm3pRoot, "output", "Cache", "running", "chapterNumber.txt"));
+string modNo = ReadAllTextSafe(Path.Combine(gm3pRoot, "output", "Cache", "running", "modNumbersCache.txt"));
+
+if (string.IsNullOrWhiteSpace(chapterNo) || string.IsNullOrWhiteSpace(modNo))
+    throw new ScriptException("chapterNumber/modNumbersCache missing in /output/Cache/running/." + Convert.ToString(Path.Combine(gm3pRoot, "output", "Cache", "running", "modNumbersCache.txt")));
+
+string importFolder = Path.Combine(gm3pRoot, "output", "xDeltaCombiner", chapterNo, modNo, "Objects", "CodeEntries");
 if (importFolder == null || !Directory.Exists(importFolder))
     throw new ScriptException("The import folder was not set or does not exist: " + importFolder);
 

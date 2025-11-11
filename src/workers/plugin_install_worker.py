@@ -7,7 +7,7 @@ import tempfile
 from PyQt6.QtCore import QThread, pyqtSignal
 from managers.localization_manager import tr
 from utils.network_utils import get_session, download_file
-from config.constants import NETWORK_TIMEOUT_HEAD
+from config.constants import NETWORK_TIMEOUT_HEAD, UI_COLORS
 
 
 class PluginInstallWorker(QThread):
@@ -73,7 +73,7 @@ class PluginInstallWorker(QThread):
 
     def _download_archive(self, url: str, target_path: str) -> bool:
         try:
-            self.status.emit(tr('plugins.downloading_plugin'), 'info')
+            self.status.emit(tr('plugins.downloading_plugin'), UI_COLORS['status_warning'])
             session = get_session()
             self._session = session
             total_size = 0
@@ -108,7 +108,7 @@ class PluginInstallWorker(QThread):
                     except Exception as e:
                         self.finished.emit(False, tr('plugins.download_error', error=str(e)))
                         return
-                    self.status.emit(tr('plugins.validating_plugin'), 'info')
+                    self.status.emit(tr('plugins.validating_plugin'), UI_COLORS['status_warning'])
                     if not self._check_archive_has_plugin_init_py(temp_archive_path):
                         self.finished.emit(False, tr('plugins.invalid_plugin_archive'))
                         return
@@ -125,7 +125,7 @@ class PluginInstallWorker(QThread):
                 if not os.path.exists(self.archive_path):
                     self.finished.emit(False, tr('plugins.archive_not_found'))
                     return
-                self.status.emit(tr('plugins.validating_plugin'), 'info')
+                self.status.emit(tr('plugins.validating_plugin'), UI_COLORS['status_warning'])
                 if not self._check_archive_has_plugin_init_py(self.archive_path):
                     self.finished.emit(False, tr('plugins.invalid_plugin_archive'))
                     return

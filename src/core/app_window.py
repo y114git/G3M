@@ -276,26 +276,19 @@ class AppWindow(QWidget):
         self._load_local_data()
         self.mod_manager.load_local_mods()
         try:
-            # Determine game mode
             if settings.get('is_undertaleyellow_mode', False):
                 self.app_state.game_mode = UndertaleYellowGameMode()
             elif settings.get('is_undertale_mode', False):
                 self.app_state.game_mode = UndertaleGameMode()
             else:
                 self.app_state.game_mode = DemoGameMode() if settings.get('is_demo_mode', False) else FullGameMode()
-
-            # Load game paths from shortcut settings
             game_path = settings.get('game_path', '')
             demo_game_path = settings.get('demo_game_path', '')
             undertale_game_path = settings.get('undertale_game_path', '')
             undertaleyellow_game_path = settings.get('undertaleyellow_game_path', '')
-
-            # Copy paths to app_state
             self.app_state.game_path = game_path
             self.app_state.demo_game_path = demo_game_path
             self.app_state.undertale_game_path = undertale_game_path
-
-            # Copy paths to local_config so game_mode.get_game_path() can find them
             if game_path:
                 self.app_state.local_config['game_path'] = game_path
             if demo_game_path:
@@ -304,7 +297,6 @@ class AppWindow(QWidget):
                 self.app_state.local_config['undertale_game_path'] = undertale_game_path
             if undertaleyellow_game_path:
                 self.app_state.local_config['undertaleyellow_game_path'] = undertaleyellow_game_path
-
             launch_via_steam = settings.get('launch_via_steam', False)
             use_custom_executable = settings.get('use_custom_executable', False)
             custom_exec_path = settings.get('custom_executable_path', '')
@@ -897,7 +889,6 @@ class AppWindow(QWidget):
         self.theme.apply_theme()
 
     def _post_show_initialization(self):
-        from utils.network_utils import check_internet_connection
         self.app_state.has_internet = check_internet_connection()
         if not self.app_state.has_internet:
             logging.info('No internet connection detected, running in offline mode')
@@ -1550,7 +1541,7 @@ class AppWindow(QWidget):
                     self._show_chapter_mode_instruction()
             else:
                 self.library_display.update_display()
-        self.refresh_controller.refresh_mods_list(is_initial=is_initial, language_combo=self.language_combo, retranslate_callback=self._retranslate_ui, on_fetch_finished_kwargs={'update_filtered_mods_callback': lambda: self.search_display.update_filtered_mods(), 'update_installed_mods_callback': update_installed_mods_callback, 'update_action_button_callback': lambda: self.game_launch.update_button_state(), 'update_plugin_tabs_callback': self._update_plugin_tabs, 'mods_loaded_signal': self.mods_loaded_signal})
+        self.refresh_controller.refresh_mods_list(is_initial=is_initial, language_combo=self.language_combo, retranslate_callback=self._retranslate_ui, on_fetch_finished_kwargs={'update_filtered_mods_callback': lambda: self.search_display.update_filtered_mods(preserve_page=True), 'update_installed_mods_callback': update_installed_mods_callback, 'update_action_button_callback': lambda: self.game_launch.update_button_state(), 'update_plugin_tabs_callback': self._update_plugin_tabs, 'mods_loaded_signal': self.mods_loaded_signal})
 
     def _update_plugin_tabs(self):
         if not hasattr(self, 'plugin_manager') or not hasattr(self, 'main_tab_widget'):

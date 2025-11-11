@@ -130,8 +130,8 @@ class PluginDisplayController:
             self.feedback_manager.show_message('error', 'errors.error', tr('plugins.open_page_error'))
 
     def on_import_plugin(self):
-        from ui.dialogs.plugin_import_dialog import PluginImportDialog
-        dialog = PluginImportDialog(self.app, self.plugin_manager, self.app_state, self.feedback_manager)
+        from ui.dialogs.import_dialog import ImportDialog
+        dialog = ImportDialog(self.app, self.feedback_manager, 'plugins')
         if dialog.exec() == QDialog.DialogCode.Accepted:
             if dialog.import_method == 'file' and dialog.selected_file:
                 self._install_plugin_from_file(dialog.selected_file)

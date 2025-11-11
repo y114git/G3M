@@ -151,6 +151,7 @@ class RefreshController:
                     from utils.gamebanana_cache import GameBananaMetadataCache
                     metadata_cache = GameBananaMetadataCache(self.app_state.config_dir)
                     restored_count = 0
+                    downloads_restored = False
                     if hasattr(self.app_state, 'all_mods') and self.app_state.all_mods:
                         for mod in self.app_state.all_mods:
                             if hasattr(mod, 'is_gamebanana_mod') and mod.is_gamebanana_mod and mod.gamebanana_mod_id:
@@ -162,7 +163,10 @@ class RefreshController:
                                     screenshots = metadata_cache.get_screenshots(mod_id)
                                     category = metadata_cache.get_category(mod_id)
                                     if downloads is not None:
+                                        old_downloads = getattr(mod, 'downloads', 0) or 0
                                         mod.downloads = downloads
+                                        if old_downloads != downloads:
+                                            downloads_restored = True
                                     if tagline:
                                         mod.tagline = tagline
                                     if full_description:
@@ -177,8 +181,23 @@ class RefreshController:
                                     logging.debug(f'RefreshController: Restored metadata from cache for mod {mod_id} - downloads: {downloads}, has_desc: {bool(full_description)}, has_screenshots: {bool(screenshots)}, has_tagline: {bool(tagline)}, category: {category}')
                 except Exception as e:
                     logging.warning(f'RefreshController: Error restoring metadata from cache: {e}', exc_info=True)
-            if update_filtered_mods_callback:
-                update_filtered_mods_callback()
+            if update_filtered_mods_callback and (not downloads_restored):
+
+                def deferred_update():
+                    try:
+                        update_filtered_mods_callback()
+                    except Exception as e:
+                        logging.error(f'RefreshController: Error in deferred update_filtered_mods_callback: {e}', exc_info=True)
+                QTimer.singleShot(100, deferred_update)
+            elif downloads_restored:
+
+                def re_sort_after_cache_restore():
+                    try:
+                        if self.app_window and hasattr(self.app_window, 'search_display'):
+                            self.app_window.search_display.update_filtered_mods(preserve_page=True)
+                    except Exception as e:
+                        logging.error(f'RefreshController: Error re-sorting after cache restore: {e}', exc_info=True)
+                QTimer.singleShot(400, re_sort_after_cache_restore)
             if not self.app_state.mods_loaded:
                 self.app_state.mods_loaded = True
                 if mods_loaded_signal:
@@ -265,7 +284,20 @@ class RefreshController:
     def _on_metadata_loading_finished(self):
         try:
             logging.info('RefreshController: Metadata loading finished')
-            if hasattr(self.app_state, 'gamebanana_mods_needing_metadata') and self.app_state.gamebanana_mods_needing_metadata:
+            has_more_mods = hasattr(self.app_state, 'gamebanana_mods_needing_metadata') and self.app_state.gamebanana_mods_needing_metadata
+            if self.app_window and hasattr(self.app_window, 'search_display'):
+
+                def ensure_sorted():
+                    try:
+                        if hasattr(self.app_window, 'search_display'):
+                            self.app_window.search_display.update_filtered_mods(preserve_page=True)
+                    except Exception as e:
+                        logging.error(f'RefreshController: Error ensuring sort after metadata load: {e}', exc_info=True)
+                if has_more_mods:
+                    QTimer.singleShot(500, ensure_sorted)
+                else:
+                    QTimer.singleShot(800, ensure_sorted)
+            if has_more_mods:
                 logging.info(f'RefreshController: Found {len(self.app_state.gamebanana_mods_needing_metadata)} more mods needing metadata, starting another batch')
                 QTimer.singleShot(100, self._start_metadata_loading)
             if self.metadata_thread:

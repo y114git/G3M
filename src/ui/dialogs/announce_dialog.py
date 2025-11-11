@@ -1,7 +1,6 @@
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import pyqtSignal, QUrl
 from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QTextBrowser
 from PyQt6.QtGui import QDesktopServices
-from PyQt6.QtCore import QUrl
 from managers.localization_manager import tr
 import logging
 
@@ -39,7 +38,6 @@ class AnnounceDialog(QDialog):
         ok_button.setDefault(True)
         button_layout.addWidget(ok_button)
         layout.addLayout(button_layout)
-        self.setLayout(layout)
 
     def _on_ok_clicked(self):
         self.accepted_with_ok.emit()

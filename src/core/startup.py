@@ -14,7 +14,7 @@ from utils.audio_utils import _audio_manager
 from core.splash import create_splash, create_png_splash
 from utils.path_utils import get_user_data_root, get_launcher_dir
 from logging.handlers import RotatingFileHandler
-from config.constants import SPLASH_MIN_DURATION, SPLASH_SOUND_DELAY, LAUNCHER_FALLBACK_TIMEOUT, SPLASH_RETRY_DELAY
+from config.constants import SPLASH_MIN_DURATION, LAUNCHER_FALLBACK_TIMEOUT, SPLASH_RETRY_DELAY
 import traceback
 if platform.system() == 'Windows':
     import winreg
@@ -256,7 +256,7 @@ def run_app():
         logging.warning(safe_msg)
     is_first_launch = not config.get('first_launch_splash_shown', False)
     splash_disabled_by_user = config.get('disable_splash', False)
-    show_animated_splash = is_first_launch or not splash_disabled_by_user
+    show_animated_splash = is_first_launch and (not splash_disabled_by_user)
 
     def create_launcher_and_show_splash(app, initial_url, show_animation: bool):
         global _splash_start_time
@@ -265,18 +265,12 @@ def run_app():
             _splash_start_time = time.time()
             splash = create_splash()
             splash.show()
-            app.processEvents()
             if hasattr(splash, 'movie'):
-                for i in range(50):
-                    app.processEvents()
-                    if splash.movie.currentFrameNumber() >= 0:
-                        break
-                    time.sleep(0.01)
                 splash.start_gif_animation()
                 _audio_manager.play_deltahub_sound()
-                app.processEvents()
             else:
                 _audio_manager.play_deltahub_sound()
+            app.processEvents()
         else:
             splash = create_png_splash()
             splash.show()

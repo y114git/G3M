@@ -122,17 +122,17 @@ class SearchDisplayController:
                     self.app_state.all_mods.extend(new_mods_to_add)
                     if hasattr(self, '_last_load_attempt'):
                         self._last_load_attempt['attempts'] = 0
+
+                    def safe_update():
+                        try:
+                            self.update_filtered_mods(preserve_page=True)
+                            self.update_pagination()
+                        except Exception as e:
+                            logger.error(f'SearchDisplayController: Error in safe_update after loading mods: {e}', exc_info=True)
+                    QTimer.singleShot(100, safe_update)
                 else:
                     self.update_pagination()
                     return
-
-                def safe_update():
-                    try:
-                        self.update_filtered_mods(preserve_page=True)
-                        self.update_pagination()
-                    except Exception as e:
-                        logger.error(f'SearchDisplayController: Error in safe_update after loading mods: {e}', exc_info=True)
-                QTimer.singleShot(100, safe_update)
             except Exception as e:
                 logger.error(f'SearchDisplayController: Error in on_all_results_received: {e}', exc_info=True)
                 self.app_state.gamebanana_loading = False
@@ -288,18 +288,6 @@ class SearchDisplayController:
                 logger.warning('SearchDisplayController: mod_list_widget not available')
                 self._update_display_in_progress = False
                 return
-            widgets_to_hide = []
-            for i in range(self.app.mod_list_layout.count() - 1):
-                item = self.app.mod_list_layout.itemAt(i)
-                if item and item.widget():
-                    widget = item.widget()
-                    if isinstance(widget, ModPlaqueWidget):
-                        widgets_to_hide.append(widget)
-            for widget in widgets_to_hide:
-                widget.hide()
-            self.app.mod_list_widget.setUpdatesEnabled(False)
-            widgets_shown = 0
-            widgets_created = 0
 
             def get_mod_cache_key(mod):
                 if hasattr(mod, 'is_gamebanana_mod') and mod.is_gamebanana_mod:
@@ -310,7 +298,24 @@ class SearchDisplayController:
                     return f'local_{mod_key}'
                 mod_name = getattr(mod, 'name', 'unknown')
                 return f'name_{mod_name}'
+            widgets_to_hide = []
+            existing_widgets_in_layout = {}
+            for i in range(self.app.mod_list_layout.count() - 1):
+                item = self.app.mod_list_layout.itemAt(i)
+                if item and item.widget():
+                    widget = item.widget()
+                    if isinstance(widget, ModPlaqueWidget):
+                        widgets_to_hide.append(widget)
+                        if hasattr(widget, 'mod_data') and widget.mod_data:
+                            cache_key = get_mod_cache_key(widget.mod_data)
+                            existing_widgets_in_layout[cache_key] = (widget, i)
+            for widget in widgets_to_hide:
+                widget.hide()
+            self.app.mod_list_widget.setUpdatesEnabled(False)
+            widgets_shown = 0
+            widgets_created = 0
             try:
+                target_position = 0
                 for idx, mod in enumerate(current_page_mods):
                     if mod is None:
                         logger.warning(f'SearchDisplayController: Mod at index {start_index + idx} is None, skipping')
@@ -325,17 +330,22 @@ class SearchDisplayController:
                                     plaque.update_mod_data()
                                 if hasattr(plaque, 'update_installation_status'):
                                     plaque.update_installation_status()
-                            is_in_layout = False
+                            current_position = None
                             for i in range(self.app.mod_list_layout.count() - 1):
                                 item = self.app.mod_list_layout.itemAt(i)
                                 if item and item.widget() == plaque:
-                                    is_in_layout = True
+                                    current_position = i
                                     break
-                            if not is_in_layout:
-                                self.app.mod_list_layout.insertWidget(self.app.mod_list_layout.count() - 1, plaque)
+                            if current_position is not None:
+                                if current_position != target_position:
+                                    self.app.mod_list_layout.removeWidget(plaque)
+                                    self.app.mod_list_layout.insertWidget(target_position, plaque)
+                            else:
+                                self.app.mod_list_layout.insertWidget(target_position, plaque)
                             plaque.show()
                             plaque.install_button.setEnabled(not self.app_state.is_installing)
                             widgets_shown += 1
+                            target_position += 1
                         else:
                             parent_widget = self.app.mod_list_widget if hasattr(self.app, 'mod_list_widget') else self.app
                             plaque = ModPlaqueWidget(mod, parent=parent_widget, parent_app=self.app)
@@ -344,13 +354,30 @@ class SearchDisplayController:
                             plaque.clicked.connect(self.on_mod_clicked)
                             plaque.details_requested.connect(self.show_details)
                             plaque.install_button.setEnabled(not self.app_state.is_installing)
-                            self.app.mod_list_layout.insertWidget(self.app.mod_list_layout.count() - 1, plaque)
+                            self.app.mod_list_layout.insertWidget(target_position, plaque)
                             self.plaque_widget_cache[cache_key] = plaque
                             widgets_created += 1
                             widgets_shown += 1
+                            target_position += 1
                     except Exception as e:
                         logger.error(f"Error processing plaque for mod {(mod.name if mod else 'unknown')} at index {start_index + idx}: {e}", exc_info=True)
                         continue
+                current_page_cache_keys = {get_mod_cache_key(mod) for mod in current_page_mods if mod is not None}
+                widgets_to_remove = []
+                for i in range(self.app.mod_list_layout.count() - 1):
+                    item = self.app.mod_list_layout.itemAt(i)
+                    if item and item.widget():
+                        widget = item.widget()
+                        if isinstance(widget, ModPlaqueWidget):
+                            widget_cache_key = get_mod_cache_key(widget.mod_data) if hasattr(widget, 'mod_data') and widget.mod_data else None
+                            if widget_cache_key and widget_cache_key not in current_page_cache_keys:
+                                widgets_to_remove.append(widget)
+                for widget in widgets_to_remove:
+                    try:
+                        self.app.mod_list_layout.removeWidget(widget)
+                        widget.hide()
+                    except Exception as e:
+                        logger.debug(f'Error removing widget from layout: {e}')
             finally:
                 self.app.mod_list_widget.setUpdatesEnabled(True)
             self.update_pagination()
@@ -442,8 +469,8 @@ class SearchDisplayController:
                 self._metadata_update_timer = QTimer()
                 self._metadata_update_timer.setSingleShot(True)
                 self._metadata_update_timer.timeout.connect(self._apply_pending_metadata_updates)
-            if not self._metadata_update_timer.isActive():
-                self._metadata_update_timer.start(200)
+            self._metadata_update_timer.stop()
+            self._metadata_update_timer.start(1500)
         except Exception as e:
             logger.error(f'SearchDisplayController: Error in on_metadata_updated: {e}', exc_info=True)
 
@@ -454,6 +481,7 @@ class SearchDisplayController:
             updated_mods = []
             needs_resort = False
             needs_refilter = False
+            downloads_changed = False
             if hasattr(self.app_state, 'all_mods') and self.app_state.all_mods:
                 for mod in self.app_state.all_mods:
                     if hasattr(mod, 'is_gamebanana_mod') and mod.is_gamebanana_mod:
@@ -465,9 +493,27 @@ class SearchDisplayController:
                             else:
                                 downloads, tagline = (update_data[0], update_data[1])
                                 category = ''
-                            if downloads > 0 and mod.downloads != downloads:
-                                mod.downloads = downloads
-                                needs_resort = True
+                            if downloads is not None and downloads >= 0:
+                                old_downloads = getattr(mod, 'downloads', None)
+                                if old_downloads is None:
+                                    old_downloads = 0
+                                else:
+                                    try:
+                                        old_downloads = int(old_downloads)
+                                    except (ValueError, TypeError):
+                                        old_downloads = 0
+                                try:
+                                    downloads_int = int(downloads)
+                                except (ValueError, TypeError):
+                                    downloads_int = 0
+                                if old_downloads != downloads_int:
+                                    mod.downloads = downloads_int
+                                    needs_resort = True
+                                    downloads_changed = True
+                                elif mod.downloads != downloads_int:
+                                    mod.downloads = downloads_int
+                                    needs_resort = True
+                                    downloads_changed = True
                             if tagline and tagline != 'No description' and (mod.tagline != tagline):
                                 mod.tagline = tagline
                             if category:
@@ -476,13 +522,14 @@ class SearchDisplayController:
                                     needs_refilter = True
                             updated_mods.append(mod_id)
             self._pending_metadata_updates.clear()
-            if (needs_resort or needs_refilter) and hasattr(self.app_state, 'filtered_mods'):
+            if downloads_changed or needs_resort or needs_refilter:
                 sort_needs_resort = False
                 if hasattr(self.app, 'sort_combo'):
                     sort_type = self.app.sort_combo.currentIndex()
                     if sort_type == 0:
                         sort_needs_resort = True
-                if sort_needs_resort or needs_refilter:
+                if sort_needs_resort or needs_refilter or downloads_changed:
+                    logger.debug(f"SearchDisplayController: Re-sorting mods after metadata update (downloads_changed={downloads_changed}, needs_resort={needs_resort}, needs_refilter={needs_refilter}, sort_type={(sort_type if hasattr(self.app, 'sort_combo') else 'N/A')})")
                     self.update_filtered_mods(preserve_page=True)
             if updated_mods:
                 self._update_plaques_for_mods(updated_mods)

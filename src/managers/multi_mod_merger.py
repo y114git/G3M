@@ -1222,8 +1222,6 @@ class MultiModMerger(QObject):
         return chapter_dir
 
     def _get_target_dir(self, chapter_id: int) -> Optional[str]:
-        # Use game_mode.get_game_path() to get the correct path based on game mode
-        # This ensures we get the path from local_config using the correct key
         base_path = self.app_state.game_mode.get_game_path(self.app_state.local_config)
         if not base_path:
             return None
