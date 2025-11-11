@@ -112,10 +112,6 @@ class ThemeController:
         self.app.startup_sound_button.setText(self.customization_manager.get_startup_sound_button_text())
         self.customization_manager.stop_background_music()
         self.customization_manager.maybe_start_background_music(force=True)
-        try:
-            self.app.initialization_finished.disconnect(self.app._handle_first_launch_settings)
-        except TypeError:
-            pass
 
     def on_custom_style_edited(self):
         self.settings_manager.on_custom_style_edited(self.app.color_widgets)

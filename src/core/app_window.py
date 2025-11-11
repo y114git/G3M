@@ -96,6 +96,9 @@ class AppWindow(QWidget):
         self._initial_size = None
         self.app_state.local_config = self.settings_manager.read_json(self.app_state.config_path) or {}
         self._init_localization()
+        self._splash_was_shown = False
+        self.settings_manager.migrate_config_if_needed()
+        is_first_launch = not self.app_state.local_config.get('first_launch_splash_shown', False)
         self.resize(875, 750)
         self._initial_size = self.size()
         self.background_movie = None
@@ -165,6 +168,8 @@ class AppWindow(QWidget):
         self.settings_manager.theme_changed.connect(self._on_theme_changed_by_manager)
         self.initialization_finished.connect(self.game_launch.update_button_state)
         self.initialization_finished.connect(self._try_start_background_music)
+        if is_first_launch:
+            self.initialization_finished.connect(self._handle_first_launch_settings)
         if self.is_shortcut_launch:
             self._shortcut_launch(args)
             return
@@ -187,8 +192,22 @@ class AppWindow(QWidget):
         self.initialization_timer.timeout.connect(self._force_finish_initialization)
         self.initialization_timer.start(INITIALIZATION_TIMEOUT)
         self.settings_manager.load_window_geometry(self)
-        if not self.app_state.local_config.get('first_launch_splash_shown', False):
-            self.initialization_finished.connect(self._handle_first_launch_settings)
+
+    def _handle_first_launch_settings(self):
+        if self.app_state.local_config.get('first_launch_splash_shown', False):
+            try:
+                self.initialization_finished.disconnect(self._handle_first_launch_settings)
+            except TypeError:
+                pass
+            return
+        self.app_state.local_config['first_launch_splash_shown'] = True
+        if 'disable_splash' not in self.app_state.local_config or self.app_state.local_config.get('disable_splash') is False:
+            self.app_state.local_config['disable_splash'] = True
+        self.settings_manager.write_local_config()
+        try:
+            self.initialization_finished.disconnect(self._handle_first_launch_settings)
+        except TypeError:
+            pass
 
     def _handle_pending_install(self):
         if self._pending_install_url:
@@ -684,14 +703,8 @@ class AppWindow(QWidget):
             QTimer.singleShot(500, self._check_and_show_announce)
 
     def _try_start_background_music(self):
-        import logging
-        logging.info(f"[AppWindow] _try_start_background_music called, is_shown_to_user: {getattr(self, 'is_shown_to_user', False)}, isVisible: {self.isVisible()}")
         if getattr(self, 'is_shown_to_user', False) and self.isVisible():
-            logging.info('[AppWindow] Conditions met, calling maybe_start_background_music')
             self.customization_manager.maybe_start_background_music(force=True)
-        else:
-            logging.debug('[AppWindow] Conditions not met yet, will retry when window is shown')
-            QTimer.singleShot(100, self._try_start_background_music)
 
     def _on_library_filter_changed(self):
         self.library_display.update_display()
@@ -889,6 +902,11 @@ class AppWindow(QWidget):
         self.theme.apply_theme()
 
     def _post_show_initialization(self):
+        is_first_launch = not self.app_state.local_config.get('first_launch_splash_shown', False)
+        if is_first_launch and getattr(self, '_splash_was_shown', False):
+            self.app_state.local_config['first_launch_splash_shown'] = True
+            self.app_state.local_config['disable_splash'] = True
+            self.settings_manager.write_local_config()
         self.app_state.has_internet = check_internet_connection()
         if not self.app_state.has_internet:
             logging.info('No internet connection detected, running in offline mode')
@@ -945,7 +963,6 @@ class AppWindow(QWidget):
             self.hide_library_filters_checkbox.setChecked(self.app_state.local_config.get('hide_library_filters', False))
         self._update_change_path_button_text()
         self.theme.update_background_button_state()
-        self.settings_manager.migrate_config_if_needed()
         self.use_custom_executable_checkbox.setChecked(self.app_state.local_config.get('use_custom_executable', False))
         self.launch_via_steam_checkbox.setChecked(self.app_state.local_config.get('launch_via_steam', False))
         if self.use_portproton_checkbox:
@@ -1421,7 +1438,13 @@ class AppWindow(QWidget):
         self.settings_manager.schedule_geometry_save(self)
 
     def _load_local_data(self):
+        protected_first_launch_splash_shown = self.app_state.local_config.get('first_launch_splash_shown')
+        protected_disable_splash = self.app_state.local_config.get('disable_splash')
         self.app_state.local_config = self.settings_manager.read_json(self.app_state.config_path) or {}
+        if protected_first_launch_splash_shown is not None:
+            self.app_state.local_config['first_launch_splash_shown'] = protected_first_launch_splash_shown
+        if protected_disable_splash is not None:
+            self.app_state.local_config['disable_splash'] = protected_disable_splash
         try:
             self.mod_manager.migrate_metadata_from_local_configs()
         except Exception as e:
@@ -1453,16 +1476,6 @@ class AppWindow(QWidget):
             safe_msg = sanitize_log_message(f'_init_session: heartbeat failed: {e}')
             logging.debug(safe_msg)
             self.app_state.has_internet = False
-
-    def _handle_first_launch_settings(self):
-        self.app_state.local_config['first_launch_splash_shown'] = True
-        if 'disable_splash' not in self.app_state.local_config:
-            self.app_state.local_config['disable_splash'] = True
-        self.settings_manager.write_local_config()
-        try:
-            self.initialization_finished.disconnect(self._handle_first_launch_settings)
-        except TypeError:
-            pass
 
     def _on_theme_changed_by_manager(self):
         self.theme.on_theme_changed_by_manager()
@@ -1675,26 +1688,27 @@ class AppWindow(QWidget):
             if saved_version == -1:
                 logging.info('_check_and_show_announce: User has disabled announcements (version -1)')
                 return
-            if announce_version == saved_version:
-                logging.info(f'_check_and_show_announce: Announce version {announce_version} already shown')
-                return
-            if localization_manager.get_current_language() == 'ru':
-                announce_message = announce.get('message_ru', '')
+            if announce_version != saved_version:
+                if localization_manager.get_current_language() == 'ru':
+                    announce_message = announce.get('message_ru', '')
+                else:
+                    announce_message = announce.get('message_en', '')
+                if not announce_message:
+                    logging.info('_check_and_show_announce: No message for current language')
+                    self._save_announce(announce_version)
+                    return
+                announce_link = announce.get('link', '')
+                logging.info(f'_check_and_show_announce: Conditions met, showing announce dialog (version {announce_version}, saved {saved_version})')
+                if is_visible and (not is_shown):
+                    self.app_state.is_shown_to_user = True
+                    logging.info('_check_and_show_announce: Set app_state.is_shown_to_user=True because window is visible')
+                from ui.dialogs.announce_dialog import AnnounceDialog
+                dialog = AnnounceDialog(announce_message, announce_link, self)
+                dialog.accepted_with_ok.connect(lambda: self._save_announce(announce_version))
+                dialog.exec()
+                self.app_state.pending_announce_check = False
             else:
-                announce_message = announce.get('message_en', '')
-            if not announce_message:
-                logging.info('_check_and_show_announce: No message for current language')
-                return
-            announce_link = announce.get('link', '')
-            logging.info(f'_check_and_show_announce: Conditions met, showing announce dialog (version {announce_version}, saved {saved_version})')
-            if is_visible and (not is_shown):
-                self.app_state.is_shown_to_user = True
-                logging.info('_check_and_show_announce: Set app_state.is_shown_to_user=True because window is visible')
-            from ui.dialogs.announce_dialog import AnnounceDialog
-            dialog = AnnounceDialog(announce_message, announce_link, self)
-            dialog.accepted_with_ok.connect(lambda: self._save_announce(announce_version))
-            dialog.exec()
-            self.app_state.pending_announce_check = False
+                logging.info(f'_check_and_show_announce: Announce version {announce_version} matches saved version, skipping')
         elif retry_count < max_retries:
             logging.debug(f'_check_and_show_announce: Conditions not met, retrying in 1 second (retry {retry_count + 1}/{max_retries})')
             QTimer.singleShot(1000, lambda: self._check_and_show_announce(retry_count + 1, force_check))

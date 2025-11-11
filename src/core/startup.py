@@ -254,23 +254,24 @@ def run_app():
         from utils.network_utils import sanitize_log_message
         safe_msg = sanitize_log_message(f'Unexpected error loading config: {e}')
         logging.warning(safe_msg)
-    is_first_launch = not config.get('first_launch_splash_shown', False)
     splash_disabled_by_user = config.get('disable_splash', False)
-    show_animated_splash = is_first_launch and (not splash_disabled_by_user)
+    show_animated_splash = not splash_disabled_by_user
 
     def create_launcher_and_show_splash(app, initial_url, show_animation: bool):
         global _splash_start_time
         launcher_app = {}
         if show_animation:
+            from config.constants import SPLASH_SOUND_DELAY
             _splash_start_time = time.time()
             splash = create_splash()
             splash.show()
-            if hasattr(splash, 'movie'):
-                splash.start_gif_animation()
-                _audio_manager.play_deltahub_sound()
-            else:
-                _audio_manager.play_deltahub_sound()
             app.processEvents()
+
+            def start_splash_and_sound():
+                if hasattr(splash, 'movie'):
+                    splash.start_gif_animation()
+                _audio_manager.play_deltahub_sound()
+            QTimer.singleShot(SPLASH_SOUND_DELAY, start_splash_and_sound)
         else:
             splash = create_png_splash()
             splash.show()
@@ -331,6 +332,8 @@ def run_app():
                     QMessageBox.critical(None, tr('errors.error'), error_msg)
                     sys.exit(1)
                 launcher_app['instance'].server = server
+                if show_animation:
+                    launcher_app['instance']._splash_was_shown = True
                 launcher_app['instance']._post_show_initialization()
                 if show_animation:
                     launcher_app['instance'].ui_ready.connect(close_splash_when_ready)
