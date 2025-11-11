@@ -1,7 +1,11 @@
 from PyQt6.QtWidgets import QMessageBox
 
 # --- Plugin Metadata ---
-PLUGIN_NAME = "window_opener_tab_title"
+PLUGIN_ID = "simple_window_opener"  # Unique plugin identifier (used for config prefixes)
+PLUGIN_NAME = "window_opener_tab_title"  # Plugin display name (localization key)
+VERSION = "1.0.0"
+AUTHOR = "DELTAHUB"  # Plugin author (optional, displayed in plugin plaque)
+DESCRIPTION = "Opens a message box when the plugin tab is clicked"
 TAB_HIDE = False
 
 # --- Localization ---

@@ -1,6 +1,6 @@
 from typing import Dict, Any
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QFrame, QLabel, QPushButton, QCheckBox, QComboBox, QScrollArea, QSizePolicy
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QFrame, QLabel, QPushButton, QCheckBox, QComboBox, QScrollArea, QSizePolicy, QSpinBox
 from managers.localization_manager import tr
 from ui.widgets.common.custom_controls import NoScrollComboBox
 from ui.common.styling import get_theme_color
@@ -68,16 +68,18 @@ class SearchTabBuilder:
         modgame_combo.addItem(tr('ui.deltarune'), 'deltarune')
         modgame_combo.addItem(tr('ui.deltarunedemo'), 'deltarunedemo')
         modgame_combo.addItem(tr('ui.undertale'), 'undertale')
+        modgame_combo.addItem(tr('ui.undertaleyellow'), 'undertaleyellow')
         filters_layout.addWidget(modgame_combo)
         filters_layout.addSpacing(20)
         tags_label = QLabel(tr('ui.tags_label'))
         filters_layout.addWidget(tags_label)
-        tag_translation = QCheckBox(tr('tags.translation'))
+        tag_textedit = QCheckBox(tr('tags.textedit'))
         tag_customization = QCheckBox(tr('tags.customization'))
         tag_gameplay = QCheckBox(tr('tags.gameplay'))
         tag_other = QCheckBox(tr('tags.other'))
-        tag_style = '\n            QCheckBox {\n                color: white;\n                font-size: 12px;\n                spacing: 5px;\n            }\n            QCheckBox::indicator {\n                width: 16px;\n                height: 16px;\n            }\n        '
-        for tag in [tag_translation, tag_customization, tag_gameplay, tag_other]:
+        text_color = get_theme_color(self.app_state.local_config, 'text', 'white')
+        tag_style = f'\n            QCheckBox {{\n                color: {text_color};\n                font-size: 12px;\n                spacing: 5px;\n            }}\n            QCheckBox::indicator {{\n                width: 16px;\n                height: 16px;\n            }}\n        '
+        for tag in [tag_textedit, tag_customization, tag_gameplay, tag_other]:
             tag.setStyleSheet(tag_style)
             filters_layout.addWidget(tag)
         filters_layout.addStretch()
@@ -91,7 +93,7 @@ class SearchTabBuilder:
         self.widgets['sort_order_btn'] = sort_order_btn
         self.widgets['modgame_combo'] = modgame_combo
         self.widgets['tags_label'] = tags_label
-        self.widgets['tag_translation'] = tag_translation
+        self.widgets['tag_textedit'] = tag_textedit
         self.widgets['tag_customization'] = tag_customization
         self.widgets['tag_gameplay'] = tag_gameplay
         self.widgets['tag_other'] = tag_other
@@ -100,25 +102,69 @@ class SearchTabBuilder:
 
     def _create_pagination_widget(self) -> QWidget:
         pagination_widget = QWidget()
-        pagination_layout = QHBoxLayout(pagination_widget)
-        pagination_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        pagination_widget.setMinimumHeight(80)
+        pagination_layout = QVBoxLayout(pagination_widget)
+        pagination_layout.setContentsMargins(0, 0, 0, 0)
+        pagination_layout.setSpacing(15)
+        pagination_buttons_layout = QHBoxLayout()
+        pagination_buttons_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         prev_page_btn = QPushButton(tr('ui.prev_page'))
         prev_page_btn.setEnabled(False)
         prev_page_btn.setMaximumHeight(24)
         prev_page_btn.setStyleSheet('font-size: 12px; padding: 3px 8px;')
-        pagination_layout.addWidget(prev_page_btn, alignment=Qt.AlignmentFlag.AlignVCenter)
+        pagination_buttons_layout.addWidget(prev_page_btn)
         page_label = QLabel(tr('ui.page_label', current=1, total=1))
         page_label.setStyleSheet('font-size: 14px; padding: 0px 10px;')
         page_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        pagination_layout.addWidget(page_label, alignment=Qt.AlignmentFlag.AlignVCenter)
+        pagination_buttons_layout.addWidget(page_label)
         next_page_btn = QPushButton(tr('ui.next_page'))
         next_page_btn.setEnabled(False)
         next_page_btn.setMaximumHeight(24)
         next_page_btn.setStyleSheet('font-size: 12px; padding: 3px 8px;')
-        pagination_layout.addWidget(next_page_btn, alignment=Qt.AlignmentFlag.AlignVCenter)
+        pagination_buttons_layout.addWidget(next_page_btn)
+        pagination_layout.addLayout(pagination_buttons_layout)
+        mods_per_page_layout = QHBoxLayout()
+        mods_per_page_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        mods_per_page_layout.setSpacing(10)
+        gb_sort_label = QLabel(tr('ui.gamebanana_sort_label'))
+        gb_sort_label.setStyleSheet('font-size: 12px; padding: 0px 5px;')
+        mods_per_page_layout.addWidget(gb_sort_label)
+        gb_sort_combo = QComboBox()
+        gb_sort_combo.addItem(tr('ui.gamebanana_sort_default'), 'default')
+        gb_sort_combo.addItem(tr('ui.gamebanana_sort_new'), 'new')
+        gb_sort_combo.addItem(tr('ui.gamebanana_sort_updated'), 'updated')
+        gb_sort_combo.setMaximumWidth(120)
+        gb_sort_combo.setStyleSheet('font-size: 12px; padding: 2px 5px;')
+        gb_sort_combo.setToolTip(tr('ui.gamebanana_sort_tooltip'))
+        current_sort = getattr(self.app_state, 'gamebanana_sort', 'default')
+        if current_sort == 'default':
+            gb_sort_combo.setCurrentIndex(0)
+        elif current_sort == 'new':
+            gb_sort_combo.setCurrentIndex(1)
+        elif current_sort == 'updated':
+            gb_sort_combo.setCurrentIndex(2)
+        else:
+            gb_sort_combo.setCurrentIndex(0)
+        mods_per_page_layout.addWidget(gb_sort_combo)
+        mods_per_page_label = QLabel(tr('ui.mods_per_page_label'))
+        mods_per_page_label.setStyleSheet('font-size: 12px; padding: 0px 5px;')
+        mods_per_page_layout.addWidget(mods_per_page_label)
+        mods_per_page_spinbox = QSpinBox()
+        mods_per_page_spinbox.setMinimum(5)
+        mods_per_page_spinbox.setMaximum(1000)
+        mods_per_page_spinbox.setValue(self.app_state.mods_per_page if hasattr(self.app_state, 'mods_per_page') else 20)
+        mods_per_page_spinbox.setMaximumWidth(80)
+        mods_per_page_spinbox.setStyleSheet('\n            QSpinBox {\n                font-size: 12px;\n                padding: 2px 5px;\n            }\n            QSpinBox::up-button, QSpinBox::down-button {\n                width: 0px;\n                border: none;\n            }\n        ')
+        mods_per_page_spinbox.setToolTip(tr('ui.mods_per_page_tooltip'))
+        mods_per_page_layout.addWidget(mods_per_page_spinbox)
+        pagination_layout.addLayout(mods_per_page_layout)
         self.widgets['prev_page_btn'] = prev_page_btn
         self.widgets['page_label'] = page_label
         self.widgets['next_page_btn'] = next_page_btn
+        self.widgets['mods_per_page_spinbox'] = mods_per_page_spinbox
+        self.widgets['mods_per_page_label'] = mods_per_page_label
+        self.widgets['gb_sort_combo'] = gb_sort_combo
+        self.widgets['gb_sort_label'] = gb_sort_label
         return pagination_widget
 
     def get_widgets(self) -> Dict[str, Any]:

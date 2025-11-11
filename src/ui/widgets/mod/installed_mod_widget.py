@@ -2,6 +2,7 @@ from PyQt6.QtCore import pyqtSignal, Qt
 from PyQt6.QtWidgets import QLabel, QPushButton, QHBoxLayout, QVBoxLayout, QFrame, QWidget
 from .base_mod_widget import BaseModWidget
 from managers.localization_manager import tr
+from ui.common.styling import get_theme_color
 
 
 class InstalledModWidget(BaseModWidget):
@@ -24,7 +25,6 @@ class InstalledModWidget(BaseModWidget):
         self.setFrameShape(QFrame.Shape.StyledPanel)
         self.setFixedHeight(120)
         self._init_ui()
-        self._update_style()
         self._update_button_from_status()
 
     def _init_ui(self):
@@ -73,11 +73,19 @@ class InstalledModWidget(BaseModWidget):
         actions_layout.addWidget(self.use_button)
         self.remove_button = QPushButton(tr('buttons.delete'))
         self.remove_button.setObjectName('plaqueButton')
-        self.remove_button.setStyleSheet('\n            QPushButton#plaqueButton {\n                background-color: #F44336;\n                color: white;\n            }\n            QPushButton#plaqueButton:hover {\n                background-color: #da190b;\n            }\n        ')
+        config = None
+        if self.parent_app:
+            if hasattr(self.parent_app, 'local_config'):
+                config = self.parent_app.local_config
+            elif hasattr(self.parent_app, 'app_state') and hasattr(self.parent_app.app_state, 'local_config'):
+                config = self.parent_app.app_state.local_config
+        text_color = get_theme_color(config, 'text', 'white') if config else 'white'
+        self.remove_button.setStyleSheet(f'\n            QPushButton#plaqueButton {{\n                background-color: #F44336;\n                color: {text_color};\n            }}\n            QPushButton#plaqueButton:hover {{\n                background-color: #da190b;\n            }}\n        ')
         self.remove_button.clicked.connect(lambda: self.remove_requested.emit(self.mod_data))
         actions_layout.addWidget(self.remove_button)
         self.actions_widget.setVisible(False)
         self.main_layout.addWidget(self.actions_widget)
+        self._update_style()
 
     def _update_indicator(self):
         style = 'font-size: 14px; font-weight: bold; margin-left: 5px;'
@@ -103,8 +111,7 @@ class InstalledModWidget(BaseModWidget):
     def _mod_needs_update(self):
         if not self.parent_app or self.is_local:
             return False
-        needs_update = any((self.parent_app.mod_manager.mod_has_files_for_chapter(self.mod_data, i) and self.parent_app.mod_manager.get_mod_status(self.mod_data, i) == 'update' for i in range(5)))
-        return needs_update
+        return self.parent_app.mod_manager.mod_has_update_available(self.mod_data)
 
     def _update_button_from_status(self):
         if not self.use_button:

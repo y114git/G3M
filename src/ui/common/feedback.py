@@ -19,61 +19,14 @@ class FeedbackManager(QObject):
             return not self.app_state.game_is_running
         return True
 
-    def show_error(self, message_key: str, details: str = '', **kwargs):
+    def show_message(self, message_type: str, message_key: str, details: str = '', **kwargs):
         if not self._should_show_dialog():
             return
-        title = tr('errors.error')
+        type_map = {'error': (QMessageBox.Icon.Critical, tr('errors.error')), 'warning': (QMessageBox.Icon.Warning, 'Warning'), 'info': (QMessageBox.Icon.Information, tr('dialogs.success')), 'success': (QMessageBox.Icon.Information, tr('dialogs.success'))}
+        icon, title = type_map.get(message_type, (QMessageBox.Icon.Information, tr('dialogs.success')))
         message = tr(message_key, **kwargs)
         msg_box = QMessageBox(self.parent_widget)
-        msg_box.setIcon(QMessageBox.Icon.Critical)
-        msg_box.setWindowTitle(title)
-        if details:
-            details_html = details.replace('\\n', '<br>').replace('\n', '<br>')
-            full_message = f'{message}<br><br>{details_html}'
-        else:
-            full_message = message.replace('\\n', '<br>').replace('\n', '<br>')
-        msg_box.setText(full_message)
-        msg_box.exec()
-
-    def show_warning(self, message_key: str, details: str = '', **kwargs):
-        if not self._should_show_dialog():
-            return
-        title = tr('errors.error')
-        message = tr(message_key, **kwargs)
-        msg_box = QMessageBox(self.parent_widget)
-        msg_box.setIcon(QMessageBox.Icon.Warning)
-        msg_box.setWindowTitle(title)
-        if details:
-            details_html = details.replace('\\n', '<br>').replace('\n', '<br>')
-            full_message = f'{message}<br><br>{details_html}'
-        else:
-            full_message = message.replace('\\n', '<br>').replace('\n', '<br>')
-        msg_box.setText(full_message)
-        msg_box.exec()
-
-    def show_info(self, message_key: str, details: str = '', **kwargs):
-        if not self._should_show_dialog():
-            return
-        title = tr('dialogs.success')
-        message = tr(message_key, **kwargs)
-        msg_box = QMessageBox(self.parent_widget)
-        msg_box.setIcon(QMessageBox.Icon.Information)
-        msg_box.setWindowTitle(title)
-        if details:
-            details_html = details.replace('\\n', '<br>').replace('\n', '<br>')
-            full_message = f'{message}<br><br>{details_html}'
-        else:
-            full_message = message.replace('\\n', '<br>').replace('\n', '<br>')
-        msg_box.setText(full_message)
-        msg_box.exec()
-
-    def show_success(self, message_key: str, details: str = '', **kwargs):
-        if not self._should_show_dialog():
-            return
-        title = tr('dialogs.success')
-        message = tr(message_key, **kwargs)
-        msg_box = QMessageBox(self.parent_widget)
-        msg_box.setIcon(QMessageBox.Icon.Information)
+        msg_box.setIcon(icon)
         msg_box.setWindowTitle(title)
         if details:
             details_html = details.replace('\\n', '<br>').replace('\n', '<br>')

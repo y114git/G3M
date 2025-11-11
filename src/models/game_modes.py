@@ -90,3 +90,20 @@ class UndertaleGameMode(GameMode):
 
     def filter_mods_for_ui(self, all_mods: list['ModInfo']) -> dict[int, list['ModInfo']]:
         return {0: [mod for mod in all_mods if mod.modgame == 'undertale' and (not mod.hide_mod) and (not mod.ban_status) and mod.files.get('undertale')]}
+
+
+class UndertaleYellowGameMode(GameMode):
+
+    def __init__(self):
+        self._path_key = 'undertaleyellow_game_path'
+        self._custom_exec_key = 'undertaleyellow_custom_executable_path'
+        self.steam_id = ''
+        self._path_change_button_key = 'buttons.change_undertaleyellow_path'
+        self._tab_name_keys = ['tabs.undertaleyellow']
+        self.direct_launch_allowed = True
+
+    def get_chapter_id(self, ui_index: int) -> int:
+        return 0
+
+    def filter_mods_for_ui(self, all_mods: list['ModInfo']) -> dict[int, list['ModInfo']]:
+        return {0: [mod for mod in all_mods if mod.modgame == 'undertaleyellow' and (not mod.hide_mod) and (not mod.ban_status) and mod.files.get('undertale')]}

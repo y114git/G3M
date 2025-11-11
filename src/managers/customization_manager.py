@@ -19,14 +19,17 @@ class CustomizationManager(QObject):
     def __init__(self, app_state, parent=None):
         super().__init__(parent)
         self.app_state = app_state
+        self.parent_widget = parent
         self._bg_music_running = False
         self._bg_music_thread = None
         self._bg_music_instance = None
         self.bg_fallback_proc = None
 
     def get_background_music_path(self) -> str:
+        import logging
         mp3_path = os.path.join(self.app_state.config_dir, 'custom_background_music.mp3')
         wav_path = os.path.join(self.app_state.config_dir, 'custom_background_music.wav')
+        logging.debug(f'[CustomizationManager] Checking music paths: mp3={mp3_path} (exists: {os.path.exists(mp3_path)}), wav={wav_path} (exists: {os.path.exists(wav_path)})')
         if os.path.exists(mp3_path):
             return mp3_path
         if os.path.exists(wav_path):
@@ -67,10 +70,14 @@ class CustomizationManager(QObject):
             library_container.setStyleSheet(f'\n            QWidget#library_mods_background {{\n                background-color: {bg_rgba};\n                border-radius: 10px;\n                margin: 5px;\n            }}\n        ')
 
     def start_background_music(self):
+        import logging
         try:
             music_path = self.get_background_music_path()
+            logging.info(f'[CustomizationManager] start_background_music called, path: {music_path}')
             if not music_path or not os.path.exists(music_path):
+                logging.warning(f'[CustomizationManager] Cannot start music: path invalid or file not found: {music_path}')
                 return
+            logging.info(f'[CustomizationManager] Stopping existing music and starting new')
             self.stop_background_music()
             from playsound3 import playsound
             self._bg_music_running = True
@@ -100,10 +107,12 @@ class CustomizationManager(QObject):
                             time.sleep(3)
                             continue
             self._bg_music_thread = _MusicLoop(self, music_path)
+            logging.info('[CustomizationManager] Starting background music thread')
             self._bg_music_thread.start()
             self.music_started.emit()
-        except Exception:
-            pass
+            logging.info('[CustomizationManager] Background music thread started, signal emitted')
+        except Exception as e:
+            logging.error(f'[CustomizationManager] Failed to start background music: {e}', exc_info=True)
 
     def stop_background_music(self):
         try:
@@ -140,17 +149,28 @@ class CustomizationManager(QObject):
             self.bg_fallback_proc = None
             self.music_stopped.emit()
 
-    def maybe_start_background_music(self, is_shown_to_user: bool, is_visible: bool):
+    def maybe_start_background_music(self, force=False):
+        import logging
         try:
             music_path = self.get_background_music_path()
+            logging.info(f'[CustomizationManager] maybe_start_background_music called, path: {music_path}, force: {force}')
             if not music_path or not os.path.exists(music_path):
+                logging.debug(f'[CustomizationManager] No music file found or path invalid: {music_path}')
                 return
-            if self.app_state.initialization_completed and is_shown_to_user and is_visible:
-                self.start_background_music()
+            logging.info(f'[CustomizationManager] Music file exists: {os.path.exists(music_path)}')
+            if hasattr(self, 'parent_widget') and self.parent_widget:
+                is_shown_to_user = getattr(self.app_state, 'is_shown_to_user', False)
+                is_visible = self.parent_widget.isVisible()
+                logging.info(f'[CustomizationManager] parent_widget exists: {self.parent_widget is not None}, is_shown_to_user: {is_shown_to_user}, is_visible: {is_visible}, force: {force}')
+                if force or (is_shown_to_user and is_visible):
+                    logging.info('[CustomizationManager] Starting background music')
+                    self.start_background_music()
+                else:
+                    logging.debug(f'[CustomizationManager] Conditions not met for starting music: is_shown_to_user={is_shown_to_user}, is_visible={is_visible}, force={force}')
             else:
-                QTimer.singleShot(500, lambda: self.maybe_start_background_music(is_shown_to_user, is_visible))
-        except Exception:
-            pass
+                logging.warning(f"[CustomizationManager] parent_widget not available: hasattr={hasattr(self, 'parent_widget')}, value={getattr(self, 'parent_widget', None)}")
+        except Exception as e:
+            logging.error(f'[CustomizationManager] Error in maybe_start_background_music: {e}', exc_info=True)
 
     def load_custom_style_settings(self, color_widgets: dict, apply_theme_callback: Optional[Callable] = None):
         theme_defaults = THEMES['default']

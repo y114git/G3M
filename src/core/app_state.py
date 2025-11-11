@@ -7,10 +7,10 @@ from models.game_modes import GameMode, FullGameMode
 
 class AppState(QObject):
     is_installing_changed = pyqtSignal(bool)
+    is_merging_changed = pyqtSignal(bool)
     game_mode_changed = pyqtSignal(object)
     current_mode_changed = pyqtSignal(str)
     selected_chapter_changed = pyqtSignal(object)
-    is_save_manager_view_changed = pyqtSignal(bool)
     operation_cancelled_changed = pyqtSignal(bool)
     filtered_mods_changed = pyqtSignal(list)
     current_page_changed = pyqtSignal(int)
@@ -35,12 +35,11 @@ class AppState(QObject):
         self.mods_dir: str = ''
         self.plugins_dir: str = ''
         self.mods_metadata_path: str = ''
+        self.plugins_metadata_path: str = ''
         self.config_path: str = ''
-        self.save_path: str = ''
         self.all_mods: List[ModInfo] = []
         self.mods_loaded: bool = False
         self.is_settings_view: bool = False
-        self._is_save_manager_view: bool = False
         self.is_changelog_view: bool = False
         self.is_help_view: bool = False
         self.current_settings_page: Optional[Any] = None
@@ -48,13 +47,12 @@ class AppState(QObject):
         self._current_mode: str = 'normal'
         self._selected_chapter_id: Optional[int] = None
         self._is_installing: bool = False
+        self._is_merging: bool = False
         self.update_in_progress: bool = False
         self.initialization_completed: bool = False
         self.is_shown_to_user: bool = False
         self._game_mode: GameMode = FullGameMode()
         self.slots: Dict[int, Any] = {}
-        self.current_collection_idx: int = -1
-        self.selected_slot: Optional[Tuple[int, int]] = None
         self.global_settings: Dict[str, Any] = {}
         self.plugins: List[Dict[str, Any]] = []
         self.translations_by_chapter: Dict[int, List] = {i: [] for i in range(5)}
@@ -70,9 +68,14 @@ class AppState(QObject):
         self._current_task: Optional[QThread] = None
         self._action_button_text: str = ''
         self._action_button_enabled: bool = True
-        self._saves_button_enabled: bool = True
         self._progress_bar_visible: bool = False
         self._progress_bar_value: int = 0
+        self.gamebanana_loaded_pages: Dict[int, int] = {}
+        self.gamebanana_loading: bool = False
+        self.gamebanana_sort: str = 'default'
+        self.gamebanana_mods_needing_metadata: List[str] = []
+        self.has_internet: bool = True
+        self.pending_announce_check: bool = False
 
     @property
     def is_installing(self) -> bool:
@@ -83,6 +86,16 @@ class AppState(QObject):
         if self._is_installing != value:
             self._is_installing = value
             self.is_installing_changed.emit(value)
+
+    @property
+    def is_merging(self) -> bool:
+        return self._is_merging
+
+    @is_merging.setter
+    def is_merging(self, value: bool) -> None:
+        if self._is_merging != value:
+            self._is_merging = value
+            self.is_merging_changed.emit(value)
 
     @property
     def game_mode(self) -> GameMode:
@@ -113,16 +126,6 @@ class AppState(QObject):
         if self._selected_chapter_id != chapter_id:
             self._selected_chapter_id = chapter_id
             self.selected_chapter_changed.emit(chapter_id)
-
-    @property
-    def is_save_manager_view(self) -> bool:
-        return self._is_save_manager_view
-
-    @is_save_manager_view.setter
-    def is_save_manager_view(self, value: bool) -> None:
-        if self._is_save_manager_view != value:
-            self._is_save_manager_view = value
-            self.is_save_manager_view_changed.emit(value)
 
     @property
     def operation_cancelled(self) -> bool:
@@ -197,6 +200,22 @@ class AppState(QObject):
     def clear_current_task(self) -> None:
         self.current_task = None
 
+    def cancel_current_operation(self):
+        import logging
+        self.operation_cancelled = True
+        logging.info('AppState: Cancel button clicked')
+        if self.current_task:
+            if hasattr(self.current_task, 'cancel'):
+                logging.info(f'AppState: Calling cancel() on current_task: {type(self.current_task).__name__}')
+                try:
+                    self.current_task.cancel()
+                except Exception as e:
+                    logging.error(f'AppState: Error calling cancel() on task: {e}', exc_info=True)
+            else:
+                logging.warning(f'AppState: current_task {type(self.current_task).__name__} does not have cancel() method')
+        else:
+            logging.warning('AppState: No current_task to cancel')
+
     @property
     def action_button_text(self) -> str:
         return self._action_button_text
@@ -216,16 +235,6 @@ class AppState(QObject):
         if self._action_button_enabled != value:
             self._action_button_enabled = value
             self.action_button_enabled_changed.emit(value)
-
-    @property
-    def saves_button_enabled(self) -> bool:
-        return self._saves_button_enabled
-
-    @saves_button_enabled.setter
-    def saves_button_enabled(self, value: bool) -> None:
-        if self._saves_button_enabled != value:
-            self._saves_button_enabled = value
-            self.saves_button_enabled_changed.emit(value)
 
     @property
     def progress_bar_visible(self) -> bool:

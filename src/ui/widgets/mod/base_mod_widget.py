@@ -28,6 +28,7 @@ class BaseModWidget(QFrame):
         info_layout.setSpacing(2)
         title_layout = QHBoxLayout()
         name_label = QLabel(self.mod_data.name)
+        name_label.setObjectName('primaryText')
         name_label.setStyleSheet('font-size: 16px; font-weight: bold;')
         title_layout.addWidget(name_label)
         if self.mod_data.version and '|' in self.mod_data.version:
@@ -73,10 +74,10 @@ class BaseModWidget(QFrame):
         tagline_text = self.mod_data.tagline or tr('ui.no_description')
         if len(tagline_text) > 200:
             tagline_text = tagline_text[:197] + '...'
-        tagline_label = QLabel(tagline_text)
-        tagline_label.setWordWrap(True)
-        tagline_label.setObjectName('secondaryText')
-        info_layout.addWidget(tagline_label)
+        self.tagline_label = QLabel(tagline_text)
+        self.tagline_label.setWordWrap(True)
+        self.tagline_label.setObjectName('secondaryText')
+        info_layout.addWidget(self.tagline_label)
         self._create_tags_layout_if_needed(info_layout)
         info_layout.addStretch()
         main_layout.addLayout(info_layout, 1)
@@ -91,6 +92,20 @@ class BaseModWidget(QFrame):
     def _update_style(self):
         if self.frame_selector:
             update_mod_widget_style(self, self.frame_selector, self.parent_app)
+
+    def update_labels_text(self):
+        if hasattr(self, 'author_container') and self.author_container:
+            author_container_layout = self.author_container.layout()
+            if author_container_layout and author_container_layout.count() >= 1:
+                author_label_title = author_container_layout.itemAt(0).widget()
+                if isinstance(author_label_title, QLabel):
+                    author_label_title.setText(tr('ui.author_label'))
+        if hasattr(self, 'game_version_container') and self.game_version_container:
+            game_version_container_layout = self.game_version_container.layout()
+            if game_version_container_layout and game_version_container_layout.count() >= 1:
+                game_version_label_title = game_version_container_layout.itemAt(0).widget()
+                if isinstance(game_version_label_title, QLabel):
+                    game_version_label_title.setText(tr('ui.game_version_label'))
 
     def set_selected(self, selected):
         self.is_selected = selected

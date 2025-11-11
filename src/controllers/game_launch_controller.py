@@ -5,8 +5,7 @@ from PyQt6.QtCore import QObject, pyqtSignal
 from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QVBoxLayout, QFileDialog, QWidget
 from managers.localization_manager import tr
 from config.constants import UI_COLORS
-from models.game_modes import DemoGameMode
-from ui.common.styling import load_mod_icon_universal
+from models.game_modes import DemoGameMode, UndertaleYellowGameMode
 from workers.background_workers import FullInstallThread
 
 
@@ -42,6 +41,10 @@ class GameLaunchController(QObject):
             self.app_state.action_button_text = tr('ui.cancel_button')
             self.app_state.action_button_enabled = True
             return
+        if self.app_state.is_merging:
+            self.app_state.action_button_text = tr('ui.cancel_button')
+            self.app_state.action_button_enabled = True
+            return
         if not self.app_state.initialization_completed:
             self.app_state.action_button_text = tr('status.please_wait')
             self.app_state.action_button_enabled = False
@@ -59,21 +62,70 @@ class GameLaunchController(QObject):
 
     def on_action_button_click(self):
         if self.app_state.is_installing:
-            self.app_state.operation_cancelled = True
+            logging.info('GameLaunchController: Cancel button clicked during installation')
+            self.app_state.cancel_current_operation()
             self.feedback_manager.update_status(tr('status.operation_cancelled'), UI_COLORS['status_error'])
             try:
                 self.app_state.progress_bar_value = 0
                 self.app_state.progress_bar_visible = False
             except (AttributeError, RuntimeError):
-                import logging
                 logging.debug('Progress bar update failed', exc_info=True)
+            self.update_button_state()
+            return
+        if self.app_state.is_merging or (hasattr(self.game_launcher, '_merge_thread') and self.game_launcher._merge_thread and self.game_launcher._merge_thread.isRunning()):
+            is_modpack_creation = False
+            modpack_dir = None
+            if hasattr(self.app, 'library_display') and hasattr(self.app.library_display, '_modpack_thread'):
+                is_modpack_creation = self.app.library_display._modpack_thread == self.app_state.current_task
+                if is_modpack_creation:
+                    modpack_dir = getattr(self.app.library_display, '_modpack_dir', None)
+            merge_thread = None
+            if hasattr(self.game_launcher, '_merge_thread') and self.game_launcher._merge_thread:
+                merge_thread = self.game_launcher._merge_thread
+                merge_thread.cancel()
+            if is_modpack_creation and modpack_dir and os.path.exists(modpack_dir):
+                try:
+                    import shutil
+                    shutil.rmtree(modpack_dir, ignore_errors=True)
+                    logging.info(f'Cancelled modpack creation, removed directory: {modpack_dir}')
+                except Exception as e:
+                    logging.error(f'Failed to remove cancelled modpack directory: {e}')
+            if is_modpack_creation and hasattr(self.app, 'library_display'):
+                if hasattr(self.app.library_display, '_modpack_thread'):
+                    self.app.library_display._modpack_thread = None
+                if hasattr(self.app.library_display, '_modpack_dir'):
+                    self.app.library_display._modpack_dir = None
+            self.app_state.is_merging = False
+            self.app_state.progress_bar_visible = False
+            self.app_state.progress_bar_value = 0
+            self.app_state.clear_current_task()
+            self.app_state.action_button_text = None
+            if merge_thread:
+                try:
+                    if merge_thread.isRunning():
+                        if not merge_thread.wait(3000):
+                            logging.warning('Merge thread did not finish in time, requesting termination')
+                            merge_thread.terminate()
+                            merge_thread.wait(1000)
+                    if merge_thread.merger:
+                        merge_thread.merger.cleanup(force=True)
+                    merge_thread.deleteLater()
+                except Exception as e:
+                    logging.error(f'Error cleaning up cancelled merge thread: {e}', exc_info=True)
+                finally:
+                    self.game_launcher._merge_thread = None
+            self.feedback_manager.update_status(tr('status.operation_cancelled'), UI_COLORS['status_error'])
+            try:
+                self.app_state.progress_bar_value = 0
+                self.app_state.progress_bar_visible = False
+            except (AttributeError, RuntimeError):
+                pass
             if self.app_state.current_task and hasattr(self.app_state.current_task, 'cancel'):
                 self.app_state.current_task.cancel()
-            self.app_state.is_installing = False
             self.app_state.clear_current_task()
             self.update_button_state()
             return
-        if isinstance(self.app_state.game_mode, DemoGameMode) and self._full_install_checkbox_is_checked:
+        if (isinstance(self.app_state.game_mode, DemoGameMode) or isinstance(self.app_state.game_mode, UndertaleYellowGameMode)) and self._full_install_checkbox_is_checked:
             self.perform_full_install()
             return
         if self.app_state.is_installing:
@@ -83,32 +135,35 @@ class GameLaunchController(QObject):
             return
         if self.app_state.operation_cancelled:
             return
-        self.app_state.action_button_enabled = False
-        self.app_state.saves_button_enabled = False
+        if not self.app_state.is_merging:
+            self.app_state.action_button_enabled = False
         self.app_state.progress_bar_visible = False
         self.launch_game()
 
     def launch_game(self):
-        self.game_launcher.launch_game_with_all_mods(execute_plugin_hooks=lambda hook_name: self.plugin_manager.execute_hooks(hook_name, self.app), restore_window_callback=self.app.restore_window_signal.emit)
+
+        def execute_plugin_hooks(hook_name):
+            return self.plugin_manager.execute_hooks(hook_name, self.app)
+        self.game_launcher.launch_game_with_all_mods(execute_plugin_hooks=execute_plugin_hooks, restore_window_callback=self.app.restore_window_signal.emit)
 
     def hide_window(self):
         try:
             self.customization_manager.stop_background_music()
         except Exception as e:
             logging.debug(f'stop_background_music failed: {e}')
+        self.settings_manager.save_window_geometry(self.app)
         self.app_state.game_is_running = True
         self.window_hide_requested.emit()
 
     def restore_window(self):
         self.app_state.game_is_running = False
         self.window_restore_requested.emit()
-        self.app_state.saves_button_enabled = True
         self.app_state.progress_bar_visible = False
         self.update_button_state()
         self.update_geometry_requested.emit()
         self.library_display_update_requested.emit()
         self.search_display_update_requested.emit()
-        self.customization_manager.maybe_start_background_music(self.app_state.is_shown_to_user, True)
+        self.customization_manager.maybe_start_background_music()
         self.show_pending_dialogs_requested.emit()
         self.plugin_manager.execute_hooks('on_after_game_exit', self.app)
 
@@ -118,9 +173,15 @@ class GameLaunchController(QObject):
         if self.app_state.current_task and self.app_state.current_task.isRunning():
             return
         self.app_state.action_button_enabled = False
-        self.app_state.saves_button_enabled = False
         dlg = QDialog(cast(QWidget, self.app))
-        dlg.setWindowTitle(tr('dialogs.full_demo_install'))
+        if isinstance(self.app_state.game_mode, UndertaleYellowGameMode):
+            dlg.setWindowTitle(tr('dialogs.full_yellow_install'))
+            install_location_key = 'dialogs.install_yellow_location'
+            folder_name = 'UNDERTALE Yellow'
+        else:
+            dlg.setWindowTitle(tr('dialogs.full_demo_install'))
+            install_location_key = 'dialogs.install_demo_location'
+            folder_name = 'DELTARUNEdemo'
         v = QVBoxLayout(dlg)
         lbl = QLabel(self.app._full_install_tooltip())
         lbl.setWordWrap(True)
@@ -132,15 +193,15 @@ class GameLaunchController(QObject):
         if dlg.exec() != QDialog.DialogCode.Accepted:
             self.app_state.action_button_enabled = True
             return
-        base_dir = QFileDialog.getExistingDirectory(cast(QWidget, self.app), tr('dialogs.install_demo_location'))
+        base_dir = QFileDialog.getExistingDirectory(cast(QWidget, self.app), tr(install_location_key))
         if not base_dir:
             self.app_state.action_button_enabled = True
             return
-        target_dir = os.path.join(base_dir, 'DELTARUNEdemo')
+        target_dir = os.path.join(base_dir, folder_name)
         try:
             os.makedirs(target_dir, exist_ok=True)
         except (OSError, PermissionError) as e:
-            self.feedback_manager.show_error('errors.error', tr('errors.folder_creation_failed', error=str(e)))
+            self.feedback_manager.show_message('error', 'errors.error', tr('errors.folder_creation_failed', error=str(e)))
             self.app_state.action_button_enabled = True
             return
         self.app_state.progress_bar_visible = True
@@ -162,6 +223,8 @@ class GameLaunchController(QObject):
             if isinstance(self.app_state.game_mode, DemoGameMode):
                 self.app_state.demo_game_path = target_dir
                 self.app_state.local_config['demo_game_path'] = target_dir
+            elif isinstance(self.app_state.game_mode, UndertaleYellowGameMode):
+                self.app_state.game_mode.set_game_path(self.app_state.local_config, target_dir)
             else:
                 self.app_state.game_path = target_dir
                 self.app_state.local_config['game_path'] = target_dir
@@ -204,14 +267,3 @@ class GameLaunchController(QObject):
                     updated_mod = self.mod_manager.create_mod_object_from_info(mod_config, getattr(self.app_state, 'all_mods', None))
             if updated_mod:
                 self.slot_manager.used_mods[chapter_id] = updated_mod
-
-    def run_as_admin_windows(self, path: str) -> bool:
-        import subprocess
-        script = f"import os, stat; p = r'{path}'; [os.chmod(os.path.join(r, f), os.stat(os.path.join(r, f)).st_mode | stat.S_IWRITE) for r, _, fs in os.walk(p) for f in fs] if os.path.isdir(p) else os.chmod(p, os.stat(p).st_mode | stat.S_IWRITE) if os.path.exists(p) else None"
-        command = f'Start-Process python -ArgumentList "-c \\"{script}\\"" -Verb RunAs -WindowStyle Hidden'
-        try:
-            subprocess.run(['powershell', '-Command', command], check=True, capture_output=True)
-            return True
-        except (subprocess.CalledProcessError, FileNotFoundError):
-            self.feedback_manager.update_status(tr('status.permission_change_failed'), UI_COLORS['status_error'])
-            return False

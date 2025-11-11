@@ -6,6 +6,7 @@ import shutil
 import threading
 import subprocess
 import requests
+import logging
 from utils.network_utils import get_session
 from PyQt6.QtCore import QObject, pyqtSignal
 from managers.localization_manager import tr
@@ -52,6 +53,7 @@ class UpdateChecker(QObject):
                 self.feedback_manager.update_status(tr('errors.no_build_for_os', platform=current_platform_key), UI_COLORS['status_warning'])
                 return
             update_info = {'version': remote_version, 'url': download_url, 'message': update_message, 'message_ru': update_message_ru, 'message_en': update_message_en}
+            logging.info(f'UpdateChecker: Update available - version {remote_version}, emitting update_available signal')
             self.update_available.emit(update_info)
         except requests.RequestException as e:
             self.feedback_manager.update_status(tr('errors.update_check_network_error', error=str(e)), UI_COLORS['status_error'])
@@ -83,8 +85,8 @@ class UpdateChecker(QObject):
                 extraction_dir = os.path.join(tmp_dir, 'extracted')
                 os.makedirs(extraction_dir, exist_ok=True)
                 if system != 'Darwin':
-                    from utils.file_utils import _extract_archive
-                    _extract_archive(archive_path, extraction_dir, os.path.basename(archive_path))
+                    from utils.file_utils import extract_archive
+                    extract_archive(archive_path, extraction_dir, os.path.basename(archive_path))
                 if system == 'Windows':
                     new_exe_path = next((os.path.join(root, f) for root, _, files in os.walk(extraction_dir) for f in files if f.lower().endswith('.exe')), None)
                     if not new_exe_path:

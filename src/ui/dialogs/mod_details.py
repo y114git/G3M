@@ -1,10 +1,101 @@
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QWidget, QScrollArea, QTextBrowser
 from managers.localization_manager import tr
 from ui.common.styling import get_theme_color, load_mod_icon_universal
 from ui.widgets.common.outlined_label import OutlinedTextLabel
 from ui.widgets.common.screenshots_carousel import ScreenshotsCarousel
+import logging
 import webbrowser
+
+
+class LoadModDetailsThread(QThread):
+    details_loaded = pyqtSignal(dict)
+
+    def __init__(self, mod_data, config_dir=None, parent=None):
+        super().__init__(parent)
+        self.mod_data = mod_data
+        self.config_dir = config_dir
+
+    def run(self):
+        try:
+            if not (hasattr(self.mod_data, 'is_gamebanana_mod') and self.mod_data.is_gamebanana_mod):
+                return
+            if not hasattr(self.mod_data, 'gamebanana_mod_id') or not self.mod_data.gamebanana_mod_id:
+                return
+            mod_id = int(self.mod_data.gamebanana_mod_id)
+            mod_id_str = str(mod_id)
+            metadata_cache = None
+            cached_text = None
+            cached_screenshots = None
+            if self.config_dir:
+                try:
+                    from utils.gamebanana_cache import GameBananaMetadataCache
+                    metadata_cache = GameBananaMetadataCache(self.config_dir)
+                    if metadata_cache.is_valid(mod_id_str):
+                        cached_text = metadata_cache.get_full_description(mod_id_str)
+                        cached_screenshots = metadata_cache.get_screenshots(mod_id_str)
+                        if cached_text or cached_screenshots:
+                            logging.debug(f'LoadModDetailsThread: Using cached data for mod {mod_id_str}')
+                            result = {}
+                            if cached_text:
+                                result['text'] = cached_text
+                            if cached_screenshots:
+                                result['screenshots'] = cached_screenshots
+                            if result:
+                                self.details_loaded.emit(result)
+                                return
+                except Exception as e:
+                    logging.warning(f'LoadModDetailsThread: Error accessing cache: {e}', exc_info=True)
+            from utils.gamebanana_api import GameBananaAPI
+            api = GameBananaAPI()
+            details = api.get_mod_text_and_screenshots(mod_id)
+            if details:
+                result = {}
+                text_field = details.get('text')
+                full_description = None
+                if text_field:
+                    if isinstance(text_field, list) and len(text_field) > 0:
+                        full_description = text_field[0]
+                    elif isinstance(text_field, str):
+                        full_description = text_field
+                    else:
+                        full_description = str(text_field)
+                    result['text'] = full_description
+                screenshots_field = details.get('screenshots')
+                screenshots = []
+                if screenshots_field:
+                    screenshots_data = None
+                    if isinstance(screenshots_field, list) and len(screenshots_field) > 0:
+                        screenshots_data = screenshots_field[0]
+                    elif not isinstance(screenshots_field, list):
+                        screenshots_data = screenshots_field
+                    if isinstance(screenshots_data, str):
+                        screenshots = api.extract_screenshots_from_api(screenshots_data)
+                    elif isinstance(screenshots_data, list):
+                        base_url = 'https://images.gamebanana.com/img/ss/mods'
+                        for screenshot_obj in screenshots_data:
+                            if isinstance(screenshot_obj, dict):
+                                file_name = screenshot_obj.get('_sFile') or screenshot_obj.get('_sFile800') or screenshot_obj.get('_sFile530') or screenshot_obj.get('_sFile220')
+                                if file_name:
+                                    screenshot_url = f'{base_url}/{file_name}'
+                                    screenshots.append(screenshot_url)
+                    elif isinstance(screenshots_data, dict):
+                        import json
+                        try:
+                            screenshots_str = json.dumps(screenshots_data)
+                            screenshots = api.extract_screenshots_from_api(screenshots_str)
+                        except (TypeError, ValueError):
+                            screenshots = []
+                result['screenshots'] = screenshots
+                if metadata_cache and (full_description or screenshots):
+                    try:
+                        metadata_cache.set(mod_id_str, full_description=full_description, screenshots=screenshots if screenshots else None)
+                        logging.debug(f'LoadModDetailsThread: Saved details to cache for mod {mod_id_str}')
+                    except Exception as e:
+                        logging.warning(f'LoadModDetailsThread: Error saving to cache: {e}', exc_info=True)
+                self.details_loaded.emit(result)
+        except Exception as e:
+            logging.error(f'Error loading mod details: {e}', exc_info=True)
 
 
 def open_mod_details_dialog(parent, mod_data):
@@ -14,6 +105,7 @@ def open_mod_details_dialog(parent, mod_data):
     dialog.resize(800, 750)
     app_state = getattr(parent, 'app_state', None)
     local_cfg = getattr(app_state, 'local_config', None) if app_state is not None else None
+    text_color = get_theme_color(local_cfg, 'text', 'white')
     secondary_text_color = get_theme_color(local_cfg, 'version_text', 'rgba(255, 255, 255, 178)')
     layout = QVBoxLayout(dialog)
     layout.setSpacing(15)
@@ -25,7 +117,8 @@ def open_mod_details_dialog(parent, mod_data):
     icon_label = QLabel()
     icon_label.setFixedSize(120, 120)
     icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-    icon_label.setStyleSheet('border: 2px solid #fff;')
+    border_color = get_theme_color(local_cfg, 'border', '#fff')
+    icon_label.setStyleSheet(f'border: 2px solid {border_color};')
     load_mod_icon_universal(icon_label, mod_data, 120)
     left_layout.addWidget(icon_label)
     left_container = QWidget()
@@ -34,30 +127,30 @@ def open_mod_details_dialog(parent, mod_data):
     metadata_layout = QVBoxLayout()
     metadata_layout.setSpacing(3)
     author_text = mod_data.author or tr('defaults.unknown')
-    author_label = QLabel(f"""<span style="color: white;">{tr('ui.author_label')}</span> <span style="color: {secondary_text_color};">{author_text}</span>""")
+    author_label = QLabel(f"""<span style="color: {text_color};">{tr('ui.author_label')}</span> <span style="color: {secondary_text_color};">{author_text}</span>""")
     author_label.setStyleSheet('font-size: 12px;')
     metadata_layout.addWidget(author_label)
     game_version_text = mod_data.game_version or 'N/A'
-    game_version_label = QLabel(f"""<span style="color: white;">{tr('ui.game_version_label')}</span> <span style="color: {secondary_text_color};">{game_version_text}</span>""")
+    game_version_label = QLabel(f"""<span style="color: {text_color};">{tr('ui.game_version_label')}</span> <span style="color: {secondary_text_color};">{game_version_text}</span>""")
     game_version_label.setStyleSheet('font-size: 12px;')
     metadata_layout.addWidget(game_version_label)
     created_date_text = mod_data.created_date or 'N/A'
-    created_label = QLabel(f"""<span style="color: white;">{tr('ui.created_label')}</span> <span style="color: {secondary_text_color};">{created_date_text}</span>""")
+    created_label = QLabel(f"""<span style="color: {text_color};">{tr('ui.created_label')}</span> <span style="color: {secondary_text_color};">{created_date_text}</span>""")
     created_label.setStyleSheet('font-size: 12px;')
     metadata_layout.addWidget(created_label)
     updated_date_text = mod_data.last_updated or 'N/A'
-    updated_label = QLabel(f"""<span style="color: white;">{tr('ui.updated_label')}</span> <span style="color: {secondary_text_color};">{updated_date_text}</span>""")
+    updated_label = QLabel(f"""<span style="color: {text_color};">{tr('ui.updated_label')}</span> <span style="color: {secondary_text_color};">{updated_date_text}</span>""")
     updated_label.setStyleSheet('font-size: 12px;')
     metadata_layout.addWidget(updated_label)
-    downloads_label = QLabel(f"""<span style="color: white;">{tr('ui.downloads_label')}</span> <span style="color: {secondary_text_color};">{mod_data.downloads}</span>""")
+    downloads_label = QLabel(f"""<span style="color: {text_color};">{tr('ui.downloads_label')}</span> <span style="color: {secondary_text_color};">{mod_data.downloads}</span>""")
     downloads_label.setStyleSheet('font-size: 12px;')
     metadata_layout.addWidget(downloads_label)
     if hasattr(mod_data, 'tags') and mod_data.tags:
         metadata_layout.addSpacing(8)
         tags_header = QLabel(tr('ui.tags_label'))
-        tags_header.setStyleSheet('font-size: 12px; color: white; font-weight: bold;')
+        tags_header.setStyleSheet(f'font-size: 12px; color: {text_color}; font-weight: bold;')
         metadata_layout.addWidget(tags_header)
-        tag_translations = {'translation': tr('tags.translation'), 'customization': tr('tags.customization'), 'gameplay': tr('tags.gameplay'), 'other': tr('tags.other')}
+        tag_translations = {'textedit': tr('tags.textedit'), 'translation': tr('tags.textedit'), 'customization': tr('tags.customization'), 'gameplay': tr('tags.gameplay'), 'other': tr('tags.other')}
         tags_list = mod_data.tags if isinstance(mod_data.tags, list) else [mod_data.tags]
         filtered_tags = [tag for tag in tags_list if tag]
         translated_tags = [tag_translations.get(tag, tag) or tag for tag in filtered_tags]
@@ -90,7 +183,7 @@ def open_mod_details_dialog(parent, mod_data):
     if mod_data.tagline:
         tagline_label = QLabel(mod_data.tagline)
         tagline_label.setWordWrap(True)
-        tagline_label.setStyleSheet('font-size: 14px; color: #ddd;')
+        tagline_label.setStyleSheet(f'font-size: 14px; color: {secondary_text_color};')
         tagline_label.setAlignment(Qt.AlignmentFlag.AlignTop)
         tagline_layout.addWidget(tagline_label)
     tagline_layout.addSpacing(20)
@@ -99,7 +192,7 @@ def open_mod_details_dialog(parent, mod_data):
     modgame_container = QVBoxLayout()
     modgame_container.setSpacing(4)
     modgame_label = OutlinedTextLabel(tr(f'ui.{mod_data.modgame}_label'))
-    fill_color = 'white'
+    fill_color = text_color
     outline_color = '#222222'
     if mod_data.modgame == 'deltarune':
         outline_color = '#222222'
@@ -107,6 +200,8 @@ def open_mod_details_dialog(parent, mod_data):
         outline_color = 'lightgreen'
     elif mod_data.modgame == 'undertale':
         outline_color = '#750B0B'
+    elif mod_data.modgame == 'undertaleyellow':
+        outline_color = '#FFD700'
     f = modgame_label.font()
     f.setBold(True)
     f.setPointSize(15)
@@ -146,20 +241,26 @@ def open_mod_details_dialog(parent, mod_data):
     separator.setMinimumHeight(1)
     separator.setStyleSheet('background: rgba(255,255,255,0.25);')
     scroll_layout.addWidget(separator)
+    screenshots_container = QWidget()
+    screenshots_container_layout = QVBoxLayout(screenshots_container)
+    screenshots_container_layout.setContentsMargins(0, 0, 0, 0)
     screenshots = getattr(mod_data, 'screenshots_url', []) or []
+    screenshots_widget = None
     if isinstance(screenshots, list) and any((isinstance(u, str) and u.strip() for u in screenshots)):
         screenshots_title = QLabel(f"<b>{tr('ui.screenshots_title')}</b>")
         screenshots_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        scroll_layout.addWidget(screenshots_title)
-        carousel = ScreenshotsCarousel(screenshots, parent)
+        screenshots_container_layout.addWidget(screenshots_title)
+        app_state = getattr(parent, 'app_state', None) if parent else None
+        screenshots_widget = ScreenshotsCarousel(screenshots, parent, app_state)
         container = QWidget()
         cont_layout = QHBoxLayout(container)
         cont_layout.setContentsMargins(0, 0, 0, 0)
         cont_layout.addStretch()
-        cont_layout.addWidget(carousel)
+        cont_layout.addWidget(screenshots_widget)
         cont_layout.addStretch()
-        scroll_layout.addWidget(container)
-        scroll_layout.addSpacing(12)
+        screenshots_container_layout.addWidget(container)
+    scroll_layout.addWidget(screenshots_container)
+    scroll_layout.addSpacing(12)
     full_desc_label = QLabel(f"<b>{tr('ui.full_description_label')}</b>")
     full_desc_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
     scroll_layout.addWidget(full_desc_label)
@@ -167,7 +268,49 @@ def open_mod_details_dialog(parent, mod_data):
     desc_text = QTextBrowser()
     desc_text.setMinimumHeight(300)
     desc_text.setOpenExternalLinks(True)
-    if hasattr(mod_data, 'description_url') and mod_data.description_url:
+
+    def update_ui_with_details(details_dict):
+        if details_dict.get('text'):
+            try:
+                desc_text.setHtml(details_dict['text'])
+            except Exception as e:
+                logging.warning(f'Error setting full_description HTML: {e}')
+                desc_text.setPlainText(details_dict['text'])
+        new_screenshots = details_dict.get('screenshots', [])
+        if new_screenshots and isinstance(new_screenshots, list) and any((isinstance(u, str) and u.strip() for u in new_screenshots)):
+            while screenshots_container_layout.count() > 0:
+                item = screenshots_container_layout.takeAt(0)
+                widget = item.widget() if item else None
+                if widget:
+                    widget.deleteLater()
+            screenshots_title = QLabel(f"<b>{tr('ui.screenshots_title')}</b>")
+            screenshots_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            screenshots_container_layout.addWidget(screenshots_title)
+            app_state = getattr(parent, 'app_state', None) if parent else None
+            new_carousel = ScreenshotsCarousel(new_screenshots, parent, app_state)
+            container = QWidget()
+            cont_layout = QHBoxLayout(container)
+            cont_layout.setContentsMargins(0, 0, 0, 0)
+            cont_layout.addStretch()
+            cont_layout.addWidget(new_carousel)
+            cont_layout.addStretch()
+            screenshots_container_layout.addWidget(container)
+    needs_load = hasattr(mod_data, 'is_gamebanana_mod') and mod_data.is_gamebanana_mod and hasattr(mod_data, 'gamebanana_mod_id') and mod_data.gamebanana_mod_id and (not hasattr(mod_data, 'full_description') or not mod_data.full_description)
+    if needs_load:
+        desc_text.setPlainText(tr('status.loading_description'))
+        config_dir = None
+        if app_state and hasattr(app_state, 'config_dir'):
+            config_dir = app_state.config_dir
+        load_thread = LoadModDetailsThread(mod_data, config_dir=config_dir, parent=dialog)
+        load_thread.details_loaded.connect(update_ui_with_details)
+        load_thread.start()
+    elif hasattr(mod_data, 'is_gamebanana_mod') and mod_data.is_gamebanana_mod and hasattr(mod_data, 'full_description') and mod_data.full_description:
+        try:
+            desc_text.setHtml(mod_data.full_description)
+        except Exception as e:
+            logging.warning(f'Error setting full_description HTML: {e}')
+            desc_text.setPlainText(mod_data.full_description)
+    elif hasattr(mod_data, 'description_url') and mod_data.description_url:
         try:
             from utils.network_utils import get_session
             desc_text.setPlainText(tr('status.loading_description'))

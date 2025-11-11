@@ -8,20 +8,27 @@ from managers.localization_manager import tr
 
 
 def update_mod_widget_style(widget, frame_selector, parent_app=None):
-    if parent_app and hasattr(parent_app, 'local_config'):
-        config = parent_app.local_config
-        plaque_bg_color = get_theme_color(config, 'button', 'black')
+    config = None
+    if parent_app:
+        if hasattr(parent_app, 'local_config'):
+            config = parent_app.local_config
+        elif hasattr(parent_app, 'app_state') and hasattr(parent_app.app_state, 'local_config'):
+            config = parent_app.app_state.local_config
+    if config:
+        plaque_bg_color = get_theme_color(config, 'background', '#000000')
         border_color = get_theme_color(config, 'border', '#fff')
         hover_border_color = get_theme_color(config, 'button_hover', '#fff')
+        text_color = get_theme_color(config, 'text', '#ffffff')
         version_text_color = get_theme_color(config, 'version_text', 'rgba(255, 255, 255, 178)')
     else:
-        plaque_bg_color = 'black'
+        plaque_bg_color = '#000000'
         border_color = '#fff'
         hover_border_color = '#fff'
+        text_color = '#ffffff'
         version_text_color = 'rgba(255, 255, 255, 178)'
     border_width = '3px' if getattr(widget, 'is_selected', False) else '1px'
     current_border_color = hover_border_color if getattr(widget, 'is_selected', False) else border_color
-    widget.setStyleSheet(f'\n        QFrame#{frame_selector} {{\n            background-color: {plaque_bg_color};\n            border: {border_width} solid {current_border_color};\n        }}\n        QFrame#{frame_selector}:hover {{\n            border-color: {hover_border_color};\n        }}\n        QLabel#modIcon {{\n            border: 2px solid {border_color};\n        }}\n        QLabel#versionLabel {{\n            color: {version_text_color};\n        }}\n        QLabel#secondaryText {{\n            color: {version_text_color};\n            font-size: 12px;\n        }}\n        QLabel#primaryText {{\n            color: white;\n            font-size: 12px;\n        }}\n        QPushButton#plaqueButton, QPushButton#plaqueButtonInstall {{\n            min-width: 110px;\n            max-width: 110px;\n            min-height: 35px;\n            max-height: 35px;\n            font-size: 15px;\n            padding: 1px;\n        }}\n        QPushButton#plaqueButtonInstall {{\n            background-color: #4CAF50;\n            font-weight: bold;\n        }}\n        QPushButton#plaqueButtonInstall:hover {{\n            background-color: #5cb85c;\n        }}\n    ')
+    widget.setStyleSheet(f'\n        QFrame#{frame_selector} {{\n            background-color: {plaque_bg_color};\n            border: {border_width} solid {current_border_color};\n        }}\n        QFrame#{frame_selector}:hover {{\n            border-color: {hover_border_color};\n        }}\n        QLabel#modIcon {{\n            border: 2px solid {border_color};\n        }}\n        QLabel#versionLabel {{\n            color: {version_text_color};\n        }}\n        QLabel#secondaryText {{\n            color: {version_text_color};\n            font-size: 12px;\n        }}\n        QLabel#primaryText {{\n            color: {text_color};\n            font-size: 12px;\n        }}\n        QPushButton#plaqueButton, QPushButton#plaqueButtonInstall {{\n            min-width: 110px;\n            max-width: 110px;\n            min-height: 35px;\n            max-height: 35px;\n            font-size: 15px;\n            padding: 1px;\n        }}\n        QPushButton#plaqueButtonInstall {{\n            background-color: #4CAF50;\n            font-weight: bold;\n        }}\n        QPushButton#plaqueButtonInstall:hover {{\n            background-color: #5cb85c;\n        }}\n    ')
 
 
 def show_empty_message_in_layout(layout, text, local_config=None, font_size=16):
@@ -58,14 +65,22 @@ def clear_layout_widgets(layout, keep_last_n=1):
     if not layout:
         return
     end_index = layout.count() - keep_last_n
+    widgets_to_remove = []
     for i in reversed(range(end_index)):
         item = layout.itemAt(i)
         if item:
             widget = item.widget()
             if widget:
-                widget.setParent(None)
+                widgets_to_remove.append(widget)
             else:
                 layout.removeItem(item)
+    for widget in widgets_to_remove:
+        try:
+            layout.removeWidget(widget)
+            widget.setParent(None)
+            widget.deleteLater()
+        except (RuntimeError, AttributeError):
+            pass
 
 
 def load_mod_icon_universal(icon_label, mod_data, size=80):
