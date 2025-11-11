@@ -71,9 +71,9 @@ class PluginManager(QObject):
     def disable_plugin(self, plugin_name: str):
         self.update_plugin_metadata(plugin_name, {'enabled': False})
 
-    def _extract_plugin_info_from_file(self, main_py_path: str, plugin_info: dict):
+    def _extract_plugin_info_from_file(self, plugin_init_py_path: str, plugin_info: dict):
         try:
-            with open(main_py_path, 'r', encoding='utf-8') as f:
+            with open(plugin_init_py_path, 'r', encoding='utf-8') as f:
                 content = f.read()
             import re
             plugin_id_match = re.search('PLUGIN_ID\\s*=\\s*["\\\']([^"\\\']+)["\\\']', content)
@@ -97,13 +97,13 @@ class PluginManager(QObject):
                         plugin_info['description'] = description
                     break
         except Exception as e:
-            logging.debug(f'_extract_plugin_info_from_file: Error extracting info from {main_py_path}: {e}')
+            logging.debug(f'_extract_plugin_info_from_file: Error extracting info from {plugin_init_py_path}: {e}')
 
     def get_plugin_status(self, plugin_name: str, plugin_path: str) -> str:
         if not os.path.isdir(plugin_path):
             return 'broken'
-        main_py_path = os.path.join(plugin_path, 'main.py')
-        if not os.path.isfile(main_py_path):
+        plugin_init_py_path = os.path.join(plugin_path, 'plugin_init.py')
+        if not os.path.isfile(plugin_init_py_path):
             return 'broken'
         if plugin_name in self._plugin_errors:
             return 'broken'
@@ -120,21 +120,21 @@ class PluginManager(QObject):
                 item_path = os.path.join(self.app_state.plugins_dir, item_name)
                 if os.path.isfile(item_path) and item_name.lower().endswith(('.zip', '.7z', '.rar', '.tar.gz', '.lzma')):
                     try:
-                        has_main_py = False
+                        has_plugin_init_py = False
                         item_name_lower = item_name.lower()
                         if item_name_lower.endswith('.zip'):
                             with zipfile.ZipFile(item_path, 'r') as zf:
                                 for name in zf.namelist():
                                     normalized = name.replace('\\', '/').strip('/')
-                                    if normalized == 'main.py' or normalized.endswith('/main.py'):
-                                        has_main_py = True
+                                    if normalized == 'plugin_init.py' or normalized.endswith('/plugin_init.py'):
+                                        has_plugin_init_py = True
                                         break
                         elif item_name_lower.endswith('.tar.gz'):
                             with tarfile.open(item_path, 'r:gz') as tf:
                                 for member in tf.getmembers():
                                     name = member.name.replace('\\', '/').strip('/')
-                                    if name == 'main.py' or name.endswith('/main.py'):
-                                        has_main_py = True
+                                    if name == 'plugin_init.py' or name.endswith('/plugin_init.py'):
+                                        has_plugin_init_py = True
                                         break
                         elif item_name_lower.endswith('.rar'):
                             try:
@@ -142,8 +142,8 @@ class PluginManager(QObject):
                                 with rarfile.RarFile(item_path, 'r') as rf:
                                     for name in rf.namelist():
                                         normalized = name.replace('\\', '/').strip('/')
-                                        if normalized == 'main.py' or normalized.endswith('/main.py'):
-                                            has_main_py = True
+                                        if normalized == 'plugin_init.py' or normalized.endswith('/plugin_init.py'):
+                                            has_plugin_init_py = True
                                             break
                             except (OSError, ImportError) as e:
                                 logging.warning(f'convert_plugin_archives: failed to check rar archive {item_name}: {e}', exc_info=True)
@@ -153,12 +153,12 @@ class PluginManager(QObject):
                                 with py7zr.SevenZipFile(item_path, mode='r') as zf:
                                     for name in zf.getnames():
                                         normalized = name.replace('\\', '/').strip('/')
-                                        if normalized == 'main.py' or normalized.endswith('/main.py'):
-                                            has_main_py = True
+                                        if normalized == 'plugin_init.py' or normalized.endswith('/plugin_init.py'):
+                                            has_plugin_init_py = True
                                             break
                             except (OSError, ImportError) as e:
                                 logging.warning(f'convert_plugin_archives: failed to check 7z archive {item_name}: {e}', exc_info=True)
-                        if has_main_py:
+                        if has_plugin_init_py:
                             from utils.file_utils import remove_archive_extension
                             plugin_folder_name = remove_archive_extension(item_name)
                             plugin_folder_path = os.path.join(self.app_state.plugins_dir, plugin_folder_name)
@@ -173,8 +173,8 @@ class PluginManager(QObject):
                                 with tempfile.TemporaryDirectory() as temp_dir:
                                     shutil.unpack_archive(item_path, temp_dir)
                                     contents = os.listdir(temp_dir)
-                                    main_py_path = os.path.join(temp_dir, 'main.py')
-                                    if os.path.isfile(main_py_path):
+                                    plugin_init_py_path = os.path.join(temp_dir, 'plugin_init.py')
+                                    if os.path.isfile(plugin_init_py_path):
                                         os.makedirs(plugin_folder_path, exist_ok=True)
                                         for item in os.listdir(temp_dir):
                                             shutil.move(os.path.join(temp_dir, item), plugin_folder_path)
@@ -183,12 +183,12 @@ class PluginManager(QObject):
                                         if len(contents) == 1:
                                             single_dir = os.path.join(temp_dir, contents[0])
                                             if os.path.isdir(single_dir):
-                                                single_main_py = os.path.join(single_dir, 'main.py')
-                                                if os.path.isfile(single_main_py):
+                                                single_plugin_init_py = os.path.join(single_dir, 'plugin_init.py')
+                                                if os.path.isfile(single_plugin_init_py):
                                                     found_plugin_dir = single_dir
                                         if not found_plugin_dir:
                                             for root, dirs, files in os.walk(temp_dir):
-                                                if 'main.py' in files:
+                                                if 'plugin_init.py' in files:
                                                     rel_path = os.path.relpath(root, temp_dir)
                                                     if rel_path != '.' and os.path.dirname(rel_path) == '.':
                                                         found_plugin_dir = root
@@ -231,14 +231,14 @@ class PluginManager(QObject):
             logging.info('Plugin archives converted, reloading plugins')
         for plugin_name in os.listdir(self.app_state.plugins_dir):
             plugin_path = os.path.join(self.app_state.plugins_dir, plugin_name)
-            main_py_path = os.path.join(plugin_path, 'main.py')
-            if not os.path.isdir(plugin_path) or not os.path.isfile(main_py_path):
+            plugin_init_py_path = os.path.join(plugin_path, 'plugin_init.py')
+            if not os.path.isdir(plugin_path) or not os.path.isfile(plugin_init_py_path):
                 continue
             if not self.is_plugin_enabled(plugin_name):
                 logging.info(f'Plugin {plugin_name} is disabled, skipping')
                 continue
             try:
-                spec = importlib.util.spec_from_file_location(f'plugins.{plugin_name}', main_py_path)
+                spec = importlib.util.spec_from_file_location(f'plugins.{plugin_name}', plugin_init_py_path)
                 if spec and spec.loader:
                     plugin_module = importlib.util.module_from_spec(spec)
                     sys.modules[f'plugins.{plugin_name}'] = plugin_module
@@ -334,22 +334,22 @@ class PluginManager(QObject):
                 continue
             if not os.path.isdir(item_path):
                 continue
-            main_py_path = os.path.join(item_path, 'main.py')
-            if not os.path.isfile(main_py_path):
+            plugin_init_py_path = os.path.join(item_path, 'plugin_init.py')
+            if not os.path.isfile(plugin_init_py_path):
                 continue
             status = self.get_plugin_status(item_name, item_path)
             plugin_meta = self.get_plugin_metadata(item_name)
             installed_date = plugin_meta.get('installed_date')
             if not installed_date:
                 try:
-                    if os.path.exists(main_py_path):
-                        mtime = os.path.getmtime(main_py_path)
+                    if os.path.exists(plugin_init_py_path):
+                        mtime = os.path.getmtime(plugin_init_py_path)
                         installed_date = datetime.fromtimestamp(mtime).strftime('%d.%m.%y %H:%M')
                         self.update_plugin_metadata(item_name, {'installed_date': installed_date})
                 except Exception:
                     pass
             plugin_info = {'name': item_name, 'path': item_path, 'status': status, 'installed_date': installed_date, 'error': self._plugin_errors.get(item_name)}
-            self._extract_plugin_info_from_file(main_py_path, plugin_info)
+            self._extract_plugin_info_from_file(plugin_init_py_path, plugin_info)
             if 'plugin_id' not in plugin_info:
                 plugin_info['plugin_id'] = item_name
             plugin_id = plugin_info.get('plugin_id', item_name)

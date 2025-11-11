@@ -40,9 +40,22 @@ class UpdateGameBananaModThread(QThread):
                     for folder_name in os.listdir(mods_dir):
                         folder_path = os.path.join(mods_dir, folder_name)
                         if os.path.isdir(folder_path):
-                            config_path = os.path.join(folder_path, 'config.json')
+                            config_path = os.path.join(folder_path, 'mod_config.json')
+                            old_config_path = os.path.join(folder_path, 'config.json')
                             if os.path.exists(config_path):
                                 try:
+                                    with open(config_path, 'r', encoding='utf-8') as f:
+                                        config_data = json.load(f)
+                                    if config_data.get('mod_key') == mod_key:
+                                        mod_dir = folder_path
+                                        break
+                                except Exception:
+                                    continue
+                            elif os.path.exists(old_config_path):
+                                try:
+                                    import shutil
+                                    shutil.move(old_config_path, config_path)
+                                    logger.info(f'Migrated mod config.json to mod_config.json in {folder_name}')
                                     with open(config_path, 'r', encoding='utf-8') as f:
                                         config_data = json.load(f)
                                     if config_data.get('mod_key') == mod_key:
@@ -84,9 +97,22 @@ class UpdateGameBananaModThread(QThread):
                         for folder_name in os.listdir(mods_dir):
                             folder_path = os.path.join(mods_dir, folder_name)
                             if os.path.isdir(folder_path):
-                                config_path = os.path.join(folder_path, 'config.json')
+                                config_path = os.path.join(folder_path, 'mod_config.json')
+                                old_config_path = os.path.join(folder_path, 'config.json')
                                 if os.path.exists(config_path):
                                     try:
+                                        with open(config_path, 'r', encoding='utf-8') as f:
+                                            config_data = json.load(f)
+                                        if config_data.get('mod_key') == mod_key:
+                                            mod_dir_new = folder_path
+                                            break
+                                    except Exception:
+                                        continue
+                                elif os.path.exists(old_config_path):
+                                    try:
+                                        import shutil
+                                        shutil.move(old_config_path, config_path)
+                                        logger.info(f'Migrated mod config.json to mod_config.json in {folder_name}')
                                         with open(config_path, 'r', encoding='utf-8') as f:
                                             config_data = json.load(f)
                                         if config_data.get('mod_key') == mod_key:

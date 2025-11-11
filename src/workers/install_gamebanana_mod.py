@@ -71,7 +71,7 @@ class InstallGameBananaModThread(QThread):
             if not compatible_file:
                 mod_url = self.mod_info.external_url or f'https://gamebanana.com/mods/{mod_id}'
                 error_msg = f'MOD_NOT_COMPATIBLE:{mod_url}'
-                logger.warning(f'Mod {mod_id} does not have a compatible file with _deltamodInfo.json')
+                logger.warning(f'Mod {mod_id} does not have a compatible file with mod_config.json or _deltamodInfo.json')
                 self.status.emit(tr('status.installation_failed'), UI_COLORS['status_error'])
                 self.finished.emit(False, error_msg)
                 return
@@ -97,6 +97,7 @@ class InstallGameBananaModThread(QThread):
                 self._cleanup_temp_files(archive_path, archive_dir)
                 self.finished.emit(False, tr('status.operation_cancelled'))
                 return
+            file_format = compatible_file.get('file_format', 'deltamod')
             try:
                 import tempfile
                 from utils.file_utils import _extract_archive_raw
@@ -110,21 +111,27 @@ class InstallGameBananaModThread(QThread):
                         self.status.emit(error_msg, UI_COLORS['status_error'])
                         self.finished.emit(False, error_msg)
                         return
+                    has_mod_config = False
                     has_deltamod_info = False
                     for root, dirs, files in os.walk(temp_dir):
                         for file in files:
-                            if file.lower().endswith('_deltamodinfo.json') or file.endswith('_deltamodInfo.json'):
+                            if file == 'mod_config.json':
+                                has_mod_config = True
+                            elif file.lower().endswith('_deltamodinfo.json') or file.endswith('_deltamodInfo.json'):
                                 has_deltamod_info = True
-                                break
-                        if has_deltamod_info:
+                        if has_mod_config or has_deltamod_info:
                             break
-                    if not has_deltamod_info:
+                    if not has_mod_config and (not has_deltamod_info):
                         mod_url = self.mod_info.external_url or f'https://gamebanana.com/mods/{mod_id}'
-                        error_msg = tr('errors.archive_missing_deltamodinfo')
-                        logger.error(f'Archive {archive_path} does not contain _deltamodInfo.json despite API check')
+                        error_msg = tr('errors.archive_missing_modinfo')
+                        logger.error(f'Archive {archive_path} does not contain mod_config.json or _deltamodInfo.json despite API check')
                         self.status.emit(error_msg, UI_COLORS['status_error'])
                         self.finished.emit(False, error_msg)
                         return
+                    if has_mod_config:
+                        file_format = 'deltahub'
+                    elif has_deltamod_info:
+                        file_format = 'deltamod'
             except Exception as e:
                 error_msg = tr('errors.invalid_archive_format')
                 logger.error(f'Error checking archive: {archive_path}: {e}', exc_info=True)
@@ -134,6 +141,20 @@ class InstallGameBananaModThread(QThread):
             if self._cancelled:
                 self._cleanup_temp_files(archive_path, archive_dir)
                 self.finished.emit(False, tr('status.operation_cancelled'))
+                return
+            if file_format == 'deltahub':
+                self.status.emit(tr('status.installing_mod'), UI_COLORS['status_info'])
+                try:
+                    mod_dir = self._install_deltahub_mod(archive_path, mod_id)
+                    self._cleanup_temp_files(archive_path, archive_dir)
+                    if not mod_dir:
+                        raise ValueError(tr('errors.gamebanana_installation_failed'))
+                    mod_name = os.path.basename(mod_dir)
+                    self.finished.emit(True, tr('status.install_complete_success', mod_name=mod_name))
+                except Exception as e:
+                    self._cleanup_temp_files(archive_path, archive_dir)
+                    logger.error(f'Error installing DELTAHUB mod from GameBanana: {e}', exc_info=True)
+                    raise ValueError(tr('errors.gamebanana_installation_failed'))
                 return
             self.status.emit(tr('status.converting_mod'), UI_COLORS['status_info'])
             gb_metadata = {'mod_id': mod_id, 'mod_type': self.mod_info.gamebanana_mod_type or 'Mod', 'last_update_timestamp': self.mod_info.gamebanana_last_update_timestamp, 'profile_url': self.mod_info.external_url}
@@ -156,6 +177,94 @@ class InstallGameBananaModThread(QThread):
             logger.error(f'Error installing GameBanana mod: {e}', exc_info=True)
             self._cleanup_temp_files(archive_path, archive_dir)
             self.finished.emit(False, str(e))
+
+    def _install_deltahub_mod(self, archive_path: str, mod_id: int) -> Optional[str]:
+        import tempfile
+        import json
+        from utils.file_utils import _extract_archive_raw, remove_archive_extension, sanitize_filename
+        from managers.settings_manager import SettingsManager
+        fname_lower = os.path.basename(archive_path).lower()
+        with tempfile.TemporaryDirectory(prefix='gb_install_dh_') as temp_dir:
+            try:
+                _extract_archive_raw(archive_path, fname_lower, temp_dir)
+            except Exception as e:
+                logger.error(f'Error extracting DELTAHUB mod archive: {e}')
+                raise
+            mod_config_path = None
+            content_root = temp_dir
+            for root, dirs, files in os.walk(temp_dir):
+                if 'mod_config.json' in files:
+                    mod_config_path = os.path.join(root, 'mod_config.json')
+                    if root != temp_dir:
+                        content_root = root
+                    break
+            if not mod_config_path:
+                logger.error('mod_config.json not found in DELTAHUB mod archive')
+                raise ValueError('mod_config.json not found in archive')
+            try:
+                with open(mod_config_path, 'r', encoding='utf-8') as f:
+                    config_data = json.load(f)
+            except Exception as e:
+                logger.error(f'Error reading mod_config.json: {e}')
+                raise
+            is_redirect = False
+            files_in_archive = []
+            for root, dirs, files in os.walk(content_root):
+                for file in files:
+                    if file != 'mod_config.json':
+                        files_in_archive.append(file)
+            if len(files_in_archive) == 0:
+                external_url = config_data.get('external_url') or config_data.get('download_url')
+                if external_url:
+                    logger.info(f'DELTAHUB mod {mod_id} appears to be a redirect to {external_url}')
+                    is_redirect = True
+                    self.status.emit(tr('status.downloading_from_external'), UI_COLORS['status_info'])
+                    try:
+                        redirect_archive_path = self._download_file(external_url, 'redirect_mod.zip')
+                        return self._install_deltahub_mod(redirect_archive_path, mod_id)
+                    except Exception as e:
+                        logger.error(f'Error downloading redirect mod: {e}')
+                        raise ValueError(f'Failed to download redirect mod: {e}')
+            mod_key = config_data.get('mod_key')
+            if not mod_key:
+                mod_key = f'gb_{mod_id}'
+                config_data['mod_key'] = mod_key
+            mod_name = config_data.get('name', f'mod_{mod_id}')
+            folder_name = sanitize_filename(mod_name)
+            target_mod_dir = os.path.join(self.main_window.app_state.mods_dir, folder_name)
+            counter = 1
+            while os.path.exists(target_mod_dir):
+                folder_name_with_counter = f'{folder_name}_{counter}'
+                target_mod_dir = os.path.join(self.main_window.app_state.mods_dir, folder_name_with_counter)
+                counter += 1
+            os.makedirs(target_mod_dir, exist_ok=True)
+            for item in os.listdir(content_root):
+                src_path = os.path.join(content_root, item)
+                dst_path = os.path.join(target_mod_dir, item)
+                if os.path.isdir(src_path):
+                    shutil.copytree(src_path, dst_path)
+                else:
+                    shutil.copy2(src_path, dst_path)
+            config_data['is_gamebanana_mod'] = True
+            config_data['is_local_mod'] = False
+            config_data['gamebanana_mod_id'] = str(mod_id)
+            if self.mod_info.gamebanana_mod_type:
+                config_data['gamebanana_mod_type'] = self.mod_info.gamebanana_mod_type
+            if self.mod_info.gamebanana_last_update_timestamp:
+                config_data['gamebanana_last_update_timestamp'] = self.mod_info.gamebanana_last_update_timestamp
+            if not config_data.get('external_url') and self.mod_info.external_url:
+                config_data['external_url'] = self.mod_info.external_url
+            expected_mod_key = f'gb_{mod_id}'
+            config_data['mod_key'] = expected_mod_key
+            target_config_path = os.path.join(target_mod_dir, 'mod_config.json')
+            try:
+                with open(target_config_path, 'w', encoding='utf-8') as f:
+                    json.dump(config_data, f, indent=4, ensure_ascii=False)
+                logger.info(f'Installed DELTAHUB mod: {target_mod_dir}, mod_key={expected_mod_key}')
+            except Exception as e:
+                logger.error(f'Error writing mod_config.json: {e}')
+                raise
+            return target_mod_dir
 
     def _check_file_compatibility(self, download_url: str, file_info: Dict) -> Optional[Dict]:
         try:

@@ -437,24 +437,39 @@ class GameBananaAPI:
             return None
 
     def check_file_has_deltamodinfo(self, file_id: int) -> bool:
+        file_type = self.check_file_compatibility(file_id)
+        return file_type is not None
+
+    def check_file_compatibility(self, file_id: int) -> Optional[str]:
         file_tree = self.get_file_contents(file_id)
         if not file_tree:
-            logger.debug(f'check_file_has_deltamodinfo: No file tree returned for file_id {file_id}')
-            return False
+            logger.debug(f'check_file_compatibility: No file tree returned for file_id {file_id}')
+            return None
         if not isinstance(file_tree, list):
-            logger.warning(f'check_file_has_deltamodinfo: file_tree is not a list, type: {type(file_tree)}')
-            return False
-        logger.debug(f'check_file_has_deltamodinfo: Checking file_id {file_id}, file_tree has {len(file_tree)} items')
+            logger.warning(f'check_file_compatibility: file_tree is not a list, type: {type(file_tree)}')
+            return None
+        logger.debug(f'check_file_compatibility: Checking file_id {file_id}, file_tree has {len(file_tree)} items')
+        has_deltamod = False
+        has_deltahub = False
         for file_name in file_tree:
             if isinstance(file_name, str):
                 file_lower = file_name.lower()
-                if '_deltamodinfo.json' in file_lower:
-                    logger.info(f'check_file_has_deltamodinfo: Found _deltamodInfo.json in file: {file_name}')
-                    return True
+                if file_lower == 'mod_config.json' or file_name == 'mod_config.json':
+                    has_deltahub = True
+                    logger.info(f'check_file_compatibility: Found mod_config.json in file: {file_name}')
+                elif '_deltamodinfo.json' in file_lower:
+                    has_deltamod = True
+                    logger.info(f'check_file_compatibility: Found _deltamodInfo.json in file: {file_name}')
             else:
-                logger.debug(f'check_file_has_deltamodinfo: Skipping non-string item: {type(file_name)}')
-        logger.debug(f'check_file_has_deltamodinfo: No _deltamodInfo.json found in file_id {file_id}')
-        return False
+                logger.debug(f'check_file_compatibility: Skipping non-string item: {type(file_name)}')
+        if has_deltahub:
+            logger.info(f'check_file_compatibility: File {file_id} is DELTAHUB format (mod_config.json)')
+            return 'deltahub'
+        elif has_deltamod:
+            logger.info(f'check_file_compatibility: File {file_id} is Deltamod format (_deltamodInfo.json)')
+            return 'deltamod'
+        logger.debug(f'check_file_compatibility: No compatible file found in file_id {file_id}')
+        return None
 
     def find_compatible_file(self, mod_id: int) -> Optional[Dict]:
         files = self.get_mod_files(mod_id)
@@ -462,6 +477,8 @@ class GameBananaAPI:
             logger.debug(f'find_compatible_file: No files found for mod_id {mod_id}')
             return None
         logger.debug(f'find_compatible_file: Checking {len(files)} files for mod_id {mod_id}')
+        deltahub_file = None
+        deltamod_file = None
         for file_info in files:
             file_id = file_info.get('_idRow')
             if not file_id:
@@ -471,10 +488,23 @@ class GameBananaAPI:
             if not has_contents:
                 logger.debug(f'find_compatible_file: File {file_id} does not have contents (_bHasContents=False), skipping')
                 continue
-            logger.debug(f'find_compatible_file: Checking file_id {file_id} for _deltamodInfo.json')
-            if self.check_file_has_deltamodinfo(file_id):
-                logger.info(f'find_compatible_file: Found compatible file {file_id} for mod_id {mod_id}')
-                return file_info
+            logger.debug(f'find_compatible_file: Checking file_id {file_id} for compatibility')
+            file_format = self.check_file_compatibility(file_id)
+            if file_format == 'deltahub':
+                logger.info(f'find_compatible_file: Found DELTAHUB format file {file_id} for mod_id {mod_id}')
+                file_info['file_format'] = 'deltahub'
+                deltahub_file = file_info
+            elif file_format == 'deltamod':
+                logger.info(f'find_compatible_file: Found Deltamod format file {file_id} for mod_id {mod_id}')
+                file_info['file_format'] = 'deltamod'
+                if deltamod_file is None:
+                    deltamod_file = file_info
+        if deltahub_file:
+            logger.info(f'find_compatible_file: Returning DELTAHUB format file for mod_id {mod_id}')
+            return deltahub_file
+        elif deltamod_file:
+            logger.info(f'find_compatible_file: Returning Deltamod format file for mod_id {mod_id}')
+            return deltamod_file
         logger.warning(f'find_compatible_file: No compatible file found for mod_id {mod_id}')
         return None
 

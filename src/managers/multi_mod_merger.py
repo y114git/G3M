@@ -10,7 +10,7 @@ from utils.path_utils import get_xdelta_path, find_chapter_resource_dir
 from utils.file_utils import ensure_writable, sanitize_filename
 from managers.localization_manager import tr
 from utils.mod_utils import get_mod_key, get_mod_name
-from utils.game_utils import is_demo_mode, is_undertale_mode
+from utils.game_utils import is_demo_mode, is_undertale_mode, is_undertale_yellow_mode
 
 
 class MultiModMerger(QObject):
@@ -1222,12 +1222,9 @@ class MultiModMerger(QObject):
         return chapter_dir
 
     def _get_target_dir(self, chapter_id: int) -> Optional[str]:
-        if is_demo_mode(self.app_state.game_mode):
-            base_path = self.app_state.demo_game_path
-        elif is_undertale_mode(self.app_state.game_mode):
-            base_path = self.app_state.undertale_game_path
-        else:
-            base_path = self.app_state.game_path
+        # Use game_mode.get_game_path() to get the correct path based on game mode
+        # This ensures we get the path from local_config using the correct key
+        base_path = self.app_state.game_mode.get_game_path(self.app_state.local_config)
         if not base_path:
             return None
         return find_chapter_resource_dir(base_path, chapter_id)

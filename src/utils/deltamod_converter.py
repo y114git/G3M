@@ -33,7 +33,7 @@ class DeltamodConverter:
                 shutil.rmtree(target_mod_dir)
             os.makedirs(target_mod_dir)
             self._process_files(target_mod_dir)
-            config_path = os.path.join(target_mod_dir, 'config.json')
+            config_path = os.path.join(target_mod_dir, 'mod_config.json')
             with open(config_path, 'w', encoding='utf-8') as f:
                 json.dump(config_data, f, indent=4, ensure_ascii=False)
             logging.info(f"Deltamod converted: {config_data.get('name')} → {target_mod_dir}")

@@ -35,7 +35,7 @@ class SettingsManager(QObject):
         try:
             with open(path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-            if isinstance(data, dict) and path.endswith('config.json'):
+            if isinstance(data, dict) and (path.endswith('mod_config.json') or (path.endswith('config.json') and 'mod_key' in data)):
                 needs_migration = False
                 if 'chapters' in data and 'files' not in data:
                     data['files'] = data['chapters']

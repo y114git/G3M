@@ -146,11 +146,14 @@ class ShortcutManager(QObject):
         is_chapter_mode = hasattr(self.parent_widget, 'chapter_mode_checkbox') and self.parent_widget.chapter_mode_checkbox.isChecked()
         is_undertale = is_undertale_mode(self.app_state.game_mode)
         is_undertaleyellow = is_undertale_yellow_mode(self.app_state.game_mode)
-        from models.game_modes import DemoGameMode, UndertaleYellowGameMode
+        from models.game_modes import DemoGameMode, UndertaleGameMode, UndertaleYellowGameMode
+        undertale_game_path = ''
         undertaleyellow_game_path = ''
-        if is_undertaleyellow:
+        if is_undertale:
+            undertale_game_path = self.app_state.game_mode.get_game_path(self.app_state.local_config) or ''
+        elif is_undertaleyellow:
             undertaleyellow_game_path = self.app_state.game_mode.get_game_path(self.app_state.local_config) or ''
-        settings = {'launcher_version': LAUNCHER_VERSION, 'game_path': self.app_state.game_path, 'demo_game_path': self.app_state.demo_game_path, 'undertaleyellow_game_path': undertaleyellow_game_path, 'is_demo_mode': is_demo, 'is_chapter_mode': is_chapter_mode, 'is_undertale_mode': is_undertale, 'is_undertaleyellow_mode': is_undertaleyellow, 'launch_via_steam': self.parent_widget.launch_via_steam_checkbox.isChecked(), 'use_custom_executable': self.parent_widget.use_custom_executable_checkbox.isChecked(), 'custom_executable_path': self.app_state.local_config.get(FullGameMode().get_custom_exec_config_key(), ''), 'demo_custom_executable_path': self.app_state.local_config.get(DemoGameMode().get_custom_exec_config_key(), ''), 'undertaleyellow_custom_executable_path': self.app_state.local_config.get(UndertaleYellowGameMode().get_custom_exec_config_key(), ''), 'direct_launch_slot_id': self.app_state.local_config.get('direct_launch_slot_id', SLOT_ID_UNIVERSAL), 'mods': {}}
+        settings = {'launcher_version': LAUNCHER_VERSION, 'game_path': self.app_state.game_path, 'demo_game_path': self.app_state.demo_game_path, 'undertale_game_path': undertale_game_path, 'undertaleyellow_game_path': undertaleyellow_game_path, 'is_demo_mode': is_demo, 'is_chapter_mode': is_chapter_mode, 'is_undertale_mode': is_undertale, 'is_undertaleyellow_mode': is_undertaleyellow, 'launch_via_steam': self.parent_widget.launch_via_steam_checkbox.isChecked(), 'use_custom_executable': self.parent_widget.use_custom_executable_checkbox.isChecked(), 'custom_executable_path': self.app_state.local_config.get(FullGameMode().get_custom_exec_config_key(), ''), 'demo_custom_executable_path': self.app_state.local_config.get(DemoGameMode().get_custom_exec_config_key(), ''), 'undertale_custom_executable_path': self.app_state.local_config.get(UndertaleGameMode().get_custom_exec_config_key(), ''), 'undertaleyellow_custom_executable_path': self.app_state.local_config.get(UndertaleYellowGameMode().get_custom_exec_config_key(), ''), 'direct_launch_slot_id': self.app_state.local_config.get('direct_launch_slot_id', SLOT_ID_UNIVERSAL), 'mods': {}}
         slot_manager = getattr(self.parent_widget, 'slot_manager', None) if self.parent_widget else None
         if not slot_manager or not hasattr(slot_manager, 'get_active_mod_selections'):
             if is_demo:
@@ -308,7 +311,7 @@ class ShortcutManager(QObject):
                 mods_list.append(mod_data)
         return mods_list
 
-    def launch_game_from_shortcut(self, launch_via_steam=False, use_custom_executable=False, custom_exec_path='', demo_custom_exec_path='', undertaleyellow_custom_exec_path='', direct_launch_slot_id=-1):
+    def launch_game_from_shortcut(self, launch_via_steam=False, use_custom_executable=False, custom_exec_path='', demo_custom_exec_path='', undertale_custom_exec_path='', undertaleyellow_custom_exec_path='', direct_launch_slot_id=-1):
         try:
             if not self.parent_widget:
                 raise Exception(tr('errors.parent_widget_not_found'))
@@ -320,25 +323,32 @@ class ShortcutManager(QObject):
                 self.app_state.local_config['direct_launch_slot_id'] = direct_launch_slot_id
             if launch_via_steam:
                 self.app_state.local_config['launch_via_steam'] = True
+            # Set custom executable path based on game mode
             if use_custom_executable:
                 is_demo = is_demo_mode(self.app_state.game_mode)
+                is_undertale = is_undertale_mode(self.app_state.game_mode)
                 is_undertaleyellow = is_undertale_yellow_mode(self.app_state.game_mode)
                 if is_demo:
                     exec_path = demo_custom_exec_path
-                elif is_undertaleyellow:
-                    exec_path = undertaleyellow_custom_exec_path
-                else:
-                    exec_path = custom_exec_path
-                if exec_path:
-                    if is_demo:
+                    if exec_path:
                         from models.game_modes import DemoGameMode
                         self.app_state.local_config[DemoGameMode().get_custom_exec_config_key()] = exec_path
-                    elif is_undertaleyellow:
+                elif is_undertale:
+                    exec_path = undertale_custom_exec_path
+                    if exec_path:
+                        from models.game_modes import UndertaleGameMode
+                        self.app_state.local_config[UndertaleGameMode().get_custom_exec_config_key()] = exec_path
+                elif is_undertaleyellow:
+                    exec_path = undertaleyellow_custom_exec_path
+                    if exec_path:
                         from models.game_modes import UndertaleYellowGameMode
                         self.app_state.local_config[UndertaleYellowGameMode().get_custom_exec_config_key()] = exec_path
-                    else:
+                else:
+                    exec_path = custom_exec_path
+                    if exec_path:
                         from models.game_modes import FullGameMode
                         self.app_state.local_config[FullGameMode().get_custom_exec_config_key()] = exec_path
+                if exec_path:
                     self.app_state.local_config['use_custom_executable'] = True
             game_launcher.is_shortcut_launch = True
             logging.info('Launching game from shortcut with mods via game_launcher')

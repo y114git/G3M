@@ -5,6 +5,7 @@ import tempfile
 import threading
 import time
 import requests
+from typing import Optional
 from utils.network_utils import get_session
 from PyQt6.QtCore import QObject, QThread, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QImage
@@ -697,14 +698,35 @@ class UrlInstallThread(QThread):
                     if len(unpacked_items) == 1 and os.path.isdir(os.path.join(unpack_dir, unpacked_items[0])):
                         content_path = os.path.join(unpack_dir, unpacked_items[0])
                     files_in_root = os.listdir(content_path)
-                    if 'config.json' in files_in_root and len(files_in_root) == 1:
-                        with open(os.path.join(content_path, 'config.json'), 'r', encoding='utf-8') as f:
-                            redirect_config = json.load(f)
-                        if 'dm_url' in redirect_config:
-                            self.status.emit(tr('status.deltamod_redirect_found'), UI_COLORS['status_info'])
-                            self.progress.emit(0)
-                            self._process_deltamod_archive(redirect_config['dm_url'])
-                            return
+                    redirect_config_path = None
+                    if 'mod_config.json' in files_in_root and len(files_in_root) == 1:
+                        redirect_config_path = os.path.join(content_path, 'mod_config.json')
+                    elif 'config.json' in files_in_root and len(files_in_root) == 1:
+                        redirect_config_path = os.path.join(content_path, 'config.json')
+                    if redirect_config_path:
+                        try:
+                            with open(redirect_config_path, 'r', encoding='utf-8') as f:
+                                redirect_config = json.load(f)
+                            redirect_url = redirect_config.get('dm_url') or redirect_config.get('external_url') or redirect_config.get('download_url')
+                            if redirect_url:
+                                self.status.emit(tr('status.deltamod_redirect_found'), UI_COLORS['status_info'])
+                                self.progress.emit(0)
+                                if 'mod_config.json' in files_in_root:
+                                    self._process_deltahub_redirect(redirect_url, redirect_config)
+                                else:
+                                    self._process_deltamod_archive(redirect_url)
+                                return
+                        except Exception as e:
+                            logging.warning(f'UrlInstallThread: Error reading redirect config: {e}')
+                    if 'mod_config.json' in files_in_root:
+                        self.status.emit(tr('status.installing_mod'), UI_COLORS['status_info'])
+                        mod_dir = self._install_deltahub_mod_from_path(content_path)
+                        if mod_dir:
+                            mod_name = os.path.basename(mod_dir)
+                            self.finished.emit(True, tr('status.install_complete_success', mod_name=mod_name))
+                        else:
+                            raise ValueError(tr('errors.mod_installation_failed'))
+                        return
                     if '_deltamodInfo.json' in files_in_root:
                         self.status.emit(tr('status.deltamod_archive_detected_url'), UI_COLORS['status_info'])
                         converter = DeltamodConverter(content_path, self.main_window.app_state.mods_dir)
@@ -719,6 +741,35 @@ class UrlInstallThread(QThread):
         except Exception as e:
             self.finished.emit(False, str(e))
 
+    def _process_deltahub_redirect(self, url: str, redirect_config: dict):
+        with tempfile.TemporaryDirectory(prefix='dh-redirect-dl-') as temp_dir:
+            archive_path = self._download_archive(url, temp_dir)
+            with tempfile.TemporaryDirectory(prefix='dh-redirect-unpack-') as unpack_dir:
+                shutil.unpack_archive(archive_path, unpack_dir)
+                content_path = unpack_dir
+                unpacked_items = os.listdir(unpack_dir)
+                if len(unpacked_items) == 1 and os.path.isdir(os.path.join(unpack_dir, unpacked_items[0])):
+                    content_path = os.path.join(unpack_dir, unpacked_items[0])
+                files_in_root = os.listdir(content_path)
+                if 'mod_config.json' in files_in_root:
+                    mod_dir = self._install_deltahub_mod_from_path(content_path)
+                    if mod_dir:
+                        mod_name = os.path.basename(mod_dir)
+                        self.finished.emit(True, tr('status.install_complete_success', mod_name=mod_name))
+                    else:
+                        raise ValueError(tr('errors.mod_installation_failed'))
+                elif '_deltamodInfo.json' in files_in_root:
+                    from utils.deltamod_converter import DeltamodConverter
+                    converter = DeltamodConverter(content_path, self.main_window.app_state.mods_dir)
+                    new_mod_path = converter.convert()
+                    if new_mod_path:
+                        mod_name = os.path.basename(new_mod_path)
+                        self.finished.emit(True, tr('status.install_complete_success', mod_name=mod_name))
+                    else:
+                        raise ValueError(tr('errors.deltamod_conversion_failed_url'))
+                else:
+                    raise ValueError(tr('errors.deltamod_archive_invalid_redirect'))
+
     def _process_deltamod_archive(self, url: str):
         with tempfile.TemporaryDirectory(prefix='dh-redirect-dl-') as temp_dir:
             archive_path = self._download_archive(url, temp_dir)
@@ -728,8 +779,17 @@ class UrlInstallThread(QThread):
                 unpacked_items = os.listdir(unpack_dir)
                 if len(unpacked_items) == 1 and os.path.isdir(os.path.join(unpack_dir, unpacked_items[0])):
                     content_path = os.path.join(unpack_dir, unpacked_items[0])
-                if '_deltamodInfo.json' in os.listdir(content_path):
-                    converter = LegacyModConverter(content_path, self.main_window.app_state.mods_dir)
+                files_in_root = os.listdir(content_path)
+                if 'mod_config.json' in files_in_root:
+                    mod_dir = self._install_deltahub_mod_from_path(content_path)
+                    if mod_dir:
+                        mod_name = os.path.basename(mod_dir)
+                        self.finished.emit(True, tr('status.install_complete_success', mod_name=mod_name))
+                    else:
+                        raise ValueError(tr('errors.mod_installation_failed'))
+                elif '_deltamodInfo.json' in files_in_root:
+                    from utils.deltamod_converter import DeltamodConverter
+                    converter = DeltamodConverter(content_path, self.main_window.app_state.mods_dir)
                     new_mod_path = converter.convert()
                     if new_mod_path:
                         mod_name = os.path.basename(new_mod_path)
@@ -738,6 +798,59 @@ class UrlInstallThread(QThread):
                         raise ValueError(tr('errors.deltamod_conversion_failed_url'))
                 else:
                     raise ValueError(tr('errors.deltamod_archive_invalid_redirect'))
+
+    def _install_deltahub_mod_from_path(self, content_path: str) -> Optional[str]:
+        import json
+        from utils.file_utils import sanitize_filename
+        mod_config_path = None
+        for root, dirs, files in os.walk(content_path):
+            if 'mod_config.json' in files:
+                mod_config_path = os.path.join(root, 'mod_config.json')
+                break
+        if not mod_config_path:
+            logging.error('mod_config.json not found in DELTAHUB mod archive')
+            return None
+        try:
+            with open(mod_config_path, 'r', encoding='utf-8') as f:
+                config_data = json.load(f)
+        except Exception as e:
+            logging.error(f'Error reading mod_config.json: {e}')
+            return None
+        mod_key = config_data.get('mod_key')
+        if not mod_key:
+            mod_name = config_data.get('name', 'imported_mod')
+            mod_key = f"local_{sanitize_filename(mod_name).lower().replace(' ', '_')}"
+            config_data['mod_key'] = mod_key
+        mod_name = config_data.get('name', 'imported_mod')
+        folder_name = sanitize_filename(mod_name)
+        target_mod_dir = os.path.join(self.main_window.app_state.mods_dir, folder_name)
+        counter = 1
+        while os.path.exists(target_mod_dir):
+            folder_name_with_counter = f'{folder_name}_{counter}'
+            target_mod_dir = os.path.join(self.main_window.app_state.mods_dir, folder_name_with_counter)
+            counter += 1
+        os.makedirs(target_mod_dir, exist_ok=True)
+        for item in os.listdir(content_path):
+            src_path = os.path.join(content_path, item)
+            dst_path = os.path.join(target_mod_dir, item)
+            if os.path.isdir(src_path):
+                if os.path.exists(dst_path):
+                    shutil.rmtree(dst_path)
+                shutil.copytree(src_path, dst_path)
+            else:
+                shutil.copy2(src_path, dst_path)
+        config_data['is_local_mod'] = True
+        if 'is_gamebanana_mod' not in config_data:
+            config_data['is_gamebanana_mod'] = False
+        target_config_path = os.path.join(target_mod_dir, 'mod_config.json')
+        try:
+            with open(target_config_path, 'w', encoding='utf-8') as f:
+                json.dump(config_data, f, indent=4, ensure_ascii=False)
+            logging.info(f'Installed DELTAHUB mod from URL: {target_mod_dir}, mod_key={mod_key}')
+        except Exception as e:
+            logging.error(f'Error writing mod_config.json: {e}')
+            return None
+        return target_mod_dir
 
     def _download_archive(self, url: str, temp_dir: str) -> str:
         from urllib.parse import urlparse, unquote
@@ -823,7 +936,15 @@ class ModScanThread(QThread):
                         continue
                     folder_name = entry.name
                     folder_path = entry.path
-                    config_path = os.path.join(folder_path, 'config.json')
+                    old_config_path = os.path.join(folder_path, 'config.json')
+                    config_path = os.path.join(folder_path, 'mod_config.json')
+                    if os.path.exists(old_config_path) and (not os.path.exists(config_path)):
+                        try:
+                            import shutil
+                            shutil.move(old_config_path, config_path)
+                            logging.info(f'ModScanThread: Migrated mod config.json to mod_config.json in {folder_name}')
+                        except Exception as e:
+                            logging.warning(f'ModScanThread: Failed to migrate mod config.json to mod_config.json in {folder_name}: {e}')
                     if not os.path.exists(config_path):
                         continue
                     try:

@@ -58,8 +58,11 @@ class ModImportExportController:
                     else:
                         QMessageBox.critical(self.app_window, tr('errors.error'), tr('errors.mod_import_failed', error='Conversion failed'))
                     return
-                if os.path.exists(os.path.join(content_path, 'config.json')):
-                    with open(os.path.join(content_path, 'config.json'), 'r', encoding='utf-8') as f:
+                mod_config_path = os.path.join(content_path, 'mod_config.json')
+                old_config_path = os.path.join(content_path, 'config.json')
+                config_path_to_read = mod_config_path if os.path.exists(mod_config_path) else old_config_path
+                if os.path.exists(config_path_to_read):
+                    with open(config_path_to_read, 'r', encoding='utf-8') as f:
                         config = json.load(f)
                     mod_key = config.get('mod_key')
                     if not mod_key:
@@ -75,7 +78,15 @@ class ModImportExportController:
                         target_mod_dir = os.path.join(self.app_state.mods_dir, folder_name_with_counter)
                         counter += 1
                     shutil.copytree(content_path, target_mod_dir)
-                    config_path = os.path.join(target_mod_dir, 'config.json')
+                    target_old_config_path = os.path.join(target_mod_dir, 'config.json')
+                    target_config_path = os.path.join(target_mod_dir, 'mod_config.json')
+                    if os.path.exists(target_old_config_path) and (not os.path.exists(target_config_path)):
+                        try:
+                            shutil.move(target_old_config_path, target_config_path)
+                            logging.info(f'Migrated mod config.json to mod_config.json during import in {folder_name}')
+                        except Exception as e:
+                            logging.warning(f'Failed to migrate mod config.json to mod_config.json during import in {folder_name}: {e}')
+                    config_path = target_config_path
                     config_updated = False
                     if 'files' in config:
                         for chapter_key, chapter_data in config['files'].items():
@@ -173,7 +184,8 @@ class ModImportExportController:
                     for entry in os.scandir(self.app_state.mods_dir):
                         if not entry.is_dir():
                             continue
-                        config_path = os.path.join(entry.path, 'config.json')
+                        config_path = os.path.join(entry.path, 'mod_config.json')
+                        old_config_path = os.path.join(entry.path, 'config.json')
                         if os.path.exists(config_path):
                             try:
                                 with open(config_path, 'r', encoding='utf-8') as f:
@@ -189,6 +201,25 @@ class ModImportExportController:
                                         break
                             except Exception as e:
                                 logging.warning(f'Error reading config {config_path}: {e}')
+                                continue
+                        elif os.path.exists(old_config_path):
+                            try:
+                                import shutil
+                                shutil.move(old_config_path, config_path)
+                                logging.info(f'Migrated mod config.json to mod_config.json during export in {entry.name}')
+                                with open(config_path, 'r', encoding='utf-8') as f:
+                                    config = json.load(f)
+                                config_mod_key = config.get('mod_key')
+                                config_mod_name = config.get('name', '')
+                                if config_mod_key:
+                                    if config_mod_key == mod.key:
+                                        mod_dir = entry.path
+                                        break
+                                    elif config_mod_name == mod.name:
+                                        mod_dir = entry.path
+                                        break
+                            except Exception as e:
+                                logging.warning(f'Error migrating or reading config in {entry.path}: {e}')
                                 continue
                 else:
                     logging.error(f'Mods directory does not exist: {self.app_state.mods_dir}')

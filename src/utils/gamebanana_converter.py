@@ -103,9 +103,18 @@ class GameBananaConverter:
                 folder_path = os.path.join(self.mods_dir, folder_name)
                 if not os.path.isdir(folder_path):
                     continue
-                config_path = os.path.join(folder_path, 'config.json')
+                config_path = os.path.join(folder_path, 'mod_config.json')
+                old_config_path = os.path.join(folder_path, 'config.json')
                 if not os.path.exists(config_path):
-                    continue
+                    if os.path.exists(old_config_path):
+                        try:
+                            import shutil
+                            shutil.move(old_config_path, config_path)
+                            logger.info(f'GameBananaConverter: Migrated mod config.json to mod_config.json in {folder_name}')
+                        except Exception as e:
+                            logger.debug(f'GameBananaConverter: Failed to migrate config in {folder_path}: {e}')
+                    else:
+                        continue
                 try:
                     with open(config_path, 'r', encoding='utf-8') as f:
                         config_data = json.load(f)
@@ -120,7 +129,7 @@ class GameBananaConverter:
             logger.warning(f'GameBananaConverter: Error checking for existing mod folder: {e}')
 
     def _update_config_with_gb_metadata(self, mod_dir: str) -> str:
-        config_path = os.path.join(mod_dir, 'config.json')
+        config_path = os.path.join(mod_dir, 'mod_config.json')
         if not os.path.exists(config_path):
             logger.warning(f'GameBananaConverter: Config file not found at {config_path}')
             return mod_dir

@@ -95,10 +95,10 @@ class CreateModpackThread(QThread):
                     files_data[chapter_key] = file_info
             mod_key = f'local_{uuid.uuid4().hex[:12]}'
             config_data = {'is_local_mod': True, 'mod_key': mod_key, 'name': self.modpack_name, 'author': tr('defaults.multiple_authors'), 'version': '1.0.0', 'tagline': tr('defaults.no_short_description'), 'game_version': tr('defaults.not_specified'), 'modgame': 'deltarune', 'files': files_data, 'tags': [], 'created_date': time.strftime('%d.%m.%y %H:%M'), 'is_available_on_server': False}
-            config_path = os.path.join(self.modpack_dir, 'config.json')
+            config_path = os.path.join(self.modpack_dir, 'mod_config.json')
             with open(config_path, 'w', encoding='utf-8') as f:
                 json.dump(config_data, f, indent=4, ensure_ascii=False)
-            logging.info(f'Created config.json for modpack: {self.modpack_name}')
+            logging.info(f'Created mod_config.json for modpack: {self.modpack_name}')
         except Exception as e:
-            logging.error(f'Failed to create config.json: {e}', exc_info=True)
+            logging.error(f'Failed to create mod_config.json: {e}', exc_info=True)
             raise

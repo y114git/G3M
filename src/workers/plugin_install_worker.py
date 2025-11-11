@@ -31,20 +31,20 @@ class PluginInstallWorker(QThread):
             except Exception:
                 pass
 
-    def _check_archive_has_main_py(self, archive_path: str) -> bool:
+    def _check_archive_has_plugin_init_py(self, archive_path: str) -> bool:
         archive_lower = archive_path.lower()
         try:
             if archive_lower.endswith('.zip'):
                 with zipfile.ZipFile(archive_path, 'r') as zf:
                     for name in zf.namelist():
                         normalized = name.replace('\\', '/').strip('/')
-                        if normalized == 'main.py' or normalized.endswith('/main.py'):
+                        if normalized == 'plugin_init.py' or normalized.endswith('/plugin_init.py'):
                             return True
             elif archive_lower.endswith('.tar.gz'):
                 with tarfile.open(archive_path, 'r:gz') as tf:
                     for member in tf.getmembers():
                         name = member.name.replace('\\', '/').strip('/')
-                        if name == 'main.py' or name.endswith('/main.py'):
+                        if name == 'plugin_init.py' or name.endswith('/plugin_init.py'):
                             return True
             elif archive_lower.endswith('.rar'):
                 try:
@@ -52,7 +52,7 @@ class PluginInstallWorker(QThread):
                     with rarfile.RarFile(archive_path, 'r') as rf:
                         for name in rf.namelist():
                             normalized = name.replace('\\', '/').strip('/')
-                            if normalized == 'main.py' or normalized.endswith('/main.py'):
+                            if normalized == 'plugin_init.py' or normalized.endswith('/plugin_init.py'):
                                 return True
                 except (OSError, ImportError):
                     return False
@@ -62,7 +62,7 @@ class PluginInstallWorker(QThread):
                     with py7zr.SevenZipFile(archive_path, mode='r') as zf:
                         for name in zf.getnames():
                             normalized = name.replace('\\', '/').strip('/')
-                            if normalized == 'main.py' or normalized.endswith('/main.py'):
+                            if normalized == 'plugin_init.py' or normalized.endswith('/plugin_init.py'):
                                 return True
                 except (OSError, ImportError):
                     return False
@@ -109,7 +109,7 @@ class PluginInstallWorker(QThread):
                         self.finished.emit(False, tr('plugins.download_error', error=str(e)))
                         return
                     self.status.emit(tr('plugins.validating_plugin'), 'info')
-                    if not self._check_archive_has_main_py(temp_archive_path):
+                    if not self._check_archive_has_plugin_init_py(temp_archive_path):
                         self.finished.emit(False, tr('plugins.invalid_plugin_archive'))
                         return
                     archive_name = os.path.basename(url.split('?')[0].split('/')[-1])
@@ -126,7 +126,7 @@ class PluginInstallWorker(QThread):
                     self.finished.emit(False, tr('plugins.archive_not_found'))
                     return
                 self.status.emit(tr('plugins.validating_plugin'), 'info')
-                if not self._check_archive_has_main_py(self.archive_path):
+                if not self._check_archive_has_plugin_init_py(self.archive_path):
                     self.finished.emit(False, tr('plugins.invalid_plugin_archive'))
                     return
                 archive_name = os.path.basename(self.archive_path)

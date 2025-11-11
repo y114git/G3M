@@ -228,11 +228,20 @@ def run_app():
         return
     config = {}
     try:
-        config_path = os.path.join(get_user_data_root(), 'settings', 'config.json')
+        settings_path = os.path.join(get_user_data_root(), 'settings', 'settings.json')
+        old_config_path = os.path.join(get_user_data_root(), 'settings', 'config.json')
+        config_path = settings_path if os.path.exists(settings_path) else old_config_path
         if os.path.exists(config_path):
             import json
             with open(config_path, 'r', encoding='utf-8') as f:
                 config = json.load(f)
+            if config_path == old_config_path and (not os.path.exists(settings_path)):
+                try:
+                    import shutil
+                    shutil.move(old_config_path, settings_path)
+                    logging.info('Migrated settings config.json to settings.json in startup')
+                except Exception as e:
+                    logging.warning(f'Failed to migrate settings config.json to settings.json in startup: {e}')
     except (OSError, IOError) as e:
         from utils.network_utils import sanitize_log_message
         safe_msg = sanitize_log_message(f'Failed to read config file: {e}')
