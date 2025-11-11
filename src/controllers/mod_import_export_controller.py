@@ -179,16 +179,29 @@ class ModImportExportController:
 
         def update_mod_list():
             mod_list.clear()
-            all_mods = self.app_state.all_mods
-            for mod in all_mods:
+            installed_mods = self.mod_manager.get_installed_mods_list()
+            for mod_info in installed_mods:
+                mod_modgame = mod_info.get('modgame', 'deltarune')
                 if filter_checkbox.isChecked() and current_game:
-                    if mod.modgame != current_game:
+                    if mod_modgame != current_game:
                         continue
-                mod_folder_path = self.mod_manager.get_mod_folder_path(mod.key)
+                mod_key = mod_info.get('mod_key')
+                if not mod_key:
+                    continue
+                mod_folder_path = self.mod_manager.get_mod_folder_path(mod_key)
                 if not mod_folder_path or not os.path.exists(mod_folder_path):
                     continue
-                item = QListWidgetItem(mod.name)
-                item.setData(Qt.ItemDataRole.UserRole, mod)
+                mod_data = None
+                if hasattr(self.app_state, 'all_mods'):
+                    for mod in self.app_state.all_mods:
+                        if hasattr(mod, 'key') and mod.key == mod_key:
+                            mod_data = mod
+                            break
+                if not mod_data:
+                    mod_data = self.mod_manager.create_mod_object_from_info(mod_info, self.app_state.all_mods if hasattr(self.app_state, 'all_mods') else None)
+                mod_name = mod_info.get('name', mod_key)
+                item = QListWidgetItem(mod_name)
+                item.setData(Qt.ItemDataRole.UserRole, mod_data)
                 mod_list.addItem(item)
         filter_checkbox.stateChanged.connect(update_mod_list)
         update_mod_list()
