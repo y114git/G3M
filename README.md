@@ -20,13 +20,13 @@
 
 - **Chapter-by-Chapter Mode:** For the full version of DELTARUNE, you can select mods for each chapter separately, allowing you to play with different mod combinations per chapter.
 
+- **Direct Launch:** Double-click on the desired chapter slot and enable direct launch. This will allow you to launch the desired chapter directly when starting the game, bypassing the chapter selection menu.
+
 - **Mod Import/Export:** Import mods from files or URLs, and export them in both DELTAHUB format. Share your mods easily with others!
 
 - **Deltamod compatibility:** DH features built-in compatibility with the Deltamod format. More about this you can read from [Wiki](https://github.com/y114git/DELTAHUB/wiki/Deltamod-compatibility).
 
 ### Game and Save Management
-
-- **Direct Launch:** Double-click on the desired chapter slot and enable direct launch. This will allow you to launch the desired chapter directly when starting the game, bypassing the chapter selection menu.
 
 - **Support for Multiple Games:** DH allows you to install mods for **DELTARUNE**, **DELTARUNEdemo**, **UNDERTALE**, and **UNDERTALE Yellow**! For free games like DELTARUNEdemo and UNDERTALE Yellow, DH has the ability to directly download the game itself with up-to-date files, eliminating the need to visit separate websites.
 
