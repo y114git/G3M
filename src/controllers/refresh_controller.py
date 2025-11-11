@@ -137,6 +137,7 @@ class RefreshController:
 
     def _on_fetch_finished(self, success: bool, retranslate_callback=None, update_filtered_mods_callback=None, update_installed_mods_callback=None, update_action_button_callback=None, update_plugin_tabs_callback=None, mods_loaded_signal=None, fetch_thread=None):
         try:
+            self.mod_manager.invalidate_mods_cache()
             self.mod_manager.load_local_mods()
             if hasattr(self.app_state, 'all_mods') and self.app_state.all_mods:
                 installed_gb_mods = []
