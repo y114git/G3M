@@ -51,10 +51,6 @@ class ConfigLoader:
         config = self.load_config()
         return config.get(key, default)
 
-    def reload(self) -> None:
-        self._config_cache = None
-        self.load_config()
-
 
 _config_loader = ConfigLoader()
 
@@ -65,10 +61,6 @@ def load_configuration() -> Dict[str, Any]:
 
 def get_config_value(key: str, default: str = '') -> str:
     return _config_loader.get(key, default)
-
-
-def reload_configuration() -> None:
-    _config_loader.reload()
 
 
 load_configuration()

@@ -2,26 +2,19 @@ import os
 import sys
 import platform
 import shutil
-import tempfile
-import hashlib
 import subprocess
 import webbrowser
-import rarfile
-import tarfile
-import lzma
-import py7zr
-import zipfile
-import json
 import logging
-from typing import Dict, Optional, Any
+from typing import Dict, Optional, Any, List
 from PyQt6.QtCore import QObject, QThread, QTimer, pyqtSignal
 from managers.localization_manager import tr
-from models.game_modes import DemoGameMode, UndertaleGameMode
-from utils.file_utils import ensure_writable, sanitize_filename
-from utils.game_utils import is_game_running
-from utils.path_utils import get_xdelta_path
+from utils.file_utils import ensure_writable
+from utils.game_utils import is_game_running, is_demo_mode, is_undertale_mode, is_undertale_yellow_mode
+from utils.path_utils import find_chapter_resource_dir, resolve_game_executable
+from utils.mod_utils import get_mod_key
 from workers.game_monitor import GameMonitorWorker
-from config.constants import UI_COLORS, SLOT_ID_UNIVERSAL, SLOT_ID_DEMO, SLOT_ID_UNDERTALE
+from managers.multi_mod_merger import MultiModMerger
+from config.constants import UI_COLORS, SLOT_ID_UNIVERSAL
 
 
 class GameLauncher(QObject):
@@ -29,29 +22,26 @@ class GameLauncher(QObject):
     progress_updated = pyqtSignal(int)
     game_launch_started = pyqtSignal()
     game_launch_finished = pyqtSignal()
+    multi_mod_merge_finished = pyqtSignal(bool)
 
-    def __init__(self, app_state, feedback_manager, mod_manager, save_manager=None, parent=None):
+    def __init__(self, app_state, feedback_manager, mod_manager, parent=None):
         super().__init__(parent)
         self.app_state = app_state
         self.feedback_manager = feedback_manager
         self.mod_manager = mod_manager
-        self.save_manager = save_manager
         self.monitor_thread = None
         self._backup_temp_dir = None
         self._backup_files = {}
         self._mod_files_to_cleanup = []
         self._mod_dirs_to_cleanup = []
         self._direct_launch_cleanup_info = None
-        self._collection_backup_info = {}
-        self._ensure_backup_attributes()
-
-    def _ensure_backup_attributes(self):
-        if not hasattr(self, '_mod_files_to_cleanup'):
-            self._mod_files_to_cleanup = []
-        if not hasattr(self, '_backup_files'):
-            self._backup_files = {}
-        if not hasattr(self, '_mod_dirs_to_cleanup'):
-            self._mod_dirs_to_cleanup = []
+        self.multi_mod_merger = MultiModMerger(app_state, mod_manager, parent)
+        self.multi_mod_merger.status_update.connect(self._on_merge_status)
+        self.multi_mod_merger.progress_update.connect(self._on_merge_progress)
+        self.multi_mod_merger._session_manifest_path = os.path.join(self.app_state.config_dir, 'session.lock')
+        self._merge_thread = None
+        self._pending_selections = None
+        self._merge_finished_callback = None
 
     def _stop_monitor_thread(self):
         if not self.monitor_thread:
@@ -71,108 +61,56 @@ class GameLauncher(QObject):
             logging.error(f'monitor thread cleanup failed: {e}', exc_info=True)
 
     def launch_game_with_all_mods(self, execute_plugin_hooks=None, restore_window_callback=None):
-        if self.save_manager:
-            if isinstance(self.app_state.game_mode, UndertaleGameMode):
-                collection_idx = -1
-            else:
-                collection_idx = self.save_manager.prompt_for_save_collection_on_launch()
-            if collection_idx is None:
-                if restore_window_callback:
-                    restore_window_callback()
-                return
-            if collection_idx != -1:
-                self._collection_backup_info = self.save_manager.apply_collection_saves_for_launch(collection_idx)
         selections = self._get_used_mods_selections()
         self._launch_game_with_selections(selections, execute_plugin_hooks, restore_window_callback)
 
-    def _get_used_mods_selections(self) -> Dict[int, str]:
-        selections = {}
+    def _get_used_mods_selections(self) -> Dict[int, Any]:
         try:
             parent_obj = self.parent()
         except (AttributeError, TypeError):
             parent_obj = None
         slot_manager = getattr(parent_obj, 'slot_manager', None) if parent_obj else None
-        if not slot_manager or not hasattr(slot_manager, 'used_mods') or (not slot_manager.used_mods):
+        if not slot_manager or not hasattr(slot_manager, 'get_active_mod_selections'):
+            selections = {}
             for chapter_id in range(5):
-                selections[chapter_id] = 'no_change'
+                selections[chapter_id] = []
             return selections
-        is_demo_mode = isinstance(self.app_state.game_mode, DemoGameMode)
-        is_undertale_mode = isinstance(self.app_state.game_mode, UndertaleGameMode)
+        return slot_manager.get_active_mod_selections()
 
-        def _get_mod_key(mod_data):
-            if not mod_data:
-                return None
-            return getattr(mod_data, 'key', None) or getattr(mod_data, 'mod_key', None) or getattr(mod_data, 'name', None)
-        if is_demo_mode:
-            used_mod = slot_manager.used_mods.get(SLOT_ID_DEMO)
-            if used_mod:
-                mod_key = _get_mod_key(used_mod)
-                if mod_key:
-                    selections[-1] = mod_key
-                else:
-                    selections[-1] = 'no_change'
-            else:
-                selections[-1] = 'no_change'
-        elif is_undertale_mode:
-            used_mod = slot_manager.used_mods.get(SLOT_ID_UNDERTALE)
-            if used_mod:
-                mod_key = _get_mod_key(used_mod)
-                if mod_key:
-                    selections[-1] = mod_key
-                else:
-                    selections[-1] = 'no_change'
-            else:
-                selections[-1] = 'no_change'
-        elif self.app_state.current_mode == 'normal':
-            used_mod = slot_manager.used_mods.get(SLOT_ID_UNIVERSAL)
-            if used_mod:
-                mod_key = _get_mod_key(used_mod)
-                if mod_key:
-                    for chapter_id in range(5):
-                        if used_mod.get_chapter_data(chapter_id):
-                            selections[chapter_id] = mod_key
-                        else:
-                            selections[chapter_id] = 'no_change'
-                else:
-                    for chapter_id in range(5):
-                        selections[chapter_id] = 'no_change'
-            else:
-                for chapter_id in range(5):
-                    selections[chapter_id] = 'no_change'
-        elif self.app_state.current_mode == 'chapter':
-            for chapter_id in range(5):
-                used_mod = slot_manager.used_mods.get(chapter_id)
-                if used_mod:
-                    mod_key = _get_mod_key(used_mod)
-                    if mod_key:
-                        selections[chapter_id] = mod_key
-                    else:
-                        selections[chapter_id] = 'no_change'
-                else:
-                    selections[chapter_id] = 'no_change'
-        return selections
-
-    def _launch_game_with_selections(self, selections: Dict[int, str], execute_plugin_hooks=None, restore_window_callback=None):
+    def _launch_game_with_selections(self, selections: Dict[int, Any], execute_plugin_hooks=None, restore_window_callback=None):
         self.execute_plugin_hooks = execute_plugin_hooks
         self.restore_window_callback = restore_window_callback
         if execute_plugin_hooks:
-            execute_plugin_hooks('on_before_game_launch')
-        self.game_launch_started.emit()
+            hook_result = execute_plugin_hooks('on_before_game_launch')
+            if hook_result is False:
+                if restore_window_callback:
+                    restore_window_callback()
+                return
+            self._hook_result = hook_result
         self.status_changed.emit(tr('status.launching_game'), UI_COLORS['status_success'])
-        self._ensure_backup_attributes()
         if not self._find_and_validate_game_path(selections):
             self._handle_launch_failure()
             return
-        if not self._prepare_game_files(selections):
-            self._handle_launch_failure()
+        has_list_format = any((isinstance(mods_list, list) for mods_list in selections.values()))
+        needs_multi_mod = has_list_format and any((len(mods_list) > 0 for mods_list in selections.values() if isinstance(mods_list, list)))
+        logging.info(f'Multi-mod check: needs_multi_mod={needs_multi_mod} (has_list_format={has_list_format})')
+        if needs_multi_mod:
+            logging.info('Using multi-mod merger for game launch')
+            self.app_state.progress_bar_visible = True
+            self.app_state.progress_bar_value = 0
+            self.app_state.is_merging = True
+            self.app_state.action_button_text = tr('ui.cancel_button')
+            self.app_state.action_button_enabled = True
+            self._pending_selections = selections
+            if not self._prepare_game_files_multi_mod_async(selections):
+                logging.error('Failed to start multi-mod merge')
+                self.app_state.progress_bar_visible = False
+                self.app_state.is_merging = False
+                self._handle_launch_failure()
+                return
             return
-        launch_config = self._determine_launch_config(selections)
-        if not launch_config:
-            self._handle_launch_failure()
-            return
-        self._execute_game(launch_config)
-        if execute_plugin_hooks:
-            execute_plugin_hooks('on_after_game_launch')
+        else:
+            self._continue_after_merge(selections, True)
 
     def _handle_launch_failure(self):
         if hasattr(self, 'restore_window_callback') and self.restore_window_callback:
@@ -222,8 +160,16 @@ class GameLauncher(QObject):
                 command = [target_path]
                 if system == 'Linux' and target_path.lower().endswith('.exe'):
                     is_steam_launch = self.app_state.local_config.get('launch_via_steam', False)
+                    use_portproton = self.app_state.local_config.get('use_portproton', False)
                     if not is_steam_launch:
-                        command.insert(0, 'wine')
+                        if use_portproton:
+                            portproton_path = self.app_state.local_config.get('portproton_path', '')
+                            if portproton_path:
+                                command = [portproton_path, 'run', target_path]
+                            else:
+                                command = ['portproton', 'run', target_path]
+                        else:
+                            command.insert(0, 'wine')
                 creationflags = 0
                 if system == 'Windows':
                     creationflags = 8
@@ -254,9 +200,6 @@ class GameLauncher(QObject):
         else:
             self.status_changed.emit(tr('status.game_closed_restoring_files'), UI_COLORS['status_info'])
             self._cleanup_direct_launch_files()
-            if self.save_manager and self._collection_backup_info:
-                self.save_manager.restore_original_saves_after_launch(self._collection_backup_info)
-                self._collection_backup_info = {}
             if self.monitor_thread:
                 self._stop_monitor_thread()
                 self.monitor_thread = None
@@ -264,12 +207,12 @@ class GameLauncher(QObject):
                     self.monitor_worker = None
             self.game_launch_finished.emit()
 
-    def _determine_launch_config(self, selections: Dict[int, str]) -> Optional[Dict[str, Any]]:
+    def _determine_launch_config(self, selections: Dict[int, Any]) -> Optional[Dict[str, Any]]:
         use_steam = self.app_state.local_config.get('launch_via_steam', False)
         direct_launch_slot_id = self.app_state.local_config.get('direct_launch_slot_id', SLOT_ID_UNIVERSAL)
         is_chapter_mode = self.app_state.current_mode == 'chapter'
         direct_launch = direct_launch_slot_id >= 0 and direct_launch_slot_id != 0 and is_chapter_mode and self.app_state.game_mode.direct_launch_allowed and (platform.system() != 'Darwin')
-        if use_steam:
+        if use_steam and self.app_state.game_mode.steam_id:
             return {'target': f'steam://rungameid/{self.app_state.game_mode.steam_id}', 'cwd': None, 'type': 'webbrowser'}
         if direct_launch:
             return self._handle_direct_launch(direct_launch_slot_id)
@@ -284,7 +227,7 @@ class GameLauncher(QObject):
         if chapter_id == 0:
             self.status_changed.emit(tr('ui.direct_launch_menu_not_allowed'), UI_COLORS['status_warning'])
             return None
-        chapter_folder = self._get_target_dir(chapter_id)
+        chapter_folder = find_chapter_resource_dir(self._get_current_game_path(), chapter_id)
         source_exe = self._get_source_executable_path()
         use_custom_exe = self.app_state.local_config.get('use_custom_executable', False)
         if not chapter_folder or not source_exe:
@@ -296,11 +239,13 @@ class GameLauncher(QObject):
             if use_custom_exe:
                 target_exe = os.path.join(chapter_folder, os.path.basename(source_exe))
             else:
-                exe_name = 'UNDERTALE.exe' if isinstance(self.app_state.game_mode, UndertaleGameMode) else 'DELTARUNE.exe'
+                if is_undertale_mode(self.app_state.game_mode) or is_undertale_yellow_mode(self.app_state.game_mode):
+                    exe_name = 'UNDERTALE.exe' if is_undertale_mode(self.app_state.game_mode) else 'Undertale Yellow.exe'
+                else:
+                    exe_name = 'DELTARUNE.exe'
                 target_exe = os.path.join(chapter_folder, exe_name)
             shutil.copy2(source_exe, target_exe)
             self._direct_launch_cleanup_info = {'target_exe': target_exe, 'source_exe': source_exe, 'chapter_folder': chapter_folder, 'use_custom_exe': use_custom_exe}
-            self._update_session_manifest(direct_launch=self._direct_launch_cleanup_info)
             return {'target': target_exe, 'cwd': chapter_folder, 'type': 'subprocess'}
         except PermissionError:
             self.status_changed.emit(tr('errors.permission_denied'), UI_COLORS['status_error'])
@@ -315,38 +260,12 @@ class GameLauncher(QObject):
         current_game_path = self._get_current_game_path()
         if not current_game_path or not os.path.isdir(current_game_path):
             return None
-        system = platform.system()
-        is_undertale = isinstance(self.app_state.game_mode, UndertaleGameMode)
-        base_exe_name = 'UNDERTALE' if is_undertale else 'DELTARUNE'
-        if system == 'Windows':
-            exe_path = os.path.join(current_game_path, f'{base_exe_name}.exe')
-            if os.path.isfile(exe_path):
-                return exe_path
-        elif system == 'Linux':
-            native_path = os.path.join(current_game_path, base_exe_name)
-            if os.path.isfile(native_path) and os.access(native_path, os.X_OK):
-                return native_path
-            exe_path = os.path.join(current_game_path, f'{base_exe_name}.exe')
-            if os.path.isfile(exe_path):
-                return exe_path
-        elif system == 'Darwin':
-            if current_game_path.endswith('.app') and os.path.isdir(current_game_path):
-                app_path = current_game_path
-            else:
-                app_path = None
-                if is_undertale:
-                    app_names = ['UNDERTALE.app']
-                else:
-                    app_names = ['DELTARUNE.app', 'DELTARUNEdemo.app']
-                for name in app_names:
-                    candidate = os.path.join(current_game_path, name)
-                    if os.path.isdir(candidate):
-                        app_path = candidate
-                        break
-            if app_path:
-                return app_path
-        self.status_changed.emit(tr('errors.executable_not_found_deltarune'), UI_COLORS['status_error'])
-        return None
+        from utils.game_utils import is_undertale_yellow_mode
+        is_undertale = is_undertale_mode(self.app_state.game_mode) or is_undertale_yellow_mode(self.app_state.game_mode)
+        executable = resolve_game_executable(current_game_path, is_undertale)
+        if not executable:
+            self.status_changed.emit(tr('errors.executable_not_found_deltarune'), UI_COLORS['status_error'])
+        return executable
 
     def _get_source_executable_path(self):
         if self.app_state.local_config.get('use_custom_executable', False):
@@ -357,461 +276,77 @@ class GameLauncher(QObject):
     def _get_current_game_path(self) -> str:
         return self.app_state.game_mode.get_game_path(self.app_state.local_config) or ''
 
-    def _get_target_dir(self, chapter_id):
-        target_base = self._get_current_game_path()
-        if not target_base:
-            return None
-        if platform.system() == 'Darwin':
-            if not target_base.endswith('.app'):
-                for app_name in ('DELTARUNE.app', 'DELTARUNEdemo.app'):
-                    candidate = os.path.join(target_base, app_name)
-                    if os.path.isdir(candidate):
-                        target_base = candidate
-                        break
-            target_base = os.path.join(target_base, 'Contents', 'Resources')
-            if not os.path.isdir(target_base):
-                return None
-        if chapter_id == -1:
-            return target_base
-        if chapter_id == 0:
-            return target_base
-        chapter_prefix = f'chapter{chapter_id}_'
-        try:
-            for entry in os.listdir(target_base):
-                if os.path.isdir(os.path.join(target_base, entry)) and entry.startswith(chapter_prefix):
-                    return os.path.join(target_base, entry)
-            return None
-        except Exception as e:
-            self.status_changed.emit(tr('errors.chapter_folder_search_error', error=str(e)), UI_COLORS['status_error'])
-            return None
-
-    def _prepare_game_files(self, selections: Dict[int, str]) -> bool:
-        try:
-            if not selections:
-                return True
-            applied_chapters = set()
-            for ui_index, mod_key in selections.items():
-                if mod_key == 'no_change':
-                    continue
-                if ui_index == -1:
-                    chapter_id = -1
-                else:
-                    chapter_id = self.app_state.game_mode.get_chapter_id(ui_index)
-                mod = next((m for m in self.app_state.all_mods if m.key == mod_key), None)
-                if not mod:
-                    continue
-                is_local = getattr(mod, 'is_local_mod', False)
-                if is_local:
-                    mod_folder_path = self.mod_manager.get_mod_folder_path(mod_key)
-                    if mod_folder_path:
-                        source_dir = mod_folder_path
-                    else:
-                        folder_name = sanitize_filename(mod.name)
-                        source_dir = os.path.join(self.app_state.mods_dir, folder_name)
-                else:
-                    folder_name = sanitize_filename(mod.name)
-                    source_dir = os.path.join(self.app_state.mods_dir, folder_name)
-                if not os.path.isdir(source_dir):
-                    self.status_changed.emit(tr('errors.mod_folder_not_found', mod_name=mod.name, path=source_dir), UI_COLORS['status_warning'])
-                    continue
-                mod_type_str = tr('tags.local') if is_local else tr('buttons.public')
-                self.status_changed.emit(tr('status.applying_mod', mod_name=mod.name, mod_type=mod_type_str), UI_COLORS['status_warning'])
-                if chapter_id in applied_chapters:
-                    continue
-                is_xdelta_mod = self._is_xdelta_mod(mod, source_dir, chapter_id)
-                if not is_xdelta_mod and (not mod.get_chapter_data(chapter_id)) and (not is_local):
-                    continue
-                target_dir = self._get_target_dir(chapter_id)
-                if not target_dir:
-                    continue
-                if not ensure_writable(target_dir):
-                    raise PermissionError(tr('errors.no_write_permission_for', path=target_dir))
-                if not self._create_backup_and_copy_mod_files(source_dir, target_dir, chapter_id, mod):
-                    return False
-                applied_chapters.add(chapter_id)
+    def _prepare_game_files_multi_mod_async(self, selections: Dict[int, List[Any]]) -> bool:
+        import logging
+        from workers.mod_merge_thread import ModMergeThread
+        logging.info('Starting multi-mod merge in background thread')
+        chapter_mods = {chapter_id: mods_list for chapter_id, mods_list in selections.items() if isinstance(mods_list, list) and mods_list}
+        if not chapter_mods:
+            self._continue_after_merge(selections, True)
             return True
-        except PermissionError as e:
-            path = e.filename or (e.args[0] if e.args else tr('errors.unknown_path'))
-            self.status_changed.emit(tr('errors.permission_error', path=path), UI_COLORS['status_error'])
-            return False
-        except Exception as e:
-            self.status_changed.emit(tr('errors.file_prep_error', error=str(e)), UI_COLORS['status_error'])
-            return False
-
-    def _is_xdelta_mod(self, mod_info, source_dir: str, chapter_id: Optional[int] = None) -> bool:
-        if chapter_id is not None:
-            search_dir = None
-            if chapter_id == -1:
-                demo_dir = os.path.join(source_dir, 'demo')
-                if os.path.isdir(demo_dir):
-                    search_dir = demo_dir
-                else:
-                    search_dir = source_dir
-            elif chapter_id == 0:
-                chapter0_dir = os.path.join(source_dir, 'chapter_0')
-                menu_dir_alt = os.path.join(source_dir, 'menu')
-                if os.path.isdir(chapter0_dir):
-                    search_dir = chapter0_dir
-                elif os.path.isdir(menu_dir_alt):
-                    search_dir = menu_dir_alt
-                else:
-                    search_dir = source_dir
-            else:
-                chapter_dir = os.path.join(source_dir, f'chapter_{chapter_id}')
-                if os.path.isdir(chapter_dir):
-                    search_dir = chapter_dir
-            if not search_dir:
-                return False
-        else:
-            search_dir = source_dir
-        if os.path.exists(search_dir):
-            for root, _, files in os.walk(search_dir):
-                for file in files:
-                    if file.lower().endswith('.xdelta'):
-                        return True
-        return False
-
-    def _create_backup_and_copy_mod_files(self, source_dir: str, target_dir: str, chapter_id: Optional[int] = None, mod_info=None):
-        if not os.path.isdir(source_dir):
-            error_msg = f'Mod source directory does not exist: {source_dir}'
-            logging.error(f'_create_backup_and_copy_mod_files: {error_msg}', exc_info=True)
-            self.status_changed.emit(tr('errors.mod_folder_not_found_simple', path=source_dir), UI_COLORS['status_error'])
-            return False
-        self._ensure_backup_attributes()
-        self._ensure_session_manifest()
-        is_xdelta_mod = self._is_xdelta_mod(mod_info, source_dir, chapter_id)
-        applied_xdelta_for_this_chapter = False
-        files_copied = 0
-        backup_errors = []
-        if chapter_id is not None:
-            chapter_folder_name = {-1: 'demo', 0: 'chapter_0'}.get(chapter_id, f'chapter_{chapter_id}')
-            mod_source_dir = os.path.join(source_dir, chapter_folder_name)
-            if not os.path.isdir(mod_source_dir):
-                if chapter_id == 0:
-                    alt_menu_dir = os.path.join(source_dir, 'menu')
-                    if os.path.isdir(alt_menu_dir):
-                        mod_source_dir = alt_menu_dir
-                    else:
-                        mod_source_dir = source_dir
-                elif chapter_id == -1:
-                    mod_source_dir = source_dir
-                else:
-                    mod_source_dir = None
-        else:
-            mod_source_dir = source_dir
-        if not mod_source_dir or not os.path.isdir(mod_source_dir):
-            logging.debug(f'_create_backup_and_copy_mod_files: no source directory for chapter {chapter_id}')
-            self.status_changed.emit(tr('status.no_files_to_copy'), UI_COLORS['status_warning'])
-            return True
-        if not self._backup_temp_dir:
-            self._backup_temp_dir = tempfile.mkdtemp(prefix='deltahub_backup_')
-            logging.info(f'_create_backup_and_copy_mod_files: created backup temp dir: {self._backup_temp_dir}')
-            self._update_session_manifest(backup_temp_dir=self._backup_temp_dir)
-        logging.info(f'_create_backup_and_copy_mod_files: backing up and copying files from {mod_source_dir} to {target_dir}')
-        for root, _, files in os.walk(mod_source_dir):
-            for file in files:
-                if file.lower() == 'config.json' or file.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp', '.ico')):
-                    continue
-                cache_file_path = os.path.join(root, file)
-                rel_path = os.path.relpath(cache_file_path, mod_source_dir)
-                file_lower = file.lower()
-                target_rel_path = rel_path
-                is_core_data_file = file_lower in ('data.win', 'data.ios', 'game.ios') or (file_lower.endswith('.win') and 'data' in file_lower) or (file_lower.endswith('.ios') and 'game' in file_lower) or (is_xdelta_mod and file_lower.endswith('.xdelta'))
-                if platform.system() == 'Darwin':
-                    if is_core_data_file:
-                        target_rel_path = os.path.join(os.path.dirname(rel_path), 'game.ios')
-                    elif file_lower.endswith('.win'):
-                        name_without_ext = os.path.splitext(file)[0]
-                        target_rel_path = os.path.join(os.path.dirname(rel_path), name_without_ext + '.ios')
-                elif is_core_data_file:
-                    target_rel_path = os.path.join(os.path.dirname(rel_path), 'data.win')
-                elif file_lower.endswith('.ios'):
-                    name_without_ext = os.path.splitext(file)[0]
-                    target_rel_path = os.path.join(os.path.dirname(rel_path), name_without_ext + '.win')
-                game_file_path = os.path.join(target_dir, target_rel_path)
-                try:
-                    target_dirname = os.path.dirname(game_file_path)
-                    os.makedirs(target_dirname, exist_ok=True)
-                    try:
-                        if target_dirname not in self._mod_dirs_to_cleanup:
-                            self._mod_dirs_to_cleanup.append(target_dirname)
-                            self._update_session_manifest(mod_dirs=[target_dirname])
-                    except Exception as e:
-                        error_msg = f'Failed to update manifest for dir {target_dirname}: {e}'
-                        logging.error(f'_create_backup_and_copy_mod_files: {error_msg}', exc_info=True)
-                        backup_errors.append(error_msg)
-                    if is_xdelta_mod and file_lower.endswith('.xdelta') and is_core_data_file:
-                        if applied_xdelta_for_this_chapter:
-                            continue
-                        if not self._apply_xdelta_patch(cache_file_path, game_file_path, target_dir):
-                            self.status_changed.emit(tr('errors.xdelta_apply_error', file=file), UI_COLORS['status_error'])
-                            return False
-                        files_copied += 1
-                        applied_xdelta_for_this_chapter = True
-                        continue
-                    if file_lower.endswith('.xdelta'):
-                        continue
-                    if os.path.exists(game_file_path) and game_file_path not in self._backup_files:
-                        try:
-                            original_size = os.path.getsize(game_file_path)
-                            unique_hash = hashlib.md5(game_file_path.encode('utf-8')).hexdigest()
-                            backup_filename = f'{unique_hash}_{os.path.basename(game_file_path)}'
-                            backup_file_path = os.path.join(self._backup_temp_dir, backup_filename)
-                            os.makedirs(os.path.dirname(backup_file_path), exist_ok=True)
-                            shutil.move(game_file_path, backup_file_path)
-                            if not self._verify_file_integrity(backup_file_path, original_size):
-                                error_msg = f'Backup integrity check failed for {game_file_path}'
-                                logging.error(f'_create_backup_and_copy_mod_files: {error_msg}', exc_info=True)
-                                backup_errors.append(error_msg)
-                                try:
-                                    shutil.move(backup_file_path, game_file_path)
-                                except Exception:
-                                    pass
-                                continue
-                            self._backup_files[game_file_path] = backup_file_path
-                            self._update_session_manifest(backup_files={game_file_path: backup_file_path})
-                            logging.debug(f'_create_backup_and_copy_mod_files: backed up {game_file_path} -> {backup_file_path}')
-                        except Exception as e:
-                            error_msg = f'Failed to backup {game_file_path}: {e}'
-                            logging.error(f'_create_backup_and_copy_mod_files: {error_msg}', exc_info=True)
-                            backup_errors.append(error_msg)
-                            continue
-                    if file_lower.endswith(('.zip', '.rar', '.7z', '.tar.gz', '.lzma')) and (not is_core_data_file):
-                        extracted_files = self._extract_archive_to_target(cache_file_path, target_dir)
-                        if extracted_files:
-                            self._mod_files_to_cleanup.extend(extracted_files)
-                            self._update_session_manifest(mod_files=extracted_files)
-                        files_copied += 1
-                    else:
-                        tmp_target = game_file_path + '.tmp'
-                        try:
-                            source_size = os.path.getsize(cache_file_path)
-                            shutil.copy2(cache_file_path, tmp_target)
-                            if not self._verify_file_integrity(tmp_target, source_size):
-                                error_msg = f'Copied file integrity check failed for {cache_file_path}'
-                                logging.error(f'_create_backup_and_copy_mod_files: {error_msg}', exc_info=True)
-                                backup_errors.append(error_msg)
-                                continue
-                            if os.path.exists(game_file_path) and game_file_path not in self._backup_files:
-                                try:
-                                    original_size = os.path.getsize(game_file_path)
-                                    unique_hash = hashlib.md5(game_file_path.encode('utf-8')).hexdigest()
-                                    backup_filename = f'{unique_hash}_{os.path.basename(game_file_path)}'
-                                    backup_file_path = os.path.join(self._backup_temp_dir, backup_filename)
-                                    os.makedirs(os.path.dirname(backup_file_path), exist_ok=True)
-                                    shutil.move(game_file_path, backup_file_path)
-                                    self._backup_files[game_file_path] = backup_file_path
-                                    self._update_session_manifest(backup_files={game_file_path: backup_file_path})
-                                except Exception as e:
-                                    error_msg = f'Failed to backup existing file {game_file_path}: {e}'
-                                    logging.error(f'_create_backup_and_copy_mod_files: {error_msg}', exc_info=True)
-                                    backup_errors.append(error_msg)
-                            os.replace(tmp_target, game_file_path)
-                            if not self._verify_file_integrity(game_file_path, source_size):
-                                error_msg = f'Final file integrity check failed for {game_file_path}'
-                                logging.error(f'_create_backup_and_copy_mod_files: {error_msg}', exc_info=True)
-                                backup_errors.append(error_msg)
-                            files_copied += 1
-                            self._mod_files_to_cleanup.append(game_file_path)
-                            self._update_session_manifest(mod_files=[game_file_path])
-                        finally:
-                            try:
-                                if os.path.exists(tmp_target):
-                                    os.remove(tmp_target)
-                            except Exception as e:
-                                error_msg = f'Failed to remove temp file {tmp_target}: {e}'
-                                logging.warning(f'_create_backup_and_copy_mod_files: {error_msg}', exc_info=True)
-                except PermissionError as e:
-                    error_msg = f'Permission denied copying {file}: {e}'
-                    logging.error(f'_create_backup_and_copy_mod_files: {error_msg}', exc_info=True)
-                    backup_errors.append(error_msg)
-                    self.status_changed.emit(tr('errors.file_copy_error', file=file, error=str(e)), UI_COLORS['status_error'])
-                except Exception as e:
-                    error_msg = f'Failed to copy {file}: {e}'
-                    logging.error(f'_create_backup_and_copy_mod_files: {error_msg}', exc_info=True)
-                    backup_errors.append(error_msg)
-                    self.status_changed.emit(tr('errors.file_copy_error', file=file, error=str(e)), UI_COLORS['status_error'])
-        if backup_errors:
-            logging.warning(f'_create_backup_and_copy_mod_files: completed with {len(backup_errors)} errors: {backup_errors[:3]}')
-        if files_copied > 0:
-            logging.info(f'_create_backup_and_copy_mod_files: copied {files_copied} files, created {len(self._backup_files)} backups')
-            self.status_changed.emit(tr('status.files_copied_count', count=files_copied), UI_COLORS['status_info'])
-        else:
-            self.status_changed.emit(tr('status.no_files_to_copy'), UI_COLORS['status_warning'])
+        session_manifest_path = os.path.join(self.app_state.config_dir, 'session.lock')
+        self._merge_thread = ModMergeThread(self.app_state, self.mod_manager, chapter_mods, session_manifest_path, self)
+        self._merge_thread.progress_update.connect(self._on_merge_progress)
+        self._merge_thread.status_update.connect(self._on_merge_status)
+        self._merge_thread.finished.connect(lambda success: self._on_merge_finished(selections, success))
+        self.app_state.current_task = self._merge_thread
+        self._merge_thread.start()
         return True
 
-    def _apply_xdelta_patch(self, xdelta_file_path: str, target_game_file_path: str, target_dir: str) -> bool:
-        xdelta_exe = get_xdelta_path()
-        if not xdelta_exe:
-            self.status_changed.emit(tr('errors.xdelta_not_found', path='xdelta'), UI_COLORS['status_error'])
-            return False
-        data_win = os.path.join(target_dir, 'data.win')
-        game_ios = os.path.join(target_dir, 'game.ios')
-        if platform.system() == 'Darwin':
-            primary_file = game_ios
-            secondary_file = data_win
-        else:
-            primary_file = data_win
-            secondary_file = game_ios
-        original_data_file = None
-        if os.path.exists(primary_file):
-            original_data_file = primary_file
-        elif os.path.exists(secondary_file):
-            original_data_file = secondary_file
-        if not original_data_file:
-            self.status_changed.emit(tr('errors.original_data_file_not_found', target_dir=target_dir), UI_COLORS['status_error'])
-            return False
-        if original_data_file not in self._backup_files:
-            if not self._backup_temp_dir:
-                self._backup_temp_dir = tempfile.mkdtemp(prefix='deltahub_backup_')
-                self._update_session_manifest(backup_temp_dir=self._backup_temp_dir)
-            unique_hash = hashlib.md5(original_data_file.encode('utf-8')).hexdigest()
-            backup_filename = f'xdelta_{unique_hash}_{os.path.basename(original_data_file)}'
-            backup_file_path = os.path.join(self._backup_temp_dir, backup_filename)
-            shutil.copy2(original_data_file, backup_file_path)
-            self._backup_files[original_data_file] = backup_file_path
-            self._update_session_manifest(backup_files={original_data_file: backup_file_path})
-        temp_output = original_data_file + '.tmp'
-        command = ['-d', '-f', '-s', self._backup_files[original_data_file], xdelta_file_path, temp_output]
-        try:
-            command_to_run = [xdelta_exe] + command
-            startupinfo = None
-            if os.name == 'nt':
-                startupinfo = subprocess.STARTUPINFO()
-                startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-            process = subprocess.run(command_to_run, capture_output=True, text=True, check=False, startupinfo=startupinfo, encoding='utf-8', errors='replace')
-            if process.returncode == 0:
-                try:
-                    os.replace(temp_output, original_data_file)
-                    self._mod_files_to_cleanup.append(original_data_file)
-                    self.status_changed.emit(tr('status.xdelta_patch_applied', patch_name=os.path.basename(xdelta_file_path)), UI_COLORS['status_success'])
-                    return True
-                finally:
-                    try:
-                        if os.path.exists(temp_output):
-                            os.remove(temp_output)
-                    except Exception as e:
-                        logging.warning(f'_apply_xdelta_patch: temp cleanup failed (success): {e}', exc_info=True)
+    def _on_merge_finished(self, selections: Dict[int, Any], success: bool):
+        self.app_state.progress_bar_visible = False
+        self.app_state.is_merging = False
+        self.app_state.clear_current_task()
+        self.app_state.action_button_text = None
+        merge_thread = self._merge_thread
+        if merge_thread:
+            try:
+                if merge_thread.isRunning():
+                    merge_thread.wait(5000)
+                if merge_thread.merger:
+                    self.multi_mod_merger = merge_thread.merger
+                merge_thread.deleteLater()
+            except Exception as e:
+                logging.error(f'Error cleaning up merge thread: {e}', exc_info=True)
+            finally:
+                self._merge_thread = None
+        if not success:
+            if merge_thread and (merge_thread.isInterruptionRequested() or getattr(merge_thread, '_cancelled', False)):
+                logging.info('Multi-mod merge was cancelled by user')
             else:
-                try:
-                    if os.path.exists(temp_output):
-                        os.remove(temp_output)
-                except Exception as e:
-                    logging.warning(f'_apply_xdelta_patch: temp cleanup failed (error): {e}', exc_info=True)
-                shutil.copy2(self._backup_files[original_data_file], original_data_file)
-                error_message = process.stderr.strip() or process.stdout.strip()
-                self.status_changed.emit(tr('errors.xdelta_patch_error', error=error_message), UI_COLORS['status_error'])
-                return False
-        except FileNotFoundError:
-            self.status_changed.emit(tr('errors.xdelta_not_found', path=xdelta_exe), UI_COLORS['status_error'])
-            return False
-        except Exception as e:
-            logging.error(f'_apply_xdelta_patch: critical error: {e}', exc_info=True)
-            self.status_changed.emit(tr('errors.xdelta_patch_critical_error', error=str(e)), UI_COLORS['status_error'])
-            try:
-                if os.path.exists(temp_output):
-                    os.remove(temp_output)
-            except Exception as cleanup_e:
-                logging.warning(f'_apply_xdelta_patch: temp cleanup failed (critical): {cleanup_e}', exc_info=True)
-            try:
-                shutil.copy2(self._backup_files[original_data_file], original_data_file)
-            except Exception as restore_e:
-                logging.error(f'_apply_xdelta_patch: restore backup failed: {restore_e}', exc_info=True)
-            return False
+                self._handle_launch_failure()
+            return
+        logging.info('Multi-mod merge completed successfully')
+        self._continue_after_merge(selections, True)
 
-    def _extract_archive_to_target(self, archive_path: str, target_dir: str):
-        file_lower = archive_path.lower()
-        extracted_files = []
-        try:
-            with tempfile.TemporaryDirectory(prefix='deltahub-extract-') as temp_dir:
-                if file_lower.endswith('.zip'):
-                    with zipfile.ZipFile(archive_path, 'r') as zf:
-                        zf.extractall(temp_dir)
-                elif file_lower.endswith('.rar'):
-                    with rarfile.RarFile(archive_path, 'r') as rf:
-                        rf.extractall(temp_dir)
-                elif file_lower.endswith('.7z'):
-                    with py7zr.SevenZipFile(archive_path, mode='r') as zf:
-                        zf.extractall(path=temp_dir)
-                elif file_lower.endswith('.tar.gz'):
-                    with tarfile.open(archive_path, 'r:gz') as tf:
-                        tf.extractall(temp_dir)
-                elif file_lower.endswith('.lzma'):
-                    output_path = os.path.join(temp_dir, os.path.splitext(os.path.basename(archive_path))[0])
-                    with lzma.open(archive_path) as f_in, open(output_path, 'wb') as f_out:
-                        shutil.copyfileobj(f_in, f_out)
-                else:
-                    raise ValueError(f'Unsupported archive format for extraction: {archive_path}')
-                from utils.file_utils import _cleanup_extracted_archive
-                _cleanup_extracted_archive(temp_dir)
-                for root, dirs, files in os.walk(temp_dir):
-                    for file in files:
-                        source_file = os.path.join(root, file)
-                        rel_path = os.path.relpath(source_file, temp_dir)
-                        target_file = os.path.join(target_dir, rel_path)
-                        file_lower = file.lower()
-                        if platform.system() == 'Darwin':
-                            if file_lower.endswith('.win'):
-                                name_without_ext = os.path.splitext(file)[0]
-                                target_file = os.path.join(os.path.dirname(target_file), name_without_ext + '.ios')
-                        elif file_lower.endswith('.ios'):
-                            name_without_ext = os.path.splitext(file)[0]
-                            target_file = os.path.join(os.path.dirname(target_file), name_without_ext + '.win')
-                        target_dirname = os.path.dirname(target_file)
-                        os.makedirs(target_dirname, exist_ok=True)
-                        try:
-                            if target_dirname not in self._mod_dirs_to_cleanup:
-                                self._mod_dirs_to_cleanup.append(target_dirname)
-                                self._update_session_manifest(mod_dirs=[target_dirname])
-                        except Exception as e:
-                            logging.error(f'_extract_archive_to_target: manifest update failed: {e}', exc_info=True)
-                        tmp_target = target_file + '.tmp'
-                        try:
-                            shutil.copy2(source_file, tmp_target)
-                            if os.path.exists(target_file):
-                                backup_rel_path = os.path.relpath(target_file, target_dir)
-                                if self._backup_temp_dir:
-                                    backup_file_path = os.path.join(self._backup_temp_dir, backup_rel_path)
-                                    os.makedirs(os.path.dirname(backup_file_path), exist_ok=True)
-                                    shutil.move(target_file, backup_file_path)
-                                    if not hasattr(self, '_backup_files'):
-                                        self._backup_files = {}
-                                    self._backup_files[target_file] = backup_file_path
-                                    self._update_session_manifest(backup_files={target_file: backup_file_path})
-                            os.replace(tmp_target, target_file)
-                            extracted_files.append(target_file)
-                        finally:
-                            try:
-                                if os.path.exists(tmp_target):
-                                    os.remove(tmp_target)
-                            except Exception as e:
-                                logging.warning(f'_extract_archive_to_target: tmp cleanup failed: {e}', exc_info=True)
-        except Exception as e:
-            self.status_changed.emit(tr('errors.archive_unpack_error', archive_name=os.path.basename(archive_path), error=str(e)), UI_COLORS['status_error'])
-        return extracted_files
+    def _continue_after_merge(self, selections: Dict[int, Any], merge_success: bool):
+        if not merge_success:
+            return
+        has_list_format = any((isinstance(mods_list, list) for mods_list in selections.values()))
+        needs_multi_mod = has_list_format and any((len(mods_list) > 0 for mods_list in selections.values() if isinstance(mods_list, list)))
+        if needs_multi_mod:
+            pass
+        elif hasattr(self, 'restore_window_callback') and self.restore_window_callback:
+            self.game_launch_started.emit()
+        launch_config = self._determine_launch_config(selections)
+        if not launch_config:
+            self._handle_launch_failure()
+            return
+        if needs_multi_mod:
+            if hasattr(self, 'restore_window_callback') and self.restore_window_callback:
+                self.game_launch_started.emit()
+        self._execute_game(launch_config)
+        if self.execute_plugin_hooks:
+            self.execute_plugin_hooks('on_after_game_launch')
 
-    def _validate_session_manifest(self, data: dict) -> bool:
-        if not isinstance(data, dict):
-            logging.error('_validate_session_manifest: manifest is not a dict', exc_info=True)
-            return False
-        required_keys = ['backup_files', 'mod_files_to_cleanup', 'mod_dirs_to_cleanup']
-        for key in required_keys:
-            if key not in data:
-                data[key] = [] if key.endswith('_to_cleanup') or key == 'mod_dirs_to_cleanup' else {}
-        if isinstance(data.get('backup_files'), dict):
-            for original_path, backup_path in list(data['backup_files'].items()):
-                if not isinstance(original_path, str) or not isinstance(backup_path, str):
-                    logging.warning(f'_validate_session_manifest: invalid backup entry: {original_path} -> {backup_path}')
-                    data['backup_files'].pop(original_path, None)
-                elif not os.path.isabs(original_path) or not os.path.isabs(backup_path):
-                    logging.warning(f'_validate_session_manifest: non-absolute path in backup entry: {original_path} -> {backup_path}')
-        for file_path in data.get('mod_files_to_cleanup', []):
-            if not isinstance(file_path, str) or not os.path.isabs(file_path):
-                logging.warning(f'_validate_session_manifest: invalid mod file path: {file_path}')
-        for dir_path in data.get('mod_dirs_to_cleanup', []):
-            if not isinstance(dir_path, str) or not os.path.isabs(dir_path):
-                logging.warning(f'_validate_session_manifest: invalid mod dir path: {dir_path}')
-        return True
+    def _on_merge_status(self, message: str, status_type: str):
+        color = UI_COLORS.get(f'status_{status_type}', UI_COLORS['status_error'])
+        self.status_changed.emit(message, color)
+
+    def _on_merge_progress(self, progress: int, message: str):
+        self.app_state.progress_bar_value = progress
+        if message:
+            self.status_changed.emit(message, UI_COLORS['status_info'])
 
     def _verify_file_integrity(self, file_path: str, expected_size: Optional[int] = None) -> bool:
         try:
@@ -834,143 +369,21 @@ class GameLauncher(QObject):
 
     def _cleanup_direct_launch_files(self):
         restore_errors = []
-        files_restored = 0
-        files_failed = 0
         try:
-            session_data = self._load_session_manifest()
-            if not self._validate_session_manifest(session_data):
-                logging.warning('_cleanup_direct_launch_files: session manifest validation failed or incomplete, attempting cleanup with available data')
-            cleanup_info = session_data.get('direct_launch')
-            if cleanup_info and cleanup_info.get('save_collection_swap'):
-                logging.info('_cleanup_direct_launch_files: restoring save collection swap')
-                collection_path = cleanup_info.get('collection_path')
-                backup_path = cleanup_info.get('backup_path')
-                current_save_path = self.app_state.save_path
-                if not os.path.exists(current_save_path):
-                    from utils.game_utils import get_default_save_path
-                    current_save_path = self.app_state.local_config.get('save_path') or get_default_save_path()
-                if collection_path and backup_path and os.path.exists(current_save_path):
-                    try:
-                        if os.path.exists(collection_path):
-                            shutil.rmtree(collection_path)
-                        os.makedirs(collection_path, exist_ok=True)
-                        import re
-                        ignore_pattern = shutil.ignore_patterns('*_*_*')
-                        shutil.copytree(current_save_path, collection_path, dirs_exist_ok=True, ignore=ignore_pattern)
-                        for item in os.listdir(current_save_path):
-                            item_path = os.path.join(current_save_path, item)
-                            if not (os.path.isdir(item_path) and re.match('(.+?)_(\\d+)_(\\d+)$', item)):
-                                if os.path.isdir(item_path):
-                                    shutil.rmtree(item_path)
-                                else:
-                                    os.remove(item_path)
-                        if os.path.exists(backup_path):
-                            shutil.copytree(backup_path, current_save_path, dirs_exist_ok=True)
-                            shutil.rmtree(backup_path)
-                        logging.info('_cleanup_direct_launch_files: save collection swap restored successfully')
-                    except Exception as e:
-                        error_msg = f'Save collection swap restore failed: {e}'
-                        logging.error(f'_cleanup_direct_launch_files: {error_msg}', exc_info=True)
-                        restore_errors.append(error_msg)
-            backed_up_targets = set(self._backup_files.keys()) if self._backup_files else set()
-            if not backed_up_targets and session_data.get('backup_files'):
-                self._backup_files = session_data.get('backup_files', {})
-                backed_up_targets = set(self._backup_files.keys())
-            if self._backup_files:
-                logging.info(f'_cleanup_direct_launch_files: restoring {len(self._backup_files)} backed up files')
-                for original_path, backup_path in list(self._backup_files.items()):
-                    try:
-                        if not os.path.exists(backup_path):
-                            error_msg = f'Backup file not found: {backup_path}'
-                            logging.error(f'_cleanup_direct_launch_files: {error_msg}', exc_info=True)
-                            restore_errors.append(f'{original_path}: {error_msg}')
-                            files_failed += 1
-                            continue
-                        backup_size = os.path.getsize(backup_path)
-                        if not self._verify_file_integrity(backup_path, backup_size):
-                            error_msg = f'Backup file integrity check failed: {backup_path}'
-                            logging.error(f'_cleanup_direct_launch_files: {error_msg}', exc_info=True)
-                            restore_errors.append(f'{original_path}: {error_msg}')
-                            files_failed += 1
-                            continue
-                        original_dir = os.path.dirname(original_path)
-                        if original_dir and (not os.path.exists(original_dir)):
-                            os.makedirs(original_dir, exist_ok=True)
-                            logging.info(f'_cleanup_direct_launch_files: created directory: {original_dir}')
-                        if os.path.exists(original_path):
-                            os.remove(original_path)
-                        shutil.move(backup_path, original_path)
-                        if not self._verify_file_integrity(original_path, backup_size):
-                            error_msg = f'Restored file integrity check failed: {original_path}'
-                            logging.error(f'_cleanup_direct_launch_files: {error_msg}', exc_info=True)
-                            restore_errors.append(error_msg)
-                            files_failed += 1
-                        else:
-                            logging.info(f'_cleanup_direct_launch_files: restored file: {original_path}')
-                            files_restored += 1
-                    except PermissionError as e:
-                        error_msg = f'Permission denied restoring {original_path}: {e}'
-                        logging.error(f'_cleanup_direct_launch_files: {error_msg}', exc_info=True)
-                        restore_errors.append(error_msg)
-                        files_failed += 1
-                    except Exception as e:
-                        error_msg = f'Failed to restore {original_path}: {e}'
-                        logging.error(f'_cleanup_direct_launch_files: {error_msg}', exc_info=True)
-                        restore_errors.append(error_msg)
-                        files_failed += 1
-                self._backup_files = {}
-            if self._mod_files_to_cleanup:
-                mod_files_list = self._mod_files_to_cleanup.copy()
-                if not mod_files_list and session_data.get('mod_files_to_cleanup'):
-                    mod_files_list = session_data.get('mod_files_to_cleanup', [])
-                logging.info(f'_cleanup_direct_launch_files: cleaning up {len(mod_files_list)} mod files')
-                for file_path in mod_files_list:
-                    if file_path in backed_up_targets:
-                        continue
-                    try:
-                        if os.path.exists(file_path):
-                            os.remove(file_path)
-                            logging.debug(f'_cleanup_direct_launch_files: removed mod file: {file_path}')
-                    except PermissionError as e:
-                        error_msg = f'Permission denied removing {file_path}: {e}'
-                        logging.error(f'_cleanup_direct_launch_files: {error_msg}', exc_info=True)
-                        restore_errors.append(error_msg)
-                        files_failed += 1
-                    except Exception as e:
-                        error_msg = f'Failed to remove {file_path}: {e}'
-                        logging.warning(f'_cleanup_direct_launch_files: {error_msg}', exc_info=True)
-                        restore_errors.append(error_msg)
-                self._mod_files_to_cleanup = []
-            backup_temp_dir = self._backup_temp_dir or session_data.get('backup_temp_dir')
-            if backup_temp_dir and os.path.exists(backup_temp_dir):
+            if hasattr(self, 'multi_mod_merger') and self.multi_mod_merger:
                 try:
-                    shutil.rmtree(backup_temp_dir)
-                    self._backup_temp_dir = None
-                    logging.info(f'_cleanup_direct_launch_files: removed backup temp dir: {backup_temp_dir}')
+                    logging.info('_cleanup_direct_launch_files: restoring multi-mod backups')
+                    restored = self.multi_mod_merger.restore_all_backups()
+                    if restored:
+                        logging.info('_cleanup_direct_launch_files: multi-mod backups restored successfully')
+                        self.status_changed.emit(tr('status.files_restored'), UI_COLORS['status_success'])
+                    else:
+                        logging.debug('_cleanup_direct_launch_files: no multi-mod backups to restore')
                 except Exception as e:
-                    error_msg = f'Failed to remove backup temp dir {backup_temp_dir}: {e}'
+                    error_msg = f'Failed to restore multi-mod backups: {e}'
                     logging.error(f'_cleanup_direct_launch_files: {error_msg}', exc_info=True)
                     restore_errors.append(error_msg)
-                    files_failed += 1
-            try:
-                dirs = []
-                if self._mod_dirs_to_cleanup:
-                    dirs = sorted(set(self._mod_dirs_to_cleanup), key=lambda p: len(p.split(os.sep)), reverse=True)
-                else:
-                    dirs = sorted(set(session_data.get('mod_dirs_to_cleanup', [])), key=lambda p: len(p.split(os.sep)), reverse=True)
-                for d in dirs:
-                    try:
-                        if os.path.isdir(d) and (not os.listdir(d)):
-                            os.rmdir(d)
-                            logging.debug(f'_cleanup_direct_launch_files: removed empty dir: {d}')
-                    except Exception as e:
-                        logging.debug(f'_cleanup_direct_launch_files: failed to remove empty dir {d}: {e}')
-                self._mod_dirs_to_cleanup = []
-            except Exception as e:
-                error_msg = f'Failed to cleanup directories: {e}'
-                logging.warning(f'_cleanup_direct_launch_files: {error_msg}', exc_info=True)
-            if not cleanup_info:
-                cleanup_info = self._direct_launch_cleanup_info
+            cleanup_info = self._direct_launch_cleanup_info
             if cleanup_info:
                 if 'target_exe' in cleanup_info and os.path.exists(cleanup_info['target_exe']):
                     try:
@@ -982,169 +395,55 @@ class GameLauncher(QObject):
                         restore_errors.append(error_msg)
                 self._direct_launch_cleanup_info = None
             if restore_errors:
-                error_summary = f'Restored {files_restored} files, {files_failed} failures. See logs for details.'
+                error_summary = f'Errors during cleanup: {len(restore_errors)} failure(s). See logs for details.'
                 logging.error(f'_cleanup_direct_launch_files: {error_summary}. Errors: {restore_errors[:3]}')
-                if files_restored > 0:
-                    self.status_changed.emit(tr('status.files_restored') + f' ({files_restored}/{files_restored + files_failed})', UI_COLORS['status_warning'])
-                else:
-                    self.status_changed.emit(tr('errors.files_restore_error', error=f'{files_failed} files failed'), UI_COLORS['status_error'])
-            else:
-                logging.info(f'_cleanup_direct_launch_files: successfully restored {files_restored} files')
-                self.status_changed.emit(tr('status.files_restored'), UI_COLORS['status_success'])
-            self._clear_session_manifest()
+                self.status_changed.emit(tr('errors.files_restore_error', error=str(restore_errors[0])), UI_COLORS['status_error'])
         except Exception as e:
             error_msg = f'Critical error during file restoration: {e}'
             logging.error(f'_cleanup_direct_launch_files: {error_msg}', exc_info=True)
             self.status_changed.emit(tr('errors.files_restore_error', error=str(e)), UI_COLORS['status_error'])
 
-    def _session_manifest_path(self):
-        return os.path.join(self.app_state.config_dir, 'session.lock')
-
-    def _load_session_manifest(self) -> dict:
-        manifest_path = self._session_manifest_path()
-        try:
-            if not os.path.exists(manifest_path):
-                logging.debug(f'_load_session_manifest: manifest does not exist: {manifest_path}')
-                return {}
-            with open(manifest_path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-            if not isinstance(data, dict):
-                logging.error(f'_load_session_manifest: manifest is not a dict: {type(data)}', exc_info=True)
-                return {}
-            logging.debug(f"_load_session_manifest: loaded manifest with {len(data.get('backup_files', {}))} backups")
-            return data
-        except json.JSONDecodeError as e:
-            error_msg = f'Invalid JSON in session manifest: {e}'
-            logging.error(f'_load_session_manifest: {error_msg}', exc_info=True)
-            try:
-                corrupted_path = manifest_path + '.corrupted'
-                if os.path.exists(manifest_path):
-                    shutil.move(manifest_path, corrupted_path)
-                    logging.warning(f'_load_session_manifest: moved corrupted manifest to {corrupted_path}')
-            except Exception:
-                pass
-            return {}
-        except PermissionError as e:
-            error_msg = f'Permission denied reading session manifest: {e}'
-            logging.error(f'_load_session_manifest: {error_msg}', exc_info=True)
-            return {}
-        except Exception as e:
-            error_msg = f'Failed to load session manifest: {e}'
-            logging.error(f'_load_session_manifest: {error_msg}', exc_info=True)
-            return {}
-
-    def _write_session_manifest(self, data: dict):
-        manifest_path = self._session_manifest_path()
-        temp_path = manifest_path + '.tmp'
-        try:
-            if not isinstance(data, dict):
-                logging.error(f'_write_session_manifest: data is not a dict: {type(data)}', exc_info=True)
-                return False
-            with open(temp_path, 'w', encoding='utf-8') as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
-            if os.path.exists(manifest_path):
-                os.replace(temp_path, manifest_path)
-            else:
-                shutil.move(temp_path, manifest_path)
-            logging.debug(f"_write_session_manifest: wrote manifest with {len(data.get('backup_files', {}))} backups")
-            return True
-        except PermissionError as e:
-            error_msg = f'Permission denied writing session manifest: {e}'
-            logging.error(f'_write_session_manifest: {error_msg}', exc_info=True)
-            try:
-                if os.path.exists(temp_path):
-                    os.remove(temp_path)
-            except Exception:
-                pass
-            return False
-        except Exception as e:
-            error_msg = f'Failed to write session manifest: {e}'
-            logging.error(f'_write_session_manifest: {error_msg}', exc_info=True)
-            try:
-                if os.path.exists(temp_path):
-                    os.remove(temp_path)
-            except Exception:
-                pass
-            return False
-
-    def _ensure_session_manifest(self) -> dict:
-        data = self._load_session_manifest()
-        if not data:
-            data = {'backup_files': {}, 'mod_files_to_cleanup': [], 'mod_dirs_to_cleanup': [], 'backup_temp_dir': None, 'direct_launch': None}
-            self._write_session_manifest(data)
-        return data
-
-    def _update_session_manifest(self, backup_files: Optional[dict] = None, mod_files: Optional[list] = None, backup_temp_dir: Optional[str] = None, direct_launch: Optional[dict] = None, mod_dirs: Optional[list] = None):
-        data = self._ensure_session_manifest()
-        if backup_files:
-            data.setdefault('backup_files', {}).update(backup_files)
-        if mod_files:
-            existing = set(data.get('mod_files_to_cleanup', []))
-            for p in mod_files:
-                if p not in existing:
-                    data.setdefault('mod_files_to_cleanup', []).append(p)
-        if mod_dirs:
-            existing_dirs = set(data.get('mod_dirs_to_cleanup', []))
-            for d in mod_dirs:
-                if d not in existing_dirs:
-                    data.setdefault('mod_dirs_to_cleanup', []).append(d)
-        if backup_temp_dir is not None:
-            data['backup_temp_dir'] = backup_temp_dir
-        if direct_launch is not None:
-            data['direct_launch'] = direct_launch
-        self._write_session_manifest(data)
-
-    def _clear_session_manifest(self):
-        manifest_path = self._session_manifest_path()
-        try:
-            if os.path.exists(manifest_path):
-                os.remove(manifest_path)
-                logging.debug(f'_clear_session_manifest: removed manifest: {manifest_path}')
-        except PermissionError as e:
-            error_msg = f'Permission denied removing session manifest: {e}'
-            logging.error(f'_clear_session_manifest: {error_msg}', exc_info=True)
-        except Exception as e:
-            error_msg = f'Failed to clear session manifest: {e}'
-            logging.error(f'_clear_session_manifest: {error_msg}', exc_info=True)
-
     def recover_previous_session(self):
         try:
-            data = self._load_session_manifest()
-            if not data:
-                return
-            self._backup_files = data.get('backup_files', {})
-            self._mod_files_to_cleanup = data.get('mod_files_to_cleanup', [])
-            self._backup_temp_dir = data.get('backup_temp_dir')
-            self._direct_launch_cleanup_info = data.get('direct_launch')
             self.feedback_manager.update_status(tr('status.recovering_previous_session'), UI_COLORS['status_warning'])
-            self._cleanup_direct_launch_files()
-            self._clear_session_manifest()
+            if hasattr(self, 'multi_mod_merger') and self.multi_mod_merger:
+                try:
+                    restored = self.multi_mod_merger.restore_all_backups()
+                    if restored:
+                        logging.info('recover_previous_session: backups restored successfully')
+                        self.feedback_manager.update_status(tr('status.files_restored'), UI_COLORS['status_success'])
+                    else:
+                        logging.debug('recover_previous_session: no backups to restore')
+                except Exception as e:
+                    error_msg = f'Failed to restore backups: {e}'
+                    logging.error(f'recover_previous_session: {error_msg}', exc_info=True)
+                    self.feedback_manager.update_status(tr('errors.files_restore_error', error=str(e)), UI_COLORS['status_error'])
         except Exception as e:
             error_msg = f'Failed to recover previous session: {e}'
             logging.error(f'recover_previous_session: {error_msg}', exc_info=True)
             self.feedback_manager.update_status(tr('errors.files_restore_error', error=str(e)), UI_COLORS['status_error'])
 
-    def _find_and_validate_game_path(self, selections: Optional[Dict[int, str]] = None, is_initial: bool = False):
+    def _find_and_validate_game_path(self, selections: Optional[Dict[int, Any]] = None, is_initial: bool = False):
         from utils.game_utils import is_valid_game_path
         from utils.file_utils import autodetect_path
         path_from_config = self._get_current_game_path()
         skip_data_check = bool(selections and self._has_mods_with_data_files(selections)) if selections else False
-        if isinstance(self.app_state.game_mode, DemoGameMode):
+        if is_demo_mode(self.app_state.game_mode):
             game_type = 'deltarune'
-        elif isinstance(self.app_state.game_mode, UndertaleGameMode):
+            game_name = 'DELTARUNEdemo'
+        elif is_undertale_mode(self.app_state.game_mode):
             game_type = 'undertale'
+            game_name = 'UNDERTALE'
+        elif is_undertale_yellow_mode(self.app_state.game_mode):
+            game_type = 'undertaleyellow'
+            game_name = 'UNDERTALE Yellow'
         else:
             game_type = 'deltarune'
+            game_name = 'DELTARUNE'
         if is_valid_game_path(path_from_config, skip_data_check, game_type):
             self.status_changed.emit(tr('status.game_path', path=path_from_config), UI_COLORS['status_info'])
             return True
         self.status_changed.emit(tr('status.autodetecting_path'), UI_COLORS['status_info'])
-        if isinstance(self.app_state.game_mode, DemoGameMode):
-            game_name = 'DELTARUNEdemo'
-        elif isinstance(self.app_state.game_mode, UndertaleGameMode):
-            game_name = 'UNDERTALE'
-        else:
-            game_name = 'DELTARUNE'
         autodetected_path = autodetect_path(game_name)
         if autodetected_path and is_valid_game_path(autodetected_path, skip_data_check, game_type):
             self.app_state.game_mode.set_game_path(self.app_state.local_config, autodetected_path)
@@ -1154,22 +453,38 @@ class GameLauncher(QObject):
             self.status_changed.emit(tr('status.no_game_path'), UI_COLORS['status_error'])
         return False
 
-    def _has_mods_with_data_files(self, selections: Dict[int, str]) -> bool:
-        for ui_index, mod_key in selections.items():
-            if mod_key == 'no_change':
+    def _mod_has_data_files_for_chapter(self, mod, chapter_id: int) -> bool:
+        mod_key = get_mod_key(mod)
+        if not mod_key:
+            return False
+        if mod_key.startswith('local_'):
+            mod_config = self.mod_manager.get_mod_config(mod_key)
+            if mod_config:
+                chapter_files = mod_config.get('files', {}).get(str(chapter_id), {})
+                if chapter_files.get('data_file_url'):
+                    return True
+        else:
+            chapter_data = mod.get_chapter_data(chapter_id)
+            if chapter_data and hasattr(chapter_data, 'data_file_url') and chapter_data.data_file_url:
+                return True
+        return False
+
+    def _has_mods_with_data_files(self, selections: Dict[int, Any]) -> bool:
+        for ui_index, mod_data in selections.items():
+            if isinstance(mod_data, list):
+                if not mod_data:
+                    continue
+                for mod in mod_data:
+                    chapter_id = self.app_state.game_mode.get_chapter_id(ui_index)
+                    if self._mod_has_data_files_for_chapter(mod, chapter_id):
+                        return True
                 continue
-            mod = next((m for m in self.app_state.all_mods if m.key == mod_key), None)
+            if mod_data == 'no_change':
+                continue
+            mod = next((m for m in self.app_state.all_mods if m.key == mod_data), None)
             if not mod:
                 continue
             chapter_id = self.app_state.game_mode.get_chapter_id(ui_index)
-            if mod_key.startswith('local_'):
-                mod_config = self.mod_manager.get_mod_config(mod_key)
-                if mod_config:
-                    chapter_files = mod_config.get('files', {}).get(str(chapter_id), {})
-                    if chapter_files.get('data_file_url'):
-                        return True
-            else:
-                chapter_data = mod.get_chapter_data(chapter_id)
-                if chapter_data and hasattr(chapter_data, 'data_file_url') and chapter_data.data_file_url:
-                    return True
+            if self._mod_has_data_files_for_chapter(mod, chapter_id):
+                return True
         return False

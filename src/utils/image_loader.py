@@ -1,8 +1,6 @@
 from __future__ import annotations
-import io
 import logging
 import requests
-from PIL import Image
 from PyQt6.QtCore import QRunnable
 from PyQt6.QtGui import QImage
 from workers import WorkerSignals
@@ -31,14 +29,14 @@ class ImageLoaderRunnable(QRunnable):
             if cached is not None and (not cached.isNull()):
                 try:
                     self.signals.result.emit(cached)
-                finally:
-                    pass
-                return
+                    return
+                except Exception as e:
+                    logging.debug(f'ImageLoader.run: Error emitting cached image: {e}')
             if _NET_SEM:
                 _NET_SEM.acquire()
             try:
                 session = get_session()
-                resp = session.get(self.url, timeout=8)
+                resp = session.get(self.url, timeout=10, stream=False)
             finally:
                 try:
                     if _NET_SEM:
@@ -46,29 +44,27 @@ class ImageLoaderRunnable(QRunnable):
                 except Exception as e:
                     logging.debug(f'ImageLoader.run: semaphore release failed: {e}')
             resp.raise_for_status()
-            try:
-                image_data = io.BytesIO(resp.content)
-                pil_img = Image.open(image_data)
-                if 'icc_profile' in pil_img.info:
-                    del pil_img.info['icc_profile']
-                buffer = io.BytesIO()
-                pil_img.save(buffer, format='PNG')
-                processed_content = buffer.getvalue()
-            except Exception as e:
-                from utils.network_utils import sanitize_log_message
-                safe_msg = sanitize_log_message(f'ImageLoader.run: PIL processing failed, using raw content: {e}')
-                logging.debug(safe_msg)
-                processed_content = resp.content
+            content = resp.content
+            if not content:
+                self._emit_error('empty response')
+                return
             img = QImage()
-            if not img.loadFromData(processed_content):
+            if not img.loadFromData(content):
+                logging.warning(f'ImageLoader.run: Failed to load image from data for URL: {self.url[:100]}')
                 self._emit_error('decode')
+                return
+            if img.isNull():
+                logging.warning(f'ImageLoader.run: Loaded image is null for URL: {self.url[:100]}')
+                self._emit_error('null image')
                 return
             add_to_cache(self.url, img)
             try:
                 self.signals.result.emit(img)
-            finally:
-                pass
+            except Exception as e:
+                logging.debug(f'ImageLoader.run: Error emitting result: {e}')
         except requests.RequestException as e:
+            logging.debug(f'ImageLoader.run: Request exception for URL {self.url[:100]}: {e}')
             self._emit_error(f'network:{e}')
-        except (OSError, ValueError, RuntimeError) as e:
+        except Exception as e:
+            logging.error(f'ImageLoader.run: Unexpected error for URL {self.url[:100]}: {e}', exc_info=True)
             self._emit_error(str(e))

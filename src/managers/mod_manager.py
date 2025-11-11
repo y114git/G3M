@@ -12,8 +12,9 @@ from PyQt6.QtWidgets import QApplication
 from managers.localization_manager import tr
 from models.mod_models import ModChapterData
 import models.mod_models as mod_models
-from workers.background_workers import InstallModsThread, UrlInstallThread, ModScanThread
+from workers.background_workers import UrlInstallThread, ModScanThread
 from utils.file_utils import sanitize_filename
+from utils.mod_utils import get_mod_key, get_mod_name
 from config.constants import UI_COLORS
 import requests
 import time
@@ -37,10 +38,11 @@ class ModManager(QObject):
     installation_finished = pyqtSignal(bool, str)
     url_prompt_required = pyqtSignal(str, str)
 
-    def __init__(self, app_state, feedback_manager, parent=None):
+    def __init__(self, app_state, feedback_manager, settings_manager=None, parent=None):
         super().__init__(parent)
         self.app_state = app_state
         self.feedback_manager = feedback_manager
+        self.settings_manager = settings_manager
         self._cache_lock = threading.RLock()
         self._mods_cache: Dict[str, ModFolderInfo] = {}
         self._mods_by_name: Dict[str, str] = {}
@@ -48,8 +50,10 @@ class ModManager(QObject):
         self._scan_thread: Optional[ModScanThread] = None
         self._scan_in_progress = False
 
-    def _scan_mods_directory(self) -> Dict[str, ModFolderInfo]:
+    def _scan_mods_directory(self, old_cache: Optional[Dict[str, ModFolderInfo]] = None) -> Dict[str, ModFolderInfo]:
         cache: Dict[str, ModFolderInfo] = {}
+        if old_cache is None:
+            old_cache = {}
         if not os.path.exists(self.app_state.mods_dir):
             return cache
         try:
@@ -59,27 +63,44 @@ class ModManager(QObject):
                         continue
                     folder_name = entry.name
                     folder_path = entry.path
-                    config_path = os.path.join(folder_path, 'config.json')
+                    old_config_path = os.path.join(folder_path, 'config.json')
+                    config_path = os.path.join(folder_path, 'mod_config.json')
+                    if os.path.exists(old_config_path) and (not os.path.exists(config_path)):
+                        try:
+                            import shutil
+                            shutil.move(old_config_path, config_path)
+                            logging.info(f'Migrated mod config.json to mod_config.json in {folder_name}')
+                        except Exception as e:
+                            logging.warning(f'Failed to migrate mod config.json to mod_config.json in {folder_name}: {e}')
                     if not os.path.exists(config_path):
                         continue
                     try:
                         config_mtime = os.path.getmtime(config_path)
-                        with open(config_path, 'r', encoding='utf-8') as f:
-                            config_data = json.load(f)
-                        mod_key = config_data.get('mod_key')
-                        if not mod_key:
-                            continue
-                        if mod_key in cache:
-                            existing_info = cache[mod_key]
-                            if config_mtime <= existing_info.config_mtime:
+                        mod_key = None
+                        for old_key, old_info in old_cache.items():
+                            if old_info.folder_path == folder_path:
+                                mod_key = old_key
+                                if config_mtime <= old_info.config_mtime:
+                                    cache[mod_key] = old_info
+                                    mod_name = old_info.config_data.get('name', '')
+                                    if mod_name:
+                                        if not hasattr(self, '_temp_mods_by_name'):
+                                            self._temp_mods_by_name = {}
+                                        self._temp_mods_by_name[mod_name.lower()] = mod_key
+                                break
+                        if mod_key is None or mod_key not in cache:
+                            with open(config_path, 'r', encoding='utf-8') as f:
+                                config_data = json.load(f)
+                            mod_key = config_data.get('mod_key')
+                            if not mod_key:
                                 continue
-                        mod_info = ModFolderInfo(mod_key=mod_key, folder_path=folder_path, folder_name=folder_name, config_data=config_data, config_mtime=config_mtime)
-                        cache[mod_key] = mod_info
-                        mod_name = config_data.get('name', '')
-                        if mod_name:
-                            if not hasattr(self, '_temp_mods_by_name'):
-                                self._temp_mods_by_name = {}
-                            self._temp_mods_by_name[mod_name.lower()] = mod_key
+                            mod_info = ModFolderInfo(mod_key=mod_key, folder_path=folder_path, folder_name=folder_name, config_data=config_data, config_mtime=config_mtime)
+                            cache[mod_key] = mod_info
+                            mod_name = config_data.get('name', '')
+                            if mod_name:
+                                if not hasattr(self, '_temp_mods_by_name'):
+                                    self._temp_mods_by_name = {}
+                                self._temp_mods_by_name[mod_name.lower()] = mod_key
                     except OSError as e:
                         logging.warning(f'_scan_mods_directory: failed to access config {config_path}: {e}', exc_info=True, extra={'mod_folder': folder_name, 'config_path': config_path})
                         continue
@@ -128,7 +149,7 @@ class ModManager(QObject):
                     self._scan_thread.start()
             if hasattr(self, '_temp_mods_by_name'):
                 del self._temp_mods_by_name
-            self._mods_cache = self._scan_mods_directory()
+            self._mods_cache = self._scan_mods_directory(old_cache=self._mods_cache)
             if hasattr(self, '_temp_mods_by_name'):
                 self._mods_by_name = self._temp_mods_by_name.copy()
                 del self._temp_mods_by_name
@@ -200,7 +221,7 @@ class ModManager(QObject):
                 elif os.path.isdir(item_path):
                     try:
                         dir_contents = os.listdir(item_path)
-                        if '_deltamodInfo.json' in dir_contents and 'config.json' not in dir_contents:
+                        if '_deltamodInfo.json' in dir_contents and 'mod_config.json' not in dir_contents and ('config.json' not in dir_contents):
                             self.status_changed.emit(tr('status.deltamod_detected', name=item_name), UI_COLORS['status_info'])
                             QApplication.processEvents()
                             from utils.deltamod_converter import DeltamodConverter
@@ -239,7 +260,15 @@ class ModManager(QObject):
                 item_path = os.path.join(self.app_state.mods_dir, item_name)
                 if not os.path.isdir(item_path):
                     continue
-                config_path = os.path.join(item_path, 'config.json')
+                old_config_path = os.path.join(item_path, 'config.json')
+                config_path = os.path.join(item_path, 'mod_config.json')
+                if os.path.exists(old_config_path) and (not os.path.exists(config_path)):
+                    try:
+                        import shutil
+                        shutil.move(old_config_path, config_path)
+                        logging.info(f'Migrated mod config.json to mod_config.json in {item_name}')
+                    except Exception as e:
+                        logging.warning(f'Failed to migrate mod config.json to mod_config.json in {item_name}: {e}')
                 if not os.path.exists(config_path):
                     continue
                 try:
@@ -250,8 +279,25 @@ class ModManager(QObject):
                     mod_key = config_data.get('mod_key')
                     if mod_key:
                         installed_mods[mod_key] = config_data
+                    elif config_data.get('is_gamebanana_mod') and config_data.get('gamebanana_mod_id'):
+                        mod_id = config_data.get('gamebanana_mod_id')
+                        recovered_key = f'gb_{mod_id}'
+                        logging.warning(f'load_local_mods: Found GameBanana mod with empty mod_key in {item_path}, recovering as {recovered_key} (ID: {mod_id})')
+                        config_data['mod_key'] = recovered_key
+                        installed_mods[recovered_key] = config_data
+                    else:
+                        logging.warning(f'load_local_mods: Found mod with empty mod_key in {item_path}, skipping')
                 except (OSError, json.JSONDecodeError, KeyError) as e:
                     logging.debug(f'load_local_mods: failed to load mod from {item_path}: {e}')
+            installed_gamebanana_by_id = {}
+            installed_gamebanana_by_key = {}
+            for mod_key, config_data in installed_mods.items():
+                if config_data.get('is_gamebanana_mod') and config_data.get('gamebanana_mod_id'):
+                    gb_id = str(config_data.get('gamebanana_mod_id'))
+                    installed_gamebanana_by_id[gb_id] = (mod_key, config_data)
+                    installed_gamebanana_by_key[mod_key] = config_data
+                    logging.debug(f'load_local_mods: Registered installed GameBanana mod - key={mod_key}, id={gb_id}')
+            updated_count = 0
             for mod in list(self.app_state.all_mods):
                 if mod.key in installed_mods:
                     config_data = installed_mods[mod.key]
@@ -262,104 +308,212 @@ class ModManager(QObject):
                             if os.path.exists(potential_icon):
                                 mod.icon_url = potential_icon
                                 break
-            existing_keys = {mod.key for mod in self.app_state.all_mods}
-            for mod_key, config_data in list(installed_mods.items()):
-                if not config_data.get('is_local_mod') and mod_key not in existing_keys:
-                    try:
+                    if config_data.get('is_gamebanana_mod'):
+                        updated_count += 1
+                elif hasattr(mod, 'is_gamebanana_mod') and mod.is_gamebanana_mod and hasattr(mod, 'gamebanana_mod_id') and mod.gamebanana_mod_id:
+                    gb_id = str(mod.gamebanana_mod_id)
+                    if gb_id in installed_gamebanana_by_id:
+                        mod_key, config_data = installed_gamebanana_by_id[gb_id]
+                        if mod.key != mod_key:
+                            logging.debug(f'load_local_mods: Updating mod.key from {mod.key} to {mod_key} for GameBanana mod {gb_id}')
+                            mod.key = mod_key
                         mod_folder_path = self.get_mod_folder_path(mod_key)
-                        icon_path = ''
                         if mod_folder_path:
                             for ext in ['.png', '.jpg', '.jpeg', '.gif']:
                                 potential_icon = os.path.join(mod_folder_path, f'_icon{ext}')
                                 if os.path.exists(potential_icon):
-                                    icon_path = potential_icon
+                                    mod.icon_url = potential_icon
                                     break
-                        safe_mod_info = {'key': mod_key, 'name': config_data.get('name', 'Installed Mod'), 'version': config_data.get('version', '1.0.0'), 'author': config_data.get('author', tr('defaults.unknown')), 'tagline': config_data.get('tagline', tr('defaults.no_description')), 'game_version': config_data.get('game_version', tr('defaults.not_specified')), 'description_url': '', 'downloads': 0, 'modgame': config_data.get('modgame', 'deltarune'), 'is_verified': False, 'icon_url': icon_path, 'tags': [], 'hide_mod': False, 'is_local_mod': False, 'ban_status': False, 'demo_url': None, 'demo_version': '1.0.0', 'created_date': config_data.get('created_date', 'N/A'), 'last_updated': config_data.get('created_date', 'N/A'), 'external_url': config_data.get('external_url')}
-                        mod = mod_models.ModInfo(**safe_mod_info)
-                        files_data = config_data.get('files', {})
-                        for file_key, ch_info in list(files_data.items()):
-                            extra_files_list = []
-                            for ef_data in ch_info.get('extra_files', []):
-                                if isinstance(ef_data, dict):
-                                    try:
-                                        ExtraFileClass = globals()['ModExtraFile']
-                                        extra_files_list.append(ExtraFileClass(key=ef_data.get('key', ''), version=ef_data.get('version', ''), url=ef_data.get('url', '')))
-                                    except (KeyError, TypeError, ValueError) as e:
-                                        logging.debug(f'load_local_mods: failed to parse extra_file: {e}')
-                            valid_chapter_fields = {'description': ch_info.get('description'), 'data_file_url': ch_info.get('data_file_url'), 'data_file_version': ch_info.get('data_file_version'), 'extra_files': extra_files_list}
-                            mod.files[file_key] = ModChapterData(**valid_chapter_fields)
-                        self.app_state.all_mods.append(mod)
-                    except Exception as e:
-                        logging.warning(f'Failed to create ModInfo for installed mod {mod_key}: {e}')
-            self.app_state.all_mods = [mod for mod in self.app_state.all_mods if not hasattr(mod, 'tags') or 'local' not in mod.tags]
+                        updated_count += 1
+            logging.debug(f'load_local_mods: Updated {updated_count} existing GameBanana mods in all_mods')
+            existing_keys = {mod.key for mod in self.app_state.all_mods}
+            existing_gamebanana_ids = {}
+            for mod in self.app_state.all_mods:
+                if hasattr(mod, 'is_gamebanana_mod') and mod.is_gamebanana_mod and hasattr(mod, 'gamebanana_mod_id') and mod.gamebanana_mod_id:
+                    gb_id = str(mod.gamebanana_mod_id)
+                    existing_gamebanana_ids[gb_id] = mod.key
             for mod_key, config_data in list(installed_mods.items()):
                 if config_data.get('is_local_mod'):
-                    try:
-                        mod_folder_for_icon = self.get_mod_folder_path(mod_key)
-                        icon_path = ''
-                        if mod_folder_for_icon:
-                            for ext in ['.png', '.jpg', '.jpeg', '.gif']:
-                                potential_icon = os.path.join(mod_folder_for_icon, f'_icon{ext}')
-                                if os.path.exists(potential_icon):
-                                    icon_path = potential_icon
-                                    break
-                        safe_mod_info = {'key': mod_key, 'name': config_data.get('name', tr('defaults.local_mod')), 'version': config_data.get('version', '1.0.0'), 'author': config_data.get('author', tr('defaults.unknown')), 'tagline': config_data.get('tagline', tr('defaults.no_description')), 'game_version': config_data.get('game_version', tr('defaults.not_specified')), 'description_url': '', 'downloads': 0, 'modgame': config_data.get('modgame', 'deltarune'), 'is_verified': False, 'icon_url': icon_path, 'tags': ['local'], 'hide_mod': False, 'is_local_mod': config_data.get('is_local_mod', True), 'ban_status': False, 'demo_url': None, 'demo_version': '1.0.0', 'created_date': config_data.get('created_date', 'N/A'), 'last_updated': config_data.get('created_date', 'N/A'), 'external_url': config_data.get('external_url')}
-                        mod = mod_models.ModInfo(**safe_mod_info)
-                        files_data = config_data.get('files', {})
-                        mod_folder_path = None
-                        for folder_name in os.listdir(self.app_state.mods_dir):
-                            folder_path = os.path.join(self.app_state.mods_dir, folder_name)
-                            test_config_path = os.path.join(folder_path, 'config.json')
-                            if os.path.isfile(test_config_path):
+                    continue
+                is_gamebanana_mod = config_data.get('is_gamebanana_mod', False)
+                gamebanana_mod_id = config_data.get('gamebanana_mod_id')
+                if is_gamebanana_mod and gamebanana_mod_id:
+                    gb_id_str = str(gamebanana_mod_id)
+                    if mod_key in existing_keys:
+                        continue
+                    if gb_id_str in existing_gamebanana_ids:
+                        existing_mod_key = existing_gamebanana_ids[gb_id_str]
+                        for mod in self.app_state.all_mods:
+                            if hasattr(mod, 'gamebanana_mod_id') and str(mod.gamebanana_mod_id) == gb_id_str:
+                                if mod.key != mod_key:
+                                    logging.debug(f'load_local_mods: Updating mod.key from {mod.key} to {mod_key} for GameBanana mod {gb_id_str}')
+                                    mod.key = mod_key
+                                    existing_keys.discard(existing_mod_key)
+                                    existing_keys.add(mod_key)
+                                break
+                        continue
+                elif mod_key in existing_keys:
+                    logging.debug(f'load_local_mods: Non-GameBanana mod {mod_key} already in all_mods, skipping')
+                    continue
+                try:
+                    mod_folder_path = self.get_mod_folder_path(mod_key)
+                    icon_path = ''
+                    if mod_folder_path:
+                        for ext in ['.png', '.jpg', '.jpeg', '.gif']:
+                            potential_icon = os.path.join(mod_folder_path, f'_icon{ext}')
+                            if os.path.exists(potential_icon):
+                                icon_path = potential_icon
+                                break
+                    icon_url = icon_path
+                    if config_data.get('is_gamebanana_mod') and config_data.get('gamebanana_mod_id') and (not icon_path):
+                        try:
+                            from utils.gamebanana_api import GameBananaAPI
+                            api = GameBananaAPI()
+                            mod_id = int(config_data.get('gamebanana_mod_id'))
+                            preview_media = api.get_mod_preview_media(mod_id)
+                            if preview_media:
+                                icon_url_from_api = api.extract_icon_url(preview_media)
+                                if icon_url_from_api:
+                                    icon_url = icon_url_from_api
+                                    logging.debug(f'Loaded icon_url from API for GameBanana mod {mod_id}: {icon_url_from_api}')
+                        except Exception as e:
+                            logging.debug(f"Failed to load icon_url for GameBanana mod {config_data.get('gamebanana_mod_id')}: {e}")
+                    safe_mod_info = {'key': mod_key, 'name': config_data.get('name', 'Installed Mod'), 'version': config_data.get('version', '1.0.0'), 'author': config_data.get('author', tr('defaults.unknown')), 'tagline': config_data.get('tagline', tr('defaults.no_description')), 'game_version': config_data.get('game_version', tr('defaults.not_specified')), 'description_url': '', 'downloads': 0, 'modgame': config_data.get('modgame', 'deltarune'), 'is_verified': False, 'icon_url': icon_url, 'tags': [], 'hide_mod': False, 'is_local_mod': False, 'ban_status': False, 'demo_url': None, 'demo_version': '1.0.0', 'created_date': config_data.get('created_date', 'N/A'), 'last_updated': config_data.get('created_date', 'N/A'), 'external_url': config_data.get('external_url'), 'is_gamebanana_mod': config_data.get('is_gamebanana_mod', False), 'gamebanana_mod_id': config_data.get('gamebanana_mod_id'), 'gamebanana_mod_type': config_data.get('gamebanana_mod_type'), 'gamebanana_last_update_timestamp': config_data.get('gamebanana_last_update_timestamp')}
+                    mod = mod_models.ModInfo(**safe_mod_info)
+                    files_data = config_data.get('files', {})
+                    for file_key, ch_info in list(files_data.items()):
+                        extra_files_list = []
+                        for ef_data in ch_info.get('extra_files', []):
+                            if isinstance(ef_data, dict):
                                 try:
-                                    with open(test_config_path, 'r', encoding='utf-8') as f:
-                                        test_config = json.load(f)
+                                    extra_files_list.append(mod_models.ModExtraFile(key=ef_data.get('key', ''), version=ef_data.get('version', ''), url=ef_data.get('url', '')))
+                                except (KeyError, TypeError, ValueError) as e:
+                                    logging.debug(f'load_local_mods: failed to parse extra_file: {e}')
+                        valid_chapter_fields = {'description': ch_info.get('description'), 'data_file_url': ch_info.get('data_file_url'), 'data_file_version': ch_info.get('data_file_version'), 'extra_files': extra_files_list}
+                        mod.files[file_key] = ModChapterData(**valid_chapter_fields)
+                    self.app_state.all_mods.append(mod)
+                except Exception as e:
+                    logging.warning(f'Failed to create ModInfo for installed mod {mod_key}: {e}', exc_info=True)
+            all_mods_filtered = []
+            for mod in self.app_state.all_mods:
+                if hasattr(mod, 'is_local_mod') and mod.is_local_mod:
+                    if hasattr(mod, 'tags') and 'local' in mod.tags:
+                        continue
+                all_mods_filtered.append(mod)
+            self.app_state.all_mods = all_mods_filtered
+            for mod_key, config_data in list(installed_mods.items()):
+                if config_data.get('is_gamebanana_mod'):
+                    gb_id = config_data.get('gamebanana_mod_id')
+                    if gb_id:
+                        gb_id_str = str(gb_id)
+                        if gb_id_str in existing_gamebanana_ids:
+                            continue
+                    continue
+                if not config_data.get('is_local_mod'):
+                    continue
+                if mod_key in existing_keys:
+                    logging.debug(f'load_local_mods: Skipping local mod {mod_key} - already in all_mods')
+                    continue
+                try:
+                    mod_folder_for_icon = self.get_mod_folder_path(mod_key)
+                    icon_path = ''
+                    if mod_folder_for_icon:
+                        for ext in ['.png', '.jpg', '.jpeg', '.gif']:
+                            potential_icon = os.path.join(mod_folder_for_icon, f'_icon{ext}')
+                            if os.path.exists(potential_icon):
+                                icon_path = potential_icon
+                                break
+                    safe_mod_info = {'key': mod_key, 'name': config_data.get('name', tr('defaults.local_mod')), 'version': config_data.get('version', '1.0.0'), 'author': config_data.get('author', tr('defaults.unknown')), 'tagline': config_data.get('tagline', tr('defaults.no_description')), 'game_version': config_data.get('game_version', tr('defaults.not_specified')), 'description_url': '', 'downloads': 0, 'modgame': config_data.get('modgame', 'deltarune'), 'is_verified': False, 'icon_url': icon_path, 'tags': ['local'], 'hide_mod': False, 'is_local_mod': config_data.get('is_local_mod', True), 'ban_status': False, 'demo_url': None, 'demo_version': '1.0.0', 'created_date': config_data.get('created_date', 'N/A'), 'last_updated': config_data.get('created_date', 'N/A'), 'external_url': config_data.get('external_url'), 'is_gamebanana_mod': config_data.get('is_gamebanana_mod', False), 'gamebanana_mod_id': config_data.get('gamebanana_mod_id'), 'gamebanana_mod_type': config_data.get('gamebanana_mod_type'), 'gamebanana_last_update_timestamp': config_data.get('gamebanana_last_update_timestamp')}
+                    mod = mod_models.ModInfo(**safe_mod_info)
+                    files_data = config_data.get('files', {})
+                    mod_folder_path = None
+                    for folder_name in os.listdir(self.app_state.mods_dir):
+                        folder_path = os.path.join(self.app_state.mods_dir, folder_name)
+                        test_config_path = os.path.join(folder_path, 'mod_config.json')
+                        old_test_config_path = os.path.join(folder_path, 'config.json')
+                        if os.path.isfile(test_config_path):
+                            try:
+                                with open(test_config_path, 'r', encoding='utf-8') as f:
+                                    test_config = json.load(f)
                                     if test_config.get('mod_key') == mod_key:
                                         mod_folder_path = folder_path
                                         break
-                                except Exception as e:
-                                    logging.warning(f'Failed reading config {test_config_path}: {e}')
-                                    continue
-                        for file_key, ch_info in list(files_data.items()):
-                            chapter_files = ch_info
-                            if mod_folder_path:
-                                if file_key == 'demo':
-                                    chapter_folder = os.path.join(mod_folder_path, 'demo')
-                                elif file_key == 'undertale':
-                                    chapter_folder = os.path.join(mod_folder_path, 'undertale')
-                                elif file_key in ['0', '1', '2', '3', '4']:
-                                    if file_key == '0':
+                            except Exception as e:
+                                logging.warning(f'Failed reading config {test_config_path}: {e}')
+                                continue
+                        elif os.path.isfile(old_test_config_path):
+                            try:
+                                import shutil
+                                shutil.move(old_test_config_path, test_config_path)
+                                logging.info(f'Migrated mod config.json to mod_config.json in {folder_name}')
+                                with open(test_config_path, 'r', encoding='utf-8') as f:
+                                    test_config = json.load(f)
+                                    if test_config.get('mod_key') == mod_key:
+                                        mod_folder_path = folder_path
+                                        break
+                            except Exception as e:
+                                logging.warning(f'Failed to migrate or read config in {folder_name}: {e}')
+                                continue
+                    for file_key, ch_info in list(files_data.items()):
+                        chapter_files = ch_info
+                        if mod_folder_path:
+                            if file_key == 'demo':
+                                chapter_folder = os.path.join(mod_folder_path, 'demo')
+                            elif file_key == 'undertale':
+                                chapter_folder = os.path.join(mod_folder_path, 'undertale')
+                            elif file_key in ['0', '1', '2', '3', '4']:
+                                if file_key == '0':
+                                    chapter_folder = os.path.join(mod_folder_path, 'chapter_0')
+                                else:
+                                    chapter_folder = os.path.join(mod_folder_path, f'chapter_{file_key}')
+                            else:
+                                try:
+                                    ch_id = int(file_key)
+                                    if ch_id == -1:
+                                        chapter_folder = os.path.join(mod_folder_path, 'demo')
+                                    elif ch_id == 0:
                                         chapter_folder = os.path.join(mod_folder_path, 'chapter_0')
                                     else:
-                                        chapter_folder = os.path.join(mod_folder_path, f'chapter_{file_key}')
-                                else:
-                                    try:
-                                        ch_id = int(file_key)
-                                        if ch_id == -1:
-                                            chapter_folder = os.path.join(mod_folder_path, 'demo')
-                                        elif ch_id == 0:
-                                            chapter_folder = os.path.join(mod_folder_path, 'chapter_0')
-                                        else:
-                                            chapter_folder = os.path.join(mod_folder_path, f'chapter_{ch_id}')
-                                    except ValueError:
-                                        continue
-                            data_file_url = ''
-                            if chapter_files.get('data_file_url') and mod_folder_path:
-                                data_file_url = os.path.join(chapter_folder, chapter_files['data_file_url'])
-                            from models.mod_models import ModExtraFile
-                            extra_files = []
-                            if chapter_files.get('extra_files') and mod_folder_path:
-                                for group_key, filenames in list(chapter_files['extra_files'].items()):
-                                    for filename in filenames:
-                                        file_path = os.path.join(chapter_folder, filename)
-                                        extra_files.append(ModExtraFile(key=group_key, url=file_path, version='1.0.0'))
-                            mod_chapter = ModChapterData(description=config_data.get('tagline', ''), data_file_url=data_file_url, data_file_version=chapter_files.get('data_file_version', (ch_info.get('versions', {}) or {}).get('data', '1.0.0')), extra_files=extra_files)
-                            mod.files[file_key] = mod_chapter
-                        if mod.files:
-                            self.app_state.all_mods.append(mod)
-                    except Exception as e:
-                        logging.warning(f'Failed to build local ModInfo: {e}')
-                        continue
+                                        chapter_folder = os.path.join(mod_folder_path, f'chapter_{ch_id}')
+                                except ValueError:
+                                    continue
+                        data_file_url = ''
+                        if chapter_files.get('data_file_url') and mod_folder_path:
+                            data_file_url = os.path.join(chapter_folder, chapter_files['data_file_url'])
+                        from models.mod_models import ModExtraFile
+                        extra_files = []
+                        if chapter_files.get('extra_files') and mod_folder_path:
+                            for group_key, filenames in list(chapter_files['extra_files'].items()):
+                                for filename in filenames:
+                                    file_path = os.path.join(chapter_folder, filename)
+                                    extra_files.append(ModExtraFile(key=group_key, url=file_path, version='1.0.0'))
+                        mod_chapter = ModChapterData(description=config_data.get('tagline', ''), data_file_url=data_file_url, data_file_version=chapter_files.get('data_file_version', (ch_info.get('versions', {}) or {}).get('data', '1.0.0')), extra_files=extra_files)
+                        mod.files[file_key] = mod_chapter
+                    if mod.files:
+                        self.app_state.all_mods.append(mod)
+                except Exception as e:
+                    logging.warning(f'Failed to build local ModInfo: {e}')
+                    continue
+            installed_gamebanana_mod_ids = set()
+            for mod_key, config_data in installed_mods.items():
+                if config_data.get('is_gamebanana_mod') and config_data.get('gamebanana_mod_id'):
+                    installed_gamebanana_mod_ids.add(str(config_data.get('gamebanana_mod_id')))
+            for mod in self.app_state.all_mods:
+                if hasattr(mod, 'is_gamebanana_mod') and mod.is_gamebanana_mod and hasattr(mod, 'gamebanana_mod_id') and mod.gamebanana_mod_id:
+                    mod_id_str = str(mod.gamebanana_mod_id)
+                    if mod_id_str in installed_gamebanana_mod_ids:
+                        current_downloads = getattr(mod, 'downloads', 0) or 0
+                        if current_downloads <= 0:
+                            try:
+                                from utils.gamebanana_api import GameBananaAPI
+                                api = GameBananaAPI()
+                                downloaded_count = api.get_mod_downloads_only(int(mod.gamebanana_mod_id))
+                                if downloaded_count is not None and downloaded_count > 0:
+                                    mod.downloads = downloaded_count
+                                elif downloaded_count is not None:
+                                    mod.downloads = 0
+                            except Exception as e:
+                                logging.debug(f'load_local_mods: Failed to load downloads from API for mod {mod.key}: {e}')
             metadata = self._read_metadata()
             cleanup_files = metadata.get('mod_files_to_cleanup', [])
             cleanup_dirs = metadata.get('mod_dirs_to_cleanup', [])
@@ -395,77 +549,6 @@ class ModManager(QObject):
             return mod_info.folder_path
         return ''
 
-    def install_mod(self, mod, force=False, is_update=False):
-        try:
-            if self.app_state.is_installing and (not force):
-                return
-            available_chapters = []
-            if getattr(mod, 'modgame', 'deltarune') == 'undertale':
-                if getattr(mod, 'files', {}).get('undertale'):
-                    available_chapters.append(0)
-            elif getattr(mod, 'modgame', 'deltarune') == 'deltarunedemo':
-                if getattr(mod, 'files', {}).get('demo'):
-                    available_chapters.append(-1)
-            else:
-                for chapter_id in range(0, 5):
-                    try:
-                        chapter_data = mod.get_chapter_data(chapter_id)
-                    except (AttributeError, KeyError, TypeError) as e:
-                        logging.debug(f'install_mod: failed to get chapter {chapter_id} data: {e}', extra={'chapter_id': chapter_id, 'mod_key': getattr(mod, 'key', None)})
-                        chapter_data = None
-                    except Exception as e:
-                        logging.warning(f'install_mod: unexpected error getting chapter {chapter_id} data: {e}', exc_info=True, extra={'chapter_id': chapter_id, 'mod_key': getattr(mod, 'key', None)})
-                        chapter_data = None
-                    if chapter_data:
-                        available_chapters.append(chapter_id)
-            if not available_chapters:
-                self.feedback_manager.show_error('errors.no_chapters_available')
-                return
-            self.app_state.is_installing = True
-            parent = self.parent()
-            if parent:
-                set_buttons_method = getattr(parent, '_set_install_buttons_enabled', None)
-                if callable(set_buttons_method):
-                    set_buttons_method(False)
-            self.status_changed.emit(tr('status.installing_mod'), 'status_info')
-            install_tasks = []
-            for chapter_id in available_chapters:
-                install_tasks.append((mod, chapter_id))
-            install_thread = InstallModsThread(self.parent(), install_tasks, was_installed or is_update)
-            install_thread.progress.connect(self.progress_updated.emit)
-            install_thread.status.connect(self.status_changed.emit)
-            install_thread.finished.connect(self._on_single_mod_install_finished)
-            self.app_state.current_task = install_thread
-            install_thread.start()
-        except PermissionError as e:
-            self.app_state.is_installing = False
-            self.app_state.clear_current_task()
-            mod_key = getattr(mod, 'key', 'unknown')
-            mod_name = getattr(mod, 'name', 'Unknown Mod')
-            logging.error(f'install_mod: permission error: {e}', exc_info=True, extra={'mod_key': mod_key, 'mod_name': mod_name, 'operation': 'install'})
-            self.feedback_manager.show_error('errors.installation_failed', tr('errors.permission_denied'))
-        except (OSError, shutil.Error) as e:
-            self.app_state.is_installing = False
-            self.app_state.clear_current_task()
-            mod_key = getattr(mod, 'key', 'unknown')
-            mod_name = getattr(mod, 'name', 'Unknown Mod')
-            logging.error(f'install_mod: file operation error: {e}', exc_info=True, extra={'mod_key': mod_key, 'mod_name': mod_name, 'operation': 'install'})
-            self.feedback_manager.show_error('errors.installation_failed', tr('errors.file_operation_failed', error=str(e)))
-        except (KeyError, AttributeError) as e:
-            self.app_state.is_installing = False
-            self.app_state.clear_current_task()
-            mod_key = getattr(mod, 'key', 'unknown')
-            mod_name = getattr(mod, 'name', 'Unknown Mod')
-            logging.error(f'install_mod: data error: {e}', exc_info=True, extra={'mod_key': mod_key, 'mod_name': mod_name})
-            self.feedback_manager.show_error('errors.installation_failed', str(e))
-        except Exception as e:
-            self.app_state.is_installing = False
-            self.app_state.clear_current_task()
-            mod_key = getattr(mod, 'key', 'unknown')
-            mod_name = getattr(mod, 'name', 'Unknown Mod')
-            logging.error(f'install_mod: unexpected error: {e}', exc_info=True, extra={'mod_key': mod_key, 'mod_name': mod_name})
-            self.feedback_manager.show_error('errors.installation_failed', str(e))
-
     def install_from_url(self, url: str):
         if self.app_state.is_installing:
             return
@@ -486,37 +569,40 @@ class ModManager(QObject):
             self.mod_list_updated.emit()
             self.status_changed.emit(tr('status.mod_uninstalled'), 'status_success')
         except PermissionError as e:
-            mod_key = mod.get('key', '') if isinstance(mod, dict) else getattr(mod, 'key', 'unknown')
-            mod_name = mod.get('name', '') if isinstance(mod, dict) else getattr(mod, 'name', 'Unknown Mod')
+            mod_key = get_mod_key(mod) or 'unknown'
+            mod_name = get_mod_name(mod, 'Unknown Mod')
             error = ModUninstallationError(f'Permission denied during uninstallation: {e}', mod_key=mod_key, mod_name=mod_name, reason='permission_error')
             logging.error(f'uninstall_mod: permission error: {e}', exc_info=True, extra={'mod_key': mod_key, 'mod_name': mod_name})
-            self.feedback_manager.show_error('errors.uninstall_failed', tr('errors.permission_denied'))
+            self.feedback_manager.show_message('error', 'errors.uninstall_failed', tr('errors.permission_denied'))
             raise error
         except (OSError, shutil.Error) as e:
-            mod_key = mod.get('key', '') if isinstance(mod, dict) else getattr(mod, 'key', 'unknown')
-            mod_name = mod.get('name', '') if isinstance(mod, dict) else getattr(mod, 'name', 'Unknown Mod')
+            mod_key = get_mod_key(mod) or 'unknown'
+            mod_name = get_mod_name(mod, 'Unknown Mod')
             error = ModUninstallationError(f'File operation failed during uninstallation: {e}', mod_key=mod_key, mod_name=mod_name, reason='io_error')
             logging.error(f'uninstall_mod: file operation error: {e}', exc_info=True, extra={'mod_key': mod_key, 'mod_name': mod_name})
-            self.feedback_manager.show_error('errors.uninstall_failed', tr('errors.file_operation_failed', error=str(e)))
+            self.feedback_manager.show_message('error', 'errors.uninstall_failed', tr('errors.file_operation_failed', error=str(e)))
             raise error
         except (KeyError, AttributeError) as e:
-            mod_key = mod.get('key', '') if isinstance(mod, dict) else getattr(mod, 'key', 'unknown')
-            mod_name = mod.get('name', '') if isinstance(mod, dict) else getattr(mod, 'name', 'Unknown Mod')
+            mod_key = get_mod_key(mod) or 'unknown'
+            mod_name = get_mod_name(mod, 'Unknown Mod')
             error = ModUninstallationError(f'Missing required data: {e}', mod_key=mod_key, mod_name=mod_name, reason='missing_data')
             logging.error(f'uninstall_mod: data error: {e}', exc_info=True, extra={'mod_key': mod_key, 'mod_name': mod_name})
             raise error
         except Exception as e:
-            mod_key = mod.get('key', '') if isinstance(mod, dict) else getattr(mod, 'key', 'unknown')
-            mod_name = mod.get('name', '') if isinstance(mod, dict) else getattr(mod, 'name', 'Unknown Mod')
+            mod_key = get_mod_key(mod) or 'unknown'
+            mod_name = get_mod_name(mod, 'Unknown Mod')
             error = ModUninstallationError(f'Unexpected error during uninstallation: {e}', mod_key=mod_key, mod_name=mod_name, reason='unknown')
             logging.error(f'uninstall_mod: unexpected error: {e}', exc_info=True, extra={'mod_key': mod_key, 'mod_name': mod_name})
-            self.feedback_manager.show_error('errors.uninstall_failed', str(e))
+            self.feedback_manager.show_message('error', 'errors.uninstall_failed', str(e))
             raise error
 
     def update_mod(self, mod_data):
         if self.app_state.is_installing:
             return
-        self.install_mod(mod_data, force=True, is_update=True)
+        parent = self.parent()
+        mod_ops = getattr(parent, 'mod_ops', None) if parent else None
+        if mod_ops:
+            mod_ops.install_mod(mod_data, force=True, is_update=True)
 
     def delete_mod_files(self, mod_data):
         try:
@@ -585,6 +671,27 @@ class ModManager(QObject):
                 return 'update'
         return 'ready'
 
+    def mod_has_update_available(self, mod_data) -> bool:
+        try:
+            if hasattr(mod_data, 'is_gamebanana_mod') and mod_data.is_gamebanana_mod:
+                try:
+                    from managers.gamebanana_update_manager import GameBananaUpdateManager
+                    update_manager = GameBananaUpdateManager(self.app_state.mods_dir)
+                    has_update = update_manager.check_mod_for_updates(mod_data)
+                    if has_update:
+                        logging.info(f'mod_has_update_available: GameBanana mod {mod_data.name} has update available')
+                    return has_update
+                except Exception as e:
+                    logging.warning(f'mod_has_update_available: Error checking GameBanana update for {mod_data.name}: {e}', exc_info=True)
+            for chapter_id in range(5):
+                if self.mod_has_files_for_chapter(mod_data, chapter_id):
+                    if self.get_mod_status(mod_data, chapter_id) == 'update':
+                        return True
+            return False
+        except Exception as e:
+            logging.warning(f'mod_has_update_available: exception: {e}', exc_info=True)
+            return False
+
     def is_mod_installed(self, mod_key: str) -> bool:
         with self._cache_lock:
             if not self._mods_cache_valid:
@@ -617,7 +724,7 @@ class ModManager(QObject):
 
     def mod_has_files_for_chapter(self, mod_data, chapter_id):
         try:
-            mod_key = getattr(mod_data, 'key', None) or getattr(mod_data, 'mod_key', None)
+            mod_key = get_mod_key(mod_data)
             if not mod_key:
                 return True
             cache = self._get_mods_cache()
@@ -655,8 +762,11 @@ class ModManager(QObject):
             if not os.path.exists(self.app_state.mods_metadata_path):
                 return {}
             try:
-                with open(self.app_state.mods_metadata_path, 'r', encoding='utf-8') as f:
-                    return json.load(f) or {}
+                if self.settings_manager:
+                    return self.settings_manager.read_json(self.app_state.mods_metadata_path) or {}
+                else:
+                    with open(self.app_state.mods_metadata_path, 'r', encoding='utf-8') as f:
+                        return json.load(f) or {}
             except Exception as e:
                 logging.warning(f'_read_metadata: failed: {e}', exc_info=True)
                 return {}
@@ -664,30 +774,13 @@ class ModManager(QObject):
     def _write_metadata(self, data: Dict):
         with self.app_state._mods_metadata_lock:
             try:
-                with open(self.app_state.mods_metadata_path, 'w', encoding='utf-8') as f:
-                    json.dump(data, f, ensure_ascii=False, indent=2)
+                if self.settings_manager:
+                    self.settings_manager.write_json(self.app_state.mods_metadata_path, data)
+                else:
+                    with open(self.app_state.mods_metadata_path, 'w', encoding='utf-8') as f:
+                        json.dump(data, f, ensure_ascii=False, indent=2)
             except Exception as e:
                 logging.error(f'_write_metadata: failed: {e}', exc_info=True)
-
-    def _on_single_mod_install_finished(self, success):
-        was_installed_before = False
-        if self.app_state.current_task:
-            was_installed_before = getattr(self.app_state.current_task, 'was_installed_before', False)
-        self.progress_updated.emit(0)
-        self.app_state.is_installing = False
-        self.app_state.clear_current_task()
-        if success:
-            self.invalidate_mods_cache()
-            if was_installed_before:
-                self.status_changed.emit(tr('status.mod_updated'), 'status_success')
-            else:
-                self.status_changed.emit(tr('status.mod_installed'), 'status_success')
-        elif self.app_state.current_task and getattr(self.app_state.current_task, '_cancelled', False):
-            self.status_changed.emit(tr('status.install_cancelled_by_user'), 'status_info')
-        else:
-            self.status_changed.emit(tr('status.installation_failed'), 'status_error')
-        self.mod_list_updated.emit()
-        self.installation_finished.emit(success, '')
 
     def _on_url_install_finished(self, success: bool, message: str):
         self.app_state.is_installing = False
@@ -713,7 +806,7 @@ class ModManager(QObject):
             for mod in all_mods:
                 if hasattr(mod, 'key') and mod.key == mod_key:
                     return mod
-        return mod_models.ModInfo(key=mod_key, name=mod_info.get('name', mod_key), version=mod_info.get('version', '1.0.0'), author=mod_info.get('author', tr('defaults.unknown')), tagline=mod_info.get('tagline', tr('defaults.no_description')), game_version=mod_info.get('game_version', '1.04'), description_url='', downloads=0, modgame=mod_info.get('modgame', 'deltarune'), is_verified=False, is_local_mod=mod_info.get('is_local_mod', False))
+        return mod_models.ModInfo(key=mod_key, name=mod_info.get('name', mod_key), version=mod_info.get('version', '1.0.0'), author=mod_info.get('author', tr('defaults.unknown')), tagline=mod_info.get('tagline', tr('defaults.no_description')), game_version=mod_info.get('game_version', '1.04'), description_url='', downloads=0, modgame=mod_info.get('modgame', 'deltarune'), is_verified=False, icon_url=None, tags=[], hide_mod=False, is_local_mod=mod_info.get('is_local_mod', False), ban_status=False, files={})
 
     def fetch_mod_data_by_secret(self, secret_key: str) -> Tuple[Optional[dict], Optional[str], bool]:
         from utils.crypto_utils import possible_secret_hashes
@@ -773,7 +866,15 @@ class ModManager(QObject):
             folder_path = os.path.join(self.app_state.mods_dir, folder_name)
             if not os.path.isdir(folder_path):
                 continue
-            config_path = os.path.join(folder_path, 'config.json')
+            old_config_path = os.path.join(folder_path, 'config.json')
+            config_path = os.path.join(folder_path, 'mod_config.json')
+            if os.path.exists(old_config_path) and (not os.path.exists(config_path)):
+                try:
+                    import shutil
+                    shutil.move(old_config_path, config_path)
+                    logging.info(f'Migrated mod config.json to mod_config.json in {folder_name}')
+                except Exception as e:
+                    logging.warning(f'Failed to migrate mod config.json to mod_config.json in {folder_name}: {e}')
             if not os.path.exists(config_path):
                 continue
             try:
@@ -795,7 +896,15 @@ class ModManager(QObject):
             folder_path = os.path.join(self.app_state.mods_dir, folder_name)
             if not os.path.isdir(folder_path):
                 continue
-            config_path = os.path.join(folder_path, 'config.json')
+            old_config_path = os.path.join(folder_path, 'config.json')
+            config_path = os.path.join(folder_path, 'mod_config.json')
+            if os.path.exists(old_config_path) and (not os.path.exists(config_path)):
+                try:
+                    import shutil
+                    shutil.move(old_config_path, config_path)
+                    logging.info(f'Migrated mod config.json to mod_config.json in {folder_name}')
+                except Exception as e:
+                    logging.warning(f'Failed to migrate mod config.json to mod_config.json in {folder_name}: {e}')
             if not os.path.exists(config_path):
                 continue
             try:
@@ -833,7 +942,15 @@ class ModManager(QObject):
             folder_path = os.path.join(self.app_state.mods_dir, folder_name)
             if not os.path.isdir(folder_path):
                 continue
-            config_path = os.path.join(folder_path, 'config.json')
+            old_config_path = os.path.join(folder_path, 'config.json')
+            config_path = os.path.join(folder_path, 'mod_config.json')
+            if os.path.exists(old_config_path) and (not os.path.exists(config_path)):
+                try:
+                    import shutil
+                    shutil.move(old_config_path, config_path)
+                    logging.info(f'Migrated mod config.json to mod_config.json in {folder_name}')
+                except Exception as e:
+                    logging.warning(f'Failed to migrate mod config.json to mod_config.json in {folder_name}: {e}')
             if os.path.exists(config_path):
                 try:
                     with open(config_path, 'r', encoding='utf-8') as f:

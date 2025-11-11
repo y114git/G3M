@@ -49,10 +49,10 @@ def sanitize_log_message(message: str) -> str:
     urls = re.findall('https?://[^\\s\\)\\]\\}\\\'\\"\\;\\,]+', msg)
     for url in urls:
         msg = msg.replace(url, mask_url(url))
-    domain_patterns = re.findall('[a-zA-Z0-9.-]+\\.(cloudfunctions|net|com|org|io|cloud)[^\\s\\)\\]\\}\\\'\\"]*', msg)
+    domain_patterns = re.findall('(?:^|[^\\w.-])([a-zA-Z0-9][a-zA-Z0-9.-]*\\.(?:cloudfunctions|net|com|org|io|cloud))(?=[^\\w.-]|$)', msg)
     for domain_match in domain_patterns:
-        if '://' not in domain_match:
-            msg = msg.replace(domain_match, '[HIDDEN_DOMAIN]')
+        if '.' in domain_match and domain_match.count('.') >= 1:
+            msg = re.sub(re.escape(domain_match), '[HIDDEN_DOMAIN]', msg)
     return msg
 
 
@@ -195,13 +195,16 @@ def download_file(session, url, tmp_path, progress_callback=None, total_size: in
                 logging.debug(f'download_file: sleep failed: {sleep_e}')
 
 
-def check_internet_connection() -> bool:
-    try:
-        session = get_session()
-        session.get('https://www.google.com', timeout=NETWORK_TIMEOUT_SHORT)
-        return True
-    except requests.RequestException:
-        return False
+def check_internet_connection(max_attempts: int = 2) -> bool:
+    for attempt in range(max_attempts):
+        try:
+            session = get_session()
+            session.get('https://www.google.com', timeout=NETWORK_TIMEOUT_SHORT)
+            return True
+        except requests.RequestException:
+            if attempt < max_attempts - 1:
+                continue
+    return False
 
 
 def increment_launch_counter() -> None:

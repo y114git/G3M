@@ -1,6 +1,7 @@
-from typing import Dict, Any, Callable
+from typing import Dict, Any
+import platform
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QFrame, QLabel, QPushButton, QCheckBox, QLineEdit, QTextBrowser, QSizePolicy, QColorDialog
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QFrame, QLabel, QPushButton, QCheckBox, QLineEdit, QTextBrowser, QSizePolicy
 from managers.localization_manager import localization_manager, tr
 from ui.widgets.common.custom_controls import NoScrollComboBox
 
@@ -89,6 +90,25 @@ class SettingsViewBuilder:
         launch_via_steam_checkbox = QCheckBox(tr('ui.steam_launch'))
         launch_via_steam_checkbox.setToolTip("<html><body style='white-space: normal;'>" + tr('tooltips.steam') + '</body></html>')
         settings_center_container.addWidget(launch_via_steam_checkbox, alignment=Qt.AlignmentFlag.AlignHCenter)
+        use_portproton_checkbox = QCheckBox(tr('ui.use_portproton'))
+        use_portproton_checkbox.setToolTip("<html><body style='white-space: normal;'>" + tr('tooltips.portproton') + '</body></html>')
+        use_portproton_checkbox.setVisible(platform.system() == 'Linux')
+        settings_center_container.addWidget(use_portproton_checkbox, alignment=Qt.AlignmentFlag.AlignHCenter)
+        select_portproton_path_button = QPushButton(tr('buttons.select_portproton_path'))
+        select_portproton_path_button.setVisible(platform.system() == 'Linux')
+        select_portproton_path_button.setFixedWidth(153)
+        portproton_path_label = QLabel(tr('ui.file_not_selected'))
+        portproton_path_label.setFixedHeight(20)
+        portproton_frame = QFrame()
+        portproton_layout = QVBoxLayout(portproton_frame)
+        portproton_layout.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+        portproton_layout.addWidget(select_portproton_path_button, alignment=Qt.AlignmentFlag.AlignHCenter)
+        portproton_layout.addWidget(portproton_path_label, alignment=Qt.AlignmentFlag.AlignHCenter)
+        portproton_frame.setVisible(False)
+        if platform.system() != 'Linux':
+            portproton_frame.setVisible(False)
+            use_portproton_checkbox.setVisible(False)
+        settings_center_container.addWidget(portproton_frame, alignment=Qt.AlignmentFlag.AlignHCenter)
         use_custom_executable_checkbox = QCheckBox(tr('ui.custom_executable'))
         use_custom_executable_checkbox.setToolTip("<html><body style='white-space: normal;'>" + tr('tooltips.custom_exe') + '</body></html>')
         settings_center_container.addWidget(use_custom_executable_checkbox, alignment=Qt.AlignmentFlag.AlignHCenter)
@@ -106,6 +126,9 @@ class SettingsViewBuilder:
         change_path_button = QPushButton()
         change_path_button.setFixedWidth(300)
         settings_center_container.addWidget(change_path_button, alignment=Qt.AlignmentFlag.AlignHCenter)
+        open_deltahub_folder_button = QPushButton(tr('buttons.open_deltahub_folder'))
+        open_deltahub_folder_button.setFixedWidth(300)
+        settings_center_container.addWidget(open_deltahub_folder_button, alignment=Qt.AlignmentFlag.AlignHCenter)
         customization_button = QPushButton(tr('tags.customization'))
         customization_button.setFixedWidth(200)
         reset_button = QPushButton(tr('buttons.reset_settings'))
@@ -125,11 +148,16 @@ class SettingsViewBuilder:
         self.widgets['fullscreen_checkbox'] = fullscreen_checkbox
         self.widgets['hide_library_filters_checkbox'] = hide_library_filters_checkbox
         self.widgets['launch_via_steam_checkbox'] = launch_via_steam_checkbox
+        self.widgets['use_portproton_checkbox'] = use_portproton_checkbox
+        self.widgets['select_portproton_path_button'] = select_portproton_path_button
+        self.widgets['portproton_path_label'] = portproton_path_label
+        self.widgets['portproton_frame'] = portproton_frame
         self.widgets['use_custom_executable_checkbox'] = use_custom_executable_checkbox
         self.widgets['select_custom_executable_button'] = select_custom_executable_button
         self.widgets['custom_executable_path_label'] = custom_executable_path_label
         self.widgets['custom_exe_frame'] = custom_exe_frame
         self.widgets['change_path_button'] = change_path_button
+        self.widgets['open_deltahub_folder_button'] = open_deltahub_folder_button
         self.widgets['customization_button'] = customization_button
         self.widgets['settings_customization_button'] = customization_button
         self.widgets['reset_button'] = reset_button

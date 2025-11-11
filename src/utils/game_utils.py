@@ -2,7 +2,11 @@ import os
 import platform
 import psutil
 from pathlib import Path
+from typing import TYPE_CHECKING
 from config.constants import GAME_PROCESS_NAMES
+if TYPE_CHECKING:
+    from models.game_modes import GameMode
+    from core.app_state import AppState
 
 
 def is_game_running():
@@ -23,7 +27,10 @@ def is_valid_save_path(path: str) -> bool:
 def is_valid_mac_game_path(path: str, skip_data_check: bool, game_type: str) -> bool:
     app_path = Path(path)
     if not path.endswith('.app'):
-        app_names = ('UNDERTALE.app',) if game_type == 'undertale' else ('DELTARUNE.app', 'DELTARUNEdemo.app')
+        if game_type == 'undertale' or game_type == 'undertaleyellow':
+            app_names = ('UNDERTALE.app',)
+        else:
+            app_names = ('DELTARUNE.app', 'DELTARUNEdemo.app')
         app_path = next((app_path / name for name in app_names if (app_path / name).is_dir()), None)
     if not app_path or not app_path.is_dir():
         return False
@@ -47,5 +54,41 @@ def is_valid_game_path(path: str, skip_data_check: bool = False, game_type: str 
         return False
     if platform.system() == 'Darwin':
         return is_valid_mac_game_path(path, skip_data_check, game_type)
-    executables = ('UNDERTALE.exe', 'UNDERTALE') if game_type == 'undertale' else ('DELTARUNE.exe', 'DELTARUNE')
+    if game_type == 'undertale' or game_type == 'undertaleyellow':
+        if game_type == 'undertaleyellow':
+            executables = ('Undertale Yellow.exe', 'Undertale Yellow', 'UNDERTALE.exe', 'UNDERTALE')
+        else:
+            executables = ('UNDERTALE.exe', 'UNDERTALE')
+    else:
+        executables = ('DELTARUNE.exe', 'DELTARUNE')
     return any((os.path.isfile(os.path.join(path, exe)) for exe in executables))
+
+
+def is_demo_mode(game_mode: 'GameMode') -> bool:
+    from models.game_modes import DemoGameMode
+    return isinstance(game_mode, DemoGameMode)
+
+
+def is_undertale_mode(game_mode: 'GameMode') -> bool:
+    from models.game_modes import UndertaleGameMode
+    return isinstance(game_mode, UndertaleGameMode)
+
+
+def is_undertale_yellow_mode(game_mode: 'GameMode') -> bool:
+    from models.game_modes import UndertaleYellowGameMode
+    return isinstance(game_mode, UndertaleYellowGameMode)
+
+
+def get_target_chapter_id(app_state: 'AppState', slot_id: int) -> int:
+    from models.game_modes import DemoGameMode, UndertaleGameMode, UndertaleYellowGameMode
+    from config.constants import SLOT_ID_DEMO, SLOT_ID_UNDERTALE, SLOT_ID_UNDERTALE_YELLOW, SLOT_ID_UNIVERSAL
+    if isinstance(app_state.game_mode, DemoGameMode):
+        return SLOT_ID_DEMO
+    elif isinstance(app_state.game_mode, UndertaleGameMode):
+        return SLOT_ID_UNDERTALE
+    elif isinstance(app_state.game_mode, UndertaleYellowGameMode):
+        return SLOT_ID_UNDERTALE_YELLOW
+    elif app_state.current_mode == 'chapter':
+        return slot_id
+    else:
+        return SLOT_ID_UNIVERSAL

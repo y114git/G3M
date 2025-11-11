@@ -6,8 +6,9 @@ from managers.localization_manager import tr
 
 class ScreenshotsCarousel(QWidget):
 
-    def __init__(self, urls: list[str], parent=None):
+    def __init__(self, urls: list[str], parent=None, app_state=None):
         super().__init__(parent)
+        self.app_state = app_state
         self.urls = [u for u in urls if isinstance(u, str) and u.startswith(('http://', 'https://'))][:10]
         self.index = 0
         self._images = [None] * len(self.urls)
@@ -84,9 +85,13 @@ class ScreenshotsCarousel(QWidget):
                 if w is not None:
                     w.setParent(None)
         self._dot_labels = []
+        from ui.common.styling import get_theme_color
+        text_color = 'white'
+        if self.app_state and hasattr(self.app_state, 'local_config'):
+            text_color = get_theme_color(self.app_state.local_config, 'text', 'white')
         for i in range(len(self.urls)):
             lbl = QLabel('●' if i == self.index else '○')
-            lbl.setStyleSheet('color: white; font-size: 14px;')
+            lbl.setStyleSheet(f'color: {text_color}; font-size: 14px;')
             self._dot_labels.append(lbl)
             self.dots_layout.addWidget(lbl)
 

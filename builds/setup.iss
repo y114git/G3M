@@ -1,5 +1,5 @@
 #define AppName        "DELTAHUB"
-#define AppVersion     "2.1.3"
+#define AppVersion     "2.2.0"
 #define AppExeName     "DELTAHUB.exe"
 #define AppIcon        "..\\src\\assets\\icons\\icon.ico"
 #define AppSmallIcon   "..\\src\\assets\\icons\\icon_small.bmp"
@@ -52,8 +52,8 @@ begin
 
   if (Win.Major < 10) or ((Win.Major = 10) and (Win.Build < 17763)) then
   begin
-    MsgBox('DELTAHUB поддерживает только Windows 10 1809 и выше.'#13#10 +
-           'Установка будет прервана.', mbCriticalError, MB_OK);
+    MsgBox('DELTAHUB supports only Windows 10 1809 and higher.'#13#10 +
+           'Installation will be cancelled.', mbCriticalError, MB_OK);
     Result := False;
     Exit;
   end

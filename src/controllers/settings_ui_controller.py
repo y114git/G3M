@@ -1,7 +1,7 @@
 from PyQt6.QtWidgets import QWidget
 from managers.localization_manager import tr
 from config.constants import UI_COLORS, SLOT_ID_UNIVERSAL
-from models.game_modes import DemoGameMode, UndertaleGameMode, FullGameMode
+from models.game_modes import DemoGameMode, UndertaleGameMode, UndertaleYellowGameMode, FullGameMode
 
 
 class SettingsUiController:
@@ -20,8 +20,6 @@ class SettingsUiController:
         else:
             self.app_state.is_settings_view = not self.app_state.is_settings_view
             if not self.app_state.is_settings_view:
-                if self.app_state.is_save_manager_view:
-                    self.app.save_ui.show_save_manager()
                 if self.app_state.is_changelog_view:
                     self.app_state.is_changelog_view = False
         if self.app_state.is_settings_view:
@@ -84,6 +82,10 @@ class SettingsUiController:
         callbacks = {'migrate_config': lambda: (self.app._load_local_data(), self.settings_manager.migrate_config_if_needed())}
         self.settings_manager.on_reset_settings_click(callbacks)
         self.app.launch_via_steam_checkbox.setChecked(False)
+        if hasattr(self.app, 'use_portproton_checkbox') and self.app.use_portproton_checkbox:
+            self.app.use_portproton_checkbox.setChecked(False)
+            if hasattr(self.app, '_update_portproton_ui'):
+                self.app._update_portproton_ui()
         self.app.use_custom_executable_checkbox.setChecked(False)
         self.app.chapter_mode_checkbox.setChecked(False)
         self.app.beta_updates_checkbox.setChecked(False)
@@ -115,10 +117,16 @@ class SettingsUiController:
             self.app_state.game_mode = DemoGameMode()
         elif game_type == 'undertale':
             self.app_state.game_mode = UndertaleGameMode()
+        elif game_type == 'undertaleyellow':
+            self.app_state.game_mode = UndertaleYellowGameMode()
         else:
             self.app_state.game_mode = FullGameMode()
         self.app_state.local_config['selected_game_type'] = game_type
         self.settings_manager.write_local_config()
+        if hasattr(self.app, '_update_saves_button_state'):
+            self.app._update_saves_button_state()
+        if hasattr(self.app, '_update_checkbox_visibility'):
+            self.app._update_checkbox_visibility()
 
     def on_chapter_mode_changed(self, state):
         game_type = self.app.game_type_combo.currentData()
@@ -164,6 +172,7 @@ class SettingsUiController:
             self.app.showFullScreen()
         else:
             self.app.showNormal()
+        self.settings_manager.save_window_geometry(self.app)
 
     def on_toggle_steam_launch(self, state=None):
         is_steam_launch = self.app.launch_via_steam_checkbox.isChecked()
@@ -171,11 +180,17 @@ class SettingsUiController:
             direct_launch_slot_id = self.app_state.local_config.get('direct_launch_slot_id', SLOT_ID_UNIVERSAL)
             is_chapter_mode = self.app_state.current_mode == 'chapter'
             if direct_launch_slot_id >= 0 and is_chapter_mode:
-                self.feedback_manager.show_warning('ui.steam_launch', tr('ui.steam_launch_direct_conflict'))
+                self.feedback_manager.show_message('warning', 'ui.steam_launch', tr('ui.steam_launch_direct_conflict'))
                 self.app.launch_via_steam_checkbox.setChecked(False)
                 return
         self.settings_manager.on_toggle_steam_launch(is_steam_launch)
         self.app._update_custom_executable_ui()
+
+    def on_toggle_portproton(self):
+        use_portproton = self.app.use_portproton_checkbox.isChecked() if hasattr(self.app, 'use_portproton_checkbox') and self.app.use_portproton_checkbox else False
+        self.settings_manager.on_toggle_portproton(use_portproton)
+        if hasattr(self.app, '_update_portproton_ui'):
+            self.app._update_portproton_ui()
 
     def on_toggle_custom_executable(self):
         use_custom = self.app.use_custom_executable_checkbox.isChecked()

@@ -2,7 +2,11 @@ import os
 import logging
 
 # --- Plugin Metadata ---
-PLUGIN_NAME = "background_logger_name"
+PLUGIN_ID = "background_event_logger"  # Unique plugin identifier (used for config prefixes)
+PLUGIN_NAME = "background_logger_name"  # Plugin display name (localization key)
+VERSION = "1.0.0"
+AUTHOR = "DELTAHUB"  # Plugin author (optional, displayed in plugin plaque)
+DESCRIPTION = "Logs game launch and exit events to a file"
 TAB_HIDE = True
 
 # --- Localization ---

@@ -9,7 +9,7 @@ import threading
 import zipfile
 from typing import Optional
 from PyQt6.QtCore import QObject, pyqtSignal, QTimer, QByteArray
-from PyQt6.QtWidgets import QFileDialog, QApplication, QWidget
+from PyQt6.QtWidgets import QFileDialog, QWidget
 from managers.localization_manager import tr, LocalizationManager
 from config.constants import LAUNCHER_VERSION, UI_COLORS, SLOT_ID_UNIVERSAL
 from models.game_modes import DemoGameMode, UndertaleGameMode
@@ -35,7 +35,7 @@ class SettingsManager(QObject):
         try:
             with open(path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-            if isinstance(data, dict) and path.endswith('config.json'):
+            if isinstance(data, dict) and (path.endswith('mod_config.json') or (path.endswith('config.json') and 'mod_key' in data)):
                 needs_migration = False
                 if 'chapters' in data and 'files' not in data:
                     data['files'] = data['chapters']
@@ -48,6 +48,16 @@ class SettingsManager(QObject):
                         data['modgame'] = 'deltarune'
                     del data['is_demo_mod']
                     needs_migration = True
+                if 'tags' in data:
+                    tags = data['tags']
+                    if isinstance(tags, list):
+                        if 'translation' in tags:
+                            tags = ['textedit' if tag == 'translation' else tag for tag in tags]
+                            data['tags'] = tags
+                            needs_migration = True
+                    elif tags == 'translation':
+                        data['tags'] = 'textedit'
+                        needs_migration = True
                 if needs_migration:
                     self.write_json(path, data)
             return data
@@ -79,16 +89,20 @@ class SettingsManager(QObject):
         if self.parent_widget and hasattr(self.parent_widget, '_handle_permission_error'):
             self.parent_widget._handle_permission_error(directory)
         else:
-            self.feedback_manager.show_error('errors.permission_denied', directory)
+            self.feedback_manager.show_message('error', 'errors.no_write_permission_for', path=directory)
 
     def write_local_config(self):
         self.write_json(self.app_state.config_path, self.app_state.local_config)
 
     def migrate_config_if_needed(self):
         self.app_state.local_config['cache_format_version'] = LAUNCHER_VERSION
-        defaults = {'game_path': '', 'last_selected': {}, 'use_custom_executable': False, 'demo_game_path': '', 'launch_via_steam': False, 'direct_launch_slot_id': SLOT_ID_UNIVERSAL, 'demo_mode_enabled': False, 'chapter_mode_enabled': False, 'custom_background_path': '', 'custom_executable_path': '', 'background_disabled': False, 'custom_color_background': '', 'custom_color_button': '', 'custom_color_border': '', 'custom_color_button_hover': '', 'custom_color_text': '', 'custom_color_version_text': '', 'beta_updates_enabled': False}
+        defaults = {'game_path': '', 'last_selected': {}, 'use_custom_executable': False, 'demo_game_path': '', 'launch_via_steam': False, 'use_portproton': False, 'portproton_path': '', 'direct_launch_slot_id': SLOT_ID_UNIVERSAL, 'demo_mode_enabled': False, 'chapter_mode_enabled': False, 'custom_background_path': '', 'custom_executable_path': '', 'background_disabled': False, 'custom_color_background': '', 'custom_color_button': '', 'custom_color_border': '', 'custom_color_button_hover': '', 'custom_color_text': '', 'custom_color_version_text': '', 'beta_updates_enabled': False}
         for key, value in defaults.items():
             self.app_state.local_config.setdefault(key, value)
+        if 'disable_splash' not in self.app_state.local_config:
+            self.app_state.local_config['disable_splash'] = False
+        if 'first_launch_splash_shown' not in self.app_state.local_config:
+            self.app_state.local_config['first_launch_splash_shown'] = False
         self.write_local_config()
 
     def on_language_changed(self, language_code: str):
@@ -119,6 +133,21 @@ class SettingsManager(QObject):
         self.write_local_config()
         self.settings_changed.emit()
 
+    def on_toggle_portproton(self, enabled: bool):
+        self.app_state.local_config['use_portproton'] = enabled
+        self.write_local_config()
+        self.settings_changed.emit()
+
+    def select_portproton_path(self) -> Optional[str]:
+        dlg_title = tr('ui.select_portproton_path')
+        filepath, _ = QFileDialog.getOpenFileName(self.parent_widget, dlg_title)
+        if filepath:
+            self.app_state.local_config['portproton_path'] = filepath
+            self.write_local_config()
+            self.settings_changed.emit()
+            return filepath
+        return None
+
     def on_toggle_custom_executable(self, enabled: bool):
         self.app_state.local_config['use_custom_executable'] = enabled
         if not enabled:
@@ -146,17 +175,21 @@ class SettingsManager(QObject):
         self.write_local_config()
 
     def prompt_for_game_path(self, is_initial=False) -> bool:
+        from models.game_modes import UndertaleYellowGameMode
         if isinstance(self.app_state.game_mode, DemoGameMode):
             title = tr('dialogs.select_demo_folder')
             message = tr('dialogs.demo_not_found')
         elif isinstance(self.app_state.game_mode, UndertaleGameMode):
             title = tr('dialogs.select_undertale_folder')
             message = tr('dialogs.undertale_not_found')
+        elif isinstance(self.app_state.game_mode, UndertaleYellowGameMode):
+            title = tr('dialogs.select_undertaleyellow_folder')
+            message = tr('dialogs.undertaleyellow_not_found')
         else:
             title = tr('dialogs.select_deltarune_folder')
             message = tr('dialogs.deltarune_not_found')
         if is_initial:
-            self.feedback_manager.show_info('dialogs.path_not_found', tr('dialogs.game_path_instruction', message=message))
+            self.feedback_manager.show_message('info', 'dialogs.path_not_found', tr('dialogs.game_path_instruction', message=message))
         if platform.system() == 'Darwin':
             path, _ = QFileDialog.getOpenFileName(self.parent_widget, title, '', 'Application bundle (*.app);;All files (*)')
             if not path:
@@ -166,7 +199,7 @@ class SettingsManager(QObject):
         if path:
             corrected_path = path
             if platform.system() == 'Darwin' and (not path.endswith('.app')):
-                if isinstance(self.app_state.game_mode, UndertaleGameMode):
+                if isinstance(self.app_state.game_mode, UndertaleGameMode) or isinstance(self.app_state.game_mode, UndertaleYellowGameMode):
                     app_names = ('UNDERTALE.app',)
                 else:
                     app_names = ('DELTARUNE.app', 'DELTARUNEdemo.app')
@@ -177,6 +210,8 @@ class SettingsManager(QObject):
                         break
             if isinstance(self.app_state.game_mode, UndertaleGameMode):
                 game_type = 'undertale'
+            elif isinstance(self.app_state.game_mode, UndertaleYellowGameMode):
+                game_type = 'undertaleyellow'
             else:
                 game_type = 'deltarune'
             if is_valid_game_path(corrected_path, False, game_type):
@@ -186,7 +221,7 @@ class SettingsManager(QObject):
                 self.settings_changed.emit()
                 return True
             else:
-                self.feedback_manager.show_warning('dialogs.invalid_folder', tr('dialogs.invalid_game_folder'))
+                self.feedback_manager.show_message('warning', 'dialogs.invalid_folder', tr('dialogs.invalid_game_folder'))
         return False
 
     def on_background_button_click(self):
@@ -212,32 +247,37 @@ class SettingsManager(QObject):
                             os.remove(p)
                     except Exception:
                         pass
-                self.feedback_manager.show_info('dialogs.success', tr('dialogs.background_music_removed'))
+                self.feedback_manager.show_message('info', 'dialogs.success', tr('dialogs.background_music_removed'))
                 self.theme_changed.emit()
             except Exception:
-                self.feedback_manager.show_warning('errors.error', tr('errors.remove_background_music_failed'))
+                self.feedback_manager.show_message('warning', 'errors.error', tr('errors.remove_background_music_failed'))
         else:
             file_path, _ = QFileDialog.getOpenFileName(self.parent_widget, tr('dialogs.select_background_music'), '', 'Audio Files (*.mp3 *.wav)')
             if file_path:
                 lower = file_path.lower()
                 if not (lower.endswith('.mp3') or lower.endswith('.wav')):
-                    self.feedback_manager.show_warning('errors.error', tr('errors.can_select_only_mp3_wav'))
+                    self.feedback_manager.show_message('warning', 'errors.error', tr('errors.can_select_only_mp3_wav'))
                     return
                 try:
+                    import logging
                     os.makedirs(self.app_state.config_dir, exist_ok=True)
                     ext = '.mp3' if lower.endswith('.mp3') else '.wav'
                     dest_path = os.path.join(self.app_state.config_dir, f'custom_background_music{ext}')
+                    logging.info(f'[SettingsManager] Copying background music from {file_path} to {dest_path}')
                     shutil.copy2(file_path, dest_path)
-                    self.feedback_manager.show_info('dialogs.success', tr('dialogs.background_music_selected'))
+                    logging.info(f'[SettingsManager] Background music copied successfully, file exists: {os.path.exists(dest_path)}')
+                    self.feedback_manager.show_message('info', 'dialogs.success', tr('dialogs.background_music_selected'))
                     self.theme_changed.emit()
-                except Exception:
-                    self.feedback_manager.show_warning('errors.error', tr('errors.copy_background_music_failed'))
+                except Exception as e:
+                    import logging
+                    logging.error(f'[SettingsManager] Failed to copy background music: {e}', exc_info=True)
+                    self.feedback_manager.show_message('warning', 'errors.error', tr('errors.copy_background_music_failed'))
 
     def on_startup_sound_button_click(self):
         mp3 = os.path.join(self.app_state.config_dir, 'custom_startup_sound.mp3')
         wav = os.path.join(self.app_state.config_dir, 'custom_startup_sound.wav')
         existing = ''
-        if hasattr(self.parent_widget, 'customization_manager'):
+        if self.parent_widget and hasattr(self.parent_widget, 'customization_manager'):
             existing = self.parent_widget.customization_manager.get_startup_sound_path()
         elif os.path.exists(mp3):
             existing = mp3
@@ -251,26 +291,26 @@ class SettingsManager(QObject):
                             os.remove(p)
                     except Exception:
                         pass
-                self.feedback_manager.show_info('dialogs.success', tr('dialogs.startup_sound_removed'))
+                self.feedback_manager.show_message('info', 'dialogs.success', tr('dialogs.startup_sound_removed'))
                 self.theme_changed.emit()
             except Exception:
-                self.feedback_manager.show_warning('errors.error', tr('errors.remove_startup_sound_failed'))
+                self.feedback_manager.show_message('warning', 'errors.error', tr('errors.remove_startup_sound_failed'))
         else:
             file_path, _ = QFileDialog.getOpenFileName(self.parent_widget, tr('dialogs.select_startup_sound'), '', 'Audio Files (*.mp3 *.wav)')
             if file_path:
                 lower = file_path.lower()
                 if not (lower.endswith('.mp3') or lower.endswith('.wav')):
-                    self.feedback_manager.show_warning('errors.error', tr('errors.can_select_only_mp3_wav'))
+                    self.feedback_manager.show_message('warning', 'errors.error', tr('errors.can_select_only_mp3_wav'))
                     return
                 try:
                     os.makedirs(self.app_state.config_dir, exist_ok=True)
                     ext = '.mp3' if lower.endswith('.mp3') else '.wav'
                     dest = os.path.join(self.app_state.config_dir, f'custom_startup_sound{ext}')
                     shutil.copy2(file_path, dest)
-                    self.feedback_manager.show_info('dialogs.success', tr('dialogs.startup_sound_selected'))
+                    self.feedback_manager.show_message('info', 'dialogs.success', tr('dialogs.startup_sound_selected'))
                     self.theme_changed.emit()
                 except Exception:
-                    self.feedback_manager.show_warning('errors.error', tr('errors.copy_startup_sound_failed'))
+                    self.feedback_manager.show_message('warning', 'errors.error', tr('errors.copy_startup_sound_failed'))
 
     def is_valid_hex_color(self, s: str) -> bool:
         return bool(re.fullmatch('#[0-9a-fA-F]{6}', s or ''))
@@ -298,19 +338,26 @@ class SettingsManager(QObject):
                 zipf.write(bg_path, f'background{os.path.splitext(bg_path)[1]}')
             music_path = None
             sound_path = None
-            if hasattr(self.parent_widget, 'customization_manager'):
+            if self.parent_widget and hasattr(self.parent_widget, 'customization_manager'):
                 music_path = self.parent_widget.customization_manager.get_background_music_path() or None
                 sound_path = self.parent_widget.customization_manager.get_startup_sound_path() or None
             if music_path and os.path.exists(music_path):
                 zipf.write(music_path, f'background_music{os.path.splitext(music_path)[1]}')
             if sound_path and os.path.exists(sound_path):
                 zipf.write(sound_path, f'startup_sound{os.path.splitext(sound_path)[1]}')
-        self.feedback_manager.show_info('dialogs.success', tr('dialogs.theme_exported_success'))
+        self.feedback_manager.show_message('info', 'dialogs.success', tr('dialogs.theme_exported_success'))
 
     def import_theme(self):
-        theme_file_path, _ = QFileDialog.getOpenFileName(self.parent_widget, tr('dialogs.import_theme_title'), '', f"{tr('file_descriptions.theme_files')} (*.dhtheme)")
-        if not theme_file_path:
-            return
+        from ui.dialogs.import_dialog import ImportDialog
+        from PyQt6.QtWidgets import QDialog
+        dialog = ImportDialog(self.parent_widget, self.feedback_manager, 'themes', '*.dhtheme')
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            if dialog.import_method == 'file' and dialog.selected_file:
+                self._install_theme_from_file(dialog.selected_file)
+            elif dialog.import_method == 'url' and dialog.selected_url:
+                self._install_theme_from_url(dialog.selected_url)
+
+    def _install_theme_from_file(self, theme_file_path: str):
         try:
             with zipfile.ZipFile(theme_file_path, 'r') as zipf:
                 if 'theme.json' not in zipf.namelist():
@@ -338,13 +385,49 @@ class SettingsManager(QObject):
                             shutil.copy2(src_path, os.path.join(self.app_state.config_dir, f'custom_startup_sound{os.path.splitext(filename)[1]}'))
             self.write_local_config()
             self.app_state.local_config['first_launch_splash_shown'] = True
-            self.app_state.local_config['disable_splash'] = True
+            if 'disable_splash' in theme_settings:
+                self.app_state.local_config['disable_splash'] = theme_settings['disable_splash']
+            elif 'disable_splash' not in self.app_state.local_config:
+                self.app_state.local_config['disable_splash'] = True
             self.write_local_config()
             self.theme_changed.emit()
             self.settings_changed.emit()
-            self.feedback_manager.show_info('dialogs.success', tr('dialogs.theme_imported_success'))
+            self.feedback_manager.show_message('info', 'dialogs.success', tr('dialogs.theme_imported_success'))
         except Exception as e:
-            self.feedback_manager.show_error('dialogs.error', tr('dialogs.theme_import_failed', error=str(e)))
+            self.feedback_manager.show_message('error', 'dialogs.error', tr('dialogs.theme_import_failed', error=str(e)))
+
+    def _install_theme_from_url(self, url: str):
+        try:
+            from workers.theme_install_worker import ThemeInstallWorker
+            worker = ThemeInstallWorker(url, self.app_state.config_dir, self.app_state, self, self.parent_widget)
+            worker.status.connect(lambda msg, color: self.feedback_manager.update_status(msg, color))
+            worker.progress.connect(lambda p: setattr(self.app_state, 'progress_bar_value', p))
+            worker.finished.connect(self._on_theme_install_finished)
+            self.app_state.is_installing = True
+            self.app_state.progress_bar_visible = True
+            self.app_state.progress_bar_value = 0
+            self.app_state.current_task = worker
+            worker.start()
+        except Exception as e:
+            import logging
+            logging.error(f'SettingsManager: Error installing theme from URL: {e}', exc_info=True)
+            self.feedback_manager.show_message('error', 'errors.error', tr('themes.installation_error', error=str(e)))
+
+    def _on_theme_install_finished(self, success: bool, message: str):
+        self.app_state.is_installing = False
+        self.app_state.progress_bar_visible = False
+        self.app_state.progress_bar_value = 0
+        self.app_state.clear_current_task()
+        if success:
+            self.theme_changed.emit()
+            self.settings_changed.emit()
+            self.feedback_manager.update_status(message, 'green')
+            self.feedback_manager.show_message('info', 'dialogs.success', message)
+        else:
+            import logging
+            logging.warning(f'Theme installation failed: {message}')
+            self.feedback_manager.update_status(message or tr('errors.error'), 'red')
+            self.feedback_manager.show_message('error', 'errors.error', message)
 
     def on_reset_settings_click(self, callbacks: dict):
         if not self.feedback_manager.ask_question('dialogs.reset_settings_confirm_title', 'dialogs.reset_settings_confirm_text', '', False):
@@ -365,7 +448,7 @@ class SettingsManager(QObject):
             callbacks['migrate_config']()
         self.theme_changed.emit()
         self.settings_changed.emit()
-        self.feedback_manager.show_info('dialogs.success', tr('status.settings_reset_success'))
+        self.feedback_manager.show_message('info', 'dialogs.success', tr('status.settings_reset_success'))
 
     def disable_direct_launch(self):
         self.app_state.local_config['direct_launch_slot_id'] = SLOT_ID_UNIVERSAL

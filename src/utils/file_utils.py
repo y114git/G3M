@@ -10,10 +10,6 @@ import tarfile
 import lzma
 import logging
 from pathlib import Path
-import requests
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
-from config.constants import BROWSER_HEADERS
 from utils.network_utils import download_file, get_filename_from_url, get_session
 import errno
 
@@ -35,10 +31,10 @@ def download_and_extract_archive(url: str, target_dir: str, progress_callback=No
 
 def extract_archive(archive_path: str, target_dir: str, fname: str | None = None, is_game_installation: bool = False, size_cap_bytes: int | None = None) -> None:
     os.makedirs(target_dir, exist_ok=True)
-    low = (fname or os.path.basename(archive_path)).lower()
-    with tempfile.TemporaryDirectory(prefix='deltahub-extract-') as temp_out:
-        _extract_archive_raw(archive_path, low, temp_out)
-        if size_cap_bytes is not None:
+    if size_cap_bytes is not None:
+        low = (fname or os.path.basename(archive_path)).lower()
+        with tempfile.TemporaryDirectory(prefix='deltahub-extract-') as temp_out:
+            _extract_archive_raw(archive_path, low, temp_out)
             total = 0
             for root, _, files in os.walk(temp_out):
                 for f in files:
@@ -48,8 +44,76 @@ def extract_archive(archive_path: str, target_dir: str, fname: str | None = None
                         pass
             if total > size_cap_bytes:
                 raise IOError('extracted_content_too_large')
-        _move_tree_safely(temp_out, target_dir)
-        _cleanup_extracted_archive(target_dir, is_game_installation)
+            _move_tree_safely(temp_out, target_dir)
+            _cleanup_extracted_archive(target_dir, is_game_installation)
+    else:
+        extract_archive_with_backup(archive_path, target_dir, backup_temp_dir=None, backup_files=None, add_mod_dir_callback=None, backup_file_callback=None, update_manifest_callback=None, status_callback=None)
+
+
+def extract_archive_with_backup(archive_path: str, target_dir: str, backup_temp_dir: str | None = None, backup_files: dict | None = None, add_mod_dir_callback=None, backup_file_callback=None, update_manifest_callback=None, status_callback=None) -> list[str]:
+    import platform
+    extracted_files = []
+    file_lower = archive_path.lower()
+    try:
+        with tempfile.TemporaryDirectory(prefix='deltahub-extract-') as temp_dir:
+            _extract_archive_raw(archive_path, file_lower, temp_dir)
+            _cleanup_extracted_archive(temp_dir, False)
+            for root, dirs, files in os.walk(temp_dir):
+                for file in files:
+                    source_file = os.path.join(root, file)
+                    rel_path = os.path.relpath(source_file, temp_dir)
+                    target_file = os.path.join(target_dir, rel_path)
+                    file_lower = file.lower()
+                    if platform.system() == 'Darwin':
+                        if file_lower.endswith('.win'):
+                            name_without_ext = os.path.splitext(file)[0]
+                            target_file = os.path.join(os.path.dirname(target_file), name_without_ext + '.ios')
+                    elif file_lower.endswith('.ios'):
+                        name_without_ext = os.path.splitext(file)[0]
+                        target_file = os.path.join(os.path.dirname(target_file), name_without_ext + '.win')
+                    target_dirname = os.path.dirname(target_file)
+                    os.makedirs(target_dirname, exist_ok=True)
+                    if add_mod_dir_callback:
+                        try:
+                            add_mod_dir_callback(target_dirname)
+                        except Exception as e:
+                            logging.error(f'extract_archive_with_backup: add_mod_dir_callback failed: {e}', exc_info=True)
+                    tmp_target = target_file + '.tmp'
+                    try:
+                        shutil.copy2(source_file, tmp_target)
+                        if os.path.exists(target_file) and backup_temp_dir and (backup_files is not None):
+                            backup_rel_path = os.path.relpath(target_file, target_dir)
+                            backup_file_path = os.path.join(backup_temp_dir, backup_rel_path)
+                            os.makedirs(os.path.dirname(backup_file_path), exist_ok=True)
+                            shutil.move(target_file, backup_file_path)
+                            backup_files[target_file] = backup_file_path
+                            if backup_file_callback:
+                                try:
+                                    backup_file_callback(target_file, backup_file_path)
+                                except Exception as e:
+                                    logging.error(f'extract_archive_with_backup: backup_file_callback failed: {e}', exc_info=True)
+                            if update_manifest_callback:
+                                try:
+                                    update_manifest_callback({target_file: backup_file_path}, None, None)
+                                except Exception as e:
+                                    logging.error(f'extract_archive_with_backup: update_manifest_callback failed: {e}', exc_info=True)
+                        os.replace(tmp_target, target_file)
+                        extracted_files.append(target_file)
+                    finally:
+                        try:
+                            if os.path.exists(tmp_target):
+                                os.remove(tmp_target)
+                        except Exception as e:
+                            logging.warning(f'extract_archive_with_backup: tmp cleanup failed: {e}', exc_info=True)
+    except Exception as e:
+        error_msg = f'Archive unpack error: {os.path.basename(archive_path)}: {e}'
+        if status_callback:
+            try:
+                status_callback(error_msg)
+            except Exception:
+                pass
+        logging.error(f'extract_archive_with_backup: {error_msg}', exc_info=True)
+    return extracted_files
 
 
 def _extract_archive_raw(src_path: str, fname_lower: str, out_dir: str) -> None:
@@ -139,6 +203,29 @@ def _extract_lzma(tmp_path, target_dir, fname):
 
 def _cleanup_extracted_archive(target_dir: str, is_game_installation: bool = False):
     if is_game_installation:
+        try:
+            entries = list(os.listdir(target_dir))
+            if len(entries) == 1:
+                single_entry = os.path.join(target_dir, entries[0])
+                if os.path.isdir(single_entry):
+                    import logging
+                    logging.info(f'Moving contents from nested folder {single_entry} to {target_dir}')
+                    for item in os.listdir(single_entry):
+                        src = os.path.join(single_entry, item)
+                        dst = os.path.join(target_dir, item)
+                        if os.path.exists(dst):
+                            if os.path.isdir(dst):
+                                shutil.rmtree(dst)
+                            else:
+                                os.remove(dst)
+                        shutil.move(src, dst)
+                    try:
+                        os.rmdir(single_entry)
+                    except OSError:
+                        pass
+        except Exception as e:
+            import logging
+            logging.warning(f'Failed to handle nested folder structure: {e}')
         cleanup_dir_pattern = re.compile('^chapter\\d+_(windows|mac)$', re.I)
         for root, dirs, _ in os.walk(target_dir, topdown=False):
             for dir_name in dirs[:]:
@@ -154,6 +241,16 @@ def _cleanup_extracted_archive(target_dir: str, is_game_installation: bool = Fal
 
 def sanitize_filename(name: str) -> str:
     return re.sub('[\\\\/*?:"<>|]', '', name).strip()
+
+
+def remove_archive_extension(filename: str) -> str:
+    filename_lower = filename.lower()
+    if filename_lower.endswith('.tar.gz'):
+        return filename[:-7]
+    elif filename_lower.endswith('.tar.lzma'):
+        return filename[:-9]
+    else:
+        return os.path.splitext(filename)[0]
 
 
 def get_unique_mod_dir(mods_dir, mod_name):
@@ -184,6 +281,8 @@ def ensure_writable(path: str) -> bool:
 
 
 def autodetect_path(game_name: str) -> str | None:
+    if game_name == 'UNDERTALE YELLOW' or game_name == 'UndertaleYellow' or game_name == 'undertaleyellow':
+        return None
     system = platform.system()
     paths = []
     if system == 'Windows':
@@ -319,3 +418,17 @@ def get_file_filter(filter_type: str) -> str:
     description = FILTER_DESCRIPTIONS.get(filter_type, filter_type)
     all_files_desc = FILTER_DESCRIPTIONS.get('all_files', 'All files')
     return f'{description} ({extensions});;{all_files_desc} (*)'
+
+
+def run_as_admin_windows(path: str, feedback_manager) -> bool:
+    import subprocess
+    from managers.localization_manager import tr
+    from config.constants import UI_COLORS
+    script = f"import os, stat; p = r'{path}'; [os.chmod(os.path.join(r, f), os.stat(os.path.join(r, f)).st_mode | stat.S_IWRITE) for r, _, fs in os.walk(p) for f in fs] if os.path.isdir(p) else os.chmod(p, os.stat(p).st_mode | stat.S_IWRITE) if os.path.exists(p) else None"
+    command = f'Start-Process python -ArgumentList "-c \\"{script}\\"" -Verb RunAs -WindowStyle Hidden'
+    try:
+        subprocess.run(['powershell', '-Command', command], check=True, capture_output=True)
+        return True
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        feedback_manager.update_status(tr('status.permission_change_failed'), UI_COLORS['status_error'])
+        return False

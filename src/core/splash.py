@@ -1,7 +1,7 @@
 import os
+from PyQt6.QtWidgets import QSplashScreen, QLabel, QApplication
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QPixmap
-from PyQt6.QtWidgets import QSplashScreen
+from PyQt6.QtGui import QPixmap, QMovie
 from utils.path_utils import resource_path
 
 
@@ -11,16 +11,16 @@ class CustomSplashScreen(QSplashScreen):
         if pixmap:
             super().__init__(pixmap)
         else:
-            super().__init__()
+            empty_pixmap = QPixmap(550, 309)
+            empty_pixmap.fill(Qt.GlobalColor.transparent)
+            super().__init__(empty_pixmap)
         self.setWindowFlags(Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.FramelessWindowHint)
-        self.animation = None
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         if gif_path:
             self.setup_gif_animation(gif_path)
 
     def setup_gif_animation(self, gif_path):
         try:
-            from PyQt6.QtGui import QMovie
-            from PyQt6.QtWidgets import QLabel
             self.movie = QMovie(gif_path)
             if not self.movie.isValid():
                 return False
@@ -28,7 +28,6 @@ class CustomSplashScreen(QSplashScreen):
             self.movie.setSpeed(100)
             self.movie.jumpToFrame(0)
             gif_size = self.movie.currentPixmap().size()
-            from PyQt6.QtWidgets import QApplication
             screen = QApplication.primaryScreen()
             if screen:
                 screen_geom = screen.geometry()
@@ -37,8 +36,9 @@ class CustomSplashScreen(QSplashScreen):
                 target_width = 550
             ratio = gif_size.height() / gif_size.width()
             target_height = int(target_width * ratio)
-            size = QPixmap(target_width, target_height).size()
-            self.movie.setScaledSize(size)
+            if gif_size.width() != target_width or gif_size.height() != target_height:
+                size = QPixmap(target_width, target_height).size()
+                self.movie.setScaledSize(size)
             self.gif_label = QLabel(self)
             self.gif_label.setFixedSize(target_width, target_height)
             self.gif_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -47,7 +47,6 @@ class CustomSplashScreen(QSplashScreen):
             self.gif_label.hide()
             self.gif_label.setMovie(self.movie)
             self.setFixedSize(target_width, target_height)
-            self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
             self.setStyleSheet('background: transparent;')
             if screen:
                 self.move((screen_geom.width() - target_width) // 2, (screen_geom.height() - target_height) // 2)
@@ -59,7 +58,7 @@ class CustomSplashScreen(QSplashScreen):
             return False
 
     def start_gif_animation(self):
-        if hasattr(self, 'movie'):
+        if hasattr(self, 'movie') and self.movie.isValid():
             if hasattr(self, 'gif_label'):
                 self.gif_label.show()
             self.movie.start()
@@ -96,6 +95,6 @@ def create_splash():
     gif_path = resource_path('assets/images/splash.gif')
     if os.path.exists(gif_path):
         splash = CustomSplashScreen(gif_path=gif_path)
-        return splash
-    else:
-        return create_png_splash()
+        if hasattr(splash, 'movie') and splash.movie.isValid():
+            return splash
+    return create_png_splash()

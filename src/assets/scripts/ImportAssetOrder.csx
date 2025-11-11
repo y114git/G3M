@@ -1,0 +1,157 @@
+// Takes an existing text file exported from ExportAssetOrder, and uses it to reorganize the assets in the current data file.
+// Made by colinator27.
+
+using System;
+using System.IO;
+using System.Collections;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Reflection;
+using UndertaleModLib.Util;
+
+EnsureDataLoaded();
+
+if (Data.IsVersionAtLeast(2024, 11))
+{
+    ScriptWarning("This script may act erroneously on GameMaker version 2024.11 and later.");
+}
+
+// Try to find DELTAHUB root (same approach as ExportModifiedOnly.csx)
+string gm3pRoot = null;
+{
+    // Method 1: Check current working directory
+    var probe = new DirectoryInfo(Directory.GetCurrentDirectory());
+    while (probe != null)
+    {
+        if (Directory.Exists(Path.Combine(probe.FullName, "output"))) { gm3pRoot = probe.FullName; break; }
+        probe = probe.Parent;
+    }
+    // Method 2: Try data.win location (FilePath)
+    if (gm3pRoot == null && !string.IsNullOrEmpty(FilePath))
+    {
+        var dataWinDir = new DirectoryInfo(Path.GetDirectoryName(FilePath));
+        probe = dataWinDir;
+        while (probe != null)
+        {
+            if (Directory.Exists(Path.Combine(probe.FullName, "output"))) { gm3pRoot = probe.FullName; break; }
+            probe = probe.Parent;
+        }
+    }
+    // Method 3: Fallback to Assembly location (original behavior)
+    if (gm3pRoot == null)
+    {
+        var assemblyRoot = Directory.GetParent(Directory.GetParent(Assembly.GetEntryAssembly().Location));
+        if (assemblyRoot != null && Directory.Exists(Path.Combine(assemblyRoot.FullName, "output")))
+        {
+            gm3pRoot = assemblyRoot.FullName;
+        }
+    }
+}
+
+if (gm3pRoot == null)
+    throw new ScriptException("DELTAHUB root not found (no /output ancestor).");
+
+string chapterNo = File.ReadAllText(Path.Combine(gm3pRoot, "output", "Cache", "running", "chapterNumber.txt"));
+string modNo = File.ReadAllText(Path.Combine(gm3pRoot, "output", "Cache", "running", "modNumbersCache.txt"));
+string assetNamePath = Path.Combine(gm3pRoot, "output", "xDeltaCombiner", chapterNo, modNo, "Objects", "AssetOrder.txt");
+if (assetNamePath == null || !File.Exists(assetNamePath))
+    throw new ScriptException("The asset name text file was not chosen or does not exist: " + assetNamePath);
+
+string[] lines = File.ReadAllLines(@assetNamePath);
+
+void Reorganize<T>(IList<T> list, List<string> order) where T : UndertaleNamedResource, new()
+{
+    Dictionary<string, T> temp = new Dictionary<string, T>();
+    for (int i = 0; i < list.Count; i++)
+    {
+        T asset = list[i];
+        string assetName = asset.Name?.Content;
+        if (order.Contains(assetName))
+            temp[assetName] = asset;
+    }
+
+    List<T> addOrder = new List<T>();
+    for (int i = order.Count - 1; i >= 0; i--)
+    {
+        T asset;
+        try
+        {
+            if (order[i] == "(null)")
+                asset = default(T);
+            else if (int.TryParse(order[i], out int index))
+                asset = list[index];
+            else
+                asset = temp[order[i]];
+        }
+        catch (Exception e)
+        {
+            throw new ScriptException($"Missing asset with name \"{order[i]}\"");
+        }
+        addOrder.Add(asset);
+    }
+
+    foreach (T asset in addOrder)
+        list.Remove(asset);
+    foreach (T asset in addOrder)
+        list.Insert(0, asset);
+}
+
+string currentType;
+List<string> currentList = new List<string>();
+
+void SubmitList()
+{
+    if (currentList.Count == 0)
+        return;
+
+    switch (currentType)
+    {
+        case "sounds":
+            Reorganize<UndertaleSound>(Data.Sounds, currentList);
+            break;
+        case "sprites":
+            Reorganize<UndertaleSprite>(Data.Sprites, currentList);
+            break;
+        case "backgrounds":
+            Reorganize<UndertaleBackground>(Data.Backgrounds, currentList);
+            break;
+        case "paths":
+            Reorganize<UndertalePath>(Data.Paths, currentList);
+            break;
+        case "scripts":
+            Reorganize<UndertaleScript>(Data.Scripts, currentList);
+            break;
+        case "fonts":
+            Reorganize<UndertaleFont>(Data.Fonts, currentList);
+            break;
+        case "objects":
+            Reorganize<UndertaleGameObject>(Data.GameObjects, currentList);
+            break;
+        case "timelines":
+            Reorganize<UndertaleTimeline>(Data.Timelines, currentList);
+            break;
+        case "rooms":
+            Reorganize<UndertaleRoom>(Data.Rooms, currentList);
+            break;
+        case "shaders":
+            Reorganize<UndertaleShader>(Data.Shaders, currentList);
+            break;
+        case "extensions":
+            Reorganize<UndertaleExtension>(Data.Extensions, currentList);
+            break;
+    }
+}
+
+foreach (string line in lines)
+{
+    if (line.StartsWith("@@") && line.EndsWith("@@"))
+    {
+        SubmitList();
+        currentType = line.Substring(2, line.Length - 4).ToLower();
+        currentList.Clear();
+    }
+    else
+        currentList.Add(line.Trim());
+}
+SubmitList();
