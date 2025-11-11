@@ -152,12 +152,50 @@ class FetchModsThread(QThread):
                     logger.info(f'FetchModsThread: Found {len(installed_gamebanana_mod_keys)} installed GameBanana mods')
                 except Exception as e:
                     logger.warning(f'FetchModsThread: Error getting installed GameBanana mods: {e}')
+            installed_mods_with_files = {}
+            if hasattr(self.main_window, 'mod_manager'):
+                try:
+                    installed_mods_list = self.main_window.mod_manager.get_installed_mods_list()
+                    for installed_mod in installed_mods_list:
+                        mod_key = installed_mod.get('mod_key')
+                        if mod_key and installed_mod.get('files'):
+                            installed_mods_with_files[mod_key] = installed_mod
+                except Exception as e:
+                    logger.warning(f'FetchModsThread: Error getting installed mods with files: {e}')
+            existing_mods_with_files = {}
+            if hasattr(self.main_window.app_state, 'all_mods'):
+                for mod in self.main_window.app_state.all_mods:
+                    mod_key = getattr(mod, 'key', None)
+                    if mod_key and hasattr(mod, 'files') and mod.files:
+                        existing_mods_with_files[mod_key] = mod
             all_mods_filtered = []
             for mod in all_mods:
                 if hasattr(mod, 'is_local_mod') and mod.is_local_mod:
                     continue
-                all_mods_filtered.append(mod)
-            self.main_window.app_state.all_mods = all_mods_filtered + local_mods
+                mod_key = getattr(mod, 'key', None)
+                if mod_key and mod_key in existing_mods_with_files:
+                    existing_mod = existing_mods_with_files[mod_key]
+                    for attr in ['name', 'author', 'tagline', 'game_version', 'description_url', 'downloads', 'icon_url', 'is_verified', 'gamebanana_mod_id', 'gamebanana_mod_type', 'gamebanana_last_update_timestamp']:
+                        if hasattr(mod, attr):
+                            setattr(existing_mod, attr, getattr(mod, attr))
+                    all_mods_filtered.append(existing_mod)
+                elif mod_key and mod_key in installed_mods_with_files:
+                    installed_mod_config = installed_mods_with_files[mod_key]
+                    if hasattr(self.main_window, 'mod_manager'):
+                        mod_with_files = self.main_window.mod_manager.create_mod_object_from_info(installed_mod_config, all_mods_filtered)
+                        for attr in ['name', 'author', 'tagline', 'game_version', 'description_url', 'downloads', 'icon_url', 'is_verified', 'gamebanana_mod_id', 'gamebanana_mod_type', 'gamebanana_last_update_timestamp']:
+                            if hasattr(mod, attr):
+                                setattr(mod_with_files, attr, getattr(mod, attr))
+                        all_mods_filtered.append(mod_with_files)
+                    else:
+                        all_mods_filtered.append(mod)
+                else:
+                    all_mods_filtered.append(mod)
+            for local_mod in local_mods:
+                mod_key = getattr(local_mod, 'key', None)
+                if mod_key and mod_key not in [getattr(m, 'key', None) for m in all_mods_filtered]:
+                    all_mods_filtered.append(local_mod)
+            self.main_window.app_state.all_mods = all_mods_filtered
             self._update_remote_exists_flags(all_mods)
             logger.info('FetchModsThread: Mod fetch completed successfully')
             self.result.emit(True)
