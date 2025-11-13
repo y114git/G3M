@@ -71,7 +71,7 @@ def configure_logging(app_name: str, user_data_root: str) -> str:
                     pass
             except Exception as e:
                 print(f'Failed to clear log file: {e}')
-        file_handler = RotatingFileHandler(log_path, maxBytes=1000000, backupCount=3, encoding='utf-8')
+        file_handler = RotatingFileHandler(log_path, maxBytes=10000000, backupCount=3, encoding='utf-8')
         file_handler.setFormatter(fmt)
         file_handler.addFilter(secure_filter)
         root.addHandler(file_handler)
