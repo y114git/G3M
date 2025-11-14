@@ -163,8 +163,33 @@ class MultiModMerger(QObject):
             self.progress_update.emit(100, completed_msg)
             if is_modpack:
                 logging.info('Modpack creation completed successfully')
+                if self.temp_merge_dir and os.path.exists(self.temp_merge_dir):
+                    try:
+                        shutil.rmtree(self.temp_merge_dir)
+                        logging.info(f'Cleaned up temp merge directory for modpack: {self.temp_merge_dir}')
+                    except Exception as e:
+                        logging.warning(f'Failed to cleanup temp merge dir for modpack {self.temp_merge_dir}: {e}')
+                self.temp_merge_dir = None
+                self.backup_dir = None
             else:
                 logging.info('Multi-mod merge completed successfully')
+                if self.temp_merge_dir and os.path.exists(self.temp_merge_dir):
+                    try:
+                        for item in os.listdir(self.temp_merge_dir):
+                            item_path = os.path.join(self.temp_merge_dir, item)
+                            if item != 'backups':
+                                try:
+                                    if os.path.isdir(item_path):
+                                        shutil.rmtree(item_path)
+                                        logging.debug(f'Removed temp directory: {item_path}')
+                                    else:
+                                        os.remove(item_path)
+                                        logging.debug(f'Removed temp file: {item_path}')
+                                except Exception as e:
+                                    logging.warning(f'Failed to remove temp item {item_path}: {e}')
+                        logging.info(f'Cleaned up temp files from merge directory, kept backups: {self.temp_merge_dir}')
+                    except Exception as e:
+                        logging.warning(f'Failed to cleanup temp files from merge dir {self.temp_merge_dir}: {e}')
             return True
         except Exception as e:
             if is_modpack:
@@ -1363,8 +1388,23 @@ class MultiModMerger(QObject):
                     logging.warning(f'Failed to cleanup temp merge dir {self.temp_merge_dir}: {e}')
             self.temp_merge_dir = None
             self.backup_dir = None
-        else:
-            logging.debug('Skipping cleanup - backups still needed (will be cleaned up after restoration)')
+        elif self.temp_merge_dir and os.path.exists(self.temp_merge_dir):
+            try:
+                for item in os.listdir(self.temp_merge_dir):
+                    item_path = os.path.join(self.temp_merge_dir, item)
+                    if item != 'backups':
+                        try:
+                            if os.path.isdir(item_path):
+                                shutil.rmtree(item_path)
+                                logging.debug(f'Removed temp directory: {item_path}')
+                            else:
+                                os.remove(item_path)
+                                logging.debug(f'Removed temp file: {item_path}')
+                        except Exception as e:
+                            logging.warning(f'Failed to remove temp item {item_path}: {e}')
+                logging.info(f'Cleaned up temp files from merge directory, kept backups: {self.temp_merge_dir}')
+            except Exception as e:
+                logging.warning(f'Failed to cleanup temp files from merge dir {self.temp_merge_dir}: {e}')
 
     def restore_all_backups(self) -> bool:
         import json

@@ -36,13 +36,11 @@ class LoadMoreGameBananaModsThread(QThread):
                 logger.error(f'Unknown game_id: {self.game_id}')
                 self.result.emit([])
                 return
-            logger.info(f'LoadMoreGameBananaModsThread: Loading pages {self.start_page}-{self.start_page + self.num_pages - 1} for {game_name} (sort={self.sort})')
             for page in range(self.start_page, self.start_page + self.num_pages):
                 if self._cancelled:
                     break
                 mods_data, mods_needing_metadata = self.api.get_game_mods(self.game_id, page=page, per_page=GAMEBANANA_PER_PAGE, sort=self.sort, metadata_cache=self.metadata_cache)
-                if not mods_data:
-                    logger.debug(f'No mods data for {game_name} page {page}')
+                if not mods_data or len(mods_data) == 0:
                     break
                 self._mods_needing_metadata.extend(mods_needing_metadata)
                 for mod_data in mods_data:
@@ -57,7 +55,10 @@ class LoadMoreGameBananaModsThread(QThread):
                         logger.warning(f'Error converting mod data: {e}', exc_info=True)
                         continue
                 if len(mods_data) < GAMEBANANA_PER_PAGE:
-                    break
+                    if page < self.start_page + self.num_pages - 1:
+                        continue
+                    else:
+                        break
             if self._mods_needing_metadata:
                 try:
                     parent = self.parent()
@@ -79,7 +80,6 @@ class LoadMoreGameBananaModsThread(QThread):
                         logger.debug(f'LoadMoreGameBananaModsThread: Added {len(new_ids)} mod IDs to metadata loading queue')
                 except (AttributeError, RuntimeError, TypeError) as e:
                     logger.debug(f'LoadMoreGameBananaModsThread: Could not access app_state: {e} (this is OK if parent is not AppWindow)')
-            logger.info(f'LoadMoreGameBananaModsThread: Loaded {len(new_mods)} new mods, {len(self._mods_needing_metadata)} need metadata')
             self.result.emit(new_mods)
         except Exception as e:
             logger.error(f'Error loading more GameBanana mods: {e}', exc_info=True)
