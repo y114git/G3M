@@ -297,25 +297,35 @@ class InstallGameBananaModThread(QThread):
         self._session = session
         downloaded_ref = [0]
         total_size = 0
+        download_success = False
         try:
-            head_response = session.head(url, allow_redirects=True, timeout=NETWORK_TIMEOUT_HEAD)
-            total_size = int(head_response.headers.get('content-length', 0))
-        except (requests.RequestException, ValueError):
-            pass
+            try:
+                head_response = session.head(url, allow_redirects=True, timeout=NETWORK_TIMEOUT_HEAD)
+                total_size = int(head_response.headers.get('content-length', 0))
+            except (requests.RequestException, ValueError):
+                pass
 
-        def progress_callback(progress):
-            if not self._cancelled:
-                self.progress.emit(progress)
+            def progress_callback(progress):
+                if not self._cancelled:
+                    self.progress.emit(progress)
 
-        def on_response(r):
-            self._active_response = r
-        try:
-            download_file(session, url, archive_path, progress_callback=progress_callback, total_size=total_size, downloaded_ref=downloaded_ref, cancel_check=lambda: self._cancelled, on_response=on_response)
-            if not self._cancelled:
-                self.progress.emit(100)
-            return archive_path
-        except RuntimeError as e:
-            if str(e) == 'download_cancelled' or self._cancelled:
-                self._cleanup_temp_files(archive_path, temp_dir)
+            def on_response(r):
+                self._active_response = r
+            try:
+                download_file(session, url, archive_path, progress_callback=progress_callback, total_size=total_size, downloaded_ref=downloaded_ref, cancel_check=lambda: self._cancelled, on_response=on_response)
+                if not self._cancelled:
+                    self.progress.emit(100)
+                download_success = True
+                return archive_path
+            except RuntimeError as e:
+                if str(e) == 'download_cancelled' or self._cancelled:
+                    self._cleanup_temp_files(archive_path, temp_dir)
+                    raise
                 raise
+        except Exception as e:
+            if not download_success:
+                try:
+                    self._cleanup_temp_files(archive_path, temp_dir)
+                except Exception:
+                    pass
             raise

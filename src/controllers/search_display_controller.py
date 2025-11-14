@@ -49,16 +49,25 @@ class SearchDisplayController:
             def do_page_change():
                 try:
                     total_mods = len(self.app_state.filtered_mods) if self.app_state.filtered_mods else 0
+                    current_page = self.app_state.current_page
+                    next_page_num = current_page + 1
+                    items_needed = next_page_num * self.app_state.mods_per_page
+                    should_load_more = False
                     if self.app_state.mods_loaded:
-                        next_page_num = self.app_state.current_page + 1
-                        items_needed = next_page_num * self.app_state.mods_per_page
                         if total_mods < items_needed:
+                            should_load_more = True
                             self._load_more_gamebanana_mods_if_needed(items_needed)
-                    if total_mods > 0 or self.app_state.gamebanana_loading:
-                        max_available_page = max(1, (total_mods - 1) // self.app_state.mods_per_page + 1) if total_mods > 0 else 1
-                        if self.app_state.current_page < max_available_page or self.app_state.gamebanana_loading:
-                            self.app_state.current_page += 1
-                            self.update_display()
+                    max_available_page = max(1, (total_mods - 1) // self.app_state.mods_per_page + 1) if total_mods > 0 else 1
+                    can_advance = False
+                    if should_load_more and self.app_state.gamebanana_loading:
+                        can_advance = True
+                    elif current_page < max_available_page:
+                        can_advance = True
+                    elif total_mods > 0 and self.app_state.gamebanana_loading:
+                        can_advance = True
+                    if can_advance:
+                        self.app_state.current_page += 1
+                        self.update_display()
                 except Exception as e:
                     logger.error(f'SearchDisplayController: Error in next_page do_page_change: {e}', exc_info=True)
             QTimer.singleShot(200, do_page_change)
@@ -73,17 +82,6 @@ class SearchDisplayController:
         self._load_more_threads = [t for t in self._load_more_threads if t and t.isRunning()]
         if self._load_more_threads:
             return
-        current_total = len(self.app_state.all_mods)
-        if current_total >= items_needed:
-            return
-        if self._last_load_attempt['items_needed'] == items_needed and self._last_load_attempt['current_total'] == current_total:
-            self._last_load_attempt['attempts'] += 1
-            if self._last_load_attempt['attempts'] >= 2:
-                logger.warning(f"Stopping load attempt after {self._last_load_attempt['attempts']} attempts with no new mods")
-                return
-        else:
-            self._last_load_attempt = {'items_needed': items_needed, 'current_total': current_total, 'attempts': 0}
-        pages_needed = 2
         selected_modgame = ''
         if hasattr(self.app, 'modgame_combo'):
             selected_modgame = self.app.modgame_combo.currentData() or ''
@@ -94,6 +92,25 @@ class SearchDisplayController:
             games_to_load = {'undertale': GAMEBANANA_GAME_IDS['undertale']}
         else:
             games_to_load = GAMEBANANA_GAME_IDS
+        games_to_load_filtered = {}
+        for game_name, game_id in games_to_load.items():
+            last_page = self.app_state.gamebanana_loaded_pages.get(game_id, 0)
+            if last_page < 50:
+                games_to_load_filtered[game_name] = game_id
+        if not games_to_load_filtered:
+            return
+        games_to_load = games_to_load_filtered
+        filtered_mods_count = len(self.app_state.filtered_mods) if self.app_state.filtered_mods else 0
+        current_total = len(self.app_state.all_mods)
+        if filtered_mods_count >= items_needed:
+            return
+        if self._last_load_attempt['items_needed'] == items_needed and self._last_load_attempt['current_total'] == current_total:
+            self._last_load_attempt['attempts'] += 1
+            if self._last_load_attempt['attempts'] >= 3:
+                return
+        else:
+            self._last_load_attempt = {'items_needed': items_needed, 'current_total': current_total, 'attempts': 0}
+        pages_needed = 2
         self.app_state.gamebanana_loading = True
         all_new_mods = []
         results_received = [0]
@@ -153,14 +170,19 @@ class SearchDisplayController:
             start_page = last_page + 1
             load_thread = LoadMoreGameBananaModsThread(game_id, start_page, num_pages=pages_needed, sort=sort_param, parent=self.app, metadata_cache=metadata_cache)
 
-            def make_on_result(gid, lp):
+            def make_on_result(gid, gname, lp, sp, pn):
 
                 def on_result(mods_list):
+                    current_loaded = self.app_state.gamebanana_loaded_pages.get(gid, 0)
                     if mods_list:
                         all_new_mods.extend(mods_list)
-                        pages_loaded = (len(mods_list) + GAMEBANANA_PER_PAGE - 1) // GAMEBANANA_PER_PAGE
-                        current_loaded = self.app_state.gamebanana_loaded_pages.get(gid, 0)
-                        self.app_state.gamebanana_loaded_pages[gid] = max(current_loaded, lp + pages_loaded)
+                        if len(mods_list) >= pn * GAMEBANANA_PER_PAGE:
+                            real_pages_loaded = pn
+                        else:
+                            pages_from_mods = (len(mods_list) + GAMEBANANA_PER_PAGE - 1) // GAMEBANANA_PER_PAGE
+                            real_pages_loaded = min(pn, max(1, pages_from_mods))
+                        new_loaded = max(current_loaded, sp + real_pages_loaded - 1)
+                        self.app_state.gamebanana_loaded_pages[gid] = new_loaded
                         if hasattr(self.app_state, 'gamebanana_mods_needing_metadata') and self.app_state.gamebanana_mods_needing_metadata:
 
                             def trigger_metadata_loading():
@@ -171,14 +193,12 @@ class SearchDisplayController:
                                     logger.warning(f'SearchDisplayController: Error triggering metadata loading: {e}', exc_info=True)
                             QTimer.singleShot(500, trigger_metadata_loading)
                     else:
-                        current_loaded = self.app_state.gamebanana_loaded_pages.get(gid, 0)
-                        self.app_state.gamebanana_loaded_pages[gid] = max(current_loaded, lp + pages_needed)
-                        logger.info(f'No mods returned for game {gid}, marking pages {lp + 1}-{lp + pages_needed} as loaded')
+                        self.app_state.gamebanana_loaded_pages[gid] = 100
                     results_received[0] += 1
                     if results_received[0] >= expected_results:
                         QTimer.singleShot(0, on_all_results_received)
                 return on_result
-            load_thread.result.connect(make_on_result(game_id, last_page))
+            load_thread.result.connect(make_on_result(game_id, game_name, last_page, start_page, pages_needed))
 
             def on_thread_finished(thread=load_thread):
                 try:
