@@ -8,7 +8,7 @@ import xml.etree.ElementTree as ET
 from datetime import datetime
 from typing import Optional, Dict, Any
 from managers.localization_manager import tr
-from utils.file_utils import get_unique_mod_dir
+from utils.file_utils import get_unique_mod_dir, find_deltamod_info_file
 
 
 class DeltamodConverter:
@@ -43,9 +43,9 @@ class DeltamodConverter:
             return None
 
     def _validate_source(self) -> bool:
-        info_path = os.path.join(self.source_path, '_deltamodInfo.json')
+        info_path = find_deltamod_info_file(self.source_path)
         xml_path = os.path.join(self.source_path, 'modding.xml')
-        if not os.path.exists(info_path):
+        if not info_path:
             return False
         if not os.path.exists(xml_path):
             return False

@@ -8,6 +8,7 @@ from config.constants import UI_COLORS, NETWORK_TIMEOUT_HEAD
 from managers.localization_manager import tr
 from utils.gamebanana_api import GameBananaAPI
 from utils.gamebanana_converter import GameBananaConverter
+from utils.file_utils import check_filename_is_deltamod_info
 from utils.network_utils import get_session, download_file
 import requests
 logger = logging.getLogger(__name__)
@@ -71,7 +72,7 @@ class InstallGameBananaModThread(QThread):
             if not compatible_file:
                 mod_url = self.mod_info.external_url or f'https://gamebanana.com/mods/{mod_id}'
                 error_msg = f'MOD_NOT_COMPATIBLE:{mod_url}'
-                logger.warning(f'Mod {mod_id} does not have a compatible file with mod_config.json or _deltamodInfo.json')
+                logger.warning(f'Mod {mod_id} does not have a compatible file with mod_config.json or deltamod info file')
                 self.status.emit(tr('status.installation_failed'), UI_COLORS['status_error'])
                 self.finished.emit(False, error_msg)
                 return
@@ -117,14 +118,14 @@ class InstallGameBananaModThread(QThread):
                         for file in files:
                             if file == 'mod_config.json':
                                 has_mod_config = True
-                            elif file.lower().endswith('_deltamodinfo.json') or file.endswith('_deltamodInfo.json'):
+                            elif check_filename_is_deltamod_info(file):
                                 has_deltamod_info = True
                         if has_mod_config or has_deltamod_info:
                             break
                     if not has_mod_config and (not has_deltamod_info):
                         mod_url = self.mod_info.external_url or f'https://gamebanana.com/mods/{mod_id}'
                         error_msg = tr('errors.archive_missing_modinfo')
-                        logger.error(f'Archive {archive_path} does not contain mod_config.json or _deltamodInfo.json despite API check')
+                        logger.error(f'Archive {archive_path} does not contain mod_config.json or deltamod info file despite API check')
                         self.status.emit(error_msg, UI_COLORS['status_error'])
                         self.finished.emit(False, error_msg)
                         return

@@ -386,3 +386,23 @@ def get_file_filter(filter_type: str) -> str:
     description = FILTER_DESCRIPTIONS.get(filter_type, filter_type)
     all_files_desc = FILTER_DESCRIPTIONS.get('all_files', 'All files')
     return f'{description} ({extensions});;{all_files_desc} (*)'
+
+
+def find_deltamod_info_file(directory: str) -> str | None:
+    info_path_1 = os.path.join(directory, '_deltamodInfo.json')
+    info_path_2 = os.path.join(directory, 'meta.json')
+    if os.path.exists(info_path_1):
+        return info_path_1
+    if os.path.exists(info_path_2):
+        return info_path_2
+    return None
+
+
+def has_deltamod_info_file(file_list: list[str] | set[str]) -> bool:
+    file_set = set(file_list)
+    return '_deltamodInfo.json' in file_set or 'meta.json' in file_set
+
+
+def check_filename_is_deltamod_info(filename: str) -> bool:
+    filename_lower = filename.lower()
+    return filename_lower.endswith('_deltamodinfo.json') or filename == '_deltamodInfo.json' or filename == 'meta.json' or (filename_lower == 'meta.json')

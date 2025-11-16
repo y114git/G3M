@@ -7,7 +7,7 @@ import zipfile
 from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QFileDialog, QMessageBox, QListWidget, QListWidgetItem, QCheckBox
 from PyQt6.QtCore import Qt
 from managers.localization_manager import tr
-from utils.file_utils import extract_archive
+from utils.file_utils import extract_archive, find_deltamod_info_file
 from utils.deltamod_converter import DeltamodConverter
 
 
@@ -53,7 +53,7 @@ class ModImportExportController:
                 contents = os.listdir(temp_dir)
                 if len(contents) == 1 and os.path.isdir(os.path.join(temp_dir, contents[0])):
                     content_path = os.path.join(temp_dir, contents[0])
-                if os.path.exists(os.path.join(content_path, '_deltamodInfo.json')):
+                if find_deltamod_info_file(content_path):
                     converter = DeltamodConverter(content_path, self.app_state.mods_dir)
                     new_mod_path = converter.convert()
                     if new_mod_path:

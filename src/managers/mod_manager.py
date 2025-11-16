@@ -13,7 +13,7 @@ from managers.localization_manager import tr
 from models.mod_models import ModChapterData
 import models.mod_models as mod_models
 from workers.background_workers import UrlInstallThread, ModScanThread
-from utils.file_utils import sanitize_filename
+from utils.file_utils import sanitize_filename, has_deltamod_info_file
 from utils.mod_utils import get_mod_key, get_mod_name
 from config.constants import UI_COLORS
 import requests
@@ -171,18 +171,18 @@ class ModManager(QObject):
                         item_name_lower = item_name.lower()
                         if item_name_lower.endswith('.zip'):
                             with zipfile.ZipFile(item_path, 'r') as zf:
-                                if '_deltamodInfo.json' in zf.namelist():
+                                if has_deltamod_info_file(zf.namelist()):
                                     is_deltamod_archive = True
                         elif item_name_lower.endswith('.tar.gz'):
                             import tarfile
                             with tarfile.open(item_path, 'r:gz') as tf:
-                                if '_deltamodInfo.json' in tf.getnames():
+                                if has_deltamod_info_file(tf.getnames()):
                                     is_deltamod_archive = True
                         elif item_name_lower.endswith('.rar'):
                             try:
                                 import rarfile
                                 with rarfile.RarFile(item_path, 'r') as rf:
-                                    if '_deltamodInfo.json' in rf.namelist():
+                                    if has_deltamod_info_file(rf.namelist()):
                                         is_deltamod_archive = True
                             except (OSError, ImportError) as e:
                                 logging.warning(f'convert_legacy_mods: failed to check rar archive {item_name}: {e}', exc_info=True)
@@ -190,7 +190,7 @@ class ModManager(QObject):
                             import py7zr
                             try:
                                 with py7zr.SevenZipFile(item_path, mode='r') as zf:
-                                    if '_deltamodInfo.json' in zf.getnames():
+                                    if has_deltamod_info_file(zf.getnames()):
                                         is_deltamod_archive = True
                             except (OSError, ImportError) as e:
                                 logging.warning(f'convert_legacy_mods: failed to check 7z archive {item_name}: {e}', exc_info=True)
@@ -221,7 +221,7 @@ class ModManager(QObject):
                 elif os.path.isdir(item_path):
                     try:
                         dir_contents = os.listdir(item_path)
-                        if '_deltamodInfo.json' in dir_contents and 'mod_config.json' not in dir_contents and ('config.json' not in dir_contents):
+                        if has_deltamod_info_file(dir_contents) and 'mod_config.json' not in dir_contents and ('config.json' not in dir_contents):
                             self.status_changed.emit(tr('status.deltamod_detected', name=item_name), UI_COLORS['status_info'])
                             QApplication.processEvents()
                             from utils.deltamod_converter import DeltamodConverter

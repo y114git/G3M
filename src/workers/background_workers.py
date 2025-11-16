@@ -11,7 +11,7 @@ from PyQt6.QtCore import QObject, QThread, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QImage
 from config.constants import CLOUD_FUNCTIONS_BASE_URL, UI_COLORS, NETWORK_TIMEOUT_MEDIUM, NETWORK_TIMEOUT_HEAD
 from managers.localization_manager import tr
-from utils.file_utils import get_unique_mod_dir
+from utils.file_utils import get_unique_mod_dir, has_deltamod_info_file
 from utils.deltamod_converter import DeltamodConverter
 from utils.network_utils import download_file, sanitize_log_message
 import logging
@@ -713,7 +713,7 @@ class UrlInstallThread(QThread):
                         else:
                             raise ValueError(tr('errors.mod_installation_failed'))
                         return
-                    if '_deltamodInfo.json' in files_in_root:
+                    if has_deltamod_info_file(files_in_root):
                         self.status.emit(tr('status.deltamod_archive_detected_url'), UI_COLORS['status_info'])
                         converter = DeltamodConverter(content_path, self.main_window.app_state.mods_dir)
                         new_mod_path = converter.convert()
@@ -744,7 +744,7 @@ class UrlInstallThread(QThread):
                         self.finished.emit(True, tr('status.install_complete_success', mod_name=mod_name))
                     else:
                         raise ValueError(tr('errors.mod_installation_failed'))
-                elif '_deltamodInfo.json' in files_in_root:
+                elif has_deltamod_info_file(files_in_root):
                     from utils.deltamod_converter import DeltamodConverter
                     converter = DeltamodConverter(content_path, self.main_window.app_state.mods_dir)
                     new_mod_path = converter.convert()
@@ -773,7 +773,7 @@ class UrlInstallThread(QThread):
                         self.finished.emit(True, tr('status.install_complete_success', mod_name=mod_name))
                     else:
                         raise ValueError(tr('errors.mod_installation_failed'))
-                elif '_deltamodInfo.json' in files_in_root:
+                elif has_deltamod_info_file(files_in_root):
                     from utils.deltamod_converter import DeltamodConverter
                     converter = DeltamodConverter(content_path, self.main_window.app_state.mods_dir)
                     new_mod_path = converter.convert()
