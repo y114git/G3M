@@ -1,7 +1,6 @@
 import os
 import shutil
 import tempfile
-import logging
 import subprocess
 import time
 import re
@@ -214,7 +213,6 @@ class MultiModMerger(QObject):
             return False
 
     def _merge_mods_for_chapter(self, chapter_id: int, mods_list: List[Any], progress_base: int = 0, total_chapters: int = 1) -> bool:
-        import logging
         self.patching_logger.debug(f'_merge_mods_for_chapter: chapter_id={chapter_id}, mods_count={len(mods_list)}')
         target_dir = self._get_target_dir(chapter_id)
         if not target_dir:
@@ -232,7 +230,6 @@ class MultiModMerger(QObject):
         return self._perform_chapter_merge(chapter_id, mods_list, data_win_path, target_dir, None, progress_base, total_chapters, is_modpack=False)
 
     def _perform_chapter_merge(self, chapter_id: int, mods_list: List[Any], output_data_win_path: str, target_dir: str, modpack_dir: Optional[str], progress_base: int, total_chapters: int, is_modpack: bool) -> bool:
-        import logging
         import platform
         original_data_win = output_data_win_path
         chapter_progress_range = 100 // total_chapters if total_chapters > 0 else 100
@@ -815,7 +812,6 @@ class MultiModMerger(QObject):
         return True
 
     def _merge_mods_for_chapter_to_dir(self, chapter_id: int, mods_list: List[Any], modpack_dir: str, progress_base: int = 0, total_chapters: int = 1) -> bool:
-        import logging
         self.patching_logger.debug(f'_merge_mods_for_chapter_to_dir: chapter_id={chapter_id}, mods_count={len(mods_list)}, modpack_dir={modpack_dir}')
         os.makedirs(modpack_dir, exist_ok=True)
         target_dir = self._get_target_dir(chapter_id)
@@ -989,7 +985,6 @@ class MultiModMerger(QObject):
             return False
 
     def _import_assets_from_objects_dir(self, data_win_path: str, objects_dir: str, mods_to_apply: Optional[List[Any]] = None, mods_count: int = 0) -> bool:
-        import logging
         try:
             if not os.path.exists(objects_dir):
                 self.patching_logger.debug(f'Objects directory does not exist: {objects_dir}')
@@ -1782,7 +1777,6 @@ class MultiModMerger(QObject):
     def _extract_archive_to_target(self, archive_path: str, target_dir: str) -> bool:
         import zipfile
         import tarfile
-        import logging
         try:
             archive_lower = archive_path.lower()
             chapter_id = self._extract_chapter_id_from_path(target_dir)
@@ -2047,7 +2041,6 @@ class MultiModMerger(QObject):
         return (scripts, comparison_file)
 
     def _export_mod_assets_optimized(self, mod_data_win: str, mod_number: int, scripts: List[str], comparison_file: Optional[str], vanilla_file: str, merge_root: str, cache_running_dir: str, chapter_str: str) -> bool:
-        import logging
         vanilla_backup = None
         try:
             mod_dir = os.path.dirname(mod_data_win)
