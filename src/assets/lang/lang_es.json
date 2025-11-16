@@ -359,6 +359,17 @@
     "filter_deltarune": "DELTARUNE"
   },
   "dialogs": {
+    "conflicts": {
+      "title": "Conflictos de Fusión de Mods Detectados",
+      "message": "Se detectaron conflictos entre mods durante el proceso de fusión. Algunos recursos de diferentes mods pueden no funcionar juntos correctamente.",
+      "conflicting_mods": "Mods en conflicto:",
+      "total_conflicts": "Total de conflictos detectados: {count}",
+      "open_logs_and_launch": "Abrir Registros y Lanzar Juego",
+      "continue_without_logs": "Continuar sin Registros",
+      "no_logs_title": "No se Encontraron Archivos de Registro",
+      "no_logs_message": "No se encontraron archivos de registro.",
+      "failed_to_open_log": "Error al abrir el archivo de registro: {file}\nError: {error}"
+    },
     "theme_choice": "Elige una acción: ¿Importar o Exportar?",
     "create_shortcut_question": "¿Crear acceso directo?",
     "access_error": "Error de Acceso",
@@ -816,6 +827,7 @@
     "preparing_mod_merge": "Preparando para fusionar {mods} mod(s) para {chapters} capítulo(s)...",
     "merging_mods": "Fusionando mods... {progress}%",
     "merging_chapter": "Fusionando capítulo {chapter} ({current}/{total})...",
+    "merging_assets": "Fusionando recursos de {mod} ({current}/{total})...",
     "chapter_merged": "Capítulo {chapter} fusionado exitosamente",
     "merge_completed": "Fusión de mods completada exitosamente",
     "merge_failed": "Error en fusión de mods",

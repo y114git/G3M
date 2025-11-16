@@ -376,38 +376,6 @@ def version_sort_key(version_string: str):
         return (0, 0, 0, 0, '')
 
 
-def game_version_sort_key(version_string: str):
-    try:
-        match = re.match('^(\\d+)\\.(\\d+)([A-Z]?)$', version_string.strip())
-        if match:
-            major, minor, letter = (int(match.group(1)), int(match.group(2)), match.group(3))
-            letter_ord = 0 if letter == '' else ord(letter) - ord('A') + 1
-            return (major, minor, letter_ord)
-        else:
-            parts = version_string.split('.')
-            major = 0
-            minor = 0
-            if len(parts) > 0 and parts[0].isdigit():
-                major = int(parts[0])
-            if len(parts) > 1 and parts[1].isdigit():
-                minor = int(parts[1])
-            return (major, minor, 0)
-    except Exception as e:
-        logging.debug(f'game_version_sort_key: failed to parse "{version_string}": {e}')
-        return (0, 0, 0)
-
-
-def detect_field_type_by_text(text: str) -> str:
-    text_lower = text.lower()
-    if any((keyword in text_lower for keyword in ['ссылка', 'путь', 'url', 'link'])):
-        return 'file_path'
-    elif 'версия' in text_lower or 'version' in text_lower:
-        return 'version'
-    elif 'дополнительные файлы' in text_lower or 'extra files' in text_lower:
-        return 'extra_files'
-    return 'unknown'
-
-
 def get_file_filter(filter_type: str) -> str:
     FILTER_EXTENSIONS = {'image_files': '*.jpg *.png *.bmp *.gif', 'background_images': '*.jpg *.png *.bmp *.gif', 'xdelta_files': '*.xdelta', 'data_files': '*.win *.ios *.xdelta *.vcdiff *.csx', 'archive_files': '*.zip *.rar *.7z *.tar.gz *.lzma', 'extended_archives': '*.zip *.rar *.7z *.tar.gz *.lzma', 'game_files': '*.exe', 'text_files': '*.txt', 'all_files': '*'}
 
@@ -418,17 +386,3 @@ def get_file_filter(filter_type: str) -> str:
     description = FILTER_DESCRIPTIONS.get(filter_type, filter_type)
     all_files_desc = FILTER_DESCRIPTIONS.get('all_files', 'All files')
     return f'{description} ({extensions});;{all_files_desc} (*)'
-
-
-def run_as_admin_windows(path: str, feedback_manager) -> bool:
-    import subprocess
-    from managers.localization_manager import tr
-    from config.constants import UI_COLORS
-    script = f"import os, stat; p = r'{path}'; [os.chmod(os.path.join(r, f), os.stat(os.path.join(r, f)).st_mode | stat.S_IWRITE) for r, _, fs in os.walk(p) for f in fs] if os.path.isdir(p) else os.chmod(p, os.stat(p).st_mode | stat.S_IWRITE) if os.path.exists(p) else None"
-    command = f'Start-Process python -ArgumentList "-c \\"{script}\\"" -Verb RunAs -WindowStyle Hidden'
-    try:
-        subprocess.run(['powershell', '-Command', command], check=True, capture_output=True)
-        return True
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        feedback_manager.update_status(tr('status.permission_change_failed'), UI_COLORS['status_error'])
-        return False

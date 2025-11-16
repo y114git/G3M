@@ -11,7 +11,7 @@ from models.game_modes import DemoGameMode, UndertaleGameMode, UndertaleYellowGa
 from managers.localization_manager import tr
 from config.constants import SLOT_ID_UNIVERSAL, SLOT_ID_DEMO, SLOT_ID_UNDERTALE, SLOT_ID_UNDERTALE_YELLOW, SLOT_ID_MENU, SLOT_ID_CHAPTER_1, SLOT_ID_CHAPTER_2, SLOT_ID_CHAPTER_3, SLOT_ID_CHAPTER_4
 from utils.mod_utils import get_mod_key, get_mod_name
-from utils.game_utils import is_demo_mode, is_undertale_mode, is_undertale_yellow_mode
+from utils.game_utils import get_chapter_id_for_game_mode
 
 
 class UsedModsManager(QObject):
@@ -192,14 +192,9 @@ class UsedModsManager(QObject):
             except ValueError:
                 continue
             is_chapter_mode = self.app_state.current_mode == 'chapter'
-            if is_demo_mode(self.app_state.game_mode):
-                if chapter_id != SLOT_ID_DEMO:
-                    continue
-            elif is_undertale_mode(self.app_state.game_mode):
-                if chapter_id != SLOT_ID_UNDERTALE:
-                    continue
-            elif is_undertale_yellow_mode(self.app_state.game_mode):
-                if chapter_id != SLOT_ID_UNDERTALE_YELLOW:
+            expected_chapter_id = get_chapter_id_for_game_mode(self.app_state.game_mode)
+            if not is_chapter_mode and expected_chapter_id != SLOT_ID_UNIVERSAL:
+                if chapter_id != expected_chapter_id:
                     continue
             elif is_chapter_mode:
                 if chapter_id not in [SLOT_ID_MENU, SLOT_ID_CHAPTER_1, SLOT_ID_CHAPTER_2, SLOT_ID_CHAPTER_3, SLOT_ID_CHAPTER_4]:
@@ -273,14 +268,11 @@ class UsedModsManager(QObject):
         if getattr(self.app_state, 'is_installing', False):
             return []
         is_chapter_mode = self.app_state.current_mode == 'chapter'
-        if is_demo_mode(self.app_state.game_mode):
-            active_chapter_ids = [SLOT_ID_DEMO]
-        elif is_undertale_mode(self.app_state.game_mode):
-            active_chapter_ids = [SLOT_ID_UNDERTALE]
-        elif is_chapter_mode:
+        if is_chapter_mode:
             active_chapter_ids = [SLOT_ID_MENU, SLOT_ID_CHAPTER_1, SLOT_ID_CHAPTER_2, SLOT_ID_CHAPTER_3, SLOT_ID_CHAPTER_4]
         else:
-            active_chapter_ids = [SLOT_ID_UNIVERSAL]
+            chapter_id = get_chapter_id_for_game_mode(self.app_state.game_mode)
+            active_chapter_ids = [chapter_id]
         mods_to_update = []
         for chapter_id in active_chapter_ids:
             mods_list = self.used_mods.get(chapter_id, [])
@@ -298,11 +290,9 @@ class UsedModsManager(QObject):
             for chapter_id in range(5):
                 selections[chapter_id] = []
             return selections
-        if is_demo_mode(self.app_state.game_mode):
-            mods_list = self.get_used_mods_list(SLOT_ID_DEMO)
-            selections[-1] = mods_list if mods_list else []
-        elif is_undertale_mode(self.app_state.game_mode):
-            mods_list = self.get_used_mods_list(SLOT_ID_UNDERTALE)
+        chapter_id = get_chapter_id_for_game_mode(self.app_state.game_mode)
+        if chapter_id != SLOT_ID_UNIVERSAL:
+            mods_list = self.get_used_mods_list(chapter_id)
             selections[-1] = mods_list if mods_list else []
         elif self.app_state.current_mode == 'normal':
             mods_list = self.get_used_mods_list(SLOT_ID_UNIVERSAL)

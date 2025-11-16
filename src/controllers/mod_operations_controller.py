@@ -284,6 +284,37 @@ class ModOperationsController:
         try:
             self.mod_manager.load_local_mods()
             logging.info('ModOperationsController: Local mods reloaded after installation')
+            if installed_mod_info and hasattr(self.app_state, 'all_mods'):
+                if not self.app_state.all_mods:
+                    self.app_state.all_mods = []
+                installed_mod_key = getattr(installed_mod_info, 'key', None)
+                installed_mod_id = None
+                if hasattr(installed_mod_info, 'is_gamebanana_mod') and installed_mod_info.is_gamebanana_mod:
+                    installed_mod_id = str(getattr(installed_mod_info, 'gamebanana_mod_id', None)) if getattr(installed_mod_info, 'gamebanana_mod_id', None) else None
+                mod_already_in_all_mods = False
+                if installed_mod_key:
+                    mod_already_in_all_mods = any((getattr(m, 'key', None) == installed_mod_key for m in self.app_state.all_mods))
+                elif installed_mod_id:
+                    mod_already_in_all_mods = any((hasattr(m, 'gamebanana_mod_id') and m.gamebanana_mod_id and (str(m.gamebanana_mod_id) == installed_mod_id) for m in self.app_state.all_mods))
+                if not mod_already_in_all_mods:
+                    try:
+                        cache = self.mod_manager._get_mods_cache()
+                        mod_to_add = None
+                        if installed_mod_key and installed_mod_key in cache:
+                            mod_to_add = self.mod_manager.create_mod_object_from_info(cache[installed_mod_key].config_data, self.app_state.all_mods)
+                        elif installed_mod_id:
+                            for mod_key, mod_info in cache.items():
+                                config = mod_info.config_data
+                                if config.get('is_gamebanana_mod') and str(config.get('gamebanana_mod_id', '')) == installed_mod_id:
+                                    mod_to_add = self.mod_manager.create_mod_object_from_info(config, self.app_state.all_mods)
+                                    break
+                        if mod_to_add:
+                            self.app_state.all_mods.append(mod_to_add)
+                            logging.info(f'''ModOperationsController: Added installed mod "{mod_to_add.name}" (key: {getattr(mod_to_add, 'key', 'N/A')}, id: {getattr(mod_to_add, 'gamebanana_mod_id', 'N/A')}) to all_mods''')
+                        else:
+                            logging.warning(f'ModOperationsController: Could not create mod object for installed mod (key: {installed_mod_key}, id: {installed_mod_id})')
+                    except Exception as e:
+                        logging.warning(f'ModOperationsController: Failed to add installed mod to all_mods: {e}', exc_info=True)
         except Exception as e:
             logging.warning(f'ModOperationsController: Failed to reload local mods: {e}', exc_info=True)
 

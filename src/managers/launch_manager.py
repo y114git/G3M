@@ -6,12 +6,15 @@ import subprocess
 import webbrowser
 import logging
 from typing import Dict, Optional, Any, List
-from PyQt6.QtCore import QObject, QThread, QTimer, pyqtSignal
+from PyQt6.QtCore import QObject, QThread, QTimer, pyqtSignal, Qt
+from PyQt6.QtWidgets import QDialog
 from managers.localization_manager import tr
 from utils.file_utils import ensure_writable
-from utils.game_utils import is_game_running, is_demo_mode, is_undertale_mode, is_undertale_yellow_mode
+from utils.game_utils import is_game_running, get_game_type_string, get_game_name_string
+from models.game_modes import DemoGameMode, UndertaleGameMode, UndertaleYellowGameMode
 from utils.path_utils import find_chapter_resource_dir, resolve_game_executable
 from utils.mod_utils import get_mod_key
+from utils.patching_logger import clear_patching_logs
 from workers.game_monitor import GameMonitorWorker
 from managers.multi_mod_merger import MultiModMerger
 from config.constants import UI_COLORS, SLOT_ID_UNIVERSAL
@@ -78,6 +81,7 @@ class GameLauncher(QObject):
         return slot_manager.get_active_mod_selections()
 
     def _launch_game_with_selections(self, selections: Dict[int, Any], execute_plugin_hooks=None, restore_window_callback=None):
+        clear_patching_logs()
         self.execute_plugin_hooks = execute_plugin_hooks
         self.restore_window_callback = restore_window_callback
         if execute_plugin_hooks:
@@ -239,8 +243,8 @@ class GameLauncher(QObject):
             if use_custom_exe:
                 target_exe = os.path.join(chapter_folder, os.path.basename(source_exe))
             else:
-                if is_undertale_mode(self.app_state.game_mode) or is_undertale_yellow_mode(self.app_state.game_mode):
-                    exe_name = 'UNDERTALE.exe' if is_undertale_mode(self.app_state.game_mode) else 'Undertale Yellow.exe'
+                if isinstance(self.app_state.game_mode, UndertaleGameMode) or isinstance(self.app_state.game_mode, UndertaleYellowGameMode):
+                    exe_name = 'UNDERTALE.exe' if isinstance(self.app_state.game_mode, UndertaleGameMode) else 'Undertale Yellow.exe'
                 else:
                     exe_name = 'DELTARUNE.exe'
                 target_exe = os.path.join(chapter_folder, exe_name)
@@ -260,8 +264,7 @@ class GameLauncher(QObject):
         current_game_path = self._get_current_game_path()
         if not current_game_path or not os.path.isdir(current_game_path):
             return None
-        from utils.game_utils import is_undertale_yellow_mode
-        is_undertale = is_undertale_mode(self.app_state.game_mode) or is_undertale_yellow_mode(self.app_state.game_mode)
+        is_undertale = isinstance(self.app_state.game_mode, UndertaleGameMode) or isinstance(self.app_state.game_mode, UndertaleYellowGameMode)
         executable = resolve_game_executable(current_game_path, is_undertale)
         if not executable:
             self.status_changed.emit(tr('errors.executable_not_found_deltarune'), UI_COLORS['status_error'])
@@ -321,11 +324,52 @@ class GameLauncher(QObject):
         logging.info('Multi-mod merge completed successfully')
         self._continue_after_merge(selections, True)
 
+    def _cancel_launch_after_merge(self):
+        logging.info('Cancelling launch after merge: restoring backups and resetting state')
+        try:
+            if hasattr(self, 'multi_mod_merger') and self.multi_mod_merger:
+                try:
+                    restored = self.multi_mod_merger.restore_all_backups()
+                    if restored:
+                        logging.info('Backups restored successfully after launch cancellation')
+                        self.status_changed.emit(tr('status.files_restored'), UI_COLORS['status_success'])
+                    else:
+                        logging.debug('No backups to restore after launch cancellation')
+                except Exception as e:
+                    logging.error(f'Failed to restore backups after launch cancellation: {e}', exc_info=True)
+        except Exception as e:
+            logging.error(f'Error during launch cancellation cleanup: {e}', exc_info=True)
+        finally:
+            try:
+                self.app_state.progress_bar_visible = False
+                self.app_state.progress_bar_value = 0
+                self.app_state.is_merging = False
+                self.app_state.action_button_text = None
+                self.app_state.action_button_enabled = True
+                logging.info('App state reset after launch cancellation')
+            except Exception as e:
+                logging.error(f'Failed to reset app state: {e}', exc_info=True)
+            if hasattr(self, 'restore_window_callback') and self.restore_window_callback:
+                try:
+                    self.restore_window_callback()
+                except Exception as e:
+                    logging.error(f'Failed to restore window: {e}', exc_info=True)
+
     def _continue_after_merge(self, selections: Dict[int, Any], merge_success: bool):
         if not merge_success:
             return
         has_list_format = any((isinstance(mods_list, list) for mods_list in selections.values()))
         needs_multi_mod = has_list_format and any((len(mods_list) > 0 for mods_list in selections.values() if isinstance(mods_list, list)))
+        if needs_multi_mod and hasattr(self, 'multi_mod_merger') and self.multi_mod_merger:
+            conflicts_summary = self.multi_mod_merger.get_conflicts_summary()
+            if conflicts_summary.get('has_conflicts', False):
+                from ui.dialogs.conflicts_dialog import ConflictsDialog
+                dialog = ConflictsDialog(conflicts_summary, self.app_state.config_dir, parent=None)
+                result = dialog.exec()
+                if result == QDialog.DialogCode.Rejected or result == 0:
+                    logging.info('Game launch cancelled: conflicts dialog was closed without selecting an option')
+                    self._cancel_launch_after_merge()
+                    return
         if needs_multi_mod:
             pass
         elif hasattr(self, 'restore_window_callback') and self.restore_window_callback:
@@ -432,18 +476,8 @@ class GameLauncher(QObject):
         from utils.file_utils import autodetect_path
         path_from_config = self._get_current_game_path()
         skip_data_check = bool(selections and self._has_mods_with_data_files(selections)) if selections else False
-        if is_demo_mode(self.app_state.game_mode):
-            game_type = 'deltarune'
-            game_name = 'DELTARUNEdemo'
-        elif is_undertale_mode(self.app_state.game_mode):
-            game_type = 'undertale'
-            game_name = 'UNDERTALE'
-        elif is_undertale_yellow_mode(self.app_state.game_mode):
-            game_type = 'undertaleyellow'
-            game_name = 'UNDERTALE Yellow'
-        else:
-            game_type = 'deltarune'
-            game_name = 'DELTARUNE'
+        game_type = get_game_type_string(self.app_state.game_mode)
+        game_name = get_game_name_string(self.app_state.game_mode)
         if is_valid_game_path(path_from_config, skip_data_check, game_type):
             self.status_changed.emit(tr('status.game_path', path=path_from_config), UI_COLORS['status_info'])
             return True

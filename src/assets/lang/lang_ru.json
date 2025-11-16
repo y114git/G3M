@@ -359,6 +359,17 @@
     "filter_deltarune": "DELTARUNE"
   },
   "dialogs": {
+    "conflicts": {
+      "title": "Обнаружены конфликты при слиянии модов",
+      "message": "Во время процесса слияния были обнаружены конфликты между модами. Некоторые ресурсы из разных модов могут не работать вместе корректно.",
+      "conflicting_mods": "Конфликтующие моды:",
+      "total_conflicts": "Всего конфликтов обнаружено: {count}",
+      "open_logs_and_launch": "Открыть логи и запустить игру",
+      "continue_without_logs": "Продолжить без логов",
+      "no_logs_title": "Файлы логов не найдены",
+      "no_logs_message": "Файлы логов не были найдены.",
+      "failed_to_open_log": "Не удалось открыть файл лога: {file}\nОшибка: {error}"
+    },
     "theme_choice": "Выберите действие: Импорт или Экспорт?",
     "create_shortcut_question": "Создать ярлык?",
     "access_error": "Ошибка доступа",
@@ -818,6 +829,7 @@
     "preparing_mod_merge": "Подготовка к слиянию {mods} мод(ов) для {chapters} глав(ы)...",
     "merging_mods": "Слияние модов... {progress}%",
     "merging_chapter": "Слияние главы {chapter} ({current}/{total})...",
+    "merging_assets": "Слияние ресурсов из {mod} ({current}/{total})...",
     "chapter_merged": "Глава {chapter} успешно объединена",
     "merge_completed": "Слияние модов завершено успешно",
     "merge_failed": "Слияние модов не удалось",

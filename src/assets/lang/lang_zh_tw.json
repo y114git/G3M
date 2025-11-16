@@ -358,6 +358,17 @@
     "filter_deltarune": "DELTARUNE"
   },
   "dialogs": {
+    "conflicts": {
+      "title": "偵測到模組合併衝突",
+      "message": "在合併過程中偵測到模組之間的衝突。來自不同模組的某些資源可能無法正確協同工作。",
+      "conflicting_mods": "衝突的模組：",
+      "total_conflicts": "偵測到的衝突總數：{count}",
+      "open_logs_and_launch": "開啟日誌並啟動遊戲",
+      "continue_without_logs": "不查看日誌繼續",
+      "no_logs_title": "未找到日誌檔案",
+      "no_logs_message": "未找到日誌檔案。",
+      "failed_to_open_log": "無法開啟日誌檔案：{file}\n錯誤：{error}"
+    },
     "theme_choice": "選擇操作：導入或導出？",
     "create_shortcut_question": "建立捷徑？",
     "access_error": "訪問錯誤",
@@ -819,6 +830,7 @@
     "preparing_mod_merge": "準備合併 {mods} 個模組用於 {chapters} 章...",
     "merging_mods": "合併模組... {progress}%",
     "merging_chapter": "合併第 {chapter} 章 ({current}/{total})...",
+    "merging_assets": "合併來自 {mod} 的資源 ({current}/{total})...",
     "chapter_merged": "第 {chapter} 章合併成功",
     "merge_completed": "模組合併完成",
     "merge_failed": "模組合併失敗",

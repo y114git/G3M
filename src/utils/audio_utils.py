@@ -44,17 +44,3 @@ class AudioManager:
 
 
 _audio_manager = AudioManager()
-
-
-def get_launcher_volume() -> int:
-    try:
-        settings_path = os.path.join(get_user_data_root(), 'settings', 'settings.json')
-        old_config_path = os.path.join(get_user_data_root(), 'settings', 'config.json')
-        config_path = settings_path if os.path.exists(settings_path) else old_config_path
-        if os.path.exists(config_path):
-            with open(config_path, 'r', encoding='utf-8') as f:
-                config = json.load(f)
-                return config.get('launcher_volume', 100)
-    except (IOError, json.JSONDecodeError):
-        pass
-    return 100

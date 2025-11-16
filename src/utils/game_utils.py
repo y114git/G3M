@@ -13,17 +13,6 @@ def is_game_running():
     return any((proc.info['name'] in GAME_PROCESS_NAMES for proc in psutil.process_iter(['name'])))
 
 
-def get_default_save_path() -> str:
-    system = platform.system()
-    paths = {'Windows': os.path.join(os.environ.get('USERPROFILE', ''), 'AppData', 'Local', 'DELTARUNE'), 'Darwin': os.path.expanduser('~/Library/Application Support/com.tobyfox.deltarune')}
-    default_path = os.path.expanduser('~/.steam/steam/steamapps/compatdata/1690940/pfx/drive_c/users/steamuser/Local Settings/Application Data/DELTARUNE')
-    return paths.get(system, default_path)
-
-
-def is_valid_save_path(path: str) -> bool:
-    return bool(path and os.path.isdir(path) and os.listdir(path))
-
-
 def is_valid_mac_game_path(path: str, skip_data_check: bool, game_type: str) -> bool:
     app_path = Path(path)
     if not path.endswith('.app'):
@@ -64,31 +53,38 @@ def is_valid_game_path(path: str, skip_data_check: bool = False, game_type: str 
     return any((os.path.isfile(os.path.join(path, exe)) for exe in executables))
 
 
-def is_demo_mode(game_mode: 'GameMode') -> bool:
-    from models.game_modes import DemoGameMode
-    return isinstance(game_mode, DemoGameMode)
-
-
-def is_undertale_mode(game_mode: 'GameMode') -> bool:
-    from models.game_modes import UndertaleGameMode
-    return isinstance(game_mode, UndertaleGameMode)
-
-
-def is_undertale_yellow_mode(game_mode: 'GameMode') -> bool:
-    from models.game_modes import UndertaleYellowGameMode
-    return isinstance(game_mode, UndertaleYellowGameMode)
-
-
-def get_target_chapter_id(app_state: 'AppState', slot_id: int) -> int:
+def get_chapter_id_for_game_mode(game_mode: 'GameMode') -> int:
     from models.game_modes import DemoGameMode, UndertaleGameMode, UndertaleYellowGameMode
     from config.constants import SLOT_ID_DEMO, SLOT_ID_UNDERTALE, SLOT_ID_UNDERTALE_YELLOW, SLOT_ID_UNIVERSAL
-    if isinstance(app_state.game_mode, DemoGameMode):
+    if isinstance(game_mode, DemoGameMode):
         return SLOT_ID_DEMO
-    elif isinstance(app_state.game_mode, UndertaleGameMode):
+    elif isinstance(game_mode, UndertaleGameMode):
         return SLOT_ID_UNDERTALE
-    elif isinstance(app_state.game_mode, UndertaleYellowGameMode):
+    elif isinstance(game_mode, UndertaleYellowGameMode):
         return SLOT_ID_UNDERTALE_YELLOW
-    elif app_state.current_mode == 'chapter':
-        return slot_id
     else:
         return SLOT_ID_UNIVERSAL
+
+
+def get_game_type_string(game_mode: 'GameMode') -> str:
+    from models.game_modes import DemoGameMode, UndertaleGameMode, UndertaleYellowGameMode
+    if isinstance(game_mode, DemoGameMode):
+        return 'deltarune'
+    elif isinstance(game_mode, UndertaleGameMode):
+        return 'undertale'
+    elif isinstance(game_mode, UndertaleYellowGameMode):
+        return 'undertaleyellow'
+    else:
+        return 'deltarune'
+
+
+def get_game_name_string(game_mode: 'GameMode') -> str:
+    from models.game_modes import DemoGameMode, UndertaleGameMode, UndertaleYellowGameMode
+    if isinstance(game_mode, DemoGameMode):
+        return 'DELTARUNEdemo'
+    elif isinstance(game_mode, UndertaleGameMode):
+        return 'UNDERTALE'
+    elif isinstance(game_mode, UndertaleYellowGameMode):
+        return 'UNDERTALE Yellow'
+    else:
+        return 'DELTARUNE'

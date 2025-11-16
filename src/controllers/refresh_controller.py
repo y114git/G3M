@@ -22,13 +22,6 @@ class RefreshController:
         self.details_thread = None
         self.metadata_thread = None
 
-    def _set_combo_silently(self, combo, operation):
-        combo.blockSignals(True)
-        try:
-            operation()
-        finally:
-            combo.blockSignals(False)
-
     def refresh_mods_list(self, is_initial=False, language_combo=None, retranslate_callback=None, on_fetch_finished_kwargs=None):
         try:
             if hasattr(self.app_state, 'config_dir') and self.app_state.config_dir:
@@ -53,15 +46,16 @@ class RefreshController:
             if language_combo is not None:
                 current_lang_code = localization_manager.get_current_language()
                 localization_manager.rescan_languages()
-
-                def _populate_combo():
+                language_combo.blockSignals(True)
+                try:
                     language_combo.clear()
                     for code, name in localization_manager.get_available_languages().items():
                         language_combo.addItem(name, code)
                     index = language_combo.findData(current_lang_code)
                     if index != -1:
                         language_combo.setCurrentIndex(index)
-                self._set_combo_silently(language_combo, _populate_combo)
+                finally:
+                    language_combo.blockSignals(False)
             if not is_initial and retranslate_callback:
                 retranslate_callback()
             if is_game_running():

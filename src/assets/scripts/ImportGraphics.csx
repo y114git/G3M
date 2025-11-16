@@ -1,5 +1,5 @@
-// Texture packer by Samuel Roy
-// Uses code from https://github.com/mfascia/TexturePacker
+
+
 
 using System;
 using System.IO;
@@ -16,38 +16,38 @@ EnsureDataLoaded();
 static List<MagickImage> imagesToCleanup = new();
 bool importAsSprite = true;
 
-// TODO: see if this can be reimplemented using substring instead of regex?
-// "(.+?)" - match everything; "?" = match as few characters as possible.
-// "(?:_(\d+))" - an underscore followed by digits;
-// "?:" = don't make a separate group for the whole part
+
+
+
+
 Regex sprFrameRegex = new(@"^(.+?)(?:_(\d+))$", RegexOptions.Compiled);
 string importFolder = CheckValidity();
 
-bool noMasksForBasicRectangles = Data.IsVersionAtLeast(2022, 9); // TODO: figure out the exact version, but this is pretty close
+bool noMasksForBasicRectangles = Data.IsVersionAtLeast(2022, 9);
 
 try
 {
     string packDir = Path.Combine(ExePath, "Packager");
     Directory.CreateDirectory(packDir);
 
-    // IMPORTANT: Only process sprites from the Objects/Sprites folder
+
     string spritesPath = Path.Combine(importFolder, "Sprites");
     if (!Directory.Exists(spritesPath))
     {
         ScriptMessage("No Sprites folder found in Objects - no sprites to import");
-        return; // Exit early if no sprites to import
+        return;
     }
-    
-    // Check if there are any PNG files to process
+
+
     var pngFiles = Directory.GetFiles(spritesPath, "*.png", SearchOption.AllDirectories);
     if (pngFiles.Length == 0)
     {
         ScriptMessage("No PNG files found in Sprites folder - nothing to import");
-        return; // Exit early if no PNGs
+        return;
     }
-    
+
     ScriptMessage($"Found {pngFiles.Length} PNG files to pack in {spritesPath}");
-    
+
     string sourcePath = spritesPath;
     string searchPattern = "*.png";
     string outName = Path.Combine(packDir, "atlas.txt");
@@ -64,7 +64,7 @@ try
     bool bboxMasks = Data.IsVersionAtLeast(2024, 6);
     Dictionary<UndertaleSprite, Node> maskNodes = new();
 
-    // Import everything into UTMT
+
     string prefix = outName.Replace(Path.GetExtension(outName), "");
     int atlasCount = 0;
     foreach (Atlas atlas in packer.Atlasses)
@@ -75,14 +75,14 @@ try
 
         UndertaleEmbeddedTexture texture = new();
         texture.Name = new UndertaleString($"Texture {++lastTextPage}");
-        texture.TextureData.Image = GMImage.FromMagickImage(atlasImage).ConvertToPng(); // TODO: other formats?
+        texture.TextureData.Image = GMImage.FromMagickImage(atlasImage).ConvertToPng();
         Data.EmbeddedTextures.Add(texture);
 
         foreach (Node n in atlas.Nodes)
         {
             if (n.Texture != null)
             {
-                // Initalize values of this texture
+
                 UndertaleTexturePageItem texturePageItem = new();
                 texturePageItem.Name = new UndertaleString($"PageItem {++lastTextPageItem}");
                 texturePageItem.SourceX = (ushort)n.Bounds.X;
@@ -97,10 +97,10 @@ try
                 texturePageItem.BoundingHeight = (ushort)n.Texture.BoundingHeight;
                 texturePageItem.TexturePage = texture;
 
-                // Add this texture to UTMT
+
                 Data.TexturePageItems.Add(texturePageItem);
 
-                // String processing - extract just the filename without the full path
+
                 string sourceFileName = Path.GetFileName(n.Texture.Source);
                 string stripped = Path.GetFileNameWithoutExtension(sourceFileName);
 
@@ -122,7 +122,7 @@ try
                     }
                     else
                     {
-                        // No background found, let's make one
+
                         UndertaleString backgroundUTString = Data.Strings.MakeString(stripped);
                         UndertaleBackground newBackground = new();
                         newBackground.Name = backgroundUTString;
@@ -134,7 +134,7 @@ try
                 }
                 else if (spriteType == SpriteType.Sprite)
                 {
-                    // Get sprite to add this texture to
+
                     string spriteName;
                     int frame = 0;
                     try
@@ -149,11 +149,11 @@ try
                         continue;
                     }
 
-                    // Create TextureEntry object
+
                     UndertaleSprite.TextureEntry texentry = new();
                     texentry.Texture = texturePageItem;
 
-                    // Set values for new sprites
+
 					UndertaleSprite sprite = Data.Sprites.ByName(spriteName);
 					if (sprite is null)
 					{
@@ -174,11 +174,11 @@ try
 								newSprite.Textures.Add(null);
 						}
 
-						// Only generate collision masks for sprites that need them (in newer GameMaker versions)
+
 						if (!noMasksForBasicRectangles ||
 							newSprite.SepMasks is not (UndertaleSprite.SepMaskType.AxisAlignedRect or UndertaleSprite.SepMaskType.RotatedRect))
 						{
-							// Generate mask later (when the current atlas is about to be unloaded)
+
 							maskNodes.Add(newSprite, n);
 						}
 
@@ -187,24 +187,24 @@ try
 						continue;
 					}
 
-					// ---------------------------
-					// EXISTING SPRITE: PRESERVE GEOMETRY
-					// ---------------------------
 
-					// Ensure the Textures list is long enough
+
+
+
+
 					if (frame >= sprite.Textures.Count)
 					{
 						while (frame >= sprite.Textures.Count)
 							sprite.Textures.Add(null);
 					}
 
-					// Find the old texture page item for this frame (or any existing frame as fallback)
+
 					UndertaleTexturePageItem oldTex =
 						(sprite.Textures[frame]?.Texture)
 						?? sprite.Textures.FirstOrDefault(te => te != null)?.Texture;
 
-					// We already created `texturePageItem` for the new atlas region above.
-					// Overwrite its *target/canvas* to match the old geometry so draw placement stays identical.
+
+
 					if (oldTex != null)
 					{
 						texturePageItem.TargetX        = oldTex.TargetX;
@@ -215,14 +215,14 @@ try
 						texturePageItem.BoundingHeight = oldTex.BoundingHeight;
 					}
 
-					// Assign the new frame
+
 					sprite.Textures[frame] = texentry;
 
-					// Do NOT change sprite.Width/Height, origin, or margins for existing sprites.
-					// Keeping those stable prevents per-frame drift/misplacement.
 
-					// Collision mask handling: only if the sprite has no masks yet and uses precise masks.
-					// (We don't want to force mask rebuilds that could change behavior.)
+
+
+
+
 					bool needMaskInit =
 						sprite.SepMasks is UndertaleSprite.SepMaskType.Precise &&
 						sprite.CollisionMasks.Count == 0;
@@ -232,10 +232,10 @@ try
 						maskNodes[sprite] = n;
 					}
 				}
-		   }  // end: if (n.Texture != null)
-        } // end: foreach (Node n in atlas.Nodes)
+		   }
+        }
 
-            // Update masks for when bounding box masks are enabled
+
             foreach ((UndertaleSprite maskSpr, Node maskNode) in maskNodes)
             {
                 maskSpr.CollisionMasks.Clear();
@@ -268,9 +268,9 @@ try
             }
             maskNodes.Clear();
 
-            // Increment atlas
+
             atlasCount++;
-    } // end: foreach (Atlas atlas in packer.Atlasses)
+    }
 
         HideProgressBar();
         ScriptMessage("Import Complete!");
@@ -359,11 +359,11 @@ public class Packer
         Padding = _Padding;
         AtlasSize = _AtlasSize;
         DebugMode = _DebugMode;
-        //1: scan for all the textures we need to pack
+
         ScanForTextures(_SourceDir, _Pattern);
         List<TextureInfo> textures = new List<TextureInfo>();
         textures = SourceTextures.ToList();
-        //2: generate as many atlasses as needed (with the latest one as small as possible)
+
         Atlasses = new List<Atlas>();
         while (textures.Count > 0)
         {
@@ -373,15 +373,15 @@ public class Packer
             List<TextureInfo> leftovers = LayoutAtlas(textures, atlas);
             if (leftovers.Count == 0)
             {
-                // we reached the last atlas. Check if this last atlas could have been twice smaller
+
                 while (leftovers.Count == 0)
                 {
                     atlas.Width /= 2;
                     atlas.Height /= 2;
                     leftovers = LayoutAtlas(textures, atlas);
                 }
-                // we need to go 1 step larger as we found the first size that is too small
-                // if the atlas is 0x0 then it should be 1x1 instead
+
+
                 if (atlas.Width == 0)
                 {
                     atlas.Width = 1;
@@ -417,11 +417,11 @@ public class Packer
         {
             string atlasName = $"{prefix}{atlasCount:000}.png";
 
-            // 1: Save images
+
             using (MagickImage img = CreateAtlasImage(atlas))
                 TextureWorker.SaveImageToFile(img, atlasName);
 
-            // 2: save description in file
+
             foreach (Node n in atlas.Nodes)
             {
                 if (n.Texture != null)
@@ -470,7 +470,7 @@ public class Packer
                 ti.BoundingWidth = (int)img.Width;
                 ti.BoundingHeight = (int)img.Height;
 
-                // GameMaker doesn't trim tilesets. I assume it didn't trim backgrounds too
+
                 ti.TargetX = 0;
                 ti.TargetY = 0;
                 if (GetSpriteType(ti.Source) != SpriteType.Background)
@@ -483,13 +483,13 @@ public class Packer
                     {
                         ti.TargetX = bbox.X - 1;
                         ti.TargetY = bbox.Y - 1;
-                        // yes, .Trim() mutates the image...
-                        // it doesn't really matter though since it isn't written back or anything
+
+
                         img.Trim();
                     }
                     else
                     {
-                        // Empty sprites should be 1x1
+
                         ti.TargetX = 0;
                         ti.TargetY = 0;
                         img.Crop(1, 1);
@@ -560,7 +560,7 @@ public class Packer
         {
             switch (FitHeuristic)
             {
-                // Max of Width and Height ratios
+
                 case BestFitHeuristic.MaxOneAxis:
                     if (ti.Width <= _Node.Bounds.Width && ti.Height <= _Node.Bounds.Height)
                     {
@@ -574,7 +574,7 @@ public class Packer
                         }
                     }
                     break;
-                // Maximize Area coverage
+
                 case BestFitHeuristic.Area:
                     if (ti.Width <= _Node.Bounds.Width && ti.Height <= _Node.Bounds.Height)
                     {
@@ -670,15 +670,15 @@ public static SpriteType GetSpriteType(string path)
 string CheckValidity()
 {
     string importFolder = null;
-    
-    // Method 1: Check if we're being run from DELTAHUB context
-    // When DELTAHUB runs scripts, the data.win is in xDeltaCombiner structure
+
+
+
     string dataWinDir = Path.GetDirectoryName(FilePath);
-    
-    // Check if we're in the xDeltaCombiner structure
+
+
     if (dataWinDir.Contains("xDeltaCombiner"))
     {
-        // We're in DELTAHUB context, Objects folder should be right here
+
         string objectsPath = Path.Combine(dataWinDir, "Objects");
         if (Directory.Exists(objectsPath))
         {
@@ -687,8 +687,8 @@ string CheckValidity()
             return importFolder;
         }
     }
-    
-    // Method 2: Look for Objects folder relative to data.win
+
+
     string objectsRelative = Path.Combine(dataWinDir, "Objects");
     if (Directory.Exists(objectsRelative))
     {
@@ -696,15 +696,15 @@ string CheckValidity()
         ScriptMessage($"Found Objects folder relative to data.win: {importFolder}");
         return importFolder;
     }
-    
-    // Method 3: Manual fallback
+
+
     ScriptMessage("Could not automatically detect DELTAHUB Objects folder.");
     ScriptMessage("Please select the Objects folder containing sprites to import");
-    importFolder = PromptChooseDirectory();  // No arguments
-    
+    importFolder = PromptChooseDirectory();
+
     if (string.IsNullOrWhiteSpace(importFolder))
         throw new ScriptException("No folder selected. Import cancelled.");
-    
+
     ScriptMessage($"Using import folder: {importFolder}");
     return importFolder;
 }
