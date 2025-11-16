@@ -876,7 +876,16 @@ class ModManager(QObject):
                                 extra_files_list.append(mod_models.ModExtraFile(key=group_key, version=ch_info.get('versions', {}).get(group_key, '1.0.0') if isinstance(ch_info.get('versions'), dict) else '1.0.0', url=filename))
                 valid_chapter_fields = {'description': ch_info.get('description'), 'data_file_url': ch_info.get('data_file_url'), 'data_file_version': ch_info.get('data_file_version') or (ch_info.get('versions', {}).get('data') if isinstance(ch_info.get('versions'), dict) else None) or '1.0.0', 'extra_files': extra_files_list}
                 files_dict[file_key] = mod_models.ModChapterData(**valid_chapter_fields)
-        return mod_models.ModInfo(key=mod_key, name=mod_info.get('name', mod_key), version=mod_info.get('version', '1.0.0'), author=mod_info.get('author', tr('defaults.unknown')), tagline=mod_info.get('tagline', tr('defaults.no_description')), game_version=mod_info.get('game_version', '1.04'), description_url='', downloads=0, modgame=mod_info.get('modgame', 'deltarune'), is_verified=False, icon_url=None, tags=[], hide_mod=False, is_local_mod=mod_info.get('is_local_mod', False), ban_status=False, files=files_dict)
+        mod_info_kwargs = {'key': mod_key, 'name': mod_info.get('name', mod_key), 'version': mod_info.get('version', '1.0.0'), 'author': mod_info.get('author', tr('defaults.unknown')), 'tagline': mod_info.get('tagline', tr('defaults.no_description')), 'game_version': mod_info.get('game_version', '1.04'), 'description_url': '', 'downloads': 0, 'modgame': mod_info.get('modgame', 'deltarune'), 'is_verified': False, 'icon_url': None, 'tags': mod_info.get('tags', []), 'hide_mod': False, 'is_local_mod': mod_info.get('is_local_mod', False), 'ban_status': False, 'files': files_dict}
+        if mod_info.get('is_gamebanana_mod'):
+            mod_info_kwargs['is_gamebanana_mod'] = True
+            if mod_info.get('gamebanana_mod_id'):
+                mod_info_kwargs['gamebanana_mod_id'] = mod_info.get('gamebanana_mod_id')
+            if mod_info.get('gamebanana_mod_type'):
+                mod_info_kwargs['gamebanana_mod_type'] = mod_info.get('gamebanana_mod_type')
+            if mod_info.get('gamebanana_last_update_timestamp'):
+                mod_info_kwargs['gamebanana_last_update_timestamp'] = mod_info.get('gamebanana_last_update_timestamp')
+        return mod_models.ModInfo(**mod_info_kwargs)
 
     def fetch_mod_data_by_secret(self, secret_key: str) -> Tuple[Optional[dict], Optional[str], bool]:
         from utils.crypto_utils import possible_secret_hashes

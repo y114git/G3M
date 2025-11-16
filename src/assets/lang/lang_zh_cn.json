@@ -358,6 +358,17 @@
     "filter_deltarune": "DELTARUNE"
   },
   "dialogs": {
+    "conflicts": {
+      "title": "检测到模组合并冲突",
+      "message": "在合并过程中检测到模组之间的冲突。来自不同模组的某些资源可能无法正确协同工作。",
+      "conflicting_mods": "冲突的模组：",
+      "total_conflicts": "检测到的冲突总数：{count}",
+      "open_logs_and_launch": "打开日志并启动游戏",
+      "continue_without_logs": "不查看日志继续",
+      "no_logs_title": "未找到日志文件",
+      "no_logs_message": "未找到日志文件。",
+      "failed_to_open_log": "无法打开日志文件：{file}\n错误：{error}"
+    },
     "theme_choice": "选择操作：导入或导出？",
     "create_shortcut_question": "创建快捷方式？",
     "access_error": "访问错误",
@@ -816,6 +827,7 @@
     "preparing_mod_merge": "准备合并 {mods} 个模组用于 {chapters} 章...",
     "merging_mods": "合并模组... {progress}%",
     "merging_chapter": "合并第 {chapter} 章 ({current}/{total})...",
+    "merging_assets": "合并来自 {mod} 的资源 ({current}/{total})...",
     "chapter_merged": "第 {chapter} 章合并成功",
     "merge_completed": "模组合并完成",
     "merge_failed": "模组合并失败",

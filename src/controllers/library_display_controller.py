@@ -6,7 +6,7 @@ from ui.dialogs.mod_priority_dialog import ModPriorityDialog
 from config.constants import SLOT_ID_UNIVERSAL, SLOT_ID_DEMO, SLOT_ID_UNDERTALE, SLOT_ID_UNDERTALE_YELLOW, SLOT_ID_MENU, SLOT_ID_CHAPTER_1, SLOT_ID_CHAPTER_2, SLOT_ID_CHAPTER_3, SLOT_ID_CHAPTER_4
 from utils.mod_filter_utils import filter_and_sort_mods
 from utils.mod_utils import get_mod_key, get_mod_name
-from utils.game_utils import is_demo_mode, is_undertale_mode, is_undertale_yellow_mode
+from utils.game_utils import get_chapter_id_for_game_mode
 
 
 class LibraryDisplayController:
@@ -220,14 +220,7 @@ class LibraryDisplayController:
                     if selected_chapter_id is not None:
                         is_used = self.slot_manager.is_mod_used_for_chapter(widget.mod_data, selected_chapter_id)
                     else:
-                        if is_demo_mode(self.app_state.game_mode):
-                            check_chapter_id = SLOT_ID_DEMO
-                        elif is_undertale_mode(self.app_state.game_mode):
-                            check_chapter_id = SLOT_ID_UNDERTALE
-                        elif is_undertale_yellow_mode(self.app_state.game_mode):
-                            check_chapter_id = SLOT_ID_UNDERTALE_YELLOW
-                        else:
-                            check_chapter_id = SLOT_ID_UNIVERSAL
+                        check_chapter_id = get_chapter_id_for_game_mode(self.app_state.game_mode)
                         is_used = self.slot_manager.is_mod_used_for_chapter(widget.mod_data, check_chapter_id)
                     widget.set_in_slot(is_used)
 
@@ -268,16 +261,9 @@ class LibraryDisplayController:
             self.feedback_manager.show_message('error', 'errors.mod_removal_failed', error=str(e))
 
     def on_mod_use(self, mod_data):
-        if is_demo_mode(self.app_state.game_mode):
-            target_chapter_id = SLOT_ID_DEMO
-        elif is_undertale_mode(self.app_state.game_mode):
+        target_chapter_id = get_chapter_id_for_game_mode(self.app_state.game_mode)
+        if target_chapter_id == SLOT_ID_UNIVERSAL and hasattr(mod_data, 'modgame') and (mod_data.modgame == 'undertale'):
             target_chapter_id = SLOT_ID_UNDERTALE
-        elif is_undertale_yellow_mode(self.app_state.game_mode):
-            target_chapter_id = SLOT_ID_UNDERTALE_YELLOW
-        elif hasattr(mod_data, 'modgame') and mod_data.modgame == 'undertale':
-            target_chapter_id = SLOT_ID_UNDERTALE
-        else:
-            target_chapter_id = SLOT_ID_UNIVERSAL
         self._handle_mod_use(mod_data, target_chapter_id)
 
     def _handle_mod_use(self, mod_data, chapter_id):
@@ -321,15 +307,10 @@ class LibraryDisplayController:
             chapter_id = self.app_state.selected_chapter_id
             logging.info(f'_get_current_chapter_id: chapter mode, selected_chapter_id={chapter_id}')
             return chapter_id
-        elif is_demo_mode(self.app_state.game_mode):
-            logging.info('_get_current_chapter_id: DemoGameMode, returning SLOT_ID_DEMO')
-            return SLOT_ID_DEMO
-        elif is_undertale_mode(self.app_state.game_mode):
-            logging.info('_get_current_chapter_id: UndertaleGameMode, returning SLOT_ID_UNDERTALE')
-            return SLOT_ID_UNDERTALE
-        elif is_undertale_yellow_mode(self.app_state.game_mode):
-            logging.info('_get_current_chapter_id: UndertaleYellowGameMode, returning SLOT_ID_UNDERTALE_YELLOW')
-            return SLOT_ID_UNDERTALE_YELLOW
+        chapter_id = get_chapter_id_for_game_mode(self.app_state.game_mode)
+        if chapter_id != SLOT_ID_UNIVERSAL:
+            logging.info(f'_get_current_chapter_id: {type(self.app_state.game_mode).__name__}, returning {chapter_id}')
+            return chapter_id
 
         def _check_slot_for_mods(slot_id, min_count=2):
             mods_list = self.slot_manager.get_used_mods_list(slot_id)
@@ -437,20 +418,13 @@ class LibraryDisplayController:
             if not mods_list or len(mods_list) < 2:
                 return
             chapter_mods = {chapter_id: mods_list}
-        elif is_demo_mode(self.app_state.game_mode):
-            mods_list = self.slot_manager.get_used_mods_list(SLOT_ID_DEMO)
-            if mods_list and len(mods_list) >= 2:
-                chapter_mods = {-1: mods_list}
-        elif is_undertale_mode(self.app_state.game_mode):
-            mods_list = self.slot_manager.get_used_mods_list(SLOT_ID_UNDERTALE)
-            if mods_list and len(mods_list) >= 2:
-                chapter_mods = {-1: mods_list}
-        elif is_undertale_yellow_mode(self.app_state.game_mode):
-            mods_list = self.slot_manager.get_used_mods_list(SLOT_ID_UNDERTALE_YELLOW)
-            if mods_list and len(mods_list) >= 2:
-                chapter_mods = {-1: mods_list}
         else:
-            mods_list = self.slot_manager.get_used_mods_list(SLOT_ID_UNIVERSAL)
+            chapter_id = get_chapter_id_for_game_mode(self.app_state.game_mode)
+            mods_list = self.slot_manager.get_used_mods_list(chapter_id)
+            if mods_list and len(mods_list) >= 2:
+                chapter_mods = {-1: mods_list}
+            else:
+                mods_list = self.slot_manager.get_used_mods_list(SLOT_ID_UNIVERSAL)
             if mods_list and len(mods_list) >= 2:
                 for chapter_id in range(5):
                     chapter_mods_for_chapter = []

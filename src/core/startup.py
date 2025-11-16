@@ -11,8 +11,10 @@ from PyQt6.QtNetwork import QLocalServer, QLocalSocket
 from PyQt6.QtWidgets import QApplication, QMessageBox
 from managers.localization_manager import localization_manager, tr
 from utils.audio_utils import _audio_manager
-from core.splash import create_splash, create_png_splash
-from utils.path_utils import get_user_data_root, get_launcher_dir
+from utils.network_utils import sanitize_log_message
+from core.splash import create_png_splash
+from utils.path_utils import resource_path, get_user_data_root, get_launcher_dir
+import os
 from logging.handlers import RotatingFileHandler
 from config.constants import SPLASH_MIN_DURATION, LAUNCHER_FALLBACK_TIMEOUT, SPLASH_RETRY_DELAY
 import traceback
@@ -22,11 +24,6 @@ if platform.system() == 'Windows':
 
 class ShortcutLaunchError(Exception):
     pass
-
-
-def create_app_reference():
-    from core.app_window import AppWindow
-    return AppWindow
 
 
 SINGLE_INSTANCE_KEY = 'deltahub.y.114.single-instance-lock'
@@ -49,7 +46,6 @@ class SecureLogFilter(logging.Filter):
 
     def filter(self, record):
         try:
-            from utils.network_utils import sanitize_log_message
             if record.getMessage():
                 record.msg = sanitize_log_message(str(record.msg))
                 record.args = ()
@@ -131,7 +127,6 @@ def register_url_protocol():
                 f.write(desktop_file_content)
             subprocess.run(['xdg-mime', 'default', 'deltahub.desktop', 'x-scheme-handler/deltahub'], check=False)
     except Exception as e:
-        from utils.network_utils import sanitize_log_message
         safe_msg = sanitize_log_message(f'Failed to register URL protocol: {e}')
         logging.warning(safe_msg)
 
@@ -213,13 +208,12 @@ def run_app():
     try:
         register_url_protocol()
     except Exception as e:
-        from utils.network_utils import sanitize_log_message
         safe_msg = sanitize_log_message(f'Could not register protocol handler: {e}')
         logging.warning(safe_msg)
     if args.shortcut_launch:
-        DeltaHubApp = create_app_reference()
+        from core.app_window import AppWindow
         try:
-            DeltaHubApp(args=args)
+            AppWindow(args=args)
         except ShortcutLaunchError as e:
             error_msg = str(e) or tr('errors.error')
             print(f'STARTUP ERROR: {error_msg}')
@@ -243,15 +237,12 @@ def run_app():
                 except Exception as e:
                     logging.warning(f'Failed to migrate settings config.json to settings.json in startup: {e}')
     except (OSError, IOError) as e:
-        from utils.network_utils import sanitize_log_message
         safe_msg = sanitize_log_message(f'Failed to read config file: {e}')
         logging.warning(safe_msg)
     except (json.JSONDecodeError, ValueError) as e:
-        from utils.network_utils import sanitize_log_message
         safe_msg = sanitize_log_message(f'Failed to parse config JSON: {e}')
         logging.warning(safe_msg)
     except Exception as e:
-        from utils.network_utils import sanitize_log_message
         safe_msg = sanitize_log_message(f'Unexpected error loading config: {e}')
         logging.warning(safe_msg)
     splash_disabled_by_user = config.get('disable_splash', False)
@@ -263,7 +254,14 @@ def run_app():
         if show_animation:
             from config.constants import SPLASH_SOUND_DELAY
             _splash_start_time = time.time()
-            splash = create_splash()
+            from core.splash import CustomSplashScreen
+            gif_path = resource_path('assets/images/splash.gif')
+            if os.path.exists(gif_path):
+                splash = CustomSplashScreen(gif_path=gif_path)
+                if not (hasattr(splash, 'movie') and splash.movie.isValid()):
+                    splash = create_png_splash()
+            else:
+                splash = create_png_splash()
             splash.show()
             app.processEvents()
 
@@ -323,8 +321,8 @@ def run_app():
 
         def create_launcher():
             try:
-                DeltaHubApp = create_app_reference()
-                launcher_app['instance'] = DeltaHubApp(parent_for_dialogs=splash, initial_url=initial_url)
+                from core.app_window import AppWindow
+                launcher_app['instance'] = AppWindow(parent_for_dialogs=splash, initial_url=initial_url)
                 server = SingleInstanceServer(launcher_app['instance'])
                 if not server.listen(SINGLE_INSTANCE_KEY):
                     error_msg = tr('errors.single_instance_error')

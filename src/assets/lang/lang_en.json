@@ -359,6 +359,17 @@
     "filter_deltarune": "DELTARUNE"
   },
   "dialogs": {
+    "conflicts": {
+      "title": "Mod Merge Conflicts Detected",
+      "message": "Conflicts were detected between mods during the merge process. Some resources from different mods may not work together correctly.",
+      "conflicting_mods": "Conflicting mods:",
+      "total_conflicts": "Total conflicts detected: {count}",
+      "open_logs_and_launch": "Open Logs and Launch Game",
+      "continue_without_logs": "Continue without Logs",
+      "no_logs_title": "No Log Files",
+      "no_logs_message": "Log files were not found.",
+      "failed_to_open_log": "Failed to open log file: {file}\nError: {error}"
+    },
     "theme_choice": "Choose an action: Import or Export?",
     "create_shortcut_question": "Create Shortcut?",
     "access_error": "Access Error",
@@ -816,6 +827,7 @@
     "preparing_mod_merge": "Preparing to merge {mods} mod(s) for {chapters} chapter(s)...",
     "merging_mods": "Merging mods... {progress}%",
     "merging_chapter": "Merging chapter {chapter} ({current}/{total})...",
+    "merging_assets": "Merging assets from {mod} ({current}/{total})...",
     "chapter_merged": "Chapter {chapter} merged successfully",
     "merge_completed": "Mod merge completed successfully",
     "merge_failed": "Mod merge failed",

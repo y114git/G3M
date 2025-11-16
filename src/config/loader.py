@@ -55,12 +55,8 @@ class ConfigLoader:
 _config_loader = ConfigLoader()
 
 
-def load_configuration() -> Dict[str, Any]:
-    return _config_loader.load_config()
-
-
 def get_config_value(key: str, default: str = '') -> str:
     return _config_loader.get(key, default)
 
 
-load_configuration()
+_config_loader.load_config()

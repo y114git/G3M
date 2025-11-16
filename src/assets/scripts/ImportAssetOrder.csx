@@ -1,5 +1,5 @@
-// Takes an existing text file exported from ExportAssetOrder, and uses it to reorganize the assets in the current data file.
-// Made by colinator27.
+
+
 
 using System;
 using System.IO;
@@ -17,44 +17,44 @@ if (Data.IsVersionAtLeast(2024, 11))
     ScriptWarning("This script may act erroneously on GameMaker version 2024.11 and later.");
 }
 
-// Try to find DELTAHUB root (same approach as ExportModifiedOnly.csx)
-string gm3pRoot = null;
+
+string deltahubRoot = null;
 {
-    // Method 1: Check current working directory
+    
     var probe = new DirectoryInfo(Directory.GetCurrentDirectory());
     while (probe != null)
     {
-        if (Directory.Exists(Path.Combine(probe.FullName, "output"))) { gm3pRoot = probe.FullName; break; }
+        if (Directory.Exists(Path.Combine(probe.FullName, "output"))) { deltahubRoot = probe.FullName; break; }
         probe = probe.Parent;
     }
-    // Method 2: Try data.win location (FilePath)
-    if (gm3pRoot == null && !string.IsNullOrEmpty(FilePath))
+    
+    if (deltahubRoot == null && !string.IsNullOrEmpty(FilePath))
     {
         var dataWinDir = new DirectoryInfo(Path.GetDirectoryName(FilePath));
         probe = dataWinDir;
         while (probe != null)
         {
-            if (Directory.Exists(Path.Combine(probe.FullName, "output"))) { gm3pRoot = probe.FullName; break; }
+            if (Directory.Exists(Path.Combine(probe.FullName, "output"))) { deltahubRoot = probe.FullName; break; }
             probe = probe.Parent;
         }
     }
-    // Method 3: Fallback to Assembly location (original behavior)
-    if (gm3pRoot == null)
+    
+    if (deltahubRoot == null)
     {
         var assemblyRoot = Directory.GetParent(Directory.GetParent(Assembly.GetEntryAssembly().Location));
         if (assemblyRoot != null && Directory.Exists(Path.Combine(assemblyRoot.FullName, "output")))
         {
-            gm3pRoot = assemblyRoot.FullName;
+            deltahubRoot = assemblyRoot.FullName;
         }
     }
 }
 
-if (gm3pRoot == null)
+if (deltahubRoot == null)
     throw new ScriptException("DELTAHUB root not found (no /output ancestor).");
 
-string chapterNo = File.ReadAllText(Path.Combine(gm3pRoot, "output", "Cache", "running", "chapterNumber.txt"));
-string modNo = File.ReadAllText(Path.Combine(gm3pRoot, "output", "Cache", "running", "modNumbersCache.txt"));
-string assetNamePath = Path.Combine(gm3pRoot, "output", "xDeltaCombiner", chapterNo, modNo, "Objects", "AssetOrder.txt");
+string chapterNo = File.ReadAllText(Path.Combine(deltahubRoot, "output", "Cache", "running", "chapterNumber.txt"));
+string modNo = File.ReadAllText(Path.Combine(deltahubRoot, "output", "Cache", "running", "modNumbersCache.txt"));
+string assetNamePath = Path.Combine(deltahubRoot, "output", "xDeltaCombiner", chapterNo, modNo, "Objects", "AssetOrder.txt");
 if (assetNamePath == null || !File.Exists(assetNamePath))
     throw new ScriptException("The asset name text file was not chosen or does not exist: " + assetNamePath);
 

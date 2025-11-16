@@ -1,4 +1,6 @@
-// ExportModifiedOnly.csx — Original made for GM3P, modified by Y114 for DELTAHUB.
+
+
+
 
 using System;
 using System.IO;
@@ -17,7 +19,7 @@ void DebugLog(string s) { if (DEBUG) PrintLine($"[DEBUG] {s}"); }
 
 string FixEventNameCasing(string codeName)
 {
-    // GameMaker event name mappings (case-sensitive)
+    
     var eventMappings = new Dictionary<string, string>
     {
         {"_create_", "_Create_"},
@@ -40,7 +42,7 @@ string FixEventNameCasing(string codeName)
     {
         if (result.Contains(mapping.Key, StringComparison.OrdinalIgnoreCase))
         {
-            // Replace with case-insensitive search but case-sensitive replacement
+            
             int index = result.IndexOf(mapping.Key, StringComparison.OrdinalIgnoreCase);
             if (index >= 0)
             {
@@ -70,23 +72,23 @@ object GetProp(object obj, string name)
 EnsureDataLoaded();
 if (Data.IsYYC())
 {
-    PrintLine("[ExportModifiedOnly] YYC build detected – code export not available.");
+    PrintLine("[SmartExport] YYC build detected – code export not available.");
     return;
 }
 
-// ── locate DELTAHUB root (ancestor holding /output)
-string gm3pRoot = null;
+
+string deltahubRoot = null;
 {
     var probe = new DirectoryInfo(Directory.GetCurrentDirectory());
     while (probe != null)
     {
-        if (Directory.Exists(Path.Combine(probe.FullName, "output"))) { gm3pRoot = probe.FullName; break; }
+        if (Directory.Exists(Path.Combine(probe.FullName, "output"))) { deltahubRoot = probe.FullName; break; }
         probe = probe.Parent;
     }
-        // If UTMT was called but not as a child of DELTAHUB 
-        if (gm3pRoot == null)
+        
+        if (deltahubRoot == null)
         {
-            // Resolve DELTAHUB root → output/xDeltaCombiner/<chapter>/1/Objects (no prompts)
+            
             string TryRoot(string root)
             {
                 if (string.IsNullOrWhiteSpace(root)) return null;
@@ -95,25 +97,53 @@ string gm3pRoot = null;
             }
 
             var got = TryRoot(@Convert.ToString(Directory.GetParent(Convert.ToString(Directory.GetParent(Convert.ToString(Assembly.GetEntryAssembly().Location))))));
-            if (got!=null){ gm3pRoot = got;}
+            if (got!=null){ deltahubRoot = got;}
 
         }
     
-    if (gm3pRoot == null) throw new ScriptException("DELTAHUB root not found (no /output ancestor).");
+    if (deltahubRoot == null) throw new ScriptException("DELTAHUB root not found (no /output ancestor).");
 }
 
-// ── run context provided by DELTAHUB
-string chapterNo = ReadAllTextSafe(Path.Combine(gm3pRoot, "output", "Cache", "running", "chapterNumber.txt"));
-string modNo     = ReadAllTextSafe(Path.Combine(gm3pRoot, "output", "Cache", "running", "modNumbersCache.txt"));
-if (string.IsNullOrWhiteSpace(chapterNo) || string.IsNullOrWhiteSpace(modNo))
-    throw new ScriptException("chapterNumber/modNumbersCache missing in /output/Cache/running/." + Convert.ToString(Path.Combine(gm3pRoot, "output", "Cache", "running", "modNumbersCache.txt")));
 
-// ── output layout (everything under Objects/)
-string modRoot         = Path.Combine(gm3pRoot, "output", "xDeltaCombiner", chapterNo, modNo);
+string chapterNo = ReadAllTextSafe(Path.Combine(deltahubRoot, "output", "Cache", "running", "chapterNumber.txt"));
+string modNo     = ReadAllTextSafe(Path.Combine(deltahubRoot, "output", "Cache", "running", "modNumbersCache.txt"));
+if (string.IsNullOrWhiteSpace(chapterNo) || string.IsNullOrWhiteSpace(modNo))
+    throw new ScriptException("chapterNumber/modNumbersCache missing in /output/Cache/running/." + Convert.ToString(Path.Combine(deltahubRoot, "output", "Cache", "running", "modNumbersCache.txt")));
+
+
+
+string comparisonPath = null;
+string customVanillaPath = Environment.GetEnvironmentVariable("SMARTEXPORT_VANILLA_PATH");
+if (!string.IsNullOrEmpty(customVanillaPath) && File.Exists(customVanillaPath))
+{
+    comparisonPath = customVanillaPath;
+    PrintLine($"[SmartExport] Using custom vanilla path from environment: {comparisonPath}");
+}
+else
+{
+    
+    if (modNo != "0" && modNo != "1")
+    {
+        int modNum = int.Parse(modNo);
+        string previousModPath = Path.Combine(deltahubRoot, "output", "xDeltaCombiner", chapterNo, (modNum - 1).ToString(), "data.win");
+        if (File.Exists(previousModPath))
+        {
+            comparisonPath = previousModPath;
+        }
+    }
+    if (comparisonPath == null)
+    {
+        comparisonPath = Path.Combine(deltahubRoot, "output", "xDeltaCombiner", chapterNo, "0", "data.win");
+    }
+}
+
+
+string modRoot         = Path.Combine(deltahubRoot, "output", "xDeltaCombiner", chapterNo, modNo);
 string outputRoot      = Path.Combine(modRoot, "Objects");
 string codeOut         = Path.Combine(outputRoot, "CodeEntries");
 string spritesOut      = Path.Combine(outputRoot, "Sprites");
 string backgroundsOut  = Path.Combine(outputRoot, "Backgrounds");
+string tilesetsOut     = Path.Combine(outputRoot, "Tilesets");
 string newObjRoot      = Path.Combine(outputRoot, "NewObjects");
 string objDefDir       = Path.Combine(newObjRoot, "ObjectDefinitions");
 string objCodeDir      = Path.Combine(newObjRoot, "CodeEntries");
@@ -122,13 +152,14 @@ Directory.CreateDirectory(outputRoot);
 Directory.CreateDirectory(codeOut);
 Directory.CreateDirectory(spritesOut);
 Directory.CreateDirectory(backgroundsOut);
+Directory.CreateDirectory(tilesetsOut);
 
-// ── if someone created a stray root-level /Sprites, move it inside Objects/Sprites
+
 void MergeStraySpritesIntoObjects()
 {
     var stray = Path.Combine(modRoot, "Sprites");
     if (!Directory.Exists(stray)) return;
-    PrintLine("[ExportModifiedOnly] WARNING: Found stray Sprites at mod root; moving into Objects/Sprites.");
+    PrintLine("[SmartExport] WARNING: Found stray Sprites at mod root; moving into Objects/Sprites.");
 
     foreach (var dir in Directory.GetDirectories(stray, "*", SearchOption.AllDirectories))
     {
@@ -146,10 +177,10 @@ void MergeStraySpritesIntoObjects()
     try { Directory.Delete(stray, true); } catch { }
 }
 
-// ── vanilla path for comparison
-string vanillaPath = Path.Combine(gm3pRoot, "output", "xDeltaCombiner", chapterNo, "0", "data.win");
 
-// ── AssetOrder writer (into Objects/)
+string vanillaPath = Path.Combine(deltahubRoot, "output", "xDeltaCombiner", chapterNo, "0", "data.win");
+
+
 void WriteAssetOrder(string assetOrderPath)
 {
     using var w = new StreamWriter(assetOrderPath, false, Encoding.UTF8);
@@ -165,15 +196,15 @@ void WriteAssetOrder(string assetOrderPath)
     w.Flush();
 }
 
-// ── FULL FALLBACK if vanilla not present
-if (!File.Exists(vanillaPath))
+
+if (!File.Exists(comparisonPath))
 {
-    PrintLine($"[ExportModifiedOnly] ERROR: Vanilla not found at {vanillaPath}");
-    PrintLine("[ExportModifiedOnly] Falling back to full export...");
+    PrintLine($"[SmartExport] ERROR: Comparison file not found at {comparisonPath}");
+    PrintLine("[SmartExport] Falling back to full export...");
 
     using (var worker = new TextureWorker())
     {
-        // sprites
+        
         foreach (var sprite in Data.Sprites)
         {
             if (sprite?.Name?.Content == null) continue;
@@ -185,7 +216,7 @@ if (!File.Exists(vanillaPath))
                 if (tpi != null) worker.ExportAsPNG(tpi, Path.Combine(sprDir, $"{SafeName(sprite.Name.Content)}_{i}.png"));
             }
         }
-        // backgrounds
+        
         foreach (var bg in Data.Backgrounds)
         {
             if (bg?.Name?.Content == null) continue;
@@ -194,7 +225,7 @@ if (!File.Exists(vanillaPath))
             worker.ExportAsPNG(tpi, Path.Combine(backgroundsOut, SafeName(bg.Name.Content) + ".png"));
         }
     }
-    // code
+    
     foreach (var code in Data.Code)
     {
         if (code?.Name?.Content == null) continue;
@@ -207,26 +238,26 @@ if (!File.Exists(vanillaPath))
     return;
 }
 
-// ── load vanilla for diff
-PrintLine($"[ExportModifiedOnly] Loading vanilla from: {vanillaPath}");
-UndertaleData vanilla;
-using (var fs = new FileStream(vanillaPath, FileMode.Open, FileAccess.Read, FileShare.Read))
-    vanilla = UndertaleIO.Read(fs);
 
-// always write AssetOrder
+PrintLine($"[SmartExport] Loading comparison file from: {comparisonPath}");
+UndertaleData comparison;
+using (var fs = new FileStream(comparisonPath, FileMode.Open, FileAccess.Read, FileShare.Read))
+    comparison = UndertaleIO.Read(fs);
+
+
 WriteAssetOrder(Path.Combine(outputRoot, "AssetOrder.txt"));
-PrintLine("[ExportModifiedOnly] AssetOrder written");
+PrintLine("[SmartExport] AssetOrder written");
 
-// ── NEW OBJECTS (GameObjects that don't exist in vanilla)
-var vanillaObjects = vanilla.GameObjects.ToDictionary(o => o?.Name?.Content ?? "", o => o);
+
+var comparisonObjects = comparison.GameObjects.ToDictionary(o => o?.Name?.Content ?? "", o => o);
 var newObjects = Data.GameObjects
-    .Where(o => o?.Name?.Content != null && !vanillaObjects.ContainsKey(o.Name.Content))
+    .Where(o => o?.Name?.Content != null && !comparisonObjects.ContainsKey(o.Name.Content))
     .ToList();
 
 int objectsNew = 0;
-if (newObjects.Count > 0 && modNo != "0")  // Skip for vanilla
+if (newObjects.Count > 0 && modNo != "0")  
 {
-    PrintLine($"[ExportModifiedOnly] Found {newObjects.Count} new objects");
+    PrintLine($"[SmartExport] Found {newObjects.Count} new objects");
     
     Directory.CreateDirectory(objDefDir);
     Directory.CreateDirectory(objCodeDir);
@@ -240,7 +271,7 @@ if (newObjects.Count > 0 && modNo != "0")  // Skip for vanilla
         manifest.Add($"- {name}");
         objectsNew++;
         
-        // Get object properties
+        
         string spriteName = (GetProp(obj, "Sprite") as UndertaleSprite)?.Name?.Content;
         string maskName = (GetProp(obj, "MaskSprite") as UndertaleSprite)?.Name?.Content;
         string parentName = (GetProp(obj, "ParentObject") as UndertaleGameObject)?.Name?.Content;
@@ -258,7 +289,7 @@ if (newObjects.Count > 0 && modNo != "0")  // Skip for vanilla
         bool persistent = (GetProp(obj, "Persistent") as bool?) ?? false;
         bool physics = (GetProp(obj, "PhysicsObject") as bool?) ?? false;
         
-        // Find all code entries for this object
+        
         string prefix = $"gml_Object_{name}_";
 		var objCodeEntries = Data.Code
 			.Where(c => c?.Name?.Content != null && c.Name.Content.StartsWith(prefix, StringComparison.Ordinal))
@@ -267,7 +298,7 @@ if (newObjects.Count > 0 && modNo != "0")  // Skip for vanilla
         
         allNewObjectCode[name] = objCodeEntries;
         
-        // Write object definition
+        
         var def = new StringBuilder();
         def.AppendLine("[Object]");
         def.AppendLine($"Name={name}");
@@ -287,27 +318,27 @@ if (newObjects.Count > 0 && modNo != "0")  // Skip for vanilla
             def.AppendLine(codeEntry);
         }
         
-        // Save definition
+        
         string defPath = Path.Combine(objDefDir, SafeName(name) + ".txt");
         File.WriteAllText(defPath, def.ToString(), Encoding.UTF8);
         
         PrintLine($"[Object] {name}: NEW ({objCodeEntries.Count} code entries)");
     }
     
-    // Write manifest
+    
     if (newObjects.Count > 0)
     {
         File.WriteAllLines(Path.Combine(newObjRoot, "manifest.txt"), manifest, Encoding.UTF8);
         
-        // Also write a simple list for compatibility
+        
         File.WriteAllLines(Path.Combine(outputRoot, "NewObjects.txt"), 
             newObjects.Select(o => o.Name.Content), Encoding.UTF8);
     }
 }
 
-// ── SPRITES diff
+
 int spritesNew = 0, spritesChanged = 0;
-var vSprites = vanilla.Sprites.ToDictionary(s => s?.Name?.Content ?? "", s => s);
+var cSprites = comparison.Sprites.ToDictionary(s => s?.Name?.Content ?? "", s => s);
 
 using (var worker = new TextureWorker())
 {
@@ -316,19 +347,19 @@ using (var worker = new TextureWorker())
         if (sprite?.Name?.Content == null) continue;
 
         string spriteName = sprite.Name.Content;
-        bool isNew = !vSprites.ContainsKey(spriteName);
+        bool isNew = !cSprites.ContainsKey(spriteName);
         bool isChanged = false;
 
         if (!isNew)
         {
-            var v = vSprites[spriteName];
-            if (sprite.Textures.Count != v.Textures.Count) isChanged = true;
+            var c = cSprites[spriteName];
+            if (sprite.Textures.Count != c.Textures.Count) isChanged = true;
             else
             {
                 for (int i = 0; i < sprite.Textures.Count; i++)
                 {
                     var tpiA = GetTpiFromFrame(sprite.Textures[i]);
-                    var tpiB = GetTpiFromFrame(v.Textures[i]);
+                    var tpiB = GetTpiFromFrame(c.Textures[i]);
                     if (tpiA == null || tpiB == null) { isChanged = true; break; }
                     if (tpiA.SourceX != tpiB.SourceX ||
                         tpiA.SourceY != tpiB.SourceY ||
@@ -362,9 +393,26 @@ using (var worker = new TextureWorker())
     }
 }
 
-// ── BACKGROUNDS diff
+
 int bgsNew = 0, bgsChanged = 0;
-var vBgs = vanilla.Backgrounds.ToDictionary(b => b?.Name?.Content ?? "", b => b);
+var cBgs = comparison.Backgrounds.ToDictionary(b => b?.Name?.Content ?? "", b => b);
+
+
+T GetPropertyValue<T>(object obj, string propName, T defaultValue = default(T))
+{
+    try
+    {
+        var prop = obj.GetType().GetProperty(propName, BindingFlags.Public | BindingFlags.Instance);
+        if (prop != null)
+        {
+            var value = prop.GetValue(obj);
+            if (value != null && value is T)
+                return (T)value;
+        }
+    }
+    catch { }
+    return defaultValue;
+}
 
 using (var worker = new TextureWorker())
 {
@@ -373,14 +421,14 @@ using (var worker = new TextureWorker())
         if (bg?.Name?.Content == null) continue;
         string name = bg.Name.Content;
 
-        bool isNew = !vBgs.ContainsKey(name);
+        bool isNew = !cBgs.ContainsKey(name);
         bool isChanged = false;
 
         if (!isNew)
         {
-            var v = vBgs[name];
+            var c = cBgs[name];
             var a = GetBackgroundTpi(bg);
-            var b = GetBackgroundTpi(v);
+            var b = GetBackgroundTpi(c);
 
             if (a == null || b == null) isChanged = (a != b);
             else
@@ -407,10 +455,93 @@ using (var worker = new TextureWorker())
                 if (isNew) bgsNew++; else bgsChanged++;
             }
         }
+        
+        
+        
+        
+        bool tilesetPropsChanged = false;
+        if (!isNew)
+        {
+            var c = cBgs[name];
+            
+            int bgTileCount = GetPropertyValue<int>(bg, "TileCount", 0);
+            int cTileCount = GetPropertyValue<int>(c, "TileCount", 0);
+            int bgTileWidth = GetPropertyValue<int>(bg, "TileWidth", 0);
+            int cTileWidth = GetPropertyValue<int>(c, "TileWidth", 0);
+            int bgTileHeight = GetPropertyValue<int>(bg, "TileHeight", 0);
+            int cTileHeight = GetPropertyValue<int>(c, "TileHeight", 0);
+            int bgBorderX = GetPropertyValue<int>(bg, "BorderX", 0);
+            int cBorderX = GetPropertyValue<int>(c, "BorderX", 0);
+            int bgBorderY = GetPropertyValue<int>(bg, "BorderY", 0);
+            int cBorderY = GetPropertyValue<int>(c, "BorderY", 0);
+            int bgTileColumn = GetPropertyValue<int>(bg, "TileColumn", 0);
+            int cTileColumn = GetPropertyValue<int>(c, "TileColumn", 0);
+            int bgItemPerTile = GetPropertyValue<int>(bg, "ItemPerTile", 0);
+            int cItemPerTile = GetPropertyValue<int>(c, "ItemPerTile", 0);
+            bool bgTransparent = GetPropertyValue<bool>(bg, "Transparent", false);
+            bool cTransparent = GetPropertyValue<bool>(c, "Transparent", false);
+            bool bgSmooth = GetPropertyValue<bool>(bg, "Smooth", false);
+            bool cSmooth = GetPropertyValue<bool>(c, "Smooth", false);
+            bool bgPreload = GetPropertyValue<bool>(bg, "Preload", false);
+            bool cPreload = GetPropertyValue<bool>(c, "Preload", false);
+            int bgFrametime = GetPropertyValue<int>(bg, "Frametime", 0);
+            int cFrametime = GetPropertyValue<int>(c, "Frametime", 0);
+            
+            
+            if (bgTileCount != cTileCount ||
+                bgTileWidth != cTileWidth ||
+                bgTileHeight != cTileHeight ||
+                bgBorderX != cBorderX ||
+                bgBorderY != cBorderY ||
+                bgTileColumn != cTileColumn ||
+                bgItemPerTile != cItemPerTile ||
+                bgTransparent != cTransparent ||
+                bgSmooth != cSmooth ||
+                bgPreload != cPreload ||
+                bgFrametime != cFrametime)
+            {
+                tilesetPropsChanged = true;
+            }
+        }
+        
+        if (isNew || tilesetPropsChanged)
+        {
+            
+            int tileCount = GetPropertyValue<int>(bg, "TileCount", 0);
+            int tileWidth = GetPropertyValue<int>(bg, "TileWidth", 0);
+            int tileHeight = GetPropertyValue<int>(bg, "TileHeight", 0);
+            int borderX = GetPropertyValue<int>(bg, "BorderX", 0);
+            int borderY = GetPropertyValue<int>(bg, "BorderY", 0);
+            int tileColumn = GetPropertyValue<int>(bg, "TileColumn", 0);
+            int itemPerTile = GetPropertyValue<int>(bg, "ItemPerTile", 0);
+            bool transparent = GetPropertyValue<bool>(bg, "Transparent", false);
+            bool smooth = GetPropertyValue<bool>(bg, "Smooth", false);
+            bool preload = GetPropertyValue<bool>(bg, "Preload", false);
+            int frametime = GetPropertyValue<int>(bg, "Frametime", 0);
+            
+            var tilesetJson = new StringBuilder();
+            tilesetJson.AppendLine("{");
+            tilesetJson.AppendLine($"  \"tile_count\": {tileCount},");
+            tilesetJson.AppendLine($"  \"tile_width\": {tileWidth},");
+            tilesetJson.AppendLine($"  \"tile_height\": {tileHeight},");
+            tilesetJson.AppendLine($"  \"border_x\": {borderX},");
+            tilesetJson.AppendLine($"  \"border_y\": {borderY},");
+            tilesetJson.AppendLine($"  \"tile_column\": {tileColumn},");
+            tilesetJson.AppendLine($"  \"item_per_tile\": {itemPerTile},");
+            tilesetJson.AppendLine($"  \"transparent\": {(transparent ? "true" : "false")},");
+            tilesetJson.AppendLine($"  \"smooth\": {(smooth ? "true" : "false")},");
+            tilesetJson.AppendLine($"  \"preload\": {(preload ? "true" : "false")},");
+            tilesetJson.AppendLine($"  \"frametime\": {frametime}");
+            tilesetJson.AppendLine("}");
+            
+            string tilesetJsonPath = Path.Combine(tilesetsOut, SafeName(name) + ".json");
+            File.WriteAllText(tilesetJsonPath, tilesetJson.ToString(), Encoding.UTF8);
+            if (tilesetPropsChanged) PrintLine($"[Tileset] {name}: Properties changed");
+        }
     }
 }
 
-// ── CODE diff
+
 string Decompile(UndertaleCode code)
 {
     try
@@ -482,7 +613,7 @@ string Decompile(UndertaleCode code)
     }
     catch { }
 
-    // fallback: bytecode
+    
     var sb = new StringBuilder();
     sb.AppendLine("/* DECOMPILER UNAVAILABLE - bytecode dump below for reference only */");
     sb.AppendLine($"/* {code?.Name?.Content ?? "unknown"} */");
@@ -491,7 +622,7 @@ string Decompile(UndertaleCode code)
 }
 
 int codeNew = 0, codeChanged = 0;
-var vCode = vanilla.Code.ToDictionary(c => c?.Name?.Content ?? "", c => c);
+var cCode = comparison.Code.ToDictionary(c => c?.Name?.Content ?? "", c => c);
 
 using (var sha = SHA1.Create())
 {
@@ -500,7 +631,7 @@ using (var sha = SHA1.Create())
         if (code?.Name?.Content == null) continue;
         string codeName = code.Name.Content;
 
-        bool isNew = !vCode.ContainsKey(codeName);
+        bool isNew = !cCode.ContainsKey(codeName);
         bool isDifferent = false;
 
         if (isNew)
@@ -509,13 +640,13 @@ using (var sha = SHA1.Create())
         }
         else
         {
-            var vCodeEntry = vCode[codeName];
-            if (code.Instructions.Count != vCodeEntry.Instructions.Count) isDifferent = true;
+            var cCodeEntry = cCode[codeName];
+            if (code.Instructions.Count != cCodeEntry.Instructions.Count) isDifferent = true;
             else
             {
                 var modHash = sha.ComputeHash(Encoding.UTF8.GetBytes(string.Join("\n", code.Instructions.Select(i => i.ToString()))));
-                var vanHash = sha.ComputeHash(Encoding.UTF8.GetBytes(string.Join("\n", vCodeEntry.Instructions.Select(i => i.ToString()))));
-                isDifferent = !modHash.SequenceEqual(vanHash);
+                var compHash = sha.ComputeHash(Encoding.UTF8.GetBytes(string.Join("\n", cCodeEntry.Instructions.Select(i => i.ToString()))));
+                isDifferent = !modHash.SequenceEqual(compHash);
             }
             if (isDifferent) codeChanged++;
         }
@@ -529,7 +660,7 @@ using (var sha = SHA1.Create())
     }
 }
 
-// ── final sanity + summary
+
 MergeStraySpritesIntoObjects();
 
 int codeCount   = Directory.Exists(codeOut)        ? Directory.EnumerateFiles(codeOut, "*.gml", SearchOption.AllDirectories).Count() : 0;
@@ -537,15 +668,19 @@ int spriteCount = Directory.Exists(spritesOut)     ? Directory.EnumerateFiles(sp
 int bgCount     = Directory.Exists(backgroundsOut) ? Directory.EnumerateFiles(backgroundsOut, "*.png", SearchOption.AllDirectories).Count() : 0;
 int objDefCount = Directory.Exists(objDefDir)      ? Directory.EnumerateFiles(objDefDir, "*.txt", SearchOption.AllDirectories).Count() : 0;
 
-PrintLine($"\n[ExportModifiedOnly] Summary for Mod {modNo}:");
+
+
+
+
+PrintLine($"\n[SmartExport] Summary for Mod {modNo}:");
 PrintLine($"  Objects      - New: {objectsNew}, Definitions: {objDefCount}");
 PrintLine($"  Sprites      - New: {spritesNew}, Changed: {spritesChanged}, Files: {spriteCount}");
 PrintLine($"  Backgrounds  - New: {bgsNew},    Changed: {bgsChanged},   Files: {bgCount}");
 PrintLine($"  Code         - New: {codeNew},   Changed: {codeChanged},   Files: {codeCount}");
 PrintLine($"  Total exports: {objectsNew + spritesNew + spritesChanged + bgsNew + bgsChanged + codeNew + codeChanged}");
-PrintLine("[ExportModifiedOnly] Done.");
+PrintLine("[SmartExport] Done.");
 
-// ── helpers (written to avoid compile-time dependency on fork-specific members)
+
 UndertaleTexturePageItem GetTpiFromFrame(UndertaleSprite.TextureEntry te)
 {
     try
@@ -553,16 +688,16 @@ UndertaleTexturePageItem GetTpiFromFrame(UndertaleSprite.TextureEntry te)
         if (te == null) return null;
         var teType = te.GetType();
 
-        // 1) Texture property present?
+        
         var texProp = teType.GetProperty("Texture", BindingFlags.Public | BindingFlags.Instance);
         if (texProp != null)
         {
             var tex = texProp.GetValue(te);
 
-            // 1a) In some forks this is already the TPI
+            
             if (tex is UndertaleTexturePageItem tpi0) return tpi0;
 
-            // 1b) In others, it's an UndertaleTexture which has .TexturePageItem
+            
             if (tex != null)
             {
                 var tpiProp = tex.GetType().GetProperty("TexturePageItem", BindingFlags.Public | BindingFlags.Instance);
@@ -574,7 +709,7 @@ UndertaleTexturePageItem GetTpiFromFrame(UndertaleSprite.TextureEntry te)
             }
         }
 
-        // 2) Some forks expose .TexturePageItem directly on the TextureEntry
+        
         var direct = teType.GetProperty("TexturePageItem", BindingFlags.Public | BindingFlags.Instance)
                            ?.GetValue(te) as UndertaleTexturePageItem;
         if (direct != null) return direct;
@@ -584,7 +719,7 @@ UndertaleTexturePageItem GetTpiFromFrame(UndertaleSprite.TextureEntry te)
     catch { return null; }
 }
 
-// Resolve a background's TexturePageItem using reflection so it works across UTMT forks.
+
 UndertaleTexturePageItem GetBackgroundTpi(object bgObj)
 {
     try
@@ -592,7 +727,7 @@ UndertaleTexturePageItem GetBackgroundTpi(object bgObj)
         if (bgObj == null) return null;
         var bgType = bgObj.GetType();
 
-        // 1) bg.Texture?.TexturePageItem *or* bg.Texture is already TPI
+        
         var texProp = bgType.GetProperty("Texture", BindingFlags.Public | BindingFlags.Instance);
         var tex = texProp?.GetValue(bgObj);
         if (tex is UndertaleTexturePageItem tpi0) return tpi0;
@@ -606,12 +741,12 @@ UndertaleTexturePageItem GetBackgroundTpi(object bgObj)
             }
         }
 
-        // 2) bg.TexturePageItem (direct)
+        
         var direct = bgType.GetProperty("TexturePageItem", BindingFlags.Public | BindingFlags.Instance)
                            ?.GetValue(bgObj) as UndertaleTexturePageItem;
         if (direct != null) return direct;
 
-        // 3) bg.Graphic?.TexturePageItem
+        
         var g = bgType.GetProperty("Graphic", BindingFlags.Public | BindingFlags.Instance)?.GetValue(bgObj);
         if (g != null)
         {
@@ -623,3 +758,4 @@ UndertaleTexturePageItem GetBackgroundTpi(object bgObj)
     catch { }
     return null;
 }
+

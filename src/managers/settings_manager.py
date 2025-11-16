@@ -208,12 +208,8 @@ class SettingsManager(QObject):
                     if os.path.isdir(candidate):
                         corrected_path = candidate
                         break
-            if isinstance(self.app_state.game_mode, UndertaleGameMode):
-                game_type = 'undertale'
-            elif isinstance(self.app_state.game_mode, UndertaleYellowGameMode):
-                game_type = 'undertaleyellow'
-            else:
-                game_type = 'deltarune'
+            from utils.game_utils import get_game_type_string
+            game_type = get_game_type_string(self.app_state.game_mode)
             if is_valid_game_path(corrected_path, False, game_type):
                 self.app_state.game_mode.set_game_path(self.app_state.local_config, corrected_path)
                 self.write_local_config()

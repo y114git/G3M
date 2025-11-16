@@ -89,12 +89,3 @@ def create_png_splash():
     splash.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
     splash.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint)
     return splash
-
-
-def create_splash():
-    gif_path = resource_path('assets/images/splash.gif')
-    if os.path.exists(gif_path):
-        splash = CustomSplashScreen(gif_path=gif_path)
-        if hasattr(splash, 'movie') and splash.movie.isValid():
-            return splash
-    return create_png_splash()

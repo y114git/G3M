@@ -15,7 +15,7 @@ from config.constants import LAUNCHER_VERSION, UI_COLORS, SLOT_ID_UNIVERSAL, SLO
 from managers.localization_manager import tr
 from utils.path_utils import resource_path
 from utils.mod_utils import get_mod_key
-from utils.game_utils import is_demo_mode, is_undertale_mode, is_undertale_yellow_mode
+from models.game_modes import DemoGameMode, UndertaleGameMode, UndertaleYellowGameMode
 
 
 class ShortcutManager(QObject):
@@ -142,11 +142,10 @@ class ShortcutManager(QObject):
         current_path = self.parent_widget._get_current_game_path()
         if not current_path:
             return None
-        is_demo = is_demo_mode(self.app_state.game_mode)
+        is_demo = isinstance(self.app_state.game_mode, DemoGameMode)
         is_chapter_mode = hasattr(self.parent_widget, 'chapter_mode_checkbox') and self.parent_widget.chapter_mode_checkbox.isChecked()
-        is_undertale = is_undertale_mode(self.app_state.game_mode)
-        is_undertaleyellow = is_undertale_yellow_mode(self.app_state.game_mode)
-        from models.game_modes import DemoGameMode, UndertaleGameMode, UndertaleYellowGameMode
+        is_undertale = isinstance(self.app_state.game_mode, UndertaleGameMode)
+        is_undertaleyellow = isinstance(self.app_state.game_mode, UndertaleYellowGameMode)
         undertale_game_path = ''
         undertaleyellow_game_path = ''
         if is_undertale:
@@ -217,9 +216,9 @@ class ShortcutManager(QObject):
             slot_manager = getattr(self.parent_widget, 'slot_manager', None)
             if not slot_manager:
                 raise Exception('slot_manager not found')
-            is_demo = is_demo_mode(self.app_state.game_mode)
-            is_undertale = is_undertale_mode(self.app_state.game_mode)
-            is_undertaleyellow = is_undertale_yellow_mode(self.app_state.game_mode)
+            is_demo = isinstance(self.app_state.game_mode, DemoGameMode)
+            is_undertale = isinstance(self.app_state.game_mode, UndertaleGameMode)
+            is_undertaleyellow = isinstance(self.app_state.game_mode, UndertaleYellowGameMode)
             if is_chapter_mode is None:
                 is_chapter_mode = self.app_state.current_mode == 'chapter'
             if is_demo:
@@ -324,9 +323,9 @@ class ShortcutManager(QObject):
             if launch_via_steam:
                 self.app_state.local_config['launch_via_steam'] = True
             if use_custom_executable:
-                is_demo = is_demo_mode(self.app_state.game_mode)
-                is_undertale = is_undertale_mode(self.app_state.game_mode)
-                is_undertaleyellow = is_undertale_yellow_mode(self.app_state.game_mode)
+                is_demo = isinstance(self.app_state.game_mode, DemoGameMode)
+                is_undertale = isinstance(self.app_state.game_mode, UndertaleGameMode)
+                is_undertaleyellow = isinstance(self.app_state.game_mode, UndertaleYellowGameMode)
                 if is_demo:
                     exec_path = demo_custom_exec_path
                     if exec_path:

@@ -13,7 +13,7 @@ from config.constants import CLOUD_FUNCTIONS_BASE_URL, UI_COLORS, NETWORK_TIMEOU
 from managers.localization_manager import tr
 from utils.file_utils import get_unique_mod_dir
 from utils.deltamod_converter import DeltamodConverter
-from utils.network_utils import download_file
+from utils.network_utils import download_file, sanitize_log_message
 import logging
 
 
@@ -50,17 +50,14 @@ class PresenceWorker(QObject):
             else:
                 self.update_online_count.emit(-1)
         except requests.Timeout as e:
-            from utils.network_utils import sanitize_log_message
             safe_msg = sanitize_log_message(f'PresenceWorker: timeout error: {e}')
             logging.debug(safe_msg)
             self.update_online_count.emit(-1)
         except requests.ConnectionError as e:
-            from utils.network_utils import sanitize_log_message
             safe_msg = sanitize_log_message(f'PresenceWorker: connection error: {e}')
             logging.debug(safe_msg)
             self.update_online_count.emit(-1)
         except requests.RequestException as e:
-            from utils.network_utils import sanitize_log_message
             safe_msg = sanitize_log_message(f'PresenceWorker: request error: {e}')
             logging.debug(safe_msg)
             self.update_online_count.emit(-1)
@@ -110,7 +107,6 @@ class FetchChangelogWorker(QObject):
             else:
                 text = self.source
         except Exception as e:
-            from utils.network_utils import sanitize_log_message
             safe_msg = sanitize_log_message(f'FetchChangelogWorker: failed to load changelog: {e}')
             logging.warning(safe_msg, exc_info=True)
             text = tr('errors.changelog_load_failed')
@@ -314,7 +310,6 @@ class InstallModsThread(QThread):
                     os.remove(target_path)
                 except OSError as rm_e:
                     logging.debug(f'_download_component_file: cleanup failed: {rm_e}')
-            from utils.network_utils import sanitize_log_message
             safe_msg = sanitize_log_message(f'_download_component_file: network error downloading file: {e}')
             logging.error(safe_msg, exc_info=True)
             raise
@@ -324,7 +319,6 @@ class InstallModsThread(QThread):
                     os.remove(target_path)
                 except OSError as rm_e:
                     logging.debug(f'_download_component_file: cleanup failed: {rm_e}')
-            from utils.network_utils import sanitize_log_message
             status_code = getattr(e.response, 'status_code', None)
             safe_msg = sanitize_log_message(f'_download_component_file: request error downloading file: {e}')
             if status_code:
@@ -344,7 +338,6 @@ class InstallModsThread(QThread):
                     os.remove(target_path)
                 except OSError as rm_e:
                     logging.debug(f'_download_component_file: cleanup failed: {rm_e}')
-            from utils.network_utils import sanitize_log_message
             safe_msg = sanitize_log_message(f'_download_component_file: unexpected error downloading file: {e}')
             logging.error(safe_msg, exc_info=True)
             raise
@@ -354,7 +347,6 @@ class InstallModsThread(QThread):
                     os.remove(target_path)
                 except OSError as rm_e:
                     logging.debug(f'_download_component_file: cleanup failed: {rm_e}')
-            from utils.network_utils import sanitize_log_message
             safe_msg = sanitize_log_message(f'_download_component_file: unexpected error downloading file: {e}')
             logging.error(safe_msg, exc_info=True)
             raise
@@ -407,14 +399,12 @@ class InstallModsThread(QThread):
                     file_sizes_cache[u] = content_length
                     total_bytes += content_length
                 except requests.Timeout as e:
-                    from utils.network_utils import sanitize_log_message
                     safe_msg = sanitize_log_message(f'InstallModsThread: HEAD timeout: {e}')
                     logging.warning(safe_msg)
                     file_sizes_cache[u] = 0
                     total_bytes = 0
                     break
                 except requests.HTTPError as e:
-                    from utils.network_utils import sanitize_log_message
                     status_code = e.response.status_code if e.response else None
                     safe_msg = sanitize_log_message(f'InstallModsThread: HEAD HTTP error: {e}')
                     if status_code:
@@ -424,14 +414,12 @@ class InstallModsThread(QThread):
                     total_bytes = 0
                     break
                 except requests.RequestException as e:
-                    from utils.network_utils import sanitize_log_message
                     safe_msg = sanitize_log_message(f'InstallModsThread: HEAD request error: {e}')
                     logging.warning(safe_msg)
                     file_sizes_cache[u] = 0
                     total_bytes = 0
                     break
                 except Exception as e:
-                    from utils.network_utils import sanitize_log_message
                     safe_msg = sanitize_log_message(f'InstallModsThread: unexpected error during HEAD: {e}')
                     logging.warning(safe_msg, exc_info=True)
                     file_sizes_cache[u] = 0
@@ -514,12 +502,10 @@ class InstallModsThread(QThread):
                 except RuntimeError as e:
                     if str(e) == 'download_cancelled':
                         raise
-                    from utils.network_utils import sanitize_log_message
                     safe_msg = sanitize_log_message(f'InstallModsThread._download_mod_file: download failed: {e}')
                     logging.error(safe_msg, exc_info=True)
                     raise
                 except Exception as e:
-                    from utils.network_utils import sanitize_log_message
                     safe_msg = sanitize_log_message(f'InstallModsThread._download_mod_file: download failed: {e}')
                     logging.error(safe_msg, exc_info=True)
                     raise
@@ -530,10 +516,10 @@ class InstallModsThread(QThread):
                     done_files += 1
                     progress = int(done_files / max(1, len(download_tasks)) * 100)
                     self.progress.emit(progress)
-            if self._cancelled:
-                self.status.emit(tr('status.operation_cancelled'), UI_COLORS['status_error'])
-                self.finished.emit(False)
-                return
+                if self._cancelled:
+                    self.status.emit(tr('status.operation_cancelled'), UI_COLORS['status_error'])
+                    self.finished.emit(False)
+                    return
             for mod_key, mod_data in installed_mods.items():
                 mod = mod_data['mod']
                 mod_folder_name = mod_folders[mod.key]
@@ -905,7 +891,6 @@ class FetchHelpContentWorker(QObject):
                 error_msg = tr('errors.load_error_http', code=response.status_code)
                 self.finished.emit(f'<i>{error_msg}</i>')
         except Exception as e:
-            from utils.network_utils import sanitize_log_message
             safe_msg = sanitize_log_message(f'FetchHelpContentWorker: failed to load help content: {e}')
             logging.warning(safe_msg, exc_info=True)
             self.finished.emit(f"<i>{tr('dialogs.help_content_load_failed')}</i>")
@@ -961,22 +946,18 @@ class ModScanThread(QThread):
                         mod_info = {'mod_key': mod_key, 'folder_path': folder_path, 'folder_name': folder_name, 'config_data': config_data, 'config_mtime': config_mtime}
                         cache[mod_key] = mod_info
                     except OSError as e:
-                        from utils.network_utils import sanitize_log_message
                         safe_msg = sanitize_log_message(f'ModScanThread: failed to access config {config_path}: {e}')
                         logging.warning(safe_msg, exc_info=True)
                         continue
                     except json.JSONDecodeError as e:
-                        from utils.network_utils import sanitize_log_message
                         safe_msg = sanitize_log_message(f'ModScanThread: invalid JSON in {config_path}: {e}')
                         logging.warning(safe_msg, exc_info=True)
                         continue
                     except KeyError as e:
-                        from utils.network_utils import sanitize_log_message
                         safe_msg = sanitize_log_message(f'ModScanThread: missing key in {config_path}: {e}')
                         logging.debug(safe_msg)
                         continue
         except OSError as e:
-            from utils.network_utils import sanitize_log_message
             safe_msg = sanitize_log_message(f'ModScanThread: failed to list directory {self.mods_dir}: {e}')
             logging.error(safe_msg, exc_info=True)
         self.scan_completed.emit(cache)
