@@ -6,6 +6,7 @@ from typing import Dict, List, Optional, Any, Tuple
 from datetime import datetime
 from config.constants import GAMEBANANA_API_BASE, GAMEBANANA_GAME_IDS, NETWORK_TIMEOUT_MEDIUM
 from utils.network_utils import get_session
+from utils.file_utils import check_filename_is_deltamod_info
 from models.mod_models import ModInfo
 from managers.localization_manager import tr
 logger = logging.getLogger(__name__)
@@ -467,16 +468,16 @@ class GameBananaAPI:
                 if file_lower == 'mod_config.json' or file_name == 'mod_config.json':
                     has_deltahub = True
                     logger.info(f'check_file_compatibility: Found mod_config.json in file: {file_name}')
-                elif '_deltamodinfo.json' in file_lower:
+                elif check_filename_is_deltamod_info(file_name):
                     has_deltamod = True
-                    logger.info(f'check_file_compatibility: Found _deltamodInfo.json in file: {file_name}')
+                    logger.info(f'check_file_compatibility: Found deltamod info file in file: {file_name}')
             else:
                 logger.debug(f'check_file_compatibility: Skipping non-string item: {type(file_name)}')
         if has_deltahub:
             logger.info(f'check_file_compatibility: File {file_id} is DELTAHUB format (mod_config.json)')
             return 'deltahub'
         elif has_deltamod:
-            logger.info(f'check_file_compatibility: File {file_id} is Deltamod format (_deltamodInfo.json)')
+            logger.info(f'check_file_compatibility: File {file_id} is Deltamod format (deltamod info file)')
             return 'deltamod'
         logger.debug(f'check_file_compatibility: No compatible file found in file_id {file_id}')
         return None

@@ -7,6 +7,7 @@ import tempfile
 from typing import Optional, Dict, Any
 from managers.localization_manager import tr
 from utils.deltamod_converter import DeltamodConverter
+from utils.file_utils import find_deltamod_info_file, check_filename_is_deltamod_info
 logger = logging.getLogger(__name__)
 
 
@@ -22,7 +23,7 @@ class GameBananaConverter:
         try:
             self.temp_extract_dir = tempfile.mkdtemp(prefix='gb_convert_')
             if not self._check_compatibility():
-                logger.error(f'Archive {self.archive_path} does not contain _deltamodInfo.json')
+                logger.error(f'Archive {self.archive_path} does not contain deltamod info file')
                 return None
             self._extract_archive()
             target_mod_key = None
@@ -53,7 +54,7 @@ class GameBananaConverter:
             with zipfile.ZipFile(self.archive_path, 'r') as zf:
                 namelist = zf.namelist()
                 for name in namelist:
-                    if name.lower().endswith('_deltamodinfo.json') or name.endswith('_deltamodInfo.json'):
+                    if check_filename_is_deltamod_info(name):
                         return True
                 return False
         except zipfile.BadZipFile:
@@ -79,8 +80,8 @@ class GameBananaConverter:
             raise
 
     def _update_deltamod_info_mod_key(self, target_mod_key: str) -> None:
-        deltamod_info_path = os.path.join(self.temp_extract_dir, '_deltamodInfo.json')
-        if not os.path.exists(deltamod_info_path):
+        deltamod_info_path = find_deltamod_info_file(self.temp_extract_dir)
+        if not deltamod_info_path:
             return
         try:
             with open(deltamod_info_path, 'r', encoding='utf-8') as f:
@@ -91,9 +92,9 @@ class GameBananaConverter:
             deltamod_info['metadata']['packageID'] = package_id
             with open(deltamod_info_path, 'w', encoding='utf-8') as f:
                 json.dump(deltamod_info, f, indent=4, ensure_ascii=False)
-            logger.info(f'GameBananaConverter: Updated packageID in _deltamodInfo.json to {package_id} (target_mod_key: {target_mod_key})')
+            logger.info(f'GameBananaConverter: Updated packageID in deltamod info file to {package_id} (target_mod_key: {target_mod_key})')
         except Exception as e:
-            logger.warning(f'Failed to update packageID in _deltamodInfo.json: {e}')
+            logger.warning(f'Failed to update packageID in deltamod info file: {e}')
 
     def _remove_existing_mod_folder(self, mod_key: str) -> None:
         if not os.path.exists(self.mods_dir):

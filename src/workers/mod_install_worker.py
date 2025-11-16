@@ -6,7 +6,7 @@ import json
 from PyQt6.QtCore import QThread, pyqtSignal
 from managers.localization_manager import tr
 from utils.network_utils import get_session, download_file
-from utils.file_utils import extract_archive, sanitize_filename
+from utils.file_utils import extract_archive, sanitize_filename, has_deltamod_info_file
 from utils.deltamod_converter import DeltamodConverter
 from config.constants import NETWORK_TIMEOUT_HEAD, UI_COLORS
 
@@ -57,7 +57,7 @@ class ModInstallWorker(QThread):
     def _install_mod_from_path(self, content_path: str) -> bool:
         try:
             files_in_root = os.listdir(content_path)
-            if '_deltamodInfo.json' in files_in_root:
+            if has_deltamod_info_file(files_in_root):
                 self.status.emit(tr('status.deltamod_archive_detected_url'), UI_COLORS['status_warning'])
                 converter = DeltamodConverter(content_path, self.mods_dir)
                 new_mod_path = converter.convert()
