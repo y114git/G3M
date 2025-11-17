@@ -76,6 +76,9 @@ class AppState(QObject):
         self.gamebanana_mods_needing_metadata: List[str] = []
         self.has_internet: bool = True
         self.pending_announce_check: bool = False
+        self.current_install_mod_identifier: Optional[str] = None
+        self.current_install_is_gamebanana: bool = False
+        self.current_install_progress: int = 0
 
     @property
     def is_installing(self) -> bool:

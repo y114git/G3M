@@ -1,13 +1,16 @@
 import os
 import shutil
 import logging
+from typing import Dict, List, Optional
 from PyQt6.QtCore import QTimer
+from PyQt6.QtWidgets import QDialog
 from managers.localization_manager import tr
 from config.constants import UI_COLORS
 from ui.widgets.mod.installed_mod_widget import InstalledModWidget
 from workers.background_workers import InstallModsThread
 from workers.install_gamebanana_mod import InstallGameBananaModThread
 from utils.mod_utils import get_mod_key, get_mod_name
+from ui.dialogs.gamebanana_file_picker_dialog import GameBananaFilePickerDialog
 
 
 class ModOperationsController:
@@ -17,6 +20,7 @@ class ModOperationsController:
         self.feedback_manager = feedback_manager
         self.mod_manager = mod_manager
         self.app = app_window
+        self._last_gamebanana_progress = -1
 
     def _safe_execute(self, func, error_msg_prefix='', default_return=None):
         try:
@@ -48,7 +52,7 @@ class ModOperationsController:
             return
         self.install_mod(mod)
 
-    def _install_gamebanana_mod(self, mod, force=False, is_update=False):
+    def _install_gamebanana_mod(self, mod, force=False, is_update=False, selected_file=None):
         try:
             self._safe_execute(lambda: setattr(self.app_state, 'operation_cancelled', False), 'Failed to set operation_cancelled')
             if self.app_state.current_task and self.app_state.current_task.isRunning():
@@ -103,7 +107,7 @@ class ModOperationsController:
                 except Exception:
                     pass
                 self.app_state.clear_current_task()
-            self._start_gamebanana_install(mod, force, is_update)
+            self._start_gamebanana_install(mod, force, is_update, selected_file)
         except Exception as e:
             logging.error(f'Error starting GameBanana mod installation: {e}', exc_info=True)
             self.app_state.is_installing = False
@@ -139,11 +143,17 @@ class ModOperationsController:
             self._safe_execute(lambda: self.app.game_launch.update_button_state(), 'Failed to update button state')
             self.feedback_manager.show_message('error', 'errors.gamebanana_install_failed', error=str(e))
 
-    def _start_gamebanana_install(self, mod, force=False, is_update=False):
+    def _start_gamebanana_install(self, mod, force=False, is_update=False, selected_file=None):
         try:
             self.app._install_op_id += 1
             op_id = self.app._install_op_id
-            install_thread = InstallGameBananaModThread(self.app, mod)
+            identifier = self._get_mod_identifier(mod)
+            self.app_state.current_install_mod_identifier = identifier
+            self.app_state.current_install_is_gamebanana = True
+            self.app_state.current_install_progress = 0
+            self._last_gamebanana_progress = -1
+            self._safe_execute(lambda: self.app.search_display.update_search_plaques(), 'Failed to refresh plaques before download')
+            install_thread = InstallGameBananaModThread(self.app, mod, selected_file=selected_file)
             self._start_install_thread(install_thread, op_id)
         except Exception as e:
             logging.error(f'Error starting GameBanana mod installation thread: {e}', exc_info=True)
@@ -152,6 +162,70 @@ class ModOperationsController:
             self.app_state.clear_current_task()
             self._safe_execute(lambda: self.app.game_launch.update_button_state(), 'Failed to update button state')
             self.feedback_manager.show_message('error', 'errors.gamebanana_install_failed', error=str(e))
+
+    def _show_incompatible_gamebanana_dialog(self, mod=None, mod_url: Optional[str] = None):
+        from PyQt6.QtWidgets import QMessageBox
+        import webbrowser
+        url_to_open = mod_url
+        if not url_to_open and mod:
+            url_to_open = getattr(mod, 'external_url', None)
+            if not url_to_open:
+                mod_id = getattr(mod, 'gamebanana_mod_id', None)
+                if mod_id:
+                    url_to_open = f'https://gamebanana.com/mods/{mod_id}'
+        msg_box = QMessageBox(self.app)
+        msg_box.setIcon(QMessageBox.Icon.Information)
+        msg_box.setWindowTitle(tr('errors.mod_not_compatible_title'))
+        msg_box.setText(tr('errors.mod_requires_manual_installation'))
+        open_btn = msg_box.addButton(tr('ui.open_instructions'), QMessageBox.ButtonRole.AcceptRole)
+        msg_box.addButton(tr('buttons.close'), QMessageBox.ButtonRole.RejectRole)
+        msg_box.setDefaultButton(open_btn)
+        msg_box.exec()
+        if msg_box.clickedButton() == open_btn and url_to_open:
+            webbrowser.open(url_to_open)
+
+    def _get_available_gamebanana_files(self, mod) -> List[Dict]:
+        files = getattr(mod, 'gamebanana_supported_files', []) or []
+        if files:
+            self._notify_gamebanana_status_refresh()
+            return files
+        mod_id = getattr(mod, 'gamebanana_mod_id', None)
+        if not mod_id:
+            return []
+        try:
+            from utils.gamebanana_api import GameBananaAPI
+            api = GameBananaAPI()
+            compat = api.get_supported_files_for_mod(int(mod_id))
+            files = compat.get('supported_files') or []
+            if files:
+                setattr(mod, 'gamebanana_supported_files', files)
+                setattr(mod, 'gamebanana_is_tool_compatible', compat.get('has_supported_files', False))
+                setattr(mod, 'gamebanana_compatibility_checked', compat.get('compatibility_checked', False))
+                self._notify_gamebanana_status_refresh()
+            return files
+        except Exception as e:
+            logging.warning(f'ModOperationsController: Failed to refresh GameBanana files for {mod_id}: {e}')
+            return []
+
+    def _get_mod_identifier(self, mod) -> Optional[str]:
+        try:
+            if hasattr(mod, 'is_gamebanana_mod') and mod.is_gamebanana_mod:
+                mod_id = getattr(mod, 'gamebanana_mod_id', None)
+                if mod_id:
+                    return f'gb::{mod_id}'
+            mod_key = getattr(mod, 'key', None)
+            if mod_key:
+                return f'key::{mod_key}'
+        except Exception as e:
+            logging.debug(f'ModOperationsController: Failed to get identifier for mod: {e}')
+        return None
+
+    def _notify_gamebanana_status_refresh(self):
+        try:
+            if hasattr(self.app, 'search_display'):
+                QTimer.singleShot(0, self.app.search_display.update_search_plaques)
+        except Exception:
+            pass
 
     def _on_gamebanana_install_finished(self, success: bool, message: str, op_id: int):
         if self.app._install_op_id != op_id:
@@ -164,18 +238,7 @@ class ModOperationsController:
         if not success and message and message.startswith('MOD_NOT_COMPATIBLE:'):
             mod_url = message.replace('MOD_NOT_COMPATIBLE:', '')
             if mod_url:
-                import webbrowser
-                from PyQt6.QtWidgets import QMessageBox
-                msg_box = QMessageBox(self.app)
-                msg_box.setIcon(QMessageBox.Icon.Information)
-                msg_box.setWindowTitle(tr('errors.mod_not_compatible_title'))
-                msg_box.setText(tr('errors.mod_requires_manual_installation'))
-                open_btn = msg_box.addButton(tr('ui.open_instructions'), QMessageBox.ButtonRole.AcceptRole)
-                msg_box.addButton(tr('buttons.close'), QMessageBox.ButtonRole.RejectRole)
-                msg_box.setDefaultButton(open_btn)
-                msg_box.exec()
-                if msg_box.clickedButton() == open_btn:
-                    webbrowser.open(mod_url)
+                self._show_incompatible_gamebanana_dialog(mod_url=mod_url)
             self._on_install_complete(False, '', was_installed_before=False)
             return
         self._on_install_complete(success, message, was_installed_before=False)
@@ -185,7 +248,26 @@ class ModOperationsController:
             if self.app_state.is_installing and (not force):
                 return
             if hasattr(mod, 'is_gamebanana_mod') and mod.is_gamebanana_mod:
-                self._install_gamebanana_mod(mod, force, is_update)
+                available_files = self._get_available_gamebanana_files(mod)
+                is_checked = bool(getattr(mod, 'gamebanana_compatibility_checked', False))
+                is_compatible = bool(getattr(mod, 'gamebanana_is_tool_compatible', False))
+                if is_checked and (not is_compatible):
+                    self._show_incompatible_gamebanana_dialog(mod=mod)
+                    return
+                if not available_files:
+                    self._show_incompatible_gamebanana_dialog(mod=mod)
+                    return
+                selected_file = available_files[0]
+                if len(available_files) > 1:
+                    dialog = GameBananaFilePickerDialog(self.app, available_files, mod.name, getattr(mod, 'external_url', None))
+                    result = dialog.exec()
+                    if result != QDialog.DialogCode.Accepted:
+                        self.feedback_manager.update_status(tr('status.operation_cancelled'), UI_COLORS['status_warning'])
+                        return
+                    selection = dialog.get_selected_file()
+                    if selection:
+                        selected_file = selection
+                self._install_gamebanana_mod(mod, force, is_update, selected_file)
                 return
             available_chapters = []
             if mod.modgame == 'undertale':
@@ -238,6 +320,11 @@ class ModOperationsController:
     def on_install_progress_token(self, value: int, op_id: int):
         if self.app._install_op_id == op_id and self.app_state.is_installing:
             self.app.progress_bar.setValue(value)
+            if getattr(self.app_state, 'current_install_is_gamebanana', False):
+                self.app_state.current_install_progress = value
+                if value >= 100 or abs(value - self._last_gamebanana_progress) >= 2:
+                    self._last_gamebanana_progress = value
+                    self._safe_execute(lambda: self.app.search_display.update_search_plaques(), 'Failed to refresh plaques for progress')
 
     def on_install_status_token(self, message: str, color: str, op_id: int):
         if self.app._install_op_id == op_id and self.app_state.is_installing:
@@ -260,7 +347,12 @@ class ModOperationsController:
         self.app.progress_bar.setVisible(False)
         self.app_state.clear_current_task()
         self.app_state.is_installing = False
+        self.app_state.current_install_progress = 0
+        self.app_state.current_install_mod_identifier = None
+        self.app_state.current_install_is_gamebanana = False
+        self._last_gamebanana_progress = -1
         self.set_install_buttons_enabled(True)
+        self._safe_execute(lambda: self.app.search_display.update_search_plaques(), 'Failed to refresh plaques after install')
         QTimer.singleShot(50, lambda: self._safe_execute(lambda: self.app.game_launch.update_button_state(), 'Failed to update button state'))
         if not success:
             is_cancelled = message == tr('status.operation_cancelled') or 'cancelled' in message.lower() or self.app_state.operation_cancelled

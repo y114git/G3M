@@ -3,12 +3,12 @@ import tempfile
 import shutil
 import logging
 from typing import Optional, Dict
-from PyQt6.QtCore import QThread, pyqtSignal
+from PyQt6.QtCore import QThread, pyqtSignal, QTimer
 from config.constants import UI_COLORS, NETWORK_TIMEOUT_HEAD
 from managers.localization_manager import tr
 from utils.gamebanana_api import GameBananaAPI
 from utils.gamebanana_converter import GameBananaConverter
-from utils.file_utils import check_filename_is_deltamod_info
+from utils.file_utils import normalize_mod_package
 from utils.network_utils import get_session, download_file
 import requests
 logger = logging.getLogger(__name__)
@@ -20,7 +20,7 @@ class InstallGameBananaModThread(QThread):
     finished = pyqtSignal(bool, str)
     file_selection_required = pyqtSignal(list, str)
 
-    def __init__(self, main_window, mod_info, parent=None):
+    def __init__(self, main_window, mod_info, selected_file=None, parent=None):
         super().__init__(parent)
         self.main_window = main_window
         self.mod_info = mod_info
@@ -30,6 +30,7 @@ class InstallGameBananaModThread(QThread):
         self._active_response = None
         self._selected_file_index = None
         self._file_selection_event = None
+        self.selected_file = selected_file
 
     def cancel(self):
         self._cancelled = True
@@ -67,23 +68,23 @@ class InstallGameBananaModThread(QThread):
             if self._cancelled:
                 self.finished.emit(False, tr('status.operation_cancelled'))
                 return
-            self.status.emit(tr('status.checking_mod_compatibility'), UI_COLORS['status_info'])
-            compatible_file = self.api.find_compatible_file(int(mod_id))
-            if not compatible_file:
+            self.status.emit(tr('status.preparing_download'), UI_COLORS['status_info'])
+            file_choice = self._resolve_selected_file(int(mod_id))
+            if not file_choice:
                 mod_url = self.mod_info.external_url or f'https://gamebanana.com/mods/{mod_id}'
                 error_msg = f'MOD_NOT_COMPATIBLE:{mod_url}'
-                logger.warning(f'Mod {mod_id} does not have a compatible file with mod_config.json or deltamod info file')
+                logger.warning(f'Mod {mod_id} does not have a compatible file assigned for auto install')
                 self.status.emit(tr('status.installation_failed'), UI_COLORS['status_error'])
                 self.finished.emit(False, error_msg)
                 return
             if self._cancelled:
                 self.finished.emit(False, tr('status.operation_cancelled'))
                 return
-            download_url = compatible_file.get('_sDownloadUrl')
+            download_url = file_choice.get('download_url') or file_choice.get('_sDownloadUrl')
             if not download_url:
                 raise ValueError(tr('errors.no_download_url'))
             self.status.emit(tr('status.downloading_mod'), UI_COLORS['status_warning'])
-            file_name = compatible_file.get('_sFile', compatible_file.get('_sName', 'mod.zip'))
+            file_name = file_choice.get('name') or file_choice.get('_sFile') or file_choice.get('_sName') or f'mod_{mod_id}.zip'
             try:
                 archive_path = self._download_file(download_url, file_name)
                 archive_dir = os.path.dirname(archive_path) if archive_path else None
@@ -98,47 +99,7 @@ class InstallGameBananaModThread(QThread):
                 self._cleanup_temp_files(archive_path, archive_dir)
                 self.finished.emit(False, tr('status.operation_cancelled'))
                 return
-            file_format = compatible_file.get('file_format', 'deltamod')
-            try:
-                import tempfile
-                from utils.file_utils import _extract_archive_raw
-                fname_lower = os.path.basename(archive_path).lower()
-                with tempfile.TemporaryDirectory(prefix='gb_check_') as temp_dir:
-                    try:
-                        _extract_archive_raw(archive_path, fname_lower, temp_dir)
-                    except Exception as e:
-                        error_msg = tr('errors.invalid_archive_format')
-                        logger.error(f'Invalid archive format: {archive_path}: {e}')
-                        self.status.emit(error_msg, UI_COLORS['status_error'])
-                        self.finished.emit(False, error_msg)
-                        return
-                    has_mod_config = False
-                    has_deltamod_info = False
-                    for root, dirs, files in os.walk(temp_dir):
-                        for file in files:
-                            if file == 'mod_config.json':
-                                has_mod_config = True
-                            elif check_filename_is_deltamod_info(file):
-                                has_deltamod_info = True
-                        if has_mod_config or has_deltamod_info:
-                            break
-                    if not has_mod_config and (not has_deltamod_info):
-                        mod_url = self.mod_info.external_url or f'https://gamebanana.com/mods/{mod_id}'
-                        error_msg = tr('errors.archive_missing_modinfo')
-                        logger.error(f'Archive {archive_path} does not contain mod_config.json or deltamod info file despite API check')
-                        self.status.emit(error_msg, UI_COLORS['status_error'])
-                        self.finished.emit(False, error_msg)
-                        return
-                    if has_mod_config:
-                        file_format = 'deltahub'
-                    elif has_deltamod_info:
-                        file_format = 'deltamod'
-            except Exception as e:
-                error_msg = tr('errors.invalid_archive_format')
-                logger.error(f'Error checking archive: {archive_path}: {e}', exc_info=True)
-                self.status.emit(error_msg, UI_COLORS['status_error'])
-                self.finished.emit(False, error_msg)
-                return
+            file_format = file_choice.get('compatibility', 'deltahub')
             if self._cancelled:
                 self._cleanup_temp_files(archive_path, archive_dir)
                 self.finished.emit(False, tr('status.operation_cancelled'))
@@ -191,14 +152,12 @@ class InstallGameBananaModThread(QThread):
             except Exception as e:
                 logger.error(f'Error extracting DELTAHUB mod archive: {e}')
                 raise
-            mod_config_path = None
-            content_root = temp_dir
-            for root, dirs, files in os.walk(temp_dir):
-                if 'mod_config.json' in files:
-                    mod_config_path = os.path.join(root, 'mod_config.json')
-                    if root != temp_dir:
-                        content_root = root
-                    break
+            try:
+                normalize_info = normalize_mod_package(temp_dir, require_mod_config=True)
+            except Exception as e:
+                logger.error(f'Error normalizing DELTAHUB archive: {e}')
+                raise
+            mod_config_path = normalize_info.get('mod_config_path')
             if not mod_config_path:
                 logger.error('mod_config.json not found in DELTAHUB mod archive')
                 raise ValueError('mod_config.json not found in archive')
@@ -208,6 +167,7 @@ class InstallGameBananaModThread(QThread):
             except Exception as e:
                 logger.error(f'Error reading mod_config.json: {e}')
                 raise
+            content_root = os.path.dirname(mod_config_path)
             is_redirect = False
             files_in_archive = []
             for root, dirs, files in os.walk(content_root):
@@ -330,3 +290,32 @@ class InstallGameBananaModThread(QThread):
                 except Exception:
                     pass
             raise
+
+    def _resolve_selected_file(self, mod_id: int) -> Optional[Dict]:
+        if self.selected_file:
+            return self.selected_file
+        files = getattr(self.mod_info, 'gamebanana_supported_files', []) or []
+        if files:
+            self.selected_file = files[0]
+            self._notify_search_refresh()
+            return self.selected_file
+        try:
+            compat = self.api.get_supported_files_for_mod(int(mod_id))
+            files = compat.get('supported_files') or []
+            if files:
+                self.mod_info.gamebanana_supported_files = files
+                self.mod_info.gamebanana_is_tool_compatible = compat.get('has_supported_files', False)
+                self.mod_info.gamebanana_compatibility_checked = compat.get('compatibility_checked', False)
+                self.selected_file = files[0]
+                self._notify_search_refresh()
+                return self.selected_file
+        except Exception as e:
+            logger.warning(f'InstallGameBananaModThread: Failed to refresh supported files for {mod_id}: {e}')
+        return None
+
+    def _notify_search_refresh(self):
+        try:
+            if hasattr(self.main_window, 'search_display'):
+                QTimer.singleShot(0, self.main_window.search_display.update_search_plaques)
+        except Exception:
+            pass

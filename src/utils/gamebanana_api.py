@@ -4,7 +4,7 @@ import json
 import re
 from typing import Dict, List, Optional, Any, Tuple
 from datetime import datetime
-from config.constants import GAMEBANANA_API_BASE, GAMEBANANA_GAME_IDS, NETWORK_TIMEOUT_MEDIUM
+from config.constants import GAMEBANANA_API_BASE, GAMEBANANA_GAME_IDS, GAMEBANANA_SUPPORTED_TOOL_IDS, GAMEBANANA_TOOL_ID_DELTAHUB, GAMEBANANA_TOOL_ID_DELTAMOD, NETWORK_TIMEOUT_MEDIUM
 from utils.network_utils import get_session
 from utils.file_utils import check_filename_is_deltamod_info
 from models.mod_models import ModInfo
@@ -18,6 +18,7 @@ class GameBananaAPI:
         self.base_url = GAMEBANANA_API_BASE
         self.core_api_base = 'https://api.gamebanana.com'
         self.session = get_session()
+        self._compatibility_cache: Dict[int, Dict[str, Any]] = {}
 
     def get_game_mods(self, game_id: int, page: int = 1, per_page: int = 20, sort: str = 'default', metadata_cache=None) -> Tuple[Optional[List[Dict]], List[str]]:
         valid_sorts = ['default', 'new', 'updated']
@@ -85,6 +86,14 @@ class GameBananaAPI:
                             needs_category = not current_category
                             if (needs_downloads or needs_tagline or needs_category) and (not cache_valid):
                                 mods_needing_metadata.append(mod_id_str)
+                            mapped_data['gamebanana_supported_files'] = []
+                            mapped_data['gamebanana_has_compatible_file'] = None
+                            mapped_data['gamebanana_is_tool_compatible'] = False
+                            mapped_data['gamebanana_supported_tool_ids'] = []
+                            mapped_data['gamebanana_preferred_format'] = None
+                            mapped_data['gamebanana_has_deltahub_file'] = False
+                            mapped_data['gamebanana_has_deltamod_file'] = False
+                            mapped_data['gamebanana_compatibility_checked'] = False
                             mapped_mods.append(mapped_data)
             return (mapped_mods, mods_needing_metadata)
         except requests.RequestException as e:
@@ -365,6 +374,24 @@ class GameBananaAPI:
             logger.error(f'Unexpected error fetching preview media for mod {mod_id}: {e}', exc_info=True)
             return None
 
+    def get_mod_profile_page(self, mod_id: int) -> Optional[Dict]:
+        url = f'{self.base_url}/Mod/{mod_id}/ProfilePage'
+        try:
+            logger.debug(f'get_mod_profile_page: Fetching profile for mod {mod_id}')
+            response = self.session.get(url, timeout=NETWORK_TIMEOUT_MEDIUM)
+            response.raise_for_status()
+            data = response.json()
+            if isinstance(data, dict):
+                return data
+            logger.warning(f'get_mod_profile_page: Unexpected response type for mod {mod_id}: {type(data)}')
+            return None
+        except requests.RequestException as e:
+            logger.error(f'Error fetching profile page for mod {mod_id}: {e}')
+            return None
+        except Exception as e:
+            logger.error(f'Unexpected error fetching profile page for mod {mod_id}: {e}', exc_info=True)
+            return None
+
     def get_mod_files(self, mod_id: int) -> Optional[List[Dict]]:
         url = f'{self.core_api_base}/Core/Item/Data'
         import urllib.parse
@@ -401,6 +428,90 @@ class GameBananaAPI:
         except Exception as e:
             logger.error(f'Unexpected error fetching mod files for {mod_id}: {e}', exc_info=True)
             return None
+
+    def _get_mod_file_compatibility(self, mod_id: int) -> Dict[str, Any]:
+        cached = self._compatibility_cache.get(mod_id)
+        if cached:
+            return cached
+        compatibility: Dict[str, Any] = {'supported_files': [], 'has_supported_files': False, 'preferred_format': None, 'tool_ids': set(), 'has_deltahub_file': False, 'has_deltamod_file': False, 'compatibility_checked': False}
+        try:
+            profile_data = self.get_mod_profile_page(mod_id) or {}
+            profile_files = profile_data.get('_aFiles') or []
+            if isinstance(profile_files, dict):
+                profile_files = list(profile_files.values())
+            if isinstance(profile_files, list):
+                compatibility['compatibility_checked'] = True
+            else:
+                profile_files = []
+            for file_entry in profile_files:
+                if not isinstance(file_entry, dict):
+                    continue
+                file_id = self._safe_int(file_entry.get('_idRow'))
+                if file_id is None:
+                    continue
+                integrations = file_entry.get('_aModManagerIntegrations') or []
+                file_tool_ids: List[int] = []
+                file_tool_names: List[str] = []
+                for integration in integrations:
+                    if not isinstance(integration, dict):
+                        continue
+                    tool_id = self._safe_int(integration.get('_idToolRow'))
+                    if tool_id is None:
+                        continue
+                    file_tool_ids.append(tool_id)
+                    name = integration.get('_sName') or str(tool_id)
+                    file_tool_names.append(name)
+                compatibility_label = None
+                if GAMEBANANA_TOOL_ID_DELTAHUB in file_tool_ids:
+                    compatibility_label = 'deltahub'
+                    compatibility['has_deltahub_file'] = True
+                elif GAMEBANANA_TOOL_ID_DELTAMOD in file_tool_ids:
+                    compatibility_label = 'deltamod'
+                    compatibility['has_deltamod_file'] = True
+                if not compatibility_label:
+                    continue
+                details_entry = None
+                file_payload = self._build_file_metadata(file_id=file_id, profile_entry=file_entry, details_entry=details_entry, tool_ids=file_tool_ids, tool_names=file_tool_names, compatibility_label=compatibility_label)
+                compatibility['supported_files'].append(file_payload)
+                compatibility['tool_ids'].update(file_tool_ids)
+            if compatibility['supported_files']:
+                compatibility['has_supported_files'] = True
+                if compatibility['has_deltahub_file']:
+                    compatibility['preferred_format'] = 'deltahub'
+                elif compatibility['has_deltamod_file']:
+                    compatibility['preferred_format'] = 'deltamod'
+            compatibility['tool_ids'] = sorted(list(compatibility['tool_ids']))
+        except Exception as e:
+            logger.warning(f'_get_mod_file_compatibility: Failed to collect compatibility for mod {mod_id}: {e}', exc_info=True)
+        self._compatibility_cache[mod_id] = compatibility
+        return compatibility
+
+    def get_supported_files_for_mod(self, mod_id: int) -> Dict[str, Any]:
+        return self._get_mod_file_compatibility(int(mod_id))
+
+    @staticmethod
+    def _safe_int(value: Any) -> Optional[int]:
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _first_value(entries: List[Optional[Dict[str, Any]]], key: str, default: Any = None) -> Any:
+        for entry in entries:
+            if not entry:
+                continue
+            value = entry.get(key)
+            if value not in (None, ''):
+                return value
+        return default
+
+    def _build_file_metadata(self, file_id: int, profile_entry: Dict[str, Any], details_entry: Optional[Dict[str, Any]], tool_ids: List[int], tool_names: List[str], compatibility_label: str) -> Dict[str, Any]:
+        sources = [profile_entry, details_entry or {}]
+        size_val = self._safe_int(self._first_value(sources, '_nFilesize'))
+        timestamp_val = self._safe_int(self._first_value(sources, '_tsDateAdded'))
+        download_count = self._safe_int(self._first_value(sources, '_nDownloadCount'))
+        return {'id': file_id, 'name': self._first_value(sources, '_sFile', f'file_{file_id}'), 'version': self._first_value(sources, '_sVersion', '1.0.0'), 'description': self._first_value(sources, '_sDescription', ''), 'download_url': self._first_value(sources, '_sDownloadUrl'), 'size_bytes': size_val or 0, 'timestamp': timestamp_val, 'download_count': download_count or 0, 'md5': self._first_value(sources, '_sMd5Checksum'), 'analysis_state': self._first_value(sources, '_sAnalysisState'), 'analysis_result': self._first_value(sources, '_sAnalysisResult'), 'analysis_result_verbose': self._first_value(sources, '_sAnalysisResultVerbose'), 'av_state': self._first_value(sources, '_sAvState'), 'av_result': self._first_value(sources, '_sAvResult'), 'is_archived': bool(self._first_value(sources, '_bIsArchived', False)), 'has_contents': bool(self._first_value(sources, '_bHasContents', False)), 'tool_ids': tool_ids, 'tool_names': tool_names, 'compatibility': compatibility_label}
 
     def get_file_contents(self, file_id: int) -> Optional[List[str]]:
         url = f'{self.core_api_base}/Core/Item/Data'
@@ -679,7 +790,6 @@ class GameBananaAPI:
         preview_media = gb_data.get('_aPreviewMedia', {})
         icon_url = self.extract_icon_url(preview_media)
         tags = self.extract_tags(gb_data.get('_aTags', []))
-        has_compatible_file = None
         category = None
         gamebanana_category = gb_data.get('_aCategory') or gb_data.get('Category')
         if gamebanana_category:
@@ -693,7 +803,7 @@ class GameBananaAPI:
                     category = category.get('_sName') or category.get('name')
                 elif not isinstance(category, str):
                     category = str(category) if category else None
-        return {'key': f'gb_{mod_id}', 'name': name, 'version': version, 'author': author, 'tagline': tagline, 'game_version': game_version, 'downloads': downloads, 'created_date': created_date, 'last_updated': last_updated, 'modgame': game_name, 'is_verified': gb_data.get('_bIsVerified', False), 'icon_url': icon_url, 'tags': tags, 'external_url': gb_data.get('_sProfileUrl'), 'screenshots_url': screenshots, 'description_url': gb_data.get('_sTextUrl', ''), 'full_description': None, 'is_gamebanana_mod': True, 'gamebanana_mod_id': str(mod_id), 'gamebanana_mod_type': gb_data.get('_sModelName', 'Mod'), 'gamebanana_last_update_timestamp': updated_timestamp, 'gamebanana_has_compatible_file': has_compatible_file, 'gamebanana_category': category}
+        return {'key': f'gb_{mod_id}', 'name': name, 'version': version, 'author': author, 'tagline': tagline, 'game_version': game_version, 'downloads': downloads, 'created_date': created_date, 'last_updated': last_updated, 'modgame': game_name, 'is_verified': gb_data.get('_bIsVerified', False), 'icon_url': icon_url, 'tags': tags, 'external_url': gb_data.get('_sProfileUrl'), 'screenshots_url': screenshots, 'description_url': gb_data.get('_sTextUrl', ''), 'full_description': None, 'is_gamebanana_mod': True, 'gamebanana_mod_id': str(mod_id), 'gamebanana_mod_type': gb_data.get('_sModelName', 'Mod'), 'gamebanana_last_update_timestamp': updated_timestamp, 'gamebanana_has_compatible_file': False, 'gamebanana_category': category, 'gamebanana_is_tool_compatible': False, 'gamebanana_supported_files': [], 'gamebanana_supported_tool_ids': [], 'gamebanana_preferred_format': None, 'gamebanana_has_deltahub_file': False, 'gamebanana_has_deltamod_file': False, 'gamebanana_compatibility_checked': False}
 
     @staticmethod
     def mod_data_dict_to_mod_info(mod_data: Dict[str, Any], game_name: str = 'deltarune') -> Optional[ModInfo]:
@@ -702,7 +812,7 @@ class GameBananaAPI:
             if not mod_id:
                 return None
             category = mod_data.get('gamebanana_category')
-            return ModInfo(key=mod_data.get('key', f'gb_{mod_id}'), name=mod_data.get('name', 'Unknown Mod'), version=mod_data.get('version', '1.0.0'), author=mod_data.get('author', tr('defaults.unknown')), tagline=mod_data.get('tagline', tr('status.no_description_status')), game_version=mod_data.get('game_version', tr('defaults.not_specified')), description_url=mod_data.get('description_url', ''), downloads=mod_data.get('downloads', 0), modgame=mod_data.get('modgame', game_name), is_verified=mod_data.get('is_verified', False), icon_url=mod_data.get('icon_url'), tags=mod_data.get('tags', []), hide_mod=False, is_local_mod=False, ban_status=False, files={}, created_date=mod_data.get('created_date'), last_updated=mod_data.get('last_updated'), external_url=mod_data.get('external_url'), screenshots_url=mod_data.get('screenshots_url', []), full_description=mod_data.get('full_description'), is_gamebanana_mod=True, gamebanana_mod_id=str(mod_id), gamebanana_mod_type=mod_data.get('gamebanana_mod_type', 'Mod'), gamebanana_last_update_timestamp=mod_data.get('gamebanana_last_update_timestamp'), gamebanana_has_compatible_file=mod_data.get('gamebanana_has_compatible_file'), gamebanana_category=category)
+            return ModInfo(key=mod_data.get('key', f'gb_{mod_id}'), name=mod_data.get('name', 'Unknown Mod'), version=mod_data.get('version', '1.0.0'), author=mod_data.get('author', tr('defaults.unknown')), tagline=mod_data.get('tagline', tr('status.no_description_status')), game_version=mod_data.get('game_version', tr('defaults.not_specified')), description_url=mod_data.get('description_url', ''), downloads=mod_data.get('downloads', 0), modgame=mod_data.get('modgame', game_name), is_verified=mod_data.get('is_verified', False), icon_url=mod_data.get('icon_url'), tags=mod_data.get('tags', []), hide_mod=False, is_local_mod=False, ban_status=False, files={}, created_date=mod_data.get('created_date'), last_updated=mod_data.get('last_updated'), external_url=mod_data.get('external_url'), screenshots_url=mod_data.get('screenshots_url', []), full_description=mod_data.get('full_description'), is_gamebanana_mod=True, gamebanana_mod_id=str(mod_id), gamebanana_mod_type=mod_data.get('gamebanana_mod_type', 'Mod'), gamebanana_last_update_timestamp=mod_data.get('gamebanana_last_update_timestamp'), gamebanana_has_compatible_file=mod_data.get('gamebanana_has_compatible_file'), gamebanana_category=category, gamebanana_is_tool_compatible=mod_data.get('gamebanana_is_tool_compatible', False), gamebanana_supported_files=mod_data.get('gamebanana_supported_files', []), gamebanana_supported_tool_ids=mod_data.get('gamebanana_supported_tool_ids', []), gamebanana_preferred_format=mod_data.get('gamebanana_preferred_format'), gamebanana_has_deltahub_file=mod_data.get('gamebanana_has_deltahub_file', False), gamebanana_has_deltamod_file=mod_data.get('gamebanana_has_deltamod_file', False), gamebanana_compatibility_checked=mod_data.get('gamebanana_compatibility_checked', False))
         except Exception as e:
             logger.error(f'Error converting mod data to ModInfo: {e}', exc_info=True)
             return None

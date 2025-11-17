@@ -7,7 +7,7 @@ import tempfile
 from typing import Optional, Dict, Any
 from managers.localization_manager import tr
 from utils.deltamod_converter import DeltamodConverter
-from utils.file_utils import find_deltamod_info_file, check_filename_is_deltamod_info
+from utils.file_utils import find_deltamod_info_file, check_filename_is_deltamod_info, normalize_mod_package
 logger = logging.getLogger(__name__)
 
 
@@ -26,6 +26,7 @@ class GameBananaConverter:
                 logger.error(f'Archive {self.archive_path} does not contain deltamod info file')
                 return None
             self._extract_archive()
+            normalize_mod_package(self.temp_extract_dir, require_manifest=True)
             target_mod_key = None
             if self.gamebanana_metadata.get('mod_id'):
                 target_mod_key = f"gb_{self.gamebanana_metadata['mod_id']}"

@@ -1,8 +1,32 @@
-from PyQt6.QtCore import pyqtSignal, Qt
+from typing import Optional
+from PyQt6.QtCore import pyqtSignal, Qt, QThread
 from PyQt6.QtWidgets import QLabel, QPushButton, QHBoxLayout, QVBoxLayout, QFrame, QWidget
 from .base_mod_widget import BaseModWidget
 from managers.localization_manager import tr
 from ui.common.styling import get_theme_color
+import logging
+
+
+class CompatibilityCheckThread(QThread):
+    compatibility_checked = pyqtSignal(object, dict)
+
+    def __init__(self, mod_data, parent=None):
+        super().__init__(parent)
+        self.mod_data = mod_data
+
+    def run(self):
+        try:
+            if not hasattr(self.mod_data, 'is_gamebanana_mod') or not self.mod_data.is_gamebanana_mod:
+                return
+            mod_id = getattr(self.mod_data, 'gamebanana_mod_id', None)
+            if not mod_id:
+                return
+            from utils.gamebanana_api import GameBananaAPI
+            api = GameBananaAPI()
+            compat = api.get_supported_files_for_mod(int(mod_id))
+            self.compatibility_checked.emit(self.mod_data, compat)
+        except Exception as e:
+            logging.warning(f'CompatibilityCheckThread: Error checking compatibility: {e}', exc_info=True)
 
 
 class ModPlaqueWidget(BaseModWidget):
@@ -17,7 +41,6 @@ class ModPlaqueWidget(BaseModWidget):
         elif parent and hasattr(parent, 'parent_app'):
             self.parent_app = parent.parent_app
         elif parent:
-            from PyQt6.QtWidgets import QWidget
             current = parent
             while current:
                 if hasattr(current, 'mod_manager') or hasattr(current, 'app_state'):
@@ -29,8 +52,12 @@ class ModPlaqueWidget(BaseModWidget):
         self.setObjectName('modPlaque')
         self.setFrameShape(QFrame.Shape.StyledPanel)
         self.setFixedHeight(120)
+        self.gb_status_label = None
+        self._compatibility_thread = None
         self._init_ui()
         self._check_installation_status()
+        if hasattr(self.mod_data, 'is_gamebanana_mod') and self.mod_data.is_gamebanana_mod:
+            self._start_compatibility_check()
 
     def _create_tags_layout_if_needed(self, info_layout):
         tags_layout = QHBoxLayout()
@@ -39,12 +66,7 @@ class ModPlaqueWidget(BaseModWidget):
         modgame = getattr(self.mod_data, 'modgame', 'deltarune')
         modgame_text = ''
         modgame_style = ''
-        config = None
-        if self.parent_app:
-            if hasattr(self.parent_app, 'local_config'):
-                config = self.parent_app.local_config
-            elif hasattr(self.parent_app, 'app_state') and hasattr(self.parent_app.app_state, 'local_config'):
-                config = self.parent_app.app_state.local_config
+        config = self._resolve_theme_config()
         text_color = get_theme_color(config, 'text', 'white') if config else 'white'
         if modgame == 'deltarune':
             modgame_text = 'DELTARUNE'
@@ -72,8 +94,42 @@ class ModPlaqueWidget(BaseModWidget):
             gb_label.setStyleSheet('color: yellow; font-size: 14px;')
             gb_label.setToolTip(tr('ui.gamebanana_mod_tooltip'))
             tags_layout.addWidget(gb_label)
+            self.gb_status_label = QLabel()
+            self.gb_status_label.setObjectName('gbStatusLabel')
+            tags_layout.addWidget(self.gb_status_label)
+            self._update_gamebanana_status_label()
         tags_layout.addStretch()
         info_layout.addLayout(tags_layout)
+
+    def _resolve_theme_config(self):
+        if self.parent_app:
+            if hasattr(self.parent_app, 'local_config'):
+                return self.parent_app.local_config
+            if hasattr(self.parent_app, 'app_state') and hasattr(self.parent_app.app_state, 'local_config'):
+                return self.parent_app.app_state.local_config
+        return None
+
+    def _get_theme_text_color(self, fallback='white'):
+        config = self._resolve_theme_config()
+        return get_theme_color(config, 'text', fallback) if config else fallback
+
+    def _get_app_state(self):
+        if self.parent_app and hasattr(self.parent_app, 'app_state'):
+            return self.parent_app.app_state
+        return None
+
+    def _get_mod_identifier(self):
+        try:
+            if hasattr(self.mod_data, 'is_gamebanana_mod') and self.mod_data.is_gamebanana_mod:
+                mod_id = getattr(self.mod_data, 'gamebanana_mod_id', None)
+                if mod_id:
+                    return f'gb::{mod_id}'
+            mod_key = getattr(self.mod_data, 'key', None)
+            if mod_key:
+                return f'key::{mod_key}'
+        except Exception:
+            pass
+        return None
 
     def _init_ui(self):
         super()._init_ui()
@@ -176,22 +232,116 @@ class ModPlaqueWidget(BaseModWidget):
             self.is_installed = False
         self._update_install_button()
 
+    def _start_compatibility_check(self):
+        if getattr(self.mod_data, 'gamebanana_compatibility_checked', False):
+            return
+        if self._compatibility_thread:
+            if self._compatibility_thread.isFinished():
+                try:
+                    self._compatibility_thread.compatibility_checked.disconnect()
+                except (TypeError, RuntimeError):
+                    pass
+                try:
+                    self._compatibility_thread.finished.disconnect()
+                except (TypeError, RuntimeError):
+                    pass
+                self._compatibility_thread = None
+            elif self._compatibility_thread.isRunning():
+                return
+        try:
+            self._compatibility_thread = CompatibilityCheckThread(self.mod_data, self)
+            self._compatibility_thread.compatibility_checked.connect(self._on_compatibility_checked)
+            self._compatibility_thread.finished.connect(lambda: setattr(self, '_compatibility_thread', None))
+            self._compatibility_thread.start()
+        except Exception as e:
+            logging.warning(f'ModPlaqueWidget: Failed to start compatibility check: {e}', exc_info=True)
+
+    def _on_compatibility_checked(self, mod_data, compat_info):
+        if mod_data != self.mod_data:
+            return
+        try:
+            setattr(self.mod_data, 'gamebanana_supported_files', compat_info.get('supported_files', []))
+            setattr(self.mod_data, 'gamebanana_has_compatible_file', compat_info.get('has_supported_files', False))
+            setattr(self.mod_data, 'gamebanana_is_tool_compatible', compat_info.get('has_supported_files', False))
+            setattr(self.mod_data, 'gamebanana_compatibility_checked', compat_info.get('compatibility_checked', False))
+            setattr(self.mod_data, 'gamebanana_preferred_format', compat_info.get('preferred_format', None))
+            setattr(self.mod_data, 'gamebanana_has_deltahub_file', compat_info.get('has_deltahub_file', False))
+            setattr(self.mod_data, 'gamebanana_has_deltamod_file', compat_info.get('has_deltamod_file', False))
+            self._apply_gamebanana_install_styles()
+            self._update_gamebanana_status_label()
+        except Exception as e:
+            logging.warning(f'ModPlaqueWidget: Error updating compatibility info: {e}', exc_info=True)
+
     def _update_install_button(self):
         if self.is_installed:
             self.install_button.setText(tr('buttons.delete'))
             self.install_button.setObjectName('plaqueButtonUninstall')
-            config = None
-            if self.parent_app:
-                if hasattr(self.parent_app, 'local_config'):
-                    config = self.parent_app.local_config
-                elif hasattr(self.parent_app, 'app_state') and hasattr(self.parent_app.app_state, 'local_config'):
-                    config = self.parent_app.app_state.local_config
-            text_color = get_theme_color(config, 'text', 'white') if config else 'white'
-            self.install_button.setStyleSheet(f'\n                QPushButton#plaqueButtonUninstall {{\n                    background-color: #F44336;\n                    color: {text_color};\n                    font-weight: bold;\n                    min-width: 110px;\n                    max-width: 110px;\n                    min-height: 35px;\n                    max-height: 35px;\n                    font-size: 15px;\n                    padding: 1px;\n                }}\n                QPushButton#plaqueButtonUninstall:hover {{\n                    background-color: #d32f2f;\n                }}\n            ')
+            text_color = self._get_theme_text_color('white')
+            self.install_button.setStyleSheet(f'\n                QPushButton#plaqueButtonUninstall {{\n                    background-color: #F44336;\n                    color: {text_color};\n                    font-weight: bold;\n                    font-size: 15px;\n                    padding: 1px;\n                }}\n                QPushButton#plaqueButtonUninstall:hover {{\n                    background-color: #d32f2f;\n                }}\n            ')
+            self.install_button.setToolTip('')
         else:
             self.install_button.setText(tr('buttons.install'))
             self.install_button.setObjectName('plaqueButtonInstall')
+            self._apply_gamebanana_install_styles()
+
+    def _apply_gamebanana_install_styles(self):
+        if not hasattr(self.mod_data, 'is_gamebanana_mod') or not self.mod_data.is_gamebanana_mod:
             self.install_button.setStyleSheet('')
+            self.install_button.setToolTip('')
+            return
+        compatible = bool(getattr(self.mod_data, 'gamebanana_is_tool_compatible', False))
+        checked = bool(getattr(self.mod_data, 'gamebanana_compatibility_checked', False))
+        if checked and (not compatible):
+            text_color = self._get_theme_text_color('white')
+            style = f'\n                QPushButton#plaqueButtonInstall {{\n                    background-color: #FFC107;\n                    color: {text_color};\n                }}\n                QPushButton#plaqueButtonInstall:hover {{\n                    background-color: #FFB300;\n                }}\n            '
+            self.install_button.setStyleSheet(style)
+            self.install_button.setToolTip(tr('ui.gamebanana_status_manual_tooltip'))
+        else:
+            self.install_button.setStyleSheet('')
+            self.install_button.setToolTip('')
+
+    def _format_gamebanana_format(self, fmt: Optional[str]) -> str:
+        if fmt == 'deltahub':
+            return tr('ui.gamebanana_format_deltahub')
+        if fmt == 'deltamod':
+            return tr('ui.gamebanana_format_deltamod')
+        return tr('defaults.not_specified')
+
+    def _update_gamebanana_status_label(self):
+        if not self.gb_status_label:
+            return
+        is_gb = bool(getattr(self.mod_data, 'is_gamebanana_mod', False))
+        if not is_gb:
+            self.gb_status_label.setVisible(False)
+            return
+        self.gb_status_label.setVisible(True)
+        if self.is_installed:
+            text = tr('ui.gamebanana_status_installed')
+            color = '#4CAF50'
+            tooltip = tr('ui.gamebanana_status_installed_tooltip')
+            self.gb_status_label.setText(text)
+            self.gb_status_label.setStyleSheet(f'color: {color}; font-size: 13px; font-weight: bold; background: transparent;')
+            self.gb_status_label.setToolTip(tooltip)
+            return
+        compatible = bool(getattr(self.mod_data, 'gamebanana_is_tool_compatible', False))
+        checked = bool(getattr(self.mod_data, 'gamebanana_compatibility_checked', False))
+        files = getattr(self.mod_data, 'gamebanana_supported_files', []) or []
+        preferred = getattr(self.mod_data, 'gamebanana_preferred_format', None)
+        if compatible:
+            text = tr('ui.gamebanana_status_ready')
+            color = '#4CAF50'
+            tooltip = tr('ui.gamebanana_status_ready_tooltip', files=len(files) or 1, format=self._format_gamebanana_format(preferred))
+        elif checked:
+            text = tr('ui.gamebanana_status_manual')
+            color = '#FFC107'
+            tooltip = tr('ui.gamebanana_status_manual_tooltip')
+        else:
+            text = tr('ui.gamebanana_status_unknown')
+            color = '#9E9E9E'
+            tooltip = tr('ui.gamebanana_status_unknown_tooltip')
+        self.gb_status_label.setText(text)
+        self.gb_status_label.setStyleSheet(f'color: {color}; font-size: 13px; font-weight: bold; background: transparent;')
+        self.gb_status_label.setToolTip(tooltip)
 
     def _on_install_button_clicked(self):
         if self.is_installed:
@@ -200,7 +350,16 @@ class ModPlaqueWidget(BaseModWidget):
             self.install_requested.emit(self.mod_data)
 
     def update_installation_status(self):
+        was_installed = self.is_installed
         self._check_installation_status()
+        if was_installed and (not self.is_installed):
+            if hasattr(self.mod_data, 'is_gamebanana_mod') and self.mod_data.is_gamebanana_mod:
+                setattr(self.mod_data, 'gamebanana_compatibility_checked', False)
+                setattr(self.mod_data, 'gamebanana_is_tool_compatible', False)
+                setattr(self.mod_data, 'gamebanana_supported_files', [])
+                self._start_compatibility_check()
+                self._update_gamebanana_status_label()
+                self._apply_gamebanana_install_styles()
 
     def update_mod_data(self):
         try:
@@ -212,6 +371,23 @@ class ModPlaqueWidget(BaseModWidget):
                 if len(tagline) > 200:
                     tagline = tagline[:197] + '...'
                 self.tagline_label.setText(tagline)
+            if hasattr(self.mod_data, 'is_gamebanana_mod') and self.mod_data.is_gamebanana_mod:
+                checked = bool(getattr(self.mod_data, 'gamebanana_compatibility_checked', False))
+                if not checked:
+                    if self._compatibility_thread and self._compatibility_thread.isRunning():
+                        try:
+                            self._compatibility_thread.compatibility_checked.disconnect()
+                        except (TypeError, RuntimeError):
+                            pass
+                        try:
+                            self._compatibility_thread.finished.disconnect()
+                        except (TypeError, RuntimeError):
+                            pass
+                        self._compatibility_thread = None
+                    self._start_compatibility_check()
+            self._update_gamebanana_status_label()
+            if not self.is_installed:
+                self._apply_gamebanana_install_styles()
         except Exception as e:
             import logging
             logging.warning(f'ModPlaqueWidget: Error updating mod data: {e}', exc_info=True)
@@ -229,3 +405,5 @@ class ModPlaqueWidget(BaseModWidget):
                 self.install_button.setText(tr('buttons.delete'))
             else:
                 self.install_button.setText(tr('buttons.install'))
+                self._apply_gamebanana_install_styles()
+        self._update_gamebanana_status_label()

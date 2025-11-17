@@ -232,12 +232,8 @@ class AppWindow(QWidget):
             self.feedback_manager.show_message('warning', 'dialogs.install_in_progress_title', tr('dialogs.install_in_progress_body'))
             return
         if url.startswith('deltahub://'):
-            content = url[len('deltahub://'):].split(',')[0].strip().rstrip('/')
-            if not content.startswith(('http://', 'https://')):
-                content = content.replace('https//', 'https://').replace('http//', 'http://')
-            download_url = content
-            from workers.plugin_install_worker import PluginInstallWorker
-            worker = PluginInstallWorker(download_url, self.app_state.plugins_dir, self.plugin_manager, self)
+            from workers.background_workers import UrlInstallThread
+            worker = UrlInstallThread(self, url)
             worker.status.connect(lambda msg, color: self.feedback_manager.update_status(msg, color))
             worker.progress.connect(lambda p: setattr(self.app_state, 'progress_bar_value', p))
 
@@ -250,13 +246,17 @@ class AppWindow(QWidget):
                     if self.plugin_manager:
                         self.plugin_manager.convert_plugin_archives()
                         self.plugin_manager.load_plugins()
-                    self.feedback_manager.update_status(message, UI_COLORS['status_success'])
                     if hasattr(self, '_update_plugin_tabs'):
                         self._update_plugin_tabs()
                     if hasattr(self, 'plugin_display'):
                         self.plugin_display.update_display()
+                    if hasattr(self, 'library_display'):
+                        self.library_display.update_display()
+                    if hasattr(self, 'settings_manager'):
+                        self.settings_manager.theme_changed.emit()
+                    self.feedback_manager.update_status(message, UI_COLORS['status_success'])
                 else:
-                    logging.warning(f'Plugin installation failed for deltahub:// URL: {message}')
+                    logging.warning(f'Installation failed for deltahub:// URL: {message}')
                     self.feedback_manager.update_status(message or tr('errors.error'), UI_COLORS['status_error'])
             worker.finished.connect(on_finished)
             self.app_state.is_installing = True
