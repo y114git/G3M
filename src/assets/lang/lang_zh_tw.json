@@ -836,7 +836,7 @@
     "installer_launched_closing": "安裝程式已啟動。正在關閉啟動器...",
     "settings_reset_success": "設置已成功重置。",
     "unknown_size": "未知大小",
-    "downloading_from_external": "正在從外部源下載模組...",
+    "downloading_from_external": "正在從外部源下載檔案...",
     "install_cancelled_by_user": "安裝已被用戶取消。",
     "unpacking_mod": "正在提取模組壓縮檔案：{mod_name}...",
     "install_complete_success": "成功安裝 '{mod_name}'！",
