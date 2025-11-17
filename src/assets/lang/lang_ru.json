@@ -836,7 +836,7 @@
     "installer_launched_closing": "Установщик запущен. Закрытие лаунчера...",
     "settings_reset_success": "Настройки успешно сброшены.",
     "unknown_size": "Неизвестный размер",
-    "downloading_from_external": "Загрузка мода из внешнего источника...",
+    "downloading_from_external": "Загрузка файла из внешнего источника...",
     "install_cancelled_by_user": "Установка отменена пользователем.",
     "install_complete_success": "Мод «{mod_name}» успешно установлен!",
     "beta_updates_enabled": "Бета-обновления включены",

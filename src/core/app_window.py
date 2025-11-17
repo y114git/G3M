@@ -255,6 +255,7 @@ class AppWindow(QWidget):
                     if hasattr(self, 'settings_manager'):
                         self.settings_manager.theme_changed.emit()
                     self.feedback_manager.update_status(message, UI_COLORS['status_success'])
+                    QTimer.singleShot(500, lambda: self._on_refresh_clicked(is_initial=False))
                 else:
                     logging.warning(f'Installation failed for deltahub:// URL: {message}')
                     self.feedback_manager.update_status(message or tr('errors.error'), UI_COLORS['status_error'])
@@ -547,6 +548,7 @@ class AppWindow(QWidget):
         self.game_launch.set_full_install_checkbox_state(saved_full_install)
         self.app_state.is_installing_changed.connect(self.game_launch.update_button_state)
         self.app_state.is_installing_changed.connect(lambda v: self.mod_ops.set_install_buttons_enabled(not v))
+        self.app_state.is_installing_changed.connect(lambda v: self._update_all_install_buttons())
         self.app_state.current_mode = 'chapter' if saved_chapter_mode else 'normal'
         self.game_launch.update_button_state()
         self._previous_mode = self.app_state.current_mode
@@ -1540,6 +1542,10 @@ class AppWindow(QWidget):
             self._set_checkbox_checked_silently(self.full_install_checkbox, False)
             return
         self.game_launch.update_button_state()
+
+    def _update_all_install_buttons(self):
+        if hasattr(self, 'search_display'):
+            self.search_display.update_search_plaques()
 
     def _on_refresh_clicked(self, is_initial=False):
         if not is_initial and (not self.is_shortcut_launch) and self.app_state.has_internet:

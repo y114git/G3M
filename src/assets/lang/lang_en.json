@@ -834,7 +834,7 @@
     "installer_launched_closing": "Installer launched. Closing launcher...",
     "settings_reset_success": "Settings have been reset successfully.",
     "unknown_size": "Unknown size",
-    "downloading_from_external": "Downloading mod from external source...",
+    "downloading_from_external": "Downloading file from external source...",
     "install_cancelled_by_user": "Installation cancelled by user.",
     "install_complete_success": "Successfully installed '{mod_name}'!",
     "beta_updates_enabled": "Beta updates enabled",

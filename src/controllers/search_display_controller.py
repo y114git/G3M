@@ -369,7 +369,8 @@ class SearchDisplayController:
                                     self.app.mod_list_layout.insertWidget(target_position, plaque)
                             else:
                                 self.app.mod_list_layout.insertWidget(target_position, plaque)
-                            plaque.install_button.setEnabled(not self.app_state.is_installing)
+                            if hasattr(plaque, 'update_install_button_state'):
+                                plaque.update_install_button_state()
                             widgets_shown += 1
                             target_position += 1
                         else:
@@ -380,7 +381,8 @@ class SearchDisplayController:
                             plaque.uninstall_requested.connect(self.mod_ops.on_mod_uninstall_requested)
                             plaque.clicked.connect(self.on_mod_clicked)
                             plaque.details_requested.connect(self.show_details)
-                            plaque.install_button.setEnabled(not self.app_state.is_installing)
+                            if hasattr(plaque, 'update_install_button_state'):
+                                plaque.update_install_button_state()
                             self.app.mod_list_layout.insertWidget(target_position, plaque)
                             self.plaque_widget_cache[cache_key] = plaque
                             widgets_created += 1
@@ -440,6 +442,8 @@ class SearchDisplayController:
                         if hasattr(widget, 'update_mod_data'):
                             widget.update_mod_data()
                         widget.update_installation_status()
+                        if hasattr(widget, 'update_install_button_state'):
+                            widget.update_install_button_state()
                     except Exception:
                         pass
 

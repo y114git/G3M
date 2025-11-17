@@ -56,6 +56,7 @@ class ModPlaqueWidget(BaseModWidget):
         self._compatibility_thread = None
         self._init_ui()
         self._check_installation_status()
+        self.update_install_button_state()
         if hasattr(self.mod_data, 'is_gamebanana_mod') and self.mod_data.is_gamebanana_mod:
             self._start_compatibility_check()
 
@@ -283,6 +284,15 @@ class ModPlaqueWidget(BaseModWidget):
             self.install_button.setText(tr('buttons.install'))
             self.install_button.setObjectName('plaqueButtonInstall')
             self._apply_gamebanana_install_styles()
+        self.update_install_button_state()
+
+    def update_install_button_state(self):
+        if not hasattr(self, 'install_button'):
+            return
+        app_state = self._get_app_state()
+        if app_state:
+            is_installing = getattr(app_state, 'is_installing', False)
+            self.install_button.setEnabled(not is_installing)
 
     def _apply_gamebanana_install_styles(self):
         if not hasattr(self.mod_data, 'is_gamebanana_mod') or not self.mod_data.is_gamebanana_mod:

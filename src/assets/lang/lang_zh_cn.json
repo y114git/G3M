@@ -833,7 +833,7 @@
     "installer_launched_closing": "安装程序已启动。正在关闭启动器...",
     "settings_reset_success": "设置已成功重置。",
     "unknown_size": "未知大小",
-    "downloading_from_external": "正在从外部源下载模组...",
+    "downloading_from_external": "正在从外部源下载文件...",
     "install_cancelled_by_user": "安装已被用户取消。",
     "unpacking_mod": "正在解压模组：{mod_name}...",
     "install_complete_success": "成功安装 '{mod_name}'！",
