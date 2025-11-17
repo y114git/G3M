@@ -53,10 +53,11 @@ class SearchDisplayController:
                     next_page_num = current_page + 1
                     items_needed = next_page_num * self.app_state.mods_per_page
                     should_load_more = False
+                    preferred_game = self._determine_preferred_game_for_page(next_page_num)
                     if self.app_state.mods_loaded:
                         if total_mods < items_needed:
                             should_load_more = True
-                            self._load_more_gamebanana_mods_if_needed(items_needed)
+                            self._load_more_gamebanana_mods_if_needed(items_needed, preferred_game)
                     max_available_page = max(1, (total_mods - 1) // self.app_state.mods_per_page + 1) if total_mods > 0 else 1
                     can_advance = False
                     if should_load_more and self.app_state.gamebanana_loading:
@@ -74,7 +75,7 @@ class SearchDisplayController:
         except Exception as e:
             logger.error(f'SearchDisplayController: Error in next_page: {e}', exc_info=True)
 
-    def _load_more_gamebanana_mods_if_needed(self, items_needed: int):
+    def _load_more_gamebanana_mods_if_needed(self, items_needed: int, preferred_modgame: str | None = None):
         if not self.app_state.mods_loaded:
             return
         if self.app_state.gamebanana_loading:
@@ -100,6 +101,14 @@ class SearchDisplayController:
         if not games_to_load_filtered:
             return
         games_to_load = games_to_load_filtered
+        preferred_game_key = ''
+        if preferred_modgame:
+            preferred_game_key = self._map_modgame_to_gamebanana(preferred_modgame)
+        if preferred_game_key and preferred_game_key in games_to_load:
+            games_to_load = {preferred_game_key: games_to_load[preferred_game_key]}
+        elif games_to_load:
+            prioritized = min(games_to_load.items(), key=lambda item: self.app_state.gamebanana_loaded_pages.get(item[1], 0))
+            games_to_load = {prioritized[0]: prioritized[1]}
         filtered_mods_count = len(self.app_state.filtered_mods) if self.app_state.filtered_mods else 0
         current_total = len(self.app_state.all_mods)
         if filtered_mods_count >= items_needed:
@@ -110,7 +119,7 @@ class SearchDisplayController:
                 return
         else:
             self._last_load_attempt = {'items_needed': items_needed, 'current_total': current_total, 'attempts': 0}
-        pages_needed = 2
+        pages_needed = 1 if len(games_to_load) == 1 else 2
         self.app_state.gamebanana_loading = True
         all_new_mods = []
         results_received = [0]
@@ -288,7 +297,8 @@ class SearchDisplayController:
                     def deferred_load_check():
                         try:
                             self._load_check_done = True
-                            self._load_more_gamebanana_mods_if_needed(items_needed)
+                            preferred_game = self._determine_preferred_game_for_page(self.app_state.current_page)
+                            self._load_more_gamebanana_mods_if_needed(items_needed, preferred_game)
                             QTimer.singleShot(500, lambda: setattr(self, '_load_check_done', False))
                         except Exception as e:
                             logger.error(f'SearchDisplayController: Error in deferred_load_check: {e}', exc_info=True)
@@ -318,19 +328,16 @@ class SearchDisplayController:
                     return f'local_{mod_key}'
                 mod_name = getattr(mod, 'name', 'unknown')
                 return f'name_{mod_name}'
-            widgets_to_hide = []
             existing_widgets_in_layout = {}
             for i in range(self.app.mod_list_layout.count() - 1):
                 item = self.app.mod_list_layout.itemAt(i)
                 if item and item.widget():
                     widget = item.widget()
                     if isinstance(widget, ModPlaqueWidget):
-                        widgets_to_hide.append(widget)
+                        widget.hide()
                         if hasattr(widget, 'mod_data') and widget.mod_data:
                             cache_key = get_mod_cache_key(widget.mod_data)
                             existing_widgets_in_layout[cache_key] = (widget, i)
-            for widget in widgets_to_hide:
-                widget.hide()
             self.app.mod_list_widget.setUpdatesEnabled(False)
             widgets_shown = 0
             widgets_created = 0
@@ -362,13 +369,13 @@ class SearchDisplayController:
                                     self.app.mod_list_layout.insertWidget(target_position, plaque)
                             else:
                                 self.app.mod_list_layout.insertWidget(target_position, plaque)
-                            plaque.show()
                             plaque.install_button.setEnabled(not self.app_state.is_installing)
                             widgets_shown += 1
                             target_position += 1
                         else:
                             parent_widget = self.app.mod_list_widget if hasattr(self.app, 'mod_list_widget') else self.app
                             plaque = ModPlaqueWidget(mod, parent=parent_widget, parent_app=self.app)
+                            plaque.hide()
                             plaque.install_requested.connect(self.mod_ops.on_mod_install_requested)
                             plaque.uninstall_requested.connect(self.mod_ops.on_mod_uninstall_requested)
                             plaque.clicked.connect(self.on_mod_clicked)
@@ -398,6 +405,12 @@ class SearchDisplayController:
                         widget.hide()
                     except Exception as e:
                         logger.debug(f'Error removing widget from layout: {e}')
+                for i in range(self.app.mod_list_layout.count() - 1):
+                    item = self.app.mod_list_layout.itemAt(i)
+                    if item and item.widget():
+                        widget = item.widget()
+                        if isinstance(widget, ModPlaqueWidget):
+                            widget.show()
             finally:
                 self.app.mod_list_widget.setUpdatesEnabled(True)
             self.update_pagination()
@@ -424,6 +437,8 @@ class SearchDisplayController:
                 widget = item.widget()
                 if isinstance(widget, ModPlaqueWidget):
                     try:
+                        if hasattr(widget, 'update_mod_data'):
+                            widget.update_mod_data()
                         widget.update_installation_status()
                     except Exception:
                         pass
@@ -481,6 +496,25 @@ class SearchDisplayController:
                 logger.error(f'SearchDisplayController: Error cleaning up details thread: {e}', exc_info=True)
         except Exception as e:
             logger.error(f'SearchDisplayController: Error in _cleanup_details_threads: {e}', exc_info=True)
+
+    def _map_modgame_to_gamebanana(self, modgame: str) -> str:
+        mapping = {'deltarune': 'deltarune', 'deltarunedemo': 'deltarune', 'undertale': 'undertale', 'undertaleyellow': 'undertaleyellow'}
+        return mapping.get((modgame or '').lower(), '')
+
+    def _determine_preferred_game_for_page(self, page_num: int) -> str:
+        try:
+            filtered = self.app_state.filtered_mods or []
+            if not filtered:
+                return ''
+            per_page = self.app_state.mods_per_page or GAMEBANANA_PER_PAGE
+            start_idx = max(0, (page_num - 1) * per_page)
+            if start_idx < len(filtered):
+                candidate = filtered[start_idx]
+            else:
+                candidate = filtered[-1]
+            return getattr(candidate, 'modgame', '') or ''
+        except Exception:
+            return ''
 
     def on_metadata_updated(self, mod_id: str, downloads: int, tagline: str, category: str = ''):
         try:

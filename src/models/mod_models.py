@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 
 @dataclass
@@ -51,6 +51,13 @@ class ModInfo:
     gamebanana_last_update_timestamp: Optional[int] = None
     gamebanana_has_compatible_file: Optional[bool] = None
     gamebanana_category: Optional[str] = None
+    gamebanana_is_tool_compatible: bool = False
+    gamebanana_supported_files: List[Dict[str, Any]] = field(default_factory=list)
+    gamebanana_supported_tool_ids: List[int] = field(default_factory=list)
+    gamebanana_preferred_format: Optional[str] = None
+    gamebanana_has_deltahub_file: bool = False
+    gamebanana_has_deltamod_file: bool = False
+    gamebanana_compatibility_checked: bool = False
 
     def get_chapter_data(self, chapter_id: int) -> Optional[ModChapterData]:
         chapter_map = {0: '0', 1: '1', 2: '2', 3: '3', 4: '4', -1: 'demo'}

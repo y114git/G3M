@@ -10,6 +10,7 @@ import tarfile
 import lzma
 import logging
 from pathlib import Path
+from typing import Dict, Optional
 from utils.network_utils import download_file, get_filename_from_url, get_session
 import errno
 
@@ -237,6 +238,87 @@ def _cleanup_extracted_archive(target_dir: str, is_game_installation: bool = Fal
                         pass
     else:
         return
+
+
+def normalize_mod_package(mod_root: str, *, rename_legacy: bool = True, check_executables: bool = True, require_mod_config: bool = False, require_manifest: bool = False) -> Dict[str, Optional[str]]:
+    if not os.path.isdir(mod_root):
+        raise ValueError('mod_root_not_directory')
+    _flatten_single_child_directories(mod_root)
+    if rename_legacy:
+        _rename_legacy_files(mod_root)
+    meta_path = find_deltamod_info_file(mod_root)
+    mod_config_path = _find_file_recursive(mod_root, 'mod_config.json')
+    icon_path = _find_file_recursive(mod_root, 'icon.png')
+    if require_manifest and (not meta_path):
+        raise FileNotFoundError('manifest_missing')
+    if require_mod_config and (not mod_config_path):
+        raise FileNotFoundError('mod_config_missing')
+    if check_executables:
+        _ensure_no_prohibited_files(mod_root)
+    return {'meta_path': meta_path, 'mod_config_path': mod_config_path, 'icon_path': icon_path}
+
+
+def _flatten_single_child_directories(root: str):
+    while True:
+        try:
+            entries = [e for e in os.listdir(root) if e not in ('.', '..') and (not e.startswith('__MACOSX'))]
+        except OSError:
+            return
+        files = [e for e in entries if os.path.isfile(os.path.join(root, e))]
+        dirs = [e for e in entries if os.path.isdir(os.path.join(root, e))]
+        if files or len(dirs) != 1:
+            return
+        child = os.path.join(root, dirs[0])
+        try:
+            for item in os.listdir(child):
+                src = os.path.join(child, item)
+                dst = os.path.join(root, item)
+                if os.path.exists(dst):
+                    if os.path.isdir(dst):
+                        shutil.rmtree(dst)
+                    else:
+                        os.remove(dst)
+                shutil.move(src, dst)
+            os.rmdir(child)
+        except OSError:
+            return
+
+
+def _rename_legacy_files(root: str):
+    legacy_meta = os.path.join(root, '_deltamodInfo.json')
+    target_meta = os.path.join(root, 'meta.json')
+    if os.path.exists(legacy_meta):
+        try:
+            shutil.copy2(legacy_meta, target_meta)
+            os.remove(legacy_meta)
+        except OSError:
+            pass
+    legacy_icon = os.path.join(root, '_icon.png')
+    target_icon = os.path.join(root, 'icon.png')
+    if os.path.exists(legacy_icon):
+        try:
+            shutil.copy2(legacy_icon, target_icon)
+            os.remove(legacy_icon)
+        except OSError:
+            pass
+
+
+def _find_file_recursive(root: str, filename: str) -> Optional[str]:
+    filename_lower = filename.lower()
+    for current_root, _, files in os.walk(root):
+        for f in files:
+            if f.lower() == filename_lower:
+                return os.path.join(current_root, f)
+    return None
+
+
+def _ensure_no_prohibited_files(root: str):
+    prohibited_exts = {'.exe', '.js', '.ts', '.bat', '.cmd'}
+    for current_root, _, files in os.walk(root):
+        for f in files:
+            ext = os.path.splitext(f)[1].lower()
+            if ext in prohibited_exts:
+                raise ValueError(f'prohibited_file:{os.path.join(current_root, f)}')
 
 
 def sanitize_filename(name: str) -> str:
