@@ -246,13 +246,9 @@ class GameLauncher(QObject):
             if use_custom_exe:
                 target_exe = os.path.join(chapter_folder, os.path.basename(source_exe))
             else:
-                from utils.game_utils import get_game_type_string
+                from utils.game_utils import get_game_type_string, get_executable_name_for_game
                 game_type = get_game_type_string(self.app_state.game_mode)
-                system = platform.system()
-                platform_key = 'windows' if system == 'Windows' else 'linux'
-                game_executables = GAME_EXECUTABLES.get(game_type, GAME_EXECUTABLES['deltarune'])
-                executables = game_executables.get(platform_key, game_executables.get('windows', ()))
-                exe_name = executables[0] if executables else 'DELTARUNE.exe'
+                exe_name = get_executable_name_for_game(game_type) or 'DELTARUNE.exe'
                 target_exe = os.path.join(chapter_folder, exe_name)
             shutil.copy2(source_exe, target_exe)
             self._direct_launch_cleanup_info = {'target_exe': target_exe, 'source_exe': source_exe, 'chapter_folder': chapter_folder, 'use_custom_exe': use_custom_exe}

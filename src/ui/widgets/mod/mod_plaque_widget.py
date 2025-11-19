@@ -57,6 +57,9 @@ class ModPlaqueWidget(BaseModWidget):
         self._init_ui()
         self._check_installation_status()
         self.update_install_button_state()
+        self._update_style()
+        if self.is_installed and hasattr(self, 'install_button'):
+            self._apply_uninstall_button_style()
         if hasattr(self.mod_data, 'is_gamebanana_mod') and self.mod_data.is_gamebanana_mod:
             self._start_compatibility_check()
 
@@ -188,7 +191,6 @@ class ModPlaqueWidget(BaseModWidget):
         actions_layout.addWidget(self.install_button)
         self.actions_widget.setVisible(False)
         self.main_layout.addWidget(self.actions_widget)
-        self._update_style()
 
     def _update_actions_visibility(self):
         if not hasattr(self, 'actions_widget'):
@@ -273,12 +275,17 @@ class ModPlaqueWidget(BaseModWidget):
         except Exception as e:
             logging.warning(f'ModPlaqueWidget: Error updating compatibility info: {e}', exc_info=True)
 
+    def _apply_uninstall_button_style(self):
+        if not hasattr(self, 'install_button'):
+            return
+        text_color = self._get_theme_text_color('white')
+        self.install_button.setStyleSheet(f'\n            QPushButton#plaqueButtonUninstall {{\n                background-color: #F44336;\n                color: {text_color};\n                font-weight: bold;\n                min-width: 110px;\n                max-width: 110px;\n                min-height: 35px;\n                max-height: 35px;\n                font-size: 15px;\n                padding: 1px;\n            }}\n            QPushButton#plaqueButtonUninstall:hover {{\n                background-color: #d32f2f;\n            }}\n        ')
+
     def _update_install_button(self):
         if self.is_installed:
             self.install_button.setText(tr('buttons.delete'))
             self.install_button.setObjectName('plaqueButtonUninstall')
-            text_color = self._get_theme_text_color('white')
-            self.install_button.setStyleSheet(f'\n                QPushButton#plaqueButtonUninstall {{\n                    background-color: #F44336;\n                    color: {text_color};\n                    font-weight: bold;\n                    font-size: 15px;\n                    padding: 1px;\n                }}\n                QPushButton#plaqueButtonUninstall:hover {{\n                    background-color: #d32f2f;\n                }}\n            ')
+            self._apply_uninstall_button_style()
             self.install_button.setToolTip('')
         else:
             self.install_button.setText(tr('buttons.install'))
@@ -401,6 +408,16 @@ class ModPlaqueWidget(BaseModWidget):
         except Exception as e:
             import logging
             logging.warning(f'ModPlaqueWidget: Error updating mod data: {e}', exc_info=True)
+
+    def set_selected(self, selected):
+        self.is_selected = selected
+        if hasattr(self, '_update_actions_visibility'):
+            self._update_actions_visibility()
+        self._update_style()
+        if hasattr(self, 'install_button') and self.is_installed:
+            button_obj_name = self.install_button.objectName()
+            if button_obj_name == 'plaqueButtonUninstall':
+                self._apply_uninstall_button_style()
 
     def update_labels_text(self):
         super().update_labels_text()

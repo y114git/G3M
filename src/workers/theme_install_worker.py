@@ -7,6 +7,7 @@ import zipfile
 from PyQt6.QtCore import QThread, pyqtSignal
 from managers.localization_manager import tr
 from utils.network_utils import get_session, download_file
+from utils.format_utils import format_size_mb
 from config.constants import NETWORK_TIMEOUT_HEAD, UI_COLORS
 
 
@@ -47,6 +48,10 @@ class ThemeInstallWorker(QThread):
 
             def progress_callback(progress):
                 self.progress.emit(progress)
+                if total_size > 0:
+                    downloaded_mb = format_size_mb(downloaded_ref[0])
+                    total_mb = format_size_mb(total_size)
+                    self.status.emit(f"{tr('themes.downloading_theme')} ({downloaded_mb} / {total_mb})", UI_COLORS['status_warning'])
             download_file(session, url, target_path, progress_callback=progress_callback, total_size=total_size, downloaded_ref=downloaded_ref, cancel_check=lambda: self._cancelled)
             self.progress.emit(100)
             return True

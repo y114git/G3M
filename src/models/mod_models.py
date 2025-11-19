@@ -80,6 +80,10 @@ class ModInfo:
         if 'files' in data_dict and isinstance(data_dict['files'], dict):
             for key, value in data_dict['files'].items():
                 if isinstance(value, dict):
+                    extra_files = value.get('extra_files', [])
+                    if extra_files and isinstance(extra_files, list) and extra_files and isinstance(extra_files[0], dict):
+                        value = value.copy()
+                        value['extra_files'] = [ModExtraFile(**ef) if isinstance(ef, dict) else ef for ef in extra_files]
                     files_dict[key] = ModChapterData(**value)
                 elif isinstance(value, ModChapterData):
                     files_dict[key] = value

@@ -651,6 +651,7 @@
     "no_changes_to_update": "您未對模組進行任何更改。無需更新。",
     "no_import_save": "所選存檔集/槽位中沒有要匯入的檔案。",
     "no_write_permission_for": "對 '{path}' 沒有寫入權限",
+    "target_directory_not_found": "未找到章節 {chapter} 的目標目錄。請檢查您的遊戲安裝路徑。",
     "not_an_image": "(❌ 不是圖像)",
     "original_data_file_not_found": "未在 {target_dir} 中找到原始Data檔案\\n預期：data.win 或 game.ios",
     "public_mod_internet": "創建公開模組需要互聯網連接。\\n請檢查連接並重試。",

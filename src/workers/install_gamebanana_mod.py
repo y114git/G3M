@@ -10,14 +10,12 @@ from utils.gamebanana_api import GameBananaAPI
 from utils.gamebanana_converter import GameBananaConverter
 from utils.file_utils import normalize_mod_package
 from utils.network_utils import get_session, download_file
+from workers.base_install_worker import BaseInstallWorker
 import requests
 logger = logging.getLogger(__name__)
 
 
-class InstallGameBananaModThread(QThread):
-    status = pyqtSignal(str, str)
-    progress = pyqtSignal(int)
-    finished = pyqtSignal(bool, str)
+class InstallGameBananaModThread(BaseInstallWorker):
     file_selection_required = pyqtSignal(list, str)
 
     def __init__(self, main_window, mod_info, selected_file=None, parent=None):
@@ -25,33 +23,9 @@ class InstallGameBananaModThread(QThread):
         self.main_window = main_window
         self.mod_info = mod_info
         self.api = GameBananaAPI()
-        self._cancelled = False
-        self._session = None
-        self._active_response = None
         self._selected_file_index = None
         self._file_selection_event = None
         self.selected_file = selected_file
-
-    def cancel(self):
-        self._cancelled = True
-        try:
-            if self._session is not None:
-                try:
-                    self._session.close()
-                except Exception as e:
-                    logger.debug(f'InstallGameBananaModThread.cancel: Error closing session: {e}')
-            if self._active_response is not None:
-                try:
-                    self._active_response.close()
-                except Exception as e:
-                    logger.debug(f'InstallGameBananaModThread.cancel: Error closing response: {e}')
-        except Exception as e:
-            logger.debug(f'InstallGameBananaModThread.cancel: Error during cleanup: {e}')
-        finally:
-            try:
-                self.status.emit(tr('status.operation_cancelled'), UI_COLORS['status_error'])
-            except Exception as e:
-                logger.debug(f'InstallGameBananaModThread.cancel: Error emitting status: {e}')
 
     def set_selected_file(self, file_index: int):
         self._selected_file_index = file_index
@@ -233,55 +207,8 @@ class InstallGameBananaModThread(QThread):
             logger.debug(f'Error checking file compatibility: {e}')
         return None
 
-    def _cleanup_temp_files(self, archive_path: Optional[str] = None, archive_dir: Optional[str] = None):
-        try:
-            if archive_path and os.path.exists(archive_path):
-                try:
-                    os.remove(archive_path)
-                except Exception as e:
-                    logger.debug(f'InstallGameBananaModThread: Error removing archive file {archive_path}: {e}')
-            if archive_dir and os.path.exists(archive_dir):
-                try:
-                    shutil.rmtree(archive_dir, ignore_errors=True)
-                except Exception as e:
-                    logger.debug(f'InstallGameBananaModThread: Error removing archive directory {archive_dir}: {e}')
-        except Exception as e:
-            logger.debug(f'InstallGameBananaModThread: Error during cleanup: {e}')
-
     def _download_file(self, url: str, filename: str) -> str:
-        temp_dir = tempfile.mkdtemp(prefix='gb_download_')
-        archive_path = os.path.join(temp_dir, filename)
-        download_success = False
-        try:
-            from utils.file_utils import download_file_with_progress
-            from utils.network_utils import get_session
-            session = get_session()
-            self._session = session
-
-            def progress_callback(progress):
-                if not self._cancelled:
-                    self.progress.emit(progress)
-
-            def on_response(r):
-                self._active_response = r
-            try:
-                success = download_file_with_progress(url, archive_path, progress_callback=progress_callback, session=session, cancel_check=lambda: self._cancelled, on_response=on_response)
-                if not success:
-                    raise RuntimeError('download_failed')
-                download_success = True
-                return archive_path
-            except RuntimeError as e:
-                if str(e) == 'download_cancelled' or self._cancelled:
-                    self._cleanup_temp_files(archive_path, temp_dir)
-                    raise RuntimeError('download_cancelled')
-                raise
-        except Exception:
-            if not download_success:
-                try:
-                    self._cleanup_temp_files(archive_path, temp_dir)
-                except Exception as e:
-                    logger.debug(f'InstallGameBananaModThread: Error during cleanup after download failure: {e}')
-            raise
+        return super()._download_file(url, filename, temp_dir_prefix='gb_download_')
 
     def _resolve_selected_file(self, mod_id: int) -> Optional[Dict]:
         if self.selected_file:

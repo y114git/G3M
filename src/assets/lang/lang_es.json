@@ -652,6 +652,7 @@
     "no_changes_to_update": "No has hecho cambios en el mod. Nada que actualizar.",
     "no_import_save": "No hay archivo para importar en la colección/ranura seleccionada.",
     "no_write_permission_for": "Sin permiso de escritura para '{path}'",
+    "target_directory_not_found": "Directorio de destino no encontrado para el capítulo {chapter}. Por favor, verifica la ruta de instalación del juego.",
     "not_an_image": "(❌ no es una imagen)",
     "original_data_file_not_found": "Archivo de datos original no encontrado en: {target_dir}\nEsperado: data.win o game.ios",
     "public_mod_internet": "Crear un mod público requiere una conexión a internet.\nVerifica la conexión e intenta de nuevo.",

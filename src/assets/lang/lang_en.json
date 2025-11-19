@@ -652,6 +652,7 @@
     "no_changes_to_update": "You have made no changes to the mod. Nothing to update.",
     "no_import_save": "No file to import in the selected collection/slot.",
     "no_write_permission_for": "No write permission for '{path}'",
+    "target_directory_not_found": "Target directory not found for chapter {chapter}. Please check your game installation path.",
     "not_an_image": "(❌ not an image)",
     "original_data_file_not_found": "Original data file not found in: {target_dir}\nExpected: data.win or game.ios",
     "public_mod_internet": "Creating a public mod requires an internet connection.\nCheck connection and try again.",

@@ -14,6 +14,7 @@ from managers.localization_manager import tr
 from utils.file_utils import get_unique_mod_dir, has_deltamod_info_file, check_filename_is_deltamod_info
 from utils.deltamod_converter import DeltamodConverter
 from utils.network_utils import download_file, sanitize_log_message
+from utils.format_utils import format_size_mb
 import logging
 
 
@@ -164,6 +165,11 @@ class FullInstallThread(QThread):
 
             def progress_callback(progress):
                 self.progress.emit(progress)
+                if total_size > 0:
+                    from utils.format_utils import format_size_mb
+                    downloaded_mb = format_size_mb(downloaded_ref[0])
+                    total_mb = format_size_mb(total_size)
+                    self.status.emit(f"{tr('status.installing_game_files')} ({downloaded_mb} / {total_mb})", UI_COLORS['status_warning'])
 
             def on_response(r):
                 self._active_response = r
@@ -490,12 +496,20 @@ class InstallModsThread(QThread):
 
                             def progress_callback(progress):
                                 self.progress.emit(progress)
+                                if total_bytes > 0:
+                                    downloaded_mb = format_size_mb(downloaded_ref[0])
+                                    total_mb = format_size_mb(total_bytes)
+                                    self.status.emit(f'{mod.name} {current_index}/{total_items} ({downloaded_mb} / {total_mb})', UI_COLORS['status_warning'])
                             self._download_component_file(url, cache_dir, 'data', progress_callback, total_bytes, downloaded_ref, session)
                         else:
                             from utils.file_utils import download_and_extract_archive
 
                             def progress_callback(progress):
                                 self.progress.emit(progress)
+                                if total_bytes > 0:
+                                    downloaded_mb = format_size_mb(downloaded_ref[0])
+                                    total_mb = format_size_mb(total_bytes)
+                                    self.status.emit(f'{mod.name} {current_index}/{total_items} ({downloaded_mb} / {total_mb})', UI_COLORS['status_warning'])
                             download_and_extract_archive(url, cache_dir, progress_callback, total_bytes, downloaded_ref, session, cancel_check=lambda: self._cancelled)
                             if self._cancelled:
                                 self.finished.emit(False)
@@ -504,6 +518,10 @@ class InstallModsThread(QThread):
 
                         def progress_callback(progress):
                             self.progress.emit(progress)
+                            if total_bytes > 0:
+                                downloaded_mb = format_size_mb(downloaded_ref[0])
+                                total_mb = format_size_mb(total_bytes)
+                                self.status.emit(f'{mod.name} {current_index}/{total_items} ({downloaded_mb} / {total_mb})', UI_COLORS['status_warning'])
                         self._download_component_file(url, cache_dir, 'extra', progress_callback, total_bytes, downloaded_ref, session)
                 except RuntimeError as e:
                     if str(e) == 'download_cancelled':
@@ -842,6 +860,10 @@ class UrlInstallThread(QThread):
 
         def progress_callback(progress):
             self.progress.emit(progress)
+            if total_size > 0:
+                downloaded_mb = format_size_mb(downloaded_ref[0])
+                total_mb = format_size_mb(total_size)
+                self.status.emit(f"{tr('status.downloading_mod')} ({downloaded_mb} / {total_mb})", UI_COLORS['status_warning'])
 
         def on_response(r):
             self._active_response = r
@@ -1226,15 +1248,9 @@ class ModScanThread(QThread):
                         continue
                     folder_name = entry.name
                     folder_path = entry.path
-                    old_config_path = os.path.join(folder_path, 'config.json')
+                    from utils.file_utils import migrate_mod_config
+                    migrate_mod_config(folder_path)
                     config_path = os.path.join(folder_path, 'mod_config.json')
-                    if os.path.exists(old_config_path) and (not os.path.exists(config_path)):
-                        try:
-                            import shutil
-                            shutil.move(old_config_path, config_path)
-                            logging.info(f'ModScanThread: Migrated mod config.json to mod_config.json in {folder_name}')
-                        except Exception as e:
-                            logging.warning(f'ModScanThread: Failed to migrate mod config.json to mod_config.json in {folder_name}: {e}')
                     if not os.path.exists(config_path):
                         continue
                     try:

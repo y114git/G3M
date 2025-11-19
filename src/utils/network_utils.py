@@ -68,12 +68,15 @@ def get_session() -> requests.Session:
 
 def _build_session() -> requests.Session:
     from config.constants import LAUNCHER_VERSION, BROWSER_HEADERS
+    import urllib3
+    urllib3_logger = logging.getLogger('urllib3.connectionpool')
+    urllib3_logger.setLevel(logging.ERROR)
     session = requests.Session()
     headers = dict(BROWSER_HEADERS or {})
     headers.setdefault('User-Agent', f'DELTAHUB/{LAUNCHER_VERSION}')
     session.headers.update(headers)
     retry = Retry(total=3, connect=3, read=3, backoff_factor=0.3, status_forcelist=(429, 500, 502, 503, 504), allowed_methods=('HEAD', 'GET', 'PUT', 'DELETE', 'OPTIONS', 'TRACE', 'POST'), raise_on_status=False)
-    adapter = HTTPAdapter(max_retries=retry, pool_connections=4, pool_maxsize=16)
+    adapter = HTTPAdapter(max_retries=retry, pool_connections=8, pool_maxsize=32)
     session.mount('http://', adapter)
     session.mount('https://', adapter)
     return session

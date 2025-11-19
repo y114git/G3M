@@ -9,40 +9,32 @@ from utils.network_utils import get_session, download_file
 from utils.file_utils import extract_archive, sanitize_filename, has_deltamod_info_file
 from utils.deltamod_converter import DeltamodConverter
 from config.constants import NETWORK_TIMEOUT_HEAD, UI_COLORS
+from workers.base_install_worker import BaseInstallWorker
 
 
-class ModInstallWorker(QThread):
-    progress = pyqtSignal(int)
-    status = pyqtSignal(str, str)
-    finished = pyqtSignal(bool, str)
+class ModInstallWorker(BaseInstallWorker):
 
     def __init__(self, archive_path: str, mods_dir: str, mod_manager, parent=None):
         super().__init__(parent)
         self.archive_path = archive_path
         self.mods_dir = mods_dir
         self.mod_manager = mod_manager
-        self._cancelled = False
-        self._session = None
-
-    def cancel(self):
-        self._cancelled = True
-        if self._session:
-            try:
-                self._session.close()
-            except Exception as e:
-                logging.debug(f'ModInstallWorker: Error closing session: {e}')
 
     def _download_archive(self, url: str, target_path: str) -> bool:
         try:
             self.status.emit(tr('mods.downloading_mod'), UI_COLORS['status_warning'])
-            from utils.file_utils import download_file_with_progress
-            from utils.network_utils import get_session
-            session = get_session()
-            self._session = session
-
-            def progress_callback(progress):
-                self.progress.emit(progress)
-            return download_file_with_progress(url, target_path, progress_callback=progress_callback, session=session, cancel_check=lambda: self._cancelled)
+            archive_path = self._download_file(url, os.path.basename(target_path), temp_dir_prefix='dh-mod-import-')
+            if archive_path and os.path.exists(archive_path):
+                target_dir = os.path.dirname(target_path)
+                os.makedirs(target_dir, exist_ok=True)
+                shutil.move(archive_path, target_path)
+                return True
+            return False
+        except RuntimeError as e:
+            if str(e) == 'download_cancelled':
+                return False
+            logging.error(f'ModInstallWorker: Download failed: {e}', exc_info=True)
+            return False
         except Exception as e:
             logging.error(f'ModInstallWorker: Download failed: {e}', exc_info=True)
             return False
@@ -101,14 +93,9 @@ class ModInstallWorker(QThread):
                     shutil.copytree(src_path, dst_path)
                 else:
                     shutil.copy2(src_path, dst_path)
-            target_old_config_path = os.path.join(target_mod_dir, 'config.json')
             target_config_path = os.path.join(target_mod_dir, 'mod_config.json')
-            if os.path.exists(target_old_config_path) and (not os.path.exists(target_config_path)):
-                try:
-                    shutil.move(target_old_config_path, target_config_path)
-                    logging.info(f'Migrated mod config.json to mod_config.json during import in {folder_name}')
-                except Exception as e:
-                    logging.warning(f'Failed to migrate mod config.json to mod_config.json during import in {folder_name}: {e}')
+            from utils.file_utils import migrate_mod_config
+            migrate_mod_config(target_mod_dir)
             config_data['is_local_mod'] = True
             if 'is_gamebanana_mod' not in config_data:
                 config_data['is_gamebanana_mod'] = False
