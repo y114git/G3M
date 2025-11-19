@@ -43,13 +43,15 @@ jobs:
                   echo "Python path:"
                   python -c "import sys; print('\n'.join(sys.path))"
                   echo "Test files:"
-                  find tests -name "test_*.py" -type f 2>&1 | head -20 || ls -la tests/unit/ tests/integration/ tests/ui/ 2>&1 | head -20 || true
+                  find tests -name "test_*.py" -type f 2>&1 | head -20 || (ls -R tests/ 2>&1 | grep "test_.*\.py" | head -20) || (ls -la tests/unit/ tests/integration/ tests/ui/ 2>&1 | head -20) || true
                   echo "Trying to import conftest:"
                   python -c "import sys; sys.path.insert(0, '${{ github.workspace }}/src'); import tests.conftest; print('conftest imported successfully')" || true
                   echo "Trying to import a test file:"
-                  python -c "import sys; sys.path.insert(0, '${{ github.workspace }}/src'); from tests.unit import test_config; print('test_config imported successfully')" || echo "Failed to import test_config"
+                  python -c "import sys; sys.path.insert(0, '${{ github.workspace }}/src'); import tests.unit.test_config; print('test_config imported successfully')" || echo "Failed to import test_config"
                   echo "Running pytest with verbose collection:"
                   pytest tests/ --collect-only -q 2>&1 | head -50 || true
+                  echo "Checking if pytest can see test files:"
+                  python -c "import os; test_files = []; [test_files.extend([os.path.join(root, f) for f in files if f.startswith('test_') and f.endswith('.py')]) for root, dirs, files in os.walk('tests')]; print(f'Found {len(test_files)} test files:'); [print(f) for f in test_files[:10]]" || true
             - name: Run all tests
               env:
                   PYTHONPATH: ${{ github.workspace }}/src
@@ -90,13 +92,15 @@ jobs:
                   echo "Python path:"
                   python -c "import sys; print('\n'.join(sys.path))"
                   echo "Test files:"
-                  find tests -name "test_*.py" -type f 2>&1 | head -20 || ls -la tests/unit/ tests/integration/ tests/ui/ 2>&1 | head -20 || true
+                  find tests -name "test_*.py" -type f 2>&1 | head -20 || (ls -R tests/ 2>&1 | grep "test_.*\.py" | head -20) || (ls -la tests/unit/ tests/integration/ tests/ui/ 2>&1 | head -20) || true
                   echo "Trying to import conftest:"
                   python -c "import sys; sys.path.insert(0, '${{ github.workspace }}/src'); import tests.conftest; print('conftest imported successfully')" || true
                   echo "Trying to import a test file:"
-                  python -c "import sys; sys.path.insert(0, '${{ github.workspace }}/src'); from tests.unit import test_config; print('test_config imported successfully')" || echo "Failed to import test_config"
+                  python -c "import sys; sys.path.insert(0, '${{ github.workspace }}/src'); import tests.unit.test_config; print('test_config imported successfully')" || echo "Failed to import test_config"
                   echo "Running pytest with verbose collection:"
                   pytest tests/ --collect-only -q 2>&1 | head -50 || true
+                  echo "Checking if pytest can see test files:"
+                  python -c "import os; test_files = []; [test_files.extend([os.path.join(root, f) for f in files if f.startswith('test_') and f.endswith('.py')]) for root, dirs, files in os.walk('tests')]; print(f'Found {len(test_files)} test files:'); [print(f) for f in test_files[:10]]" || true
             - name: Run all tests
               env:
                   PYTHONPATH: ${{ github.workspace }}/src
@@ -137,13 +141,15 @@ jobs:
                   echo "Python path:"
                   python -c "import sys; print('\n'.join(sys.path))"
                   echo "Test files:"
-                  find tests -name "test_*.py" -type f 2>&1 | head -20 || ls -la tests/unit/ tests/integration/ tests/ui/ 2>&1 | head -20 || true
+                  find tests -name "test_*.py" -type f 2>&1 | head -20 || (ls -R tests/ 2>&1 | grep "test_.*\.py" | head -20) || (ls -la tests/unit/ tests/integration/ tests/ui/ 2>&1 | head -20) || true
                   echo "Trying to import conftest:"
                   python -c "import sys; sys.path.insert(0, '${{ github.workspace }}/src'); import tests.conftest; print('conftest imported successfully')" || true
                   echo "Trying to import a test file:"
-                  python -c "import sys; sys.path.insert(0, '${{ github.workspace }}/src'); from tests.unit import test_config; print('test_config imported successfully')" || echo "Failed to import test_config"
+                  python -c "import sys; sys.path.insert(0, '${{ github.workspace }}/src'); import tests.unit.test_config; print('test_config imported successfully')" || echo "Failed to import test_config"
                   echo "Running pytest with verbose collection:"
                   pytest tests/ --collect-only -q 2>&1 | head -50 || true
+                  echo "Checking if pytest can see test files:"
+                  python -c "import os; test_files = []; [test_files.extend([os.path.join(root, f) for f in files if f.startswith('test_') and f.endswith('.py')]) for root, dirs, files in os.walk('tests')]; print(f'Found {len(test_files)} test files:'); [print(f) for f in test_files[:10]]" || true
             - name: Run all tests
               env:
                   PYTHONPATH: ${{ github.workspace }}/src
@@ -190,10 +196,12 @@ jobs:
                   python -c "import sys; sys.path.insert(0, r'${{ github.workspace }}\src'); import tests.conftest; print('conftest imported successfully')"
                   if ($LASTEXITCODE -ne 0) { Write-Host "Failed to import conftest" }
                   Write-Host "Trying to import a test file:"
-                  python -c "import sys; sys.path.insert(0, r'${{ github.workspace }}\src'); from tests.unit import test_config; print('test_config imported successfully')"
+                  python -c "import sys; sys.path.insert(0, r'${{ github.workspace }}\src'); import tests.unit.test_config; print('test_config imported successfully')"
                   if ($LASTEXITCODE -ne 0) { Write-Host "Failed to import test_config" }
                   Write-Host "Running pytest with verbose collection:"
                   pytest tests/ --collect-only -q 2>&1 | Select-Object -First 50
+                  Write-Host "Checking if pytest can see test files:"
+                  python -c "import os; test_files = []; [test_files.extend([os.path.join(root, f) for f in files if f.startswith('test_') and f.endswith('.py')]) for root, dirs, files in os.walk('tests')]; print(f'Found {len(test_files)} test files:'); [print(f) for f in test_files[:10]]"
             - name: Run all tests
               shell: powershell
               env:
