@@ -278,22 +278,29 @@ class MultiModMerger(QObject):
                 data_patches = self._find_data_patches(mod_source_dir)
                 csx_scripts = self._find_csx_scripts(mod_source_dir)
                 if ready_data_win_files and (not data_patches) and (not csx_scripts):
-                    self.patching_logger.info(f'Single mod {mod_name} with only ready data.win/game.ios - copying directly')
+                    self.patching_logger.info(f'[SINGLE_MOD] Single mod {mod_name} with only ready data.win/game.ios - copying directly')
                     ready_file = ready_data_win_files[0]
-                    self.patching_logger.info(f'Copying ready file: {ready_file} -> {output_data_win_path}')
+                    self.patching_logger.info(f'[SINGLE_MOD] Copying ready file: {ready_file} -> {output_data_win_path} (chapter {chapter_id})')
                     try:
-                        if os.path.exists(output_data_win_path):
-                            extracted_chapter_id = self._extract_chapter_id_from_path(target_dir)
-                            if extracted_chapter_id is not None:
-                                self._backup_file(extracted_chapter_id, output_data_win_path)
+                        extracted_chapter_id = self._extract_chapter_id_from_path(target_dir)
+                        if extracted_chapter_id is not None:
+                            self.patching_logger.info(f'[SINGLE_MOD] Creating backup before replacing data.win (chapter {extracted_chapter_id})')
+                            if not self._backup_file(extracted_chapter_id, output_data_win_path):
+                                self.patching_logger.error(f'[SINGLE_MOD] Failed to create backup of {output_data_win_path} before replacement')
+                                if not is_modpack:
+                                    self._restore_backups(chapter_id)
+                                return False
+                        else:
+                            self.patching_logger.warning(f'[SINGLE_MOD] Could not extract chapter ID from path {target_dir}, backup may not work correctly')
                         shutil.copy2(ready_file, output_data_win_path)
-                        self.patching_logger.info(f'Copied ready data.win/game.ios from {mod_name} to {output_data_win_path}')
+                        file_size = os.path.getsize(output_data_win_path) if os.path.exists(output_data_win_path) else 0
+                        self.patching_logger.info(f'[SINGLE_MOD] Successfully copied ready data.win/game.ios from {mod_name} to {output_data_win_path} (size: {file_size} bytes, chapter {chapter_id})')
                         used_archive_names = set()
                         if not self._apply_file_overrides(mod_source_dir, target_dir, used_archive_names, False):
-                            self.patching_logger.warning(f'Failed to apply file overrides from {mod_name}')
+                            self.patching_logger.warning(f'[SINGLE_MOD] Failed to apply file overrides from {mod_name}')
                         return True
                     except Exception as e:
-                        self.patching_logger.error(f'Failed to copy ready data.win file: {e}', exc_info=True)
+                        self.patching_logger.error(f'[SINGLE_MOD] Failed to copy ready data.win file from {mod_name}: {e}', exc_info=True)
                         if not is_modpack:
                             self._restore_backups(chapter_id)
                         return False
@@ -403,7 +410,7 @@ class MultiModMerger(QObject):
                 patch_progress = mod_progress_start + int(mod_progress_range * 0.3)
                 self.progress_update.emit(min(patch_progress, 95), f'Applying patches from {mod_name}...')
                 if not self._apply_xdelta_patches(mod_data_win, data_patches, progress_callback=lambda p: self.progress_update.emit(min(mod_progress_start + int(mod_progress_range * (0.3 + p * 0.4)), 95), f'Applying patches from {mod_name}...')):
-                    self.patching_logger.error(f'Failed to apply data patches from {mod_name}')
+                    self.patching_logger.error(f'[MERGE] Failed to apply data patches from {mod_name} (mod {mod_number}). This may be due to incompatibility with previously applied mods. The patch may have been created for the original data.win, but the file has already been modified.')
                     if not is_modpack:
                         self._restore_backups(chapter_id)
                     return False
@@ -869,7 +876,8 @@ class MultiModMerger(QObject):
         for idx, patch_path in enumerate(data_patches):
             if self._cancelled:
                 return False
-            self.patching_logger.info(f'Applying xdelta patch {idx + 1}/{total_patches}: {os.path.basename(patch_path)}')
+            patch_name = os.path.basename(patch_path)
+            self.patching_logger.info(f'[XDELTA] Applying patch {idx + 1}/{total_patches}: {patch_name} to {os.path.basename(data_win_path)}')
             if progress_callback:
                 progress_callback(idx / total_patches if total_patches > 0 else 0)
             if not os.path.exists(patch_path):
@@ -896,8 +904,15 @@ class MultiModMerger(QObject):
                 if progress_callback:
                     progress_callback((idx + 1) / total_patches if total_patches > 0 else 1.0)
                 if result.returncode != 0:
-                    self.patching_logger.error(f'xdelta patch failed: {result.stderr}')
-                    self.status_update.emit(tr('errors.xdelta_patch_failed', patch=os.path.basename(patch_path)), 'error')
+                    error_msg = result.stderr.strip() if result.stderr else 'Unknown error'
+                    if 'checksum mismatch' in error_msg.lower() or 'XD3_INVALID_INPUT' in error_msg:
+                        detailed_error = f'[XDELTA] Patch "{os.path.basename(patch_path)}" failed: checksum mismatch. This usually means the patch was created for the original data.win, but the file has already been modified by previous mods. The patch cannot be applied to a modified file.\nError details: {error_msg}'
+                        self.patching_logger.error(detailed_error)
+                        self.status_update.emit(tr('errors.xdelta_patch_checksum_mismatch', patch=os.path.basename(patch_path), error=error_msg[:100]), 'error')
+                    else:
+                        detailed_error = f'[XDELTA] Patch "{os.path.basename(patch_path)}" failed: {error_msg}'
+                        self.patching_logger.error(detailed_error)
+                        self.status_update.emit(tr('errors.xdelta_patch_failed', patch=os.path.basename(patch_path)), 'error')
                     return False
                 if not os.path.exists(temp_output):
                     self.patching_logger.error(f'Temp output file was not created: {temp_output}')
@@ -2211,14 +2226,14 @@ class MultiModMerger(QObject):
         return None
 
     def _backup_file(self, chapter_id: int, file_path: str) -> bool:
-        if not os.path.exists(file_path):
-            return True
+        file_exists = os.path.exists(file_path)
         if chapter_id not in self.original_files:
             self.original_files[chapter_id] = {}
         if file_path in self.original_files[chapter_id]:
+            self.patching_logger.debug(f'File {file_path} already backed up for chapter {chapter_id}')
             return True
         if not self.backup_dir:
-            self.patching_logger.error('Backup directory not set')
+            self.patching_logger.error('Backup directory not set - cannot create backup')
             return False
         try:
             import hashlib
@@ -2228,12 +2243,19 @@ class MultiModMerger(QObject):
             file_basename = sanitize_filename(os.path.basename(file_path))
             backup_filename = f'chapter_{chapter_id}_{file_basename}_{path_hash}_{timestamp}'
             backup_path = os.path.join(self.backup_dir, backup_filename)
-            shutil.copy2(file_path, backup_path)
+            if file_exists:
+                shutil.copy2(file_path, backup_path)
+                self.patching_logger.info(f'[BACKUP] Created backup of existing file: {file_path} -> {backup_path} (chapter {chapter_id})')
+            else:
+                with open(backup_path + '.added_by_mod', 'w') as marker:
+                    marker.write(f'File {file_path} was created by mod (did not exist before)')
+                self.patching_logger.info(f'[BACKUP] Marked file for tracking (will be created by mod): {file_path} (chapter {chapter_id})')
+                backup_path = None
             self.original_files[chapter_id][file_path] = backup_path
             self._save_backups_to_manifest()
             return True
         except Exception as e:
-            self.patching_logger.error(f'Failed to backup file {file_path}: {e}')
+            self.patching_logger.error(f'[BACKUP] Failed to backup file {file_path} for chapter {chapter_id}: {e}', exc_info=True)
             return False
 
     def _save_backups_to_manifest(self) -> None:
@@ -2275,13 +2297,30 @@ class MultiModMerger(QObject):
     def _restore_backups(self, chapter_id: int) -> None:
         if chapter_id not in self.original_files:
             return
+        self.patching_logger.info(f'[RESTORE] Restoring backups for chapter {chapter_id}')
         for file_path, backup_path in self.original_files[chapter_id].items():
-            if os.path.exists(backup_path):
-                try:
-                    shutil.copy2(backup_path, file_path)
-                    self.patching_logger.info(f'Restored backup: {file_path}')
-                except Exception as e:
-                    self.patching_logger.error(f'Failed to restore backup {backup_path}: {e}')
+            if backup_path is None:
+                if os.path.exists(file_path):
+                    try:
+                        os.remove(file_path)
+                        self.patching_logger.info(f'[RESTORE] Removed file created by mod: {file_path} (chapter {chapter_id})')
+                    except Exception as e:
+                        self.patching_logger.error(f'[RESTORE] Failed to remove file created by mod {file_path}: {e}', exc_info=True)
+                else:
+                    self.patching_logger.debug(f'[RESTORE] File created by mod already removed: {file_path} (chapter {chapter_id})')
+                continue
+            if not os.path.exists(backup_path):
+                self.patching_logger.warning(f'[RESTORE] Backup file not found: {backup_path} (original: {file_path}, chapter {chapter_id})')
+                continue
+            try:
+                target_dir = os.path.dirname(file_path)
+                if target_dir and (not os.path.exists(target_dir)):
+                    os.makedirs(target_dir, exist_ok=True)
+                    self.patching_logger.debug(f'[RESTORE] Created target directory: {target_dir}')
+                shutil.copy2(backup_path, file_path)
+                self.patching_logger.info(f'[RESTORE] Restored backup: {file_path} <- {backup_path} (chapter {chapter_id})')
+            except Exception as e:
+                self.patching_logger.error(f'[RESTORE] Failed to restore backup {backup_path} to {file_path} (chapter {chapter_id}): {e}', exc_info=True)
 
     def _extract_chapter_id_from_path(self, path: str) -> Optional[int]:
         import re
@@ -2346,7 +2385,13 @@ class MultiModMerger(QObject):
                     self.backup_dir = backup_dir
                     for chapter_key, files_dict in multimod_backups.items():
                         chapter_id = int(chapter_key)
-                        self.original_files[chapter_id] = files_dict
+                        processed_dict = {}
+                        for file_path, backup_path in files_dict.items():
+                            if backup_path is None or backup_path == 'null':
+                                processed_dict[file_path] = None
+                            else:
+                                processed_dict[file_path] = backup_path
+                        self.original_files[chapter_id] = processed_dict
                     for chapter_key, files_list in multimod_added_files.items():
                         chapter_id = int(chapter_key)
                         self.added_files[chapter_id] = set(files_list)
@@ -2355,22 +2400,35 @@ class MultiModMerger(QObject):
         if not self.original_files:
             self.patching_logger.debug('No backup files found to restore (original_files is empty)')
             return False
-        self.patching_logger.info(f'Restoring backups for {len(self.original_files)} chapter(s)')
+        self.patching_logger.info(f'[RESTORE] Starting restoration of backups for {len(self.original_files)} chapter(s)')
         for chapter_id, files_dict in self.original_files.items():
-            self.patching_logger.debug(f'Chapter {chapter_id}: {len(files_dict)} file(s) to restore')
+            self.patching_logger.info(f'[RESTORE] Chapter {chapter_id}: {len(files_dict)} file(s) to process')
             for file_path, backup_path in files_dict.items():
+                if backup_path is None:
+                    if os.path.exists(file_path):
+                        try:
+                            os.remove(file_path)
+                            self.patching_logger.info(f'[RESTORE] Removed file created by mod: {file_path} (chapter {chapter_id})')
+                            files_restored += 1
+                        except Exception as e:
+                            self.patching_logger.error(f'[RESTORE] Failed to remove file created by mod {file_path}: {e}', exc_info=True)
+                            success = False
+                    else:
+                        self.patching_logger.debug(f'[RESTORE] File created by mod already removed: {file_path} (chapter {chapter_id})')
+                    continue
                 if not os.path.exists(backup_path):
-                    self.patching_logger.warning(f'Backup file not found: {backup_path} (original: {file_path})')
+                    self.patching_logger.warning(f'[RESTORE] Backup file not found: {backup_path} (original: {file_path}, chapter {chapter_id})')
                     continue
                 try:
                     target_dir = os.path.dirname(file_path)
                     if target_dir and (not os.path.exists(target_dir)):
                         os.makedirs(target_dir, exist_ok=True)
+                        self.patching_logger.debug(f'[RESTORE] Created target directory: {target_dir}')
                     shutil.copy2(backup_path, file_path)
-                    self.patching_logger.info(f'Restored backup: {file_path}')
+                    self.patching_logger.info(f'[RESTORE] Restored backup: {file_path} <- {backup_path} (chapter {chapter_id})')
                     files_restored += 1
                 except Exception as e:
-                    self.patching_logger.error(f'Failed to restore backup {backup_path} to {file_path}: {e}', exc_info=True)
+                    self.patching_logger.error(f'[RESTORE] Failed to restore backup {backup_path} to {file_path} (chapter {chapter_id}): {e}', exc_info=True)
                     success = False
         files_removed = 0
         for chapter_id, added_files_set in self.added_files.items():

@@ -200,8 +200,10 @@ class GameLauncher(QObject):
 
     def _check_game_running(self, vanilla_mode):
         if is_game_running():
+            logging.debug('[LAUNCH] Game is still running, checking again in 2 seconds')
             QTimer.singleShot(2000, lambda: self._check_game_running(vanilla_mode))
         else:
+            logging.info('[LAUNCH] Game is no longer running, starting cleanup')
             self.status_changed.emit(tr('status.game_closed_restoring_files'), UI_COLORS['status_info'])
             self._cleanup_direct_launch_files()
             if self.monitor_thread:
@@ -210,6 +212,7 @@ class GameLauncher(QObject):
                 if hasattr(self, 'monitor_worker'):
                     self.monitor_worker = None
             self.game_launch_finished.emit()
+            logging.info('[LAUNCH] Cleanup completed, game launch finished')
 
     def _determine_launch_config(self, selections: Dict[int, Any]) -> Optional[Dict[str, Any]]:
         use_steam = self.app_state.local_config.get('launch_via_steam', False)
@@ -417,38 +420,42 @@ class GameLauncher(QObject):
 
     def _cleanup_direct_launch_files(self):
         restore_errors = []
+        logging.info('[CLEANUP] Starting cleanup of game files after game exit')
         try:
             if hasattr(self, 'multi_mod_merger') and self.multi_mod_merger:
                 try:
-                    logging.info('_cleanup_direct_launch_files: restoring multi-mod backups')
+                    logging.info('[CLEANUP] Restoring multi-mod backups (data.win and other modified files)')
                     restored = self.multi_mod_merger.restore_all_backups()
                     if restored:
-                        logging.info('_cleanup_direct_launch_files: multi-mod backups restored successfully')
+                        logging.info('[CLEANUP] Multi-mod backups restored successfully - original game files have been restored')
                         self.status_changed.emit(tr('status.files_restored'), UI_COLORS['status_success'])
                     else:
-                        logging.debug('_cleanup_direct_launch_files: no multi-mod backups to restore')
+                        logging.debug('[CLEANUP] No multi-mod backups to restore (no mods were applied or files were already restored)')
                 except Exception as e:
                     error_msg = f'Failed to restore multi-mod backups: {e}'
-                    logging.error(f'_cleanup_direct_launch_files: {error_msg}', exc_info=True)
+                    logging.error(f'[CLEANUP] {error_msg}', exc_info=True)
                     restore_errors.append(error_msg)
             cleanup_info = self._direct_launch_cleanup_info
             if cleanup_info:
                 if 'target_exe' in cleanup_info and os.path.exists(cleanup_info['target_exe']):
                     try:
+                        logging.info(f"[CLEANUP] Removing direct launch executable: {cleanup_info['target_exe']}")
                         os.remove(cleanup_info['target_exe'])
-                        logging.info(f"_cleanup_direct_launch_files: removed direct launch exe: {cleanup_info['target_exe']}")
+                        logging.info(f"[CLEANUP] Successfully removed direct launch exe: {cleanup_info['target_exe']}")
                     except Exception as e:
                         error_msg = f'Failed to remove direct launch exe: {e}'
-                        logging.error(f'_cleanup_direct_launch_files: {error_msg}', exc_info=True)
+                        logging.error(f'[CLEANUP] {error_msg}', exc_info=True)
                         restore_errors.append(error_msg)
                 self._direct_launch_cleanup_info = None
             if restore_errors:
                 error_summary = f'Errors during cleanup: {len(restore_errors)} failure(s). See logs for details.'
-                logging.error(f'_cleanup_direct_launch_files: {error_summary}. Errors: {restore_errors[:3]}')
+                logging.error(f'[CLEANUP] {error_summary}. Errors: {restore_errors[:3]}')
                 self.status_changed.emit(tr('errors.files_restore_error', error=str(restore_errors[0])), UI_COLORS['status_error'])
+            else:
+                logging.info('[CLEANUP] Cleanup completed successfully - all game files restored to original state')
         except Exception as e:
             error_msg = f'Critical error during file restoration: {e}'
-            logging.error(f'_cleanup_direct_launch_files: {error_msg}', exc_info=True)
+            logging.error(f'[CLEANUP] {error_msg}', exc_info=True)
             self.status_changed.emit(tr('errors.files_restore_error', error=str(e)), UI_COLORS['status_error'])
 
     def recover_previous_session(self):

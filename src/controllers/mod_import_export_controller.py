@@ -46,32 +46,43 @@ class ModImportExportController:
                 self._install_mod_from_url(dialog.selected_url)
 
     def _install_mod_from_file(self, file_path: str):
+        logging.info(f'[IMPORT] Starting mod import from file: {file_path}')
         try:
             with tempfile.TemporaryDirectory(prefix='deltahub_import_') as temp_dir:
+                logging.info(f'[IMPORT] Extracting archive to temporary directory: {temp_dir}')
                 extract_archive(file_path, temp_dir)
                 content_path = temp_dir
                 contents = os.listdir(temp_dir)
                 if len(contents) == 1 and os.path.isdir(os.path.join(temp_dir, contents[0])):
                     content_path = os.path.join(temp_dir, contents[0])
+                    logging.info(f'[IMPORT] Archive contains single directory, using: {content_path}')
                 if find_deltamod_info_file(content_path):
+                    logging.info('[IMPORT] DELTAMOD format detected, converting...')
                     converter = DeltamodConverter(content_path, self.app_state.mods_dir)
                     new_mod_path = converter.convert()
                     if new_mod_path:
+                        logging.info(f'[IMPORT] DELTAMOD converted successfully to: {new_mod_path}')
                         self.mod_manager.invalidate_mods_cache()
                         self.mod_manager.load_local_mods(_skip_conversion=True)
                         self.mod_manager.mod_list_updated.emit()
                         QMessageBox.information(self.app_window, tr('dialogs.success'), tr('status.mod_imported_success'))
                     else:
+                        logging.error('[IMPORT] DELTAMOD conversion failed')
                         QMessageBox.critical(self.app_window, tr('errors.error'), tr('errors.mod_import_failed', error='Conversion failed'))
                     return
                 mod_config_path = os.path.join(content_path, 'mod_config.json')
                 old_config_path = os.path.join(content_path, 'config.json')
                 config_path_to_read = mod_config_path if os.path.exists(mod_config_path) else old_config_path
+                logging.info(f'[IMPORT] Looking for mod config at: {config_path_to_read}')
                 if os.path.exists(config_path_to_read):
+                    logging.info(f'[IMPORT] Found mod config, reading...')
                     with open(config_path_to_read, 'r', encoding='utf-8') as f:
                         config = json.load(f)
                     mod_key = config.get('mod_key')
+                    mod_name = config.get('name', 'Unknown')
+                    logging.info(f'[IMPORT] Mod name: {mod_name}, mod_key: {mod_key}')
                     if not mod_key:
+                        logging.error('[IMPORT] Mod config missing mod_key field')
                         QMessageBox.critical(self.app_window, tr('errors.error'), tr('errors.invalid_mod_format'))
                         return
                     from utils.file_utils import remove_archive_extension, sanitize_filename
@@ -118,14 +129,17 @@ class ModImportExportController:
                     if config_updated:
                         with open(config_path, 'w', encoding='utf-8') as f:
                             json.dump(config, f, indent=2, ensure_ascii=False)
+                    logging.info(f'[IMPORT] Mod installed successfully to: {target_mod_dir}')
                     self.mod_manager.invalidate_mods_cache()
                     self.mod_manager.load_local_mods(_skip_conversion=True)
                     self.mod_manager.mod_list_updated.emit()
+                    logging.info('[IMPORT] Mod cache invalidated and mod list reloaded')
                     QMessageBox.information(self.app_window, tr('dialogs.success'), tr('status.mod_imported_success'))
                 else:
+                    logging.error(f'[IMPORT] Mod config not found at: {config_path_to_read}')
                     QMessageBox.critical(self.app_window, tr('errors.error'), tr('errors.invalid_mod_format'))
         except Exception as e:
-            logging.error(f'Mod import failed: {e}', exc_info=True)
+            logging.error(f'[IMPORT] Mod import failed: {e}', exc_info=True)
             QMessageBox.critical(self.app_window, tr('errors.error'), tr('errors.mod_import_failed', error=str(e)))
 
     def _install_mod_from_url(self, url: str):
