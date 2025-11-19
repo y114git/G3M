@@ -35,8 +35,22 @@ class TestPatching:
             merger = MultiModMerger(app_state, mod_manager)
             if merger.xdelta_path is None or not os.path.exists(merger.xdelta_path):
                 pytest.skip('xdelta executable not found or not available')
+            import subprocess
+            import platform
+            try:
+                if platform.system() == 'Windows':
+                    test_cmd = [merger.xdelta_path, '-h']
+                else:
+                    test_cmd = [merger.xdelta_path, '-h']
+                result = subprocess.run(test_cmd, capture_output=True, timeout=5, stdin=subprocess.DEVNULL)
+                if result.returncode not in (0, 1):
+                    pytest.skip(f'xdelta executable cannot be executed (return code: {result.returncode})')
+            except (subprocess.TimeoutExpired, FileNotFoundError, PermissionError, OSError) as e:
+                pytest.skip(f'xdelta executable cannot be executed: {e}')
             success = merger._apply_xdelta_patches(temp_data_win, [patch_file])
-            assert success is True, 'Patch application should return True on success'
+            if not success:
+                error_msg = 'Patch application failed. This may be due to patch incompatibility or xdelta execution error.'
+                assert success is True, error_msg
             assert os.path.exists(temp_data_win), 'Patched file should exist after patching'
             patched_size = os.path.getsize(temp_data_win)
             assert patched_size > 0, 'Patched file should have content (size > 0)'
