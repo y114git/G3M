@@ -16,13 +16,17 @@ class GameMonitorWorker(QObject):
     @pyqtSlot()
     def run(self):
         try:
+            logging.info('[GAME_MONITOR] Starting game monitoring')
             increment_launch_counter()
             if self.process:
                 try:
+                    logging.info(f"[GAME_MONITOR] Monitoring process: {(self.process.pid if hasattr(self.process, 'pid') else 'unknown')}")
                     self.process.wait()
+                    logging.info('[GAME_MONITOR] Game process finished')
                 except Exception as e:
-                    logging.warning(f'GameMonitorWorker.run: process.wait() failed: {e}', exc_info=True)
+                    logging.warning(f'[GAME_MONITOR] process.wait() failed: {e}', exc_info=True)
                 finally:
+                    logging.info('[GAME_MONITOR] Emitting finished signal')
                     self.finished.emit(self.vanilla_mode)
                     return
             game_appeared = False
@@ -52,7 +56,8 @@ class GameMonitorWorker(QObject):
                 time.sleep(1)
             time.sleep(2)
             if not is_game_running():
+                logging.info('[GAME_MONITOR] Game is no longer running, emitting finished signal')
                 self.finished.emit(self.vanilla_mode)
         except Exception as e:
-            logging.error(f'GameMonitorWorker.run: unexpected error: {e}', exc_info=True)
+            logging.error(f'[GAME_MONITOR] Unexpected error: {e}', exc_info=True)
             self.finished.emit(self.vanilla_mode)
