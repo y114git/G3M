@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING
 from config.constants import GAME_PROCESS_NAMES
 if TYPE_CHECKING:
     from models.game_modes import GameMode
-    from core.app_state import AppState
 
 
 def is_game_running():

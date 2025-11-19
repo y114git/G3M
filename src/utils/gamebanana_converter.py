@@ -5,7 +5,6 @@ import shutil
 import logging
 import tempfile
 from typing import Optional, Dict, Any
-from managers.localization_manager import tr
 from utils.deltamod_converter import DeltamodConverter
 from utils.file_utils import find_deltamod_info_file, check_filename_is_deltamod_info, normalize_mod_package
 logger = logging.getLogger(__name__)

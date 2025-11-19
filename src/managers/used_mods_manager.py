@@ -9,7 +9,7 @@ from managers.mod_manager import ModManager
 from managers.settings_manager import SettingsManager
 from models.game_modes import DemoGameMode, UndertaleGameMode, UndertaleYellowGameMode
 from managers.localization_manager import tr
-from config.constants import SLOT_ID_UNIVERSAL, SLOT_ID_DEMO, SLOT_ID_UNDERTALE, SLOT_ID_UNDERTALE_YELLOW, SLOT_ID_MENU, SLOT_ID_CHAPTER_1, SLOT_ID_CHAPTER_2, SLOT_ID_CHAPTER_3, SLOT_ID_CHAPTER_4
+from config.constants import SLOT_ID_UNIVERSAL, SLOT_ID_MENU, SLOT_ID_CHAPTER_1, SLOT_ID_CHAPTER_2, SLOT_ID_CHAPTER_3, SLOT_ID_CHAPTER_4
 from utils.mod_utils import get_mod_key, get_mod_name
 from utils.game_utils import get_chapter_id_for_game_mode
 

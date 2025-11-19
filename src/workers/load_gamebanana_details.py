@@ -38,7 +38,10 @@ class LoadGameBananaDetailsThread(QThread):
                 if self._cancelled:
                     break
                 try:
-                    mod_id = int(mod.gamebanana_mod_id)
+                    mod_id_value = getattr(mod, 'gamebanana_mod_id', None)
+                    if mod_id_value is None:
+                        continue
+                    mod_id = int(mod_id_value)
                     has_full_desc = hasattr(mod, 'full_description') and mod.full_description and mod.full_description.strip()
                     has_tagline = hasattr(mod, 'tagline') and mod.tagline and mod.tagline.strip()
                     needs_load = not has_full_desc or not has_tagline

@@ -280,12 +280,13 @@ class RefreshController:
         try:
             logging.info('RefreshController: Metadata loading finished')
             has_more_mods = hasattr(self.app_state, 'gamebanana_mods_needing_metadata') and self.app_state.gamebanana_mods_needing_metadata
-            if self.app_window and hasattr(self.app_window, 'search_display'):
+            if self.app_window and hasattr(self.app_window, 'search_display') and self.app_window.search_display:
 
                 def ensure_sorted():
                     try:
-                        if hasattr(self.app_window, 'search_display'):
-                            self.app_window.search_display.update_filtered_mods(preserve_page=True)
+                        app_window = self.app_window
+                        if app_window and hasattr(app_window, 'search_display') and app_window.search_display:
+                            app_window.search_display.update_filtered_mods(preserve_page=True)
                     except Exception as e:
                         logging.error(f'RefreshController: Error ensuring sort after metadata load: {e}', exc_info=True)
                 if has_more_mods:

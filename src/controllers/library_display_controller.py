@@ -1,3 +1,4 @@
+import logging
 from PyQt6.QtCore import QThread
 from managers.localization_manager import tr
 from ui.common.styling import clear_layout_widgets, show_empty_message_in_layout
@@ -459,7 +460,6 @@ class LibraryDisplayController:
             self._modpack_dir = modpack_dir
             thread.start()
         except Exception as e:
-            import logging
             logging.error(f'Error creating modpack: {e}', exc_info=True)
             self.feedback_manager.show_message('error', 'errors.error', str(e))
 
@@ -490,6 +490,6 @@ class LibraryDisplayController:
                 try:
                     import shutil
                     shutil.rmtree(modpack_dir, ignore_errors=True)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logging.warning(f'Failed to remove modpack directory {modpack_dir}: {e}')
             self.feedback_manager.show_message('error', 'errors.error', tr('errors.modpack_creation_failed'))

@@ -1,12 +1,11 @@
-import os
+from typing import Optional
 from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QLineEdit, QFileDialog, QDialogButtonBox
-from PyQt6.QtCore import Qt
 from managers.localization_manager import tr
 
 
 class ImportDialog(QDialog):
 
-    def __init__(self, parent, feedback_manager, import_type: str, file_filter: str = None):
+    def __init__(self, parent, feedback_manager, import_type: str, file_filter: Optional[str] = None):
         super().__init__(parent)
         self.feedback_manager = feedback_manager
         self.import_type = import_type

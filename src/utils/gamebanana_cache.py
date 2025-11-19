@@ -3,8 +3,7 @@ import logging
 import os
 import threading
 import time
-from typing import Dict, Optional, Tuple
-from pathlib import Path
+from typing import Dict, Optional
 logger = logging.getLogger(__name__)
 CACHE_TTL = 24 * 60 * 60
 
@@ -22,7 +21,7 @@ class GameBananaMetadataCache:
         with self._lock:
             if not os.path.exists(self.cache_file):
                 self._cache = {}
-                logger.debug(f'GameBananaMetadataCache: Cache file not found, starting with empty cache')
+                logger.debug('GameBananaMetadataCache: Cache file not found, starting with empty cache')
                 return
             try:
                 with open(self.cache_file, 'r', encoding='utf-8') as f:
@@ -32,7 +31,7 @@ class GameBananaMetadataCache:
                         logger.info(f'GameBananaMetadataCache: Loaded {len(self._cache)} entries from cache')
                     else:
                         self._cache = {}
-                        logger.warning(f'GameBananaMetadataCache: Invalid cache file format, starting with empty cache')
+                        logger.warning('GameBananaMetadataCache: Invalid cache file format, starting with empty cache')
             except (json.JSONDecodeError, IOError) as e:
                 logger.warning(f'GameBananaMetadataCache: Failed to load cache: {e}, starting with empty cache')
                 self._cache = {}

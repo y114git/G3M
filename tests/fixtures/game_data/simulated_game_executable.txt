@@ -1,0 +1,47 @@
+# Simulated Game Executable for Testing
+
+This file simulates the presence of a game executable for testing purposes.
+
+## Purpose
+
+This file is used in tests to simulate game executable detection and path resolution
+without requiring actual game files to be present in the repository.
+
+## Usage in Tests
+
+Tests can check for the existence of this file or its directory structure to verify:
+- Path resolution logic works correctly
+- Game executable detection functions properly
+- Chapter directory finding works as expected
+- Cross-platform path handling is correct
+
+## Structure
+
+The simulated game structure should mirror real game installations:
+```
+simulated_game/
+├── DELTARUNE.exe (or DELTARUNE on Linux/macOS)
+├── data.win
+├── chapter0_menu/
+│   └── data.win
+├── chapter1_/
+│   └── data.win
+├── chapter2_/
+│   └── data.win
+└── ...
+```
+
+## Testing Scenarios
+
+1. **Executable Detection**: Tests verify that the system can find game executables
+2. **Path Resolution**: Tests verify paths are resolved correctly on all platforms
+3. **Chapter Finding**: Tests verify chapter directories can be located
+4. **Cross-Platform**: Tests verify paths work on Windows, Linux, and macOS
+
+## Notes
+
+- This is a text file, not an actual executable
+- Tests create mock executables in temporary directories
+- Real game files (data.win) are not included in the repository
+- Tests use pytest.skip() if required files are missing
+

@@ -126,7 +126,7 @@ def load_mod_icon_universal(icon_label, mod_data, size=80):
                 from workers import WorkerSignals
                 from utils.image_loader import ImageLoaderRunnable
                 pool = QThreadPool.globalInstance()
-                signals = WorkerSignals()
+                signals = WorkerSignals(icon_label)
                 label_ref = weakref.ref(icon_label)
 
                 def _on_loaded_image(img):
@@ -158,13 +158,18 @@ def load_mod_icon_universal(icon_label, mod_data, size=80):
                     try:
                         signals.result.disconnect(_on_loaded_image)
                         signals.error.disconnect(_on_error)
-                    except Exception:
+                    except (TypeError, RuntimeError):
                         pass
                     try:
                         if hasattr(icon_label, '_icon_loader_signals'):
                             delattr(icon_label, '_icon_loader_signals')
                         if hasattr(icon_label, '_icon_loader_runnable'):
                             delattr(icon_label, '_icon_loader_runnable')
+                    except Exception:
+                        pass
+                    try:
+                        if pool is not None and pool.activeThreadCount() > 0:
+                            pool.waitForDone(1000)
                     except Exception:
                         pass
                 try:

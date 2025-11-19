@@ -215,5 +215,5 @@ def increment_launch_counter() -> None:
         url = f'{CLOUD_FUNCTIONS_BASE_URL}/incrementLaunches'
         session = get_session()
         session.post(url, json={'os': os_key}, timeout=NETWORK_TIMEOUT_SHORT)
-    except requests.RequestException:
-        pass
+    except requests.RequestException as e:
+        logging.debug(f'increment_launch_count: Failed to increment launch count: {e}')

@@ -2,8 +2,8 @@ import os
 import shutil
 import logging
 import webbrowser
-from typing import Dict, Any, List
-from PyQt6.QtWidgets import QWidget, QDialog
+from typing import Dict
+from PyQt6.QtWidgets import QDialog
 from managers.localization_manager import tr
 from config.constants import UI_COLORS
 from ui.widgets.plugin.plugin_widget import PluginWidget

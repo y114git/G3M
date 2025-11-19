@@ -1,5 +1,4 @@
 import os
-import webbrowser
 from typing import Dict, Any
 from PyQt6.QtWidgets import QDialog, QVBoxLayout, QLabel, QPushButton, QTextEdit, QHBoxLayout, QMessageBox
 from PyQt6.QtCore import Qt

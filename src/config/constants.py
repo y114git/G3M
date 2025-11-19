@@ -6,7 +6,6 @@ DATA_FIREBASE_URL = get_config_value('DATA_FIREBASE_URL', '')
 CLOUD_FUNCTIONS_BASE_URL = get_config_value('CLOUD_FUNCTIONS_BASE_URL', '')
 STEAM_APP_ID_FULL, STEAM_APP_ID_DEMO, STEAM_APP_ID_UNDERTALE = ('1671210', '1690940', '391540')
 GAME_PROCESS_NAMES = ['DELTARUNE.exe', 'DELTARUNE', 'UNDERTALE.exe', 'UNDERTALE', 'Undertale Yellow.exe', 'Undertale Yellow', 'runner']
-SAVE_SLOT_FINISH_MAP = {0: 3, 1: 4, 2: 5}
 ARCH = platform.machine()
 SOCIAL_LINKS = {'telegram': 'https://t.me/y_maintg', 'discord': 'https://discord.gg/T7hyqxmSjf'}
 UI_COLORS = {'status_error': 'red', 'status_warning': 'orange', 'status_success': 'green', 'status_info': 'gray', 'status_ready': 'lightgreen', 'status_steam': 'blue', 'link': '#00BFFF', 'social_discord': '#8A2BE2', 'saves_button': 'yellow'}

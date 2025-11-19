@@ -38,20 +38,20 @@ class InstallGameBananaModThread(QThread):
             if self._session is not None:
                 try:
                     self._session.close()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f'InstallGameBananaModThread.cancel: Error closing session: {e}')
             if self._active_response is not None:
                 try:
                     self._active_response.close()
-                except Exception:
-                    pass
-        except Exception:
-            pass
+                except Exception as e:
+                    logger.debug(f'InstallGameBananaModThread.cancel: Error closing response: {e}')
+        except Exception as e:
+            logger.debug(f'InstallGameBananaModThread.cancel: Error during cleanup: {e}')
         finally:
             try:
                 self.status.emit(tr('status.operation_cancelled'), UI_COLORS['status_error'])
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f'InstallGameBananaModThread.cancel: Error emitting status: {e}')
 
     def set_selected_file(self, file_index: int):
         self._selected_file_index = file_index
@@ -143,8 +143,7 @@ class InstallGameBananaModThread(QThread):
     def _install_deltahub_mod(self, archive_path: str, mod_id: int) -> Optional[str]:
         import tempfile
         import json
-        from utils.file_utils import _extract_archive_raw, remove_archive_extension, sanitize_filename
-        from managers.settings_manager import SettingsManager
+        from utils.file_utils import _extract_archive_raw, sanitize_filename
         fname_lower = os.path.basename(archive_path).lower()
         with tempfile.TemporaryDirectory(prefix='gb_install_dh_') as temp_dir:
             try:
@@ -168,7 +167,6 @@ class InstallGameBananaModThread(QThread):
                 logger.error(f'Error reading mod_config.json: {e}')
                 raise
             content_root = os.path.dirname(mod_config_path)
-            is_redirect = False
             files_in_archive = []
             for root, dirs, files in os.walk(content_root):
                 for file in files:
@@ -178,7 +176,6 @@ class InstallGameBananaModThread(QThread):
                 external_url = config_data.get('external_url') or config_data.get('download_url')
                 if external_url:
                     logger.info(f'DELTAHUB mod {mod_id} appears to be a redirect to {external_url}')
-                    is_redirect = True
                     self.status.emit(tr('status.downloading_from_external'), UI_COLORS['status_info'])
                     try:
                         redirect_archive_path = self._download_file(external_url, 'redirect_mod.zip')
@@ -241,15 +238,15 @@ class InstallGameBananaModThread(QThread):
             if archive_path and os.path.exists(archive_path):
                 try:
                     os.remove(archive_path)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f'InstallGameBananaModThread: Error removing archive file {archive_path}: {e}')
             if archive_dir and os.path.exists(archive_dir):
                 try:
                     shutil.rmtree(archive_dir, ignore_errors=True)
-                except Exception:
-                    pass
-        except Exception:
-            pass
+                except Exception as e:
+                    logger.debug(f'InstallGameBananaModThread: Error removing archive directory {archive_dir}: {e}')
+        except Exception as e:
+            logger.debug(f'InstallGameBananaModThread: Error during cleanup: {e}')
 
     def _download_file(self, url: str, filename: str) -> str:
         temp_dir = tempfile.mkdtemp(prefix='gb_download_')
@@ -263,8 +260,8 @@ class InstallGameBananaModThread(QThread):
             try:
                 head_response = session.head(url, allow_redirects=True, timeout=NETWORK_TIMEOUT_HEAD)
                 total_size = int(head_response.headers.get('content-length', 0))
-            except (requests.RequestException, ValueError):
-                pass
+            except (requests.RequestException, ValueError) as e:
+                logger.debug(f'InstallGameBananaModThread: Could not get content-length from HEAD request: {e}')
 
             def progress_callback(progress):
                 if not self._cancelled:
@@ -283,12 +280,12 @@ class InstallGameBananaModThread(QThread):
                     self._cleanup_temp_files(archive_path, temp_dir)
                     raise
                 raise
-        except Exception as e:
+        except Exception:
             if not download_success:
                 try:
                     self._cleanup_temp_files(archive_path, temp_dir)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f'InstallGameBananaModThread: Error during cleanup after download failure: {e}')
             raise
 
     def _resolve_selected_file(self, mod_id: int) -> Optional[Dict]:
@@ -317,5 +314,5 @@ class InstallGameBananaModThread(QThread):
         try:
             if hasattr(self.main_window, 'search_display'):
                 QTimer.singleShot(0, self.main_window.search_display.update_search_plaques)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f'InstallGameBananaModThread: Error notifying search refresh: {e}')

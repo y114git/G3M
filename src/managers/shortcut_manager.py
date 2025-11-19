@@ -329,22 +329,18 @@ class ShortcutManager(QObject):
                 if is_demo:
                     exec_path = demo_custom_exec_path
                     if exec_path:
-                        from models.game_modes import DemoGameMode
                         self.app_state.local_config[DemoGameMode().get_custom_exec_config_key()] = exec_path
                 elif is_undertale:
                     exec_path = undertale_custom_exec_path
                     if exec_path:
-                        from models.game_modes import UndertaleGameMode
                         self.app_state.local_config[UndertaleGameMode().get_custom_exec_config_key()] = exec_path
                 elif is_undertaleyellow:
                     exec_path = undertaleyellow_custom_exec_path
                     if exec_path:
-                        from models.game_modes import UndertaleYellowGameMode
                         self.app_state.local_config[UndertaleYellowGameMode().get_custom_exec_config_key()] = exec_path
                 else:
                     exec_path = custom_exec_path
                     if exec_path:
-                        from models.game_modes import FullGameMode
                         self.app_state.local_config[FullGameMode().get_custom_exec_config_key()] = exec_path
                 if exec_path:
                     self.app_state.local_config['use_custom_executable'] = True

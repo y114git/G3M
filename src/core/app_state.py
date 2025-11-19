@@ -1,4 +1,4 @@
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List, Optional
 import threading
 from PyQt6.QtCore import QObject, QThread, pyqtSignal
 from models.mod_models import ModInfo
@@ -208,10 +208,11 @@ class AppState(QObject):
         self.operation_cancelled = True
         logging.info('AppState: Cancel button clicked')
         if self.current_task:
-            if hasattr(self.current_task, 'cancel'):
+            if hasattr(self.current_task, 'cancel') and callable(getattr(self.current_task, 'cancel', None)):
                 logging.info(f'AppState: Calling cancel() on current_task: {type(self.current_task).__name__}')
                 try:
-                    self.current_task.cancel()
+                    cancel_method = getattr(self.current_task, 'cancel')
+                    cancel_method()
                 except Exception as e:
                     logging.error(f'AppState: Error calling cancel() on task: {e}', exc_info=True)
             else:
