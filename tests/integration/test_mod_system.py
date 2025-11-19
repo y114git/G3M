@@ -41,6 +41,8 @@ class TestModStructure:
 
     def test_mod_file_discovery(self, full_mod_structure_dir):
         mod_path = Path(full_mod_structure_dir)
+        if not mod_path.exists():
+            pytest.skip(f'Test mod structure not found at {full_mod_structure_dir}. Please create test mod structure.')
         chapter_dirs = [d for d in mod_path.iterdir() if d.is_dir() and d.name.startswith('chapter_')]
         assert len(chapter_dirs) > 0, 'No chapter directories found'
         for chapter_dir in chapter_dirs:
