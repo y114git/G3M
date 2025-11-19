@@ -249,12 +249,16 @@ class AppWindow(QWidget):
                         self._update_plugin_tabs()
                     if hasattr(self, 'plugin_display'):
                         self.plugin_display.update_display()
+                    if self.mod_manager:
+                        self.mod_manager.invalidate_mods_cache()
+                        self.mod_manager.load_local_mods(_skip_conversion=True)
+                        QTimer.singleShot(300, lambda: self.mod_manager.mod_list_updated.emit())
                     if hasattr(self, 'library_display'):
-                        self.library_display.update_display()
+                        QTimer.singleShot(500, lambda: self.library_display.update_display() if hasattr(self, 'library_display') else None)
                     if hasattr(self, 'settings_manager'):
                         self.settings_manager.theme_changed.emit()
                     self.feedback_manager.update_status(message, UI_COLORS['status_success'])
-                    QTimer.singleShot(500, lambda: self._on_refresh_clicked(is_initial=False))
+                    QTimer.singleShot(1000, lambda: self._on_refresh_clicked(is_initial=False))
                 else:
                     logging.warning(f'Installation failed for deltahub:// URL: {message}')
                     self.feedback_manager.update_status(message or tr('errors.error'), UI_COLORS['status_error'])
