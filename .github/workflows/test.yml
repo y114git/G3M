@@ -61,25 +61,56 @@ jobs:
                   echo "Checking if pytest can see test files:"
                   python -c "import os; test_files = []; [test_files.extend([os.path.join(root, f) for f in files if f.startswith('test_') and f.endswith('.py')]) for root, dirs, files in os.walk('tests')]; print(f'Found {len(test_files)} test files:'); [print(f) for f in test_files[:10]]" || true
             - name: Run all tests
+              id: run_tests
+              continue-on-error: true
               env:
                   PYTHONPATH: ${{ github.workspace }}/src
                   DISPLAY: :99
                   QT_QPA_PLATFORM: offscreen
               run: |
-                  pytest tests/ -vv --collect-only --tb=short || true
-                  pytest tests/ -v --tb=short --maxfail=5 --html=test-report.html --self-contained-html || true
+                  pytest tests/ -vv --collect-only --tb=short 2>&1 | tee test-collection.log || true
+                  pytest tests/ -v --tb=short --maxfail=5 --html=test-report.html --self-contained-html 2>&1 | tee test-output.log
+                  TEST_EXIT_CODE=$?
+                  echo "exit_code=$TEST_EXIT_CODE" >> $GITHUB_OUTPUT
+                  exit $TEST_EXIT_CODE
+            - name: Check test results
+              if: always()
+              run: |
+                  if [ "${{ steps.run_tests.outcome }}" != "success" ]; then
+                      echo "Tests failed or were cancelled"
+                      exit 1
+                  fi
             - name: Publish test results summary
               if: always()
               run: |
                   echo "## 📊 Test Results Summary (Linux)" >> $GITHUB_STEP_SUMMARY
                   echo "" >> $GITHUB_STEP_SUMMARY
-                  if [ -f test-report.html ]; then
-                      echo "✅ Test report generated: test-report.html" >> $GITHUB_STEP_SUMMARY
+
+                  # Extract test results from log if available
+                  if [ -f test-output.log ]; then
+                      echo "### Test Execution Log" >> $GITHUB_STEP_SUMMARY
+                      echo '```' >> $GITHUB_STEP_SUMMARY
+                      tail -20 test-output.log >> $GITHUB_STEP_SUMMARY || true
+                      echo '```' >> $GITHUB_STEP_SUMMARY
                       echo "" >> $GITHUB_STEP_SUMMARY
-                      echo "### Test Statistics" >> $GITHUB_STEP_SUMMARY
-                      pytest tests/ --collect-only -q 2>&1 | tail -1 >> $GITHUB_STEP_SUMMARY || echo "Failed to collect test stats" >> $GITHUB_STEP_SUMMARY
+                      
+                      # Extract summary line
+                      SUMMARY=$(grep -E "(passed|failed|skipped|error)" test-output.log | tail -1 || echo "")
+                      if [ -n "$SUMMARY" ]; then
+                          echo "### Test Statistics" >> $GITHUB_STEP_SUMMARY
+                          echo "$SUMMARY" >> $GITHUB_STEP_SUMMARY
+                          echo "" >> $GITHUB_STEP_SUMMARY
+                      fi
+                  fi
+
+                  if [ -f test-report.html ]; then
+                      echo "✅ **HTML Test Report Generated**" >> $GITHUB_STEP_SUMMARY
+                      echo "" >> $GITHUB_STEP_SUMMARY
+                      echo "Download the report from artifacts: \`test-results-linux\`" >> $GITHUB_STEP_SUMMARY
                   else
-                      echo "❌ Test report not generated" >> $GITHUB_STEP_SUMMARY
+                      echo "⚠️ **HTML Test Report Not Generated**" >> $GITHUB_STEP_SUMMARY
+                      echo "" >> $GITHUB_STEP_SUMMARY
+                      echo "Check test logs for details." >> $GITHUB_STEP_SUMMARY
                   fi
             - name: Upload test results
               if: always()
@@ -90,7 +121,10 @@ jobs:
                       .pytest_cache/
                       htmlcov/
                       test-report.html
+                      test-output.log
+                      test-collection.log
                   if-no-files-found: ignore
+                  retention-days: 7
 
     test-macos-x64:
         name: Tests (macOS x64)
@@ -126,23 +160,54 @@ jobs:
                   echo "Checking if pytest can see test files:"
                   python -c "import os; test_files = []; [test_files.extend([os.path.join(root, f) for f in files if f.startswith('test_') and f.endswith('.py')]) for root, dirs, files in os.walk('tests')]; print(f'Found {len(test_files)} test files:'); [print(f) for f in test_files[:10]]" || true
             - name: Run all tests
+              id: run_tests
+              continue-on-error: true
               env:
                   PYTHONPATH: ${{ github.workspace }}/src
               run: |
-                  pytest tests/ -vv --collect-only --tb=short || true
-                  pytest tests/ -v --tb=short --maxfail=5 --html=test-report.html --self-contained-html || true
+                  pytest tests/ -vv --collect-only --tb=short 2>&1 | tee test-collection.log || true
+                  pytest tests/ -v --tb=short --maxfail=5 --html=test-report.html --self-contained-html 2>&1 | tee test-output.log
+                  TEST_EXIT_CODE=$?
+                  echo "exit_code=$TEST_EXIT_CODE" >> $GITHUB_OUTPUT
+                  exit $TEST_EXIT_CODE
+            - name: Check test results
+              if: always()
+              run: |
+                  if [ "${{ steps.run_tests.outcome }}" != "success" ]; then
+                      echo "Tests failed or were cancelled"
+                      exit 1
+                  fi
             - name: Publish test results summary
               if: always()
               run: |
                   echo "## 📊 Test Results Summary (macOS x64)" >> $GITHUB_STEP_SUMMARY
                   echo "" >> $GITHUB_STEP_SUMMARY
-                  if [ -f test-report.html ]; then
-                      echo "✅ Test report generated: test-report.html" >> $GITHUB_STEP_SUMMARY
+
+                  # Extract test results from log if available
+                  if [ -f test-output.log ]; then
+                      echo "### Test Execution Log" >> $GITHUB_STEP_SUMMARY
+                      echo '```' >> $GITHUB_STEP_SUMMARY
+                      tail -20 test-output.log >> $GITHUB_STEP_SUMMARY || true
+                      echo '```' >> $GITHUB_STEP_SUMMARY
                       echo "" >> $GITHUB_STEP_SUMMARY
-                      echo "### Test Statistics" >> $GITHUB_STEP_SUMMARY
-                      pytest tests/ --collect-only -q 2>&1 | tail -1 >> $GITHUB_STEP_SUMMARY || echo "Failed to collect test stats" >> $GITHUB_STEP_SUMMARY
+                      
+                      # Extract summary line
+                      SUMMARY=$(grep -E "(passed|failed|skipped|error)" test-output.log | tail -1 || echo "")
+                      if [ -n "$SUMMARY" ]; then
+                          echo "### Test Statistics" >> $GITHUB_STEP_SUMMARY
+                          echo "$SUMMARY" >> $GITHUB_STEP_SUMMARY
+                          echo "" >> $GITHUB_STEP_SUMMARY
+                      fi
+                  fi
+
+                  if [ -f test-report.html ]; then
+                      echo "✅ **HTML Test Report Generated**" >> $GITHUB_STEP_SUMMARY
+                      echo "" >> $GITHUB_STEP_SUMMARY
+                      echo "Download the report from artifacts: \`test-results-macos-x64\`" >> $GITHUB_STEP_SUMMARY
                   else
-                      echo "❌ Test report not generated" >> $GITHUB_STEP_SUMMARY
+                      echo "⚠️ **HTML Test Report Not Generated**" >> $GITHUB_STEP_SUMMARY
+                      echo "" >> $GITHUB_STEP_SUMMARY
+                      echo "Check test logs for details." >> $GITHUB_STEP_SUMMARY
                   fi
             - name: Upload test results
               if: always()
@@ -153,7 +218,10 @@ jobs:
                       .pytest_cache/
                       htmlcov/
                       test-report.html
+                      test-output.log
+                      test-collection.log
                   if-no-files-found: ignore
+                  retention-days: 7
 
     test-macos-arm64:
         name: Tests (macOS arm64)
@@ -189,23 +257,54 @@ jobs:
                   echo "Checking if pytest can see test files:"
                   python -c "import os; test_files = []; [test_files.extend([os.path.join(root, f) for f in files if f.startswith('test_') and f.endswith('.py')]) for root, dirs, files in os.walk('tests')]; print(f'Found {len(test_files)} test files:'); [print(f) for f in test_files[:10]]" || true
             - name: Run all tests
+              id: run_tests
+              continue-on-error: true
               env:
                   PYTHONPATH: ${{ github.workspace }}/src
               run: |
-                  pytest tests/ -vv --collect-only --tb=short || true
-                  pytest tests/ -v --tb=short --maxfail=5 --html=test-report.html --self-contained-html || true
+                  pytest tests/ -vv --collect-only --tb=short 2>&1 | tee test-collection.log || true
+                  pytest tests/ -v --tb=short --maxfail=5 --html=test-report.html --self-contained-html 2>&1 | tee test-output.log
+                  TEST_EXIT_CODE=$?
+                  echo "exit_code=$TEST_EXIT_CODE" >> $GITHUB_OUTPUT
+                  exit $TEST_EXIT_CODE
+            - name: Check test results
+              if: always()
+              run: |
+                  if [ "${{ steps.run_tests.outcome }}" != "success" ]; then
+                      echo "Tests failed or were cancelled"
+                      exit 1
+                  fi
             - name: Publish test results summary
               if: always()
               run: |
                   echo "## 📊 Test Results Summary (macOS arm64)" >> $GITHUB_STEP_SUMMARY
                   echo "" >> $GITHUB_STEP_SUMMARY
-                  if [ -f test-report.html ]; then
-                      echo "✅ Test report generated: test-report.html" >> $GITHUB_STEP_SUMMARY
+
+                  # Extract test results from log if available
+                  if [ -f test-output.log ]; then
+                      echo "### Test Execution Log" >> $GITHUB_STEP_SUMMARY
+                      echo '```' >> $GITHUB_STEP_SUMMARY
+                      tail -20 test-output.log >> $GITHUB_STEP_SUMMARY || true
+                      echo '```' >> $GITHUB_STEP_SUMMARY
                       echo "" >> $GITHUB_STEP_SUMMARY
-                      echo "### Test Statistics" >> $GITHUB_STEP_SUMMARY
-                      pytest tests/ --collect-only -q 2>&1 | tail -1 >> $GITHUB_STEP_SUMMARY || echo "Failed to collect test stats" >> $GITHUB_STEP_SUMMARY
+                      
+                      # Extract summary line
+                      SUMMARY=$(grep -E "(passed|failed|skipped|error)" test-output.log | tail -1 || echo "")
+                      if [ -n "$SUMMARY" ]; then
+                          echo "### Test Statistics" >> $GITHUB_STEP_SUMMARY
+                          echo "$SUMMARY" >> $GITHUB_STEP_SUMMARY
+                          echo "" >> $GITHUB_STEP_SUMMARY
+                      fi
+                  fi
+
+                  if [ -f test-report.html ]; then
+                      echo "✅ **HTML Test Report Generated**" >> $GITHUB_STEP_SUMMARY
+                      echo "" >> $GITHUB_STEP_SUMMARY
+                      echo "Download the report from artifacts: \`test-results-macos-arm64\`" >> $GITHUB_STEP_SUMMARY
                   else
-                      echo "❌ Test report not generated" >> $GITHUB_STEP_SUMMARY
+                      echo "⚠️ **HTML Test Report Not Generated**" >> $GITHUB_STEP_SUMMARY
+                      echo "" >> $GITHUB_STEP_SUMMARY
+                      echo "Check test logs for details." >> $GITHUB_STEP_SUMMARY
                   fi
             - name: Upload test results
               if: always()
@@ -216,7 +315,10 @@ jobs:
                       .pytest_cache/
                       htmlcov/
                       test-report.html
+                      test-output.log
+                      test-collection.log
                   if-no-files-found: ignore
+                  retention-days: 7
 
     test-windows:
         name: Tests (Windows)
@@ -255,12 +357,26 @@ jobs:
                   Write-Host "Checking if pytest can see test files:"
                   python -c "import os; test_files = []; [test_files.extend([os.path.join(root, f) for f in files if f.startswith('test_') and f.endswith('.py')]) for root, dirs, files in os.walk('tests')]; print(f'Found {len(test_files)} test files:'); [print(f) for f in test_files[:10]]"
             - name: Run all tests
+              id: run_tests
+              continue-on-error: true
               shell: powershell
               env:
                   PYTHONPATH: ${{ github.workspace }}\src
               run: |
-                  pytest tests/ -vv --collect-only --tb=short
-                  pytest tests/ -v --tb=short --maxfail=5 --html=test-report.html --self-contained-html
+                  pytest tests/ -vv --collect-only --tb=short 2>&1 | Tee-Object -FilePath test-collection.log
+                  if ($LASTEXITCODE -ne 0) { Write-Host "Collection failed with exit code $LASTEXITCODE" }
+                  pytest tests/ -v --tb=short --maxfail=5 --html=test-report.html --self-contained-html 2>&1 | Tee-Object -FilePath test-output.log
+                  $exitCode = if ($LASTEXITCODE) { $LASTEXITCODE } else { 0 }
+                  echo "exit_code=$exitCode" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+                  exit $exitCode
+            - name: Check test results
+              if: always()
+              shell: powershell
+              run: |
+                  if ("${{ steps.run_tests.outcome }}" -ne "success") {
+                      Write-Host "Tests failed or were cancelled"
+                      exit 1
+                  }
             - name: Publish test results summary
               if: always()
               shell: powershell
@@ -269,14 +385,32 @@ jobs:
                   ## 📊 Test Results Summary (Windows)
 
                   "@
-                  if (Test-Path "test-report.html") {
-                      $summary += "✅ Test report generated: test-report.html`n`n"
-                      $summary += "### Test Statistics`n"
-                      $stats = pytest tests/ --collect-only -q 2>&1 | Select-Object -Last 1
-                      $summary += "$stats`n"
-                  } else {
-                      $summary += "❌ Test report not generated`n"
+
+                  if (Test-Path "test-output.log") {
+                      $summary += "### Test Execution Log`n"
+                      $summary += "``````n"
+                      $lastLines = Get-Content "test-output.log" -Tail 20 -ErrorAction SilentlyContinue
+                      if ($lastLines) {
+                          $summary += ($lastLines -join "`n") + "`n"
+                      }
+                      $summary += "``````n`n"
+                      
+                      # Extract summary line
+                      $summaryLine = Get-Content "test-output.log" -ErrorAction SilentlyContinue | Select-String -Pattern "(passed|failed|skipped|error)" | Select-Object -Last 1
+                      if ($summaryLine) {
+                          $summary += "### Test Statistics`n"
+                          $summary += "$($summaryLine.Line)`n`n"
+                      }
                   }
+
+                  if (Test-Path "test-report.html") {
+                      $summary += "✅ **HTML Test Report Generated**`n`n"
+                      $summary += "Download the report from artifacts: ``test-results-windows```n"
+                  } else {
+                      $summary += "⚠️ **HTML Test Report Not Generated**`n`n"
+                      $summary += "Check test logs for details.`n"
+                  }
+
                   Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value $summary
             - name: Upload test results
               if: always()
@@ -287,4 +421,7 @@ jobs:
                       .pytest_cache/
                       htmlcov/
                       test-report.html
+                      test-output.log
+                      test-collection.log
                   if-no-files-found: ignore
+                  retention-days: 7

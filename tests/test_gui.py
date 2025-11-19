@@ -12,7 +12,7 @@ if str(src_path) not in sys.path:
     sys.path.insert(0, str(src_path))
 
 
-class TestRunnerThread(QThread):
+class PytestRunnerThread(QThread):
     test_output = pyqtSignal(str)
     test_finished = pyqtSignal(int, int, int)
     test_started = pyqtSignal(str)
@@ -66,14 +66,14 @@ class TestRunnerThread(QThread):
             self._process = None
 
 
-class TestCategoryTab(QWidget):
+class CategoryTabWidget(QWidget):
 
     def __init__(self, category_name: str, test_files: List[Dict[str, str]], parent=None):
         super().__init__(parent)
         self.category_name = category_name
         self.test_files = test_files
         self.category_key = None
-        self.current_thread: Optional[TestRunnerThread] = None
+        self.current_thread: Optional[PytestRunnerThread] = None
         self.init_ui()
 
     def init_ui(self):
@@ -134,7 +134,7 @@ class TestCategoryTab(QWidget):
         self.progress_bar.setVisible(True)
         self.run_all_btn.setEnabled(False)
         self.stop_btn.setEnabled(True)
-        self.current_thread = TestRunnerThread(test_path)
+        self.current_thread = PytestRunnerThread(test_path)
         self.current_thread.test_output.connect(self.append_output)
         self.current_thread.test_finished.connect(self.on_test_finished)
         self.current_thread.test_started.connect(self.append_output)
@@ -155,7 +155,7 @@ class TestCategoryTab(QWidget):
         else:
             category_dir_name = self.category_name.lower().replace(' ', '_')
         category_path = tests_dir / category_dir_name
-        self.current_thread = TestRunnerThread(str(category_path))
+        self.current_thread = PytestRunnerThread(str(category_path))
         self.current_thread.test_output.connect(self.append_output)
         self.current_thread.test_finished.connect(self.on_test_finished)
         self.current_thread.test_started.connect(self.append_output)
@@ -212,7 +212,7 @@ class TestCategoryTab(QWidget):
         self.current_thread = None
 
 
-class TestGUIWindow(QMainWindow):
+class GUIWindow(QMainWindow):
 
     def __init__(self):
         super().__init__()
@@ -239,7 +239,7 @@ class TestGUIWindow(QMainWindow):
         self.tabs = QTabWidget()
         test_categories = [{'name': 'Unit Tests', 'key': 'unit', 'files': [{'name': 'test_utils.py', 'path': 'unit/test_utils.py', 'description': 'Utility functions tests'}, {'name': 'test_path_utils.py', 'path': 'unit/test_path_utils.py', 'description': 'Path utility functions tests'}, {'name': 'test_managers.py', 'path': 'unit/test_managers.py', 'description': 'Manager classes tests'}, {'name': 'test_models.py', 'path': 'unit/test_models.py', 'description': 'Data models tests'}, {'name': 'test_controllers.py', 'path': 'unit/test_controllers.py', 'description': 'Controller classes tests'}, {'name': 'test_config.py', 'path': 'unit/test_config.py', 'description': 'Configuration tests'}]}, {'name': 'Integration Tests', 'key': 'integration', 'files': [{'name': 'test_mod_operations.py', 'path': 'integration/test_mod_operations.py', 'description': 'Mod installation/removal tests'}, {'name': 'test_gamebanana.py', 'path': 'integration/test_gamebanana.py', 'description': 'GameBanana integration tests'}, {'name': 'test_plugin_system.py', 'path': 'integration/test_plugin_system.py', 'description': 'Plugin system tests'}, {'name': 'test_patching_and_merging.py', 'path': 'integration/test_patching_and_merging.py', 'description': 'Patching and merging tests'}, {'name': 'test_mod_system.py', 'path': 'integration/test_mod_system.py', 'description': 'Full mod system tests (structure, installation, processing)'}, {'name': 'test_game_launch_simulation.py', 'path': 'integration/test_game_launch_simulation.py', 'description': 'Game launch simulation and path resolution tests'}, {'name': 'test_customization_colors.py', 'path': 'integration/test_customization_colors.py', 'description': 'UI color customization tests'}, {'name': 'test_refresh_updates.py', 'path': 'integration/test_refresh_updates.py', 'description': 'UI refresh functionality tests'}, {'name': 'test_localization_updates.py', 'path': 'integration/test_localization_updates.py', 'description': 'Localization and translation update tests'}]}, {'name': 'UI Tests', 'key': 'ui', 'files': [{'name': 'test_dialogs.py', 'path': 'ui/test_dialogs.py', 'description': 'Dialog components tests'}, {'name': 'test_widgets.py', 'path': 'ui/test_widgets.py', 'description': 'Widget components tests'}, {'name': 'test_main_window.py', 'path': 'ui/test_main_window.py', 'description': 'Main window tests'}]}]
         for category in test_categories:
-            tab = TestCategoryTab(category['name'], category['files'], self)
+            tab = CategoryTabWidget(category['name'], category['files'], self)
             tab.category_key = category.get('key', category['name'].lower().replace(' ', '_'))
             self.tabs.addTab(tab, category['name'])
         layout.addWidget(self.tabs)
@@ -251,7 +251,7 @@ class TestGUIWindow(QMainWindow):
         reply = QMessageBox.question(self, 'Run All Tests', 'This will run all tests. This may take a while. Continue?', QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         if reply == QMessageBox.StandardButton.Yes:
             tests_dir = Path(__file__).parent
-            thread = TestRunnerThread(str(tests_dir))
+            thread = PytestRunnerThread(str(tests_dir))
             output_dialog = QMessageBox(self)
             output_dialog.setWindowTitle('Running All Tests')
             output_dialog.setText('Running all tests...\nThis may take several minutes.')
@@ -277,7 +277,7 @@ class TestGUIWindow(QMainWindow):
                     f.write(f'Generated: {datetime.now().isoformat()}\n\n')
                     for i in range(self.tabs.count()):
                         tab = self.tabs.widget(i)
-                        if isinstance(tab, TestCategoryTab):
+                        if isinstance(tab, CategoryTabWidget):
                             f.write(f'\n{tab.category_name}\n')
                             f.write('-' * 60 + '\n')
                             f.write(tab.output_text.toPlainText())
@@ -289,7 +289,7 @@ class TestGUIWindow(QMainWindow):
 
 def main():
     app = QApplication(sys.argv)
-    window = TestGUIWindow()
+    window = GUIWindow()
     window.show()
     sys.exit(app.exec())
 
