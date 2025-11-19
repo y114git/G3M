@@ -430,26 +430,26 @@ jobs:
         run: |
           cd test_artifacts
           Expand-Archive -Path *.zip -DestinationPath . -Force
-          if (Test-Path "DELTAHUB.exe") {
-            Write-Host "=== Testing startup ==="
+          if (Test-Path 'DELTAHUB.exe') {
+            Write-Host '=== Testing startup ==='
             $output = & .\DELTAHUB.exe --help 2>&1
             Write-Host $output
-            if ($output -match "STARTUP ERROR") {
-              Write-Host ""
-              Write-Host "=== STARTUP ERROR DETECTED ==="
-              Write-Host "Full error output:"
+            if ($output -match 'STARTUP ERROR') {
+              Write-Host ''
+              Write-Host '=== STARTUP ERROR DETECTED ==='
+              Write-Host 'Full error output:'
               Write-Host $output
-              Write-Host ""
-              Write-Host "=== Attempting to get more details ==="
+              Write-Host ''
+              Write-Host '=== Attempting to get more details ==='
               & .\DELTAHUB.exe --help 2>&1
-              Write-Host ""
-              Write-Host "=== File information ==="
+              Write-Host ''
+              Write-Host '=== File information ==='
               Get-Item .\DELTAHUB.exe | Select-Object FullName, Length, LastWriteTime
               exit 1
             }
-            Write-Host "✓ Startup test passed"
+            Write-Host '✓ Startup test passed'
           } else {
-            Write-Host "ERROR: DELTAHUB.exe not found in archive"
+            Write-Host 'ERROR: DELTAHUB.exe not found in archive'
             Get-ChildItem -Recurse | Select-Object FullName
             exit 1
           }
