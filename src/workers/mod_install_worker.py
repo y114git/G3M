@@ -35,21 +35,14 @@ class ModInstallWorker(QThread):
     def _download_archive(self, url: str, target_path: str) -> bool:
         try:
             self.status.emit(tr('mods.downloading_mod'), UI_COLORS['status_warning'])
+            from utils.file_utils import download_file_with_progress
+            from utils.network_utils import get_session
             session = get_session()
             self._session = session
-            total_size = 0
-            try:
-                head_response = session.head(url, allow_redirects=True, timeout=NETWORK_TIMEOUT_HEAD)
-                total_size = int(head_response.headers.get('content-length', 0))
-            except Exception as e:
-                logging.debug(f'ModInstallWorker: Could not get content-length from HEAD request: {e}')
-            downloaded_ref = [0]
 
             def progress_callback(progress):
                 self.progress.emit(progress)
-            download_file(session, url, target_path, progress_callback=progress_callback, total_size=total_size, downloaded_ref=downloaded_ref, cancel_check=lambda: self._cancelled)
-            self.progress.emit(100)
-            return True
+            return download_file_with_progress(url, target_path, progress_callback=progress_callback, session=session, cancel_check=lambda: self._cancelled)
         except Exception as e:
             logging.error(f'ModInstallWorker: Download failed: {e}', exc_info=True)
             return False

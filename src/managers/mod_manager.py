@@ -63,15 +63,9 @@ class ModManager(QObject):
                         continue
                     folder_name = entry.name
                     folder_path = entry.path
-                    old_config_path = os.path.join(folder_path, 'config.json')
+                    from utils.file_utils import migrate_mod_config
+                    migrate_mod_config(folder_path)
                     config_path = os.path.join(folder_path, 'mod_config.json')
-                    if os.path.exists(old_config_path) and (not os.path.exists(config_path)):
-                        try:
-                            import shutil
-                            shutil.move(old_config_path, config_path)
-                            logging.info(f'Migrated mod config.json to mod_config.json in {folder_name}')
-                        except Exception as e:
-                            logging.warning(f'Failed to migrate mod config.json to mod_config.json in {folder_name}: {e}')
                     if not os.path.exists(config_path):
                         continue
                     try:
@@ -260,15 +254,9 @@ class ModManager(QObject):
                 item_path = os.path.join(self.app_state.mods_dir, item_name)
                 if not os.path.isdir(item_path):
                     continue
-                old_config_path = os.path.join(item_path, 'config.json')
+                from utils.file_utils import migrate_mod_config
+                migrate_mod_config(item_path)
                 config_path = os.path.join(item_path, 'mod_config.json')
-                if os.path.exists(old_config_path) and (not os.path.exists(config_path)):
-                    try:
-                        import shutil
-                        shutil.move(old_config_path, config_path)
-                        logging.info(f'Migrated mod config.json to mod_config.json in {item_name}')
-                    except Exception as e:
-                        logging.warning(f'Failed to migrate mod config.json to mod_config.json in {item_name}: {e}')
                 if not os.path.exists(config_path):
                     continue
                 try:
@@ -489,15 +477,14 @@ class ModManager(QObject):
                                 logging.warning(f'Failed reading config {test_config_path}: {e}')
                                 continue
                         elif os.path.isfile(old_test_config_path):
+                            from utils.file_utils import migrate_mod_config
                             try:
-                                import shutil
-                                shutil.move(old_test_config_path, test_config_path)
-                                logging.info(f'Migrated mod config.json to mod_config.json in {folder_name}')
-                                with open(test_config_path, 'r', encoding='utf-8') as f:
-                                    test_config = json.load(f)
-                                    if test_config.get('mod_key') == mod_key:
-                                        mod_folder_path = folder_path
-                                        break
+                                if migrate_mod_config(folder_path):
+                                    with open(test_config_path, 'r', encoding='utf-8') as f:
+                                        test_config = json.load(f)
+                                        if test_config.get('mod_key') == mod_key:
+                                            mod_folder_path = folder_path
+                                            break
                             except Exception as e:
                                 logging.warning(f'Failed to migrate or read config in {folder_name}: {e}')
                                 continue
@@ -945,15 +932,9 @@ class ModManager(QObject):
             folder_path = os.path.join(self.app_state.mods_dir, folder_name)
             if not os.path.isdir(folder_path):
                 continue
-            old_config_path = os.path.join(folder_path, 'config.json')
+            from utils.file_utils import migrate_mod_config
+            migrate_mod_config(folder_path)
             config_path = os.path.join(folder_path, 'mod_config.json')
-            if os.path.exists(old_config_path) and (not os.path.exists(config_path)):
-                try:
-                    import shutil
-                    shutil.move(old_config_path, config_path)
-                    logging.info(f'Migrated mod config.json to mod_config.json in {folder_name}')
-                except Exception as e:
-                    logging.warning(f'Failed to migrate mod config.json to mod_config.json in {folder_name}: {e}')
             if not os.path.exists(config_path):
                 continue
             try:
@@ -975,15 +956,9 @@ class ModManager(QObject):
             folder_path = os.path.join(self.app_state.mods_dir, folder_name)
             if not os.path.isdir(folder_path):
                 continue
-            old_config_path = os.path.join(folder_path, 'config.json')
+            from utils.file_utils import migrate_mod_config
+            migrate_mod_config(folder_path)
             config_path = os.path.join(folder_path, 'mod_config.json')
-            if os.path.exists(old_config_path) and (not os.path.exists(config_path)):
-                try:
-                    import shutil
-                    shutil.move(old_config_path, config_path)
-                    logging.info(f'Migrated mod config.json to mod_config.json in {folder_name}')
-                except Exception as e:
-                    logging.warning(f'Failed to migrate mod config.json to mod_config.json in {folder_name}: {e}')
             if not os.path.exists(config_path):
                 continue
             try:
@@ -1021,15 +996,9 @@ class ModManager(QObject):
             folder_path = os.path.join(self.app_state.mods_dir, folder_name)
             if not os.path.isdir(folder_path):
                 continue
-            old_config_path = os.path.join(folder_path, 'config.json')
+            from utils.file_utils import migrate_mod_config
+            migrate_mod_config(folder_path)
             config_path = os.path.join(folder_path, 'mod_config.json')
-            if os.path.exists(old_config_path) and (not os.path.exists(config_path)):
-                try:
-                    import shutil
-                    shutil.move(old_config_path, config_path)
-                    logging.info(f'Migrated mod config.json to mod_config.json in {folder_name}')
-                except Exception as e:
-                    logging.warning(f'Failed to migrate mod config.json to mod_config.json in {folder_name}: {e}')
             if os.path.exists(config_path):
                 try:
                     with open(config_path, 'r', encoding='utf-8') as f:

@@ -87,8 +87,17 @@ class FetchGameBananaModsThread(QThread):
                 downloads = int(downloads) if downloads is not None else 0
             except (ValueError, TypeError):
                 downloads = 0
-            mod_info = ModInfo(key=mod_data.get('key', f'gb_{mod_id}'), name=mod_data.get('name', 'Unknown Mod'), version=mod_data.get('version', '1.0.0'), author=mod_data.get('author', tr('defaults.unknown')), game_version=mod_data.get('game_version', tr('defaults.not_specified')), tagline=mod_data.get('tagline', tr('status.no_description_status')), description_url=mod_data.get('description_url', ''), downloads=downloads, modgame=mod_data.get('modgame', game_name), is_verified=mod_data.get('is_verified', False), icon_url=mod_data.get('icon_url'), tags=mod_data.get('tags', []), hide_mod=False, is_local_mod=False, ban_status=False, files={}, created_date=mod_data.get('created_date'), last_updated=mod_data.get('last_updated'), external_url=mod_data.get('external_url'), screenshots_url=mod_data.get('screenshots_url', []), full_description=mod_data.get('full_description'), is_gamebanana_mod=True, gamebanana_mod_id=str(mod_id), gamebanana_mod_type=mod_data.get('gamebanana_mod_type', 'Mod'), gamebanana_last_update_timestamp=mod_data.get('gamebanana_last_update_timestamp'))
-            return mod_info
+            data_dict = mod_data.copy()
+            data_dict['key'] = mod_data.get('key', f'gb_{mod_id}')
+            data_dict['downloads'] = downloads
+            data_dict['modgame'] = mod_data.get('modgame', game_name)
+            data_dict['hide_mod'] = False
+            data_dict['is_local_mod'] = False
+            data_dict['ban_status'] = False
+            data_dict['files'] = {}
+            data_dict['is_gamebanana_mod'] = True
+            data_dict['gamebanana_mod_id'] = str(mod_id)
+            return ModInfo.from_dict(data_dict)
         except Exception as e:
             logger.error(f'Error converting mod data dict to ModInfo: {e}', exc_info=True)
             return None

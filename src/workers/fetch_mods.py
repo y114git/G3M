@@ -259,7 +259,19 @@ class FetchModsThread(QThread):
                 tags = ['textedit']
             else:
                 tags = []
-            mod = ModInfo(key=key, name=data.get('name', tr('status.unknown_mod')), author=data.get('author', tr('defaults.unknown')), version=f'{base_version}|{composite_version}' if base_version else composite_version, tagline=data.get('tagline', tr('status.no_description_status')), game_version=data.get('game_version', tr('defaults.not_specified')), description_url=data.get('description_url', ''), downloads=data.get('downloads', 0), modgame=modgame, is_verified=data.get('is_verified', False), icon_url=data.get('icon_url'), tags=tags, hide_mod=data.get('hide_mod', False), ban_status=data.get('ban_status', False), demo_url=files_data.get('demo', {}).get('url') if files_data else None, demo_version=files_data.get('demo', {}).get('version', '1.0.0') if files_data else '1.0.0', created_date=data.get('created_date'), last_updated=data.get('last_updated'), external_url=data.get('external_url'), screenshots_url=screens_list, is_gamebanana_mod=False, gamebanana_mod_id=None, gamebanana_mod_type=None, gamebanana_last_update_timestamp=None)
+            data_dict = data.copy()
+            data_dict['key'] = key
+            data_dict['version'] = f'{base_version}|{composite_version}' if base_version else composite_version
+            data_dict['modgame'] = modgame
+            data_dict['tags'] = tags
+            data_dict['screenshots_url'] = screens_list
+            data_dict['demo_url'] = files_data.get('demo', {}).get('url') if files_data else None
+            data_dict['demo_version'] = files_data.get('demo', {}).get('version', '1.0.0') if files_data else '1.0.0'
+            data_dict['is_gamebanana_mod'] = False
+            data_dict['gamebanana_mod_id'] = None
+            data_dict['gamebanana_mod_type'] = None
+            data_dict['gamebanana_last_update_timestamp'] = None
+            mod = ModInfo.from_dict(data_dict)
             if self._process_mod_chapters(mod, files_data):
                 return mod
             return None

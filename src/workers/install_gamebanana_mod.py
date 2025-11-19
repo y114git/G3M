@@ -251,17 +251,12 @@ class InstallGameBananaModThread(QThread):
     def _download_file(self, url: str, filename: str) -> str:
         temp_dir = tempfile.mkdtemp(prefix='gb_download_')
         archive_path = os.path.join(temp_dir, filename)
-        session = get_session()
-        self._session = session
-        downloaded_ref = [0]
-        total_size = 0
         download_success = False
         try:
-            try:
-                head_response = session.head(url, allow_redirects=True, timeout=NETWORK_TIMEOUT_HEAD)
-                total_size = int(head_response.headers.get('content-length', 0))
-            except (requests.RequestException, ValueError) as e:
-                logger.debug(f'InstallGameBananaModThread: Could not get content-length from HEAD request: {e}')
+            from utils.file_utils import download_file_with_progress
+            from utils.network_utils import get_session
+            session = get_session()
+            self._session = session
 
             def progress_callback(progress):
                 if not self._cancelled:
@@ -270,15 +265,15 @@ class InstallGameBananaModThread(QThread):
             def on_response(r):
                 self._active_response = r
             try:
-                download_file(session, url, archive_path, progress_callback=progress_callback, total_size=total_size, downloaded_ref=downloaded_ref, cancel_check=lambda: self._cancelled, on_response=on_response)
-                if not self._cancelled:
-                    self.progress.emit(100)
+                success = download_file_with_progress(url, archive_path, progress_callback=progress_callback, session=session, cancel_check=lambda: self._cancelled, on_response=on_response)
+                if not success:
+                    raise RuntimeError('download_failed')
                 download_success = True
                 return archive_path
             except RuntimeError as e:
                 if str(e) == 'download_cancelled' or self._cancelled:
                     self._cleanup_temp_files(archive_path, temp_dir)
-                    raise
+                    raise RuntimeError('download_cancelled')
                 raise
         except Exception:
             if not download_success:

@@ -2,6 +2,7 @@ import logging
 import os
 import platform
 import sys
+from config.constants import GAME_EXECUTABLES
 
 
 def get_legacy_ylauncher_path() -> str:
@@ -78,35 +79,42 @@ def resolve_game_executable(base_dir: str, is_undertale: bool) -> str | None:
             return None
         system = platform.system()
         if is_undertale:
-            exe_names_windows = ['Undertale Yellow.exe', 'Undertale Yellow', 'UNDERTALE.exe']
-            exe_names_linux = ['Undertale Yellow', 'UNDERTALE', 'Undertale Yellow.exe', 'UNDERTALE.exe']
-            app_names_mac = ['UNDERTALE.app']
+            game_types_to_check = ['undertaleyellow', 'undertale']
         else:
-            exe_names_windows = ['DELTARUNE.exe']
-            exe_names_linux = ['DELTARUNE', 'DELTARUNE.exe']
-            app_names_mac = ['DELTARUNE.app', 'DELTARUNEdemo.app']
+            game_types_to_check = ['deltarune']
         if system == 'Windows':
-            for exe_name in exe_names_windows:
-                exe_path = os.path.join(base_dir, exe_name)
-                if os.path.isfile(exe_path):
-                    return exe_path
-            return None
-        if system == 'Linux':
-            for exe_name in exe_names_linux:
-                exe_path = os.path.join(base_dir, exe_name)
-                if os.path.isfile(exe_path):
-                    if exe_name.endswith('.exe') or os.access(exe_path, os.X_OK):
+            for game_type in game_types_to_check:
+                game_executables = GAME_EXECUTABLES.get(game_type, {})
+                exe_names = list(game_executables.get('windows', ()))
+                for exe_name in exe_names:
+                    exe_path = os.path.join(base_dir, exe_name)
+                    if os.path.isfile(exe_path):
                         return exe_path
             return None
+        if system == 'Linux':
+            for game_type in game_types_to_check:
+                game_executables = GAME_EXECUTABLES.get(game_type, {})
+                exe_names = list(game_executables.get('linux', ()))
+                for exe_name in exe_names:
+                    exe_path = os.path.join(base_dir, exe_name)
+                    if os.path.isfile(exe_path):
+                        if exe_name.endswith('.exe') or os.access(exe_path, os.X_OK):
+                            return exe_path
+            return None
         if system == 'Darwin':
-            app_path = base_dir if base_dir.endswith('.app') and os.path.isdir(base_dir) else None
-            if not app_path:
-                for name in app_names_mac:
-                    candidate = os.path.join(base_dir, name)
-                    if os.path.isdir(candidate):
-                        app_path = candidate
-                        break
-            return app_path
+            for game_type in game_types_to_check:
+                game_executables = GAME_EXECUTABLES.get(game_type, {})
+                app_names = list(game_executables.get('mac', ()))
+                app_path = base_dir if base_dir.endswith('.app') and os.path.isdir(base_dir) else None
+                if not app_path:
+                    for name in app_names:
+                        candidate = os.path.join(base_dir, name)
+                        if os.path.isdir(candidate):
+                            app_path = candidate
+                            break
+                if app_path:
+                    return app_path
+            return None
         return None
     except Exception as e:
         logging.debug(f'resolve_game_executable: failed for {base_dir}: {e}')

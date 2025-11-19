@@ -50,3 +50,4 @@ GAMEBANANA_SUPPORTED_TOOL_IDS = (GAMEBANANA_TOOL_ID_DELTAHUB, GAMEBANANA_TOOL_ID
 GAMEBANANA_UPDATE_CHECK_INTERVAL = 3600
 GAMEBANANA_PER_PAGE = 20
 GAMEBANANA_MAX_PAGES = 50
+GAME_EXECUTABLES = {'deltarune': {'windows': ('DELTARUNE.exe', 'DELTARUNE'), 'linux': ('DELTARUNE', 'DELTARUNE.exe'), 'mac': ('DELTARUNE.app', 'DELTARUNEdemo.app')}, 'undertale': {'windows': ('UNDERTALE.exe', 'UNDERTALE'), 'linux': ('UNDERTALE', 'UNDERTALE.exe'), 'mac': ('UNDERTALE.app',)}, 'undertaleyellow': {'windows': ('Undertale Yellow.exe', 'Undertale Yellow', 'UNDERTALE.exe', 'UNDERTALE'), 'linux': ('Undertale Yellow', 'UNDERTALE', 'Undertale Yellow.exe', 'UNDERTALE.exe'), 'mac': ('UNDERTALE.app',)}}

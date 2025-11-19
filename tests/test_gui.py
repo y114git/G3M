@@ -3,7 +3,7 @@ import subprocess
 from pathlib import Path
 from typing import Dict, List, Optional
 from datetime import datetime
-from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QTextEdit, QTabWidget, QLabel, QProgressBar, QTreeWidget, QTreeWidgetItem, QSplitter, QMessageBox, QFileDialog
+from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QTextEdit, QTabWidget, QLabel, QProgressBar, QTreeWidget, QTreeWidgetItem, QSplitter, QMessageBox, QFileDialog, QDialog
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtGui import QColor, QFont, QTextCharFormat, QTextCursor
 project_root = Path(__file__).parent.parent
@@ -252,19 +252,90 @@ class GUIWindow(QMainWindow):
         if reply == QMessageBox.StandardButton.Yes:
             tests_dir = Path(__file__).parent
             thread = PytestRunnerThread(str(tests_dir))
-            output_dialog = QMessageBox(self)
+            output_dialog = QDialog(self)
             output_dialog.setWindowTitle('Running All Tests')
-            output_dialog.setText('Running all tests...\nThis may take several minutes.')
-            output_dialog.setStandardButtons(QMessageBox.StandardButton.NoButton)
-            output_dialog.show()
+            output_dialog.setMinimumSize(800, 600)
+            dialog_layout = QVBoxLayout(output_dialog)
+            header_label = QLabel('Running all tests...\nThis may take several minutes.')
+            header_label.setFont(QFont('Arial', 10, QFont.Weight.Bold))
+            dialog_layout.addWidget(header_label)
+            progress_bar = QProgressBar()
+            progress_bar.setRange(0, 0)
+            dialog_layout.addWidget(progress_bar)
+            output_text = QTextEdit()
+            output_text.setReadOnly(True)
+            output_text.setFont(QFont('Courier', 9))
+            dialog_layout.addWidget(output_text)
+            controls_layout = QHBoxLayout()
+            stop_btn = QPushButton('Stop')
+            stop_btn.setEnabled(True)
+            controls_layout.addWidget(stop_btn)
+            controls_layout.addStretch()
+            results_label = QLabel('Running tests...')
+            controls_layout.addWidget(results_label)
+            dialog_layout.addLayout(controls_layout)
+            format_normal = QTextCharFormat()
+            format_error = QTextCharFormat()
+            format_error.setForeground(QColor('red'))
+            format_success = QTextCharFormat()
+            format_success.setForeground(QColor('green'))
+            format_warning = QTextCharFormat()
+            format_warning.setForeground(QColor('orange'))
 
-            def on_finished(passed, failed, skipped):
-                output_dialog.close()
-                QMessageBox.information(self, 'Test Results', f'All tests completed!\n\nPassed: {passed}\nFailed: {failed}\nSkipped: {skipped}')
+            def append_output(text: str):
+                cursor = output_text.textCursor()
+                cursor.movePosition(QTextCursor.MoveOperation.End)
+                if 'FAILED' in text or 'ERROR' in text or 'FAIL' in text:
+                    cursor.insertText(text + '\n', format_error)
+                elif 'PASSED' in text or 'PASS' in text:
+                    cursor.insertText(text + '\n', format_success)
+                elif 'WARNING' in text or 'WARN' in text:
+                    cursor.insertText(text + '\n', format_warning)
+                else:
+                    cursor.insertText(text + '\n', format_normal)
+                output_text.setTextCursor(cursor)
+                output_text.ensureCursorVisible()
+
+            def on_output(text: str):
+                append_output(text)
+
+            def on_finished(passed: int, failed: int, skipped: int):
+                progress_bar.setVisible(False)
+                stop_btn.setEnabled(False)
+                total = passed + failed + skipped
+                if total > 0:
+                    results_label.setText(f'Results: {passed} passed, {failed} failed, {skipped} skipped')
+                    if failed > 0:
+                        results_label.setStyleSheet('color: red;')
+                    else:
+                        results_label.setStyleSheet('color: green;')
+                else:
+                    results_label.setText('No tests run')
+                    results_label.setStyleSheet('')
+                if failed > 0:
+                    QMessageBox.warning(output_dialog, 'Test Results', f'All tests completed!\n\nPassed: {passed}\nFailed: {failed}\nSkipped: {skipped}')
+                else:
+                    QMessageBox.information(output_dialog, 'Test Results', f'All tests completed!\n\nPassed: {passed}\nFailed: {failed}\nSkipped: {skipped}')
                 if thread.isRunning():
                     thread.wait(1000)
                 thread.deleteLater()
+
+            def on_started(cmd: str):
+                append_output(f'Command: {cmd}')
+                append_output('=' * 60)
+
+            def stop_tests():
+                if thread.isRunning():
+                    thread.cancel()
+                    append_output('\n\nTest run cancelled by user')
+                    if thread.isRunning():
+                        thread.wait(5000)
+                    on_finished(0, 0, 0)
+            stop_btn.clicked.connect(stop_tests)
+            thread.test_output.connect(on_output)
             thread.test_finished.connect(on_finished)
+            thread.test_started.connect(on_started)
+            output_dialog.show()
             thread.start()
 
     def export_results(self):

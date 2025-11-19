@@ -999,6 +999,75 @@ class MultiModMerger(QObject):
             self.patching_logger.error(f'UTMTCLI asset merge failed: {e}', exc_info=True)
             return False
 
+    def _import_asset_type(self, asset_config: Dict[str, Any], data_win_path: str, data_win_dir: str, objects_dir: str, mod_name_for_tracking: str) -> bool:
+        script_name = asset_config['script_name']
+        has_assets = asset_config.get('has_assets', False)
+        check_dir_func = asset_config.get('check_dir_func')
+        if check_dir_func and (not check_dir_func(objects_dir)):
+            has_assets = False
+        if not has_assets:
+            return True
+        import_script = self.utmtcli.get_script_path(script_name)
+        if not import_script:
+            return True
+        step_number = asset_config.get('step_number', '?')
+        resource_type = asset_config['resource_type']
+        resource_action = asset_config.get('resource_action', 'imported')
+        get_resources_func = asset_config.get('get_resources_func')
+        analyze_errors = asset_config.get('analyze_errors', False)
+        extra_resources_func = asset_config.get('extra_resources_func')
+        self.patching_logger.info(f'[IMPORT] [{step_number}] Importing {resource_type} from {objects_dir}')
+        resource_names = []
+        if get_resources_func:
+            resource_names = get_resources_func(objects_dir)
+        extra_resources = []
+        if extra_resources_func:
+            extra_resources = extra_resources_func(objects_dir)
+            for extra_name in extra_resources:
+                if extra_name not in resource_names:
+                    resource_names.append(extra_name)
+        for resource_name in resource_names:
+            if resource_name not in self.resource_modification_history:
+                self.resource_modification_history[resource_name] = []
+            self.resource_modification_history[resource_name].append({'type': resource_type, 'mod': mod_name_for_tracking, 'action': resource_action, 'timestamp': time.time()})
+        returncode, stdout, stderr = self.utmtcli.execute_with_scripts(data_win_path, [script_name], output_path=data_win_path, cwd=data_win_dir)
+        if analyze_errors:
+            self._analyze_compilation_errors(stdout, stderr, script_name, mod_name_for_tracking)
+        if returncode != 0:
+            error_msg = stderr[:300] if len(stderr) > 300 else stderr
+            self.patching_logger.warning(f'{script_name} failed: {error_msg}')
+            if len(stderr) > 500:
+                self.patching_logger.error(f'[IMPORT] {script_name} failed: {stderr[:500]}')
+            for resource_name in resource_names:
+                if resource_name in self.resource_modification_history:
+                    history = self.resource_modification_history[resource_name]
+                    if history:
+                        history[-1]['error'] = error_msg
+                        if len(history) > 1:
+                            prev_mods = [h['mod'] for h in history[:-1]]
+                            prev_mods_unique = [m for m in prev_mods if m != mod_name_for_tracking]
+                            if prev_mods_unique:
+                                conflict_msg = f'''{resource_type.capitalize()} "{resource_name}" was modified by: {', '.join(prev_mods_unique)} before "{mod_name_for_tracking}". Higher priority mod ({mod_name_for_tracking}) will be used.'''
+                                self.patching_logger.warning(f'[CONFLICT] {conflict_msg}')
+                                self.conflicts_logger.info(f'''Resource: {resource_type.capitalize()} "{resource_name}" | Conflict between: {', '.join(prev_mods_unique)} vs "{mod_name_for_tracking}" | Resolution: Using "{mod_name_for_tracking}" (higher priority)''')
+                                self.detected_conflicts.append({'resource_type': resource_type, 'resource_name': resource_name, 'mods': prev_mods_unique + [mod_name_for_tracking], 'resolution': mod_name_for_tracking})
+                                history[-1]['conflicts_with'] = prev_mods_unique
+        else:
+            for resource_name in resource_names:
+                if resource_name in self.resource_modification_history:
+                    history = self.resource_modification_history[resource_name]
+                    if len(history) > 1:
+                        prev_mods = [h['mod'] for h in history[:-1]]
+                        prev_mods_unique = [m for m in prev_mods if m != mod_name_for_tracking]
+                        if prev_mods_unique:
+                            conflict_msg = f'''{resource_type.capitalize()} "{resource_name}" was modified by: {', '.join(prev_mods_unique)} before "{mod_name_for_tracking}". Higher priority mod ({mod_name_for_tracking}) will be used.'''
+                            self.patching_logger.warning(f'[CONFLICT] {conflict_msg}')
+                            self.conflicts_logger.info(f'''Resource: {resource_type.capitalize()} "{resource_name}" | Conflict between: {', '.join(prev_mods_unique)} vs "{mod_name_for_tracking}" | Resolution: Using "{mod_name_for_tracking}" (higher priority)''')
+                            self.detected_conflicts.append({'resource_type': resource_type, 'resource_name': resource_name, 'mods': prev_mods_unique + [mod_name_for_tracking], 'resolution': mod_name_for_tracking})
+                            history[-1]['conflicts_with'] = prev_mods_unique
+            self.patching_logger.info(f'Successfully imported {resource_type} from Objects directory')
+        return returncode == 0
+
     def _import_assets_from_objects_dir(self, data_win_path: str, objects_dir: str, mods_to_apply: Optional[List[Any]] = None, mods_count: int = 0) -> bool:
         try:
             if not os.path.exists(objects_dir):
@@ -1066,284 +1135,87 @@ class MultiModMerger(QObject):
                                 pass
             except BaseException:
                 pass
-            import_graphics_script = self.utmtcli.get_script_path('ImportGraphics')
-            if import_graphics_script and has_graphics:
-                self.patching_logger.info(f'[IMPORT] [1/12] Importing graphics from {objects_dir}')
-                sprite_dirs_to_import = [d for d in os.listdir(sprites_dir) if os.path.isdir(os.path.join(sprites_dir, d))] if os.path.exists(sprites_dir) else []
-                self.patching_logger.info(f'[IMPORT] Will import {len(sprite_dirs_to_import)} sprite directories')
-                for sprite_dir in sprite_dirs_to_import:
-                    if sprite_dir not in self.resource_modification_history:
-                        self.resource_modification_history[sprite_dir] = []
-                    self.resource_modification_history[sprite_dir].append({'type': 'sprite', 'mod': mod_name_for_tracking, 'action': 'imported', 'timestamp': time.time()})
-                returncode, stdout, stderr = self.utmtcli.execute_with_scripts(data_win_path, ['ImportGraphics'], output_path=data_win_path, cwd=data_win_dir)
-                if returncode != 0:
-                    self.patching_logger.error(f'[IMPORT] ImportGraphics failed: {stderr[:500]}')
-                    self.patching_logger.warning(f'ImportGraphics failed: {stderr[:300]}')
-                    for sprite_dir in sprite_dirs_to_import:
-                        if sprite_dir in self.resource_modification_history:
-                            history = self.resource_modification_history[sprite_dir]
-                            history[-1]['error'] = stderr[:300]
-                            if len(history) > 1:
-                                prev_mods = [h['mod'] for h in history[:-1]]
-                                prev_mods_unique = [m for m in prev_mods if m != mod_name_for_tracking]
-                                if prev_mods_unique:
-                                    conflict_msg = f'''Sprite "{sprite_dir}" was modified by: {', '.join(prev_mods_unique)} before "{mod_name_for_tracking}". Higher priority mod ({mod_name_for_tracking}) will be used.'''
-                                    self.patching_logger.warning(f'[CONFLICT] {conflict_msg}')
-                                    self.conflicts_logger.info(f'''Resource: Sprite "{sprite_dir}" | Conflict between: {', '.join(prev_mods_unique)} vs "{mod_name_for_tracking}" | Resolution: Using "{mod_name_for_tracking}" (higher priority)''')
-                                    self.detected_conflicts.append({'resource_type': 'sprite', 'resource_name': sprite_dir, 'mods': prev_mods_unique + [mod_name_for_tracking], 'resolution': mod_name_for_tracking})
-                                    history[-1]['conflicts_with'] = prev_mods_unique
-                else:
-                    self.patching_logger.info('[IMPORT] Successfully imported graphics from Objects directory')
-            import_shaders_script = self.utmtcli.get_script_path('ImportShaders')
-            if import_shaders_script and has_shaders:
-                self.patching_logger.info(f'[IMPORT] [2/12] Importing shaders from {objects_dir}')
-                shader_dirs_to_import = [d for d in os.listdir(shaders_dir) if os.path.isdir(os.path.join(shaders_dir, d))] if os.path.exists(shaders_dir) else []
-                for shader_dir in shader_dirs_to_import:
-                    if shader_dir not in self.resource_modification_history:
-                        self.resource_modification_history[shader_dir] = []
-                    self.resource_modification_history[shader_dir].append({'type': 'shader', 'mod': mod_name_for_tracking, 'action': 'imported', 'timestamp': time.time()})
-                returncode, stdout, stderr = self.utmtcli.execute_with_scripts(data_win_path, ['ImportShaders'], output_path=data_win_path, cwd=data_win_dir)
-                if returncode != 0:
-                    self.patching_logger.warning(f'ImportShaders failed: {stderr[:300]}')
-                    for shader_dir in shader_dirs_to_import:
-                        if shader_dir in self.resource_modification_history:
-                            history = self.resource_modification_history[shader_dir]
-                            history[-1]['error'] = stderr[:300]
-                            if len(history) > 1:
-                                prev_mods = [h['mod'] for h in history[:-1]]
-                                prev_mods_unique = [m for m in prev_mods if m != mod_name_for_tracking]
-                                if prev_mods_unique:
-                                    conflict_msg = f'''Shader "{shader_dir}" was modified by: {', '.join(prev_mods_unique)} before "{mod_name_for_tracking}". Higher priority mod ({mod_name_for_tracking}) will be used.'''
-                                    self.patching_logger.warning(f'[CONFLICT] {conflict_msg}')
-                                    self.conflicts_logger.info(f'''Resource: Shader "{shader_dir}" | Conflict between: {', '.join(prev_mods_unique)} vs "{mod_name_for_tracking}" | Resolution: Using "{mod_name_for_tracking}" (higher priority)''')
-                                    self.detected_conflicts.append({'resource_type': 'shader', 'resource_name': shader_dir, 'mods': prev_mods_unique + [mod_name_for_tracking], 'resolution': mod_name_for_tracking})
-                                    history[-1]['conflicts_with'] = prev_mods_unique
-                else:
-                    self.patching_logger.info('Successfully imported shaders from Objects directory')
-            import_new_objects_script = self.utmtcli.get_script_path('ImportNewObjects')
-            if import_new_objects_script and has_new_objects:
-                self.patching_logger.info(f'[IMPORT] [3/12] Importing new objects from {objects_dir}')
-                new_object_files = [f for f in os.listdir(new_objects_dir) if f.endswith('.json')] if os.path.exists(new_objects_dir) else []
-                for obj_file in new_object_files:
-                    obj_name = os.path.splitext(obj_file)[0]
-                    if obj_name not in self.resource_modification_history:
-                        self.resource_modification_history[obj_name] = []
-                    self.resource_modification_history[obj_name].append({'type': 'new_object', 'mod': mod_name_for_tracking, 'action': 'created', 'timestamp': time.time()})
-                returncode, stdout, stderr = self.utmtcli.execute_with_scripts(data_win_path, ['ImportNewObjects'], output_path=data_win_path, cwd=data_win_dir)
-                if returncode != 0:
-                    self.patching_logger.warning(f'ImportNewObjects failed: {stderr[:300]}')
-                    for obj_file in new_object_files:
-                        obj_name = os.path.splitext(obj_file)[0]
-                        if obj_name in self.resource_modification_history:
-                            history = self.resource_modification_history[obj_name]
-                            history[-1]['error'] = stderr[:300]
-                else:
-                    self.patching_logger.info('Successfully imported new objects from Objects directory')
-            import_gml_script = self.utmtcli.get_script_path('ImportGML')
-            if import_gml_script and has_gml:
-                code_files_to_import = [f for f in os.listdir(code_entries_dir) if f.endswith('.gml')] if os.path.exists(code_entries_dir) else []
-                append_files = [f for f in os.listdir(append_code_dir) if f.endswith('.gml')] if os.path.exists(append_code_dir) else []
-                prepend_files = [f for f in os.listdir(prepend_code_dir) if f.endswith('.gml')] if os.path.exists(prepend_code_dir) else []
-                has_patches = os.path.exists(code_patches_file)
-                self.patching_logger.info(f'[IMPORT] [5/12] Importing GML from {objects_dir} - {len(code_files_to_import)} code files, {len(append_files)} append, {len(prepend_files)} prepend, patches: {has_patches}')
-                self.patching_logger.debug(f'[IMPORT] Code files to import: {code_files_to_import[:10]}...' if len(code_files_to_import) > 10 else f'[IMPORT] Code files to import: {code_files_to_import}')
+
+            def get_sprite_resources(obj_dir):
+                sprites_path = os.path.join(obj_dir, 'Sprites')
+                if os.path.exists(sprites_path):
+                    sprite_dirs = [d for d in os.listdir(sprites_path) if os.path.isdir(os.path.join(sprites_path, d))]
+                    self.patching_logger.info(f'[IMPORT] Will import {len(sprite_dirs)} sprite directories')
+                    return sprite_dirs
+                return []
+
+            def get_shader_resources(obj_dir):
+                shaders_path = os.path.join(obj_dir, 'Shaders')
+                if os.path.exists(shaders_path):
+                    return [d for d in os.listdir(shaders_path) if os.path.isdir(os.path.join(shaders_path, d))]
+                return []
+
+            def get_new_object_resources(obj_dir):
+                new_objects_path = os.path.join(obj_dir, 'NewObjects')
+                if os.path.exists(new_objects_path):
+                    return [os.path.splitext(f)[0] for f in os.listdir(new_objects_path) if f.endswith('.json')]
+                return []
+
+            def get_gml_resources(obj_dir):
+                code_entries_path = os.path.join(obj_dir, 'CodeEntries')
+                append_code_path = os.path.join(obj_dir, 'AppendCode')
+                prepend_code_path = os.path.join(obj_dir, 'PrependCode')
                 all_code_names = set()
-                for code_file in code_files_to_import:
-                    code_name = os.path.splitext(code_file)[0]
-                    all_code_names.add(code_name)
-                for code_file in append_files:
-                    code_name = os.path.splitext(code_file)[0]
-                    all_code_names.add(code_name)
-                for code_file in prepend_files:
-                    code_name = os.path.splitext(code_file)[0]
-                    all_code_names.add(code_name)
-                for code_name in all_code_names:
-                    if code_name not in self.resource_modification_history:
-                        self.resource_modification_history[code_name] = []
-                    self.resource_modification_history[code_name].append({'type': 'code', 'mod': mod_name_for_tracking, 'action': 'modified', 'timestamp': time.time()})
-                returncode, stdout, stderr = self.utmtcli.execute_with_scripts(data_win_path, ['ImportGML'], output_path=data_win_path, cwd=data_win_dir)
-                self._analyze_compilation_errors(stdout, stderr, 'ImportGML', mod_name_for_tracking)
-                if returncode != 0:
-                    self.patching_logger.error(f'[IMPORT] ImportGML failed: {stderr[:500]}')
-                    self.patching_logger.warning(f'ImportGML failed: {stderr[:300]}')
-                    for code_name in all_code_names:
-                        if code_name in self.resource_modification_history:
-                            history = self.resource_modification_history[code_name]
-                            history[-1]['error'] = stderr[:300]
-                            if len(history) > 1:
-                                prev_mods = [h['mod'] for h in history[:-1]]
-                                prev_mods_unique = [m for m in prev_mods if m != mod_name_for_tracking]
-                                if prev_mods_unique:
-                                    conflict_msg = f'''Code "{code_name}" was modified by: {', '.join(prev_mods_unique)} before "{mod_name_for_tracking}". Higher priority mod ({mod_name_for_tracking}) will be used.'''
-                                    self.patching_logger.warning(f'[CONFLICT] {conflict_msg}')
-                                    self.conflicts_logger.info(f'''Resource: GML Code "{code_name}" | Conflict between: {', '.join(prev_mods_unique)} vs "{mod_name_for_tracking}" | Resolution: Using "{mod_name_for_tracking}" (higher priority)''')
-                                    self.detected_conflicts.append({'resource_type': 'code', 'resource_name': code_name, 'mods': prev_mods_unique + [mod_name_for_tracking], 'resolution': mod_name_for_tracking})
-                                    history[-1]['conflicts_with'] = prev_mods_unique
-                else:
-                    for code_name in all_code_names:
-                        if code_name in self.resource_modification_history:
-                            history = self.resource_modification_history[code_name]
-                            if len(history) > 1:
-                                prev_mods = [h['mod'] for h in history[:-1]]
-                                prev_mods_unique = [m for m in prev_mods if m != mod_name_for_tracking]
-                                if prev_mods_unique:
-                                    conflict_msg = f'''Code "{code_name}" was modified by: {', '.join(prev_mods_unique)} before "{mod_name_for_tracking}". Higher priority mod ({mod_name_for_tracking}) will be used.'''
-                                    self.patching_logger.warning(f'[CONFLICT] {conflict_msg}')
-                                    self.conflicts_logger.info(f'''Resource: GML Code "{code_name}" | Conflict between: {', '.join(prev_mods_unique)} vs "{mod_name_for_tracking}" | Resolution: Using "{mod_name_for_tracking}" (higher priority)''')
-                                    self.detected_conflicts.append({'resource_type': 'code', 'resource_name': code_name, 'mods': prev_mods_unique + [mod_name_for_tracking], 'resolution': mod_name_for_tracking})
-                                    history[-1]['conflicts_with'] = prev_mods_unique
-                    self.patching_logger.info('[IMPORT] Successfully imported GML from Objects directory')
-                    self.patching_logger.info('Successfully imported GML from Objects directory')
-            import_existing_objects_script = self.utmtcli.get_script_path('ImportExistingObjects')
-            if import_existing_objects_script and has_existing_objects:
-                self.patching_logger.info(f'[IMPORT] [9/12] Importing existing object modifications from {objects_dir}')
-                existing_object_files = [f for f in os.listdir(existing_objects_dir) if f.endswith('.json')] if os.path.exists(existing_objects_dir) else []
-                for obj_file in existing_object_files:
-                    obj_name = os.path.splitext(obj_file)[0]
-                    if obj_name not in self.resource_modification_history:
-                        self.resource_modification_history[obj_name] = []
-                    self.resource_modification_history[obj_name].append({'type': 'existing_object', 'mod': mod_name_for_tracking, 'action': 'modified', 'timestamp': time.time()})
-                returncode, stdout, stderr = self.utmtcli.execute_with_scripts(data_win_path, ['ImportExistingObjects'], output_path=data_win_path, cwd=data_win_dir)
-                if returncode != 0:
-                    self.patching_logger.warning(f'ImportExistingObjects failed: {stderr[:300]}')
-                    for obj_file in existing_object_files:
-                        obj_name = os.path.splitext(obj_file)[0]
-                        if obj_name in self.resource_modification_history:
-                            history = self.resource_modification_history[obj_name]
-                            history[-1]['error'] = stderr[:300]
-                            if len(history) > 1:
-                                prev_mods = [h['mod'] for h in history[:-1]]
-                                prev_mods_unique = [m for m in prev_mods if m != mod_name_for_tracking]
-                                if prev_mods_unique:
-                                    conflict_msg = f'''Object "{obj_name}" was modified by: {', '.join(prev_mods_unique)} before "{mod_name_for_tracking}". Higher priority mod ({mod_name_for_tracking}) will be used.'''
-                                    self.patching_logger.warning(f'[CONFLICT] {conflict_msg}')
-                                    self.conflicts_logger.info(f'''Resource: Object "{obj_name}" | Conflict between: {', '.join(prev_mods_unique)} vs "{mod_name_for_tracking}" | Resolution: Using "{mod_name_for_tracking}" (higher priority)''')
-                                    self.detected_conflicts.append({'resource_type': 'object', 'resource_name': obj_name, 'mods': prev_mods_unique + [mod_name_for_tracking], 'resolution': mod_name_for_tracking})
-                                    history[-1]['conflicts_with'] = prev_mods_unique
-                else:
-                    self.patching_logger.info('Successfully imported existing object modifications from Objects directory')
-            import_rooms_script = self.utmtcli.get_script_path('ImportRooms')
-            if import_rooms_script and has_rooms:
-                self.patching_logger.info(f'[IMPORT] [10/12] Importing rooms from {objects_dir}')
-                room_files = [f for f in os.listdir(rooms_dir) if f.endswith('.json')] if os.path.exists(rooms_dir) else []
-                for room_file in room_files:
-                    room_name = os.path.splitext(room_file)[0]
-                    if room_name not in self.resource_modification_history:
-                        self.resource_modification_history[room_name] = []
-                    self.resource_modification_history[room_name].append({'type': 'room', 'mod': mod_name_for_tracking, 'action': 'imported', 'timestamp': time.time()})
-                returncode, stdout, stderr = self.utmtcli.execute_with_scripts(data_win_path, ['ImportRooms'], output_path=data_win_path, cwd=data_win_dir)
-                if returncode != 0:
-                    self.patching_logger.warning(f'ImportRooms failed: {stderr[:300]}')
-                    for room_file in room_files:
-                        room_name = os.path.splitext(room_file)[0]
-                        if room_name in self.resource_modification_history:
-                            history = self.resource_modification_history[room_name]
-                            history[-1]['error'] = stderr[:300]
-                            if len(history) > 1:
-                                prev_mods = [h['mod'] for h in history[:-1]]
-                                prev_mods_unique = [m for m in prev_mods if m != mod_name_for_tracking]
-                                if prev_mods_unique:
-                                    conflict_msg = f'''Room "{room_name}" was modified by: {', '.join(prev_mods_unique)} before "{mod_name_for_tracking}". Higher priority mod ({mod_name_for_tracking}) will be used.'''
-                                    self.patching_logger.warning(f'[CONFLICT] {conflict_msg}')
-                                    self.conflicts_logger.info(f'''Resource: Room "{room_name}" | Conflict between: {', '.join(prev_mods_unique)} vs "{mod_name_for_tracking}" | Resolution: Using "{mod_name_for_tracking}" (higher priority)''')
-                                    self.detected_conflicts.append({'resource_type': 'room', 'resource_name': room_name, 'mods': prev_mods_unique + [mod_name_for_tracking], 'resolution': mod_name_for_tracking})
-                                    history[-1]['conflicts_with'] = prev_mods_unique
-                else:
-                    self.patching_logger.info('Successfully imported rooms from Objects directory')
-            import_tilesets_script = self.utmtcli.get_script_path('ImportTilesets')
-            if import_tilesets_script and has_tilesets:
-                self.patching_logger.info(f'[IMPORT] [10/14] Importing tileset properties from {objects_dir}')
-                tileset_files = [f for f in os.listdir(tilesets_dir) if f.endswith('.json') and (not f.endswith('config.json'))] if os.path.exists(tilesets_dir) else []
-                has_config = os.path.exists(os.path.join(tilesets_dir, 'config.json'))
-                if has_config:
-                    config_key = 'tilesets_config'
-                    if config_key not in self.resource_modification_history:
-                        self.resource_modification_history[config_key] = []
-                    self.resource_modification_history[config_key].append({'type': 'tilesets_config', 'mod': mod_name_for_tracking, 'action': 'imported', 'timestamp': time.time()})
-                for tileset_file in tileset_files:
-                    tileset_name = os.path.splitext(tileset_file)[0]
-                    if tileset_name not in self.resource_modification_history:
-                        self.resource_modification_history[tileset_name] = []
-                    self.resource_modification_history[tileset_name].append({'type': 'tileset', 'mod': mod_name_for_tracking, 'action': 'imported', 'timestamp': time.time()})
-                returncode, stdout, stderr = self.utmtcli.execute_with_scripts(data_win_path, ['ImportTilesets'], output_path=data_win_path, cwd=data_win_dir)
-                if returncode != 0:
-                    self.patching_logger.warning(f'ImportTilesets failed: {stderr[:300]}')
-                    for tileset_file in tileset_files:
-                        tileset_name = os.path.splitext(tileset_file)[0]
-                        if tileset_name in self.resource_modification_history:
-                            history = self.resource_modification_history[tileset_name]
-                            history[-1]['error'] = stderr[:300]
-                            if len(history) > 1:
-                                prev_mods = [h['mod'] for h in history[:-1]]
-                                prev_mods_unique = [m for m in prev_mods if m != mod_name_for_tracking]
-                                if prev_mods_unique:
-                                    conflict_msg = f'''Tileset "{tileset_name}" was modified by: {', '.join(prev_mods_unique)} before "{mod_name_for_tracking}". Higher priority mod ({mod_name_for_tracking}) will be used.'''
-                                    self.patching_logger.warning(f'[CONFLICT] {conflict_msg}')
-                                    self.conflicts_logger.info(f'''Resource: Tileset "{tileset_name}" | Conflict between: {', '.join(prev_mods_unique)} vs "{mod_name_for_tracking}" | Resolution: Using "{mod_name_for_tracking}" (higher priority)''')
-                                    self.detected_conflicts.append({'resource_type': 'tileset', 'resource_name': tileset_name, 'mods': prev_mods_unique + [mod_name_for_tracking], 'resolution': mod_name_for_tracking})
-                                    history[-1]['conflicts_with'] = prev_mods_unique
-                else:
-                    self.patching_logger.info('Successfully imported tileset properties from Objects directory')
-            import_fonts_script = self.utmtcli.get_script_path('ImportFonts')
-            if import_fonts_script:
-                fonts_dir = os.path.join(objects_dir, 'Fonts')
-                if os.path.exists(fonts_dir):
-                    self.patching_logger.info(f'[IMPORT] [11/14] Importing fonts from {objects_dir}')
-                    font_files = [f for f in os.listdir(fonts_dir) if f.endswith('.png')] if os.path.exists(fonts_dir) else []
-                    for font_file in font_files:
-                        font_name = os.path.splitext(font_file)[0]
-                        if font_name not in self.resource_modification_history:
-                            self.resource_modification_history[font_name] = []
-                        self.resource_modification_history[font_name].append({'type': 'font', 'mod': mod_name_for_tracking, 'action': 'modified', 'timestamp': time.time()})
-                    returncode, stdout, stderr = self.utmtcli.execute_with_scripts(data_win_path, ['ImportFonts'], output_path=data_win_path, cwd=data_win_dir)
-                    if returncode != 0:
-                        self.patching_logger.warning(f'ImportFonts failed: {stderr[:300]}')
-                        for font_file in font_files:
-                            font_name = os.path.splitext(font_file)[0]
-                            if font_name in self.resource_modification_history:
-                                history = self.resource_modification_history[font_name]
-                                history[-1]['error'] = stderr[:300]
-                                if len(history) > 1:
-                                    prev_mods = [h['mod'] for h in history[:-1]]
-                                    prev_mods_unique = [m for m in prev_mods if m != mod_name_for_tracking]
-                                    if prev_mods_unique:
-                                        conflict_msg = f'''Font "{font_name}" was modified by: {', '.join(prev_mods_unique)} before "{mod_name_for_tracking}". Higher priority mod ({mod_name_for_tracking}) will be used.'''
-                                        self.patching_logger.warning(f'[CONFLICT] {conflict_msg}')
-                                        self.conflicts_logger.info(f'''Resource: Font "{font_name}" | Conflict between: {', '.join(prev_mods_unique)} vs "{mod_name_for_tracking}" | Resolution: Using "{mod_name_for_tracking}" (higher priority)''')
-                                        self.detected_conflicts.append({'resource_type': 'font', 'resource_name': font_name, 'mods': prev_mods_unique + [mod_name_for_tracking], 'resolution': mod_name_for_tracking})
-                                        history[-1]['conflicts_with'] = prev_mods_unique
-                    else:
-                        self.patching_logger.info('Successfully imported fonts from Objects directory')
-            import_sounds_script = self.utmtcli.get_script_path('ImportSounds')
-            if import_sounds_script:
-                sounds_dir = os.path.join(objects_dir, 'Sounds')
-                if os.path.exists(sounds_dir):
-                    self.patching_logger.info(f'[IMPORT] [12/14] Importing sounds from {objects_dir}')
-                    sound_files = [f for f in os.listdir(sounds_dir) if f.endswith(('.ogg', '.wav'))] if os.path.exists(sounds_dir) else []
-                    for sound_file in sound_files:
-                        sound_name = os.path.splitext(sound_file)[0]
-                        if sound_name not in self.resource_modification_history:
-                            self.resource_modification_history[sound_name] = []
-                        self.resource_modification_history[sound_name].append({'type': 'sound', 'mod': mod_name_for_tracking, 'action': 'modified', 'timestamp': time.time()})
-                    returncode, stdout, stderr = self.utmtcli.execute_with_scripts(data_win_path, ['ImportSounds'], output_path=data_win_path, cwd=data_win_dir)
-                    if returncode != 0:
-                        self.patching_logger.warning(f'ImportSounds failed: {stderr[:300]}')
-                        for sound_file in sound_files:
-                            sound_name = os.path.splitext(sound_file)[0]
-                            if sound_name in self.resource_modification_history:
-                                history = self.resource_modification_history[sound_name]
-                                history[-1]['error'] = stderr[:300]
-                                if len(history) > 1:
-                                    prev_mods = [h['mod'] for h in history[:-1]]
-                                    prev_mods_unique = [m for m in prev_mods if m != mod_name_for_tracking]
-                                    if prev_mods_unique:
-                                        conflict_msg = f'''Sound "{sound_name}" was modified by: {', '.join(prev_mods_unique)} before "{mod_name_for_tracking}". Higher priority mod ({mod_name_for_tracking}) will be used.'''
-                                        self.patching_logger.warning(f'[CONFLICT] {conflict_msg}')
-                                        self.conflicts_logger.info(f'''Resource: Sound "{sound_name}" | Conflict between: {', '.join(prev_mods_unique)} vs "{mod_name_for_tracking}" | Resolution: Using "{mod_name_for_tracking}" (higher priority)''')
-                                        self.detected_conflicts.append({'resource_type': 'sound', 'resource_name': sound_name, 'mods': prev_mods_unique + [mod_name_for_tracking], 'resolution': mod_name_for_tracking})
-                                        history[-1]['conflicts_with'] = prev_mods_unique
-                    else:
-                        self.patching_logger.info('Successfully imported sounds from Objects directory')
+                if os.path.exists(code_entries_path):
+                    for f in os.listdir(code_entries_path):
+                        if f.endswith('.gml'):
+                            all_code_names.add(os.path.splitext(f)[0])
+                if os.path.exists(append_code_path):
+                    for f in os.listdir(append_code_path):
+                        if f.endswith('.gml'):
+                            all_code_names.add(os.path.splitext(f)[0])
+                if os.path.exists(prepend_code_path):
+                    for f in os.listdir(prepend_code_path):
+                        if f.endswith('.gml'):
+                            all_code_names.add(os.path.splitext(f)[0])
+                code_files = list(all_code_names)
+                if code_files:
+                    self.patching_logger.debug(f'[IMPORT] Code files to import: {code_files[:10]}...' if len(code_files) > 10 else f'[IMPORT] Code files to import: {code_files}')
+                return code_files
+
+            def get_existing_object_resources(obj_dir):
+                existing_objects_path = os.path.join(obj_dir, 'ExistingObjects')
+                if os.path.exists(existing_objects_path):
+                    return [os.path.splitext(f)[0] for f in os.listdir(existing_objects_path) if f.endswith('.json')]
+                return []
+
+            def get_room_resources(obj_dir):
+                rooms_path = os.path.join(obj_dir, 'Rooms')
+                if os.path.exists(rooms_path):
+                    return [os.path.splitext(f)[0] for f in os.listdir(rooms_path) if f.endswith('.json')]
+                return []
+
+            def get_tileset_resources(obj_dir):
+                tilesets_path = os.path.join(obj_dir, 'Tilesets')
+                if os.path.exists(tilesets_path):
+                    return [os.path.splitext(f)[0] for f in os.listdir(tilesets_path) if f.endswith('.json') and (not f.endswith('config.json'))]
+                return []
+
+            def get_tileset_config_resource(obj_dir):
+                tilesets_path = os.path.join(obj_dir, 'Tilesets')
+                if os.path.exists(tilesets_path) and os.path.exists(os.path.join(tilesets_path, 'config.json')):
+                    return ['tilesets_config']
+                return []
+
+            def get_font_resources(obj_dir):
+                fonts_path = os.path.join(obj_dir, 'Fonts')
+                if os.path.exists(fonts_path):
+                    return [os.path.splitext(f)[0] for f in os.listdir(fonts_path) if f.endswith('.png')]
+                return []
+
+            def get_sound_resources(obj_dir):
+                sounds_path = os.path.join(obj_dir, 'Sounds')
+                if os.path.exists(sounds_path):
+                    return [os.path.splitext(f)[0] for f in os.listdir(sounds_path) if f.endswith(('.ogg', '.wav'))]
+                return []
+            asset_configs = [{'script_name': 'ImportGraphics', 'has_assets': has_graphics, 'step_number': '1/12', 'resource_type': 'sprite', 'resource_action': 'imported', 'get_resources_func': get_sprite_resources}, {'script_name': 'ImportShaders', 'has_assets': has_shaders, 'step_number': '2/12', 'resource_type': 'shader', 'resource_action': 'imported', 'get_resources_func': get_shader_resources}, {'script_name': 'ImportNewObjects', 'has_assets': has_new_objects, 'step_number': '3/12', 'resource_type': 'new_object', 'resource_action': 'created', 'get_resources_func': get_new_object_resources}, {'script_name': 'ImportGML', 'has_assets': has_gml, 'step_number': '5/12', 'resource_type': 'code', 'resource_action': 'modified', 'get_resources_func': get_gml_resources, 'analyze_errors': True}, {'script_name': 'ImportExistingObjects', 'has_assets': has_existing_objects, 'step_number': '9/12', 'resource_type': 'existing_object', 'resource_action': 'modified', 'get_resources_func': get_existing_object_resources}, {'script_name': 'ImportRooms', 'has_assets': has_rooms, 'step_number': '10/12', 'resource_type': 'room', 'resource_action': 'imported', 'get_resources_func': get_room_resources}, {'script_name': 'ImportTilesets', 'has_assets': has_tilesets, 'step_number': '10/14', 'resource_type': 'tileset', 'resource_action': 'imported', 'get_resources_func': get_tileset_resources, 'extra_resources_func': get_tileset_config_resource}, {'script_name': 'ImportFonts', 'has_assets': False, 'check_dir_func': lambda obj_dir: os.path.exists(os.path.join(obj_dir, 'Fonts')), 'step_number': '11/14', 'resource_type': 'font', 'resource_action': 'modified', 'get_resources_func': get_font_resources}, {'script_name': 'ImportSounds', 'has_assets': False, 'check_dir_func': lambda obj_dir: os.path.exists(os.path.join(obj_dir, 'Sounds')), 'step_number': '12/14', 'resource_type': 'sound', 'resource_action': 'modified', 'get_resources_func': get_sound_resources}]
+            for asset_config in asset_configs:
+                self._import_asset_type(asset_config, data_win_path, data_win_dir, objects_dir, mod_name_for_tracking)
             import_asset_order_script = self.utmtcli.get_script_path('ImportAssetOrder')
             if import_asset_order_script and has_asset_order:
                 self.patching_logger.info(f'[IMPORT] [14/14] Importing asset order from {objects_dir}')
@@ -1790,17 +1662,25 @@ class MultiModMerger(QObject):
         return True
 
     def _extract_archive_to_target(self, archive_path: str, target_dir: str) -> bool:
-        import zipfile
-        import tarfile
         try:
-            archive_lower = archive_path.lower()
+            from utils.file_utils import _extract_archive_raw
+            import tempfile
+            archive_lower = os.path.basename(archive_path).lower()
             chapter_id = self._extract_chapter_id_from_path(target_dir)
-            if archive_lower.endswith('.zip'):
-                with zipfile.ZipFile(archive_path, 'r') as zf:
-                    for member in zf.namelist():
-                        if member.endswith('/'):
-                            continue
-                        target_file = os.path.join(target_dir, member)
+            with tempfile.TemporaryDirectory(prefix='mm_extract_') as temp_extract_dir:
+                _extract_archive_raw(archive_path, archive_lower, temp_extract_dir)
+                for root, dirs, files in os.walk(temp_extract_dir):
+                    rel_root = os.path.relpath(root, temp_extract_dir)
+                    if rel_root == '.':
+                        rel_root = ''
+                    for file in files:
+                        source_file = os.path.join(root, file)
+                        if rel_root:
+                            target_file = os.path.join(target_dir, rel_root, file)
+                        else:
+                            target_file = os.path.join(target_dir, file)
+                        target_dirname = os.path.dirname(target_file)
+                        os.makedirs(target_dirname, exist_ok=True)
                         is_new_file = not os.path.exists(target_file)
                         if not is_new_file:
                             if chapter_id is not None:
@@ -1809,120 +1689,47 @@ class MultiModMerger(QObject):
                             if chapter_id not in self.added_files:
                                 self.added_files[chapter_id] = set()
                             self.added_files[chapter_id].add(target_file)
-                    zf.extractall(target_dir)
-                    if chapter_id is not None and chapter_id in self.added_files:
-                        self._save_backups_to_manifest()
-                self.patching_logger.debug(f'Extracted ZIP archive: {archive_path}')
-                return True
-            elif archive_lower.endswith('.tar.gz'):
-                with tarfile.open(archive_path, 'r:gz') as tf:
-                    for member in tf.getmembers():
-                        if member.isdir():
-                            continue
-                        target_file = os.path.join(target_dir, member.name)
-                        is_new_file = not os.path.exists(target_file)
-                        if not is_new_file:
-                            if chapter_id is not None:
-                                self._backup_file(chapter_id, target_file)
-                        elif chapter_id is not None:
-                            if chapter_id not in self.added_files:
-                                self.added_files[chapter_id] = set()
-                            self.added_files[chapter_id].add(target_file)
-                    tf.extractall(target_dir)
-                    if chapter_id is not None and chapter_id in self.added_files:
-                        self._save_backups_to_manifest()
-                self.patching_logger.debug(f'Extracted TAR.GZ archive: {archive_path}')
-                return True
-            elif archive_lower.endswith('.rar'):
-                try:
-                    import rarfile
-                    with rarfile.RarFile(archive_path, 'r') as rf:
-                        for member in rf.namelist():
-                            if member.endswith('/'):
-                                continue
-                            target_file = os.path.join(target_dir, member)
-                            is_new_file = not os.path.exists(target_file)
-                            if not is_new_file:
-                                if chapter_id is not None:
-                                    self._backup_file(chapter_id, target_file)
-                            elif chapter_id is not None:
-                                if chapter_id not in self.added_files:
-                                    self.added_files[chapter_id] = set()
-                                self.added_files[chapter_id].add(target_file)
-                        rf.extractall(target_dir)
-                        if chapter_id is not None and chapter_id in self.added_files:
-                            self._save_backups_to_manifest()
-                    self.patching_logger.debug(f'Extracted RAR archive: {archive_path}')
-                    return True
-                except ImportError:
-                    self.patching_logger.warning('rarfile not available, cannot extract RAR archive')
-                    return False
-            elif archive_lower.endswith('.7z'):
-                try:
-                    import py7zr
-                    with py7zr.SevenZipFile(archive_path, mode='r') as zf:
-                        file_list = zf.getnames()
-                        for member in file_list:
-                            target_file = os.path.join(target_dir, member)
-                            is_new_file = not os.path.exists(target_file)
-                            if not is_new_file:
-                                if chapter_id is not None:
-                                    self._backup_file(chapter_id, target_file)
-                            elif chapter_id is not None:
-                                if chapter_id not in self.added_files:
-                                    self.added_files[chapter_id] = set()
-                                self.added_files[chapter_id].add(target_file)
-                        zf.extractall(path=target_dir)
-                        if chapter_id is not None and chapter_id in self.added_files:
-                            self._save_backups_to_manifest()
-                    self.patching_logger.debug(f'Extracted 7Z archive: {archive_path}')
-                    return True
-                except ImportError:
-                    self.patching_logger.warning('py7zr not available, cannot extract 7Z archive')
-                    return False
-            elif archive_lower.endswith('.lzma'):
-                try:
-                    import lzma
-                    target_file = os.path.join(target_dir, os.path.basename(archive_path)[:-5])
-                    is_new_file = not os.path.exists(target_file)
-                    if not is_new_file:
-                        if chapter_id is not None:
-                            self._backup_file(chapter_id, target_file)
-                    elif chapter_id is not None:
-                        if chapter_id not in self.added_files:
-                            self.added_files[chapter_id] = set()
-                        self.added_files[chapter_id].add(target_file)
-                        self._save_backups_to_manifest()
-                    with lzma.open(archive_path, 'rb') as lzma_file:
-                        with open(target_file, 'wb') as out_file:
-                            out_file.write(lzma_file.read())
-                    self.patching_logger.debug(f'Extracted LZMA file: {archive_path}')
-                    return True
-                except Exception as e:
-                    self.patching_logger.warning(f'Failed to extract LZMA file: {e}')
-                    return False
-            else:
-                self.patching_logger.warning(f'Unknown archive format: {archive_path}')
-                return False
+                        shutil.copy2(source_file, target_file)
+                if chapter_id is not None and chapter_id in self.added_files:
+                    self._save_backups_to_manifest()
+            self.patching_logger.debug(f'Extracted archive: {archive_path}')
+            return True
         except Exception as e:
             self.patching_logger.error(f'Failed to extract archive {archive_path}: {e}', exc_info=True)
             return False
 
-    def _find_data_patches(self, mod_source_dir: str) -> List[str]:
-        patches = []
-        if not os.path.isdir(mod_source_dir):
-            return patches
-        for root, dirs, files in os.walk(mod_source_dir):
+    def _find_files_by_extension(self, directory: str, extensions: List[str], exact_names: Optional[List[str]] = None) -> List[str]:
+        found_files = []
+        if not os.path.isdir(directory):
+            return found_files
+        extensions_lower = [ext.lower() if not ext.startswith('.') else ext.lower() for ext in extensions]
+        exact_names_lower = [name.lower() for name in exact_names] if exact_names else None
+        for root, dirs, files in os.walk(directory):
             for file in files:
-                if file.lower().endswith(('.xdelta', '.vcdiff')):
-                    patches.append(os.path.join(root, file))
-        return patches
+                file_lower = file.lower()
+                if exact_names_lower and file_lower in exact_names_lower:
+                    found_files.append(os.path.join(root, file))
+                elif any((file_lower.endswith(ext) for ext in extensions_lower)):
+                    found_files.append(os.path.join(root, file))
+        return found_files
+
+    def _find_data_patches(self, mod_source_dir: str) -> List[str]:
+        return self._find_files_by_extension(mod_source_dir, ['.xdelta', '.vcdiff'])
 
     def _find_ready_data_win_files(self, mod_source_dir: str) -> List[str]:
         ready_files = []
         if not os.path.isdir(mod_source_dir):
             return ready_files
         data_file_names = ['data.win', 'game.ios']
+        main_files = self._find_files_by_extension(mod_source_dir, ['.win', '.ios'], data_file_names)
+        for file_path in main_files:
+            file_lower = os.path.basename(file_path).lower()
+            if file_lower in [name.lower() for name in data_file_names]:
+                ready_files.append(file_path)
+                self.patching_logger.debug(f'Found ready data file: {file_path}')
+            elif file_lower.endswith('.win') and file_lower != 'data.win':
+                ready_files.append(file_path)
+                self.patching_logger.debug(f'Found ready .win file: {file_path}')
         info_datawinmod_dir = None
         if mod_source_dir:
             mod_root = os.path.dirname(mod_source_dir) if os.path.basename(mod_source_dir).startswith('chapter_') else mod_source_dir
@@ -1930,38 +1737,20 @@ class MultiModMerger(QObject):
             if os.path.isdir(info_datawinmod_path):
                 info_datawinmod_dir = info_datawinmod_path
                 self.patching_logger.debug(f'Found INFO/datawinmod directory: {info_datawinmod_path}')
-        for root, dirs, files in os.walk(mod_source_dir):
-            for file in files:
-                file_lower = file.lower()
-                if file_lower in [name.lower() for name in data_file_names]:
-                    ready_files.append(os.path.join(root, file))
-                    self.patching_logger.debug(f'Found ready data file: {os.path.join(root, file)}')
-                elif file_lower.endswith('.win') and file_lower != 'data.win':
-                    ready_files.append(os.path.join(root, file))
-                    self.patching_logger.debug(f'Found ready .win file: {os.path.join(root, file)}')
         if info_datawinmod_dir:
             chapter_name = os.path.basename(mod_source_dir)
             datawinmod_chapter_dir = os.path.join(info_datawinmod_dir, chapter_name)
             if os.path.isdir(datawinmod_chapter_dir):
                 self.patching_logger.debug(f'Searching for ready files in INFO/datawinmod: {datawinmod_chapter_dir}')
-                for root, dirs, files in os.walk(datawinmod_chapter_dir):
-                    for file in files:
-                        file_lower = file.lower()
-                        if file_lower in [name.lower() for name in data_file_names] or file_lower.endswith('.win'):
-                            ready_files.append(os.path.join(root, file))
-                            self.patching_logger.debug(f'Found ready data file in INFO/datawinmod: {os.path.join(root, file)}')
+                info_files = self._find_files_by_extension(datawinmod_chapter_dir, ['.win', '.ios'], data_file_names)
+                ready_files.extend(info_files)
+                for file_path in info_files:
+                    self.patching_logger.debug(f'Found ready data file in INFO/datawinmod: {file_path}')
         self.patching_logger.info(f'_find_ready_data_win_files: found {len(ready_files)} ready data file(s) in {mod_source_dir}')
         return ready_files
 
     def _find_csx_scripts(self, mod_source_dir: str) -> List[str]:
-        scripts = []
-        if not os.path.isdir(mod_source_dir):
-            return scripts
-        for root, dirs, files in os.walk(mod_source_dir):
-            for file in files:
-                if file.lower().endswith('.csx'):
-                    scripts.append(os.path.join(root, file))
-        return scripts
+        return self._find_files_by_extension(mod_source_dir, ['.csx'])
 
     def _detect_mod_type(self, mod_source_dir: str) -> Dict[str, bool]:
         mod_type = {'has_xdelta_patch': False, 'has_ready_data_win': False, 'has_csx_scripts': False, 'has_file_overrides': False}

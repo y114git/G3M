@@ -1,7 +1,3 @@
-from ui.common.feedback import FeedbackManager
-from core.app_state import AppState
-from PyQt6.QtWidgets import QApplication
-from PyQt6.QtCore import QObject
 import os
 import sys
 import tempfile
@@ -9,10 +5,27 @@ import shutil
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 import pytest
+
+# IMPORTANT: Add src to path BEFORE importing project modules
+# Project modules (core, ui, etc.) are in the 'src' directory and won't be found
+# unless we add 'src' to sys.path first.
+# DO NOT move the imports below this line to the top of the file!
+# DO NOT run autopep8 or other formatters on this file - they will break it!
 project_root = Path(__file__).parent.parent
 src_path = project_root / 'src'
 if str(src_path) not in sys.path:
     sys.path.insert(0, str(src_path))
+
+# fmt: off
+# isort: off
+# Now import project modules (AFTER adding src to path)
+# These imports MUST come after sys.path is modified above
+from PyQt6.QtCore import QObject  # noqa: E402, I001
+from PyQt6.QtWidgets import QApplication  # noqa: E402, I001
+from core.app_state import AppState  # noqa: E402, I001
+from ui.common.feedback import FeedbackManager  # noqa: E402, I001
+# fmt: on
+# isort: on
 
 
 @pytest.fixture(scope='session')
