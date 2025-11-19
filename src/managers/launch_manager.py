@@ -17,7 +17,7 @@ from utils.mod_utils import get_mod_key
 from utils.patching_logger import clear_patching_logs
 from workers.game_monitor import GameMonitorWorker
 from managers.multi_mod_merger import MultiModMerger
-from config.constants import UI_COLORS, SLOT_ID_UNIVERSAL
+from config.constants import UI_COLORS, SLOT_ID_UNIVERSAL, GAME_EXECUTABLES
 
 
 class GameLauncher(QObject):
@@ -246,10 +246,13 @@ class GameLauncher(QObject):
             if use_custom_exe:
                 target_exe = os.path.join(chapter_folder, os.path.basename(source_exe))
             else:
-                if isinstance(self.app_state.game_mode, UndertaleGameMode) or isinstance(self.app_state.game_mode, UndertaleYellowGameMode):
-                    exe_name = 'UNDERTALE.exe' if isinstance(self.app_state.game_mode, UndertaleGameMode) else 'Undertale Yellow.exe'
-                else:
-                    exe_name = 'DELTARUNE.exe'
+                from utils.game_utils import get_game_type_string
+                game_type = get_game_type_string(self.app_state.game_mode)
+                system = platform.system()
+                platform_key = 'windows' if system == 'Windows' else 'linux'
+                game_executables = GAME_EXECUTABLES.get(game_type, GAME_EXECUTABLES['deltarune'])
+                executables = game_executables.get(platform_key, game_executables.get('windows', ()))
+                exe_name = executables[0] if executables else 'DELTARUNE.exe'
                 target_exe = os.path.join(chapter_folder, exe_name)
             shutil.copy2(source_exe, target_exe)
             self._direct_launch_cleanup_info = {'target_exe': target_exe, 'source_exe': source_exe, 'chapter_folder': chapter_folder, 'use_custom_exe': use_custom_exe}

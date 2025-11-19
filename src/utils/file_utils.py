@@ -15,6 +15,29 @@ from utils.network_utils import download_file, get_filename_from_url, get_sessio
 import errno
 
 
+def download_file_with_progress(url: str, target_path: str, progress_callback=None, session=None, cancel_check=None, on_response=None) -> bool:
+    from utils.network_utils import get_session, download_file
+    from config.constants import NETWORK_TIMEOUT_HEAD
+    import requests
+    if session is None:
+        session = get_session()
+    total_size = 0
+    try:
+        head_response = session.head(url, allow_redirects=True, timeout=NETWORK_TIMEOUT_HEAD)
+        total_size = int(head_response.headers.get('content-length', 0))
+    except Exception as e:
+        logging.debug(f'download_file_with_progress: Could not get content-length from HEAD request: {e}')
+    downloaded_ref = [0]
+    try:
+        download_file(session, url, target_path, progress_callback=progress_callback, total_size=total_size, downloaded_ref=downloaded_ref, cancel_check=cancel_check, on_response=on_response)
+        if progress_callback:
+            progress_callback(100)
+        return True
+    except Exception as e:
+        logging.error(f'download_file_with_progress: Download failed: {e}', exc_info=True)
+        return False
+
+
 def download_and_extract_archive(url: str, target_dir: str, progress_callback=None, total_size: int = 0, downloaded_ref: list[int] | None = None, session=None, is_game_installation=False, cancel_check=None, on_response=None):
     if downloaded_ref is None:
         downloaded_ref = [0]
@@ -488,3 +511,21 @@ def has_deltamod_info_file(file_list: list[str] | set[str]) -> bool:
 def check_filename_is_deltamod_info(filename: str) -> bool:
     filename_lower = filename.lower()
     return filename_lower.endswith('_deltamodinfo.json') or filename == '_deltamodInfo.json' or filename == 'meta.json' or (filename_lower == 'meta.json')
+
+
+def migrate_mod_config(mod_dir: str) -> bool:
+    import shutil
+    import logging
+    old_config_path = os.path.join(mod_dir, 'config.json')
+    config_path = os.path.join(mod_dir, 'mod_config.json')
+    if os.path.exists(old_config_path) and (not os.path.exists(config_path)):
+        try:
+            shutil.move(old_config_path, config_path)
+            folder_name = os.path.basename(mod_dir)
+            logging.info(f'Migrated mod config.json to mod_config.json in {folder_name}')
+            return True
+        except Exception as e:
+            folder_name = os.path.basename(mod_dir)
+            logging.warning(f'Failed to migrate mod config.json to mod_config.json in {folder_name}: {e}')
+            return False
+    return True

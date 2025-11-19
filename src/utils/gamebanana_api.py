@@ -103,130 +103,93 @@ class GameBananaAPI:
             logger.error(f'Unexpected error fetching mods for game {game_id}: {e}')
             return (None, [])
 
-    def get_mod_downloads_only(self, mod_id: int) -> Optional[int]:
+    def _get_item_field(self, mod_id: int, field_name: str, extractor_func=None) -> Optional[Any]:
         url = f'{self.core_api_base}/Core/Item/Data'
-        params = {'itemtype': 'Mod', 'itemid': mod_id, 'fields': 'downloads'}
+        params = {'itemtype': 'Mod', 'itemid': mod_id, 'fields': field_name}
         try:
-            logger.debug(f'get_mod_downloads_only: Fetching downloads for mod {mod_id}')
+            logger.debug(f'_get_item_field: Fetching {field_name} for mod {mod_id}')
             response = self.session.get(url, params=params, timeout=NETWORK_TIMEOUT_MEDIUM)
             response.raise_for_status()
             data = response.json()
-            logger.debug(f'get_mod_downloads_only: Got response for mod {mod_id}, data type: {type(data)}')
-            downloads_value = None
+            logger.debug(f'_get_item_field: Got response for mod {mod_id}, field {field_name}, data type: {type(data)}')
+            field_value = None
             if isinstance(data, list) and len(data) > 0:
-                downloads_field = data[0]
+                field_value = data[0]
             elif isinstance(data, dict):
-                downloads_field = data.get('downloads')
+                field_value = data.get(field_name) or data.get('name') or data.get('Category().name') or data.get('Category') or data.get('_sName')
             else:
-                downloads_field = data
-            if downloads_field is not None:
-                if isinstance(downloads_field, list) and len(downloads_field) > 0:
-                    downloads_value = downloads_field[0]
-                elif isinstance(downloads_field, (int, float)):
-                    downloads_value = downloads_field
-                elif isinstance(downloads_field, str) and downloads_field.strip():
-                    try:
-                        downloads_value = int(float(downloads_field))
-                    except (ValueError, TypeError):
-                        downloads_value = None
-                if downloads_value is not None:
-                    try:
-                        result = int(downloads_value)
-                        logger.debug(f'get_mod_downloads_only: Successfully got downloads for mod {mod_id}: {result}')
-                        return result
-                    except (ValueError, TypeError):
-                        logger.warning(f'get_mod_downloads_only: Could not convert downloads value to int for mod {mod_id}: {downloads_value}')
-            logger.warning(f'get_mod_downloads_only: No valid downloads value for mod {mod_id}')
-            return None
+                field_value = data
+            if isinstance(field_value, list):
+                if len(field_value) > 0:
+                    first_item = field_value[0]
+                    if isinstance(first_item, list) and len(first_item) > 0:
+                        field_value = first_item[0]
+                    else:
+                        field_value = first_item
+                else:
+                    field_value = None
+            if extractor_func and field_value is not None:
+                try:
+                    return extractor_func(field_value)
+                except Exception as e:
+                    logger.warning(f'_get_item_field: Extractor function failed for {field_name}: {e}')
+                    return None
+            return field_value
         except requests.RequestException as e:
-            logger.error(f'Error fetching downloads for mod {mod_id}: {e}')
+            logger.error(f'Error fetching {field_name} for mod {mod_id}: {e}')
             if hasattr(e, 'response') and e.response is not None:
                 logger.error(f'Response status: {e.response.status_code}, response text: {e.response.text[:500]}')
             return None
         except Exception as e:
-            logger.error(f'Unexpected error fetching downloads for mod {mod_id}: {e}', exc_info=True)
+            logger.error(f'Unexpected error fetching {field_name} for mod {mod_id}: {e}', exc_info=True)
             return None
+
+    def get_mod_downloads_only(self, mod_id: int) -> Optional[int]:
+
+        def extract_downloads(value):
+            if isinstance(value, (int, float)):
+                return int(value)
+            elif isinstance(value, str) and value.strip():
+                try:
+                    return int(float(value))
+                except (ValueError, TypeError):
+                    return None
+            return None
+        result = self._get_item_field(mod_id, 'downloads', extract_downloads)
+        if result is not None:
+            logger.debug(f'get_mod_downloads_only: Successfully got downloads for mod {mod_id}: {result}')
+        else:
+            logger.warning(f'get_mod_downloads_only: No valid downloads value for mod {mod_id}')
+        return result
 
     def get_mod_description_only(self, mod_id: int) -> Optional[str]:
-        url = f'{self.core_api_base}/Core/Item/Data'
-        params = {'itemtype': 'Mod', 'itemid': mod_id, 'fields': 'description'}
-        try:
-            logger.debug(f'get_mod_description_only: Fetching description for mod {mod_id}')
-            response = self.session.get(url, params=params, timeout=NETWORK_TIMEOUT_MEDIUM)
-            response.raise_for_status()
-            data = response.json()
-            logger.debug(f'get_mod_description_only: Got response for mod {mod_id}, data type: {type(data)}')
-            description_value = None
-            if isinstance(data, list) and len(data) > 0:
-                description_field = data[0]
-            elif isinstance(data, dict):
-                description_field = data.get('description')
-            else:
-                description_field = data
-            if description_field is not None:
-                if isinstance(description_field, list) and len(description_field) > 0:
-                    description_value = description_field[0]
-                elif isinstance(description_field, str):
-                    description_value = description_field
-                else:
-                    description_value = str(description_field) if description_field else None
-                if description_value and isinstance(description_value, str) and description_value.strip():
-                    logger.debug(f'get_mod_description_only: Successfully got description for mod {mod_id}')
-                    return description_value.strip()
+
+        def extract_description(value):
+            if isinstance(value, str):
+                return value.strip() if value.strip() else None
+            elif value is not None:
+                return str(value).strip() if str(value).strip() else None
+            return None
+        result = self._get_item_field(mod_id, 'description', extract_description)
+        if result:
+            logger.debug(f'get_mod_description_only: Successfully got description for mod {mod_id}')
+        else:
             logger.warning(f'get_mod_description_only: No valid description value for mod {mod_id}')
-            return None
-        except requests.RequestException as e:
-            logger.error(f'Error fetching description for mod {mod_id}: {e}')
-            if hasattr(e, 'response') and e.response is not None:
-                logger.error(f'Response status: {e.response.status_code}, response text: {e.response.text[:500]}')
-            return None
-        except Exception as e:
-            logger.error(f'Unexpected error fetching description for mod {mod_id}: {e}', exc_info=True)
-            return None
+        return result
 
     def get_mod_category_only(self, mod_id: int) -> Optional[str]:
-        url = f'{self.core_api_base}/Core/Item/Data'
-        params = {'itemtype': 'Mod', 'itemid': mod_id, 'fields': 'Category().name'}
-        try:
-            response = self.session.get(url, params=params, timeout=NETWORK_TIMEOUT_MEDIUM)
-            response.raise_for_status()
-            data = response.json()
-            category_value = None
-            if isinstance(data, list):
-                if len(data) > 0:
-                    first_item = data[0]
-                    if isinstance(first_item, list):
-                        if len(first_item) > 0:
-                            category_value = first_item[0]
-                    elif isinstance(first_item, str):
-                        category_value = first_item
-                    elif first_item is not None:
-                        category_value = str(first_item)
-            elif isinstance(data, dict):
-                category_field = data.get('name') or data.get('Category().name') or data.get('Category') or data.get('_sName')
-                if isinstance(category_field, list) and len(category_field) > 0:
-                    category_value = category_field[0]
-                elif isinstance(category_field, str):
-                    category_value = category_field
-                elif category_field is not None:
-                    category_value = str(category_field)
-            elif isinstance(data, str):
-                category_value = data
-            if category_value:
-                if not isinstance(category_value, str):
-                    category_value = str(category_value)
-                category_value = category_value.strip()
-                if category_value and category_value.lower() not in ('none', 'null', ''):
-                    return category_value
+
+        def extract_category(value):
+            if isinstance(value, str):
+                category_value = value.strip()
+            elif value is not None:
+                category_value = str(value).strip()
+            else:
+                return None
+            if category_value and category_value.lower() not in ('none', 'null', ''):
+                return category_value
             return None
-        except requests.RequestException as e:
-            logger.error(f'Error fetching category for mod {mod_id}: {e}')
-            if hasattr(e, 'response') and e.response is not None:
-                logger.error(f'Response status: {e.response.status_code}, response text: {e.response.text[:500]}')
-            return None
-        except Exception as e:
-            logger.error(f'Unexpected error fetching category for mod {mod_id}: {e}', exc_info=True)
-            return None
+        return self._get_item_field(mod_id, 'Category().name', extract_category)
 
     def get_mod_text_and_screenshots(self, mod_id: int) -> Optional[Dict]:
         url = f'{self.core_api_base}/Core/Item/Data'
@@ -811,8 +774,19 @@ class GameBananaAPI:
             mod_id = mod_data.get('gamebanana_mod_id')
             if not mod_id:
                 return None
-            category = mod_data.get('gamebanana_category')
-            return ModInfo(key=mod_data.get('key', f'gb_{mod_id}'), name=mod_data.get('name', 'Unknown Mod'), version=mod_data.get('version', '1.0.0'), author=mod_data.get('author', tr('defaults.unknown')), tagline=mod_data.get('tagline', tr('status.no_description_status')), game_version=mod_data.get('game_version', tr('defaults.not_specified')), description_url=mod_data.get('description_url', ''), downloads=mod_data.get('downloads', 0), modgame=mod_data.get('modgame', game_name), is_verified=mod_data.get('is_verified', False), icon_url=mod_data.get('icon_url'), tags=mod_data.get('tags', []), hide_mod=False, is_local_mod=False, ban_status=False, files={}, created_date=mod_data.get('created_date'), last_updated=mod_data.get('last_updated'), external_url=mod_data.get('external_url'), screenshots_url=mod_data.get('screenshots_url', []), full_description=mod_data.get('full_description'), is_gamebanana_mod=True, gamebanana_mod_id=str(mod_id), gamebanana_mod_type=mod_data.get('gamebanana_mod_type', 'Mod'), gamebanana_last_update_timestamp=mod_data.get('gamebanana_last_update_timestamp'), gamebanana_has_compatible_file=mod_data.get('gamebanana_has_compatible_file'), gamebanana_category=category, gamebanana_is_tool_compatible=mod_data.get('gamebanana_is_tool_compatible', False), gamebanana_supported_files=mod_data.get('gamebanana_supported_files', []), gamebanana_supported_tool_ids=mod_data.get('gamebanana_supported_tool_ids', []), gamebanana_preferred_format=mod_data.get('gamebanana_preferred_format'), gamebanana_has_deltahub_file=mod_data.get('gamebanana_has_deltahub_file', False), gamebanana_has_deltamod_file=mod_data.get('gamebanana_has_deltamod_file', False), gamebanana_compatibility_checked=mod_data.get('gamebanana_compatibility_checked', False))
+            data_dict = mod_data.copy()
+            if 'key' not in data_dict:
+                data_dict['key'] = f'gb_{mod_id}'
+            if 'modgame' not in data_dict:
+                data_dict['modgame'] = game_name
+            data_dict['hide_mod'] = False
+            data_dict['is_local_mod'] = False
+            data_dict['ban_status'] = False
+            data_dict['files'] = {}
+            data_dict['is_gamebanana_mod'] = True
+            if 'gamebanana_mod_id' not in data_dict:
+                data_dict['gamebanana_mod_id'] = str(mod_id)
+            return ModInfo.from_dict(data_dict)
         except Exception as e:
             logger.error(f'Error converting mod data to ModInfo: {e}', exc_info=True)
             return None

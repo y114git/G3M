@@ -42,15 +42,9 @@ class GameBananaUpdateManager:
                 folder_path = os.path.join(self.mods_dir, folder_name)
                 if not os.path.isdir(folder_path):
                     continue
-                old_config_path = os.path.join(folder_path, 'config.json')
+                from utils.file_utils import migrate_mod_config
+                migrate_mod_config(folder_path)
                 config_path = os.path.join(folder_path, 'mod_config.json')
-                if os.path.exists(old_config_path) and (not os.path.exists(config_path)):
-                    try:
-                        import shutil
-                        shutil.move(old_config_path, config_path)
-                        logging.info(f'GameBananaUpdateManager: Migrated mod config.json to mod_config.json in {folder_name}')
-                    except Exception as e:
-                        logging.warning(f'GameBananaUpdateManager: Failed to migrate mod config.json to mod_config.json in {folder_name}: {e}')
                 if not os.path.exists(config_path):
                     continue
                 try:

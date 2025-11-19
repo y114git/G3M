@@ -3,7 +3,7 @@ import platform
 import psutil
 from pathlib import Path
 from typing import TYPE_CHECKING
-from config.constants import GAME_PROCESS_NAMES
+from config.constants import GAME_PROCESS_NAMES, GAME_EXECUTABLES
 if TYPE_CHECKING:
     from models.game_modes import GameMode
 
@@ -42,13 +42,10 @@ def is_valid_game_path(path: str, skip_data_check: bool = False, game_type: str 
         return False
     if platform.system() == 'Darwin':
         return is_valid_mac_game_path(path, skip_data_check, game_type)
-    if game_type == 'undertale' or game_type == 'undertaleyellow':
-        if game_type == 'undertaleyellow':
-            executables = ('Undertale Yellow.exe', 'Undertale Yellow', 'UNDERTALE.exe', 'UNDERTALE')
-        else:
-            executables = ('UNDERTALE.exe', 'UNDERTALE')
-    else:
-        executables = ('DELTARUNE.exe', 'DELTARUNE')
+    system = platform.system()
+    platform_key = 'windows' if system == 'Windows' else 'linux'
+    game_executables = GAME_EXECUTABLES.get(game_type, GAME_EXECUTABLES['deltarune'])
+    executables = game_executables.get(platform_key, game_executables.get('windows', ()))
     return any((os.path.isfile(os.path.join(path, exe)) for exe in executables))
 
 
