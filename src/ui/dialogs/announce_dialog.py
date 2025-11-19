@@ -19,7 +19,9 @@ class AnnounceDialog(QDialog):
         layout.setContentsMargins(20, 20, 20, 20)
         text_browser = QTextBrowser()
         text_browser.setOpenExternalLinks(True)
-        text_browser.document().setDefaultStyleSheet('p { margin: 0.5em 0; }')
+        document = text_browser.document()
+        if document is not None:
+            document.setDefaultStyleSheet('p { margin: 0.5em 0; }')
         text_browser.setHtml(message)
         text_browser.setReadOnly(True)
         layout.addWidget(text_browser, 1)

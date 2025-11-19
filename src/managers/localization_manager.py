@@ -131,9 +131,32 @@ class LocalizationManager:
 
     def detect_system_language(self) -> str:
         try:
-            system_locale = locale.getdefaultlocale()[0]
+            system_locale = None
+            try:
+                system_locale, _ = locale.getlocale(locale.LC_CTYPE)
+            except (AttributeError, TypeError, ValueError):
+                try:
+                    system_locale, _ = locale.getlocale()
+                except (AttributeError, TypeError, ValueError):
+                    pass
+            if not system_locale:
+                lang_env = os.environ.get('LANG') or os.environ.get('LC_ALL') or os.environ.get('LC_CTYPE')
+                if lang_env:
+                    system_locale = lang_env.split('.')[0].split('_')[0]
+            if not system_locale:
+                try:
+                    import locale as locale_module
+                    old_locale = locale_module.getlocale()
+                    try:
+                        locale_module.setlocale(locale_module.LC_ALL, '')
+                        system_locale, _ = locale_module.getlocale()
+                    finally:
+                        if old_locale:
+                            locale_module.setlocale(locale_module.LC_ALL, old_locale)
+                except Exception:
+                    pass
             if system_locale:
-                lang_code = system_locale[:2].lower()
+                lang_code = system_locale.split('_')[0].lower()
                 if lang_code in self.available_languages:
                     return lang_code
         except Exception as e:

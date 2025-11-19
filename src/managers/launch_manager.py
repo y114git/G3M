@@ -6,12 +6,12 @@ import subprocess
 import webbrowser
 import logging
 from typing import Dict, Optional, Any, List
-from PyQt6.QtCore import QObject, QThread, QTimer, pyqtSignal, Qt
+from PyQt6.QtCore import QObject, QThread, QTimer, pyqtSignal
 from PyQt6.QtWidgets import QDialog
 from managers.localization_manager import tr
 from utils.file_utils import ensure_writable
 from utils.game_utils import is_game_running, get_game_type_string, get_game_name_string
-from models.game_modes import DemoGameMode, UndertaleGameMode, UndertaleYellowGameMode
+from models.game_modes import UndertaleGameMode, UndertaleYellowGameMode
 from utils.path_utils import find_chapter_resource_dir, resolve_game_executable
 from utils.mod_utils import get_mod_key
 from utils.patching_logger import clear_patching_logs

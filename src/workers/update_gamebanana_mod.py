@@ -53,7 +53,6 @@ class UpdateGameBananaModThread(QThread):
                                     continue
                             elif os.path.exists(old_config_path):
                                 try:
-                                    import shutil
                                     shutil.move(old_config_path, config_path)
                                     logger.info(f'Migrated mod config.json to mod_config.json in {folder_name}')
                                     with open(config_path, 'r', encoding='utf-8') as f:
@@ -110,7 +109,6 @@ class UpdateGameBananaModThread(QThread):
                                         continue
                                 elif os.path.exists(old_config_path):
                                     try:
-                                        import shutil
                                         shutil.move(old_config_path, config_path)
                                         logger.info(f'Migrated mod config.json to mod_config.json in {folder_name}')
                                         with open(config_path, 'r', encoding='utf-8') as f:

@@ -28,8 +28,8 @@ class PluginInstallWorker(QThread):
         if self._session:
             try:
                 self._session.close()
-            except Exception:
-                pass
+            except Exception as e:
+                logging.debug(f'PluginInstallWorker: Error closing session: {e}')
 
     def _check_archive_has_plugin_init_py(self, archive_path: str) -> bool:
         archive_lower = archive_path.lower()
@@ -80,8 +80,8 @@ class PluginInstallWorker(QThread):
             try:
                 head_response = session.head(url, allow_redirects=True, timeout=NETWORK_TIMEOUT_HEAD)
                 total_size = int(head_response.headers.get('content-length', 0))
-            except Exception:
-                pass
+            except Exception as e:
+                logging.debug(f'PluginInstallWorker: Could not get content-length from HEAD request: {e}')
             downloaded_ref = [0]
 
             def progress_callback(progress):

@@ -14,7 +14,6 @@ from utils.audio_utils import _audio_manager
 from utils.network_utils import sanitize_log_message
 from core.splash import create_png_splash
 from utils.path_utils import resource_path, get_user_data_root, get_launcher_dir
-import os
 from logging.handlers import RotatingFileHandler
 from config.constants import SPLASH_MIN_DURATION, LAUNCHER_FALLBACK_TIMEOUT, SPLASH_RETRY_DELAY
 import traceback
@@ -90,14 +89,20 @@ def install_excepthook(show_message_callback=None):
     def _hook(exctype, value, tb):
         try:
             logging.critical('Uncaught exception', exc_info=(exctype, value, tb))
-        except Exception:
-            pass
+        except Exception as e:
+            try:
+                print(f'CRITICAL: Failed to log uncaught exception: {e}', file=sys.stderr)
+            except Exception:
+                pass
         try:
             if callable(show_message_callback):
                 msg = ''.join(traceback.format_exception(exctype, value, tb))
                 show_message_callback(msg)
-        except Exception:
-            pass
+        except Exception as e:
+            try:
+                print(f'WARNING: Failed to show exception message: {e}', file=sys.stderr)
+            except Exception:
+                pass
     sys.excepthook = _hook
 
 

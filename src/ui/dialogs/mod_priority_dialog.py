@@ -92,12 +92,14 @@ class ModPriorityDialog(QDialog):
         secondary_text_color = get_theme_color(self.app_state.local_config, 'version_text', '#888888')
         self.setStyleSheet(f'\n            QDialog {{\n                background-color: {bg_color};\n                color: {text_color};\n            }}\n            QListWidget {{\n                background-color: {bg_color};\n                border: 2px solid {border_color};\n                color: {text_color};\n                padding: 5px;\n            }}\n            QListWidget::item {{\n                padding: 8px;\n                border-bottom: 1px solid {border_color};\n            }}\n            QListWidget::item:selected {{\n                background-color: {hover_color};\n            }}\n            QPushButton {{\n                background-color: {button_color};\n                border: 2px solid {border_color};\n                color: {text_color};\n                padding: 8px 15px;\n                font-weight: bold;\n            }}\n            QPushButton:hover {{\n                background-color: {hover_color};\n            }}\n            QPushButton:pressed {{\n                background-color: {hover_color};\n            }}\n            QLabel {{\n                color: {text_color};\n            }}\n        ')
         instructions = None
-        for i in range(self.layout().count()):
-            item = self.layout().itemAt(i)
-            if item and item.widget() and isinstance(item.widget(), QLabel):
-                widget = item.widget()
-                if widget.objectName() == 'instructionsLabel':
-                    instructions = widget
-                    break
+        layout = self.layout()
+        if layout is not None:
+            for i in range(layout.count()):
+                item = layout.itemAt(i)
+                if item:
+                    widget = item.widget()
+                    if widget and isinstance(widget, QLabel) and (widget.objectName() == 'instructionsLabel'):
+                        instructions = widget
+                        break
         if instructions:
             instructions.setStyleSheet(f'color: {secondary_text_color}; font-size: 11px;')

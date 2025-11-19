@@ -2,7 +2,7 @@ import os
 import time
 import platform
 from typing import Optional, Callable
-from PyQt6.QtCore import QObject, QThread, pyqtSignal, QTimer, Qt
+from PyQt6.QtCore import QObject, QThread, pyqtSignal, Qt
 from PyQt6.QtGui import QPixmap, QColor
 from PyQt6.QtWidgets import QWidget, QLabel
 from config.constants import THEMES
@@ -77,7 +77,7 @@ class CustomizationManager(QObject):
             if not music_path or not os.path.exists(music_path):
                 logging.warning(f'[CustomizationManager] Cannot start music: path invalid or file not found: {music_path}')
                 return
-            logging.info(f'[CustomizationManager] Stopping existing music and starting new')
+            logging.info('[CustomizationManager] Stopping existing music and starting new')
             self.stop_background_music()
             from playsound3 import playsound
             self._bg_music_running = True

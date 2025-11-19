@@ -4,7 +4,7 @@ import json
 import re
 from typing import Dict, List, Optional, Any, Tuple
 from datetime import datetime
-from config.constants import GAMEBANANA_API_BASE, GAMEBANANA_GAME_IDS, GAMEBANANA_SUPPORTED_TOOL_IDS, GAMEBANANA_TOOL_ID_DELTAHUB, GAMEBANANA_TOOL_ID_DELTAMOD, NETWORK_TIMEOUT_MEDIUM
+from config.constants import GAMEBANANA_API_BASE, GAMEBANANA_GAME_IDS, GAMEBANANA_TOOL_ID_DELTAHUB, GAMEBANANA_TOOL_ID_DELTAMOD, NETWORK_TIMEOUT_MEDIUM
 from utils.network_utils import get_session
 from utils.file_utils import check_filename_is_deltamod_info
 from models.mod_models import ModInfo

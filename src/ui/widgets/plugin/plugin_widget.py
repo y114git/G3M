@@ -144,7 +144,6 @@ class PluginWidget(QFrame):
         actions_layout.setContentsMargins(0, 0, 0, 0)
         actions_layout.setSpacing(5)
         actions_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        status = self.plugin_info.get('status', 'enabled')
         self.toggle_button = QPushButton()
         self._update_toggle_button()
         self.toggle_button.setObjectName('plaqueButtonInstall')
@@ -271,26 +270,28 @@ class PluginWidget(QFrame):
             else:
                 self.author_container.setVisible(False)
         elif author:
-            for i in range(self.layout().count()):
-                item = self.layout().itemAt(i)
-                if item and item.layout():
-                    metadata_layout = item.layout()
-                    if isinstance(metadata_layout, QHBoxLayout):
-                        self.author_container = QWidget()
-                        author_container_layout = QHBoxLayout(self.author_container)
-                        author_container_layout.setContentsMargins(0, 0, 0, 0)
-                        author_container_layout.setSpacing(0)
-                        self.author_label_title = QLabel(tr('ui.author_label'))
-                        self.author_label_title.setObjectName('primaryText')
-                        self.author_label_value = QLabel(f' {author}')
-                        self.author_label_value.setObjectName('secondaryText')
-                        author_container_layout.addWidget(self.author_label_title)
-                        author_container_layout.addWidget(self.author_label_value)
-                        if hasattr(self, 'installed_container') and self.installed_container:
-                            metadata_layout.insertWidget(metadata_layout.indexOf(self.installed_container), self.author_container)
-                        else:
-                            metadata_layout.insertWidget(0, self.author_container)
-                        break
+            layout = self.layout()
+            if layout is not None:
+                for i in range(layout.count()):
+                    item = layout.itemAt(i)
+                    if item and item.layout():
+                        metadata_layout = item.layout()
+                        if isinstance(metadata_layout, QHBoxLayout):
+                            self.author_container = QWidget()
+                            author_container_layout = QHBoxLayout(self.author_container)
+                            author_container_layout.setContentsMargins(0, 0, 0, 0)
+                            author_container_layout.setSpacing(0)
+                            self.author_label_title = QLabel(tr('ui.author_label'))
+                            self.author_label_title.setObjectName('primaryText')
+                            self.author_label_value = QLabel(f' {author}')
+                            self.author_label_value.setObjectName('secondaryText')
+                            author_container_layout.addWidget(self.author_label_title)
+                            author_container_layout.addWidget(self.author_label_value)
+                            if hasattr(self, 'installed_container') and self.installed_container:
+                                metadata_layout.insertWidget(metadata_layout.indexOf(self.installed_container), self.author_container)
+                            else:
+                                metadata_layout.insertWidget(0, self.author_container)
+                            break
         if hasattr(self, 'description_label'):
             description = self.plugin_info.get('description')
             description_text = None

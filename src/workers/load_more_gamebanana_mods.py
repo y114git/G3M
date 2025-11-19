@@ -71,8 +71,8 @@ class LoadMoreGameBananaModsThread(QThread):
                                 grandparent = parent.parent() if hasattr(parent, 'parent') else None
                                 if grandparent and hasattr(grandparent, 'app_state'):
                                     app_state = getattr(grandparent, 'app_state', None)
-                            except (AttributeError, RuntimeError):
-                                pass
+                            except (AttributeError, RuntimeError) as e:
+                                logger.debug(f'LoadMoreGameBananaModsThread: Error accessing parent hierarchy: {e}')
                     if app_state and hasattr(app_state, 'gamebanana_mods_needing_metadata'):
                         existing = set(getattr(app_state, 'gamebanana_mods_needing_metadata', []))
                         new_ids = set(self._mods_needing_metadata)

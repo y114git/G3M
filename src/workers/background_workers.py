@@ -458,7 +458,13 @@ class InstallModsThread(QThread):
                             for fname in os.listdir(cache_dir):
                                 fl = fname.lower()
                                 if fl.endswith(('.zip', '.rar', '.7z', '.tar.gz', '.lzma')):
-                                    pass
+                                    file_path = os.path.join(cache_dir, fname)
+                                    try:
+                                        if os.path.isfile(file_path):
+                                            os.remove(file_path)
+                                            logging.debug(f'InstallModsThread: Deleted cache file {fname}')
+                                    except Exception as e:
+                                        logging.warning(f'InstallModsThread: Failed to delete cache file {fname}: {e}')
                     except Exception as e:
                         logging.warning(f'InstallModsThread: delete cleanup failed: {e}', exc_info=True)
                     continue
@@ -831,8 +837,8 @@ class UrlInstallThread(QThread):
         try:
             head_response = session.head(url, allow_redirects=True, timeout=NETWORK_TIMEOUT_HEAD)
             total_size = int(head_response.headers.get('content-length', 0))
-        except (requests.RequestException, ValueError):
-            pass
+        except (requests.RequestException, ValueError) as e:
+            logging.debug(f'UrlInstallThread: Could not get content-length from HEAD request: {e}')
 
         def progress_callback(progress):
             self.progress.emit(progress)
@@ -886,8 +892,8 @@ class UrlInstallThread(QThread):
                                 return 'mod'
                             if check_filename_is_deltamod_info(normalized):
                                 return 'mod'
-                except (OSError, ImportError):
-                    pass
+                except (OSError, ImportError) as e:
+                    logging.debug(f'UrlInstallThread: Could not open RAR archive (rarfile may not be available): {e}')
             elif archive_lower.endswith('.7z'):
                 try:
                     import py7zr
@@ -902,13 +908,14 @@ class UrlInstallThread(QThread):
                                 return 'mod'
                             if check_filename_is_deltamod_info(normalized):
                                 return 'mod'
-                except (OSError, ImportError):
-                    pass
+                except (OSError, ImportError) as e:
+                    logging.debug(f'UrlInstallThread: Could not open 7z archive (py7zr may not be available): {e}')
         except Exception as e:
             logging.error(f'UrlInstallThread: Error detecting content type: {e}', exc_info=True)
-        return self._detect_content_type_from_extracted(archive_path)
+        result = self._detect_content_type_from_extracted(archive_path)
+        return result if result is not None else ''
 
-    def _detect_content_type_from_extracted(self, archive_path: str) -> str:
+    def _detect_content_type_from_extracted(self, archive_path: str) -> Optional[str]:
         with tempfile.TemporaryDirectory(prefix='dh-detect-type-') as unpack_dir:
             try:
                 shutil.unpack_archive(archive_path, unpack_dir)
@@ -1022,7 +1029,6 @@ class UrlInstallThread(QThread):
 
     def _install_plugin_from_archive(self, archive_path: str):
         try:
-            from urllib.parse import urlparse
             self.status.emit(tr('plugins.installing_plugin'), UI_COLORS['status_warning'])
             plugins_dir = self.main_window.app_state.plugins_dir
             archive_name = os.path.basename(archive_path)

@@ -29,8 +29,8 @@ class ModInstallWorker(QThread):
         if self._session:
             try:
                 self._session.close()
-            except Exception:
-                pass
+            except Exception as e:
+                logging.debug(f'ModInstallWorker: Error closing session: {e}')
 
     def _download_archive(self, url: str, target_path: str) -> bool:
         try:
@@ -41,8 +41,8 @@ class ModInstallWorker(QThread):
             try:
                 head_response = session.head(url, allow_redirects=True, timeout=NETWORK_TIMEOUT_HEAD)
                 total_size = int(head_response.headers.get('content-length', 0))
-            except Exception:
-                pass
+            except Exception as e:
+                logging.debug(f'ModInstallWorker: Could not get content-length from HEAD request: {e}')
             downloaded_ref = [0]
 
             def progress_callback(progress):
