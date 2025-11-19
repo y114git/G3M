@@ -36,6 +36,8 @@ jobs:
                   pip install -r builds/requirements.txt
                   pip install -r tests/requirements.txt
             - name: Run all tests
+              env:
+                  PYTHONPATH: ${{ github.workspace }}/src
               run: |
                   pytest tests/ -v --tb=short --maxfail=5
             - name: Upload test results
@@ -65,6 +67,8 @@ jobs:
                   pip install -r builds/requirements.txt
                   pip install -r tests/requirements.txt
             - name: Run all tests
+              env:
+                  PYTHONPATH: ${{ github.workspace }}/src
               run: |
                   pytest tests/ -v --tb=short --maxfail=5
             - name: Upload test results
@@ -94,6 +98,8 @@ jobs:
                   pip install -r builds/requirements.txt
                   pip install -r tests/requirements.txt
             - name: Run all tests
+              env:
+                  PYTHONPATH: ${{ github.workspace }}/src
               run: |
                   pytest tests/ -v --tb=short --maxfail=5
             - name: Upload test results
@@ -124,6 +130,8 @@ jobs:
                   pip install -r tests/requirements.txt
             - name: Run all tests
               shell: powershell
+              env:
+                  PYTHONPATH: ${{ github.workspace }}/src
               run: |
                   pytest tests/ -v --tb=short --maxfail=5
             - name: Upload test results
