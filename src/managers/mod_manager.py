@@ -14,7 +14,7 @@ from models.mod_models import ModChapterData
 import models.mod_models as mod_models
 from workers.background_workers import UrlInstallThread, ModScanThread
 from utils.file_utils import sanitize_filename, has_deltamod_info_file
-from utils.mod_utils import get_mod_key, get_mod_name
+from utils.mod_utils import get_mod_key, get_mod_name, resolve_mod_icon
 from config.constants import UI_COLORS
 import requests
 import time
@@ -291,11 +291,10 @@ class ModManager(QObject):
                     config_data = installed_mods[mod.key]
                     mod_folder_path = self.get_mod_folder_path(mod.key)
                     if mod_folder_path:
-                        for ext in ['.png', '.jpg', '.jpeg', '.gif']:
-                            potential_icon = os.path.join(mod_folder_path, f'_icon{ext}')
-                            if os.path.exists(potential_icon):
-                                mod.icon_url = potential_icon
-                                break
+                        config_data = self.get_mod_config(mod.key)
+                        resolved_icon = resolve_mod_icon(config_data, mod_folder_path)
+                        if resolved_icon:
+                            mod.icon_url = resolved_icon
                     if config_data.get('is_gamebanana_mod'):
                         updated_count += 1
                 elif hasattr(mod, 'is_gamebanana_mod') and mod.is_gamebanana_mod and hasattr(mod, 'gamebanana_mod_id') and mod.gamebanana_mod_id:
@@ -307,11 +306,9 @@ class ModManager(QObject):
                             mod.key = mod_key
                         mod_folder_path = self.get_mod_folder_path(mod_key)
                         if mod_folder_path:
-                            for ext in ['.png', '.jpg', '.jpeg', '.gif']:
-                                potential_icon = os.path.join(mod_folder_path, f'_icon{ext}')
-                                if os.path.exists(potential_icon):
-                                    mod.icon_url = potential_icon
-                                    break
+                            resolved_icon = resolve_mod_icon(config_data, mod_folder_path)
+                            if resolved_icon:
+                                mod.icon_url = resolved_icon
                         updated_count += 1
             logging.debug(f'load_local_mods: Updated {updated_count} existing GameBanana mods in all_mods')
             existing_keys = {mod.key for mod in self.app_state.all_mods}
@@ -377,15 +374,12 @@ class ModManager(QObject):
                     continue
                 try:
                     mod_folder_path = self.get_mod_folder_path(mod_key)
-                    icon_path = ''
+                    icon_url = ''
                     if mod_folder_path:
-                        for ext in ['.png', '.jpg', '.jpeg', '.gif']:
-                            potential_icon = os.path.join(mod_folder_path, f'_icon{ext}')
-                            if os.path.exists(potential_icon):
-                                icon_path = potential_icon
-                                break
-                    icon_url = icon_path
-                    if config_data.get('is_gamebanana_mod') and config_data.get('gamebanana_mod_id') and (not icon_path):
+                        resolved_icon = resolve_mod_icon(config_data, mod_folder_path)
+                        if resolved_icon:
+                            icon_url = resolved_icon
+                    if config_data.get('is_gamebanana_mod') and config_data.get('gamebanana_mod_id') and (not icon_url):
                         try:
                             from utils.gamebanana_api import GameBananaAPI
                             api = GameBananaAPI()
@@ -451,14 +445,12 @@ class ModManager(QObject):
                     continue
                 try:
                     mod_folder_for_icon = self.get_mod_folder_path(mod_key)
-                    icon_path = ''
+                    icon_url = ''
                     if mod_folder_for_icon:
-                        for ext in ['.png', '.jpg', '.jpeg', '.gif']:
-                            potential_icon = os.path.join(mod_folder_for_icon, f'_icon{ext}')
-                            if os.path.exists(potential_icon):
-                                icon_path = potential_icon
-                                break
-                    safe_mod_info = {'key': mod_key, 'name': config_data.get('name', tr('defaults.local_mod')), 'version': config_data.get('version', '1.0.0'), 'author': config_data.get('author', tr('defaults.unknown')), 'tagline': config_data.get('tagline', tr('defaults.no_description')), 'game_version': config_data.get('game_version', tr('defaults.not_specified')), 'description_url': '', 'downloads': 0, 'modgame': config_data.get('modgame', 'deltarune'), 'is_verified': False, 'icon_url': icon_path, 'tags': ['local'], 'hide_mod': False, 'is_local_mod': config_data.get('is_local_mod', True), 'ban_status': False, 'demo_url': None, 'demo_version': '1.0.0', 'created_date': config_data.get('created_date', 'N/A'), 'last_updated': config_data.get('created_date', 'N/A'), 'external_url': config_data.get('external_url'), 'is_gamebanana_mod': config_data.get('is_gamebanana_mod', False), 'gamebanana_mod_id': config_data.get('gamebanana_mod_id'), 'gamebanana_mod_type': config_data.get('gamebanana_mod_type'), 'gamebanana_last_update_timestamp': config_data.get('gamebanana_last_update_timestamp')}
+                        resolved_icon = resolve_mod_icon(config_data, mod_folder_for_icon)
+                        if resolved_icon:
+                            icon_url = resolved_icon
+                    safe_mod_info = {'key': mod_key, 'name': config_data.get('name', tr('defaults.local_mod')), 'version': config_data.get('version', '1.0.0'), 'author': config_data.get('author', tr('defaults.unknown')), 'tagline': config_data.get('tagline', tr('defaults.no_description')), 'game_version': config_data.get('game_version', tr('defaults.not_specified')), 'description_url': '', 'downloads': 0, 'modgame': config_data.get('modgame', 'deltarune'), 'is_verified': False, 'icon_url': icon_url, 'tags': ['local'], 'hide_mod': False, 'is_local_mod': config_data.get('is_local_mod', True), 'ban_status': False, 'demo_url': None, 'demo_version': '1.0.0', 'created_date': config_data.get('created_date', 'N/A'), 'last_updated': config_data.get('created_date', 'N/A'), 'external_url': config_data.get('external_url'), 'is_gamebanana_mod': config_data.get('is_gamebanana_mod', False), 'gamebanana_mod_id': config_data.get('gamebanana_mod_id'), 'gamebanana_mod_type': config_data.get('gamebanana_mod_type'), 'gamebanana_last_update_timestamp': config_data.get('gamebanana_last_update_timestamp')}
                     mod = mod_models.ModInfo(**safe_mod_info)
                     files_data = config_data.get('files', {})
                     mod_folder_path = None
