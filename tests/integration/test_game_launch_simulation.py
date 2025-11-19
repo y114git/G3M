@@ -1,4 +1,5 @@
 import os
+import platform
 import pytest
 from unittest.mock import Mock, patch, MagicMock
 from utils.game_utils import is_game_running, get_game_type_string, get_game_name_string
@@ -11,12 +12,23 @@ class TestGameLaunchSimulation:
     def mock_game_executable(self, temp_dir):
         game_dir = os.path.join(temp_dir, 'game')
         os.makedirs(game_dir, exist_ok=True)
-        executables = {'DELTARUNE.exe': 'deltarune', 'UNDERTALE.exe': 'undertale', 'Undertale Yellow.exe': 'undertale_yellow'}
-        for exe_name, game_type in executables.items():
-            exe_path = os.path.join(game_dir, exe_name)
-            with open(exe_path, 'w') as f:
-                f.write('mock executable')
-            os.chmod(exe_path, 493)
+        system = platform.system()
+        if system == 'Darwin':
+            app_bundles = {'DELTARUNE.app': 'deltarune', 'UNDERTALE.app': 'undertale'}
+            for app_name, game_type in app_bundles.items():
+                app_path = os.path.join(game_dir, app_name)
+                os.makedirs(app_path, exist_ok=True)
+                contents_path = os.path.join(app_path, 'Contents')
+                resources_path = os.path.join(contents_path, 'Resources')
+                os.makedirs(resources_path, exist_ok=True)
+        else:
+            executables = {'DELTARUNE.exe': 'deltarune', 'UNDERTALE.exe': 'undertale', 'Undertale Yellow.exe': 'undertale_yellow'}
+            for exe_name, game_type in executables.items():
+                exe_path = os.path.join(game_dir, exe_name)
+                with open(exe_path, 'w') as f:
+                    f.write('mock executable')
+                if system != 'Windows':
+                    os.chmod(exe_path, 493)
         return game_dir
 
     def test_resolve_game_executable_deltarune(self, mock_game_executable):
@@ -31,8 +43,17 @@ class TestGameLaunchSimulation:
 
     def test_find_chapter_resource_dir(self, temp_dir):
         game_dir = os.path.join(temp_dir, 'game')
-        chapter_dir = os.path.join(game_dir, 'chapter1_')
-        os.makedirs(chapter_dir, exist_ok=True)
+        system = platform.system()
+        if system == 'Darwin':
+            app_path = os.path.join(game_dir, 'DELTARUNE.app')
+            os.makedirs(app_path, exist_ok=True)
+            resources_path = os.path.join(app_path, 'Contents', 'Resources')
+            os.makedirs(resources_path, exist_ok=True)
+            chapter_dir = os.path.join(resources_path, 'chapter1_')
+            os.makedirs(chapter_dir, exist_ok=True)
+        else:
+            chapter_dir = os.path.join(game_dir, 'chapter1_')
+            os.makedirs(chapter_dir, exist_ok=True)
         resource_dir = find_chapter_resource_dir(game_dir, 1)
         assert resource_dir is not None
         assert os.path.exists(resource_dir)
@@ -100,26 +121,50 @@ class TestGameExecutableSimulation:
     @pytest.fixture
     def simulated_game_dir(self, temp_dir):
         game_dir = os.path.join(temp_dir, 'simulated_game')
-        structure = {'DELTARUNE.exe': '', 'data.win': '', 'chapter1_': {'data.win': ''}, 'chapter2_': {'data.win': ''}}
+        system = platform.system()
+        if system == 'Darwin':
+            app_path = os.path.join(game_dir, 'DELTARUNE.app')
+            os.makedirs(app_path, exist_ok=True)
+            resources_path = os.path.join(app_path, 'Contents', 'Resources')
+            os.makedirs(resources_path, exist_ok=True)
+            data_win_path = os.path.join(resources_path, 'data.win')
+            with open(data_win_path, 'w') as f:
+                f.write('mock')
+            for chapter_id in [1, 2]:
+                chapter_dir = os.path.join(resources_path, f'chapter{chapter_id}_')
+                os.makedirs(chapter_dir, exist_ok=True)
+                chapter_data_win = os.path.join(chapter_dir, 'data.win')
+                with open(chapter_data_win, 'w') as f:
+                    f.write('mock')
+        else:
+            structure = {'DELTARUNE.exe': '', 'data.win': '', 'chapter1_': {'data.win': ''}, 'chapter2_': {'data.win': ''}}
 
-        def create_structure(base_path, struct):
-            for name, content in struct.items():
-                path = os.path.join(base_path, name)
-                if isinstance(content, dict):
-                    os.makedirs(path, exist_ok=True)
-                    create_structure(path, content)
-                else:
-                    os.makedirs(os.path.dirname(path), exist_ok=True)
-                    with open(path, 'w') as f:
-                        f.write(content or 'mock')
-        create_structure(game_dir, structure)
+            def create_structure(base_path, struct):
+                for name, content in struct.items():
+                    path = os.path.join(base_path, name)
+                    if isinstance(content, dict):
+                        os.makedirs(path, exist_ok=True)
+                        create_structure(path, content)
+                    else:
+                        os.makedirs(os.path.dirname(path), exist_ok=True)
+                        with open(path, 'w') as f:
+                            f.write(content or 'mock')
+            create_structure(game_dir, structure)
         return game_dir
 
     def test_simulated_game_structure(self, simulated_game_dir):
         assert os.path.exists(simulated_game_dir)
-        assert os.path.exists(os.path.join(simulated_game_dir, 'DELTARUNE.exe'))
-        assert os.path.exists(os.path.join(simulated_game_dir, 'data.win'))
-        assert os.path.exists(os.path.join(simulated_game_dir, 'chapter1_', 'data.win'))
+        system = platform.system()
+        if system == 'Darwin':
+            app_path = os.path.join(simulated_game_dir, 'DELTARUNE.app')
+            resources_path = os.path.join(app_path, 'Contents', 'Resources')
+            assert os.path.exists(app_path)
+            assert os.path.exists(os.path.join(resources_path, 'data.win'))
+            assert os.path.exists(os.path.join(resources_path, 'chapter1_', 'data.win'))
+        else:
+            assert os.path.exists(os.path.join(simulated_game_dir, 'DELTARUNE.exe'))
+            assert os.path.exists(os.path.join(simulated_game_dir, 'data.win'))
+            assert os.path.exists(os.path.join(simulated_game_dir, 'chapter1_', 'data.win'))
 
     def test_find_executable_in_simulated_dir(self, simulated_game_dir):
         exe_path = resolve_game_executable(simulated_game_dir, is_undertale=False)
@@ -134,9 +179,19 @@ class TestGameExecutableSimulation:
 
     def test_find_chapter_resource_dir_multiple_chapters(self, temp_dir):
         game_dir = os.path.join(temp_dir, 'game')
-        for chapter_id in [0, 1, 2, 3, 4]:
-            chapter_dir = os.path.join(game_dir, f'chapter{chapter_id}_')
-            os.makedirs(chapter_dir, exist_ok=True)
+        system = platform.system()
+        if system == 'Darwin':
+            app_path = os.path.join(game_dir, 'DELTARUNE.app')
+            os.makedirs(app_path, exist_ok=True)
+            resources_path = os.path.join(app_path, 'Contents', 'Resources')
+            os.makedirs(resources_path, exist_ok=True)
+            for chapter_id in [0, 1, 2, 3, 4]:
+                chapter_dir = os.path.join(resources_path, f'chapter{chapter_id}_')
+                os.makedirs(chapter_dir, exist_ok=True)
+        else:
+            for chapter_id in [0, 1, 2, 3, 4]:
+                chapter_dir = os.path.join(game_dir, f'chapter{chapter_id}_')
+                os.makedirs(chapter_dir, exist_ok=True)
         for chapter_id in [1, 2, 3, 4]:
             resource_dir = find_chapter_resource_dir(game_dir, chapter_id)
             assert resource_dir is not None
