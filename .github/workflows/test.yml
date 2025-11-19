@@ -35,10 +35,22 @@ jobs:
                   python -m pip install -U pip wheel
                   pip install -r builds/requirements.txt
                   pip install -r tests/requirements.txt
+            - name: Debug test discovery
+              env:
+                  PYTHONPATH: ${{ github.workspace }}/src
+              run: |
+                  echo "PYTHONPATH: $PYTHONPATH"
+                  echo "Python path:"
+                  python -c "import sys; print('\n'.join(sys.path))"
+                  echo "Test files:"
+                  find tests -name "test_*.py" -type f || true
+                  echo "Trying to import conftest:"
+                  python -c "import sys; sys.path.insert(0, '${{ github.workspace }}/src'); import tests.conftest; print('conftest imported successfully')" || true
             - name: Run all tests
               env:
                   PYTHONPATH: ${{ github.workspace }}/src
               run: |
+                  pytest tests/ -vv --collect-only --tb=short || true
                   pytest tests/ -v --tb=short --maxfail=5
             - name: Upload test results
               if: always()
@@ -66,10 +78,22 @@ jobs:
                   python -m pip install -U pip wheel
                   pip install -r builds/requirements.txt
                   pip install -r tests/requirements.txt
+            - name: Debug test discovery
+              env:
+                  PYTHONPATH: ${{ github.workspace }}/src
+              run: |
+                  echo "PYTHONPATH: $PYTHONPATH"
+                  echo "Python path:"
+                  python -c "import sys; print('\n'.join(sys.path))"
+                  echo "Test files:"
+                  find tests -name "test_*.py" -type f || true
+                  echo "Trying to import conftest:"
+                  python -c "import sys; sys.path.insert(0, '${{ github.workspace }}/src'); import tests.conftest; print('conftest imported successfully')" || true
             - name: Run all tests
               env:
                   PYTHONPATH: ${{ github.workspace }}/src
               run: |
+                  pytest tests/ -vv --collect-only --tb=short || true
                   pytest tests/ -v --tb=short --maxfail=5
             - name: Upload test results
               if: always()
@@ -97,10 +121,22 @@ jobs:
                   python -m pip install -U pip wheel
                   pip install -r builds/requirements.txt
                   pip install -r tests/requirements.txt
+            - name: Debug test discovery
+              env:
+                  PYTHONPATH: ${{ github.workspace }}/src
+              run: |
+                  echo "PYTHONPATH: $PYTHONPATH"
+                  echo "Python path:"
+                  python -c "import sys; print('\n'.join(sys.path))"
+                  echo "Test files:"
+                  find tests -name "test_*.py" -type f || true
+                  echo "Trying to import conftest:"
+                  python -c "import sys; sys.path.insert(0, '${{ github.workspace }}/src'); import tests.conftest; print('conftest imported successfully')" || true
             - name: Run all tests
               env:
                   PYTHONPATH: ${{ github.workspace }}/src
               run: |
+                  pytest tests/ -vv --collect-only --tb=short || true
                   pytest tests/ -v --tb=short --maxfail=5
             - name: Upload test results
               if: always()
@@ -128,11 +164,24 @@ jobs:
                   python -m pip install -U pip wheel
                   pip install -r builds/requirements.txt
                   pip install -r tests/requirements.txt
+            - name: Debug test discovery
+              shell: powershell
+              env:
+                  PYTHONPATH: ${{ github.workspace }}\src
+              run: |
+                  Write-Host "PYTHONPATH: $env:PYTHONPATH"
+                  Write-Host "Python path:"
+                  python -c "import sys; print('\n'.join(sys.path))"
+                  Write-Host "Test files:"
+                  Get-ChildItem -Path tests -Recurse -Filter "test_*.py" | Select-Object -ExpandProperty FullName
+                  Write-Host "Trying to import conftest:"
+                  python -c "import sys; sys.path.insert(0, r'${{ github.workspace }}\src'); import tests.conftest; print('conftest imported successfully')" || Write-Host "Failed to import conftest"
             - name: Run all tests
               shell: powershell
               env:
-                  PYTHONPATH: ${{ github.workspace }}/src
+                  PYTHONPATH: ${{ github.workspace }}\src
               run: |
+                  pytest tests/ -vv --collect-only --tb=short
                   pytest tests/ -v --tb=short --maxfail=5
             - name: Upload test results
               if: always()
