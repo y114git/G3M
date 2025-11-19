@@ -12,7 +12,8 @@ class TestRefreshModList:
         update_checker = Mock()
         app_window = Mock()
         refresh_controller = RefreshController(app_state, feedback_manager, mod_manager, slot_manager, game_launch_controller, update_checker, app_window=app_window)
-        with patch('controllers.refresh_controller.FetchModsThread') as mock_fetch:
+        with patch('controllers.refresh_controller.FetchModsThread') as mock_fetch, \
+             patch('controllers.refresh_controller.is_game_running', return_value=False):
             mock_thread = Mock()
             mock_fetch.return_value = mock_thread
             refresh_controller.refresh_mods_list(is_initial=False)
@@ -29,7 +30,8 @@ class TestRefreshModList:
         app_window = Mock()
         retranslate_callback = Mock()
         refresh_controller = RefreshController(app_state, feedback_manager, mod_manager, slot_manager, game_launch_controller, update_checker, app_window=app_window)
-        with patch('controllers.refresh_controller.FetchModsThread') as mock_fetch:
+        with patch('controllers.refresh_controller.FetchModsThread') as mock_fetch, \
+             patch('controllers.refresh_controller.is_game_running', return_value=False):
             mock_thread = Mock()
             mock_fetch.return_value = mock_thread
             refresh_controller.refresh_mods_list(is_initial=False, retranslate_callback=retranslate_callback)
