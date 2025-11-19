@@ -464,8 +464,9 @@ class ModManager(QObject):
                     mod_folder_path = None
                     for folder_name in os.listdir(self.app_state.mods_dir):
                         folder_path = os.path.join(self.app_state.mods_dir, folder_name)
+                        from utils.file_utils import migrate_mod_config
+                        migrate_mod_config(folder_path)
                         test_config_path = os.path.join(folder_path, 'mod_config.json')
-                        old_test_config_path = os.path.join(folder_path, 'config.json')
                         if os.path.isfile(test_config_path):
                             try:
                                 with open(test_config_path, 'r', encoding='utf-8') as f:
@@ -475,18 +476,6 @@ class ModManager(QObject):
                                         break
                             except Exception as e:
                                 logging.warning(f'Failed reading config {test_config_path}: {e}')
-                                continue
-                        elif os.path.isfile(old_test_config_path):
-                            from utils.file_utils import migrate_mod_config
-                            try:
-                                if migrate_mod_config(folder_path):
-                                    with open(test_config_path, 'r', encoding='utf-8') as f:
-                                        test_config = json.load(f)
-                                        if test_config.get('mod_key') == mod_key:
-                                            mod_folder_path = folder_path
-                                            break
-                            except Exception as e:
-                                logging.warning(f'Failed to migrate or read config in {folder_name}: {e}')
                                 continue
                     for file_key, ch_info in list(files_data.items()):
                         chapter_files = ch_info
@@ -841,9 +830,9 @@ class ModManager(QObject):
                 if hasattr(mod, 'key') and mod.key == mod_key:
                     if hasattr(mod, 'files') and mod.files:
                         return mod
-        files_dict = {}
         files_data = mod_info.get('files', {})
         if files_data:
+            normalized_files = {}
             for file_key, ch_info in files_data.items():
                 if not isinstance(ch_info, dict):
                     continue
@@ -853,26 +842,21 @@ class ModManager(QObject):
                     for ef_data in extra_files_raw:
                         if isinstance(ef_data, dict):
                             try:
-                                extra_files_list.append(mod_models.ModExtraFile(key=ef_data.get('key', ''), version=ef_data.get('version', '1.0.0'), url=ef_data.get('url', '')))
+                                extra_files_list.append({'key': ef_data.get('key', ''), 'version': ef_data.get('version', '1.0.0'), 'url': ef_data.get('url', '')})
                             except (KeyError, TypeError, ValueError):
                                 pass
+                        elif isinstance(ef_data, mod_models.ModExtraFile):
+                            extra_files_list.append({'key': ef_data.key, 'version': ef_data.version, 'url': ef_data.url})
                 elif isinstance(extra_files_raw, dict):
                     for group_key, filenames in extra_files_raw.items():
                         if isinstance(filenames, list):
                             for filename in filenames:
-                                extra_files_list.append(mod_models.ModExtraFile(key=group_key, version=ch_info.get('versions', {}).get(group_key, '1.0.0') if isinstance(ch_info.get('versions'), dict) else '1.0.0', url=filename))
-                valid_chapter_fields = {'description': ch_info.get('description'), 'data_file_url': ch_info.get('data_file_url'), 'data_file_version': ch_info.get('data_file_version') or (ch_info.get('versions', {}).get('data') if isinstance(ch_info.get('versions'), dict) else None) or '1.0.0', 'extra_files': extra_files_list}
-                files_dict[file_key] = mod_models.ModChapterData(**valid_chapter_fields)
-        mod_info_kwargs = {'key': mod_key, 'name': mod_info.get('name', mod_key), 'version': mod_info.get('version', '1.0.0'), 'author': mod_info.get('author', tr('defaults.unknown')), 'tagline': mod_info.get('tagline', tr('defaults.no_description')), 'game_version': mod_info.get('game_version', '1.04'), 'description_url': '', 'downloads': 0, 'modgame': mod_info.get('modgame', 'deltarune'), 'is_verified': False, 'icon_url': None, 'tags': mod_info.get('tags', []), 'hide_mod': False, 'is_local_mod': mod_info.get('is_local_mod', False), 'ban_status': False, 'files': files_dict}
-        if mod_info.get('is_gamebanana_mod'):
-            mod_info_kwargs['is_gamebanana_mod'] = True
-            if mod_info.get('gamebanana_mod_id'):
-                mod_info_kwargs['gamebanana_mod_id'] = mod_info.get('gamebanana_mod_id')
-            if mod_info.get('gamebanana_mod_type'):
-                mod_info_kwargs['gamebanana_mod_type'] = mod_info.get('gamebanana_mod_type')
-            if mod_info.get('gamebanana_last_update_timestamp'):
-                mod_info_kwargs['gamebanana_last_update_timestamp'] = mod_info.get('gamebanana_last_update_timestamp')
-        return mod_models.ModInfo(**mod_info_kwargs)
+                                extra_files_list.append({'key': group_key, 'version': ch_info.get('versions', {}).get(group_key, '1.0.0') if isinstance(ch_info.get('versions'), dict) else '1.0.0', 'url': filename})
+                data_file_version = ch_info.get('data_file_version') or (ch_info.get('versions', {}).get('data') if isinstance(ch_info.get('versions'), dict) else None) or '1.0.0'
+                normalized_files[file_key] = {'description': ch_info.get('description'), 'data_file_url': ch_info.get('data_file_url'), 'data_file_version': data_file_version, 'extra_files': extra_files_list}
+            mod_info = mod_info.copy()
+            mod_info['files'] = normalized_files
+        return mod_models.ModInfo.from_dict(mod_info)
 
     def fetch_mod_data_by_secret(self, secret_key: str) -> Tuple[Optional[dict], Optional[str], bool]:
         from utils.crypto_utils import possible_secret_hashes

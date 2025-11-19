@@ -183,32 +183,8 @@ class PluginWidget(QFrame):
             self.toggle_button.setStyleSheet('\n                QPushButton#plaqueButtonInstall {\n                    background-color: #4CAF50;\n                    font-weight: bold;\n                }\n                QPushButton#plaqueButtonInstall:hover {\n                    background-color: #5cb85c;\n                }\n            ')
 
     def _update_style(self):
-        from ui.common.styling import get_theme_color
-        config = None
-        if self.parent_app:
-            if hasattr(self.parent_app, 'local_config'):
-                config = self.parent_app.local_config
-            elif hasattr(self.parent_app, 'app_state') and hasattr(self.parent_app.app_state, 'local_config'):
-                config = self.parent_app.app_state.local_config
-        if config:
-            plaque_bg_color = get_theme_color(config, 'background', '#000000')
-            border_color = get_theme_color(config, 'border', '#fff')
-            hover_border_color = get_theme_color(config, 'button_hover', '#fff')
-            text_color = get_theme_color(config, 'text', '#ffffff')
-            version_text_color = get_theme_color(config, 'version_text', 'rgba(255, 255, 255, 178)')
-        else:
-            plaque_bg_color = '#000000'
-            border_color = '#fff'
-            hover_border_color = '#fff'
-            text_color = '#ffffff'
-            version_text_color = 'rgba(255, 255, 255, 178)'
-        if self.is_selected:
-            border_width = '2px'
-            current_border_color = border_color
-        else:
-            border_width = '1px'
-            current_border_color = border_color
-        self.setStyleSheet(f'\n            QFrame#{self.frame_selector} {{\n                background-color: {plaque_bg_color};\n                border: {border_width} solid {current_border_color};\n            }}\n            QFrame#{self.frame_selector}:hover {{\n                border-color: {hover_border_color};\n            }}\n            QLabel#pluginIcon {{\n                border: 2px solid {border_color};\n            }}\n            QLabel#versionLabel {{\n                color: {version_text_color};\n            }}\n            QLabel#secondaryText {{\n                color: {version_text_color};\n                font-size: 12px;\n            }}\n            QLabel#primaryText {{\n                color: {text_color};\n                font-size: 12px;\n            }}\n            QPushButton#plaqueButton, QPushButton#plaqueButtonInstall {{\n                min-width: 110px;\n                max-width: 110px;\n                min-height: 35px;\n                max-height: 35px;\n                font-size: 15px;\n                padding: 1px;\n            }}\n            QPushButton#plaqueButtonInstall {{\n                background-color: #4CAF50;\n                font-weight: bold;\n            }}\n            QPushButton#plaqueButtonInstall:hover {{\n                background-color: #5cb85c;\n            }}\n        ')
+        from ui.common.styling import update_mod_widget_style
+        update_mod_widget_style(self, self.frame_selector, self.parent_app)
 
     def set_selected(self, selected: bool):
         self.is_selected = selected

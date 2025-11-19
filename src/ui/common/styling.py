@@ -7,6 +7,12 @@ from PyQt6.QtWidgets import QLabel, QVBoxLayout, QPushButton, QGroupBox
 from managers.localization_manager import tr
 
 
+def generate_widget_style(frame_selector, bg_color, border_color, hover_border_color, text_color, version_text_color, is_selected=False, icon_selector='modIcon'):
+    border_width = '3px' if is_selected else '1px'
+    current_border_color = hover_border_color if is_selected else border_color
+    return f'\n        QFrame#{frame_selector} {{\n            background-color: {bg_color};\n            border: {border_width} solid {current_border_color};\n        }}\n        QFrame#{frame_selector}:hover {{\n            border-color: {hover_border_color};\n        }}\n        QLabel#{icon_selector} {{\n            border: 2px solid {border_color};\n        }}\n        QLabel#versionLabel {{\n            color: {version_text_color};\n        }}\n        QLabel#secondaryText {{\n            color: {version_text_color};\n            font-size: 12px;\n        }}\n        QLabel#primaryText {{\n            color: {text_color};\n            font-size: 12px;\n        }}\n        QPushButton#plaqueButton, QPushButton#plaqueButtonInstall, QPushButton#plaqueButtonUninstall {{\n            min-width: 110px;\n            max-width: 110px;\n            min-height: 35px;\n            max-height: 35px;\n            font-size: 15px;\n            padding: 1px;\n        }}\n        QPushButton#plaqueButtonInstall {{\n            background-color: #4CAF50;\n            font-weight: bold;\n        }}\n        QPushButton#plaqueButtonInstall:hover {{\n            background-color: #5cb85c;\n        }}\n    '
+
+
 def update_mod_widget_style(widget, frame_selector, parent_app=None):
     config = None
     if parent_app:
@@ -26,9 +32,9 @@ def update_mod_widget_style(widget, frame_selector, parent_app=None):
         hover_border_color = '#fff'
         text_color = '#ffffff'
         version_text_color = 'rgba(255, 255, 255, 178)'
-    border_width = '3px' if getattr(widget, 'is_selected', False) else '1px'
-    current_border_color = hover_border_color if getattr(widget, 'is_selected', False) else border_color
-    widget.setStyleSheet(f'\n        QFrame#{frame_selector} {{\n            background-color: {plaque_bg_color};\n            border: {border_width} solid {current_border_color};\n        }}\n        QFrame#{frame_selector}:hover {{\n            border-color: {hover_border_color};\n        }}\n        QLabel#modIcon {{\n            border: 2px solid {border_color};\n        }}\n        QLabel#versionLabel {{\n            color: {version_text_color};\n        }}\n        QLabel#secondaryText {{\n            color: {version_text_color};\n            font-size: 12px;\n        }}\n        QLabel#primaryText {{\n            color: {text_color};\n            font-size: 12px;\n        }}\n        QPushButton#plaqueButton, QPushButton#plaqueButtonInstall {{\n            min-width: 110px;\n            max-width: 110px;\n            min-height: 35px;\n            max-height: 35px;\n            font-size: 15px;\n            padding: 1px;\n        }}\n        QPushButton#plaqueButtonInstall {{\n            background-color: #4CAF50;\n            font-weight: bold;\n        }}\n        QPushButton#plaqueButtonInstall:hover {{\n            background-color: #5cb85c;\n        }}\n    ')
+    is_selected = getattr(widget, 'is_selected', False)
+    icon_selector = 'pluginIcon' if frame_selector == 'pluginWidget' else 'modIcon'
+    widget.setStyleSheet(generate_widget_style(frame_selector, plaque_bg_color, border_color, hover_border_color, text_color, version_text_color, is_selected, icon_selector))
 
 
 def show_empty_message_in_layout(layout, text, local_config=None, font_size=16):

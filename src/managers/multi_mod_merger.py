@@ -216,7 +216,9 @@ class MultiModMerger(QObject):
         self.patching_logger.debug(f'_merge_mods_for_chapter: chapter_id={chapter_id}, mods_count={len(mods_list)}')
         target_dir = self._get_target_dir(chapter_id)
         if not target_dir:
+            error_msg = tr('errors.target_directory_not_found', chapter=chapter_id)
             self.patching_logger.error(f'Target directory not found for chapter {chapter_id}')
+            self.status_update.emit(error_msg, 'error')
             return False
         self.patching_logger.debug(f'Target directory: {target_dir}')
         if not ensure_writable(target_dir):
@@ -1272,69 +1274,38 @@ class MultiModMerger(QObject):
                         self.detected_conflicts.append({'resource_type': 'code', 'resource_name': code_name, 'mods': [prev_mod, mod_name], 'resolution': mod_name})
         return conflicts
 
+    def _check_dir_conflicts(self, base_dir: str, subfolder: str, resource_type: str, existing_assets: Dict[str, Dict[str, str]], mod_name: str, extension: str = None) -> List[str]:
+        conflicts = []
+        resource_dir = os.path.join(base_dir, subfolder)
+        if not os.path.exists(resource_dir):
+            return conflicts
+        for item_name in os.listdir(resource_dir):
+            item_path = os.path.join(resource_dir, item_name)
+            if extension:
+                if not item_name.endswith(extension):
+                    continue
+                resource_name = os.path.splitext(item_name)[0]
+            else:
+                if not os.path.isdir(item_path):
+                    continue
+                resource_name = item_name
+            if resource_name in existing_assets.get(resource_type, {}):
+                prev_mod = existing_assets[resource_type][resource_name]
+                if prev_mod != mod_name:
+                    conflicts.append(resource_name)
+                    self.patching_logger.warning(f'[CONFLICT] {resource_type.capitalize()} conflict detected: {resource_name} from mod {mod_name}')
+                    self.conflicts_logger.info(f'Resource: {resource_type.capitalize()} "{resource_name}" | Conflict between: "{prev_mod}" vs "{mod_name}" | Resolution: Using "{mod_name}" (higher priority)')
+                    self.detected_conflicts.append({'resource_type': resource_type.rstrip('s'), 'resource_name': resource_name, 'mods': [prev_mod, mod_name], 'resolution': mod_name})
+        return conflicts
+
     def detect_asset_conflicts(self, mod_source_dir: str, mod_name: str, existing_assets: Dict[str, Dict[str, str]]) -> Dict[str, List[str]]:
         conflicts = {'sprites': [], 'backgrounds': [], 'rooms': [], 'tilesets': [], 'shaders': []}
         objects_dir = os.path.join(mod_source_dir, 'Objects')
         if not os.path.exists(objects_dir):
             return conflicts
-        sprites_dir = os.path.join(objects_dir, 'Sprites')
-        if os.path.exists(sprites_dir):
-            for sprite_name in os.listdir(sprites_dir):
-                if os.path.isdir(os.path.join(sprites_dir, sprite_name)):
-                    if sprite_name in existing_assets.get('sprites', {}):
-                        prev_mod = existing_assets['sprites'][sprite_name]
-                        if prev_mod != mod_name:
-                            conflicts['sprites'].append(sprite_name)
-                            self.patching_logger.warning(f'[CONFLICT] Sprite conflict detected: {sprite_name} from mod {mod_name}')
-                            self.conflicts_logger.info(f'Resource: Sprite "{sprite_name}" | Conflict between: "{prev_mod}" vs "{mod_name}" | Resolution: Using "{mod_name}" (higher priority)')
-                            self.detected_conflicts.append({'resource_type': 'sprite', 'resource_name': sprite_name, 'mods': [prev_mod, mod_name], 'resolution': mod_name})
-        backgrounds_dir = os.path.join(objects_dir, 'Backgrounds')
-        if os.path.exists(backgrounds_dir):
-            for bg_file in os.listdir(backgrounds_dir):
-                if bg_file.endswith('.png'):
-                    bg_name = os.path.splitext(bg_file)[0]
-                    if bg_name in existing_assets.get('backgrounds', {}):
-                        prev_mod = existing_assets['backgrounds'][bg_name]
-                        if prev_mod != mod_name:
-                            conflicts['backgrounds'].append(bg_name)
-                            self.patching_logger.warning(f'[CONFLICT] Background conflict detected: {bg_name} from mod {mod_name}')
-                            self.conflicts_logger.info(f'Resource: Background "{bg_name}" | Conflict between: "{prev_mod}" vs "{mod_name}" | Resolution: Using "{mod_name}" (higher priority)')
-                            self.detected_conflicts.append({'resource_type': 'background', 'resource_name': bg_name, 'mods': [prev_mod, mod_name], 'resolution': mod_name})
-        rooms_dir = os.path.join(objects_dir, 'Rooms')
-        if os.path.exists(rooms_dir):
-            for room_file in os.listdir(rooms_dir):
-                if room_file.endswith('.json'):
-                    room_name = os.path.splitext(room_file)[0]
-                    if room_name in existing_assets.get('rooms', {}):
-                        prev_mod = existing_assets['rooms'][room_name]
-                        if prev_mod != mod_name:
-                            conflicts['rooms'].append(room_name)
-                            self.patching_logger.warning(f'[CONFLICT] Room conflict detected: {room_name} from mod {mod_name}')
-                            self.conflicts_logger.info(f'Resource: Room "{room_name}" | Conflict between: "{prev_mod}" vs "{mod_name}" | Resolution: Using "{mod_name}" (higher priority)')
-                            self.detected_conflicts.append({'resource_type': 'room', 'resource_name': room_name, 'mods': [prev_mod, mod_name], 'resolution': mod_name})
-        tilesets_dir = os.path.join(objects_dir, 'Tilesets')
-        if os.path.exists(tilesets_dir):
-            for tileset_file in os.listdir(tilesets_dir):
-                if tileset_file.endswith('.json'):
-                    tileset_name = os.path.splitext(tileset_file)[0]
-                    if tileset_name in existing_assets.get('tilesets', {}):
-                        prev_mod = existing_assets['tilesets'][tileset_name]
-                        if prev_mod != mod_name:
-                            conflicts['tilesets'].append(tileset_name)
-                            self.patching_logger.warning(f'[CONFLICT] Tileset conflict detected: {tileset_name} from mod {mod_name}')
-                            self.conflicts_logger.info(f'Resource: Tileset "{tileset_name}" | Conflict between: "{prev_mod}" vs "{mod_name}" | Resolution: Using "{mod_name}" (higher priority)')
-                            self.detected_conflicts.append({'resource_type': 'tileset', 'resource_name': tileset_name, 'mods': [prev_mod, mod_name], 'resolution': mod_name})
-        shaders_dir = os.path.join(objects_dir, 'Shaders')
-        if os.path.exists(shaders_dir):
-            for shader_name in os.listdir(shaders_dir):
-                if os.path.isdir(os.path.join(shaders_dir, shader_name)):
-                    if shader_name in existing_assets.get('shaders', {}):
-                        prev_mod = existing_assets['shaders'][shader_name]
-                        if prev_mod != mod_name:
-                            conflicts['shaders'].append(shader_name)
-                            self.patching_logger.warning(f'[CONFLICT] Shader conflict detected: {shader_name} from mod {mod_name}')
-                            self.conflicts_logger.info(f'Resource: Shader "{shader_name}" | Conflict between: "{prev_mod}" vs "{mod_name}" | Resolution: Using "{mod_name}" (higher priority)')
-                            self.detected_conflicts.append({'resource_type': 'shader', 'resource_name': shader_name, 'mods': [prev_mod, mod_name], 'resolution': mod_name})
+        resource_configs = [('Sprites', 'sprites', None), ('Backgrounds', 'backgrounds', '.png'), ('Rooms', 'rooms', '.json'), ('Tilesets', 'tilesets', '.json'), ('Shaders', 'shaders', None)]
+        for subfolder, resource_type, extension in resource_configs:
+            conflicts[resource_type] = self._check_dir_conflicts(objects_dir, subfolder, resource_type, existing_assets, mod_name, extension)
         return conflicts
 
     def _analyze_compilation_errors(self, stdout: str, stderr: str, script_name: str, mod_name: str) -> List[Dict[str, Any]]:
@@ -1408,6 +1379,37 @@ class MultiModMerger(QObject):
                     self.patching_logger.error(f'Failed to copy {src} to {dst} after {max_retries} attempts: {e}')
                     raise
 
+    def _merge_subdirectory(self, target_base: str, source_base: str, folder_name: str, resource_type: str, source_mod_name: str, track_history: bool = False) -> None:
+        source_dir = os.path.join(source_base, folder_name)
+        target_dir = os.path.join(target_base, folder_name)
+        if not os.path.exists(source_dir):
+            return
+        if os.path.exists(target_dir):
+            for root, dirs, files in os.walk(source_dir):
+                rel_path = os.path.relpath(root, source_dir)
+                target_path = os.path.join(target_dir, rel_path)
+                os.makedirs(target_path, exist_ok=True)
+                for file in files:
+                    src_file = os.path.join(root, file)
+                    dst_file = os.path.join(target_path, file)
+                    if os.path.exists(dst_file) and track_history:
+                        resource_name = rel_path if rel_path != '.' else os.path.splitext(file)[0]
+                        if resource_name in self.resource_modification_history:
+                            prev_mods = [h['mod'] for h in self.resource_modification_history[resource_name]]
+                            if prev_mods and source_mod_name not in prev_mods:
+                                conflict_msg = f'''{resource_type.capitalize()} "{resource_name}" was modified by: {', '.join(prev_mods)} before "{source_mod_name}". Higher priority mod ({source_mod_name}) will overwrite.'''
+                                self.patching_logger.warning(f'[CONFLICT] {conflict_msg}')
+                                self.conflicts_logger.info(f'''Resource: {resource_type.capitalize()} "{resource_name}" | Conflict between: {', '.join(prev_mods)} vs "{source_mod_name}" | Resolution: Using "{source_mod_name}" (higher priority)''')
+                                self.detected_conflicts.append({'resource_type': resource_type, 'resource_name': resource_name, 'mods': prev_mods + [source_mod_name], 'resolution': source_mod_name})
+                    self._safe_copy2(src_file, dst_file)
+                    if track_history:
+                        resource_name = rel_path if rel_path != '.' else os.path.splitext(file)[0]
+                        if resource_name not in self.resource_modification_history:
+                            self.resource_modification_history[resource_name] = []
+                        self.resource_modification_history[resource_name].append({'type': resource_type, 'mod': source_mod_name, 'action': 'merged', 'timestamp': time.time()})
+        else:
+            shutil.copytree(source_dir, target_dir, dirs_exist_ok=True)
+
     def _merge_objects_directories(self, target_objects_dir: str, source_objects_dir: str, source_mod_name: str = 'unknown') -> None:
         if not os.path.exists(source_objects_dir):
             return
@@ -1418,47 +1420,9 @@ class MultiModMerger(QObject):
         except Exception:
             pass
         os.makedirs(target_objects_dir, exist_ok=True)
-        source_sprites = os.path.join(source_objects_dir, 'Sprites')
-        target_sprites = os.path.join(target_objects_dir, 'Sprites')
-        if os.path.exists(source_sprites):
-            if os.path.exists(target_sprites):
-                for root, dirs, files in os.walk(source_sprites):
-                    rel_path = os.path.relpath(root, source_sprites)
-                    target_path = os.path.join(target_sprites, rel_path)
-                    os.makedirs(target_path, exist_ok=True)
-                    for file in files:
-                        src_file = os.path.join(root, file)
-                        dst_file = os.path.join(target_path, file)
-                        if os.path.exists(dst_file):
-                            sprite_name = rel_path if rel_path != '.' else os.path.splitext(file)[0]
-                            if sprite_name in self.resource_modification_history:
-                                prev_mods = [h['mod'] for h in self.resource_modification_history[sprite_name]]
-                                if prev_mods and source_mod_name not in prev_mods:
-                                    conflict_msg = f'''Sprite "{sprite_name}" was modified by: {', '.join(prev_mods)} before "{source_mod_name}". Higher priority mod ({source_mod_name}) will overwrite.'''
-                                    self.patching_logger.warning(f'[CONFLICT] {conflict_msg}')
-                                    self.conflicts_logger.info(f'''Resource: Sprite "{sprite_name}" | Conflict between: {', '.join(prev_mods)} vs "{source_mod_name}" | Resolution: Using "{source_mod_name}" (higher priority)''')
-                                    self.detected_conflicts.append({'resource_type': 'sprite', 'resource_name': sprite_name, 'mods': prev_mods + [source_mod_name], 'resolution': source_mod_name})
-                        self._safe_copy2(src_file, dst_file)
-                        sprite_name = rel_path if rel_path != '.' else os.path.splitext(file)[0]
-                        if sprite_name not in self.resource_modification_history:
-                            self.resource_modification_history[sprite_name] = []
-                        self.resource_modification_history[sprite_name].append({'type': 'sprite', 'mod': source_mod_name, 'action': 'merged', 'timestamp': time.time()})
-            else:
-                shutil.copytree(source_sprites, target_sprites, dirs_exist_ok=True)
-        source_backgrounds = os.path.join(source_objects_dir, 'Backgrounds')
-        target_backgrounds = os.path.join(target_objects_dir, 'Backgrounds')
-        if os.path.exists(source_backgrounds):
-            if os.path.exists(target_backgrounds):
-                for root, dirs, files in os.walk(source_backgrounds):
-                    rel_path = os.path.relpath(root, source_backgrounds)
-                    target_path = os.path.join(target_backgrounds, rel_path)
-                    os.makedirs(target_path, exist_ok=True)
-                    for file in files:
-                        src_file = os.path.join(root, file)
-                        dst_file = os.path.join(target_path, file)
-                        self._safe_copy2(src_file, dst_file)
-            else:
-                shutil.copytree(source_backgrounds, target_backgrounds, dirs_exist_ok=True)
+        subdirs_to_merge = [('Sprites', 'sprite', True), ('Backgrounds', 'background', False), ('Rooms', 'room', False), ('Tilesets', 'tileset', False), ('Shaders', 'shader', False)]
+        for folder_name, resource_type, track_history in subdirs_to_merge:
+            self._merge_subdirectory(target_objects_dir, source_objects_dir, folder_name, resource_type, source_mod_name, track_history)
         source_code = os.path.join(source_objects_dir, 'CodeEntries')
         target_code = os.path.join(target_objects_dir, 'CodeEntries')
         if os.path.exists(source_code):
@@ -1493,42 +1457,6 @@ class MultiModMerger(QObject):
             if os.path.exists(target_new_objects):
                 shutil.rmtree(target_new_objects)
             shutil.copytree(source_new_objects, target_new_objects, dirs_exist_ok=True)
-        source_rooms = os.path.join(source_objects_dir, 'Rooms')
-        target_rooms = os.path.join(target_objects_dir, 'Rooms')
-        if os.path.exists(source_rooms):
-            if os.path.exists(target_rooms):
-                for file in os.listdir(source_rooms):
-                    src_file = os.path.join(source_rooms, file)
-                    dst_file = os.path.join(target_rooms, file)
-                    if os.path.isfile(src_file):
-                        self._safe_copy2(src_file, dst_file)
-            else:
-                shutil.copytree(source_rooms, target_rooms, dirs_exist_ok=True)
-        source_tilesets = os.path.join(source_objects_dir, 'Tilesets')
-        target_tilesets = os.path.join(target_objects_dir, 'Tilesets')
-        if os.path.exists(source_tilesets):
-            if os.path.exists(target_tilesets):
-                for file in os.listdir(source_tilesets):
-                    src_file = os.path.join(source_tilesets, file)
-                    dst_file = os.path.join(target_tilesets, file)
-                    if os.path.isfile(src_file):
-                        self._safe_copy2(src_file, dst_file)
-            else:
-                shutil.copytree(source_tilesets, target_tilesets, dirs_exist_ok=True)
-        source_shaders = os.path.join(source_objects_dir, 'Shaders')
-        target_shaders = os.path.join(target_objects_dir, 'Shaders')
-        if os.path.exists(source_shaders):
-            if os.path.exists(target_shaders):
-                for root, dirs, files in os.walk(source_shaders):
-                    rel_path = os.path.relpath(root, source_shaders)
-                    target_path = os.path.join(target_shaders, rel_path)
-                    os.makedirs(target_path, exist_ok=True)
-                    for file in files:
-                        src_file = os.path.join(root, file)
-                        dst_file = os.path.join(target_path, file)
-                        self._safe_copy2(src_file, dst_file)
-            else:
-                shutil.copytree(source_shaders, target_shaders, dirs_exist_ok=True)
 
     def _merge_two_data_win_files(self, base_file: str, other_file: str, mod_dir: Optional[str] = None) -> bool:
         if not self.temp_merge_dir:

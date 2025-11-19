@@ -15,10 +15,9 @@ from utils.network_utils import download_file, get_filename_from_url, get_sessio
 import errno
 
 
-def download_file_with_progress(url: str, target_path: str, progress_callback=None, session=None, cancel_check=None, on_response=None) -> bool:
+def download_file_with_progress(url: str, target_path: str, progress_callback=None, session=None, cancel_check=None, on_response=None, downloaded_ref=None) -> bool:
     from utils.network_utils import get_session, download_file
     from config.constants import NETWORK_TIMEOUT_HEAD
-    import requests
     if session is None:
         session = get_session()
     total_size = 0
@@ -27,7 +26,8 @@ def download_file_with_progress(url: str, target_path: str, progress_callback=No
         total_size = int(head_response.headers.get('content-length', 0))
     except Exception as e:
         logging.debug(f'download_file_with_progress: Could not get content-length from HEAD request: {e}')
-    downloaded_ref = [0]
+    if downloaded_ref is None:
+        downloaded_ref = [0]
     try:
         download_file(session, url, target_path, progress_callback=progress_callback, total_size=total_size, downloaded_ref=downloaded_ref, cancel_check=cancel_check, on_response=on_response)
         if progress_callback:

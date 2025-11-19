@@ -2,7 +2,7 @@ import os
 import platform
 import psutil
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 from config.constants import GAME_PROCESS_NAMES, GAME_EXECUTABLES
 if TYPE_CHECKING:
     from models.game_modes import GameMode
@@ -46,6 +46,9 @@ def is_valid_game_path(path: str, skip_data_check: bool = False, game_type: str 
     platform_key = 'windows' if system == 'Windows' else 'linux'
     game_executables = GAME_EXECUTABLES.get(game_type, GAME_EXECUTABLES['deltarune'])
     executables = game_executables.get(platform_key, game_executables.get('windows', ()))
+    exe_name = get_executable_name_for_game(game_type, platform_key)
+    if exe_name:
+        return os.path.isfile(os.path.join(path, exe_name))
     return any((os.path.isfile(os.path.join(path, exe)) for exe in executables))
 
 
@@ -84,3 +87,12 @@ def get_game_name_string(game_mode: 'GameMode') -> str:
         return 'UNDERTALE Yellow'
     else:
         return 'DELTARUNE'
+
+
+def get_executable_name_for_game(game_type: str, os_type: str = None) -> Optional[str]:
+    if os_type is None:
+        system = platform.system()
+        os_type = 'windows' if system == 'Windows' else 'mac' if system == 'Darwin' else 'linux'
+    game_executables = GAME_EXECUTABLES.get(game_type, GAME_EXECUTABLES['deltarune'])
+    executables = game_executables.get(os_type, game_executables.get('windows', ()))
+    return executables[0] if executables else None

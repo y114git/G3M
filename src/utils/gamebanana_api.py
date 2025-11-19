@@ -174,7 +174,7 @@ class GameBananaAPI:
         if result:
             logger.debug(f'get_mod_description_only: Successfully got description for mod {mod_id}')
         else:
-            logger.warning(f'get_mod_description_only: No valid description value for mod {mod_id}')
+            logger.debug(f'get_mod_description_only: No valid description value for mod {mod_id}')
         return result
 
     def get_mod_category_only(self, mod_id: int) -> Optional[str]:
@@ -277,20 +277,6 @@ class GameBananaAPI:
 
     def _get_mod_full_details(self, mod_id: int) -> Optional[Dict]:
         return self.get_mod_full_details_for_display(mod_id)
-
-    def get_game_mods_raw(self, game_id: int, page: int = 1, sort: str = 'default') -> Optional[Dict]:
-        url = f'{self.base_url}/Game/{game_id}/Subfeed'
-        params = {'_nPage': page, '_sSort': sort, '_csvModelInclusions': 'Mod'}
-        try:
-            response = self.session.get(url, params=params, timeout=NETWORK_TIMEOUT_MEDIUM)
-            response.raise_for_status()
-            return response.json()
-        except requests.RequestException as e:
-            logger.error(f'Error fetching mods for game {game_id}: {e}')
-            return None
-        except Exception as e:
-            logger.error(f'Unexpected error fetching mods for game {game_id}: {e}')
-            return None
 
     def get_mod_details(self, mod_id: int) -> Optional[Dict]:
         url = f'{self.base_url}/Mod/{mod_id}/ProfilePage'

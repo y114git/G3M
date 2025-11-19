@@ -45,7 +45,6 @@ from utils.network_utils import check_internet_connection
 _translator = QTranslator()
 _lock_file = None
 
-
 class AppWindow(QWidget):
     update_status_signal = pyqtSignal(str, str)
     set_progress_signal = pyqtSignal(int)
@@ -58,7 +57,7 @@ class AppWindow(QWidget):
     url_received_signal = pyqtSignal(str)
     install_from_gb_signal = pyqtSignal(object)
 
-    def __init__(self, args: Optional[argparse.Namespace] = None, parent_for_dialogs: Optional[QWidget] = None, initial_url: str | None = None):
+    def __init__(self, args: Optional[argparse.Namespace]=None, parent_for_dialogs: Optional[QWidget]=None, initial_url: str | None=None):
         super().__init__()
         self.app_state = AppState()
         self.server: SingleInstanceServer | None = None
@@ -401,6 +400,7 @@ class AppWindow(QWidget):
         self.bottom_frame = QVBoxLayout(self.bottom_widget)
         self.status_label = QLabel(tr('ui.initialization'))
         self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.status_label.setWordWrap(True)
         self.progress_bar = QProgressBar()
         self.progress_bar.setVisible(False)
         self.action_frame = QHBoxLayout()
@@ -976,7 +976,7 @@ class AppWindow(QWidget):
         self.mod_manager.load_local_mods()
         saved_chapter_mode = self.app_state.local_config.get('chapter_mode_enabled', False)
         self.setEnabled(False)
-        self._on_refresh_clicked(is_initial=True)
+        self._load_mods_and_build_list_synchronously()
         self.setEnabled(True)
         if not saved_chapter_mode:
             self.library_display.update_display()
@@ -984,6 +984,42 @@ class AppWindow(QWidget):
             QTimer.singleShot(800, self._show_chapter_mode_instruction)
         if not self.game_launcher._find_and_validate_game_path(is_initial=True):
             self.action_button.setEnabled(False)
+
+    def _load_mods_and_build_list_synchronously(self):
+        try:
+            logging.info('AppWindow: Starting mods loading in background before window show')
+
+            def update_installed_mods_callback():
+                is_chapter_mode = self.app_state.current_mode == 'chapter'
+                selected_id = self.app_state.selected_chapter_id
+                if is_chapter_mode and selected_id is None:
+                    if hasattr(self, '_show_chapter_mode_instruction'):
+                        self._show_chapter_mode_instruction()
+                else:
+                    self.library_display.update_display()
+
+            def update_filtered_mods_callback():
+                try:
+                    logging.info('AppWindow: Building mods list after fetch (from callback)')
+                    if hasattr(self, 'search_display'):
+                        self.search_display.update_filtered_mods(preserve_page=False)
+                    logging.info('AppWindow: Mods list built successfully (from callback)')
+                except Exception as e:
+                    logging.error(f'AppWindow: Error building mods list: {e}', exc_info=True)
+            on_fetch_finished_kwargs = {'update_filtered_mods_callback': update_filtered_mods_callback, 'update_installed_mods_callback': update_installed_mods_callback, 'update_action_button_callback': lambda: self.game_launch.update_button_state(), 'update_plugin_tabs_callback': self._update_plugin_tabs, 'mods_loaded_signal': self.mods_loaded_signal}
+            self.refresh_controller.refresh_mods_list(is_initial=True, language_combo=self.language_combo, retranslate_callback=self._retranslate_ui, on_fetch_finished_kwargs=on_fetch_finished_kwargs)
+            try:
+                if hasattr(self, 'search_display'):
+                    if hasattr(self.app_state, 'all_mods') and self.app_state.all_mods:
+                        logging.info(f'AppWindow: Building initial mods list with {len(self.app_state.all_mods)} mods')
+                        self.search_display.update_filtered_mods(preserve_page=False)
+                    else:
+                        logging.info('AppWindow: No mods loaded yet, list will be built after fetch completes')
+            except Exception as e:
+                logging.error(f'AppWindow: Error building initial mods list: {e}', exc_info=True)
+            logging.info('AppWindow: Mods loading started in background, window can be shown now')
+        except Exception as e:
+            logging.error(f'AppWindow: Error in _load_mods_and_build_list_synchronously: {e}', exc_info=True)
 
     def _handle_update_info(self, update_info, retry_count=0):
         max_retries = 15
@@ -1067,10 +1103,12 @@ class AppWindow(QWidget):
         if value > 0 and (not self.progress_bar.isVisible()):
             self.progress_bar.setVisible(True)
 
-    def _update_status(self, message: str, color: str = 'white'):
+    def _update_status(self, message: str, color: str='white'):
         if not self.is_shortcut_launch:
             from config.constants import UI_COLORS
             actual_color = UI_COLORS.get(color, color)
+            if not self.status_label.wordWrap():
+                self.status_label.setWordWrap(True)
             self.status_label.setText(message)
             self.status_label.setStyleSheet(f'color: {actual_color};')
 
