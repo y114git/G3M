@@ -30,30 +30,65 @@ class TestPatching:
         try:
             temp_data_win = os.path.join(temp_dir, 'data.win')
             shutil.copy2(data_win_path, temp_data_win)
-            _ = os.path.getsize(temp_data_win)
+            original_size = os.path.getsize(temp_data_win)
             mod_manager = Mock()
             merger = MultiModMerger(app_state, mod_manager)
-            if merger.xdelta_path is None or not os.path.exists(merger.xdelta_path):
-                pytest.skip('xdelta executable not found or not available')
+            if merger.xdelta_path is None:
+                pytest.fail('xdelta executable not found: merger.xdelta_path is None')
+            if not os.path.exists(merger.xdelta_path):
+                pytest.fail(f'xdelta executable not found at path: {merger.xdelta_path}')
             import subprocess
-            import platform
             try:
-                if platform.system() == 'Windows':
-                    test_cmd = [merger.xdelta_path, '-h']
-                else:
-                    test_cmd = [merger.xdelta_path, '-h']
-                result = subprocess.run(test_cmd, capture_output=True, timeout=5, stdin=subprocess.DEVNULL)
+                test_cmd = [merger.xdelta_path, '-h']
+                result = subprocess.run(test_cmd, capture_output=True, text=True, timeout=5, stdin=subprocess.DEVNULL)
                 if result.returncode not in (0, 1):
-                    pytest.skip(f'xdelta executable cannot be executed (return code: {result.returncode})')
-            except (subprocess.TimeoutExpired, FileNotFoundError, PermissionError, OSError) as e:
-                pytest.skip(f'xdelta executable cannot be executed: {e}')
+                    error_output = result.stderr if result.stderr else result.stdout
+                    pytest.fail(f"xdelta executable cannot be executed (return code: {result.returncode}). Command: {' '.join(test_cmd)}\nError output: {error_output[:500]}")
+            except subprocess.TimeoutExpired:
+                pytest.fail(f'xdelta executable timed out when testing execution. Path: {merger.xdelta_path}')
+            except (FileNotFoundError, PermissionError, OSError) as e:
+                pytest.fail(f"xdelta executable cannot be executed: {type(e).__name__}: {e}\nPath: {merger.xdelta_path}\nFile exists: {os.path.exists(merger.xdelta_path)}\nIs file: {(os.path.isfile(merger.xdelta_path) if os.path.exists(merger.xdelta_path) else 'N/A')}")
+            if not os.path.exists(temp_data_win):
+                pytest.fail(f'Test data.win file does not exist: {temp_data_win}')
+            if not os.path.exists(patch_file):
+                pytest.fail(f'Patch file does not exist: {patch_file}')
+            test_output = temp_data_win + '.test'
+            try:
+                test_cmd = [merger.xdelta_path, '-d', '-s', temp_data_win, patch_file, test_output]
+                test_result = subprocess.run(test_cmd, capture_output=True, text=True, timeout=30, stdin=subprocess.DEVNULL)
+                direct_test_success = test_result.returncode == 0 and os.path.exists(test_output)
+                if not direct_test_success:
+                    error_detail = test_result.stderr.strip() if test_result.stderr else test_result.stdout.strip() if test_result.stdout else 'No error output'
+                    if os.path.exists(test_output):
+                        os.remove(test_output)
+                    pytest.fail(f"Direct xdelta patch test failed.\nCommand: {' '.join(test_cmd)}\nReturn code: {test_result.returncode}\nError: {error_detail[:1000]}\nData.win size: {original_size} bytes\nPatch file: {patch_file}")
+                if os.path.exists(test_output):
+                    os.remove(test_output)
+            except subprocess.TimeoutExpired:
+                pytest.fail(f"Direct xdelta patch test timed out after 30 seconds.\nCommand: {' '.join(test_cmd)}\nThis may indicate a problem with the patch file or data.win.")
+            except Exception:
+                pass
             success = merger._apply_xdelta_patches(temp_data_win, [patch_file])
             if not success:
-                error_msg = 'Patch application failed. This may be due to patch incompatibility or xdelta execution error.'
-                assert success is True, error_msg
-            assert os.path.exists(temp_data_win), 'Patched file should exist after patching'
+                log_info = ''
+                try:
+                    from utils.path_utils import get_user_data_root
+                    log_path = os.path.join(get_user_data_root(), 'patching.log')
+                    if os.path.exists(log_path):
+                        with open(log_path, 'r', encoding='utf-8', errors='ignore') as f:
+                            log_lines = f.readlines()
+                            recent_logs = '\n'.join(log_lines[-20:])
+                            log_info = f'\n\nRecent patching.log entries:\n{recent_logs}'
+                except Exception:
+                    pass
+                pytest.fail(f"Patch application failed via MultiModMerger._apply_xdelta_patches.\nxdelta_path: {merger.xdelta_path}\npatch_file: {patch_file}\ndata_win_path: {temp_data_win}\ndata_win_size: {original_size} bytes\ndata_win_exists: {os.path.exists(temp_data_win)}\npatch_file_exists: {os.path.exists(patch_file)}\npatch_file_size: {(os.path.getsize(patch_file) if os.path.exists(patch_file) else 'N/A')} bytes{log_info}")
+            if not os.path.exists(temp_data_win):
+                pytest.fail(f'Patched file does not exist after patching: {temp_data_win}')
             patched_size = os.path.getsize(temp_data_win)
-            assert patched_size > 0, 'Patched file should have content (size > 0)'
+            if patched_size == 0:
+                pytest.fail(f'Patched file is empty (size: 0 bytes). Original size: {original_size} bytes')
+            if patched_size == original_size:
+                pytest.fail(f'Patched file size unchanged ({patched_size} bytes). This may indicate the patch was not applied correctly.')
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
