@@ -43,9 +43,13 @@ jobs:
                   echo "Python path:"
                   python -c "import sys; print('\n'.join(sys.path))"
                   echo "Test files:"
-                  find tests -name "test_*.py" -type f || true
+                  find tests -name "test_*.py" -type f 2>&1 | head -20 || ls -la tests/unit/ tests/integration/ tests/ui/ 2>&1 | head -20 || true
                   echo "Trying to import conftest:"
                   python -c "import sys; sys.path.insert(0, '${{ github.workspace }}/src'); import tests.conftest; print('conftest imported successfully')" || true
+                  echo "Trying to import a test file:"
+                  python -c "import sys; sys.path.insert(0, '${{ github.workspace }}/src'); from tests.unit import test_config; print('test_config imported successfully')" || echo "Failed to import test_config"
+                  echo "Running pytest with verbose collection:"
+                  pytest tests/ --collect-only -q 2>&1 | head -50 || true
             - name: Run all tests
               env:
                   PYTHONPATH: ${{ github.workspace }}/src
@@ -86,9 +90,13 @@ jobs:
                   echo "Python path:"
                   python -c "import sys; print('\n'.join(sys.path))"
                   echo "Test files:"
-                  find tests -name "test_*.py" -type f || true
+                  find tests -name "test_*.py" -type f 2>&1 | head -20 || ls -la tests/unit/ tests/integration/ tests/ui/ 2>&1 | head -20 || true
                   echo "Trying to import conftest:"
                   python -c "import sys; sys.path.insert(0, '${{ github.workspace }}/src'); import tests.conftest; print('conftest imported successfully')" || true
+                  echo "Trying to import a test file:"
+                  python -c "import sys; sys.path.insert(0, '${{ github.workspace }}/src'); from tests.unit import test_config; print('test_config imported successfully')" || echo "Failed to import test_config"
+                  echo "Running pytest with verbose collection:"
+                  pytest tests/ --collect-only -q 2>&1 | head -50 || true
             - name: Run all tests
               env:
                   PYTHONPATH: ${{ github.workspace }}/src
@@ -129,9 +137,13 @@ jobs:
                   echo "Python path:"
                   python -c "import sys; print('\n'.join(sys.path))"
                   echo "Test files:"
-                  find tests -name "test_*.py" -type f || true
+                  find tests -name "test_*.py" -type f 2>&1 | head -20 || ls -la tests/unit/ tests/integration/ tests/ui/ 2>&1 | head -20 || true
                   echo "Trying to import conftest:"
                   python -c "import sys; sys.path.insert(0, '${{ github.workspace }}/src'); import tests.conftest; print('conftest imported successfully')" || true
+                  echo "Trying to import a test file:"
+                  python -c "import sys; sys.path.insert(0, '${{ github.workspace }}/src'); from tests.unit import test_config; print('test_config imported successfully')" || echo "Failed to import test_config"
+                  echo "Running pytest with verbose collection:"
+                  pytest tests/ --collect-only -q 2>&1 | head -50 || true
             - name: Run all tests
               env:
                   PYTHONPATH: ${{ github.workspace }}/src
@@ -175,7 +187,13 @@ jobs:
                   Write-Host "Test files:"
                   Get-ChildItem -Path tests -Recurse -Filter "test_*.py" | Select-Object -ExpandProperty FullName
                   Write-Host "Trying to import conftest:"
-                  python -c "import sys; sys.path.insert(0, r'${{ github.workspace }}\src'); import tests.conftest; print('conftest imported successfully')" || Write-Host "Failed to import conftest"
+                  python -c "import sys; sys.path.insert(0, r'${{ github.workspace }}\src'); import tests.conftest; print('conftest imported successfully')"
+                  if ($LASTEXITCODE -ne 0) { Write-Host "Failed to import conftest" }
+                  Write-Host "Trying to import a test file:"
+                  python -c "import sys; sys.path.insert(0, r'${{ github.workspace }}\src'); from tests.unit import test_config; print('test_config imported successfully')"
+                  if ($LASTEXITCODE -ne 0) { Write-Host "Failed to import test_config" }
+                  Write-Host "Running pytest with verbose collection:"
+                  pytest tests/ --collect-only -q 2>&1 | Select-Object -First 50
             - name: Run all tests
               shell: powershell
               env:
