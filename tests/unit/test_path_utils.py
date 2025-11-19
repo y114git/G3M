@@ -51,13 +51,18 @@ class TestPathUtils:
     def test_resolve_game_executable_deltarune(self, temp_dir):
         game_dir = os.path.join(temp_dir, 'game')
         os.makedirs(game_dir, exist_ok=True)
-        if platform.system() == 'Windows':
+        system = platform.system()
+        if system == 'Darwin':
+            app_path = os.path.join(game_dir, 'DELTARUNE.app')
+            os.makedirs(app_path, exist_ok=True)
+        elif system == 'Windows':
             exe_path = os.path.join(game_dir, 'DELTARUNE.exe')
+            with open(exe_path, 'w') as f:
+                f.write('mock')
         else:
             exe_path = os.path.join(game_dir, 'DELTARUNE')
-        with open(exe_path, 'w') as f:
-            f.write('mock')
-        if platform.system() != 'Windows':
+            with open(exe_path, 'w') as f:
+                f.write('mock')
             os.chmod(exe_path, 493)
         resolved = resolve_game_executable(game_dir, is_undertale=False)
         assert resolved is not None
@@ -65,13 +70,18 @@ class TestPathUtils:
     def test_resolve_game_executable_undertale(self, temp_dir):
         game_dir = os.path.join(temp_dir, 'game')
         os.makedirs(game_dir, exist_ok=True)
-        if platform.system() == 'Windows':
+        system = platform.system()
+        if system == 'Darwin':
+            app_path = os.path.join(game_dir, 'UNDERTALE.app')
+            os.makedirs(app_path, exist_ok=True)
+        elif system == 'Windows':
             exe_path = os.path.join(game_dir, 'UNDERTALE.exe')
+            with open(exe_path, 'w') as f:
+                f.write('mock')
         else:
             exe_path = os.path.join(game_dir, 'UNDERTALE')
-        with open(exe_path, 'w') as f:
-            f.write('mock')
-        if platform.system() != 'Windows':
+            with open(exe_path, 'w') as f:
+                f.write('mock')
             os.chmod(exe_path, 493)
         resolved = resolve_game_executable(game_dir, is_undertale=True)
         assert resolved is not None
@@ -84,7 +94,15 @@ class TestPathUtils:
 
     def test_find_chapter_resource_dir(self, temp_dir):
         game_dir = os.path.join(temp_dir, 'game')
-        chapter1_dir = os.path.join(game_dir, 'chapter1_')
+        system = platform.system()
+        if system == 'Darwin':
+            app_path = os.path.join(game_dir, 'DELTARUNE.app')
+            os.makedirs(app_path, exist_ok=True)
+            resources_path = os.path.join(app_path, 'Contents', 'Resources')
+            os.makedirs(resources_path, exist_ok=True)
+            chapter1_dir = os.path.join(resources_path, 'chapter1_')
+        else:
+            chapter1_dir = os.path.join(game_dir, 'chapter1_')
         os.makedirs(chapter1_dir, exist_ok=True)
         resource_dir = find_chapter_resource_dir(game_dir, 1)
         assert resource_dir is not None
@@ -92,10 +110,19 @@ class TestPathUtils:
 
     def test_find_chapter_resource_dir_chapter0(self, temp_dir):
         game_dir = os.path.join(temp_dir, 'game')
+        system = platform.system()
+        if system == 'Darwin':
+            app_path = os.path.join(game_dir, 'DELTARUNE.app')
+            os.makedirs(app_path, exist_ok=True)
+            resources_path = os.path.join(app_path, 'Contents', 'Resources')
+            os.makedirs(resources_path, exist_ok=True)
         os.makedirs(game_dir, exist_ok=True)
         resource_dir = find_chapter_resource_dir(game_dir, 0)
         assert resource_dir is not None
-        assert resource_dir == game_dir
+        if system == 'Darwin':
+            assert 'Resources' in resource_dir
+        else:
+            assert resource_dir == game_dir
 
     def test_find_chapter_resource_dir_not_found(self, temp_dir):
         game_dir = os.path.join(temp_dir, 'game')
