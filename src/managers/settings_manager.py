@@ -14,7 +14,6 @@ from managers.localization_manager import tr, LocalizationManager
 from config.constants import LAUNCHER_VERSION, UI_COLORS, SLOT_ID_UNIVERSAL
 from models.game_modes import DemoGameMode, UndertaleGameMode
 from utils.file_utils import get_file_filter
-from utils.game_utils import is_valid_game_path
 
 
 class SettingsManager(QObject):
@@ -213,16 +212,11 @@ class SettingsManager(QObject):
                     if os.path.isdir(candidate):
                         corrected_path = candidate
                         break
-            from utils.game_utils import get_game_type_string
-            game_type = get_game_type_string(self.app_state.game_mode)
-            if is_valid_game_path(corrected_path, False, game_type):
-                self.app_state.game_mode.set_game_path(self.app_state.local_config, corrected_path)
-                self.write_local_config()
-                self.feedback_manager.update_status(tr('status.game_path_set', path=corrected_path), UI_COLORS['status_success'])
-                self.settings_changed.emit()
-                return True
-            else:
-                self.feedback_manager.show_message('warning', 'dialogs.invalid_folder', tr('dialogs.invalid_game_folder'))
+            self.app_state.game_mode.set_game_path(self.app_state.local_config, corrected_path)
+            self.write_local_config()
+            self.feedback_manager.update_status(tr('status.game_path_set', path=corrected_path), UI_COLORS['status_success'])
+            self.settings_changed.emit()
+            return True
         return False
 
     def on_background_button_click(self):

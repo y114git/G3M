@@ -393,14 +393,35 @@ def autodetect_path(game_name: str) -> str | None:
     if system == 'Windows':
         program_files = [os.getenv('ProgramFiles(x86)'), os.getenv('ProgramFiles')]
         steam_paths = [os.path.join(p, 'Steam', 'steamapps', 'common', game_name) for p in program_files if p]
-        drive_paths = [f'{d}:/{s}/{game_name}' for d in 'CDE' for s in ['Steam/steamapps/common', 'SteamLibrary/steamapps/common']]
-        paths.extend(steam_paths + drive_paths)
+        drive_letters = 'CDEFGHIJKLMNOPQRSTUVWXYZ'
+        for drive in drive_letters:
+            for steam_subpath in ['Steam/steamapps/common', 'SteamLibrary/steamapps/common', 'Program Files/Steam/steamapps/common', 'Program Files (x86)/Steam/steamapps/common']:
+                paths.append(f'{drive}:/{steam_subpath}/{game_name}')
+        paths.extend(steam_paths)
     elif system == 'Linux':
         home = os.path.expanduser('~')
-        paths.extend([f'{home}/.steam/steam/steamapps/common/{game_name}', f'{home}/.local/share/Steam/steamapps/common/{game_name}', f'/run/media/mmcblk0p1/steamapps/common/{game_name}'])
+        base_steam_paths = [f'{home}/.steam/steam/steamapps/common/{game_name}', f'{home}/.local/share/Steam/steamapps/common/{game_name}', f'{home}/.var/app/com.valvesoftware.Steam/data/Steam/steamapps/common/{game_name}']
+        paths.extend(base_steam_paths)
+        mount_points = ['/mnt', '/media', '/run/media', f'{home}/.steam/steam/steamapps']
+        for mount_base in mount_points:
+            if os.path.isdir(mount_base):
+                try:
+                    for item in os.listdir(mount_base):
+                        item_path = os.path.join(mount_base, item)
+                        if os.path.isdir(item_path):
+                            steam_lib_path = os.path.join(item_path, 'SteamLibrary', 'steamapps', 'common', game_name)
+                            if os.path.exists(steam_lib_path):
+                                paths.append(steam_lib_path)
+                            steam_path = os.path.join(item_path, 'steamapps', 'common', game_name)
+                            if os.path.exists(steam_path):
+                                paths.append(steam_path)
+                except (OSError, PermissionError):
+                    pass
+        additional_paths = [f'/run/media/mmcblk0p1/steamapps/common/{game_name}', f'/run/media/mmcblk1p1/steamapps/common/{game_name}', f'/mnt/steam/steamapps/common/{game_name}', f'/media/steam/steamapps/common/{game_name}']
+        paths.extend(additional_paths)
     elif system == 'Darwin':
         home = os.path.expanduser('~')
-        base_paths = [f'{home}/Library/Application Support/Steam/steamapps/common/{game_name}', f'/Applications/{game_name}']
+        base_paths = [f'{home}/Library/Application Support/Steam/steamapps/common/{game_name}', f'/Applications/{game_name}', f'{home}/Steam/steamapps/common/{game_name}']
         if game_name.endswith('demo'):
             for parent in filter(os.path.isdir, base_paths):
                 for app_name in [f'{game_name}.app', 'DELTARUNE.app']:

@@ -92,7 +92,9 @@ class GameLauncher(QObject):
                 return
             self._hook_result = hook_result
         self.status_changed.emit(tr('status.launching_game'), UI_COLORS['status_success'])
-        if not self._find_and_validate_game_path(selections):
+        current_path = self._get_current_game_path()
+        if not current_path or not os.path.exists(current_path):
+            self.status_changed.emit(tr('status.no_game_path'), UI_COLORS['status_error'])
             self._handle_launch_failure()
             return
         has_list_format = any((isinstance(mods_list, list) for mods_list in selections.values()))
@@ -268,8 +270,6 @@ class GameLauncher(QObject):
             return None
         is_undertale = isinstance(self.app_state.game_mode, UndertaleGameMode) or isinstance(self.app_state.game_mode, UndertaleYellowGameMode)
         executable = resolve_game_executable(current_game_path, is_undertale)
-        if not executable:
-            self.status_changed.emit(tr('errors.executable_not_found_deltarune'), UI_COLORS['status_error'])
         return executable
 
     def _get_source_executable_path(self):
@@ -478,18 +478,15 @@ class GameLauncher(QObject):
             self.feedback_manager.update_status(tr('errors.files_restore_error', error=str(e)), UI_COLORS['status_error'])
 
     def _find_and_validate_game_path(self, selections: Optional[Dict[int, Any]] = None, is_initial: bool = False):
-        from utils.game_utils import is_valid_game_path
         from utils.file_utils import autodetect_path
         path_from_config = self._get_current_game_path()
-        skip_data_check = bool(selections and self._has_mods_with_data_files(selections)) if selections else False
-        game_type = get_game_type_string(self.app_state.game_mode)
         game_name = get_game_name_string(self.app_state.game_mode)
-        if is_valid_game_path(path_from_config, skip_data_check, game_type):
+        if path_from_config and os.path.exists(path_from_config):
             self.status_changed.emit(tr('status.game_path', path=path_from_config), UI_COLORS['status_info'])
             return True
         self.status_changed.emit(tr('status.autodetecting_path'), UI_COLORS['status_info'])
         autodetected_path = autodetect_path(game_name)
-        if autodetected_path and is_valid_game_path(autodetected_path, skip_data_check, game_type):
+        if autodetected_path and os.path.exists(autodetected_path):
             self.app_state.game_mode.set_game_path(self.app_state.local_config, autodetected_path)
             self.status_changed.emit(tr('status.game_folder_found', path=autodetected_path), UI_COLORS['status_success'])
             return True
