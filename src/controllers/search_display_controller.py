@@ -231,7 +231,7 @@ class SearchDisplayController:
             if ok and text.strip():
                 self.app_state.search_text = text.strip()
                 self.app.search_button.setText('↻')
-                self.app.search_button.setToolTip(tr('ui.clear_search_tooltip', search_text=self.app_state.search_text))
+                self.app.search_button.setToolTip(tr('ui.clear_search_tooltip', text=self.app_state.search_text))
                 self.update_filtered_mods()
 
     def _build_filters_and_sort(self):
