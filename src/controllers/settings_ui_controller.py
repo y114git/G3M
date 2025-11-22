@@ -197,6 +197,10 @@ class SettingsUiController:
         self.settings_manager.on_toggle_custom_executable(use_custom)
         self.app._update_custom_executable_ui()
 
+    def on_toggle_clear_logs(self):
+        clear_logs_enabled = self.app.clear_logs_checkbox.isChecked()
+        self.settings_manager.on_toggle_clear_logs(clear_logs_enabled)
+
     def on_toggle_hide_library_filters(self, state):
         is_hidden = bool(state)
         self.settings_manager.on_toggle_hide_library_filters(is_hidden)

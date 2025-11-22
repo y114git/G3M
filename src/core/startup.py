@@ -53,14 +53,14 @@ class SecureLogFilter(logging.Filter):
         return True
 
 
-def configure_logging(app_name: str, user_data_root: str) -> str:
+def configure_logging(app_name: str, user_data_root: str, clear_logs: bool = False) -> str:
     log_path = os.path.join(user_data_root, f'{app_name.lower()}.log')
     root = logging.getLogger()
     if not root.handlers:
         root.setLevel(logging.INFO)
         fmt = logging.Formatter('%(asctime)s %(levelname)s %(name)s: %(message)s')
         secure_filter = SecureLogFilter()
-        if os.path.exists(log_path):
+        if clear_logs and os.path.exists(log_path):
             try:
                 with open(log_path, 'w', encoding='utf-8'):
                     pass
@@ -179,7 +179,19 @@ def setup_app():
 def run_app():
     try:
         user_root = get_user_data_root()
-        configure_logging('DELTAHUB', user_root)
+        clear_logs = False
+        try:
+            settings_path = os.path.join(user_root, 'settings', 'settings.json')
+            old_config_path = os.path.join(user_root, 'settings', 'config.json')
+            config_path = settings_path if os.path.exists(settings_path) else old_config_path
+            if os.path.exists(config_path):
+                import json
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    config = json.load(f)
+                    clear_logs = config.get('clear_logs_on_startup', False)
+        except Exception:
+            pass
+        configure_logging('DELTAHUB', user_root, clear_logs=clear_logs)
         install_excepthook()
     except Exception as e:
         logging.warning(f'Failed to initialize logging: {e}')
@@ -232,8 +244,25 @@ def run_app():
         config_path = settings_path if os.path.exists(settings_path) else old_config_path
         if os.path.exists(config_path):
             import json
-            with open(config_path, 'r', encoding='utf-8') as f:
-                config = json.load(f)
+            try:
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    config = json.load(f)
+            except json.JSONDecodeError as e:
+                backup_path = f'{config_path}.invalid.bak'
+                try:
+                    import shutil
+                    shutil.copy2(config_path, backup_path)
+                    logging.warning(f'Corrupted config file detected, backed up to {backup_path}')
+                except Exception as backup_error:
+                    logging.warning(f'Failed to backup corrupted config: {backup_error}')
+                try:
+                    os.remove(config_path)
+                    logging.info(f'Removed corrupted config file: {config_path}')
+                except Exception as remove_error:
+                    logging.warning(f'Failed to remove corrupted config: {remove_error}')
+                safe_msg = sanitize_log_message(f'Failed to parse config JSON: {e}')
+                logging.warning(safe_msg)
+                config = {}
             if config_path == old_config_path and (not os.path.exists(settings_path)):
                 try:
                     import shutil
@@ -244,7 +273,7 @@ def run_app():
     except (OSError, IOError) as e:
         safe_msg = sanitize_log_message(f'Failed to read config file: {e}')
         logging.warning(safe_msg)
-    except (json.JSONDecodeError, ValueError) as e:
+    except ValueError as e:
         safe_msg = sanitize_log_message(f'Failed to parse config JSON: {e}')
         logging.warning(safe_msg)
     except Exception as e:

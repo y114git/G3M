@@ -4,6 +4,7 @@ from managers.localization_manager import tr
 from ui.common.styling import get_theme_color, load_mod_icon_universal
 from ui.widgets.common.outlined_label import OutlinedTextLabel
 from ui.widgets.common.screenshots_carousel import ScreenshotsCarousel
+from utils.thread_utils import safe_stop_thread
 import logging
 import webbrowser
 
@@ -18,6 +19,8 @@ class LoadModDetailsThread(QThread):
 
     def run(self):
         try:
+            if self.isInterruptionRequested():
+                return
             if not (hasattr(self.mod_data, 'is_gamebanana_mod') and self.mod_data.is_gamebanana_mod):
                 return
             if not hasattr(self.mod_data, 'gamebanana_mod_id') or not self.mod_data.gamebanana_mod_id:
@@ -29,6 +32,8 @@ class LoadModDetailsThread(QThread):
             cached_screenshots = None
             if self.config_dir:
                 try:
+                    if self.isInterruptionRequested():
+                        return
                     from utils.gamebanana_cache import GameBananaMetadataCache
                     metadata_cache = GameBananaMetadataCache(self.config_dir)
                     if metadata_cache.is_valid(mod_id_str):
@@ -46,6 +51,8 @@ class LoadModDetailsThread(QThread):
                                 return
                 except Exception as e:
                     logging.warning(f'LoadModDetailsThread: Error accessing cache: {e}', exc_info=True)
+            if self.isInterruptionRequested():
+                return
             from utils.gamebanana_api import GameBananaAPI
             api = GameBananaAPI()
             details = api.get_mod_text_and_screenshots(mod_id)
@@ -270,32 +277,49 @@ def open_mod_details_dialog(parent, mod_data):
     desc_text.setOpenExternalLinks(True)
 
     def update_ui_with_details(details_dict):
-        if details_dict.get('text'):
+        try:
             try:
-                desc_text.setHtml(details_dict['text'])
-            except Exception as e:
-                logging.warning(f'Error setting full_description HTML: {e}')
-                desc_text.setPlainText(details_dict['text'])
-        new_screenshots = details_dict.get('screenshots', [])
-        if new_screenshots and isinstance(new_screenshots, list) and any((isinstance(u, str) and u.strip() for u in new_screenshots)):
-            while screenshots_container_layout.count() > 0:
-                item = screenshots_container_layout.takeAt(0)
-                widget = item.widget() if item else None
-                if widget:
-                    widget.deleteLater()
-            screenshots_title = QLabel(f"<b>{tr('ui.screenshots_title')}</b>")
-            screenshots_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            screenshots_container_layout.addWidget(screenshots_title)
-            app_state = getattr(parent, 'app_state', None) if parent else None
-            new_carousel = ScreenshotsCarousel(new_screenshots, parent, app_state)
-            container = QWidget()
-            cont_layout = QHBoxLayout(container)
-            cont_layout.setContentsMargins(0, 0, 0, 0)
-            cont_layout.addStretch()
-            cont_layout.addWidget(new_carousel)
-            cont_layout.addStretch()
-            screenshots_container_layout.addWidget(container)
+                from PyQt6 import sip as _sip
+                if _sip.isdeleted(dialog) or _sip.isdeleted(desc_text) or _sip.isdeleted(screenshots_container_layout):
+                    return
+            except (ImportError, AttributeError):
+                if not hasattr(dialog, 'isVisible'):
+                    return
+            if details_dict.get('text'):
+                try:
+                    desc_text.setHtml(details_dict['text'])
+                except Exception as e:
+                    logging.warning(f'Error setting full_description HTML: {e}')
+                    try:
+                        desc_text.setPlainText(details_dict['text'])
+                    except Exception:
+                        pass
+            new_screenshots = details_dict.get('screenshots', [])
+            if new_screenshots and isinstance(new_screenshots, list) and any((isinstance(u, str) and u.strip() for u in new_screenshots)):
+                try:
+                    while screenshots_container_layout.count() > 0:
+                        item = screenshots_container_layout.takeAt(0)
+                        widget = item.widget() if item else None
+                        if widget:
+                            widget.deleteLater()
+                    screenshots_title = QLabel(f"<b>{tr('ui.screenshots_title')}</b>")
+                    screenshots_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                    screenshots_container_layout.addWidget(screenshots_title)
+                    app_state = getattr(parent, 'app_state', None) if parent else None
+                    new_carousel = ScreenshotsCarousel(new_screenshots, parent, app_state)
+                    container = QWidget()
+                    cont_layout = QHBoxLayout(container)
+                    cont_layout.setContentsMargins(0, 0, 0, 0)
+                    cont_layout.addStretch()
+                    cont_layout.addWidget(new_carousel)
+                    cont_layout.addStretch()
+                    screenshots_container_layout.addWidget(container)
+                except Exception as e:
+                    logging.warning(f'Error updating screenshots in mod details dialog: {e}', exc_info=True)
+        except Exception as e:
+            logging.error(f'Error in update_ui_with_details: {e}', exc_info=True)
     needs_load = hasattr(mod_data, 'is_gamebanana_mod') and mod_data.is_gamebanana_mod and hasattr(mod_data, 'gamebanana_mod_id') and mod_data.gamebanana_mod_id and (not hasattr(mod_data, 'full_description') or not mod_data.full_description)
+    load_thread = None
     if needs_load:
         desc_text.setPlainText(tr('status.loading_description'))
         config_dir = None
@@ -304,30 +328,46 @@ def open_mod_details_dialog(parent, mod_data):
         load_thread = LoadModDetailsThread(mod_data, config_dir=config_dir, parent=dialog)
         load_thread.details_loaded.connect(update_ui_with_details)
         load_thread.start()
-    elif hasattr(mod_data, 'is_gamebanana_mod') and mod_data.is_gamebanana_mod and hasattr(mod_data, 'full_description') and mod_data.full_description:
-        try:
-            desc_text.setHtml(mod_data.full_description)
-        except Exception as e:
-            logging.warning(f'Error setting full_description HTML: {e}')
-            desc_text.setPlainText(mod_data.full_description)
-    elif hasattr(mod_data, 'description_url') and mod_data.description_url:
-        try:
-            from utils.network_utils import get_session
-            desc_text.setPlainText(tr('status.loading_description'))
-            response = get_session().get(mod_data.description_url, timeout=10)
-            if response.ok:
-                content = response.text
-                is_markdown = mod_data.description_url.lower().endswith(('.md', '.markdown')) or '# ' in content or '## ' in content or ('**' in content) or ('__' in content)
-                if is_markdown:
-                    desc_text.setMarkdown(content)
+
+    def cleanup_thread():
+        nonlocal load_thread
+        if load_thread is not None:
+            try:
+                load_thread.details_loaded.disconnect()
+            except (TypeError, RuntimeError):
+                pass
+            safe_stop_thread(load_thread, timeout=2000)
+            load_thread = None
+
+    def on_dialog_close(event):
+        cleanup_thread()
+        event.accept()
+    dialog.closeEvent = on_dialog_close
+    if not needs_load:
+        if hasattr(mod_data, 'is_gamebanana_mod') and mod_data.is_gamebanana_mod and hasattr(mod_data, 'full_description') and mod_data.full_description:
+            try:
+                desc_text.setHtml(mod_data.full_description)
+            except Exception as e:
+                logging.warning(f'Error setting full_description HTML: {e}')
+                desc_text.setPlainText(mod_data.full_description)
+        elif hasattr(mod_data, 'description_url') and mod_data.description_url:
+            try:
+                from utils.network_utils import get_session
+                desc_text.setPlainText(tr('status.loading_description'))
+                response = get_session().get(mod_data.description_url, timeout=10)
+                if response.ok:
+                    content = response.text
+                    is_markdown = mod_data.description_url.lower().endswith(('.md', '.markdown')) or '# ' in content or '## ' in content or ('**' in content) or ('__' in content)
+                    if is_markdown:
+                        desc_text.setMarkdown(content)
+                    else:
+                        desc_text.setPlainText(content)
                 else:
-                    desc_text.setPlainText(content)
-            else:
-                desc_text.setPlainText(tr('errors.description_http_error_code', code=response.status_code))
-        except Exception as e:
-            desc_text.setPlainText(tr('errors.description_load_error_details', error=str(e)))
-    else:
-        desc_text.setPlainText(tr('ui.no_description'))
+                    desc_text.setPlainText(tr('errors.description_http_error_code', code=response.status_code))
+            except Exception as e:
+                desc_text.setPlainText(tr('errors.description_load_error_details', error=str(e)))
+        else:
+            desc_text.setPlainText(tr('ui.no_description'))
     scroll_layout.addWidget(desc_text)
     scroll_area.setWidget(scroll_widget)
     scroll_area.setWidgetResizable(True)

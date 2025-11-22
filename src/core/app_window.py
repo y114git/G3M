@@ -45,6 +45,7 @@ from utils.network_utils import check_internet_connection
 _translator = QTranslator()
 _lock_file = None
 
+
 class AppWindow(QWidget):
     update_status_signal = pyqtSignal(str, str)
     set_progress_signal = pyqtSignal(int)
@@ -57,7 +58,7 @@ class AppWindow(QWidget):
     url_received_signal = pyqtSignal(str)
     install_from_gb_signal = pyqtSignal(object)
 
-    def __init__(self, args: Optional[argparse.Namespace]=None, parent_for_dialogs: Optional[QWidget]=None, initial_url: str | None=None):
+    def __init__(self, args: Optional[argparse.Namespace] = None, parent_for_dialogs: Optional[QWidget] = None, initial_url: str | None = None):
         super().__init__()
         self.app_state = AppState()
         self.server: SingleInstanceServer | None = None
@@ -614,6 +615,7 @@ class AppWindow(QWidget):
         self.language_label = settings_widgets['language_label']
         self.language_combo = settings_widgets['language_combo']
         self.beta_updates_checkbox = settings_widgets['beta_updates_checkbox']
+        self.clear_logs_checkbox = settings_widgets['clear_logs_checkbox']
         self.fullscreen_checkbox = settings_widgets['fullscreen_checkbox']
         self.hide_library_filters_checkbox = settings_widgets['hide_library_filters_checkbox']
         self.launch_via_steam_checkbox = settings_widgets['launch_via_steam_checkbox']
@@ -647,6 +649,7 @@ class AppWindow(QWidget):
         self.help_button = settings_widgets['help_button']
         self.language_combo.currentTextChanged.connect(lambda: self.settings_ui.on_language_changed(self.language_combo.currentData()))
         self.beta_updates_checkbox.stateChanged.connect(self.settings_ui.on_toggle_beta_updates)
+        self.clear_logs_checkbox.stateChanged.connect(self.settings_ui.on_toggle_clear_logs)
         self.fullscreen_checkbox.stateChanged.connect(self.settings_ui.on_toggle_fullscreen)
         self.hide_library_filters_checkbox.stateChanged.connect(self.settings_ui.on_toggle_hide_library_filters)
         self.launch_via_steam_checkbox.stateChanged.connect(self.settings_ui.on_toggle_steam_launch)
@@ -792,9 +795,28 @@ class AppWindow(QWidget):
             except Exception:
                 pass
             try:
-                if hasattr(self, 'refresh_controller') and hasattr(self.refresh_controller, 'fetch_thread'):
-                    if self.refresh_controller.fetch_thread and self.refresh_controller.fetch_thread.isRunning():
+                if hasattr(self, 'refresh_controller'):
+                    if hasattr(self.refresh_controller, 'fetch_thread') and self.refresh_controller.fetch_thread and self.refresh_controller.fetch_thread.isRunning():
                         self.refresh_controller._stop_fetch_thread()
+                    if hasattr(self.refresh_controller, 'metadata_thread') and self.refresh_controller.metadata_thread:
+                        try:
+                            if hasattr(self.refresh_controller.metadata_thread, 'cancel'):
+                                self.refresh_controller.metadata_thread.cancel()
+                            if self.refresh_controller.metadata_thread.isRunning():
+                                try:
+                                    self.refresh_controller.metadata_thread.mod_updated.disconnect()
+                                    self.refresh_controller.metadata_thread.finished.disconnect()
+                                except (TypeError, RuntimeError):
+                                    pass
+                                self.refresh_controller.metadata_thread.wait(2000)
+                                if self.refresh_controller.metadata_thread.isRunning():
+                                    logging.warning('AppWindow: Metadata thread still running after sort change, terminating')
+                                    self.refresh_controller.metadata_thread.terminate()
+                                    self.refresh_controller.metadata_thread.wait(1000)
+                            self.refresh_controller.metadata_thread.deleteLater()
+                            self.refresh_controller.metadata_thread = None
+                        except Exception as e:
+                            logging.warning(f'AppWindow: Error stopping metadata thread on sort change: {e}')
             except Exception:
                 pass
             from PyQt6.QtCore import QTimer
@@ -964,6 +986,7 @@ class AppWindow(QWidget):
         self._set_checkbox_checked_silently(self.disable_background_checkbox, self.app_state.local_config.get('background_disabled', False))
         self._set_checkbox_checked_silently(self.disable_splash_checkbox, self.app_state.local_config.get('disable_splash', False))
         self.beta_updates_checkbox.setChecked(self.app_state.local_config.get('beta_updates_enabled', False))
+        self.clear_logs_checkbox.setChecked(self.app_state.local_config.get('clear_logs_on_startup', False))
         self.fullscreen_checkbox.setChecked(self.app_state.local_config.get('fullscreen_enabled', False))
         if hasattr(self, 'hide_library_filters_checkbox'):
             self.hide_library_filters_checkbox.setChecked(self.app_state.local_config.get('hide_library_filters', False))
@@ -1107,7 +1130,7 @@ class AppWindow(QWidget):
         if value > 0 and (not self.progress_bar.isVisible()):
             self.progress_bar.setVisible(True)
 
-    def _update_status(self, message: str, color: str='white'):
+    def _update_status(self, message: str, color: str = 'white'):
         if not self.is_shortcut_launch:
             from config.constants import UI_COLORS
             actual_color = UI_COLORS.get(color, color)
@@ -1247,6 +1270,8 @@ class AppWindow(QWidget):
         self.settings_title_label.setText(f"<h1>{tr('ui.settings_title')}</h1>")
         self.language_label.setText(tr('ui.language_label'))
         self.beta_updates_checkbox.setText(tr('ui.beta_updates'))
+        self.clear_logs_checkbox.setText(tr('ui.clear_logs_on_startup'))
+        self.clear_logs_checkbox.setToolTip(tr('tooltips.clear_logs_on_startup'))
         self.fullscreen_checkbox.setText(tr('ui.fullscreen'))
         self.fullscreen_checkbox.setToolTip(tr('tooltips.fullscreen_tooltip'))
         self.launch_via_steam_checkbox.setText(tr('ui.steam_launch'))
