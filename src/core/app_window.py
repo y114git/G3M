@@ -61,6 +61,8 @@ class AppWindow(QWidget):
     def __init__(self, args: Optional[argparse.Namespace] = None, parent_for_dialogs: Optional[QWidget] = None, initial_url: str | None = None):
         super().__init__()
         self.app_state = AppState()
+        from utils.network_utils import _build_session
+        self.app_state.network_session = _build_session()
         self.server: SingleInstanceServer | None = None
         self.is_shortcut_launch = args and args.shortcut_launch
         self.app_state.config_dir = os.path.join(get_user_data_root(), 'settings')
@@ -78,7 +80,7 @@ class AppWindow(QWidget):
         self._migrate_settings_config_file()
         self.feedback_manager = FeedbackManager(self)
         self.feedback_manager.app_state = self.app_state
-        self.settings_manager = SettingsManager(self.app_state, self.feedback_manager, self.lang_manager, self)
+        self.settings_manager = SettingsManager(self.app_state, self.feedback_manager, self.lang_manager, parent=self)
         self._pending_install_url = initial_url
         self.dialog_parent = parent_for_dialogs or self
         self.session_id = uuid.uuid4().hex
@@ -147,12 +149,19 @@ class AppWindow(QWidget):
         self.mod_ops = ModOperationsController(self.app_state, self.feedback_manager, self.mod_manager, self)
         self.library_display = LibraryDisplayController(self.app_state, self.feedback_manager, self.mod_manager, self.slot_manager, self)
         self.search_display = SearchDisplayController(self.app_state, self.feedback_manager, self.mod_manager, self.mod_ops, self)
+        self.search_display.ui_button_text_update.connect(self._on_search_ui_button_text_update)
+        self.search_display.ui_button_tooltip_update.connect(self._on_search_ui_button_tooltip_update)
+        self.search_display.ui_button_enabled_update.connect(self._on_search_ui_button_enabled_update)
+        self.search_display.ui_label_text_update.connect(self._on_search_ui_label_text_update)
+        self.search_display.ui_widget_updates_enabled.connect(self._on_search_ui_widget_updates_enabled)
         self.settings_ui = SettingsUiController(self.app_state, self.feedback_manager, self.settings_manager, self.slot_manager, self.customization_manager, self)
         self.theme = ThemeController(self.app_state, self.feedback_manager, self.settings_manager, self.customization_manager, self)
         self.game_launch = GameLaunchController(self.app_state, self.feedback_manager, self.mod_manager, self.slot_manager, self.settings_manager, self.game_launcher, self.customization_manager, self.plugin_manager, self)
         from controllers.refresh_controller import RefreshController
         self.refresh_controller = RefreshController(self.app_state, self.feedback_manager, self.mod_manager, self.slot_manager, self.game_launch, self.update_checker, self.settings_manager, app_window=self)
         self.mod_manager.mod_list_updated.connect(self.library_display.update_display)
+        self.mod_manager.mod_list_updated.connect(self.slot_manager._retry_load_missing_mods)
+        self.mod_manager.mod_list_updated.connect(lambda: QTimer.singleShot(200, self.slot_manager.load_used_mods_state))
         self.slot_manager.used_mod_changed.connect(lambda chapter_id: self.game_launch.update_button_state())
         self.slot_manager.used_mod_changed.connect(lambda chapter_id: self.library_display._update_priority_button_visibility(chapter_id) if hasattr(self.library_display, '_update_priority_button_visibility') else None)
         self.slot_manager.action_button_update_needed.connect(self.game_launch.update_button_state)
@@ -185,6 +194,7 @@ class AppWindow(QWidget):
         self.url_received_signal.connect(self.handle_one_click_install)
         self.install_from_gb_signal.connect(lambda mod: self._install_single_mod(mod, force=True))
         self.initialization_finished.connect(self._handle_pending_install)
+        self.app_state.all_mods_updated.connect(lambda mods: setattr(self.app_state, 'all_mods', mods))
         self._legacy_cleanup_done = False
         QTimer.singleShot(LEGACY_CLEANUP_DELAY, self._maybe_run_legacy_cleanup)
         self.initialization_timer = QTimer()
@@ -571,7 +581,6 @@ class AppWindow(QWidget):
             self.app_state.game_mode = FullGameMode()
         self.app_state.game_mode_changed.connect(self._on_game_mode_updated_by_state)
         self._update_checkbox_visibility()
-        QTimer.singleShot(400, self.slot_manager.load_used_mods_state)
         self._setup_chapter_tabs()
         if saved_chapter_mode and hasattr(self, '_show_chapter_mode_instruction'):
             QTimer.singleShot(600, self._show_chapter_mode_instruction)
@@ -942,9 +951,10 @@ class AppWindow(QWidget):
         else:
             self._init_session()
             try:
+                import requests
                 from config.constants import CLOUD_FUNCTIONS_BASE_URL
                 from utils.network_utils import get_session
-                response = get_session().get(f'{CLOUD_FUNCTIONS_BASE_URL}/getGlobalSettings', timeout=5)
+                response = get_session(self.app_state).get(f'{CLOUD_FUNCTIONS_BASE_URL}/getGlobalSettings', timeout=5)
                 if response.status_code == 200:
                     self.app_state.global_settings = response.json() or {}
             except requests.RequestException:
@@ -1000,17 +1010,31 @@ class AppWindow(QWidget):
         self._initialize_mutual_exclusions()
         self.settings_ui.on_toggle_steam_launch()
         self.theme.apply_theme()
+        from workers.background_workers import ModScanThread
+        from utils.path_utils import get_user_data_root
+        cache_dir = os.path.join(get_user_data_root(), 'cache')
+        self._mod_scan_thread = ModScanThread(self.app_state.mods_dir, self, cache_dir=cache_dir)
+        self._mod_scan_thread.scan_completed.connect(self._on_mod_scan_finished)
+        self._mod_scan_thread.start()
+        self.status_label.setText(tr('status.scanning_mods'))
+        if not self.game_launcher._find_and_validate_game_path(is_initial=True):
+            self.action_button.setEnabled(False)
+
+    def _on_mod_scan_finished(self, scan_cache: dict):
+        if hasattr(self.mod_manager, '_mods_cache') and hasattr(self.mod_manager, '_cache_lock'):
+            with self.mod_manager._cache_lock:
+                self.mod_manager._mods_cache = scan_cache
+                self.mod_manager._mods_cache_valid = True
         self.mod_manager.load_local_mods()
         saved_chapter_mode = self.app_state.local_config.get('chapter_mode_enabled', False)
         self.setEnabled(False)
         self._load_mods_and_build_list_synchronously()
         self.setEnabled(True)
+        QTimer.singleShot(500, self.slot_manager.load_used_mods_state)
         if not saved_chapter_mode:
             self.library_display.update_display()
         elif saved_chapter_mode and hasattr(self, '_show_chapter_mode_instruction'):
             QTimer.singleShot(800, self._show_chapter_mode_instruction)
-        if not self.game_launcher._find_and_validate_game_path(is_initial=True):
-            self.action_button.setEnabled(False)
 
     def _load_mods_and_build_list_synchronously(self):
         try:
@@ -1538,7 +1562,7 @@ class AppWindow(QWidget):
         try:
             from utils.network_utils import get_session
             from config.constants import CLOUD_FUNCTIONS_BASE_URL
-            get_session().post(f'{CLOUD_FUNCTIONS_BASE_URL}/presenceHeartbeat', json={'sessionId': self.session_id}, timeout=5)
+            get_session(self.app_state).post(f'{CLOUD_FUNCTIONS_BASE_URL}/presenceHeartbeat', json={'sessionId': self.session_id}, timeout=5)
         except Exception as e:
             import logging
             from utils.network_utils import sanitize_log_message
@@ -1732,9 +1756,10 @@ class AppWindow(QWidget):
         if not self.app_state.has_internet:
             return
         try:
+            import requests
             from config.constants import CLOUD_FUNCTIONS_BASE_URL
             from utils.network_utils import get_session
-            response = get_session().get(f'{CLOUD_FUNCTIONS_BASE_URL}/getGlobalSettings', timeout=5)
+            response = get_session(self.app_state).get(f'{CLOUD_FUNCTIONS_BASE_URL}/getGlobalSettings', timeout=5)
             if response.status_code == 200:
                 self.app_state.global_settings = response.json() or {}
                 logging.info('_reload_global_settings: Global settings reloaded successfully')
@@ -1842,6 +1867,31 @@ class AppWindow(QWidget):
                 logging.info('Migrated settings config.json to settings.json')
             except Exception as e:
                 logging.warning(f'Failed to migrate settings config.json to settings.json: {e}')
+
+    def _on_search_ui_button_text_update(self, widget_name: str, text: str):
+        widget = getattr(self, widget_name, None)
+        if widget and hasattr(widget, 'setText'):
+            widget.setText(text)
+
+    def _on_search_ui_button_tooltip_update(self, widget_name: str, tooltip: str):
+        widget = getattr(self, widget_name, None)
+        if widget and hasattr(widget, 'setToolTip'):
+            widget.setToolTip(tooltip)
+
+    def _on_search_ui_button_enabled_update(self, widget_name: str, enabled: bool):
+        widget = getattr(self, widget_name, None)
+        if widget and hasattr(widget, 'setEnabled'):
+            widget.setEnabled(enabled)
+
+    def _on_search_ui_label_text_update(self, widget_name: str, text: str):
+        widget = getattr(self, widget_name, None)
+        if widget and hasattr(widget, 'setText'):
+            widget.setText(text)
+
+    def _on_search_ui_widget_updates_enabled(self, widget_name: str, enabled: bool):
+        widget = getattr(self, widget_name, None)
+        if widget and hasattr(widget, 'setUpdatesEnabled'):
+            widget.setUpdatesEnabled(enabled)
 
     def _show_pending_dialogs(self):
         if not self.app_state.pending_dialogs:

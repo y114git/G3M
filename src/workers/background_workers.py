@@ -4,12 +4,11 @@ import shutil
 import tempfile
 import threading
 import time
-import requests
 from typing import Optional
 from utils.network_utils import get_session
 from PyQt6.QtCore import QObject, QThread, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QImage
-from config.constants import CLOUD_FUNCTIONS_BASE_URL, UI_COLORS, NETWORK_TIMEOUT_MEDIUM, NETWORK_TIMEOUT_HEAD
+from config.constants import CLOUD_FUNCTIONS_BASE_URL, UI_COLORS, NETWORK_TIMEOUT_MEDIUM, NETWORK_TIMEOUT_HEAD, MOD_CONFIG_FILENAME
 from managers.localization_manager import tr
 from utils.file_utils import get_unique_mod_dir, has_deltamod_info_file, check_filename_is_deltamod_info
 from utils.deltamod_converter import DeltamodConverter
@@ -29,6 +28,7 @@ class PresenceWorker(QObject):
 
     @pyqtSlot()
     def run(self):
+        import requests
         try:
             if self._busy:
                 return
@@ -287,6 +287,7 @@ class InstallModsThread(QThread):
             return False
 
     def _download_component_file(self, url: str, target_dir: str, component_type: str, progress_callback, total_size: int, downloaded_ref: list[int], session=None):
+        import requests
         import os
         import platform
         from urllib.parse import urlparse, unquote
@@ -358,6 +359,7 @@ class InstallModsThread(QThread):
             raise
 
     def run(self):
+        import requests
         try:
             self.temp_root = tempfile.mkdtemp(prefix='deltahub-install-')
             tasks = []
@@ -732,7 +734,7 @@ class UrlInstallThread(QThread):
                 if len(unpacked_items) == 1 and os.path.isdir(os.path.join(unpack_dir, unpacked_items[0])):
                     content_path = os.path.join(unpack_dir, unpacked_items[0])
                 files_in_root = os.listdir(content_path)
-                if 'mod_config.json' in files_in_root:
+                if MOD_CONFIG_FILENAME in files_in_root:
                     mod_dir = self._install_deltahub_mod_from_path(content_path)
                     if mod_dir:
                         mod_name = os.path.basename(mod_dir)
@@ -761,7 +763,7 @@ class UrlInstallThread(QThread):
                 if len(unpacked_items) == 1 and os.path.isdir(os.path.join(unpack_dir, unpacked_items[0])):
                     content_path = os.path.join(unpack_dir, unpacked_items[0])
                 files_in_root = os.listdir(content_path)
-                if 'mod_config.json' in files_in_root:
+                if MOD_CONFIG_FILENAME in files_in_root:
                     mod_dir = self._install_deltahub_mod_from_path(content_path)
                     if mod_dir:
                         mod_name = os.path.basename(mod_dir)
@@ -785,8 +787,8 @@ class UrlInstallThread(QThread):
         from utils.file_utils import sanitize_filename
         mod_config_path = None
         for root, dirs, files in os.walk(content_path):
-            if 'mod_config.json' in files:
-                mod_config_path = os.path.join(root, 'mod_config.json')
+            if MOD_CONFIG_FILENAME in files:
+                mod_config_path = os.path.join(root, MOD_CONFIG_FILENAME)
                 break
         if not mod_config_path:
             logging.error('mod_config.json not found in DELTAHUB mod archive')
@@ -823,7 +825,7 @@ class UrlInstallThread(QThread):
         config_data['is_local_mod'] = True
         if 'is_gamebanana_mod' not in config_data:
             config_data['is_gamebanana_mod'] = False
-        target_config_path = os.path.join(target_mod_dir, 'mod_config.json')
+        target_config_path = os.path.join(target_mod_dir, MOD_CONFIG_FILENAME)
         try:
             with open(target_config_path, 'w', encoding='utf-8') as f:
                 json.dump(config_data, f, indent=4, ensure_ascii=False)
@@ -834,6 +836,7 @@ class UrlInstallThread(QThread):
         return target_mod_dir
 
     def _download_archive(self, url: str, temp_dir: str) -> str:
+        import requests
         from urllib.parse import urlparse, unquote
         from utils.network_utils import download_file, get_filename_from_url
         from config.constants import NETWORK_TIMEOUT_HEAD
@@ -884,7 +887,7 @@ class UrlInstallThread(QThread):
                             return 'theme'
                         if normalized == 'plugin_init.py' or normalized.endswith('/plugin_init.py'):
                             return 'plugin'
-                        if normalized == 'mod_config.json' or normalized.endswith('/mod_config.json'):
+                        if normalized == MOD_CONFIG_FILENAME or normalized.endswith(f'/{MOD_CONFIG_FILENAME}'):
                             return 'mod'
                         if check_filename_is_deltamod_info(normalized):
                             return 'mod'
@@ -896,7 +899,7 @@ class UrlInstallThread(QThread):
                             return 'theme'
                         if name == 'plugin_init.py' or name.endswith('/plugin_init.py'):
                             return 'plugin'
-                        if name == 'mod_config.json' or name.endswith('/mod_config.json'):
+                        if name == MOD_CONFIG_FILENAME or name.endswith(f'/{MOD_CONFIG_FILENAME}'):
                             return 'mod'
                         if check_filename_is_deltamod_info(name):
                             return 'mod'
@@ -910,7 +913,7 @@ class UrlInstallThread(QThread):
                                 return 'theme'
                             if normalized == 'plugin_init.py' or normalized.endswith('/plugin_init.py'):
                                 return 'plugin'
-                            if normalized == 'mod_config.json' or normalized.endswith('/mod_config.json'):
+                            if normalized == MOD_CONFIG_FILENAME or normalized.endswith(f'/{MOD_CONFIG_FILENAME}'):
                                 return 'mod'
                             if check_filename_is_deltamod_info(normalized):
                                 return 'mod'
@@ -926,7 +929,7 @@ class UrlInstallThread(QThread):
                                 return 'theme'
                             if normalized == 'plugin_init.py' or normalized.endswith('/plugin_init.py'):
                                 return 'plugin'
-                            if normalized == 'mod_config.json' or normalized.endswith('/mod_config.json'):
+                            if normalized == MOD_CONFIG_FILENAME or normalized.endswith(f'/{MOD_CONFIG_FILENAME}'):
                                 return 'mod'
                             if check_filename_is_deltamod_info(normalized):
                                 return 'mod'
@@ -953,7 +956,7 @@ class UrlInstallThread(QThread):
                     if 'plugin_init.py' in files:
                         return 'plugin'
                 for root, dirs, files in os.walk(content_path):
-                    if 'mod_config.json' in files:
+                    if MOD_CONFIG_FILENAME in files:
                         return 'mod'
                 files_in_root = os.listdir(content_path)
                 if has_deltamod_info_file(files_in_root):
@@ -1080,7 +1083,7 @@ class UrlInstallThread(QThread):
                 files_in_root = os.listdir(content_path)
                 redirect_config_path = None
                 if 'mod_config.json' in files_in_root and len(files_in_root) == 1:
-                    redirect_config_path = os.path.join(content_path, 'mod_config.json')
+                    redirect_config_path = os.path.join(content_path, MOD_CONFIG_FILENAME)
                 elif 'config.json' in files_in_root and len(files_in_root) == 1:
                     redirect_config_path = os.path.join(content_path, 'config.json')
                 if redirect_config_path:
@@ -1095,7 +1098,7 @@ class UrlInstallThread(QThread):
                         if redirect_url:
                             self.status.emit(tr('status.deltamod_redirect_found'), UI_COLORS['status_info'])
                             self.progress.emit(0)
-                            if 'mod_config.json' in files_in_root:
+                            if MOD_CONFIG_FILENAME in files_in_root:
                                 self._process_deltahub_redirect(redirect_url, redirect_config)
                             else:
                                 self._process_deltamod_archive(redirect_url)
@@ -1165,7 +1168,7 @@ class UrlInstallThread(QThread):
                 if len(unpacked_items) == 1 and os.path.isdir(os.path.join(unpack_dir, unpacked_items[0])):
                     content_path = os.path.join(unpack_dir, unpacked_items[0])
                 files_in_root = os.listdir(content_path)
-                if 'mod_config.json' in files_in_root:
+                if MOD_CONFIG_FILENAME in files_in_root:
                     self.status.emit(tr('status.installing_mod'), UI_COLORS['status_info'])
                     mod_dir = self._install_deltahub_mod_from_path(content_path)
                     if mod_dir:
@@ -1226,15 +1229,49 @@ class FetchHelpContentWorker(QObject):
 class ModScanThread(QThread):
     scan_completed = pyqtSignal(dict)
 
-    def __init__(self, mods_dir: str, parent=None):
+    def __init__(self, mods_dir: str, parent=None, cache_dir: str = None):
         super().__init__(parent)
         self.mods_dir = mods_dir
         self._cancel_flag = False
+        self.cache_dir = cache_dir
+        self.cache_file = None
+        if cache_dir:
+            os.makedirs(cache_dir, exist_ok=True)
+            self.cache_file = os.path.join(cache_dir, 'mod_config_cache.json')
 
     def cancel(self):
         self._cancel_flag = True
 
+    def _load_cache(self) -> dict:
+        if not self.cache_file or not os.path.exists(self.cache_file):
+            return {}
+        try:
+            with open(self.cache_file, 'r', encoding='utf-8') as f:
+                cache_data = json.load(f)
+            cache = {}
+            for mod_key, info in cache_data.items():
+                if isinstance(info, dict) and 'config_mtime' in info and ('config_data' in info):
+                    cache[mod_key] = info
+            return cache
+        except (json.JSONDecodeError, OSError, KeyError) as e:
+            logging.debug(f'ModScanThread: Failed to load cache from {self.cache_file}: {e}')
+            return {}
+
+    def _save_cache(self, cache: dict):
+        if not self.cache_file:
+            return
+        try:
+            cache_to_save = {}
+            for mod_key, info in cache.items():
+                if isinstance(info, dict):
+                    cache_to_save[mod_key] = {'config_mtime': info.get('config_mtime', 0), 'config_data': info.get('config_data', {}), 'folder_path': info.get('folder_path', ''), 'folder_name': info.get('folder_name', '')}
+            with open(self.cache_file, 'w', encoding='utf-8') as f:
+                json.dump(cache_to_save, f, indent=2, ensure_ascii=False)
+        except (OSError, TypeError) as e:
+            logging.debug(f'ModScanThread: Failed to save cache to {self.cache_file}: {e}')
+
     def run(self):
+        disk_cache = self._load_cache()
         cache = {}
         if not os.path.exists(self.mods_dir):
             self.scan_completed.emit(cache)
@@ -1250,11 +1287,20 @@ class ModScanThread(QThread):
                     folder_path = entry.path
                     from utils.file_utils import migrate_mod_config
                     migrate_mod_config(folder_path)
-                    config_path = os.path.join(folder_path, 'mod_config.json')
+                    config_path = os.path.join(folder_path, MOD_CONFIG_FILENAME)
                     if not os.path.exists(config_path):
                         continue
                     try:
                         config_mtime = os.path.getmtime(config_path)
+                        mod_key = None
+                        config_data = None
+                        if folder_path in [info.get('folder_path') for info in disk_cache.values()]:
+                            cached_entry = next((info for info in disk_cache.values() if info.get('folder_path') == folder_path), None)
+                            if cached_entry and cached_entry.get('config_mtime', 0) >= config_mtime:
+                                mod_key = cached_entry.get('config_data', {}).get('mod_key')
+                                if mod_key:
+                                    cache[mod_key] = cached_entry
+                                    continue
                         with open(config_path, 'r', encoding='utf-8') as f:
                             config_data = json.load(f)
                         mod_key = config_data.get('mod_key')
@@ -1262,7 +1308,7 @@ class ModScanThread(QThread):
                             continue
                         if mod_key in cache:
                             existing_info = cache[mod_key]
-                            if config_mtime <= existing_info.config_mtime:
+                            if config_mtime <= existing_info.get('config_mtime', 0):
                                 continue
                         mod_info = {'mod_key': mod_key, 'folder_path': folder_path, 'folder_name': folder_name, 'config_data': config_data, 'config_mtime': config_mtime}
                         cache[mod_key] = mod_info
@@ -1281,4 +1327,5 @@ class ModScanThread(QThread):
         except OSError as e:
             safe_msg = sanitize_log_message(f'ModScanThread: failed to list directory {self.mods_dir}: {e}')
             logging.error(safe_msg, exc_info=True)
+        self._save_cache(cache)
         self.scan_completed.emit(cache)

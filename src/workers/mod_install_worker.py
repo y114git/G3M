@@ -3,6 +3,7 @@ import shutil
 import logging
 import tempfile
 import json
+from typing import Optional, Dict
 from PyQt6.QtCore import QThread, pyqtSignal
 from managers.localization_manager import tr
 from utils.network_utils import get_session, download_file
@@ -14,11 +15,12 @@ from workers.base_install_worker import BaseInstallWorker
 
 class ModInstallWorker(BaseInstallWorker):
 
-    def __init__(self, archive_path: str, mods_dir: str, mod_manager, parent=None):
+    def __init__(self, archive_path: str, mods_dir: str, mod_manager=None, gamebanana_metadata: Optional[Dict] = None, parent=None):
         super().__init__(parent)
         self.archive_path = archive_path
         self.mods_dir = mods_dir
         self.mod_manager = mod_manager
+        self.gamebanana_metadata = gamebanana_metadata or {}
 
     def _download_archive(self, url: str, target_path: str) -> bool:
         try:
@@ -96,9 +98,41 @@ class ModInstallWorker(BaseInstallWorker):
             target_config_path = os.path.join(target_mod_dir, 'mod_config.json')
             from utils.file_utils import migrate_mod_config
             migrate_mod_config(target_mod_dir)
-            config_data['is_local_mod'] = True
-            if 'is_gamebanana_mod' not in config_data:
-                config_data['is_gamebanana_mod'] = False
+            if self.gamebanana_metadata:
+                config_data['is_gamebanana_mod'] = True
+                config_data['is_local_mod'] = False
+                if 'mod_id' in self.gamebanana_metadata:
+                    config_data['gamebanana_mod_id'] = str(self.gamebanana_metadata['mod_id'])
+                if 'mod_type' in self.gamebanana_metadata:
+                    config_data['gamebanana_mod_type'] = self.gamebanana_metadata['mod_type']
+                if 'last_update_timestamp' in self.gamebanana_metadata:
+                    config_data['gamebanana_last_update_timestamp'] = self.gamebanana_metadata['last_update_timestamp']
+                if 'profile_url' in self.gamebanana_metadata and (not config_data.get('external_url')):
+                    config_data['external_url'] = self.gamebanana_metadata['profile_url']
+                if 'icon_url' in self.gamebanana_metadata:
+                    config_data['icon_url'] = self.gamebanana_metadata['icon_url']
+                tags = []
+                if 'tags' in self.gamebanana_metadata and self.gamebanana_metadata['tags']:
+                    tags = self.gamebanana_metadata['tags']
+                    if not isinstance(tags, list):
+                        tags = [tags] if tags else []
+                elif 'category' in self.gamebanana_metadata and self.gamebanana_metadata['category']:
+                    from utils.gamebanana_api import GameBananaAPI
+                    category_tag = GameBananaAPI.category_to_tag(self.gamebanana_metadata['category'])
+                    if category_tag:
+                        tags = [category_tag]
+                if tags:
+                    existing_tags = config_data.get('tags', [])
+                    if not isinstance(existing_tags, list):
+                        existing_tags = [existing_tags] if existing_tags else []
+                    for tag in tags:
+                        if tag and tag not in existing_tags:
+                            existing_tags.append(tag)
+                    config_data['tags'] = existing_tags
+            else:
+                config_data['is_local_mod'] = True
+                if 'is_gamebanana_mod' not in config_data:
+                    config_data['is_gamebanana_mod'] = False
             config_updated = False
             if 'files' in config_data:
                 for chapter_key, chapter_data in config_data['files'].items():
@@ -123,8 +157,8 @@ class ModInstallWorker(BaseInstallWorker):
                                     break
             final_config_path = target_config_path if os.path.exists(target_config_path) else os.path.join(target_mod_dir, 'mod_config.json')
             if config_updated or not os.path.exists(final_config_path):
-                with open(final_config_path, 'w', encoding='utf-8') as f:
-                    json.dump(config_data, f, indent=2, ensure_ascii=False)
+                from utils.file_utils import atomic_write_json
+                atomic_write_json(final_config_path, config_data, indent=2)
             return True
         except Exception as e:
             logging.error(f'ModInstallWorker: Error installing mod from path: {e}', exc_info=True)

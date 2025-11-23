@@ -15,8 +15,7 @@ import models.mod_models as mod_models
 from workers.background_workers import UrlInstallThread, ModScanThread
 from utils.file_utils import sanitize_filename, has_deltamod_info_file
 from utils.mod_utils import get_mod_key, get_mod_name, resolve_mod_icon
-from config.constants import UI_COLORS
-import requests
+from config.constants import UI_COLORS, MOD_CONFIG_FILENAME, LEGACY_MOD_CONFIG_FILENAME
 import time
 from config.constants import CLOUD_FUNCTIONS_BASE_URL
 from core.exceptions import ModUninstallationError
@@ -54,6 +53,13 @@ class ModManager(QObject):
         cache: Dict[str, ModFolderInfo] = {}
         if old_cache is None:
             old_cache = {}
+        normalized_old_cache: Dict[str, ModFolderInfo] = {}
+        for key, value in old_cache.items():
+            if isinstance(value, dict):
+                normalized_old_cache[key] = ModFolderInfo(mod_key=value.get('mod_key', key), folder_path=value.get('folder_path', ''), folder_name=value.get('folder_name', ''), config_data=value.get('config_data', {}), config_mtime=value.get('config_mtime', 0.0))
+            elif isinstance(value, ModFolderInfo):
+                normalized_old_cache[key] = value
+        old_cache = normalized_old_cache
         if not os.path.exists(self.app_state.mods_dir):
             return cache
         try:
@@ -65,7 +71,7 @@ class ModManager(QObject):
                     folder_path = entry.path
                     from utils.file_utils import migrate_mod_config
                     migrate_mod_config(folder_path)
-                    config_path = os.path.join(folder_path, 'mod_config.json')
+                    config_path = os.path.join(folder_path, MOD_CONFIG_FILENAME)
                     if not os.path.exists(config_path):
                         continue
                     try:
@@ -132,13 +138,23 @@ class ModManager(QObject):
     def _get_mods_cache(self, use_async: bool = False) -> Dict[str, ModFolderInfo]:
         with self._cache_lock:
             if self._mods_cache_valid:
+                normalized_cache: Dict[str, ModFolderInfo] = {}
+                for key, value in self._mods_cache.items():
+                    if isinstance(value, dict):
+                        normalized_cache[key] = ModFolderInfo(mod_key=value.get('mod_key', key), folder_path=value.get('folder_path', ''), folder_name=value.get('folder_name', ''), config_data=value.get('config_data', {}), config_mtime=value.get('config_mtime', 0.0))
+                    elif isinstance(value, ModFolderInfo):
+                        normalized_cache[key] = value
+                if len(normalized_cache) != len(self._mods_cache) or any((isinstance(v, dict) for v in self._mods_cache.values())):
+                    self._mods_cache = normalized_cache
                 return self._mods_cache.copy()
             if use_async and (not self._scan_in_progress):
                 if self._scan_thread and self._scan_thread.isRunning():
                     pass
                 else:
                     self._scan_in_progress = True
-                    self._scan_thread = ModScanThread(self.app_state.mods_dir, self.parent())
+                    from utils.path_utils import get_user_data_root
+                    cache_dir = os.path.join(get_user_data_root(), 'cache')
+                    self._scan_thread = ModScanThread(self.app_state.mods_dir, self.parent(), cache_dir=cache_dir)
                     self._scan_thread.scan_completed.connect(self._on_scan_completed)
                     self._scan_thread.start()
             if hasattr(self, '_temp_mods_by_name'):
@@ -215,7 +231,7 @@ class ModManager(QObject):
                 elif os.path.isdir(item_path):
                     try:
                         dir_contents = os.listdir(item_path)
-                        if has_deltamod_info_file(dir_contents) and 'mod_config.json' not in dir_contents and ('config.json' not in dir_contents):
+                        if has_deltamod_info_file(dir_contents) and MOD_CONFIG_FILENAME not in dir_contents and (LEGACY_MOD_CONFIG_FILENAME not in dir_contents):
                             self.status_changed.emit(tr('status.deltamod_detected', name=item_name), UI_COLORS['status_info'])
                             QApplication.processEvents()
                             from utils.deltamod_converter import DeltamodConverter
@@ -374,8 +390,8 @@ class ModManager(QObject):
                     continue
                 try:
                     mod_folder_path = self.get_mod_folder_path(mod_key)
-                    icon_url = ''
-                    if mod_folder_path:
+                    icon_url = config_data.get('icon_url', '')
+                    if not icon_url and mod_folder_path:
                         resolved_icon = resolve_mod_icon(config_data, mod_folder_path)
                         if resolved_icon:
                             icon_url = resolved_icon
@@ -390,9 +406,16 @@ class ModManager(QObject):
                                 if icon_url_from_api:
                                     icon_url = icon_url_from_api
                                     logging.debug(f'Loaded icon_url from API for GameBanana mod {mod_id}: {icon_url_from_api}')
+                                    config_data['icon_url'] = icon_url
+                                    from utils.file_utils import atomic_write_json
+                                    config_path = os.path.join(mod_folder_path, 'mod_config.json')
+                                    atomic_write_json(config_path, config_data, indent=2)
                         except Exception as e:
                             logging.debug(f"Failed to load icon_url for GameBanana mod {config_data.get('gamebanana_mod_id')}: {e}")
-                    safe_mod_info = {'key': mod_key, 'name': config_data.get('name', 'Installed Mod'), 'version': config_data.get('version', '1.0.0'), 'author': config_data.get('author', tr('defaults.unknown')), 'tagline': config_data.get('tagline', tr('defaults.no_description')), 'game_version': config_data.get('game_version', tr('defaults.not_specified')), 'description_url': '', 'downloads': 0, 'modgame': config_data.get('modgame', 'deltarune'), 'is_verified': False, 'icon_url': icon_url, 'tags': [], 'hide_mod': False, 'is_local_mod': False, 'ban_status': False, 'demo_url': None, 'demo_version': '1.0.0', 'created_date': config_data.get('created_date', 'N/A'), 'last_updated': config_data.get('created_date', 'N/A'), 'external_url': config_data.get('external_url'), 'is_gamebanana_mod': config_data.get('is_gamebanana_mod', False), 'gamebanana_mod_id': config_data.get('gamebanana_mod_id'), 'gamebanana_mod_type': config_data.get('gamebanana_mod_type'), 'gamebanana_last_update_timestamp': config_data.get('gamebanana_last_update_timestamp')}
+                    tags = config_data.get('tags', [])
+                    if not isinstance(tags, list):
+                        tags = [tags] if tags else []
+                    safe_mod_info = {'key': mod_key, 'name': config_data.get('name', 'Installed Mod'), 'version': config_data.get('version', '1.0.0'), 'author': config_data.get('author', tr('defaults.unknown')), 'tagline': config_data.get('tagline', tr('defaults.no_description')), 'game_version': config_data.get('game_version', tr('defaults.not_specified')), 'description_url': '', 'downloads': 0, 'modgame': config_data.get('modgame', 'deltarune'), 'is_verified': False, 'icon_url': icon_url, 'tags': tags, 'hide_mod': False, 'is_local_mod': False, 'ban_status': False, 'demo_url': None, 'demo_version': '1.0.0', 'created_date': config_data.get('created_date', 'N/A'), 'last_updated': config_data.get('created_date', 'N/A'), 'external_url': config_data.get('external_url'), 'is_gamebanana_mod': config_data.get('is_gamebanana_mod', False), 'gamebanana_mod_id': config_data.get('gamebanana_mod_id'), 'gamebanana_mod_type': config_data.get('gamebanana_mod_type'), 'gamebanana_last_update_timestamp': config_data.get('gamebanana_last_update_timestamp')}
                     mod = mod_models.ModInfo(**safe_mod_info)
                     files_data = config_data.get('files', {})
                     for file_key, ch_info in list(files_data.items()):
@@ -420,7 +443,7 @@ class ModManager(QObject):
                         valid_chapter_fields = {'description': ch_info.get('description'), 'data_file_url': ch_info.get('data_file_url'), 'data_file_version': data_file_version, 'extra_files': extra_files_list}
                         mod.files[file_key] = ModChapterData(**valid_chapter_fields)
                     if mod.files:
-                        self.app_state.all_mods.append(mod)
+                        self.app_state.append_mod(mod)
                 except Exception as e:
                     logging.warning(f'Failed to create ModInfo for installed mod {mod_key}: {e}', exc_info=True)
             all_mods_filtered = []
@@ -505,7 +528,7 @@ class ModManager(QObject):
                         mod_chapter = ModChapterData(description=config_data.get('tagline', ''), data_file_url=data_file_url, data_file_version=chapter_files.get('data_file_version', (ch_info.get('versions', {}) or {}).get('data', '1.0.0')), extra_files=extra_files)
                         mod.files[file_key] = mod_chapter
                     if mod.files:
-                        self.app_state.all_mods.append(mod)
+                        self.app_state.append_mod(mod)
                 except Exception as e:
                     logging.warning(f'Failed to build local ModInfo: {e}')
                     continue
@@ -561,8 +584,32 @@ class ModManager(QObject):
         cache = self._get_mods_cache()
         mod_info = cache.get(mod_key)
         if mod_info:
+            if isinstance(mod_info, dict):
+                return mod_info.get('folder_path', '')
             return mod_info.folder_path
         return ''
+
+    @staticmethod
+    def resolve_gamebanana_file(mod_info, api, selected_file=None) -> Optional[Dict]:
+        if selected_file:
+            return selected_file
+        files = getattr(mod_info, 'gamebanana_supported_files', []) or []
+        if files:
+            return files[0]
+        try:
+            mod_id = getattr(mod_info, 'gamebanana_mod_id', None)
+            if not mod_id:
+                return None
+            compat = api.get_supported_files_for_mod(int(mod_id))
+            files = compat.get('supported_files') or []
+            if files:
+                mod_info.gamebanana_supported_files = files
+                mod_info.gamebanana_is_tool_compatible = compat.get('has_supported_files', False)
+                mod_info.gamebanana_compatibility_checked = compat.get('compatibility_checked', False)
+                return files[0]
+        except Exception as e:
+            logging.warning(f"ModManager: Failed to resolve GameBanana file for mod {getattr(mod_info, 'gamebanana_mod_id', 'unknown')}: {e}")
+        return None
 
     def install_from_url(self, url: str):
         if self.app_state.is_installing:
@@ -792,8 +839,8 @@ class ModManager(QObject):
                 if self.settings_manager:
                     self.settings_manager.write_json(self.app_state.mods_metadata_path, data)
                 else:
-                    with open(self.app_state.mods_metadata_path, 'w', encoding='utf-8') as f:
-                        json.dump(data, f, ensure_ascii=False, indent=2)
+                    from utils.file_utils import atomic_write_json
+                    atomic_write_json(self.app_state.mods_metadata_path, data, indent=2)
             except Exception as e:
                 logging.error(f'_write_metadata: failed: {e}', exc_info=True)
 
@@ -854,6 +901,7 @@ class ModManager(QObject):
         from utils.crypto_utils import possible_secret_hashes
         candidate_hashes = possible_secret_hashes(secret_key.strip())
         mod_data: Optional[dict] = None
+        import requests
         found_in_pending = False
         found_hash: Optional[str] = None
         for h in candidate_hashes:
@@ -878,6 +926,7 @@ class ModManager(QObject):
         return (mod_data, found_hash, found_in_pending)
 
     def has_pending_changes(self, hashed_key: str) -> bool:
+        import requests
         try:
             from utils.network_utils import get_session
             resp = get_session().get(f'{CLOUD_FUNCTIONS_BASE_URL}/getPendingChangeData?modId={hashed_key}', timeout=10)
@@ -886,6 +935,7 @@ class ModManager(QObject):
             return False
 
     def withdraw_pending_mod(self, hashed_key: str) -> None:
+        import requests
         try:
             from utils.network_utils import get_session
             get_session().post(f'{CLOUD_FUNCTIONS_BASE_URL}/withdrawPendingMod', json={'hashedKey': hashed_key}, timeout=10)
@@ -893,6 +943,7 @@ class ModManager(QObject):
             raise
 
     def withdraw_pending_change(self, hashed_key: str) -> None:
+        import requests
         try:
             from utils.network_utils import get_session
             resp = get_session().post(f'{CLOUD_FUNCTIONS_BASE_URL}/withdrawPendingChange', json={'hashedKey': hashed_key}, timeout=10)
@@ -952,8 +1003,8 @@ class ModManager(QObject):
                         mods_metadata[mod_key]['installed_date'] = config_data.pop('installed_date')
                     if 'is_available_on_server' in config_data:
                         mods_metadata[mod_key]['is_available_on_server'] = config_data.pop('is_available_on_server')
-                    with open(config_path, 'w', encoding='utf-8') as f:
-                        json.dump(config_data, f, indent=4, ensure_ascii=False)
+                    from utils.file_utils import atomic_write_json
+                    atomic_write_json(config_path, config_data, indent=4)
                     updated = True
             except Exception as e:
                 logging.warning(f'Failed to migrate metadata for mod in {folder_name}: {e}')

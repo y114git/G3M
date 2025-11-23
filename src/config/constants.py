@@ -1,6 +1,6 @@
 import platform
 from .loader import get_config_value
-LAUNCHER_VERSION = '2.3.2stable'
+LAUNCHER_VERSION = '2.3.3stable'
 APP_ID = 'deltahub.y.114'
 DATA_FIREBASE_URL = get_config_value('DATA_FIREBASE_URL', '')
 CLOUD_FUNCTIONS_BASE_URL = get_config_value('CLOUD_FUNCTIONS_BASE_URL', '')
@@ -51,3 +51,10 @@ GAMEBANANA_UPDATE_CHECK_INTERVAL = 3600
 GAMEBANANA_PER_PAGE = 20
 GAMEBANANA_MAX_PAGES = 50
 GAME_EXECUTABLES = {'deltarune': {'windows': ('DELTARUNE.exe', 'DELTARUNE'), 'linux': ('DELTARUNE', 'DELTARUNE.exe'), 'mac': ('DELTARUNE.app', 'DELTARUNEdemo.app')}, 'undertale': {'windows': ('UNDERTALE.exe', 'UNDERTALE'), 'linux': ('UNDERTALE', 'UNDERTALE.exe'), 'mac': ('UNDERTALE.app',)}, 'undertaleyellow': {'windows': ('Undertale Yellow.exe', 'Undertale Yellow', 'UNDERTALE.exe', 'UNDERTALE'), 'linux': ('Undertale Yellow', 'UNDERTALE', 'Undertale Yellow.exe', 'UNDERTALE.exe'), 'mac': ('UNDERTALE.app',)}}
+MOD_CONFIG_FILENAME = 'mod_config.json'
+DATA_WIN_FILENAME = 'data.win'
+META_JSON_FILENAME = 'meta.json'
+ICON_PNG_FILENAME = 'icon.png'
+LEGACY_MOD_CONFIG_FILENAME = 'config.json'
+LEGACY_META_JSON_FILENAME = '_deltamodInfo.json'
+LEGACY_ICON_PNG_FILENAME = '_icon.png'

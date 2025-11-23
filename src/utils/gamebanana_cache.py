@@ -40,8 +40,8 @@ class GameBananaMetadataCache:
         with self._lock:
             try:
                 os.makedirs(self.cache_dir, exist_ok=True)
-                with open(self.cache_file, 'w', encoding='utf-8') as f:
-                    json.dump(self._cache, f, ensure_ascii=False, indent=2)
+                from utils.file_utils import atomic_write_json
+                atomic_write_json(self.cache_file, self._cache, indent=2)
                 logger.debug(f'GameBananaMetadataCache: Saved {len(self._cache)} entries to cache')
             except IOError as e:
                 logger.error(f'GameBananaMetadataCache: Failed to save cache: {e}', exc_info=True)

@@ -29,19 +29,11 @@ string ReadAllTextSafe(string path)
 object GetProp(object obj, string name)
     => obj?.GetType().GetProperty(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.IgnoreCase)?.GetValue(obj);
 
+#load "SharedPaths.csx"
+
 EnsureDataLoaded();
 
-
-string deltahubRoot = null;
-{
-    var probe = new DirectoryInfo(Directory.GetCurrentDirectory());
-    while (probe != null)
-    {
-        if (Directory.Exists(Path.Combine(probe.FullName, "output"))) { deltahubRoot = probe.FullName; break; }
-        probe = probe.Parent;
-    }
-    if (deltahubRoot == null) throw new ScriptException("DELTAHUB root not found (no /output ancestor).");
-}
+string deltahubRoot = FindDeltahubRoot();
 
 
 string chapterNo = ReadAllTextSafe(Path.Combine(deltahubRoot, "output", "Cache", "running", "chapterNumber.txt"));

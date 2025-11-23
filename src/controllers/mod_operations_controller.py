@@ -228,8 +228,9 @@ class ModOperationsController:
             pass
 
     def _on_gamebanana_install_finished(self, success: bool, message: str, op_id: int):
-        if self.app._install_op_id != op_id:
-            logging.debug(f'ModOperationsController: Ignoring finished signal for old operation {op_id}, current is {self.app._install_op_id}')
+        current_op_id = getattr(self.app, '_install_op_id', 0)
+        if current_op_id != op_id:
+            logging.debug(f'ModOperationsController: Ignoring finished signal for old operation {op_id}, current is {current_op_id}')
             return
         if not success and message and (message == tr('status.operation_cancelled') or 'cancelled' in message.lower()):
             logging.info('ModOperationsController: GameBanana mod installation was cancelled')
@@ -318,7 +319,8 @@ class ModOperationsController:
             raise ModInstallationError(f'Unexpected error during installation: {e}', mod_key=mod_key, mod_name=mod_name, reason='unknown') from e
 
     def on_install_progress_token(self, value: int, op_id: int):
-        if self.app._install_op_id == op_id and self.app_state.is_installing:
+        current_op_id = getattr(self.app, '_install_op_id', 0)
+        if current_op_id == op_id and self.app_state.is_installing:
             self.app.progress_bar.setValue(value)
             if getattr(self.app_state, 'current_install_is_gamebanana', False):
                 self.app_state.current_install_progress = value
@@ -327,11 +329,13 @@ class ModOperationsController:
                     self._safe_execute(lambda: self.app.search_display.update_search_plaques(), 'Failed to refresh plaques for progress')
 
     def on_install_status_token(self, message: str, color: str, op_id: int):
-        if self.app._install_op_id == op_id and self.app_state.is_installing:
+        current_op_id = getattr(self.app, '_install_op_id', 0)
+        if current_op_id == op_id and self.app_state.is_installing:
             self.app._update_status(message, color)
 
     def _on_install_task_finished(self, success: bool, op_id: int):
-        if self.app._install_op_id != op_id:
+        current_op_id = getattr(self.app, '_install_op_id', 0)
+        if current_op_id != op_id:
             return
         was_installed_before = False
         if self.app_state.current_task:
@@ -401,7 +405,7 @@ class ModOperationsController:
                                     mod_to_add = self.mod_manager.create_mod_object_from_info(config, self.app_state.all_mods)
                                     break
                         if mod_to_add:
-                            self.app_state.all_mods.append(mod_to_add)
+                            self.app_state.append_mod(mod_to_add)
                             logging.info(f'''ModOperationsController: Added installed mod "{mod_to_add.name}" (key: {getattr(mod_to_add, 'key', 'N/A')}, id: {getattr(mod_to_add, 'gamebanana_mod_id', 'N/A')}) to all_mods''')
                         else:
                             logging.warning(f'ModOperationsController: Could not create mod object for installed mod (key: {installed_mod_key}, id: {installed_mod_id})')
@@ -497,12 +501,17 @@ class ModOperationsController:
                     logging.info('ModOperationsController: Library display updated')
             except Exception as e:
                 logging.warning(f'ModOperationsController: Failed to update library display: {e}', exc_info=True)
-        self._safe_execute(lambda: QTimer.singleShot(100, check_cache_and_update), 'check_cache_and_update failed')
-        self._safe_execute(lambda: QTimer.singleShot(200, update_filtered_mods), 'update_filtered_mods failed')
-        self._safe_execute(lambda: QTimer.singleShot(300, update_plaques_with_retry), 'update_search_plaques failed')
-        self._safe_execute(lambda: QTimer.singleShot(300, update_library_with_retry), 'update_library_display failed')
-        self._safe_execute(lambda: QTimer.singleShot(1000, update_plaques_with_retry), 'update_search_plaques failed')
-        self._safe_execute(lambda: QTimer.singleShot(1000, update_library_with_retry), 'update_library_display failed')
+        from utils.ui_utils import DebounceTimer
+        if not hasattr(self, '_update_debounce_short'):
+            self._update_debounce_short = DebounceTimer(delay_ms=200)
+        if not hasattr(self, '_update_debounce_long'):
+            self._update_debounce_long = DebounceTimer(delay_ms=1000)
+        self._update_debounce_short.call(check_cache_and_update)
+        self._update_debounce_short.call(update_filtered_mods)
+        self._update_debounce_short.call(update_plaques_with_retry)
+        self._update_debounce_short.call(update_library_with_retry)
+        self._update_debounce_long.call(update_plaques_with_retry)
+        self._update_debounce_long.call(update_library_with_retry)
         if current_task and installed_mod_info:
             QTimer.singleShot(100, lambda: self.refresh_specific_mod_widget_after_update(installed_mod_info))
         if message:

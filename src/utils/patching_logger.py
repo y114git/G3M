@@ -13,12 +13,6 @@ def get_patching_logger() -> logging.Logger:
         return _patching_logger
     user_root = get_user_data_root()
     log_path = os.path.join(user_root, 'patching.log')
-    if os.path.exists(log_path):
-        try:
-            with open(log_path, 'w', encoding='utf-8'):
-                pass
-        except Exception as e:
-            print(f'Failed to clear patching.log: {e}')
     _patching_logger = logging.getLogger('patching')
     _patching_logger.setLevel(logging.DEBUG)
     _patching_logger.handlers.clear()
@@ -37,12 +31,6 @@ def get_conflicts_logger() -> logging.Logger:
         return _conflicts_logger
     user_root = get_user_data_root()
     log_path = os.path.join(user_root, 'merge_conflicts.log')
-    if os.path.exists(log_path):
-        try:
-            with open(log_path, 'w', encoding='utf-8'):
-                pass
-        except Exception as e:
-            print(f'Failed to clear merge_conflicts.log: {e}')
     _conflicts_logger = logging.getLogger('conflicts')
     _conflicts_logger.setLevel(logging.INFO)
     _conflicts_logger.handlers.clear()
@@ -65,7 +53,7 @@ def clear_patching_logs():
                 with open(log_path, 'w', encoding='utf-8'):
                     pass
             except Exception as e:
-                print(f'Failed to clear {os.path.basename(log_path)}: {e}')
+                logging.warning(f'Failed to clear {os.path.basename(log_path)}: {e}')
     global _patching_logger, _conflicts_logger
     _patching_logger = None
     _conflicts_logger = None

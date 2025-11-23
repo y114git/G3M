@@ -1,0 +1,158 @@
+
+QFrame#bottom_widget, QFrame#settings_widget {
+    background-color: %frame_bg_color%;
+}
+QWidget {
+    font-family: "%font_family_main%", sans-serif;
+    outline: none;
+    font-size: %font_size_main%pt;
+    color: %main_text_color%;
+    background-color: transparent;
+}
+QDialog, QMessageBox {
+    font-family: "%font_family_main%", sans-serif;
+    font-size: %font_size_small%pt;
+    color: %main_text_color%;
+    background-color: %frame_bg_color%;
+    border: 3px solid %border_color%;
+}
+QDialog > QLabel, QMessageBox > QLabel {
+    background: transparent;
+    font-size: %font_size_small%pt;
+}
+QDialog QPushButton, QMessageBox QPushButton {
+    font-size: %font_size_small%pt;
+}
+QPushButton {
+    background-color: %button_color%;
+    border: 2px solid %border_color%;
+    color: %main_text_color%;
+    padding: 5px;
+    min-height: 30px;
+    min-width: 100px;
+}
+QPushButton:hover {
+    background-color: %button_hover_color%;
+}
+QPushButton:disabled, QComboBox:disabled {
+    background-color: #333333;
+    color: #888888;
+    border: 2px solid #555555;
+}
+QPushButton#addTranslationButton {
+    min-width: 33px;
+    min-height: 33px;
+    padding: 2px;
+}
+QComboBox {
+    background-color: %button_color%;
+    color: %main_text_color%;
+    border: 2px solid %border_color%;
+    padding: 4px;
+    min-height: 30px;
+}
+QComboBox QAbstractItemView {
+    background-color: %button_color%;
+    border: 2px solid %border_color%;
+    color: %main_text_color%;
+    selection-background-color: %button_hover_color%;
+}
+QLineEdit {
+    background-color: %frame_bg_color%;
+    color: %main_text_color%;
+    border: 2px solid %border_color%;
+    padding: 4px;
+}
+QListWidget {
+    background-color: %frame_bg_color%;
+    color: %main_text_color%;
+    border: 2px solid %border_color%;
+}
+QListWidget::item {
+    color: %main_text_color%;
+}
+QListWidget::item:selected {
+    background-color: %button_hover_color%;
+}
+QSpinBox {
+    background-color: %frame_bg_color%;
+    color: %main_text_color%;
+    border: 2px solid %border_color%;
+    padding: 4px;
+}
+QTextEdit, QTextBrowser {
+    background-color: %frame_bg_color%;
+    color: %main_text_color%;
+    border: 2px solid %border_color%;
+    min-height: 100px;
+}
+QFrame#filters {
+    background-color: %frame_bg_color%;
+    border: 2px solid %border_color%;
+    padding: 4px 8px;
+}
+QPushButton#sortOrderBtn {
+    min-width: 35px;
+    max-width: 35px;
+    padding-left: 0px;
+    padding-right: 0px;
+    font-weight: bold;
+    font-size: 12px;
+}
+QPushButton#searchBtn {
+    min-width: 35px;
+    max-width: 35px;
+    min-height: 30px;
+    max-height: 30px;
+    padding-left: 0px;
+    padding-right: 0px;
+    font-weight: bold;
+    font-size: 16px;
+}
+QTabBar::tab {
+    background-color: %button_color%;
+    color: %main_text_color%;
+    border: 2px solid %border_color%;
+    padding: 5px;
+    min-height: 25px;
+    min-width: 80px;
+}
+QTabBar::tab:selected, QTabBar::tab:hover {
+    background-color: %button_hover_color%;
+}
+QTabBar::tab:disabled {
+    background-color: #333333;
+    color: #888888;
+    border: 2px solid #555555;
+}
+QTabWidget::pane {
+    background: transparent;
+    border: 0px;
+}
+QCheckBox:disabled {
+    color: #888888;
+}
+QCheckBox::indicator {
+    width: 15px;
+    height: 15px;
+    background-color: %button_color%;
+    border: 2px solid %border_color%;
+}
+QCheckBox::indicator:checked {
+    background-color: %checkbox_checked_color%;
+}
+QCheckBox::indicator:disabled {
+    background-color: #333333;
+    border: 2px solid #555555;
+}
+QPushButton:checked {
+    background-color: %button_hover_color%;
+    border: 2px solid %main_text_color%;
+}
+QToolTip {
+    background-color: #000000;
+    border: 2px solid #FFFFFF;
+    color: %main_text_color%;
+    padding: 4px;
+}
+

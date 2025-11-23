@@ -57,16 +57,11 @@ class FetchGameBananaModsThread(QThread):
                     logger.debug(f'FetchGameBananaModsThread: No mods data for {game_name} page {page}')
                     break
                 logger.debug(f'FetchGameBananaModsThread: Found {len(mods_data)} mods on page {page}')
-                for mod_data in mods_data:
+                for mod_info in mods_data:
                     if self._cancelled or len(mods) >= max_mods_to_fetch:
                         break
-                    try:
-                        mod_info = self._convert_dict_to_modinfo(mod_data, game_name)
-                        if mod_info:
-                            mods.append(mod_info)
-                    except Exception as e:
-                        logger.warning(f'FetchGameBananaModsThread: Error converting mod data: {e}')
-                        continue
+                    if mod_info:
+                        mods.append(mod_info)
                 if len(mods_data) < GAMEBANANA_PER_PAGE or len(mods) >= max_mods_to_fetch:
                     break
                 page += 1

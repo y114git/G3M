@@ -56,7 +56,9 @@ def sanitize_log_message(message: str) -> str:
     return msg
 
 
-def get_session() -> requests.Session:
+def get_session(app_state=None) -> requests.Session:
+    if app_state and hasattr(app_state, 'network_session') and (app_state.network_session is not None):
+        return app_state.network_session
     global _shared_session
     if _shared_session is not None:
         return _shared_session

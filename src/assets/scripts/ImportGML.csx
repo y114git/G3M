@@ -11,6 +11,8 @@ using System.Text.RegularExpressions;
 using UndertaleModLib.Util;
 using System.Reflection;
 
+#load "SharedPaths.csx"
+
 EnsureDataLoaded();
 
 string CorrectCodeEntryName(string filename)
@@ -30,22 +32,17 @@ string CorrectCodeEntryName(string filename)
     return corrected;
 }
 
-
-
 string deltahubRoot = null;
+try
 {
-    
-    var probe = new DirectoryInfo(Directory.GetCurrentDirectory());
-    while (probe != null)
-    {
-        if (Directory.Exists(Path.Combine(probe.FullName, "output"))) { deltahubRoot = probe.FullName; break; }
-        probe = probe.Parent;
-    }
-    
-    if (deltahubRoot == null && !string.IsNullOrEmpty(FilePath))
+    deltahubRoot = FindDeltahubRoot();
+}
+catch
+{
+    if (!string.IsNullOrEmpty(FilePath))
     {
         var dataWinDir = new DirectoryInfo(Path.GetDirectoryName(FilePath));
-        probe = dataWinDir;
+        var probe = dataWinDir;
         while (probe != null)
         {
             if (Directory.Exists(Path.Combine(probe.FullName, "output"))) { deltahubRoot = probe.FullName; break; }
@@ -61,10 +58,9 @@ string deltahubRoot = null;
             deltahubRoot = assemblyRoot.FullName;
         }
     }
+    
+    if (deltahubRoot == null) throw new ScriptException("DELTAHUB root not found (no /output ancestor).");
 }
-
-if (deltahubRoot == null)
-    throw new ScriptException("DELTAHUB root not found (no /output ancestor).");
 
 string ReadAllTextSafe(string path)
 {

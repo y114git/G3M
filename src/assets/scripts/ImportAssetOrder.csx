@@ -18,20 +18,19 @@ if (Data.IsVersionAtLeast(2024, 11))
 }
 
 
+#load "SharedPaths.csx"
+
 string deltahubRoot = null;
+try
 {
-    
-    var probe = new DirectoryInfo(Directory.GetCurrentDirectory());
-    while (probe != null)
-    {
-        if (Directory.Exists(Path.Combine(probe.FullName, "output"))) { deltahubRoot = probe.FullName; break; }
-        probe = probe.Parent;
-    }
-    
-    if (deltahubRoot == null && !string.IsNullOrEmpty(FilePath))
+    deltahubRoot = FindDeltahubRoot();
+}
+catch
+{
+    if (!string.IsNullOrEmpty(FilePath))
     {
         var dataWinDir = new DirectoryInfo(Path.GetDirectoryName(FilePath));
-        probe = dataWinDir;
+        var probe = dataWinDir;
         while (probe != null)
         {
             if (Directory.Exists(Path.Combine(probe.FullName, "output"))) { deltahubRoot = probe.FullName; break; }

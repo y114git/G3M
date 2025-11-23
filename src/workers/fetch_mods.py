@@ -2,7 +2,6 @@ import json
 import os
 import re
 from typing import Any, Dict, List, Optional, Tuple
-import requests
 from utils.network_utils import get_session
 import logging
 from PyQt6.QtCore import QThread, pyqtSignal
@@ -27,12 +26,14 @@ class FetchModsThread(QThread):
 
     def run(self):
         try:
+            import requests
             logger.info('FetchModsThread: Starting mod fetch')
             all_mods = []
             if CLOUD_FUNCTIONS_BASE_URL:
                 try:
                     logger.info('FetchModsThread: Fetching mods from database')
-                    session = get_session()
+                    app_state = getattr(self.main_window, 'app_state', None)
+                    session = get_session(app_state)
                     response = session.get(f'{CLOUD_FUNCTIONS_BASE_URL}/getMods', timeout=15)
                     response.raise_for_status()
                     mods_json = response.json() or {}
@@ -100,15 +101,9 @@ class FetchModsThread(QThread):
                                     logger.debug(f'No mods data for {game_name} page {page}')
                                     break
                                 mods_needing_metadata.extend(page_mods_needing_metadata)
-                                for mod_data in mods_data:
-                                    try:
-                                        from utils.gamebanana_api import GameBananaAPI
-                                        mod_info = GameBananaAPI.mod_data_dict_to_mod_info(mod_data, game_name)
-                                        if mod_info:
-                                            mods.append(mod_info)
-                                    except Exception as e:
-                                        logger.warning(f'Error converting mod data: {e}', exc_info=True)
-                                        continue
+                                for mod_info in mods_data:
+                                    if mod_info:
+                                        mods.append(mod_info)
                                 if len(mods_data) < GAMEBANANA_PER_PAGE:
                                     break
                                 logger.debug(f'Fetched page {page} for {game_name}: {len(mods_data)} mods, {len(page_mods_needing_metadata)} need metadata')
@@ -207,7 +202,7 @@ class FetchModsThread(QThread):
                     all_mods_filtered.append(local_mod)
             app_state = getattr(self.main_window, 'app_state', None)
             if app_state:
-                app_state.all_mods = all_mods_filtered
+                app_state.all_mods_updated.emit(all_mods_filtered)
             self._update_remote_exists_flags(all_mods)
             logger.info('FetchModsThread: Mod fetch completed successfully')
             self.result.emit(True)

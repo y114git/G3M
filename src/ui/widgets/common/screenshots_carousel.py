@@ -1,7 +1,9 @@
-from PyQt6.QtCore import QThread, pyqtSignal, Qt
+from PyQt6.QtCore import QThread, pyqtSignal, Qt, QThreadPool
 from PyQt6.QtGui import QImage, QPixmap, QColor, QPainter
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QSizePolicy
 from managers.localization_manager import tr
+from utils.image_loader import ImageLoaderRunnable
+from workers import WorkerSignals
 
 
 class ScreenshotsCarousel(QWidget):
@@ -12,10 +14,11 @@ class ScreenshotsCarousel(QWidget):
         self.urls = [u for u in urls if isinstance(u, str) and u.startswith(('http://', 'https://'))][:10]
         self.index = 0
         self._images = [None] * len(self.urls)
-        self._workers = {}
         self._loading = [False] * len(self.urls)
+        self._thread_pool = QThreadPool.globalInstance()
+        self._thread_pool.setMaxThreadCount(min(4, self._thread_pool.maxThreadCount()))
         try:
-            self.destroyed.connect(self._stop_all_workers)
+            self.destroyed.connect(self._cleanup)
         except Exception:
             pass
         self._init_ui()
@@ -24,20 +27,8 @@ class ScreenshotsCarousel(QWidget):
         else:
             self._update_nav_state()
 
-    def _stop_all_workers(self):
-        try:
-            for k, w in list(getattr(self, '_workers', {}).items()):
-                try:
-                    if w.isRunning():
-                        w.requestInterruption()
-                        w.quit()
-                        w.wait(1000)
-                except Exception:
-                    pass
-            if hasattr(self, '_workers'):
-                self._workers.clear()
-        except Exception:
-            pass
+    def _cleanup(self):
+        pass
 
     def _init_ui(self):
         layout = QVBoxLayout(self)
@@ -135,88 +126,44 @@ class ScreenshotsCarousel(QWidget):
                 self._current_worker = None
             if not self._loading[self.index]:
                 self._loading[self.index] = True
-                from PyQt6.QtCore import QThread, pyqtSignal
-                from utils.cache import _IMG_CACHE, _NET_SEM, cache_lock
+                signals = WorkerSignals()
+                idx = self.index
 
-                class _ImgLoader(QThread):
-                    loaded = pyqtSignal(int, object)
-                    failed = pyqtSignal(int)
-
-                    def __init__(self, idx, url):
-                        super().__init__()
-                        self.idx, self.url = (idx, url)
-
-                    def run(self):
-                        try:
-                            if _IMG_CACHE is not None:
-                                with cache_lock():
-                                    if self.url in _IMG_CACHE:
-                                        self.loaded.emit(self.idx, _IMG_CACHE[self.url])
-                                        return
-                            from utils.network_utils import get_session
-                            if _NET_SEM:
-                                _NET_SEM.acquire()
-                            try:
-                                r = get_session().get(self.url, timeout=10)
-                            finally:
-                                try:
-                                    if _NET_SEM:
-                                        _NET_SEM.release()
-                                except Exception:
-                                    pass
-                            if not r.ok:
-                                self.failed.emit(self.idx)
-                                return
-                            q = QImage()
-                            if not q.loadFromData(r.content):
-                                self.failed.emit(self.idx)
-                                return
-                            if _IMG_CACHE is not None:
-                                try:
-                                    with cache_lock():
-                                        _IMG_CACHE[self.url] = q
-                                except Exception:
-                                    pass
-                            self.loaded.emit(self.idx, q)
-                        except Exception:
-                            self.failed.emit(self.idx)
-                worker = _ImgLoader(self.index, url)
-
-                def on_loaded(i, qimg):
-                    if i < len(self._images):
-                        self._images[i] = qimg
-                        self._loading[i] = False
+                def on_loaded(qimg):
+                    if idx < len(self._images):
+                        self._images[idx] = qimg
+                        self._loading[idx] = False
                     try:
                         from PyQt6 import sip as _sip
                         if not hasattr(self, 'image_label') or _sip.isdeleted(self.image_label):
                             return
                     except Exception:
                         pass
-                    if i == self.index:
+                    if idx == self.index:
                         self._set_pixmap(qimg)
 
-                def on_failed(i):
-                    if i < len(self._loading):
-                        self._loading[i] = False
+                def on_error(url, error_msg):
+                    if idx < len(self._loading):
+                        self._loading[idx] = False
                     try:
                         from PyQt6 import sip as _sip
                         if not hasattr(self, 'image_label') or _sip.isdeleted(self.image_label):
                             return
                     except Exception:
                         pass
-                    if i == self.index:
+                    if idx == self.index:
                         try:
                             from PyQt6 import sip as _sip
                             if hasattr(self, 'image_label') and (not _sip.isdeleted(self.image_label)):
                                 self.image_label.setText(tr('errors.file_not_available'))
                         except Exception:
                             pass
-                worker.loaded.connect(on_loaded)
-                worker.failed.connect(on_failed)
-                if not hasattr(self, '_workers'):
-                    self._workers = {}
-                self._workers[self.index] = worker
-                worker.start()
+                signals.result.connect(on_loaded)
+                signals.error.connect(on_error)
+                loader = ImageLoaderRunnable(url, signals)
+                if self.app_state and hasattr(self.app_state, 'network_session'):
+                    pass
+                self._thread_pool.start(loader)
             return
         self._set_pixmap(img)
         self._preload_neighbor(self.index - 1)
@@ -232,71 +179,22 @@ class ScreenshotsCarousel(QWidget):
         if not hasattr(self, '_loading'):
             self._loading = [False] * len(self.urls)
         self._loading[idx] = True
-        if not hasattr(self, '_workers'):
-            self._workers = {}
-        from utils.cache import _IMG_CACHE, _NET_SEM, cache_lock
+        signals = WorkerSignals()
+        preload_idx = idx
 
-        class _Preloader(QThread):
-            loaded = pyqtSignal(int, object)
-            failed = pyqtSignal(int)
+        def on_preload_loaded(qimg):
+            if preload_idx < len(self._images):
+                self._images[preload_idx] = qimg
+            if hasattr(self, '_loading') and preload_idx < len(self._loading):
+                self._loading[preload_idx] = False
 
-            def __init__(self, i, url):
-                super().__init__()
-                self.i, self.url = (i, url)
-
-            def run(self):
-                try:
-                    if _IMG_CACHE is not None:
-                        with cache_lock():
-                            if self.url in _IMG_CACHE:
-                                self.loaded.emit(self.i, _IMG_CACHE[self.url])
-                                return
-                    from utils.network_utils import get_session
-                    if _NET_SEM:
-                        _NET_SEM.acquire()
-                    try:
-                        r = get_session().get(self.url, timeout=10)
-                    finally:
-                        try:
-                            if _NET_SEM:
-                                _NET_SEM.release()
-                        except Exception:
-                            pass
-                    if not r.ok:
-                        self.failed.emit(self.i)
-                        return
-                    q = QImage()
-                    if not q.loadFromData(r.content):
-                        self.failed.emit(self.i)
-                        return
-                    if _IMG_CACHE is not None:
-                        try:
-                            with cache_lock():
-                                _IMG_CACHE[self.url] = q
-                        except Exception:
-                            pass
-                    self.loaded.emit(self.i, q)
-                except Exception:
-                    self.failed.emit(self.i)
-        w = _Preloader(idx, self.urls[idx])
-
-        def on_loaded(i, qimg):
-            if i < len(self._images):
-                self._images[i] = qimg
-            if hasattr(self, '_loading') and i < len(self._loading):
-                self._loading[i] = False
-            if hasattr(self, '_workers'):
-                self._workers.pop(i, None)
-
-        def on_failed(i):
-            if hasattr(self, '_loading') and i < len(self._loading):
-                self._loading[i] = False
-            if hasattr(self, '_workers'):
-                self._workers.pop(i, None)
-        w.loaded.connect(on_loaded)
-        w.failed.connect(on_failed)
-        self._workers[idx] = w
-        w.start()
+        def on_preload_error(url, error_msg):
+            if hasattr(self, '_loading') and preload_idx < len(self._loading):
+                self._loading[preload_idx] = False
+        signals.result.connect(on_preload_loaded)
+        signals.error.connect(on_preload_error)
+        loader = ImageLoaderRunnable(self.urls[idx], signals)
+        self._thread_pool.start(loader)
 
     def _set_pixmap(self, qimg: QImage):
         try:

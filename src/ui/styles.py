@@ -1,8 +1,32 @@
-MAIN_STYLESHEET_TEMPLATE = '\nQFrame#bottom_widget, QFrame#settings_widget {{\n    background-color: {frame_bg_color};\n}}\nQWidget {{\n    font-family: "{font_family_main}", sans-serif;\n    outline: none;\n    font-size: {font_size_main}pt;\n    color: {main_text_color};\n    background-color: transparent;\n}}\nQDialog, QMessageBox {{\n    font-family: "{font_family_main}", sans-serif;\n    font-size: {font_size_small}pt;\n    color: {main_text_color};\n    background-color: {frame_bg_color};\n    border: 3px solid {border_color};\n}}\nQDialog > QLabel, QMessageBox > QLabel {{\n    background: transparent;\n    font-size: {font_size_small}pt;\n}}\nQDialog QPushButton, QMessageBox QPushButton {{\n    font-size: {font_size_small}pt;\n}}\nQPushButton {{\n    background-color: {button_color};\n    border: 2px solid {border_color};\n    color: {main_text_color};\n    padding: 5px;\n    min-height: 30px;\n    min-width: 100px;\n}}\nQPushButton:hover {{\n    background-color: {button_hover_color};\n}}\nQPushButton:disabled, QComboBox:disabled {{\n    background-color: #333333;\n    color: #888888;\n    border: 2px solid #555555;\n}}\nQPushButton#addTranslationButton {{\n    min-width: 33px;\n    min-height: 33px;\n    padding: 2px;\n}}\nQComboBox {{\n    background-color: {button_color};\n    color: {main_text_color};\n    border: 2px solid {border_color};\n    padding: 4px;\n    min-height: 30px;\n}}\nQComboBox QAbstractItemView {{\n    background-color: {button_color};\n    border: 2px solid {border_color};\n    color: {main_text_color};\n    selection-background-color: {button_hover_color};\n}}\nQLineEdit {{\n    background-color: {frame_bg_color};\n    color: {main_text_color};\n    border: 2px solid {border_color};\n    padding: 4px;\n}}\nQListWidget {{\n    background-color: {frame_bg_color};\n    color: {main_text_color};\n    border: 2px solid {border_color};\n}}\nQListWidget::item {{\n    color: {main_text_color};\n}}\nQListWidget::item:selected {{\n    background-color: {button_hover_color};\n}}\nQSpinBox {{\n    background-color: {frame_bg_color};\n    color: {main_text_color};\n    border: 2px solid {border_color};\n    padding: 4px;\n}}\nQTextEdit, QTextBrowser {{\n    background-color: {frame_bg_color};\n    color: {main_text_color};\n    border: 2px solid {border_color};\n    min-height: 100px;\n}}\nQFrame#filters {{\n    background-color: {frame_bg_color};\n    border: 2px solid {border_color};\n    padding: 4px 8px;\n}}\nQPushButton#sortOrderBtn {{\n    min-width: 35px;\n    max-width: 35px;\n    padding-left: 0px;\n    padding-right: 0px;\n    font-weight: bold;\n    font-size: 12px;\n}}\nQPushButton#searchBtn {{\n    min-width: 35px;\n    max-width: 35px;\n    min-height: 30px;\n    max-height: 30px;\n    padding-left: 0px;\n    padding-right: 0px;\n    font-weight: bold;\n    font-size: 16px;\n}}\nQTabBar::tab {{\n    background-color: {button_color};\n    color: {main_text_color};\n    border: 2px solid {border_color};\n    padding: 5px;\n    min-height: 25px;\n    min-width: 80px;\n}}\nQTabBar::tab:selected, QTabBar::tab:hover {{\n    background-color: {button_hover_color};\n}}\nQTabBar::tab:disabled {{\n    background-color: #333333;\n    color: #888888;\n    border: 2px solid #555555;\n}}\nQTabWidget::pane {{\n    background: transparent;\n    border: 0px;\n}}\nQCheckBox:disabled {{\n    color: #888888;\n}}\nQCheckBox::indicator {{\n    width: 15px;\n    height: 15px;\n    background-color: {button_color};\n    border: 2px solid {border_color};\n}}\nQCheckBox::indicator:checked {{\n    background-color: {checkbox_checked_color};\n}}\nQCheckBox::indicator:disabled {{\n    background-color: #333333;\n    border: 2px solid #555555;\n}}\nQPushButton:checked {{\n    background-color: {button_hover_color};\n    border: 2px solid {main_text_color};\n}}\nQToolTip {{\n    background-color: #000000;\n    border: 2px solid #FFFFFF;\n    color: {main_text_color};\n    padding: 4px;\n}}\n'
-SCROLLBAR_STYLESHEET_TEMPLATE = '\nQScrollBar:vertical {{\n    border: none;\n    background: {scroll_groove_color};\n    width: 14px;\n    margin: 0;\n}}\nQScrollBar::handle:vertical {{\n    background-color: {scroll_handle_color};\n    min-height: 25px;\n}}\nQScrollBar:horizontal {{\n    border: none;\n    background: {scroll_groove_color};\n    height: 14px;\n    margin: 0;\n}}\nQScrollBar::handle:horizontal {{\n    background-color: {scroll_handle_color};\n    min-width: 25px;\n}}\n'
+import os
+from PyQt6.QtCore import QFile, QIODevice
+from utils.path_utils import resource_path
+
+
+def _load_qss_template(filename: str) -> str:
+    qss_path = resource_path(f'assets/styles/{filename}')
+    if not os.path.exists(qss_path):
+        raise FileNotFoundError(f'QSS template not found: {qss_path}')
+    file = QFile(qss_path)
+    if not file.open(QIODevice.OpenModeFlag.ReadOnly | QIODevice.OpenModeFlag.Text):
+        raise IOError(f'Failed to open QSS file: {qss_path}')
+    content = file.readAll().data().decode('utf-8')
+    file.close()
+    return content
 
 
 def build_stylesheet(frame_bg_color: str, button_color: str, border_color: str, button_hover_color: str, main_text_color: str, font_family_main: str, font_size_main: int, font_size_small: int, checkbox_checked_color: str, scroll_handle_color: str, scroll_groove_color: str = 'rgba(0, 0, 0, 40)') -> str:
-    main_stylesheet = MAIN_STYLESHEET_TEMPLATE.format(frame_bg_color=frame_bg_color, button_color=button_color, border_color=border_color, button_hover_color=button_hover_color, main_text_color=main_text_color, font_family_main=font_family_main, font_size_main=font_size_main, font_size_small=font_size_small, checkbox_checked_color=checkbox_checked_color)
-    scrollbar_stylesheet = SCROLLBAR_STYLESHEET_TEMPLATE.format(scroll_handle_color=scroll_handle_color, scroll_groove_color=scroll_groove_color)
+    main_template = _load_qss_template('main.qss')
+    scrollbar_template = _load_qss_template('scrollbar.qss')
+    main_stylesheet = main_template.replace('%frame_bg_color%', frame_bg_color)
+    main_stylesheet = main_stylesheet.replace('%button_color%', button_color)
+    main_stylesheet = main_stylesheet.replace('%border_color%', border_color)
+    main_stylesheet = main_stylesheet.replace('%button_hover_color%', button_hover_color)
+    main_stylesheet = main_stylesheet.replace('%main_text_color%', main_text_color)
+    main_stylesheet = main_stylesheet.replace('%font_family_main%', font_family_main)
+    main_stylesheet = main_stylesheet.replace('%font_size_main%', str(font_size_main))
+    main_stylesheet = main_stylesheet.replace('%font_size_small%', str(font_size_small))
+    main_stylesheet = main_stylesheet.replace('%checkbox_checked_color%', checkbox_checked_color)
+    scrollbar_stylesheet = scrollbar_template.replace('%scroll_handle_color%', scroll_handle_color)
+    scrollbar_stylesheet = scrollbar_stylesheet.replace('%scroll_groove_color%', scroll_groove_color)
     return main_stylesheet + scrollbar_stylesheet

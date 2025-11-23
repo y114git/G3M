@@ -31,19 +31,23 @@ class PluginAPI(QObject):
             prefixed_key = f'{self.plugin_id}.{key}'
             prefixed_config[prefixed_key] = value
         self.app_state.local_config['plugin_configs'][self.plugin_id] = prefixed_config
-        if hasattr(self.app_window, 'settings_manager'):
+        if hasattr(self.app_state, 'settings_manager') and self.app_state.settings_manager:
+            self.app_state.settings_manager.write_local_config()
+        elif hasattr(self.app_window, 'settings_manager'):
             self.app_window.settings_manager.write_local_config()
 
     def get_mods(self) -> List[Any]:
-        if hasattr(self.app_state, 'all_mods'):
-            return self.app_state.all_mods.copy()
+        if hasattr(self.app_state, 'get_all_mods'):
+            return self.app_state.get_all_mods()
+        elif hasattr(self.app_state, 'all_mods'):
+            return list(self.app_state.all_mods) if self.app_state.all_mods else []
         return []
 
     def get_mod_by_key(self, mod_key: str) -> Optional[Any]:
-        if hasattr(self.app_state, 'all_mods'):
-            for mod in self.app_state.all_mods:
-                if hasattr(mod, 'key') and mod.key == mod_key:
-                    return mod
+        mods = self.get_mods()
+        for mod in mods:
+            if hasattr(mod, 'key') and mod.key == mod_key:
+                return mod
         return None
 
     def get_config(self, key: str, default: Any = None) -> Any:
@@ -54,8 +58,13 @@ class PluginAPI(QObject):
         self._save_config()
 
     def show_message(self, message_type: str, title: str, message: str):
-        if hasattr(self.app_window, 'feedback_manager'):
-            self.app_window.feedback_manager.show_message(message_type, title, message)
+        feedback_manager = None
+        if hasattr(self.app_state, 'feedback_manager') and self.app_state.feedback_manager:
+            feedback_manager = self.app_state.feedback_manager
+        elif hasattr(self.app_window, 'feedback_manager'):
+            feedback_manager = self.app_window.feedback_manager
+        if feedback_manager:
+            feedback_manager.show_message(message_type, title, message)
         else:
             logging.warning(f'Plugin {self.plugin_id}: Cannot show message - feedback_manager not available')
 

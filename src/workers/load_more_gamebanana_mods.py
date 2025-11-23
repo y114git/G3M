@@ -43,17 +43,11 @@ class LoadMoreGameBananaModsThread(QThread):
                 if not mods_data or len(mods_data) == 0:
                     break
                 self._mods_needing_metadata.extend(mods_needing_metadata)
-                for mod_data in mods_data:
+                for mod_info in mods_data:
                     if self._cancelled:
                         break
-                    try:
-                        from utils.gamebanana_api import GameBananaAPI
-                        mod_info = GameBananaAPI.mod_data_dict_to_mod_info(mod_data, game_name)
-                        if mod_info:
-                            new_mods.append(mod_info)
-                    except Exception as e:
-                        logger.warning(f'Error converting mod data: {e}', exc_info=True)
-                        continue
+                    if mod_info:
+                        new_mods.append(mod_info)
                 if len(mods_data) < GAMEBANANA_PER_PAGE:
                     if page < self.start_page + self.num_pages - 1:
                         continue

@@ -1,0 +1,66 @@
+import logging
+from typing import Optional, Tuple, List, Dict, Any
+from managers.utmtcli_manager import UTMTCLIManager
+from utils.patching_logger import get_patching_logger
+
+
+class UtmtWrapper:
+
+    def __init__(self, patching_logger=None):
+        self.utmtcli = UTMTCLIManager()
+        self.patching_logger = patching_logger or get_patching_logger()
+
+    def is_available(self) -> bool:
+        return self.utmtcli.is_available()
+
+    def get_platform(self) -> str:
+        return self.utmtcli.get_platform()
+
+    def get_script_path(self, script_name: str) -> Optional[str]:
+        return self.utmtcli.get_script_path(script_name)
+
+    def execute_script(self, data_win_path: str, script_name: str, output_path: Optional[str] = None, cwd: Optional[str] = None, env: Optional[Dict] = None) -> Tuple[int, str, str]:
+        if output_path is None:
+            output_path = data_win_path
+        self.patching_logger.info(f'[UTMT] Executing script: {script_name} on {data_win_path}')
+        returncode, stdout, stderr = self.utmtcli.execute_with_scripts(data_win_path, [script_name], output_path=output_path, cwd=cwd, env=env)
+        if returncode != 0:
+            error_msg = stderr[:300] if len(stderr) > 300 else stderr
+            self.patching_logger.warning(f'[UTMT] Script {script_name} failed: {error_msg}')
+        else:
+            self.patching_logger.debug(f'[UTMT] Script {script_name} completed successfully')
+        return (returncode, stdout, stderr)
+
+    def execute_scripts(self, data_win_path: str, script_names: List[str], output_path: Optional[str] = None, cwd: Optional[str] = None, env: Optional[Dict] = None) -> Tuple[int, str, str]:
+        if output_path is None:
+            output_path = data_win_path
+        self.patching_logger.info(f"[UTMT] Executing scripts: {', '.join(script_names)} on {data_win_path}")
+        returncode, stdout, stderr = self.utmtcli.execute_with_scripts(data_win_path, script_names, output_path=output_path, cwd=cwd, env=env)
+        if returncode != 0:
+            error_msg = stderr[:300] if len(stderr) > 300 else stderr
+            self.patching_logger.warning(f"[UTMT] Scripts {', '.join(script_names)} failed: {error_msg}")
+        else:
+            self.patching_logger.debug(f"[UTMT] Scripts {', '.join(script_names)} completed successfully")
+        return (returncode, stdout, stderr)
+
+    def merge_assets(self, data_win_path: str, mod_source_dir: str) -> bool:
+        success = True
+        script_path = self.get_script_path('ImportGraphics')
+        if script_path:
+            returncode, _, stderr = self.execute_script(data_win_path, 'ImportGraphics', cwd=mod_source_dir)
+            if returncode != 0:
+                self.patching_logger.warning(f'[UTMT] ImportGraphics failed: {stderr[:200]}')
+                success = False
+        script_path = self.get_script_path('ImportGML')
+        if script_path:
+            returncode, _, stderr = self.execute_script(data_win_path, 'ImportGML', cwd=mod_source_dir)
+            if returncode != 0:
+                self.patching_logger.warning(f'[UTMT] ImportGML failed: {stderr[:200]}')
+                success = False
+        script_path = self.get_script_path('ImportAssetOrder')
+        if script_path:
+            returncode, _, stderr = self.execute_script(data_win_path, 'ImportAssetOrder', cwd=mod_source_dir)
+            if returncode != 0:
+                self.patching_logger.warning(f'[UTMT] ImportAssetOrder failed: {stderr[:200]}')
+                success = False
+        return success

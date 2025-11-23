@@ -1,6 +1,5 @@
 from __future__ import annotations
 import logging
-import requests
 from PyQt6.QtCore import QRunnable
 from PyQt6.QtGui import QImage
 from workers import WorkerSignals
@@ -24,6 +23,7 @@ class ImageLoaderRunnable(QRunnable):
             logging.debug(safe_msg)
 
     def run(self) -> None:
+        import requests
         try:
             cached = get_from_cache(self.url)
             if cached is not None and (not cached.isNull()):

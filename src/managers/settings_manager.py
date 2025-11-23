@@ -73,12 +73,8 @@ class SettingsManager(QObject):
 
     def write_json(self, path: str, data):
         try:
-            dir_path = os.path.dirname(path)
-            os.makedirs(dir_path, exist_ok=True)
-            tmp = f'{path}.{os.getpid()}.{threading.get_ident()}.tmp'
-            with open(tmp, 'w', encoding='utf-8') as f:
-                json.dump(data, f, indent=2, ensure_ascii=False)
-            os.replace(tmp, path)
+            from utils.file_utils import atomic_write_json
+            atomic_write_json(path, data, indent=2)
         except (PermissionError, OSError):
             self._handle_permission_error(os.path.dirname(path))
         except Exception as e:
