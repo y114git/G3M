@@ -25,10 +25,9 @@ class GameMonitorWorker(QObject):
                     logging.info('[GAME_MONITOR] Game process finished')
                 except Exception as e:
                     logging.warning(f'[GAME_MONITOR] process.wait() failed: {e}', exc_info=True)
-                finally:
-                    logging.info('[GAME_MONITOR] Emitting finished signal')
-                    self.finished.emit(self.vanilla_mode)
-                    return
+                logging.info('[GAME_MONITOR] Emitting finished signal')
+                self.finished.emit(self.vanilla_mode)
+                return
             game_appeared = False
             consecutive_checks = 0
             for _ in range(45):

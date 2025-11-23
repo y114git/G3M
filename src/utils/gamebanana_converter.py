@@ -147,8 +147,28 @@ class GameBananaConverter:
                 config_data['gamebanana_last_update_timestamp'] = self.gamebanana_metadata['last_update_timestamp']
             if not config_data.get('external_url') and self.gamebanana_metadata.get('profile_url'):
                 config_data['external_url'] = self.gamebanana_metadata['profile_url']
-            with open(config_path, 'w', encoding='utf-8') as f:
-                json.dump(config_data, f, indent=4, ensure_ascii=False)
+            if self.gamebanana_metadata.get('icon_url'):
+                config_data['icon_url'] = self.gamebanana_metadata['icon_url']
+            tags = []
+            if self.gamebanana_metadata.get('tags'):
+                tags = self.gamebanana_metadata['tags']
+                if not isinstance(tags, list):
+                    tags = [tags] if tags else []
+            elif self.gamebanana_metadata.get('category'):
+                from utils.gamebanana_api import GameBananaAPI
+                category_tag = GameBananaAPI.category_to_tag(self.gamebanana_metadata['category'])
+                if category_tag:
+                    tags = [category_tag]
+            if tags:
+                existing_tags = config_data.get('tags', [])
+                if not isinstance(existing_tags, list):
+                    existing_tags = [existing_tags] if existing_tags else []
+                for tag in tags:
+                    if tag and tag not in existing_tags:
+                        existing_tags.append(tag)
+                config_data['tags'] = existing_tags
+            from utils.file_utils import atomic_write_json
+            atomic_write_json(config_path, config_data, indent=4)
             logger.info(f"GameBananaConverter: Updated config for GameBanana mod: mod_key={config_data.get('mod_key')}, mod_id={config_data.get('gamebanana_mod_id')}, mod_dir={mod_dir}")
             return mod_dir
         except (IOError, json.JSONDecodeError, TypeError, KeyError) as e:

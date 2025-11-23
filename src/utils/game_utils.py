@@ -3,7 +3,7 @@ import platform
 import psutil
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
-from config.constants import GAME_PROCESS_NAMES, GAME_EXECUTABLES
+from config.constants import GAME_PROCESS_NAMES, GAME_EXECUTABLES, DATA_WIN_FILENAME
 if TYPE_CHECKING:
     from models.game_modes import GameMode
 
@@ -33,7 +33,7 @@ def is_valid_mac_game_path(path: str, skip_data_check: bool, game_type: str) -> 
         return False
     if skip_data_check:
         return has_executable
-    has_data = (res_dir / 'game.ios').is_file() or (res_dir / 'data.win').is_file()
+    has_data = (res_dir / 'game.ios').is_file() or (res_dir / DATA_WIN_FILENAME).is_file()
     return has_executable and has_data
 
 

@@ -97,11 +97,9 @@ class RefreshController:
                 if hasattr(self.details_thread, 'cancel'):
                     self.details_thread.cancel()
                 if self.details_thread.isRunning():
-                    self.details_thread.wait(2000)
+                    safe_stop_thread(self.details_thread, timeout=2000)
                     if self.details_thread.isRunning():
-                        logging.warning('RefreshController: Details thread still running, terminating')
-                        self.details_thread.terminate()
-                        self.details_thread.wait(1000)
+                        logging.warning('RefreshController: Details thread still running after safe stop, this may indicate a blocking operation')
                 self.details_thread.deleteLater()
             except Exception as e:
                 logging.warning(f'RefreshController: Error stopping details thread: {e}')
@@ -118,11 +116,9 @@ class RefreshController:
                 if hasattr(self.metadata_thread, 'cancel'):
                     self.metadata_thread.cancel()
                 if self.metadata_thread.isRunning():
-                    self.metadata_thread.wait(2000)
+                    safe_stop_thread(self.metadata_thread, timeout=2000)
                     if self.metadata_thread.isRunning():
-                        logging.warning('RefreshController: Metadata thread still running, terminating')
-                        self.metadata_thread.terminate()
-                        self.metadata_thread.wait(1000)
+                        logging.warning('RefreshController: Metadata thread still running after safe stop, this may indicate a blocking operation')
                 self.metadata_thread.deleteLater()
             except Exception as e:
                 logging.warning(f'RefreshController: Error stopping metadata thread: {e}')

@@ -23,10 +23,12 @@ class AppState(QObject):
     saves_button_enabled_changed = pyqtSignal(bool)
     progress_bar_visible_changed = pyqtSignal(bool)
     progress_bar_value_changed = pyqtSignal(int)
+    all_mods_updated = pyqtSignal(list)
 
     def __init__(self):
         super().__init__()
-        self._mods_metadata_lock = threading.Lock()
+        self._mods_metadata_lock = threading.RLock()
+        self._state_lock = threading.RLock()
         self.local_config: Dict[str, Any] = {}
         self.game_path: str = ''
         self.demo_game_path: str = ''
@@ -37,7 +39,7 @@ class AppState(QObject):
         self.mods_metadata_path: str = ''
         self.plugins_metadata_path: str = ''
         self.config_path: str = ''
-        self.all_mods: List[ModInfo] = []
+        self._all_mods: List[ModInfo] = []
         self.mods_loaded: bool = False
         self.is_settings_view: bool = False
         self.is_changelog_view: bool = False
@@ -79,6 +81,46 @@ class AppState(QObject):
         self.current_install_mod_identifier: Optional[str] = None
         self.current_install_is_gamebanana: bool = False
         self.current_install_progress: int = 0
+        self.network_session: Optional[Any] = None
+
+    def get_all_mods(self) -> List[ModInfo]:
+        with self._mods_metadata_lock:
+            return list(self._all_mods)
+
+    def set_all_mods(self, mods: List[ModInfo]) -> None:
+        with self._mods_metadata_lock:
+            self._all_mods = list(mods) if mods else []
+
+    def append_mod(self, mod: ModInfo) -> None:
+        with self._mods_metadata_lock:
+            if mod not in self._all_mods:
+                self._all_mods.append(mod)
+
+    def remove_mod(self, mod: ModInfo) -> None:
+        with self._mods_metadata_lock:
+            if mod in self._all_mods:
+                self._all_mods.remove(mod)
+
+    def clear_all_mods(self) -> None:
+        with self._mods_metadata_lock:
+            self._all_mods.clear()
+
+    def extend_all_mods(self, mods: List[ModInfo]) -> None:
+        with self._mods_metadata_lock:
+            existing_keys = {getattr(m, 'key', None) for m in self._all_mods}
+            for mod in mods:
+                mod_key = getattr(mod, 'key', None)
+                if mod_key and mod_key not in existing_keys:
+                    self._all_mods.append(mod)
+                    existing_keys.add(mod_key)
+
+    @property
+    def all_mods(self) -> List[ModInfo]:
+        return self.get_all_mods()
+
+    @all_mods.setter
+    def all_mods(self, value: List[ModInfo]) -> None:
+        self.set_all_mods(value)
 
     @property
     def is_installing(self) -> bool:

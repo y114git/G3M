@@ -65,7 +65,7 @@ def configure_logging(app_name: str, user_data_root: str, clear_logs: bool = Fal
                 with open(log_path, 'w', encoding='utf-8'):
                     pass
             except Exception as e:
-                print(f'Failed to clear log file: {e}')
+                logging.warning(f'Failed to clear log file: {e}')
         file_handler = RotatingFileHandler(log_path, maxBytes=10000000, backupCount=3, encoding='utf-8')
         file_handler.setFormatter(fmt)
         file_handler.addFilter(secure_filter)
@@ -176,6 +176,32 @@ def setup_app():
     return app
 
 
+def cleanup_old_temp_directories():
+    import tempfile
+    import glob
+    from utils.file_utils import safe_rmtree
+    temp_base = tempfile.gettempdir()
+    patterns = [os.path.join(temp_base, 'deltahub_modpack_*'), os.path.join(temp_base, 'deltahub_multimod_*'), os.path.join(temp_base, 'deltahub-dl-*'), os.path.join(temp_base, 'deltahub-extract-*')]
+    cleaned_count = 0
+    for pattern in patterns:
+        try:
+            for temp_dir in glob.glob(pattern):
+                if os.path.isdir(temp_dir):
+                    try:
+                        mtime = os.path.getmtime(temp_dir)
+                        import time
+                        if time.time() - mtime > 3600:
+                            if safe_rmtree(temp_dir):
+                                cleaned_count += 1
+                                logging.debug(f'Cleaned up old temp directory: {temp_dir}')
+                    except OSError:
+                        pass
+        except Exception as e:
+            logging.debug(f'Failed to cleanup temp directories matching {pattern}: {e}')
+    if cleaned_count > 0:
+        logging.info(f'Cleaned up {cleaned_count} old temporary directory(ies) from previous sessions')
+
+
 def run_app():
     try:
         user_root = get_user_data_root()
@@ -193,6 +219,7 @@ def run_app():
             pass
         configure_logging('DELTAHUB', user_root, clear_logs=clear_logs)
         install_excepthook()
+        cleanup_old_temp_directories()
     except Exception as e:
         logging.warning(f'Failed to initialize logging: {e}')
     parser = argparse.ArgumentParser(description='DELTAHUB')
@@ -216,7 +243,7 @@ def run_app():
         if running_game:
             app = setup_app()
             error_msg = tr('errors.game_running_message', game_name=running_game)
-            print(f'STARTUP ERROR: {error_msg}')
+            logging.error(f'STARTUP ERROR: {error_msg}')
             QMessageBox.critical(None, tr('errors.game_running_title'), error_msg)
             sys.exit(1)
     if platform.system() == 'Linux' and (not args.shortcut_launch):
@@ -233,7 +260,7 @@ def run_app():
             AppWindow(args=args)
         except ShortcutLaunchError as e:
             error_msg = str(e) or tr('errors.error')
-            print(f'STARTUP ERROR: {error_msg}')
+            logging.error(f'STARTUP ERROR: {error_msg}')
             QMessageBox.critical(None, tr('errors.error'), error_msg)
             sys.exit(1)
         return
@@ -360,7 +387,7 @@ def run_app():
                 server = SingleInstanceServer(launcher_app['instance'])
                 if not server.listen(SINGLE_INSTANCE_KEY):
                     error_msg = tr('errors.single_instance_error')
-                    print(f'STARTUP ERROR: {error_msg}')
+                    logging.error(f'STARTUP ERROR: {error_msg}')
                     QMessageBox.critical(None, tr('errors.error'), error_msg)
                     sys.exit(1)
                 launcher_app['instance'].server = server
@@ -381,7 +408,7 @@ def run_app():
                     splash.stop_gif_animation()
                 splash.close()
                 error_msg = tr('errors.startup_error_message', details=str(e))
-                print(f'STARTUP ERROR: {error_msg}')
+                logging.error(f'STARTUP ERROR: {error_msg}')
                 QMessageBox.critical(None, tr('errors.startup_error_title'), error_msg)
         QTimer.singleShot(SPLASH_RETRY_DELAY, create_launcher)
     create_launcher_and_show_splash(app, url_arg, show_animated_splash)
@@ -391,5 +418,5 @@ def run_app():
         import traceback
         traceback.print_exc()
         error_msg = tr('errors.startup_error_message', details=str(e))
-        print(f'STARTUP ERROR: {error_msg}')
+        logging.error(f'STARTUP ERROR: {error_msg}')
         QMessageBox.critical(None, tr('errors.startup_error_title'), error_msg)

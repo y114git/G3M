@@ -165,7 +165,7 @@ class TestModMergingWithStructure:
         mod_manager = Mock()
         merger = MultiModMerger(app_state, mod_manager)
         assert merger is not None
-        assert hasattr(merger, 'utmtcli')
+        assert hasattr(merger, 'utmt_wrapper')
         assert hasattr(merger, 'xdelta_path')
 
     def test_mod_priority_with_structure(self, app_state, feedback_manager):

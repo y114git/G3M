@@ -11,7 +11,6 @@ from utils.gamebanana_converter import GameBananaConverter
 from utils.file_utils import normalize_mod_package
 from utils.network_utils import get_session, download_file
 from workers.base_install_worker import BaseInstallWorker
-import requests
 logger = logging.getLogger(__name__)
 
 
@@ -81,8 +80,12 @@ class InstallGameBananaModThread(BaseInstallWorker):
             if file_format == 'deltahub':
                 self.status.emit(tr('status.installing_mod'), UI_COLORS['status_info'])
                 try:
-                    mod_dir = self._install_deltahub_mod(archive_path, mod_id)
+                    from workers.mod_install_worker import ModInstallWorker
+                    gb_metadata = {'mod_id': mod_id, 'mod_type': self.mod_info.gamebanana_mod_type or 'Mod', 'last_update_timestamp': self.mod_info.gamebanana_last_update_timestamp, 'profile_url': self.mod_info.external_url, 'icon_url': self.mod_info.icon_url, 'tags': self.mod_info.tags if hasattr(self.mod_info, 'tags') and self.mod_info.tags else [], 'category': self.mod_info.gamebanana_category if hasattr(self.mod_info, 'gamebanana_category') else None}
+                    installer = ModInstallWorker(archive_path=archive_path, mods_dir=self.main_window.app_state.mods_dir, mod_manager=None, gamebanana_metadata=gb_metadata, parent=self.parent())
+                    installer.run()
                     self._cleanup_temp_files(archive_path, archive_dir)
+                    mod_dir = self._find_installed_mod_dir(mod_id)
                     if not mod_dir:
                         raise ValueError(tr('errors.gamebanana_installation_failed'))
                     mod_name = os.path.basename(mod_dir)
@@ -93,7 +96,7 @@ class InstallGameBananaModThread(BaseInstallWorker):
                     raise ValueError(tr('errors.gamebanana_installation_failed'))
                 return
             self.status.emit(tr('status.converting_mod'), UI_COLORS['status_info'])
-            gb_metadata = {'mod_id': mod_id, 'mod_type': self.mod_info.gamebanana_mod_type or 'Mod', 'last_update_timestamp': self.mod_info.gamebanana_last_update_timestamp, 'profile_url': self.mod_info.external_url}
+            gb_metadata = {'mod_id': mod_id, 'mod_type': self.mod_info.gamebanana_mod_type or 'Mod', 'last_update_timestamp': self.mod_info.gamebanana_last_update_timestamp, 'profile_url': self.mod_info.external_url, 'icon_url': self.mod_info.icon_url, 'tags': self.mod_info.tags if hasattr(self.mod_info, 'tags') and self.mod_info.tags else [], 'category': self.mod_info.gamebanana_category if hasattr(self.mod_info, 'gamebanana_category') else None}
             converter = GameBananaConverter(archive_path, self.main_window.app_state.mods_dir, gb_metadata)
             mod_dir = converter.convert()
             self._cleanup_temp_files(archive_path, archive_dir)
@@ -117,11 +120,12 @@ class InstallGameBananaModThread(BaseInstallWorker):
     def _install_deltahub_mod(self, archive_path: str, mod_id: int) -> Optional[str]:
         import tempfile
         import json
-        from utils.file_utils import _extract_archive_raw, sanitize_filename
+        from utils.archive_utils import ArchiveExtractor
+        from utils.file_utils import sanitize_filename
         fname_lower = os.path.basename(archive_path).lower()
         with tempfile.TemporaryDirectory(prefix='gb_install_dh_') as temp_dir:
             try:
-                _extract_archive_raw(archive_path, fname_lower, temp_dir)
+                ArchiveExtractor.extract(archive_path, temp_dir)
             except Exception as e:
                 logger.error(f'Error extracting DELTAHUB mod archive: {e}')
                 raise
@@ -186,17 +190,61 @@ class InstallGameBananaModThread(BaseInstallWorker):
                 config_data['gamebanana_last_update_timestamp'] = self.mod_info.gamebanana_last_update_timestamp
             if not config_data.get('external_url') and self.mod_info.external_url:
                 config_data['external_url'] = self.mod_info.external_url
+            if self.mod_info.icon_url:
+                config_data['icon_url'] = self.mod_info.icon_url
+            tags = []
+            if hasattr(self.mod_info, 'tags') and self.mod_info.tags:
+                tags = self.mod_info.tags if isinstance(self.mod_info.tags, list) else [self.mod_info.tags]
+            elif hasattr(self.mod_info, 'gamebanana_category') and self.mod_info.gamebanana_category:
+                from utils.gamebanana_api import GameBananaAPI
+                category_tag = GameBananaAPI.category_to_tag(self.mod_info.gamebanana_category)
+                if category_tag:
+                    tags = [category_tag]
+            if tags:
+                existing_tags = config_data.get('tags', [])
+                if not isinstance(existing_tags, list):
+                    existing_tags = [existing_tags] if existing_tags else []
+                for tag in tags:
+                    if tag and tag not in existing_tags:
+                        existing_tags.append(tag)
+                config_data['tags'] = existing_tags
             expected_mod_key = f'gb_{mod_id}'
             config_data['mod_key'] = expected_mod_key
             target_config_path = os.path.join(target_mod_dir, 'mod_config.json')
             try:
-                with open(target_config_path, 'w', encoding='utf-8') as f:
-                    json.dump(config_data, f, indent=4, ensure_ascii=False)
+                from utils.file_utils import atomic_write_json
+                atomic_write_json(target_config_path, config_data, indent=4)
                 logger.info(f'Installed DELTAHUB mod: {target_mod_dir}, mod_key={expected_mod_key}')
             except Exception as e:
                 logger.error(f'Error writing mod_config.json: {e}')
                 raise
             return target_mod_dir
+
+    def _find_installed_mod_dir(self, mod_id: int) -> Optional[str]:
+        try:
+            import json
+            mods_dir = self.main_window.app_state.mods_dir
+            if not os.path.exists(mods_dir):
+                return None
+            mod_id_str = str(mod_id)
+            for item_name in os.listdir(mods_dir):
+                item_path = os.path.join(mods_dir, item_name)
+                if not os.path.isdir(item_path):
+                    continue
+                config_path = os.path.join(item_path, 'mod_config.json')
+                if not os.path.exists(config_path):
+                    continue
+                try:
+                    with open(config_path, 'r', encoding='utf-8') as f:
+                        config_data = json.load(f)
+                    if config_data.get('gamebanana_mod_id') == mod_id_str:
+                        return item_path
+                except Exception:
+                    continue
+            return None
+        except Exception as e:
+            logger.error(f'Error finding installed mod directory: {e}', exc_info=True)
+            return None
 
     def _check_file_compatibility(self, download_url: str, file_info: Dict) -> Optional[Dict]:
         try:
@@ -211,26 +259,12 @@ class InstallGameBananaModThread(BaseInstallWorker):
         return super()._download_file(url, filename, temp_dir_prefix='gb_download_')
 
     def _resolve_selected_file(self, mod_id: int) -> Optional[Dict]:
-        if self.selected_file:
-            return self.selected_file
-        files = getattr(self.mod_info, 'gamebanana_supported_files', []) or []
-        if files:
-            self.selected_file = files[0]
+        from managers.mod_manager import ModManager
+        file_choice = ModManager.resolve_gamebanana_file(self.mod_info, self.api, self.selected_file)
+        if file_choice:
+            self.selected_file = file_choice
             self._notify_search_refresh()
-            return self.selected_file
-        try:
-            compat = self.api.get_supported_files_for_mod(int(mod_id))
-            files = compat.get('supported_files') or []
-            if files:
-                self.mod_info.gamebanana_supported_files = files
-                self.mod_info.gamebanana_is_tool_compatible = compat.get('has_supported_files', False)
-                self.mod_info.gamebanana_compatibility_checked = compat.get('compatibility_checked', False)
-                self.selected_file = files[0]
-                self._notify_search_refresh()
-                return self.selected_file
-        except Exception as e:
-            logger.warning(f'InstallGameBananaModThread: Failed to refresh supported files for {mod_id}: {e}')
-        return None
+        return file_choice
 
     def _notify_search_refresh(self):
         try:

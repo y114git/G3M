@@ -20,7 +20,7 @@ class GameBananaAPI:
         self.session = get_session()
         self._compatibility_cache: Dict[int, Dict[str, Any]] = {}
 
-    def get_game_mods(self, game_id: int, page: int = 1, per_page: int = 20, sort: str = 'default', metadata_cache=None) -> Tuple[Optional[List[Dict]], List[str]]:
+    def get_game_mods(self, game_id: int, page: int = 1, per_page: int = 20, sort: str = 'default', metadata_cache=None) -> Tuple[Optional[List[ModInfo]], List[str]]:
         valid_sorts = ['default', 'new', 'updated']
         effective_sort = sort if sort in valid_sorts else 'default'
         url = f'{self.base_url}/Game/{game_id}/Subfeed'
@@ -44,8 +44,8 @@ class GameBananaAPI:
                     mod_id = record.get('_idRow')
                     if mod_id:
                         mod_id_str = str(mod_id)
-                        mapped_data = self._map_mod_data(record, game_name)
-                        if mapped_data:
+                        mod_info = self._map_mod_data(record, game_name)
+                        if mod_info:
                             downloads_from_gb = record.get('_nDownloadCount')
                             downloads_value = 0
                             if downloads_from_gb is not None:
@@ -53,7 +53,7 @@ class GameBananaAPI:
                                     downloads_value = int(downloads_from_gb)
                                 except (ValueError, TypeError):
                                     downloads_value = 0
-                            mapped_data['downloads'] = downloads_value
+                            mod_info.downloads = downloads_value
                             cache_valid = False
                             cached_category = None
                             if metadata_cache:
@@ -63,14 +63,14 @@ class GameBananaAPI:
                                     cached_tagline = metadata_cache.get_tagline(mod_id_str)
                                     cached_category = metadata_cache.get_category(mod_id_str)
                                     if cached_downloads is not None and cached_downloads > 0:
-                                        mapped_data['downloads'] = cached_downloads
+                                        mod_info.downloads = cached_downloads
                                     elif downloads_value > 0:
-                                        mapped_data['downloads'] = downloads_value
+                                        mod_info.downloads = downloads_value
                                     if cached_tagline:
-                                        mapped_data['tagline'] = cached_tagline
+                                        mod_info.tagline = cached_tagline
                                     if cached_category:
-                                        mapped_data['gamebanana_category'] = cached_category
-                            current_downloads = mapped_data.get('downloads', 0)
+                                        mod_info.gamebanana_category = cached_category
+                            current_downloads = mod_info.downloads
                             if current_downloads is None:
                                 current_downloads = 0
                             else:
@@ -78,23 +78,15 @@ class GameBananaAPI:
                                     current_downloads = int(current_downloads)
                                 except (ValueError, TypeError):
                                     current_downloads = 0
-                            mapped_data['downloads'] = current_downloads
-                            current_tagline = mapped_data.get('tagline', '')
-                            current_category = mapped_data.get('gamebanana_category')
+                            mod_info.downloads = current_downloads
+                            current_tagline = mod_info.tagline
+                            current_category = mod_info.gamebanana_category
                             needs_downloads = current_downloads == 0 or current_downloads is None
                             needs_tagline = not current_tagline or current_tagline == 'No description' or len(current_tagline) < 10
                             needs_category = not current_category
                             if (needs_downloads or needs_tagline or needs_category) and (not cache_valid):
                                 mods_needing_metadata.append(mod_id_str)
-                            mapped_data['gamebanana_supported_files'] = []
-                            mapped_data['gamebanana_has_compatible_file'] = None
-                            mapped_data['gamebanana_is_tool_compatible'] = False
-                            mapped_data['gamebanana_supported_tool_ids'] = []
-                            mapped_data['gamebanana_preferred_format'] = None
-                            mapped_data['gamebanana_has_deltahub_file'] = False
-                            mapped_data['gamebanana_has_deltamod_file'] = False
-                            mapped_data['gamebanana_compatibility_checked'] = False
-                            mapped_mods.append(mapped_data)
+                            mapped_mods.append(mod_info)
             return (mapped_mods, mods_needing_metadata)
         except requests.RequestException as e:
             logger.error(f'Error fetching mods for game {game_id}: {e}')
@@ -710,8 +702,10 @@ class GameBananaAPI:
                 return 'customization'
         return 'other'
 
-    def _map_mod_data(self, gb_data: Dict, game_name: str) -> Dict[str, Any]:
+    def _map_mod_data(self, gb_data: Dict, game_name: str) -> Optional[ModInfo]:
         mod_id = gb_data.get('_idRow')
+        if not mod_id:
+            return None
         name = gb_data.get('_sName', 'Unknown Mod')
         version = gb_data.get('_sVersion', '') or '1.0.0'
         submitter = gb_data.get('_aSubmitter', {})
@@ -752,7 +746,7 @@ class GameBananaAPI:
                     category = category.get('_sName') or category.get('name')
                 elif not isinstance(category, str):
                     category = str(category) if category else None
-        return {'key': f'gb_{mod_id}', 'name': name, 'version': version, 'author': author, 'tagline': tagline, 'game_version': game_version, 'downloads': downloads, 'created_date': created_date, 'last_updated': last_updated, 'modgame': game_name, 'is_verified': gb_data.get('_bIsVerified', False), 'icon_url': icon_url, 'tags': tags, 'external_url': gb_data.get('_sProfileUrl'), 'screenshots_url': screenshots, 'description_url': gb_data.get('_sTextUrl', ''), 'full_description': None, 'is_gamebanana_mod': True, 'gamebanana_mod_id': str(mod_id), 'gamebanana_mod_type': gb_data.get('_sModelName', 'Mod'), 'gamebanana_last_update_timestamp': updated_timestamp, 'gamebanana_has_compatible_file': False, 'gamebanana_category': category, 'gamebanana_is_tool_compatible': False, 'gamebanana_supported_files': [], 'gamebanana_supported_tool_ids': [], 'gamebanana_preferred_format': None, 'gamebanana_has_deltahub_file': False, 'gamebanana_has_deltamod_file': False, 'gamebanana_compatibility_checked': False}
+        return ModInfo(key=f'gb_{mod_id}', name=name, version=version, author=author, tagline=tagline, game_version=game_version, downloads=downloads, created_date=created_date, last_updated=last_updated, modgame=game_name, is_verified=gb_data.get('_bIsVerified', False), icon_url=icon_url, tags=tags, external_url=gb_data.get('_sProfileUrl'), screenshots_url=screenshots, description_url=gb_data.get('_sTextUrl', ''), full_description=None, is_gamebanana_mod=True, gamebanana_mod_id=str(mod_id), gamebanana_mod_type=gb_data.get('_sModelName', 'Mod'), gamebanana_last_update_timestamp=updated_timestamp, gamebanana_has_compatible_file=False, gamebanana_category=category, gamebanana_is_tool_compatible=False, gamebanana_supported_files=[], gamebanana_supported_tool_ids=[], gamebanana_preferred_format=None, gamebanana_has_deltahub_file=False, gamebanana_has_deltamod_file=False, gamebanana_compatibility_checked=False)
 
     @staticmethod
     def mod_data_dict_to_mod_info(mod_data: Dict[str, Any], game_name: str = 'deltarune') -> Optional[ModInfo]:

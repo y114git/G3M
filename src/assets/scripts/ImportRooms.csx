@@ -17,25 +17,13 @@ void DebugLog(string s) { if (DEBUG) PrintLine($"[DEBUG] {s}"); }
 string ReadAllTextSafe(string path)
 {
     try { return File.ReadAllText(path, Encoding.UTF8); } catch { return null; }
-}
+}#load "SharedPaths.csx"
 
 EnsureDataLoaded();
 
-
-string deltahubRoot = null;
-{
-    var probe = new DirectoryInfo(Directory.GetCurrentDirectory());
-    while (probe != null)
-    {
-        if (Directory.Exists(Path.Combine(probe.FullName, "output"))) { deltahubRoot = probe.FullName; break; }
-        probe = probe.Parent;
-    }
-    if (deltahubRoot == null) throw new ScriptException("DELTAHUB root not found (no /output ancestor).");
-}
-
-
-string chapterNo = ReadAllTextSafe(Path.Combine(deltahubRoot, "output", "Cache", "running", "chapterNumber.txt"));
-string modNo     = ReadAllTextSafe(Path.Combine(deltahubRoot, "output", "Cache", "running", "modNumbersCache.txt"));
+string deltahubRoot = FindDeltahubRoot();
+string chapterNo = GetChapterNumber(deltahubRoot);
+string modNo = GetModNumbersCache(deltahubRoot);
 
 
 

@@ -1,7 +1,6 @@
 import logging
 import re
 from typing import Dict, List, Optional, Tuple
-import requests
 from config.constants import CLOUD_FUNCTIONS_BASE_URL, NETWORK_TIMEOUT_MEDIUM
 from utils.network_utils import get_session, check_internet_connection
 
@@ -37,12 +36,14 @@ class ChatManager:
                 error_text = response.text[:200] if hasattr(response, 'text') else 'Unknown error'
                 logging.warning(f'ChatManager: Failed to get messages. Status: {response.status_code}, Response: {error_text}')
                 return []
-        except requests.RequestException as e:
-            logging.warning(f'ChatManager: Request exception when getting messages: {e}')
-            return []
         except Exception as e:
-            logging.warning(f'ChatManager: Failed to get messages: {e}', exc_info=True)
-            return []
+            import requests
+            if isinstance(e, requests.RequestException):
+                logging.warning(f'ChatManager: Request exception when getting messages: {e}')
+                return []
+            else:
+                logging.warning(f'ChatManager: Failed to get messages: {e}', exc_info=True)
+                return []
 
     def _contains_url(self, text: str) -> bool:
         if re.search('https?://', text, re.IGNORECASE):
@@ -91,10 +92,12 @@ class ChatManager:
                 error_text = response.text[:200] if hasattr(response, 'text') else 'Unknown error'
                 logging.warning(f'ChatManager: Failed to send message. Status: {response.status_code}, Response: {error_text}')
                 return (False, 'send_error')
-        except requests.RequestException as e:
-            error_msg = str(e)
-            logging.warning(f'ChatManager: Request exception when sending message: {error_msg}', exc_info=True)
-            return (False, 'send_error')
         except Exception as e:
-            logging.warning(f'ChatManager: Failed to send message: {e}', exc_info=True)
-            return (False, 'send_error')
+            import requests
+            if isinstance(e, requests.RequestException):
+                error_msg = str(e)
+                logging.warning(f'ChatManager: Request exception when sending message: {error_msg}', exc_info=True)
+                return (False, 'send_error')
+            else:
+                logging.warning(f'ChatManager: Failed to send message: {e}', exc_info=True)
+                return (False, 'send_error')

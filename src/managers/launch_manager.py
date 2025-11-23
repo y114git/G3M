@@ -81,7 +81,9 @@ class GameLauncher(QObject):
         return slot_manager.get_active_mod_selections()
 
     def _launch_game_with_selections(self, selections: Dict[int, Any], execute_plugin_hooks=None, restore_window_callback=None):
-        clear_patching_logs()
+        clear_logs_enabled = self.app_state.local_config.get('clear_logs_on_startup', False)
+        if clear_logs_enabled:
+            clear_patching_logs()
         self.execute_plugin_hooks = execute_plugin_hooks
         self.restore_window_callback = restore_window_callback
         if execute_plugin_hooks:

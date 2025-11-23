@@ -1,0 +1,22 @@
+
+QScrollBar:vertical {
+    border: none;
+    background: %scroll_groove_color%;
+    width: 14px;
+    margin: 0;
+}
+QScrollBar::handle:vertical {
+    background-color: %scroll_handle_color%;
+    min-height: 25px;
+}
+QScrollBar:horizontal {
+    border: none;
+    background: %scroll_groove_color%;
+    height: 14px;
+    margin: 0;
+}
+QScrollBar::handle:horizontal {
+    background-color: %scroll_handle_color%;
+    min-width: 25px;
+}
+

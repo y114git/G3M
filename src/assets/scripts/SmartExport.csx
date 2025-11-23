@@ -77,31 +77,27 @@ if (Data.IsYYC())
 }
 
 
+#load "SharedPaths.csx"
+
 string deltahubRoot = null;
+try
 {
-    var probe = new DirectoryInfo(Directory.GetCurrentDirectory());
-    while (probe != null)
+    deltahubRoot = FindDeltahubRoot();
+}
+catch
+{
+    string TryRoot(string root)
     {
-        if (Directory.Exists(Path.Combine(probe.FullName, "output"))) { deltahubRoot = probe.FullName; break; }
-        probe = probe.Parent;
+        if (string.IsNullOrWhiteSpace(root)) return null;
+        string folder = Path.Combine(root);
+        return Directory.Exists(folder) ? folder : null;
     }
-        
-        if (deltahubRoot == null)
-        {
-            
-            string TryRoot(string root)
-            {
-                if (string.IsNullOrWhiteSpace(root)) return null;
-                string folder    = Path.Combine(root);
-                return Directory.Exists(folder) ? folder : null;
-            }
 
-            var got = TryRoot(@Convert.ToString(Directory.GetParent(Convert.ToString(Directory.GetParent(Convert.ToString(Assembly.GetEntryAssembly().Location))))));
-            if (got!=null){ deltahubRoot = got;}
-
-        }
+    var got = TryRoot(@Convert.ToString(Directory.GetParent(Convert.ToString(Directory.GetParent(Convert.ToString(Assembly.GetEntryAssembly().Location))))));
+    if (got != null) { deltahubRoot = got; }
     
     if (deltahubRoot == null) throw new ScriptException("DELTAHUB root not found (no /output ancestor).");
+}
 }
 
 

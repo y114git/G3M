@@ -45,8 +45,8 @@ class PluginManager(QObject):
             if self.settings_manager:
                 self.settings_manager.write_json(self.app_state.plugins_metadata_path, data)
             else:
-                with open(self.app_state.plugins_metadata_path, 'w', encoding='utf-8') as f:
-                    json.dump(data, f, ensure_ascii=False, indent=2)
+                from utils.file_utils import atomic_write_json
+                atomic_write_json(self.app_state.plugins_metadata_path, data, indent=2)
         except Exception as e:
             logging.error(f'_write_plugins_metadata: failed: {e}', exc_info=True)
 

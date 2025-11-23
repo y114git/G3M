@@ -380,6 +380,9 @@ class ModPlaqueWidget(BaseModWidget):
 
     def update_mod_data(self):
         try:
+            if hasattr(self, 'icon_label'):
+                from ui.common.styling import load_mod_icon_universal
+                load_mod_icon_universal(self.icon_label, self.mod_data, size=80)
             if hasattr(self, 'downloads_label'):
                 downloads = getattr(self.mod_data, 'downloads', 0) or 0
                 self.downloads_label.setText(f'⤓ {downloads}')

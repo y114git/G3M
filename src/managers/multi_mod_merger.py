@@ -7,8 +7,11 @@ import re
 from typing import Dict, List, Optional, Any
 from PyQt6.QtCore import QObject, pyqtSignal
 from managers.utmtcli_manager import UTMTCLIManager
+from managers.backup_manager import BackupManager
+from managers.utmt_wrapper import UtmtWrapper
 from utils.path_utils import get_xdelta_path, find_chapter_resource_dir
-from utils.file_utils import ensure_writable, sanitize_filename
+from utils.file_utils import ensure_writable, sanitize_filename, safe_remove, safe_move, safe_rmtree
+from config.constants import DATA_WIN_FILENAME
 from managers.localization_manager import tr
 from utils.mod_utils import get_mod_key, get_mod_name
 from utils.patching_logger import get_patching_logger, get_conflicts_logger, clear_patching_logs
@@ -27,7 +30,7 @@ class MultiModMerger(QObject):
         self._mod_exported_code_files: Dict[int, set] = {}
         self.app_state = app_state
         self.mod_manager = mod_manager
-        self.utmtcli = UTMTCLIManager()
+        self.utmt_wrapper = UtmtWrapper(patching_logger=self.patching_logger)
         self.xdelta_path = get_xdelta_path()
         self.patching_logger.info(f'[MultiModMerger.__init__] xdelta_path initialized: {self.xdelta_path}')
         if self.xdelta_path:
@@ -39,15 +42,14 @@ class MultiModMerger(QObject):
                     is_executable = bool(file_stat.st_mode & stat.S_IEXEC)
                     self.patching_logger.info(f'[MultiModMerger.__init__] xdelta permissions: {oct(file_stat.st_mode)} (executable: {is_executable})')
         self.temp_merge_dir = None
-        self.backup_dir = None
-        self.original_files = {}
-        self.added_files = {}
-        self._session_manifest_path = None
+        self.backup_manager: Optional[BackupManager] = None
         self._cancelled = False
         self.resource_modification_history: Dict[str, List[Dict[str, Any]]] = {}
 
     def process_mod_merge(self, chapter_mods: Dict[int, List[Any]], is_modpack: bool, modpack_dir: Optional[str] = None) -> bool:
-        clear_patching_logs()
+        clear_logs_enabled = self.app_state.local_config.get('clear_logs_on_startup', False)
+        if clear_logs_enabled:
+            clear_patching_logs()
         self.patching_logger = get_patching_logger()
         self.conflicts_logger = get_conflicts_logger()
         self.detected_conflicts = []
@@ -58,9 +60,9 @@ class MultiModMerger(QObject):
         for chapter_id, mods_list in chapter_mods.items():
             mod_names = [getattr(m, 'name', 'Unknown') for m in mods_list]
             self.patching_logger.info(f'Chapter {chapter_id}: {len(mods_list)} mod(s) - {mod_names}')
-        if not self.utmtcli.is_available():
-            self.patching_logger.error(f'UTMTCLI not available for platform: {self.utmtcli.get_platform()}')
-            self.status_update.emit(tr('errors.utmtcli_not_available', platform=self.utmtcli.get_platform()), 'error')
+        if not self.utmt_wrapper.is_available():
+            self.patching_logger.error(f'UTMTCLI not available for platform: {self.utmt_wrapper.get_platform()}')
+            self.status_update.emit(tr('errors.utmtcli_not_available', platform=self.utmt_wrapper.get_platform()), 'error')
             return False
         if is_modpack:
             self.patching_logger.info('UTMTCLI is available, proceeding with modpack creation')
@@ -83,14 +85,21 @@ class MultiModMerger(QObject):
                 else:
                     merge_msg = f'Preparing to merge {total_mods} mod(s) for {total_chapters} chapter(s)...'
             self.progress_update.emit(0, merge_msg)
-            if is_modpack:
-                self.temp_merge_dir = tempfile.mkdtemp(prefix='deltahub_modpack_')
-            else:
-                self.temp_merge_dir = tempfile.mkdtemp(prefix='deltahub_multimod_')
-            self.backup_dir = os.path.join(self.temp_merge_dir, 'backups')
-            os.makedirs(self.backup_dir, exist_ok=True)
-            self.patching_logger.info(f'Created temp merge directory: {self.temp_merge_dir}')
-            current_progress += 5
+            temp_merge_dir_created = False
+            try:
+                if is_modpack:
+                    self.temp_merge_dir = tempfile.mkdtemp(prefix='deltahub_modpack_')
+                else:
+                    self.temp_merge_dir = tempfile.mkdtemp(prefix='deltahub_multimod_')
+                temp_merge_dir_created = True
+                backup_dir = os.path.join(self.temp_merge_dir, 'backups')
+                self.backup_manager = BackupManager(backup_dir, patching_logger=self.patching_logger)
+                self.patching_logger.info(f'Created temp merge directory: {self.temp_merge_dir}')
+                current_progress += 5
+            except Exception as e:
+                self.patching_logger.error(f'Failed to create temp merge directory: {e}', exc_info=True)
+                self.status_update.emit(tr('errors.temp_dir_creation_failed'), 'error')
+                return False
             try:
                 if is_modpack:
                     merge_msg = tr('status.merging_mods', progress=current_progress)
@@ -109,7 +118,7 @@ class MultiModMerger(QObject):
                 if self._cancelled:
                     if not is_modpack:
                         for cid in chapter_mods.keys():
-                            self._restore_backups(cid)
+                            self.backup_manager.restore_backups(cid)
                     return False
                 chapter_index += 1
                 chapter_progress_base = (chapter_index - 1) * (100 // total_chapters) if total_chapters > 0 else 0
@@ -143,7 +152,8 @@ class MultiModMerger(QObject):
                         self.patching_logger.warning(f'Target directory not found for chapter {chapter_id}, skipping mods for this chapter. The game may not have this chapter installed.')
                         continue
                     self.patching_logger.error(f'Failed to merge mods for chapter {chapter_id}, restoring backups')
-                    self._restore_backups(chapter_id)
+                    if self.backup_manager:
+                        self.backup_manager.restore_backups(chapter_id)
                     try:
                         failed_msg = tr('status.merge_failed')
                     except BaseException:
@@ -174,13 +184,11 @@ class MultiModMerger(QObject):
             if is_modpack:
                 self.patching_logger.info('Modpack creation completed successfully')
                 if self.temp_merge_dir and os.path.exists(self.temp_merge_dir):
-                    try:
-                        shutil.rmtree(self.temp_merge_dir)
+                    if safe_rmtree(self.temp_merge_dir):
                         self.patching_logger.info(f'Cleaned up temp merge directory for modpack: {self.temp_merge_dir}')
-                    except Exception as e:
-                        self.patching_logger.warning(f'Failed to cleanup temp merge dir for modpack {self.temp_merge_dir}: {e}')
+                    else:
+                        self.patching_logger.warning(f'Failed to cleanup temp merge dir for modpack {self.temp_merge_dir}')
                 self.temp_merge_dir = None
-                self.backup_dir = None
             else:
                 self.patching_logger.info('Multi-mod merge completed successfully')
                 if self.temp_merge_dir and os.path.exists(self.temp_merge_dir):
@@ -188,15 +196,15 @@ class MultiModMerger(QObject):
                         for item in os.listdir(self.temp_merge_dir):
                             item_path = os.path.join(self.temp_merge_dir, item)
                             if item != 'backups':
-                                try:
-                                    if os.path.isdir(item_path):
-                                        shutil.rmtree(item_path)
+                                if os.path.isdir(item_path):
+                                    if safe_rmtree(item_path):
                                         self.patching_logger.debug(f'Removed temp directory: {item_path}')
                                     else:
-                                        os.remove(item_path)
-                                        self.patching_logger.debug(f'Removed temp file: {item_path}')
-                                except Exception as e:
-                                    self.patching_logger.warning(f'Failed to remove temp item {item_path}: {e}')
+                                        self.patching_logger.warning(f'Failed to remove temp directory {item_path}')
+                                elif safe_remove(item_path):
+                                    self.patching_logger.debug(f'Removed temp file: {item_path}')
+                                else:
+                                    self.patching_logger.warning(f'Failed to remove temp file {item_path}')
                         self.patching_logger.info(f'Cleaned up temp files from merge directory, kept backups: {self.temp_merge_dir}')
                     except Exception as e:
                         self.patching_logger.warning(f'Failed to cleanup temp files from merge dir {self.temp_merge_dir}: {e}')
@@ -209,8 +217,15 @@ class MultiModMerger(QObject):
             self.status_update.emit(tr('errors.merge_failed', error=str(e)), 'error')
             if not is_modpack:
                 for chapter_id in chapter_mods.keys():
-                    self._restore_backups(chapter_id)
+                    if self.backup_manager:
+                        self.backup_manager.restore_backups(chapter_id)
             return False
+        finally:
+            if hasattr(self, 'temp_merge_dir') and self.temp_merge_dir and os.path.exists(self.temp_merge_dir):
+                if is_modpack:
+                    if not safe_rmtree(self.temp_merge_dir):
+                        self.patching_logger.warning(f'Failed to cleanup temp merge dir in finally block: {self.temp_merge_dir}')
+                    self.temp_merge_dir = None
 
     def _merge_mods_for_chapter(self, chapter_id: int, mods_list: List[Any], progress_base: int = 0, total_chapters: int = 1) -> bool:
         self.patching_logger.debug(f'_merge_mods_for_chapter: chapter_id={chapter_id}, mods_count={len(mods_list)}')
@@ -227,7 +242,7 @@ class MultiModMerger(QObject):
         data_win_path = self._find_data_win(target_dir)
         if not data_win_path:
             return self._apply_file_overrides_only(chapter_id, mods_list, target_dir)
-        if not self._backup_file(chapter_id, data_win_path):
+        if not self.backup_manager.backup_file(chapter_id, data_win_path):
             return False
         return self._perform_chapter_merge(chapter_id, mods_list, data_win_path, target_dir, None, progress_base, total_chapters, is_modpack=False)
 
@@ -287,10 +302,10 @@ class MultiModMerger(QObject):
                         extracted_chapter_id = self._extract_chapter_id_from_path(target_dir)
                         if extracted_chapter_id is not None:
                             self.patching_logger.info(f'[SINGLE_MOD] Creating backup before replacing data.win (chapter {extracted_chapter_id})')
-                            if not self._backup_file(extracted_chapter_id, output_data_win_path):
+                            if not self.backup_manager.backup_file(extracted_chapter_id, output_data_win_path):
                                 self.patching_logger.error(f'[SINGLE_MOD] Failed to create backup of {output_data_win_path} before replacement')
                                 if not is_modpack:
-                                    self._restore_backups(chapter_id)
+                                    self.backup_manager.restore_backups(chapter_id)
                                 return False
                         else:
                             self.patching_logger.warning(f'[SINGLE_MOD] Could not extract chapter ID from path {target_dir}, backup may not work correctly')
@@ -304,7 +319,7 @@ class MultiModMerger(QObject):
                     except Exception as e:
                         self.patching_logger.error(f'[SINGLE_MOD] Failed to copy ready data.win file from {mod_name}: {e}', exc_info=True)
                         if not is_modpack:
-                            self._restore_backups(chapter_id)
+                            self.backup_manager.restore_backups(chapter_id)
                         return False
                 if data_patches and (not ready_data_win_files) and (not csx_scripts):
                     self.patching_logger.info(f'Single mod {mod_name} with only xdelta patch(es) - applying directly')
@@ -312,11 +327,11 @@ class MultiModMerger(QObject):
                         if os.path.exists(output_data_win_path):
                             extracted_chapter_id = self._extract_chapter_id_from_path(target_dir)
                             if extracted_chapter_id is not None:
-                                self._backup_file(extracted_chapter_id, output_data_win_path)
+                                self.backup_manager.backup_file(extracted_chapter_id, output_data_win_path)
                         if not self._apply_xdelta_patches(output_data_win_path, data_patches, progress_callback=lambda p: self.progress_update.emit(min(int(p * 50), 95), f'Applying patch from {mod_name}...')):
                             self.patching_logger.error(f'Failed to apply xdelta patches from {mod_name}')
                             if not is_modpack:
-                                self._restore_backups(chapter_id)
+                                self.backup_manager.restore_backups(chapter_id)
                             return False
                         self.patching_logger.info(f'Successfully applied xdelta patches from {mod_name} to {output_data_win_path}')
                         used_archive_names = set()
@@ -326,7 +341,7 @@ class MultiModMerger(QObject):
                     except Exception as e:
                         self.patching_logger.error(f'Failed to apply xdelta patches: {e}', exc_info=True)
                         if not is_modpack:
-                            self._restore_backups(chapter_id)
+                            self.backup_manager.restore_backups(chapter_id)
                         return False
                 if csx_scripts and (not ready_data_win_files) and (not data_patches):
                     self.patching_logger.info(f'Single mod {mod_name} with only CSX script(s) - executing directly')
@@ -334,11 +349,11 @@ class MultiModMerger(QObject):
                         if os.path.exists(output_data_win_path):
                             extracted_chapter_id = self._extract_chapter_id_from_path(target_dir)
                             if extracted_chapter_id is not None:
-                                self._backup_file(extracted_chapter_id, output_data_win_path)
+                                self.backup_manager.backup_file(extracted_chapter_id, output_data_win_path)
                         if not self._apply_csx_scripts(output_data_win_path, csx_scripts):
                             self.patching_logger.error(f'Failed to execute CSX scripts from {mod_name}')
                             if not is_modpack:
-                                self._restore_backups(chapter_id)
+                                self.backup_manager.restore_backups(chapter_id)
                             return False
                         self.patching_logger.info(f'Successfully executed CSX scripts from {mod_name} on {output_data_win_path}')
                         used_archive_names = set()
@@ -348,7 +363,7 @@ class MultiModMerger(QObject):
                     except Exception as e:
                         self.patching_logger.error(f'Failed to execute CSX scripts: {e}', exc_info=True)
                         if not is_modpack:
-                            self._restore_backups(chapter_id)
+                            self.backup_manager.restore_backups(chapter_id)
                         return False
         mods_already_exported = set()
         mod_types = {}
@@ -394,8 +409,8 @@ class MultiModMerger(QObject):
                 self.progress_update.emit(min(patch_progress, 95), f'Merging ready data.win from {mod_name}...')
                 if not self._handle_ready_data_win(mod_data_win, ready_data_win_files, mod_dir):
                     self.patching_logger.error(f'Failed to merge ready data.win files from {mod_name}')
-                    if not is_modpack:
-                        self._restore_backups(chapter_id)
+                    if not is_modpack and self.backup_manager:
+                        self.backup_manager.restore_backups(chapter_id)
                     return False
                 self.patching_logger.info(f'Successfully merged ready data.win files from {mod_name} (mod {mod_number})')
                 target_dir_result = self._get_target_dir(chapter_id)
@@ -413,8 +428,8 @@ class MultiModMerger(QObject):
                 self.progress_update.emit(min(patch_progress, 95), f'Applying patches from {mod_name}...')
                 if not self._apply_xdelta_patches(mod_data_win, data_patches, progress_callback=lambda p: self.progress_update.emit(min(mod_progress_start + int(mod_progress_range * (0.3 + p * 0.4)), 95), f'Applying patches from {mod_name}...')):
                     self.patching_logger.error(f'[MERGE] Failed to apply data patches from {mod_name} (mod {mod_number}). This may be due to incompatibility with previously applied mods. The patch may have been created for the original data.win, but the file has already been modified.')
-                    if not is_modpack:
-                        self._restore_backups(chapter_id)
+                    if not is_modpack and self.backup_manager:
+                        self.backup_manager.restore_backups(chapter_id)
                     return False
                 self.patching_logger.info(f'Successfully applied data patches from {mod_name} (mod {mod_number})')
                 mod_patched_files[mod_number] = mod_data_win
@@ -424,8 +439,8 @@ class MultiModMerger(QObject):
                 self.progress_update.emit(min(script_progress, 95), f'Executing scripts from {mod_name}...')
                 if not self._apply_csx_scripts(mod_data_win, csx_scripts):
                     self.patching_logger.error(f'Failed to execute CSX scripts from {mod_name}')
-                    if not is_modpack:
-                        self._restore_backups(chapter_id)
+                    if not is_modpack and self.backup_manager:
+                        self.backup_manager.restore_backups(chapter_id)
                     return False
                 self.patching_logger.info(f'Successfully executed CSX scripts from {mod_name} (mod {mod_number})')
                 mod_patched_files[mod_number] = mod_data_win
@@ -596,8 +611,8 @@ class MultiModMerger(QObject):
         expected_objects_dir = os.path.join(data_win_dir, 'Objects')
         for idx, (mod_number, mod_priority, mod_name, objects_dir) in enumerate(objects_dirs_to_import):
             if self._cancelled:
-                if not is_modpack:
-                    self._restore_backups(chapter_id)
+                if not is_modpack and self.backup_manager:
+                    self.backup_manager.restore_backups(chapter_id)
                 return False
             merge_step = idx / len(objects_dirs_to_import) * (import_progress * 0.5) if objects_dirs_to_import else 0
             current_progress = progress_base + int(xdelta_progress + export_progress + merge_step)
@@ -624,7 +639,7 @@ class MultiModMerger(QObject):
             if mod_1_patched and os.path.exists(mod_1_patched):
                 mod_1_patched_backup = mod_1_patched + '.backup_for_export'
                 if os.path.exists(mod_1_patched_backup):
-                    os.remove(mod_1_patched_backup)
+                    safe_remove(mod_1_patched_backup)
                 shutil.copy2(mod_1_patched, mod_1_patched_backup)
                 self.patching_logger.info(f'Created backup of highest priority mod file: {mod_1_patched_backup}')
         if os.path.exists(expected_objects_dir):
@@ -642,16 +657,16 @@ class MultiModMerger(QObject):
                 if ramb_sprites_before:
                     self.patching_logger.info(f'[IMPORT] Found ramb sprites before import: {ramb_sprites_before}')
             if self._cancelled:
-                if not is_modpack:
-                    self._restore_backups(chapter_id)
+                if not is_modpack and self.backup_manager:
+                    self.backup_manager.restore_backups(chapter_id)
                 return False
             import_progress_step = progress_base + int(xdelta_progress + export_progress + import_progress * 0.5)
             self.progress_update.emit(min(import_progress_step, 95), 'Importing merged assets into data.win...')
             self.patching_logger.info('Importing merged Objects directory (contains all exported mods, sorted by priority) into data.win')
             if not self._import_assets_from_objects_dir(base_data_win, expected_objects_dir, mods_to_apply, mods_count):
                 self.patching_logger.warning('Failed to import merged assets into data.win')
-                if not is_modpack:
-                    self._restore_backups(chapter_id)
+                if not is_modpack and self.backup_manager:
+                    self.backup_manager.restore_backups(chapter_id)
                 return False
             self.patching_logger.info('Successfully imported merged Objects into data.win')
             code_files_after = [f for f in os.listdir(code_entries_before) if f.endswith('.gml')] if os.path.exists(code_entries_before) else []
@@ -667,20 +682,20 @@ class MultiModMerger(QObject):
                 mod_1_objects_dir = os.path.join(mod_1_export_dir, 'Objects')
                 os.makedirs(mod_1_objects_dir, exist_ok=True)
                 mod_1_data_win_dir = os.path.dirname(mod_1_patched_backup)
-                export_script = self.utmtcli.get_script_path('SmartExport')
+                export_script = self.utmt_wrapper.get_script_path('SmartExport')
                 returncode = 1
                 stderr = ''
                 if export_script:
                     self.patching_logger.debug('Exporting modified GML code from highest priority mod using SmartExport')
                     env = os.environ.copy()
                     env['SMARTEXPORT_VANILLA_PATH'] = original_data_win
-                    returncode, stdout, stderr = self.utmtcli.execute_with_scripts(mod_1_patched_backup, ['SmartExport'], cwd=mod_1_data_win_dir, env=env)
+                    returncode, stdout, stderr = self.utmt_wrapper.execute_scripts(mod_1_patched_backup, ['SmartExport'], cwd=mod_1_data_win_dir, env=env)
                 else:
-                    export_script = self.utmtcli.get_script_path('ExportAllCode')
+                    export_script = self.utmt_wrapper.get_script_path('ExportAllCode')
                     if export_script:
                         self.patching_logger.warning('SmartExport not found, falling back to ExportAllCode (may overwrite unmodified code)')
                         self.patching_logger.debug('Exporting all GML code from highest priority mod using ExportAllCode')
-                        returncode, stdout, stderr = self.utmtcli.execute_with_scripts(mod_1_patched_backup, ['ExportAllCode'], cwd=mod_1_data_win_dir)
+                        returncode, stdout, stderr = self.utmt_wrapper.execute_scripts(mod_1_patched_backup, ['ExportAllCode'], cwd=mod_1_data_win_dir)
                     else:
                         self.patching_logger.warning('SmartExport and ExportAllCode scripts not found, cannot export from highest priority mod')
                 if returncode == 0:
@@ -751,27 +766,21 @@ class MultiModMerger(QObject):
                         self.patching_logger.debug('Objects directory not created by SmartExport/ExportAllCode for highest priority mod')
                 else:
                     self.patching_logger.warning(f'SmartExport/ExportAllCode failed for highest priority mod: {stderr[:300]}')
-                try:
-                    shutil.rmtree(mod_1_export_dir)
-                except Exception as e:
-                    self.patching_logger.warning(f'Failed to clean up temporary export directory: {e}')
-                try:
-                    if os.path.exists(mod_1_patched_backup):
-                        os.remove(mod_1_patched_backup)
-                except Exception as e:
-                    self.patching_logger.warning(f'Failed to clean up backup file: {e}')
+                if not safe_rmtree(mod_1_export_dir):
+                    self.patching_logger.warning(f'Failed to clean up temporary export directory: {mod_1_export_dir}')
+                if mod_1_patched_backup and os.path.exists(mod_1_patched_backup):
+                    if not safe_remove(mod_1_patched_backup):
+                        self.patching_logger.warning(f'Failed to clean up backup file: {mod_1_patched_backup}')
             except Exception as e:
                 self.patching_logger.error(f'Failed to export/import from highest priority mod: {e}', exc_info=True)
-                try:
-                    if mod_1_patched_backup and os.path.exists(mod_1_patched_backup):
-                        os.remove(mod_1_patched_backup)
-                except Exception as cleanup_error:
-                    self.patching_logger.warning(f'Failed to clean up backup file after error: {cleanup_error}')
+                if mod_1_patched_backup and os.path.exists(mod_1_patched_backup):
+                    if not safe_remove(mod_1_patched_backup):
+                        self.patching_logger.warning(f'Failed to clean up backup file after error: {mod_1_patched_backup}')
         else:
             self.patching_logger.debug('No highest priority mod changes to apply (no backup file created)')
         if self._cancelled:
-            if not is_modpack:
-                self._restore_backups(chapter_id)
+            if not is_modpack and self.backup_manager:
+                self.backup_manager.restore_backups(chapter_id)
             return False
         if os.path.exists(base_objects_dir):
             self.patching_logger.debug(f'Final Objects directory in base: {base_objects_dir}')
@@ -791,12 +800,12 @@ class MultiModMerger(QObject):
             self.patching_logger.info(f'Copied merged data.win to {final_output_path}')
         except Exception as e:
             self.patching_logger.error(f'Failed to copy merged data.win: {e}')
-            if not is_modpack:
-                self._restore_backups(chapter_id)
+            if not is_modpack and self.backup_manager:
+                self.backup_manager.restore_backups(chapter_id)
             return False
         if self._cancelled:
-            if not is_modpack:
-                self._restore_backups(chapter_id)
+            if not is_modpack and self.backup_manager:
+                self.backup_manager.restore_backups(chapter_id)
             return False
         if is_modpack:
             if modpack_dir is None:
@@ -810,8 +819,8 @@ class MultiModMerger(QObject):
         else:
             used_archive_names = set()
             for mod_data in mods_to_apply:
-                if self._cancelled:
-                    self._restore_backups(chapter_id)
+                if self._cancelled and self.backup_manager:
+                    self.backup_manager.restore_backups(chapter_id)
                     return False
                 mod_source_dir = self._get_mod_source_dir(mod_data, chapter_id)
                 if mod_source_dir:
@@ -920,7 +929,8 @@ class MultiModMerger(QObject):
                     self.patching_logger.error(f'Temp output file was not created: {temp_output}')
                     self.status_update.emit(tr('errors.xdelta_patch_failed', patch=os.path.basename(patch_path)), 'error')
                     return False
-                shutil.move(temp_output, data_win_path)
+                if not safe_move(temp_output, data_win_path):
+                    raise OSError(f'Failed to move patched file from {temp_output} to {data_win_path}')
                 self.patching_logger.info(f'Patch {idx + 1}/{total_patches} applied successfully')
             except subprocess.TimeoutExpired:
                 self.patching_logger.error(f'xdelta patch timed out after 300 seconds: {patch_path}')
@@ -934,16 +944,16 @@ class MultiModMerger(QObject):
     def _apply_csx_scripts(self, data_win_path: str, csx_scripts: List[str]) -> bool:
         if not csx_scripts:
             return True
-        if not self.utmtcli.is_available():
+        if not self.utmt_wrapper.is_available():
             self.patching_logger.error('UTMTCLI not available for executing CSX scripts')
-            self.status_update.emit(tr('errors.utmtcli_not_available', platform=self.utmtcli.get_platform()), 'error')
+            self.status_update.emit(tr('errors.utmtcli_not_available', platform=self.utmt_wrapper.get_platform()), 'error')
             return False
         for script_path in csx_scripts:
             if self._cancelled:
                 return False
             try:
                 self.patching_logger.info(f'Executing CSX script: {os.path.basename(script_path)}')
-                returncode, stdout, stderr = self.utmtcli.execute_with_scripts(data_win_path, [script_path], output_path=data_win_path, cwd=self.temp_merge_dir if self.temp_merge_dir else None)
+                returncode, stdout, stderr = self.utmt_wrapper.execute_script(data_win_path, script_path, output_path=data_win_path, cwd=self.temp_merge_dir if self.temp_merge_dir else None)
                 if returncode != 0:
                     self.patching_logger.error(f'CSX script execution failed: {stderr[:500]}')
                     self.status_update.emit(tr('errors.csx_script_failed', script=os.path.basename(script_path)), 'error')
@@ -981,21 +991,7 @@ class MultiModMerger(QObject):
             has_assets = self._mod_has_assets(mod_source_dir)
             if not has_assets:
                 return True
-            import_graphics_script = self.utmtcli.get_script_path('ImportGraphics')
-            if import_graphics_script:
-                returncode, stdout, stderr = self.utmtcli.execute_with_scripts(data_win_path, ['ImportGraphics'], output_path=data_win_path, cwd=mod_source_dir)
-                if returncode != 0:
-                    self.patching_logger.warning(f'ImportGraphics failed: {stderr}')
-            import_gml_script = self.utmtcli.get_script_path('ImportGML')
-            if import_gml_script:
-                returncode, stdout, stderr = self.utmtcli.execute_with_scripts(data_win_path, ['ImportGML'], output_path=data_win_path, cwd=mod_source_dir)
-                if returncode != 0:
-                    self.patching_logger.warning(f'ImportGML failed: {stderr}')
-            import_asset_order_script = self.utmtcli.get_script_path('ImportAssetOrder')
-            if import_asset_order_script:
-                returncode, stdout, stderr = self.utmtcli.execute_with_scripts(data_win_path, ['ImportAssetOrder'], output_path=data_win_path, cwd=mod_source_dir)
-                if returncode != 0:
-                    self.patching_logger.warning(f'ImportAssetOrder failed: {stderr}')
+            return self.utmt_wrapper.merge_assets(data_win_path, mod_source_dir)
             return True
         except Exception as e:
             self.patching_logger.error(f'UTMTCLI asset merge failed: {e}', exc_info=True)
@@ -1009,7 +1005,7 @@ class MultiModMerger(QObject):
             has_assets = False
         if not has_assets:
             return True
-        import_script = self.utmtcli.get_script_path(script_name)
+        import_script = self.utmt_wrapper.get_script_path(script_name)
         if not import_script:
             return True
         step_number = asset_config.get('step_number', '?')
@@ -1032,7 +1028,7 @@ class MultiModMerger(QObject):
             if resource_name not in self.resource_modification_history:
                 self.resource_modification_history[resource_name] = []
             self.resource_modification_history[resource_name].append({'type': resource_type, 'mod': mod_name_for_tracking, 'action': resource_action, 'timestamp': time.time()})
-        returncode, stdout, stderr = self.utmtcli.execute_with_scripts(data_win_path, [script_name], output_path=data_win_path, cwd=data_win_dir)
+        returncode, stdout, stderr = self.utmt_wrapper.execute_script(data_win_path, script_name, output_path=data_win_path, cwd=data_win_dir)
         if analyze_errors:
             self._analyze_compilation_errors(stdout, stderr, script_name, mod_name_for_tracking)
         if returncode != 0:
@@ -1218,10 +1214,10 @@ class MultiModMerger(QObject):
             asset_configs = [{'script_name': 'ImportGraphics', 'has_assets': has_graphics, 'step_number': '1/12', 'resource_type': 'sprite', 'resource_action': 'imported', 'get_resources_func': get_sprite_resources}, {'script_name': 'ImportShaders', 'has_assets': has_shaders, 'step_number': '2/12', 'resource_type': 'shader', 'resource_action': 'imported', 'get_resources_func': get_shader_resources}, {'script_name': 'ImportNewObjects', 'has_assets': has_new_objects, 'step_number': '3/12', 'resource_type': 'new_object', 'resource_action': 'created', 'get_resources_func': get_new_object_resources}, {'script_name': 'ImportGML', 'has_assets': has_gml, 'step_number': '5/12', 'resource_type': 'code', 'resource_action': 'modified', 'get_resources_func': get_gml_resources, 'analyze_errors': True}, {'script_name': 'ImportExistingObjects', 'has_assets': has_existing_objects, 'step_number': '9/12', 'resource_type': 'existing_object', 'resource_action': 'modified', 'get_resources_func': get_existing_object_resources}, {'script_name': 'ImportRooms', 'has_assets': has_rooms, 'step_number': '10/12', 'resource_type': 'room', 'resource_action': 'imported', 'get_resources_func': get_room_resources}, {'script_name': 'ImportTilesets', 'has_assets': has_tilesets, 'step_number': '10/14', 'resource_type': 'tileset', 'resource_action': 'imported', 'get_resources_func': get_tileset_resources, 'extra_resources_func': get_tileset_config_resource}, {'script_name': 'ImportFonts', 'has_assets': False, 'check_dir_func': lambda obj_dir: os.path.exists(os.path.join(obj_dir, 'Fonts')), 'step_number': '11/14', 'resource_type': 'font', 'resource_action': 'modified', 'get_resources_func': get_font_resources}, {'script_name': 'ImportSounds', 'has_assets': False, 'check_dir_func': lambda obj_dir: os.path.exists(os.path.join(obj_dir, 'Sounds')), 'step_number': '12/14', 'resource_type': 'sound', 'resource_action': 'modified', 'get_resources_func': get_sound_resources}]
             for asset_config in asset_configs:
                 self._import_asset_type(asset_config, data_win_path, data_win_dir, objects_dir, mod_name_for_tracking)
-            import_asset_order_script = self.utmtcli.get_script_path('ImportAssetOrder')
+            import_asset_order_script = self.utmt_wrapper.get_script_path('ImportAssetOrder')
             if import_asset_order_script and has_asset_order:
                 self.patching_logger.info(f'[IMPORT] [14/14] Importing asset order from {objects_dir}')
-                returncode, stdout, stderr = self.utmtcli.execute_with_scripts(data_win_path, ['ImportAssetOrder'], output_path=data_win_path, cwd=data_win_dir)
+                returncode, stdout, stderr = self.utmt_wrapper.execute_scripts(data_win_path, ['ImportAssetOrder'], output_path=data_win_path, cwd=data_win_dir)
                 if returncode != 0:
                     self.patching_logger.warning(f'ImportAssetOrder failed: {stderr[:300]}')
                 else:
@@ -1455,7 +1451,7 @@ class MultiModMerger(QObject):
         target_new_objects = os.path.join(target_objects_dir, 'NewObjects')
         if os.path.exists(source_new_objects):
             if os.path.exists(target_new_objects):
-                shutil.rmtree(target_new_objects)
+                safe_rmtree(target_new_objects)
             shutil.copytree(source_new_objects, target_new_objects, dirs_exist_ok=True)
 
     def _merge_two_data_win_files(self, base_file: str, other_file: str, mod_dir: Optional[str] = None) -> bool:
@@ -1465,11 +1461,11 @@ class MultiModMerger(QObject):
         try:
             merge_temp_dir = os.path.join(self.temp_merge_dir, 'merge_temp')
             os.makedirs(merge_temp_dir, exist_ok=True)
-            export_script = self.utmtcli.get_script_path('SmartExport')
+            export_script = self.utmt_wrapper.get_script_path('SmartExport')
             if export_script:
                 export_temp = os.path.join(merge_temp_dir, 'other_export')
                 os.makedirs(export_temp, exist_ok=True)
-                returncode, stdout, stderr = self.utmtcli.execute_with_scripts(other_file, ['SmartExport'], cwd=export_temp)
+                returncode, stdout, stderr = self.utmt_wrapper.execute_scripts(other_file, ['SmartExport'], cwd=export_temp)
                 if returncode == 0:
                     if mod_dir:
                         export_objects_dir = os.path.join(export_temp, 'Objects')
@@ -1482,24 +1478,24 @@ class MultiModMerger(QObject):
                                 shutil.copytree(export_objects_dir, mod_objects_dir)
                             self.patching_logger.info(f'Copied exported objects to {mod_objects_dir} for later import')
                     scripts_to_run = []
-                    if self.utmtcli.get_script_path('ImportGraphics'):
+                    if self.utmt_wrapper.get_script_path('ImportGraphics'):
                         scripts_to_run.append('ImportGraphics')
-                    if self.utmtcli.get_script_path('ImportShaders'):
+                    if self.utmt_wrapper.get_script_path('ImportShaders'):
                         scripts_to_run.append('ImportShaders')
-                    if self.utmtcli.get_script_path('ImportNewObjects'):
+                    if self.utmt_wrapper.get_script_path('ImportNewObjects'):
                         scripts_to_run.append('ImportNewObjects')
-                    if self.utmtcli.get_script_path('ImportGML'):
+                    if self.utmt_wrapper.get_script_path('ImportGML'):
                         scripts_to_run.append('ImportGML')
-                    if self.utmtcli.get_script_path('ImportExistingObjects'):
+                    if self.utmt_wrapper.get_script_path('ImportExistingObjects'):
                         scripts_to_run.append('ImportExistingObjects')
-                    if self.utmtcli.get_script_path('ImportRooms'):
+                    if self.utmt_wrapper.get_script_path('ImportRooms'):
                         scripts_to_run.append('ImportRooms')
-                    if self.utmtcli.get_script_path('ImportTilesets'):
+                    if self.utmt_wrapper.get_script_path('ImportTilesets'):
                         scripts_to_run.append('ImportTilesets')
-                    if self.utmtcli.get_script_path('ImportAssetOrder'):
+                    if self.utmt_wrapper.get_script_path('ImportAssetOrder'):
                         scripts_to_run.append('ImportAssetOrder')
                     if scripts_to_run:
-                        returncode, stdout, stderr = self.utmtcli.execute_with_scripts(base_file, scripts_to_run, output_path=base_file, cwd=export_temp)
+                        returncode, stdout, stderr = self.utmt_wrapper.execute_scripts(base_file, scripts_to_run, output_path=base_file, cwd=export_temp)
                         if returncode == 0:
                             self.patching_logger.info('Successfully merged two data.win files using UTMTCLI scripts')
                             return True
@@ -1574,13 +1570,12 @@ class MultiModMerger(QObject):
                     chapter_id = self._extract_chapter_id_from_path(target_dir)
                     is_new_file = not os.path.exists(target_path)
                     if not is_new_file:
-                        if chapter_id is not None:
-                            self._backup_file(chapter_id, target_path)
-                    elif chapter_id is not None:
-                        if chapter_id not in self.added_files:
-                            self.added_files[chapter_id] = set()
-                        self.added_files[chapter_id].add(target_path)
-                        self._save_backups_to_manifest()
+                        if chapter_id is not None and self.backup_manager:
+                            self.backup_manager.backup_file(chapter_id, target_path)
+                    elif chapter_id is not None and self.backup_manager:
+                        self.backup_manager.mark_file_added(chapter_id, target_path)
+                        if self._session_manifest_path:
+                            self.backup_manager.save_backups_to_manifest(self._session_manifest_path)
                 os.makedirs(os.path.dirname(target_path), exist_ok=True)
                 try:
                     shutil.copy2(source_path, target_path)
@@ -1591,12 +1586,12 @@ class MultiModMerger(QObject):
 
     def _extract_archive_to_target(self, archive_path: str, target_dir: str) -> bool:
         try:
-            from utils.file_utils import _extract_archive_raw
+            from utils.archive_utils import ArchiveExtractor
             import tempfile
             archive_lower = os.path.basename(archive_path).lower()
             chapter_id = self._extract_chapter_id_from_path(target_dir)
             with tempfile.TemporaryDirectory(prefix='mm_extract_') as temp_extract_dir:
-                _extract_archive_raw(archive_path, archive_lower, temp_extract_dir)
+                ArchiveExtractor.extract(archive_path, temp_extract_dir)
                 for root, dirs, files in os.walk(temp_extract_dir):
                     rel_root = os.path.relpath(root, temp_extract_dir)
                     if rel_root == '.':
@@ -1611,15 +1606,14 @@ class MultiModMerger(QObject):
                         os.makedirs(target_dirname, exist_ok=True)
                         is_new_file = not os.path.exists(target_file)
                         if not is_new_file:
-                            if chapter_id is not None:
-                                self._backup_file(chapter_id, target_file)
-                        elif chapter_id is not None:
-                            if chapter_id not in self.added_files:
-                                self.added_files[chapter_id] = set()
-                            self.added_files[chapter_id].add(target_file)
+                            if chapter_id is not None and self.backup_manager:
+                                self.backup_manager.backup_file(chapter_id, target_file)
+                        elif chapter_id is not None and self.backup_manager:
+                            self.backup_manager.mark_file_added(chapter_id, target_file)
                         shutil.copy2(source_file, target_file)
-                if chapter_id is not None and chapter_id in self.added_files:
-                    self._save_backups_to_manifest()
+                if chapter_id is not None and self.backup_manager and (chapter_id in self.backup_manager.added_files):
+                    if self._session_manifest_path:
+                        self.backup_manager.save_backups_to_manifest(self._session_manifest_path)
             self.patching_logger.debug(f'Extracted archive: {archive_path}')
             return True
         except Exception as e:
@@ -1648,14 +1642,14 @@ class MultiModMerger(QObject):
         ready_files = []
         if not os.path.isdir(mod_source_dir):
             return ready_files
-        data_file_names = ['data.win', 'game.ios']
+        data_file_names = [DATA_WIN_FILENAME, 'game.ios']
         main_files = self._find_files_by_extension(mod_source_dir, ['.win', '.ios'], data_file_names)
         for file_path in main_files:
             file_lower = os.path.basename(file_path).lower()
             if file_lower in [name.lower() for name in data_file_names]:
                 ready_files.append(file_path)
                 self.patching_logger.debug(f'Found ready data file: {file_path}')
-            elif file_lower.endswith('.win') and file_lower != 'data.win':
+            elif file_lower.endswith('.win') and file_lower != DATA_WIN_FILENAME.lower():
                 ready_files.append(file_path)
                 self.patching_logger.debug(f'Found ready .win file: {file_path}')
         info_datawinmod_dir = None
@@ -1803,12 +1797,12 @@ class MultiModMerger(QObject):
                     if os.path.exists(previous_mod_data_win):
                         vanilla_backup = vanilla_file + '.backup'
                         if os.path.exists(vanilla_backup):
-                            os.remove(vanilla_backup)
+                            safe_remove(vanilla_backup)
                         shutil.copy2(vanilla_file, vanilla_backup)
                         shutil.copy2(previous_mod_data_win, vanilla_file)
                         self.patching_logger.info(f'Using previous mod {previous_mod_number} for incremental comparison (mod {mod_number})')
             if scripts:
-                returncode, stdout, stderr = self.utmtcli.execute_with_scripts(mod_data_win, scripts, output_path=mod_data_win, cwd=merge_root, env=env)
+                returncode, stdout, stderr = self.utmt_wrapper.execute_scripts(mod_data_win, scripts, output_path=mod_data_win, cwd=merge_root, env=env)
                 if returncode != 0:
                     self.patching_logger.warning(f'Export scripts failed for mod {mod_number}: {stderr[:500]}')
                     return False
@@ -1828,35 +1822,35 @@ class MultiModMerger(QObject):
                         self.patching_logger.info(f'[EXPORT] Verified: {code_count_exported} code files, {sprite_count_exported} sprites in Objects directory after SmartExport')
                         if code_count_exported == 0 and sprite_count_exported == 0:
                             self.patching_logger.warning(f'[EXPORT] WARNING: SmartExport exported 0 resources for mod {mod_number}! This may indicate a problem with comparison file or mod has no changes.')
-                export_rooms_script = self.utmtcli.get_script_path('ExportRooms')
+                export_rooms_script = self.utmt_wrapper.get_script_path('ExportRooms')
                 if export_rooms_script:
-                    returncode, stdout, stderr = self.utmtcli.execute_with_scripts(mod_data_win, ['ExportRooms'], output_path=mod_data_win, cwd=merge_root)
+                    returncode, stdout, stderr = self.utmt_wrapper.execute_scripts(mod_data_win, ['ExportRooms'], output_path=mod_data_win, cwd=merge_root)
                     if returncode != 0:
                         self.patching_logger.warning(f'ExportRooms failed for mod {mod_number}: {stderr[:500]}')
                     else:
                         self.patching_logger.info(f'Successfully exported rooms from mod {mod_number}')
-                export_shaders_script = self.utmtcli.get_script_path('ExportShaders')
+                export_shaders_script = self.utmt_wrapper.get_script_path('ExportShaders')
                 if export_shaders_script:
-                    returncode, stdout, stderr = self.utmtcli.execute_with_scripts(mod_data_win, ['ExportShaders'], output_path=mod_data_win, cwd=merge_root)
+                    returncode, stdout, stderr = self.utmt_wrapper.execute_scripts(mod_data_win, ['ExportShaders'], output_path=mod_data_win, cwd=merge_root)
                     if returncode != 0:
                         self.patching_logger.warning(f'ExportShaders failed for mod {mod_number}: {stderr[:500]}')
-                export_tilesets_script = self.utmtcli.get_script_path('ExportTilesets')
+                export_tilesets_script = self.utmt_wrapper.get_script_path('ExportTilesets')
                 if export_tilesets_script:
-                    returncode, stdout, stderr = self.utmtcli.execute_with_scripts(mod_data_win, ['ExportTilesets'], output_path=mod_data_win, cwd=merge_root)
+                    returncode, stdout, stderr = self.utmt_wrapper.execute_scripts(mod_data_win, ['ExportTilesets'], output_path=mod_data_win, cwd=merge_root)
                     if returncode != 0:
                         self.patching_logger.warning(f'ExportTilesets failed for mod {mod_number}: {stderr[:500]}')
                     else:
                         self.patching_logger.info(f'Successfully exported tilesets from mod {mod_number}')
-                export_fonts_script = self.utmtcli.get_script_path('ExportFonts')
+                export_fonts_script = self.utmt_wrapper.get_script_path('ExportFonts')
                 if export_fonts_script:
-                    returncode, stdout, stderr = self.utmtcli.execute_with_scripts(mod_data_win, ['ExportFonts'], output_path=mod_data_win, cwd=merge_root)
+                    returncode, stdout, stderr = self.utmt_wrapper.execute_scripts(mod_data_win, ['ExportFonts'], output_path=mod_data_win, cwd=merge_root)
                     if returncode != 0:
                         self.patching_logger.warning(f'ExportFonts failed for mod {mod_number}: {stderr[:500]}')
                     else:
                         self.patching_logger.info(f'Successfully exported fonts from mod {mod_number}')
-                export_sounds_script = self.utmtcli.get_script_path('ExportSounds')
+                export_sounds_script = self.utmt_wrapper.get_script_path('ExportSounds')
                 if export_sounds_script:
-                    returncode, stdout, stderr = self.utmtcli.execute_with_scripts(mod_data_win, ['ExportSounds'], output_path=mod_data_win, cwd=merge_root)
+                    returncode, stdout, stderr = self.utmt_wrapper.execute_scripts(mod_data_win, ['ExportSounds'], output_path=mod_data_win, cwd=merge_root)
                     if returncode != 0:
                         self.patching_logger.warning(f'ExportSounds failed for mod {mod_number}: {stderr[:500]}')
                     else:
@@ -1872,9 +1866,9 @@ class MultiModMerger(QObject):
             if vanilla_backup and os.path.exists(vanilla_backup):
                 try:
                     if os.path.exists(vanilla_file):
-                        os.remove(vanilla_file)
+                        safe_remove(vanilla_file)
                     shutil.copy2(vanilla_backup, vanilla_file)
-                    os.remove(vanilla_backup)
+                    safe_remove(vanilla_backup)
                     self.patching_logger.debug(f'Restored vanilla file after incremental comparison for mod {mod_number}')
                 except Exception as restore_error:
                     self.patching_logger.error(f'Failed to restore vanilla file: {restore_error}', exc_info=True)
@@ -1937,107 +1931,10 @@ class MultiModMerger(QObject):
             if os.path.exists(ios_path):
                 return ios_path
         else:
-            win_path = os.path.join(target_dir, 'data.win')
+            win_path = os.path.join(target_dir, DATA_WIN_FILENAME)
             if os.path.exists(win_path):
                 return win_path
         return None
-
-    def _backup_file(self, chapter_id: int, file_path: str) -> bool:
-        file_exists = os.path.exists(file_path)
-        if chapter_id not in self.original_files:
-            self.original_files[chapter_id] = {}
-        if file_path in self.original_files[chapter_id]:
-            self.patching_logger.debug(f'File {file_path} already backed up for chapter {chapter_id}')
-            return True
-        if not self.backup_dir:
-            self.patching_logger.error('Backup directory not set - cannot create backup')
-            return False
-        try:
-            import hashlib
-            file_path_abs = os.path.abspath(file_path)
-            path_hash = hashlib.sha256(file_path_abs.encode('utf-8')).hexdigest()[:16]
-            timestamp = int(time.time() * 1000000)
-            file_basename = sanitize_filename(os.path.basename(file_path))
-            backup_filename = f'chapter_{chapter_id}_{file_basename}_{path_hash}_{timestamp}'
-            backup_path = os.path.join(self.backup_dir, backup_filename)
-            if file_exists:
-                shutil.copy2(file_path, backup_path)
-                self.patching_logger.info(f'[BACKUP] Created backup of existing file: {file_path} -> {backup_path} (chapter {chapter_id})')
-            else:
-                with open(backup_path + '.added_by_mod', 'w') as marker:
-                    marker.write(f'File {file_path} was created by mod (did not exist before)')
-                self.patching_logger.info(f'[BACKUP] Marked file for tracking (will be created by mod): {file_path} (chapter {chapter_id})')
-                backup_path = None
-            self.original_files[chapter_id][file_path] = backup_path
-            self._save_backups_to_manifest()
-            return True
-        except Exception as e:
-            self.patching_logger.error(f'[BACKUP] Failed to backup file {file_path} for chapter {chapter_id}: {e}', exc_info=True)
-            return False
-
-    def _save_backups_to_manifest(self) -> None:
-        if not self._session_manifest_path:
-            return
-        try:
-            import json
-            manifest_data = {}
-            if os.path.exists(self._session_manifest_path):
-                try:
-                    with open(self._session_manifest_path, 'r', encoding='utf-8') as f:
-                        manifest_data = json.load(f)
-                except Exception:
-                    pass
-            multimod_backups = {}
-            for chapter_id, files_dict in self.original_files.items():
-                chapter_key = str(chapter_id)
-                multimod_backups[chapter_key] = {}
-                for file_path, backup_path in files_dict.items():
-                    multimod_backups[chapter_key][file_path] = backup_path
-            multimod_added_files = {}
-            for chapter_id, files_set in self.added_files.items():
-                chapter_key = str(chapter_id)
-                multimod_added_files[chapter_key] = list(files_set)
-            manifest_data['multimod_backups'] = multimod_backups
-            manifest_data['multimod_added_files'] = multimod_added_files
-            manifest_data['multimod_backup_dir'] = self.backup_dir
-            manifest_data['multimod_temp_dir'] = self.temp_merge_dir
-            temp_path = self._session_manifest_path + '.tmp'
-            with open(temp_path, 'w', encoding='utf-8') as f:
-                json.dump(manifest_data, f, ensure_ascii=False, indent=2)
-            if os.path.exists(self._session_manifest_path):
-                os.replace(temp_path, self._session_manifest_path)
-            else:
-                shutil.move(temp_path, self._session_manifest_path)
-        except Exception as e:
-            self.patching_logger.warning(f'Failed to save backups to manifest: {e}')
-
-    def _restore_backups(self, chapter_id: int) -> None:
-        if chapter_id not in self.original_files:
-            return
-        self.patching_logger.info(f'[RESTORE] Restoring backups for chapter {chapter_id}')
-        for file_path, backup_path in self.original_files[chapter_id].items():
-            if backup_path is None:
-                if os.path.exists(file_path):
-                    try:
-                        os.remove(file_path)
-                        self.patching_logger.info(f'[RESTORE] Removed file created by mod: {file_path} (chapter {chapter_id})')
-                    except Exception as e:
-                        self.patching_logger.error(f'[RESTORE] Failed to remove file created by mod {file_path}: {e}', exc_info=True)
-                else:
-                    self.patching_logger.debug(f'[RESTORE] File created by mod already removed: {file_path} (chapter {chapter_id})')
-                continue
-            if not os.path.exists(backup_path):
-                self.patching_logger.warning(f'[RESTORE] Backup file not found: {backup_path} (original: {file_path}, chapter {chapter_id})')
-                continue
-            try:
-                target_dir = os.path.dirname(file_path)
-                if target_dir and (not os.path.exists(target_dir)):
-                    os.makedirs(target_dir, exist_ok=True)
-                    self.patching_logger.debug(f'[RESTORE] Created target directory: {target_dir}')
-                shutil.copy2(backup_path, file_path)
-                self.patching_logger.info(f'[RESTORE] Restored backup: {file_path} <- {backup_path} (chapter {chapter_id})')
-            except Exception as e:
-                self.patching_logger.error(f'[RESTORE] Failed to restore backup {backup_path} to {file_path} (chapter {chapter_id}): {e}', exc_info=True)
 
     def _extract_chapter_id_from_path(self, path: str) -> Optional[int]:
         import re
@@ -2049,138 +1946,113 @@ class MultiModMerger(QObject):
         return None
 
     def cleanup(self, force: bool = False) -> None:
-        if force or not self.original_files:
+        has_backups = False
+        if self.backup_manager:
+            has_backups = bool(self.backup_manager.original_files)
+        if force or not has_backups:
             if self.temp_merge_dir and os.path.exists(self.temp_merge_dir):
-                try:
-                    shutil.rmtree(self.temp_merge_dir)
+                if safe_rmtree(self.temp_merge_dir):
                     self.patching_logger.info(f'Cleaned up temp merge directory: {self.temp_merge_dir}')
-                except Exception as e:
-                    self.patching_logger.warning(f'Failed to cleanup temp merge dir {self.temp_merge_dir}: {e}')
+                else:
+                    self.patching_logger.warning(f'Failed to cleanup temp merge dir {self.temp_merge_dir}')
             self.temp_merge_dir = None
-            self.backup_dir = None
         elif self.temp_merge_dir and os.path.exists(self.temp_merge_dir):
             try:
                 for item in os.listdir(self.temp_merge_dir):
                     item_path = os.path.join(self.temp_merge_dir, item)
                     if item != 'backups':
-                        try:
-                            if os.path.isdir(item_path):
-                                shutil.rmtree(item_path)
+                        if os.path.isdir(item_path):
+                            if safe_rmtree(item_path):
                                 self.patching_logger.debug(f'Removed temp directory: {item_path}')
                             else:
-                                os.remove(item_path)
-                                self.patching_logger.debug(f'Removed temp file: {item_path}')
-                        except Exception as e:
-                            self.patching_logger.warning(f'Failed to remove temp item {item_path}: {e}')
+                                self.patching_logger.warning(f'Failed to remove temp directory {item_path}')
+                        elif safe_remove(item_path):
+                            self.patching_logger.debug(f'Removed temp file: {item_path}')
+                        else:
+                            self.patching_logger.warning(f'Failed to remove temp file {item_path}')
                 self.patching_logger.info(f'Cleaned up temp files from merge directory, kept backups: {self.temp_merge_dir}')
             except Exception as e:
                 self.patching_logger.warning(f'Failed to cleanup temp files from merge dir {self.temp_merge_dir}: {e}')
 
     def restore_all_backups(self) -> bool:
+        if self.backup_manager:
+            return self.backup_manager.restore_all_backups()
         import json
-        success = True
-        files_restored = 0
-        if not self.original_files and self._session_manifest_path and os.path.exists(self._session_manifest_path):
+        if self._session_manifest_path and os.path.exists(self._session_manifest_path):
             try:
                 with open(self._session_manifest_path, 'r', encoding='utf-8') as f:
                     manifest_data = json.load(f)
-                multimod_backups = manifest_data.get('multimod_backups', {})
-                multimod_added_files = manifest_data.get('multimod_added_files', {})
                 backup_dir = manifest_data.get('multimod_backup_dir')
-                if multimod_backups and backup_dir:
-                    self.patching_logger.info(f'Loading backup info from session manifest: {len(multimod_backups)} chapter(s)')
+                original_files_data = manifest_data.get('original_files', {})
+                added_files_data = manifest_data.get('added_files', {})
+                multimod_backups = manifest_data.get('multimod_backups', {})
+                if original_files_data or added_files_data:
+                    if not backup_dir:
+                        if self.temp_merge_dir:
+                            backup_dir = os.path.join(self.temp_merge_dir, 'backups')
+                    if backup_dir and os.path.exists(backup_dir):
+                        self.patching_logger.info(f'Loading backup info from session manifest (new format): {len(original_files_data)} chapter(s) with original files, {len(added_files_data)} chapter(s) with added files')
+                        backup_manager = BackupManager(backup_dir, patching_logger=self.patching_logger)
+                        for chapter_key, files_dict in original_files_data.items():
+                            chapter_id = int(chapter_key)
+                            for file_path, backup_path in files_dict.items():
+                                if backup_path is None or backup_path == 'null':
+                                    backup_manager.original_files.setdefault(chapter_id, {})[file_path] = None
+                                else:
+                                    backup_manager.original_files.setdefault(chapter_id, {})[file_path] = backup_path
+                        for chapter_key, file_list in added_files_data.items():
+                            chapter_id = int(chapter_key)
+                            if not isinstance(file_list, list):
+                                continue
+                            for file_path in file_list:
+                                backup_manager.added_files.setdefault(chapter_id, {})[file_path] = True
+                                if chapter_id not in backup_manager.original_files or file_path not in backup_manager.original_files[chapter_id]:
+                                    backup_manager.original_files.setdefault(chapter_id, {})[file_path] = None
+                        result = backup_manager.restore_all_backups()
+                    else:
+                        self.patching_logger.debug(f'Backup directory from manifest does not exist: {backup_dir}')
+                        self.patching_logger.debug('Backups were already restored in previous session, cleaning up manifest')
+                        if self._session_manifest_path and os.path.exists(self._session_manifest_path):
+                            if safe_remove(self._session_manifest_path):
+                                self.patching_logger.debug('Removed stale session manifest')
+                            else:
+                                self.patching_logger.debug('Failed to remove stale manifest')
+                        return False
+                elif multimod_backups and backup_dir:
+                    self.patching_logger.info(f'Loading backup info from session manifest (old format): {len(multimod_backups)} chapter(s)')
                     if not os.path.exists(backup_dir):
                         self.patching_logger.debug(f'Backup directory from manifest does not exist: {backup_dir}')
                         self.patching_logger.debug('Backups were already restored in previous session, cleaning up manifest')
-                        try:
-                            if os.path.exists(self._session_manifest_path):
-                                os.remove(self._session_manifest_path)
+                        if self._session_manifest_path and os.path.exists(self._session_manifest_path):
+                            if safe_remove(self._session_manifest_path):
                                 self.patching_logger.debug('Removed stale session manifest')
-                        except Exception as e:
-                            self.patching_logger.debug(f'Failed to remove stale manifest: {e}')
+                            else:
+                                self.patching_logger.debug('Failed to remove stale manifest')
                         return False
-                    self.backup_dir = backup_dir
+                    backup_manager = BackupManager(backup_dir, patching_logger=self.patching_logger)
                     for chapter_key, files_dict in multimod_backups.items():
                         chapter_id = int(chapter_key)
-                        processed_dict = {}
                         for file_path, backup_path in files_dict.items():
                             if backup_path is None or backup_path == 'null':
-                                processed_dict[file_path] = None
+                                backup_manager.original_files.setdefault(chapter_id, {})[file_path] = None
                             else:
-                                processed_dict[file_path] = backup_path
-                        self.original_files[chapter_id] = processed_dict
-                    for chapter_key, files_list in multimod_added_files.items():
-                        chapter_id = int(chapter_key)
-                        self.added_files[chapter_id] = set(files_list)
+                                backup_manager.original_files.setdefault(chapter_id, {})[file_path] = backup_path
+                    result = backup_manager.restore_all_backups()
+                else:
+                    self.patching_logger.debug('No valid backup data found in manifest')
+                    return False
+                if self.temp_merge_dir and os.path.exists(self.temp_merge_dir):
+                    if safe_rmtree(self.temp_merge_dir):
+                        self.patching_logger.info('Cleaned up multi-mod merge directory and backups')
+                    else:
+                        self.patching_logger.warning('Failed to cleanup temp merge dir')
+                if self._session_manifest_path and os.path.exists(self._session_manifest_path):
+                    if safe_remove(self._session_manifest_path):
+                        self.patching_logger.debug('Removed session manifest after backup restoration')
+                    else:
+                        self.patching_logger.debug('Failed to remove session manifest')
+                return result
             except Exception as e:
                 self.patching_logger.warning(f'Failed to load backups from manifest: {e}')
-        if not self.original_files:
-            self.patching_logger.debug('No backup files found to restore (original_files is empty)')
-            return False
-        self.patching_logger.info(f'[RESTORE] Starting restoration of backups for {len(self.original_files)} chapter(s)')
-        for chapter_id, files_dict in self.original_files.items():
-            self.patching_logger.info(f'[RESTORE] Chapter {chapter_id}: {len(files_dict)} file(s) to process')
-            for file_path, backup_path in files_dict.items():
-                if backup_path is None:
-                    if os.path.exists(file_path):
-                        try:
-                            os.remove(file_path)
-                            self.patching_logger.info(f'[RESTORE] Removed file created by mod: {file_path} (chapter {chapter_id})')
-                            files_restored += 1
-                        except Exception as e:
-                            self.patching_logger.error(f'[RESTORE] Failed to remove file created by mod {file_path}: {e}', exc_info=True)
-                            success = False
-                    else:
-                        self.patching_logger.debug(f'[RESTORE] File created by mod already removed: {file_path} (chapter {chapter_id})')
-                    continue
-                if not os.path.exists(backup_path):
-                    self.patching_logger.warning(f'[RESTORE] Backup file not found: {backup_path} (original: {file_path}, chapter {chapter_id})')
-                    continue
-                try:
-                    target_dir = os.path.dirname(file_path)
-                    if target_dir and (not os.path.exists(target_dir)):
-                        os.makedirs(target_dir, exist_ok=True)
-                        self.patching_logger.debug(f'[RESTORE] Created target directory: {target_dir}')
-                    shutil.copy2(backup_path, file_path)
-                    self.patching_logger.info(f'[RESTORE] Restored backup: {file_path} <- {backup_path} (chapter {chapter_id})')
-                    files_restored += 1
-                except Exception as e:
-                    self.patching_logger.error(f'[RESTORE] Failed to restore backup {backup_path} to {file_path} (chapter {chapter_id}): {e}', exc_info=True)
-                    success = False
-        files_removed = 0
-        for chapter_id, added_files_set in self.added_files.items():
-            self.patching_logger.debug(f'Chapter {chapter_id}: {len(added_files_set)} added file(s) to remove')
-            for file_path in added_files_set:
-                if os.path.exists(file_path):
-                    try:
-                        if os.path.isfile(file_path):
-                            os.remove(file_path)
-                            self.patching_logger.info(f'Removed added file: {file_path}')
-                            files_removed += 1
-                        elif os.path.isdir(file_path):
-                            try:
-                                os.rmdir(file_path)
-                                self.patching_logger.info(f'Removed empty added directory: {file_path}')
-                                files_removed += 1
-                            except OSError:
-                                self.patching_logger.debug(f'Added directory not empty, leaving: {file_path}')
-                    except Exception as e:
-                        self.patching_logger.warning(f'Failed to remove added file {file_path}: {e}')
-        self.patching_logger.info(f'Restored {files_restored} file(s) from backups, removed {files_removed} added file(s)')
-        if self.temp_merge_dir and os.path.exists(self.temp_merge_dir):
-            try:
-                shutil.rmtree(self.temp_merge_dir)
-                self.patching_logger.info('Cleaned up multi-mod merge directory and backups')
-            except Exception as e:
-                self.patching_logger.warning(f'Failed to cleanup temp merge dir: {e}')
-        if self._session_manifest_path and os.path.exists(self._session_manifest_path):
-            try:
-                os.remove(self._session_manifest_path)
-                self.patching_logger.debug('Removed session manifest after backup restoration')
-            except Exception as e:
-                self.patching_logger.debug(f'Failed to remove session manifest: {e}')
-        self.original_files = {}
-        self.added_files = {}
-        self.backup_dir = None
-        self.temp_merge_dir = None
-        return success and (files_restored > 0 or files_removed > 0)
+        self.patching_logger.debug('No backup files found to restore')
+        return False

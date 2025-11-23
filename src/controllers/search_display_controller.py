@@ -1,18 +1,29 @@
 from utils.mod_filter_utils import filter_and_sort_mods
 from PyQt6.QtWidgets import QInputDialog
-from PyQt6.QtCore import QTimer
+from PyQt6.QtCore import QTimer, QObject, pyqtSignal
 from managers.localization_manager import tr
 from ui.dialogs.mod_details import open_mod_details_dialog
 from ui.widgets.mod.mod_plaque_widget import ModPlaqueWidget
 from workers.load_more_gamebanana_mods import LoadMoreGameBananaModsThread
 from config.constants import GAMEBANANA_GAME_IDS, GAMEBANANA_PER_PAGE
+from utils.ui_utils import DebounceTimer
 import logging
 logger = logging.getLogger(__name__)
 
 
-class SearchDisplayController:
+class SearchDisplayController(QObject):
+    ui_button_text_update = pyqtSignal(str, str)
+    ui_button_tooltip_update = pyqtSignal(str, str)
+    ui_button_enabled_update = pyqtSignal(str, bool)
+    ui_label_text_update = pyqtSignal(str, str)
+    ui_combo_data_requested = pyqtSignal(str)
+    combo_data_received = pyqtSignal(str, object)
+    ui_layout_update_requested = pyqtSignal(str, list)
+    ui_layout_clear_requested = pyqtSignal(str)
+    ui_widget_updates_enabled = pyqtSignal(str, bool)
 
     def __init__(self, app_state, feedback_manager, mod_manager, mod_ops, app_window):
+        super().__init__()
         self.app_state = app_state
         self.feedback_manager = feedback_manager
         self.mod_manager = mod_manager
@@ -26,6 +37,7 @@ class SearchDisplayController:
         self._pending_metadata_updates = {}
         self._metadata_update_timer = None
         self.plaque_widget_cache: dict[str, ModPlaqueWidget] = {}
+        self._update_display_debounce = DebounceTimer(delay_ms=200)
 
     def prev_page(self):
         try:
@@ -127,12 +139,14 @@ class SearchDisplayController:
         sort_param = getattr(self.app_state, 'gamebanana_sort', 'default')
 
         def on_all_results_received():
+            from PyQt6.QtCore import QThread
+            from PyQt6.QtWidgets import QApplication
+            current_thread = QThread.currentThread()
+            app_instance = QApplication.instance()
+            if app_instance and current_thread != app_instance.thread():
+                QTimer.singleShot(0, on_all_results_received)
+                return
             try:
-                from PyQt6.QtCore import QThread
-                if QThread.currentThread() != self.app.thread():
-                    logger.warning('SearchDisplayController: on_all_results_received called from non-main thread, deferring')
-                    QTimer.singleShot(0, on_all_results_received)
-                    return
                 self.app_state.gamebanana_loading = False
                 if hasattr(self, '_last_load_attempt'):
                     self._last_load_attempt['current_total'] = len(self.app_state.all_mods)
@@ -145,7 +159,7 @@ class SearchDisplayController:
                 existing_ids = {str(m.gamebanana_mod_id) for m in self.app_state.all_mods if hasattr(m, 'gamebanana_mod_id') and m.gamebanana_mod_id}
                 new_mods_to_add = [m for m in all_new_mods if hasattr(m, 'gamebanana_mod_id') and m.gamebanana_mod_id and (str(m.gamebanana_mod_id) not in existing_ids)]
                 if new_mods_to_add:
-                    self.app_state.all_mods.extend(new_mods_to_add)
+                    self.app_state.extend_all_mods(new_mods_to_add)
                     if hasattr(self, '_last_load_attempt'):
                         self._last_load_attempt['attempts'] = 0
 
@@ -223,15 +237,15 @@ class SearchDisplayController:
     def show_search_dialog(self):
         if self.app_state.search_text:
             self.app_state.search_text = ''
-            self.app.search_button.setText('🔍')
-            self.app.search_button.setToolTip(tr('ui.search_placeholder'))
+            self.ui_button_text_update.emit('search_button', '🔍')
+            self.ui_button_tooltip_update.emit('search_button', tr('ui.search_placeholder'))
             self.update_filtered_mods()
         else:
             text, ok = QInputDialog.getText(self.app, tr('ui.search_tab'), tr('ui.search_in_name_description'))
             if ok and text.strip():
                 self.app_state.search_text = text.strip()
-                self.app.search_button.setText('↻')
-                self.app.search_button.setToolTip(tr('ui.clear_search_tooltip', text=self.app_state.search_text))
+                self.ui_button_text_update.emit('search_button', '↻')
+                self.ui_button_tooltip_update.emit('search_button', tr('ui.clear_search_tooltip', text=self.app_state.search_text))
                 self.update_filtered_mods()
 
     def _build_filters_and_sort(self):
@@ -268,13 +282,18 @@ class SearchDisplayController:
         self.update_display()
 
     def update_display(self):
+        self._update_display_debounce.call(self._do_update_display)
+
+    def _do_update_display(self):
         if self._update_display_in_progress:
-            QTimer.singleShot(200, self.update_display)
             return
         self._update_display_in_progress = True
         try:
             from PyQt6.QtCore import QThread
-            if QThread.currentThread() != self.app.thread():
+            from PyQt6.QtWidgets import QApplication
+            current_thread = QThread.currentThread()
+            app_instance = QApplication.instance()
+            if app_instance and current_thread != app_instance.thread():
                 logger.warning('SearchDisplayController: update_display called from non-main thread, deferring')
                 QTimer.singleShot(0, self.update_display)
                 self._update_display_in_progress = False
@@ -338,7 +357,7 @@ class SearchDisplayController:
                         if hasattr(widget, 'mod_data') and widget.mod_data:
                             cache_key = get_mod_cache_key(widget.mod_data)
                             existing_widgets_in_layout[cache_key] = (widget, i)
-            self.app.mod_list_widget.setUpdatesEnabled(False)
+            self.ui_widget_updates_enabled.emit('mod_list_widget', False)
             widgets_shown = 0
             widgets_created = 0
             try:
@@ -414,7 +433,7 @@ class SearchDisplayController:
                         if isinstance(widget, ModPlaqueWidget):
                             widget.show()
             finally:
-                self.app.mod_list_widget.setUpdatesEnabled(True)
+                self.ui_widget_updates_enabled.emit('mod_list_widget', True)
             self.update_pagination()
         except Exception as e:
             logger.error(f'SearchDisplayController: Error in update_display: {e}', exc_info=True)
@@ -424,13 +443,13 @@ class SearchDisplayController:
     def update_pagination(self):
         if not hasattr(self.app, 'page_label') or not hasattr(self.app, 'prev_page_btn') or (not hasattr(self.app, 'next_page_btn')):
             return
-        self.app.page_label.setText(tr('ui.page_number', page=self.app_state.current_page))
-        self.app.prev_page_btn.setEnabled(self.app_state.current_page > 1)
+        self.ui_label_text_update.emit('page_label', tr('ui.page_number', page=self.app_state.current_page))
+        self.ui_button_enabled_update.emit('prev_page_btn', self.app_state.current_page > 1)
         total_mods = len(self.app_state.filtered_mods) if self.app_state.filtered_mods else 0
         current_page_mods = total_mods - (self.app_state.current_page - 1) * self.app_state.mods_per_page
         has_more_mods = current_page_mods > self.app_state.mods_per_page
         can_load_more = self.app_state.mods_loaded and (not self.app_state.gamebanana_loading)
-        self.app.next_page_btn.setEnabled(has_more_mods or can_load_more)
+        self.ui_button_enabled_update.emit('next_page_btn', has_more_mods or can_load_more)
 
     def update_search_plaques(self):
         for i in range(self.app.mod_list_layout.count() - 1):
