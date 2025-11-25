@@ -109,7 +109,8 @@ class GameLaunchController(QObject):
                             merge_thread.wait(1000)
                     if merge_thread.merger:
                         merge_thread.merger.cleanup(force=True)
-                    merge_thread.deleteLater()
+                    if not merge_thread.isRunning():
+                        merge_thread.deleteLater()
                 except Exception as e:
                     logging.error(f'Error cleaning up cancelled merge thread: {e}', exc_info=True)
                 finally:

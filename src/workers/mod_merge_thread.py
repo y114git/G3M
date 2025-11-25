@@ -23,7 +23,10 @@ class ModMergeThread(QThread):
         self.requestInterruption()
         if self.merger:
             self.merger._cancelled = True
-        self.status_update.emit('Operation cancelled', 'error')
+        try:
+            self.status_update.emit('Operation cancelled', 'error')
+        except RuntimeError:
+            pass
 
     def run(self):
         try:
@@ -31,8 +34,11 @@ class ModMergeThread(QThread):
                 self.finished.emit(False)
                 return
             self.merger = MultiModMerger(self.app_state, self.mod_manager, None)
-            self.merger.progress_update.connect(self.progress_update.emit)
-            self.merger.status_update.connect(self.status_update.emit)
+            try:
+                self.merger.progress_update.connect(self.progress_update.emit)
+                self.merger.status_update.connect(self.status_update.emit)
+            except RuntimeError:
+                pass
             self.merger._session_manifest_path = self.session_manifest_path
             self.merger._cancelled = False
             if self.isInterruptionRequested() or self._cancelled:
@@ -43,13 +49,20 @@ class ModMergeThread(QThread):
                 self.merger._cancelled = True
                 if self.merger:
                     for chapter_id in self.chapter_mods.keys():
-                        self.merger._restore_backups(chapter_id)
+                        if self.merger.backup_manager:
+                            self.merger.backup_manager.restore_backups(chapter_id)
                 success = False
-            self.finished.emit(success)
+            try:
+                self.finished.emit(success)
+            except RuntimeError:
+                pass
         except Exception as e:
             logging.error(f'ModMergeThread failed: {e}', exc_info=True)
-            self.status_update.emit(f'Merge failed: {str(e)}', 'error')
-            self.finished.emit(False)
+            try:
+                self.status_update.emit(f'Merge failed: {str(e)}', 'error')
+                self.finished.emit(False)
+            except RuntimeError:
+                pass
         finally:
             if self.merger:
                 if self.isInterruptionRequested() or self._cancelled:

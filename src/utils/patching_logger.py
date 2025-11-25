@@ -57,3 +57,14 @@ def clear_patching_logs():
     global _patching_logger, _conflicts_logger
     _patching_logger = None
     _conflicts_logger = None
+
+
+def clear_conflicts_log():
+    user_root = get_user_data_root()
+    conflicts_log_path = os.path.join(user_root, 'merge_conflicts.log')
+    if os.path.exists(conflicts_log_path):
+        try:
+            with open(conflicts_log_path, 'w', encoding='utf-8'):
+                pass
+        except Exception as e:
+            logging.warning(f'Failed to clear merge_conflicts.log: {e}')

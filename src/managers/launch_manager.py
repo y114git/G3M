@@ -14,7 +14,7 @@ from utils.game_utils import is_game_running, get_game_type_string, get_game_nam
 from models.game_modes import UndertaleGameMode, UndertaleYellowGameMode
 from utils.path_utils import find_chapter_resource_dir, resolve_game_executable
 from utils.mod_utils import get_mod_key
-from utils.patching_logger import clear_patching_logs
+from utils.patching_logger import clear_patching_logs, clear_conflicts_log
 from workers.game_monitor import GameMonitorWorker
 from managers.multi_mod_merger import MultiModMerger
 from config.constants import UI_COLORS, SLOT_ID_UNIVERSAL, GAME_EXECUTABLES
@@ -102,6 +102,12 @@ class GameLauncher(QObject):
         has_list_format = any((isinstance(mods_list, list) for mods_list in selections.values()))
         needs_multi_mod = has_list_format and any((len(mods_list) > 0 for mods_list in selections.values() if isinstance(mods_list, list)))
         logging.info(f'Multi-mod check: needs_multi_mod={needs_multi_mod} (has_list_format={has_list_format})')
+        total_mods_count = 0
+        for mods_list in selections.values():
+            if isinstance(mods_list, list):
+                total_mods_count += len(mods_list)
+        if total_mods_count >= 2:
+            clear_conflicts_log()
         if needs_multi_mod:
             logging.info('Using multi-mod merger for game launch')
             self.app_state.progress_bar_visible = True

@@ -1,5 +1,5 @@
 import logging
-from PyQt6.QtCore import QThread
+from PyQt6.QtCore import QThread, QTimer
 from managers.localization_manager import tr
 from ui.common.styling import clear_layout_widgets, show_empty_message_in_layout
 from ui.widgets.mod.installed_mod_widget import InstalledModWidget
@@ -423,17 +423,26 @@ class LibraryDisplayController:
             chapter_id = get_chapter_id_for_game_mode(self.app_state.game_mode)
             mods_list = self.slot_manager.get_used_mods_list(chapter_id)
             if mods_list and len(mods_list) >= 2:
-                chapter_mods = {-1: mods_list}
+                if chapter_id == SLOT_ID_UNIVERSAL:
+                    for ch_id in range(5):
+                        chapter_mods_for_chapter = []
+                        for mod in mods_list:
+                            if hasattr(mod, 'get_chapter_data') and mod.get_chapter_data(ch_id):
+                                chapter_mods_for_chapter.append(mod)
+                        if chapter_mods_for_chapter:
+                            chapter_mods[ch_id] = chapter_mods_for_chapter
+                else:
+                    chapter_mods = {chapter_id: mods_list}
             else:
                 mods_list = self.slot_manager.get_used_mods_list(SLOT_ID_UNIVERSAL)
-            if mods_list and len(mods_list) >= 2:
-                for chapter_id in range(5):
-                    chapter_mods_for_chapter = []
-                    for mod in mods_list:
-                        if hasattr(mod, 'get_chapter_data') and mod.get_chapter_data(chapter_id):
-                            chapter_mods_for_chapter.append(mod)
-                    if chapter_mods_for_chapter:
-                        chapter_mods[chapter_id] = chapter_mods_for_chapter
+                if mods_list and len(mods_list) >= 2:
+                    for chapter_id in range(5):
+                        chapter_mods_for_chapter = []
+                        for mod in mods_list:
+                            if hasattr(mod, 'get_chapter_data') and mod.get_chapter_data(chapter_id):
+                                chapter_mods_for_chapter.append(mod)
+                        if chapter_mods_for_chapter:
+                            chapter_mods[chapter_id] = chapter_mods_for_chapter
         if not chapter_mods:
             return
         try:
@@ -483,7 +492,7 @@ class LibraryDisplayController:
         self.app_state.clear_current_task()
         if success:
             self.mod_manager.load_local_mods()
-            self.update_display()
+            QTimer.singleShot(200, self.refresh_async)
             self.feedback_manager.show_message('success', 'dialogs.modpack_created_title', tr('dialogs.modpack_created_message', modpack_dir=modpack_dir))
         else:
             if os.path.exists(modpack_dir):
