@@ -412,7 +412,7 @@ class ModManager(QObject):
                                     logging.debug(f'Loaded icon_url from API for GameBanana mod {mod_id}: {icon_url_from_api}')
                                     config_data['icon_url'] = icon_url
                                     from utils.file_utils import atomic_write_json
-                                    config_path = os.path.join(mod_folder_path, 'mod_config.json')
+                                    config_path = os.path.join(mod_folder_path, MOD_CONFIG_FILENAME)
                                     atomic_write_json(config_path, config_data, indent=2)
                         except Exception as e:
                             logging.debug(f"Failed to load icon_url for GameBanana mod {config_data.get('gamebanana_mod_id')}: {e}")
@@ -976,7 +976,6 @@ class ModManager(QObject):
             self.invalidate_mods_cache()
             self.load_local_mods()
             self.mod_list_updated.emit()
-        if success:
             self.status_changed.emit(tr('status.mod_installed'), 'status_success')
         elif self.app_state.current_task and getattr(self.app_state.current_task, '_cancelled', False):
             self.status_changed.emit(tr('status.install_cancelled_by_user'), 'status_info')
@@ -1088,7 +1087,7 @@ class ModManager(QObject):
                 continue
             from utils.file_utils import migrate_mod_config
             migrate_mod_config(folder_path)
-            config_path = os.path.join(folder_path, 'mod_config.json')
+            config_path = os.path.join(folder_path, MOD_CONFIG_FILENAME)
             if not os.path.exists(config_path):
                 continue
             try:
@@ -1112,7 +1111,7 @@ class ModManager(QObject):
                 continue
             from utils.file_utils import migrate_mod_config
             migrate_mod_config(folder_path)
-            config_path = os.path.join(folder_path, 'mod_config.json')
+            config_path = os.path.join(folder_path, MOD_CONFIG_FILENAME)
             if not os.path.exists(config_path):
                 continue
             try:
@@ -1152,7 +1151,7 @@ class ModManager(QObject):
                 continue
             from utils.file_utils import migrate_mod_config
             migrate_mod_config(folder_path)
-            config_path = os.path.join(folder_path, 'mod_config.json')
+            config_path = os.path.join(folder_path, MOD_CONFIG_FILENAME)
             if os.path.exists(config_path):
                 try:
                     with open(config_path, 'r', encoding='utf-8') as f:

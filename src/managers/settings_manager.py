@@ -34,7 +34,7 @@ class SettingsManager(QObject):
         try:
             with open(path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-            if isinstance(data, dict) and (path.endswith('mod_config.json') or (path.endswith('config.json') and 'mod_key' in data)):
+            if isinstance(data, dict) and path.endswith('mod_config.json'):
                 needs_migration = False
                 if 'chapters' in data and 'files' not in data:
                     data['files'] = data['chapters']
@@ -353,9 +353,9 @@ class SettingsManager(QObject):
             with zipfile.ZipFile(theme_file_path, 'r') as zipf:
                 if 'theme.json' not in zipf.namelist():
                     raise ValueError('Missing theme.json')
-                from utils.file_utils import _safe_extract_zip
+                from utils.file_utils import extract_any_archive
                 with tempfile.TemporaryDirectory() as temp_dir:
-                    _safe_extract_zip(theme_file_path, temp_dir)
+                    extract_any_archive(theme_file_path, temp_dir)
                     with open(os.path.join(temp_dir, 'theme.json'), 'r') as f:
                         theme_settings = json.load(f)
                     for key, value in theme_settings.items():

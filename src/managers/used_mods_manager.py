@@ -271,7 +271,7 @@ class UsedModsManager(QObject):
                     mods_list.append(mod_data)
                 else:
                     missing_mod_keys.append(mod_key)
-                    logging.warning(f"Mod with key {mod_key} not found during initial load, will retry after mods are fully loaded. Available mod keys: {[get_mod_key(m) for m in (self.app_state.all_mods[:10] if hasattr(self.app_state, 'all_mods') and self.app_state.all_mods else [])]}")
+                    logging.debug(f'Mod with key {mod_key} not found during initial load, will retry after mods are fully loaded')
             if mods_list:
                 self.used_mods[chapter_id] = mods_list
                 logging.info(f"Loaded {len(mods_list)} mod(s) for chapter {chapter_id}: {[get_mod_name(m, 'Unknown') for m in mods_list]}")

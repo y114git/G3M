@@ -13,7 +13,7 @@ from managers.localization_manager import tr
 from utils.file_utils import get_unique_mod_dir, has_deltamod_info_file, check_filename_is_deltamod_info
 from utils.deltamod_converter import DeltamodConverter
 from utils.network_utils import download_file, sanitize_log_message
-from utils.format_utils import format_size_mb
+from utils.ui_utils import format_size_mb
 import logging
 
 
@@ -166,7 +166,7 @@ class FullInstallThread(QThread):
             def progress_callback(progress):
                 self.progress.emit(progress)
                 if total_size > 0:
-                    from utils.format_utils import format_size_mb
+                    from utils.ui_utils import format_size_mb
                     downloaded_mb = format_size_mb(downloaded_ref[0])
                     total_mb = format_size_mb(total_size)
                     self.status.emit(f"{tr('status.installing_game_files')} ({downloaded_mb} / {total_mb})", UI_COLORS['status_warning'])
@@ -239,7 +239,8 @@ class InstallModsThread(QThread):
     def _should_update_component(self, mod, chapter_id: int, existing_folder: str) -> dict:
         if not existing_folder:
             return {}
-        config_path = os.path.join(self.main_window.app_state.mods_dir, existing_folder, 'config.json')
+        from config.constants import MOD_CONFIG_FILENAME
+        config_path = os.path.join(self.main_window.app_state.mods_dir, existing_folder, MOD_CONFIG_FILENAME)
         if not os.path.exists(config_path):
             return {}
         try:
@@ -337,14 +338,14 @@ class InstallModsThread(QThread):
                 if os.path.exists(target_path):
                     try:
                         os.remove(target_path)
-                    except OSError as rm_e:
-                        logging.debug(f'_download_component_file: cleanup failed: {rm_e}')
+                    except OSError:
+                        pass
                 raise
             if os.path.exists(target_path):
                 try:
                     os.remove(target_path)
-                except OSError as rm_e:
-                    logging.debug(f'_download_component_file: cleanup failed: {rm_e}')
+                except OSError:
+                    pass
             safe_msg = sanitize_log_message(f'_download_component_file: unexpected error downloading file: {e}')
             logging.error(safe_msg, exc_info=True)
             raise
@@ -352,8 +353,8 @@ class InstallModsThread(QThread):
             if os.path.exists(target_path):
                 try:
                     os.remove(target_path)
-                except OSError as rm_e:
-                    logging.debug(f'_download_component_file: cleanup failed: {rm_e}')
+                except OSError:
+                    pass
             safe_msg = sanitize_log_message(f'_download_component_file: unexpected error downloading file: {e}')
             logging.error(safe_msg, exc_info=True)
             raise
@@ -616,7 +617,8 @@ class InstallModsThread(QThread):
                 folder_name = info['folder_name']
                 config_data = info['config']
                 mod_dir = os.path.join(self.main_window.app_state.mods_dir, folder_name)
-                config_path = os.path.join(mod_dir, 'config.json')
+                from config.constants import MOD_CONFIG_FILENAME
+                config_path = os.path.join(mod_dir, MOD_CONFIG_FILENAME)
                 self.main_window.settings_manager.write_json(config_path, config_data)
             metadata = self.main_window.mod_manager._read_metadata()
             for mod_key in installed_mods.keys():
@@ -979,9 +981,9 @@ class UrlInstallThread(QThread):
             with zipfile.ZipFile(theme_file_path, 'r') as zipf:
                 if 'theme.json' not in zipf.namelist():
                     raise ValueError('Missing theme.json')
-                from utils.file_utils import _safe_extract_zip
+                from utils.file_utils import extract_any_archive
                 with tempfile.TemporaryDirectory(prefix='dh-theme-extract-') as temp_dir:
-                    _safe_extract_zip(theme_file_path, temp_dir)
+                    extract_any_archive(theme_file_path, temp_dir)
                     theme_json_path = os.path.join(temp_dir, 'theme.json')
                     with open(theme_json_path, 'r', encoding='utf-8') as f:
                         theme_settings = json.load(f)
@@ -1083,10 +1085,9 @@ class UrlInstallThread(QThread):
                     content_path = os.path.join(unpack_dir, unpacked_items[0])
                 files_in_root = os.listdir(content_path)
                 redirect_config_path = None
-                if 'mod_config.json' in files_in_root and len(files_in_root) == 1:
+                from config.constants import MOD_CONFIG_FILENAME
+                if MOD_CONFIG_FILENAME in files_in_root and len(files_in_root) == 1:
                     redirect_config_path = os.path.join(content_path, MOD_CONFIG_FILENAME)
-                elif 'config.json' in files_in_root and len(files_in_root) == 1:
-                    redirect_config_path = os.path.join(content_path, 'config.json')
                 if redirect_config_path:
                     try:
                         with open(redirect_config_path, 'r', encoding='utf-8') as f:

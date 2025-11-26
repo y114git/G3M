@@ -15,12 +15,11 @@ import time
 from pathlib import Path
 from typing import Dict, Optional
 from utils.network_utils import download_file, get_filename_from_url, get_session
-from config.constants import MOD_CONFIG_FILENAME, DATA_WIN_FILENAME, META_JSON_FILENAME, ICON_PNG_FILENAME, LEGACY_MOD_CONFIG_FILENAME, LEGACY_META_JSON_FILENAME, LEGACY_ICON_PNG_FILENAME
+from config.constants import MOD_CONFIG_FILENAME, DATA_WIN_FILENAME, META_JSON_FILENAME, ICON_PNG_FILENAME, LEGACY_MOD_CONFIG_FILENAME, LEGACY_META_JSON_FILENAME
 import errno
 
 
 def download_file_with_progress(url: str, target_path: str, progress_callback=None, session=None, cancel_check=None, on_response=None, downloaded_ref=None) -> bool:
-    from utils.network_utils import get_session, download_file
     from config.constants import NETWORK_TIMEOUT_HEAD
     if session is None:
         session = get_session()
@@ -63,13 +62,28 @@ def download_and_extract_archive(url: str, target_dir: str, progress_callback=No
         extract_archive(tmp_path, target_dir, fname=fname, is_game_installation=is_game_installation)
 
 
+def extract_any_archive(archive_path: str, target_dir: str) -> None:
+    if not os.path.exists(archive_path):
+        raise FileNotFoundError(f'Archive not found: {archive_path}')
+    if not os.path.isfile(archive_path):
+        raise ValueError(f'Path is not a file: {archive_path}')
+    os.makedirs(target_dir, exist_ok=True)
+    fname_lower = os.path.basename(archive_path).lower()
+    try:
+        _extract_archive_raw(archive_path, fname_lower, target_dir)
+    except Exception as e:
+        error_msg = f'Failed to extract archive {archive_path}: {e}'
+        logging.error(error_msg, exc_info=True)
+        if isinstance(e, (FileNotFoundError, PermissionError, OSError, ValueError)):
+            raise
+        raise ValueError(error_msg) from e
+
+
 def extract_archive(archive_path: str, target_dir: str, fname: str | None = None, is_game_installation: bool = False, size_cap_bytes: int | None = None) -> None:
     os.makedirs(target_dir, exist_ok=True)
     if size_cap_bytes is not None:
-        low = (fname or os.path.basename(archive_path)).lower()
         with tempfile.TemporaryDirectory(prefix='deltahub-extract-') as temp_out:
-            from utils.archive_utils import ArchiveExtractor
-            ArchiveExtractor.extract(archive_path, temp_out)
+            extract_any_archive(archive_path, temp_out)
             total = 0
             for root, _, files in os.walk(temp_out):
                 for f in files:
@@ -88,11 +102,9 @@ def extract_archive(archive_path: str, target_dir: str, fname: str | None = None
 def extract_archive_with_backup(archive_path: str, target_dir: str, backup_temp_dir: str | None = None, backup_files: dict | None = None, add_mod_dir_callback=None, backup_file_callback=None, update_manifest_callback=None, status_callback=None) -> list[str]:
     import platform
     extracted_files = []
-    file_lower = archive_path.lower()
     try:
         with tempfile.TemporaryDirectory(prefix='deltahub-extract-') as temp_dir:
-            from utils.archive_utils import ArchiveExtractor
-            ArchiveExtractor.extract(archive_path, temp_dir)
+            extract_any_archive(archive_path, temp_dir)
             _cleanup_extracted_archive(temp_dir, False)
             for root, dirs, files in os.walk(temp_dir):
                 for file in files:
@@ -259,30 +271,6 @@ def _safe_join(base: str, *paths: str) -> str:
     return final
 
 
-def _safe_extract_zip(zip_path: str, out_dir: str) -> None:
-    out_dir_abs = os.path.abspath(out_dir)
-    os.makedirs(out_dir_abs, exist_ok=True)
-    with zipfile.ZipFile(zip_path, 'r') as zf:
-        for member in zf.namelist():
-            if '..' in member or member.startswith('/'):
-                logging.warning(f'_safe_extract_zip: Skipping suspicious path in ZIP: {member}')
-                continue
-            try:
-                target_path = _safe_join(out_dir_abs, member)
-                if not os.path.abspath(target_path).startswith(out_dir_abs):
-                    logging.warning(f'_safe_extract_zip: Path traversal attempt blocked: {member}')
-                    continue
-                parent_dir = os.path.dirname(target_path)
-                if parent_dir:
-                    os.makedirs(parent_dir, exist_ok=True)
-                if not member.endswith('/'):
-                    with zf.open(member) as source, open(target_path, 'wb') as target:
-                        shutil.copyfileobj(source, target)
-            except (ValueError, OSError) as e:
-                logging.warning(f'_safe_extract_zip: Failed to extract {member}: {e}')
-                continue
-
-
 def _move_tree_safely(src_root: str, dst_root: str) -> None:
     for root, dirs, files in os.walk(src_root):
         rel_root = os.path.relpath(root, src_root)
@@ -366,8 +354,6 @@ def normalize_mod_package(mod_root: str, *, rename_legacy: bool = True, check_ex
     if not os.path.isdir(mod_root):
         raise ValueError('mod_root_not_directory')
     _flatten_single_child_directories(mod_root)
-    if rename_legacy:
-        _rename_legacy_files(mod_root)
     meta_path = find_deltamod_info_file(mod_root)
     mod_config_path = _find_file_recursive(mod_root, MOD_CONFIG_FILENAME)
     icon_path = _find_file_recursive(mod_root, ICON_PNG_FILENAME)
@@ -404,25 +390,6 @@ def _flatten_single_child_directories(root: str):
             os.rmdir(child)
         except OSError:
             return
-
-
-def _rename_legacy_files(root: str):
-    legacy_meta = os.path.join(root, LEGACY_META_JSON_FILENAME)
-    target_meta = os.path.join(root, META_JSON_FILENAME)
-    if os.path.exists(legacy_meta):
-        try:
-            shutil.copy2(legacy_meta, target_meta)
-            safe_remove(legacy_meta)
-        except (OSError, PermissionError) as e:
-            logging.warning(f'_rename_legacy_files: Failed to rename {legacy_meta}: {e}')
-    legacy_icon = os.path.join(root, LEGACY_ICON_PNG_FILENAME)
-    target_icon = os.path.join(root, ICON_PNG_FILENAME)
-    if os.path.exists(legacy_icon):
-        try:
-            shutil.copy2(legacy_icon, target_icon)
-            safe_remove(legacy_icon)
-        except (OSError, PermissionError) as e:
-            logging.warning(f'_rename_legacy_files: Failed to rename {legacy_icon}: {e}')
 
 
 def _find_file_recursive(root: str, filename: str) -> Optional[str]:
@@ -641,23 +608,20 @@ def get_file_filter(filter_type: str) -> str:
 
 
 def find_deltamod_info_file(directory: str) -> str | None:
-    info_path_1 = os.path.join(directory, LEGACY_META_JSON_FILENAME)
-    info_path_2 = os.path.join(directory, META_JSON_FILENAME)
-    if os.path.exists(info_path_1):
-        return info_path_1
-    if os.path.exists(info_path_2):
-        return info_path_2
+    info_path = os.path.join(directory, META_JSON_FILENAME)
+    if os.path.exists(info_path):
+        return info_path
     return None
 
 
 def has_deltamod_info_file(file_list: list[str] | set[str]) -> bool:
     file_set = set(file_list)
-    return LEGACY_META_JSON_FILENAME in file_set or META_JSON_FILENAME in file_set
+    return META_JSON_FILENAME in file_set or LEGACY_META_JSON_FILENAME in file_set
 
 
 def check_filename_is_deltamod_info(filename: str) -> bool:
     filename_lower = filename.lower()
-    return filename_lower.endswith('_deltamodinfo.json') or filename == LEGACY_META_JSON_FILENAME or filename == META_JSON_FILENAME or (filename_lower == META_JSON_FILENAME.lower())
+    return filename == META_JSON_FILENAME or filename_lower == META_JSON_FILENAME.lower()
 
 
 def safe_remove(path: str, max_retries: int = 5, delay: float = 0.1) -> bool:
@@ -730,6 +694,8 @@ def safe_rmtree(path: str, max_retries: int = 5, delay: float = 0.1) -> bool:
                 logging.debug(f'safe_rmtree: Attempt {attempt + 1}/{max_retries} failed for {path}: {e}, retrying...')
                 if platform.system() == 'Windows':
                     try:
+                        import gc
+                        gc.collect()
                         for root, dirs, files in os.walk(path):
                             for name in files:
                                 file_path = os.path.join(root, name)
@@ -745,26 +711,42 @@ def safe_rmtree(path: str, max_retries: int = 5, delay: float = 0.1) -> bool:
                                     pass
                     except Exception:
                         pass
-                time.sleep(delay)
+                retry_delay = delay * (attempt + 1)
+                time.sleep(retry_delay)
             else:
-                logging.warning(f'safe_rmtree: Failed to remove {path} after {max_retries} attempts: {e}')
+                logging.debug(f'safe_rmtree: Could not remove {path} after {max_retries} attempts (file may be in use): {e}')
+                try:
+                    import tempfile
+                    temp_dir = tempfile.gettempdir()
+                    renamed_path = os.path.join(temp_dir, f'deltahub_temp_cleanup_{int(time.time())}')
+                    if not os.path.exists(renamed_path):
+                        os.rename(path, renamed_path)
+                        logging.debug(f'safe_rmtree: Renamed {path} to {renamed_path} for later cleanup')
+                        try:
+                            import threading
+
+                            def delayed_cleanup():
+                                time.sleep(5)
+                                try:
+                                    shutil.rmtree(renamed_path, ignore_errors=True)
+                                except Exception:
+                                    pass
+                            threading.Thread(target=delayed_cleanup, daemon=True).start()
+                        except Exception:
+                            pass
+                        return True
+                except Exception:
+                    pass
                 return False
     return False
 
 
 def migrate_mod_config(mod_dir: str) -> bool:
-    import shutil
-    import logging
     old_config_path = os.path.join(mod_dir, LEGACY_MOD_CONFIG_FILENAME)
     config_path = os.path.join(mod_dir, MOD_CONFIG_FILENAME)
     if os.path.exists(old_config_path) and (not os.path.exists(config_path)):
-        try:
-            safe_move(old_config_path, config_path)
-            folder_name = os.path.basename(mod_dir)
-            logging.info(f'Migrated mod config.json to mod_config.json in {folder_name}')
-            return True
-        except Exception as e:
-            folder_name = os.path.basename(mod_dir)
-            logging.warning(f'Failed to migrate mod config.json to mod_config.json in {folder_name}: {e}')
-            return False
+        safe_move(old_config_path, config_path)
+        folder_name = os.path.basename(mod_dir)
+        logging.info(f'Migrated mod config.json to mod_config.json in {folder_name}')
+        return True
     return True

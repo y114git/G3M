@@ -1,4 +1,5 @@
-from PyQt6.QtCore import QTimer
+import logging
+from PyQt6.QtCore import QTimer, QThread
 from typing import Callable, Optional
 
 
@@ -37,5 +38,31 @@ class DebounceTimer:
             self._callback = None
 
 
-def create_debounce_timer(delay_ms: int = 200) -> DebounceTimer:
-    return DebounceTimer(delay_ms)
+def format_size_mb(size_bytes: int) -> str:
+    if size_bytes <= 0:
+        return '0 MB'
+    mb = size_bytes / (1024 * 1024)
+    return f'{mb:.1f} MB'
+
+
+def safe_stop_thread(thread, timeout=2000, blocking=True):
+    if not thread:
+        return
+    if isinstance(thread, QThread):
+        try:
+            if not thread.isRunning():
+                return
+            thread.requestInterruption()
+            thread.quit()
+            if blocking:
+                if not thread.wait(timeout):
+                    logging.warning(f'safe_stop_thread: thread {type(thread).__name__} did not stop in {timeout}ms. Thread may be blocked. Consider checking isInterruptionRequested() in worker loops.')
+                    try:
+                        thread.terminate()
+                        thread.wait(500)
+                    except Exception:
+                        pass
+        except (RuntimeError, AttributeError):
+            pass
+        except Exception as e:
+            logging.error(f'safe_stop_thread: error stopping thread {type(thread).__name__}: {e}', exc_info=True)

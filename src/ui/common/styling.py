@@ -6,12 +6,13 @@ from PyQt6 import sip
 from PyQt6.QtGui import QColor, QPixmap
 from PyQt6.QtWidgets import QLabel, QVBoxLayout, QPushButton, QGroupBox
 from managers.localization_manager import tr
+_STYLE_TEMPLATE = 'QFrame#{frame_selector} {{\n    background-color: {bg_color};\n    border: {border_width} solid {border_color};\n}}\nQFrame#{frame_selector}:hover {{\n    border-color: {hover_border_color};\n}}\nQLabel#{icon_selector} {{\n    border: 2px solid {border_color};\n}}\nQLabel#versionLabel {{\n    color: {version_text_color};\n}}\nQLabel#secondaryText {{\n    color: {version_text_color};\n    font-size: 12px;\n}}\nQLabel#primaryText {{\n    color: {text_color};\n    font-size: 12px;\n}}\nQPushButton#plaqueButton, QPushButton#plaqueButtonInstall, QPushButton#plaqueButtonUninstall {{\n    min-width: 110px;\n    max-width: 110px;\n    min-height: 35px;\n    max-height: 35px;\n    font-size: 15px;\n    padding: 1px;\n}}\nQPushButton#plaqueButtonInstall {{\n    background-color: #4CAF50;\n    font-weight: bold;\n}}\nQPushButton#plaqueButtonInstall:hover {{\n    background-color: #5cb85c;\n}}'
 
 
 def generate_widget_style(frame_selector, bg_color, border_color, hover_border_color, text_color, version_text_color, is_selected=False, icon_selector='modIcon'):
     border_width = '3px' if is_selected else '1px'
     current_border_color = hover_border_color if is_selected else border_color
-    return f'\n        QFrame#{frame_selector} {{\n            background-color: {bg_color};\n            border: {border_width} solid {current_border_color};\n        }}\n        QFrame#{frame_selector}:hover {{\n            border-color: {hover_border_color};\n        }}\n        QLabel#{icon_selector} {{\n            border: 2px solid {border_color};\n        }}\n        QLabel#versionLabel {{\n            color: {version_text_color};\n        }}\n        QLabel#secondaryText {{\n            color: {version_text_color};\n            font-size: 12px;\n        }}\n        QLabel#primaryText {{\n            color: {text_color};\n            font-size: 12px;\n        }}\n        QPushButton#plaqueButton, QPushButton#plaqueButtonInstall, QPushButton#plaqueButtonUninstall {{\n            min-width: 110px;\n            max-width: 110px;\n            min-height: 35px;\n            max-height: 35px;\n            font-size: 15px;\n            padding: 1px;\n        }}\n        QPushButton#plaqueButtonInstall {{\n            background-color: #4CAF50;\n            font-weight: bold;\n        }}\n        QPushButton#plaqueButtonInstall:hover {{\n            background-color: #5cb85c;\n        }}\n    '
+    return _STYLE_TEMPLATE.format(frame_selector=frame_selector, bg_color=bg_color, border_width=border_width, border_color=current_border_color, hover_border_color=hover_border_color, icon_selector=icon_selector, version_text_color=version_text_color, text_color=text_color)
 
 
 def update_mod_widget_style(widget, frame_selector, parent_app=None):
@@ -38,13 +39,16 @@ def update_mod_widget_style(widget, frame_selector, parent_app=None):
     widget.setStyleSheet(generate_widget_style(frame_selector, plaque_bg_color, border_color, hover_border_color, text_color, version_text_color, is_selected, icon_selector))
 
 
+_EMPTY_MESSAGE_STYLE = 'QLabel {{\n    color: {color};\n    font-size: {font_size}px;\n    font-style: italic;\n    opacity: 0.75;\n    background-color: transparent;\n    padding: 40px;\n}}'
+
+
 def show_empty_message_in_layout(layout, text, local_config=None, font_size=16):
     empty_text_color = 'rgba(255, 255, 255, 178)'
     if local_config:
         empty_text_color = get_theme_color(local_config, 'version_text', empty_text_color)
     empty_label = QLabel(text)
     empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-    empty_label.setStyleSheet(f'\n        QLabel {{\n            color: {empty_text_color};\n            font-size: {font_size}px;\n            font-style: italic;\n            opacity: 0.75;\n            background-color: transparent;\n            padding: 40px;\n        }}\n    ')
+    empty_label.setStyleSheet(_EMPTY_MESSAGE_STYLE.format(color=empty_text_color, font_size=font_size))
     layout.insertWidget(layout.count() - 1, empty_label)
 
 

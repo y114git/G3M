@@ -90,7 +90,11 @@ class UTMTCLIManager:
             result = subprocess.run(command, cwd=cwd, env=exec_env, capture_output=True, text=True, timeout=timeout, encoding='utf-8', errors='replace', stdin=subprocess.DEVNULL, startupinfo=startupinfo, creationflags=creationflags)
             logging.info(f'UTMTCLI command completed with return code {result.returncode}')
             if result.returncode != 0:
-                logging.warning(f'UTMTCLI command failed: {result.stderr[:200]}')
+                stderr_preview = result.stderr[:500] if result.stderr else ''
+                if 'CompilationErrorException' in stderr_preview or 'CS8098' in stderr_preview or '#load' in stderr_preview:
+                    logging.debug(f'UTMTCLI script compilation issue (may be non-critical): {stderr_preview}')
+                else:
+                    logging.warning(f'UTMTCLI command failed: {stderr_preview}')
             return (result.returncode, result.stdout, result.stderr)
         except subprocess.TimeoutExpired:
             logging.error(f'UTMTCLI command timed out after {timeout}s: {command}')

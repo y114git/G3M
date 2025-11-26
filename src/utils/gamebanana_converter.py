@@ -66,8 +66,8 @@ class GameBananaConverter:
 
     def _extract_archive(self) -> None:
         try:
-            from utils.file_utils import _safe_extract_zip
-            _safe_extract_zip(self.archive_path, self.temp_extract_dir)
+            from utils.file_utils import extract_any_archive
+            extract_any_archive(self.archive_path, self.temp_extract_dir)
             extracted_items = os.listdir(self.temp_extract_dir)
             if len(extracted_items) == 1:
                 single_item = os.path.join(self.temp_extract_dir, extracted_items[0])

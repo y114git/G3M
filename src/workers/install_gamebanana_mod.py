@@ -4,7 +4,7 @@ import shutil
 import logging
 from typing import Optional, Dict
 from PyQt6.QtCore import QThread, pyqtSignal, QTimer
-from config.constants import UI_COLORS, NETWORK_TIMEOUT_HEAD
+from config.constants import UI_COLORS, NETWORK_TIMEOUT_HEAD, MOD_CONFIG_FILENAME
 from managers.localization_manager import tr
 from utils.gamebanana_api import GameBananaAPI
 from utils.gamebanana_converter import GameBananaConverter
@@ -120,12 +120,12 @@ class InstallGameBananaModThread(BaseInstallWorker):
     def _install_deltahub_mod(self, archive_path: str, mod_id: int) -> Optional[str]:
         import tempfile
         import json
-        from utils.archive_utils import ArchiveExtractor
+        from utils.file_utils import extract_any_archive
         from utils.file_utils import sanitize_filename
         fname_lower = os.path.basename(archive_path).lower()
         with tempfile.TemporaryDirectory(prefix='gb_install_dh_') as temp_dir:
             try:
-                ArchiveExtractor.extract(archive_path, temp_dir)
+                extract_any_archive(archive_path, temp_dir)
             except Exception as e:
                 logger.error(f'Error extracting DELTAHUB mod archive: {e}')
                 raise
@@ -148,7 +148,7 @@ class InstallGameBananaModThread(BaseInstallWorker):
             files_in_archive = []
             for root, dirs, files in os.walk(content_root):
                 for file in files:
-                    if file != 'mod_config.json':
+                    if file != MOD_CONFIG_FILENAME:
                         files_in_archive.append(file)
             if len(files_in_archive) == 0:
                 external_url = config_data.get('external_url') or config_data.get('download_url')
@@ -210,7 +210,7 @@ class InstallGameBananaModThread(BaseInstallWorker):
                 config_data['tags'] = existing_tags
             expected_mod_key = f'gb_{mod_id}'
             config_data['mod_key'] = expected_mod_key
-            target_config_path = os.path.join(target_mod_dir, 'mod_config.json')
+            target_config_path = os.path.join(target_mod_dir, MOD_CONFIG_FILENAME)
             try:
                 from utils.file_utils import atomic_write_json
                 atomic_write_json(target_config_path, config_data, indent=4)
@@ -231,7 +231,7 @@ class InstallGameBananaModThread(BaseInstallWorker):
                 item_path = os.path.join(mods_dir, item_name)
                 if not os.path.isdir(item_path):
                     continue
-                config_path = os.path.join(item_path, 'mod_config.json')
+                config_path = os.path.join(item_path, MOD_CONFIG_FILENAME)
                 if not os.path.exists(config_path):
                     continue
                 try:

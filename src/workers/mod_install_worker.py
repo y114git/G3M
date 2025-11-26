@@ -9,7 +9,7 @@ from managers.localization_manager import tr
 from utils.network_utils import get_session, download_file
 from utils.file_utils import extract_archive, sanitize_filename, has_deltamod_info_file
 from utils.deltamod_converter import DeltamodConverter
-from config.constants import NETWORK_TIMEOUT_HEAD, UI_COLORS
+from config.constants import NETWORK_TIMEOUT_HEAD, UI_COLORS, MOD_CONFIG_FILENAME, LEGACY_MOD_CONFIG_FILENAME
 from workers.base_install_worker import BaseInstallWorker
 
 
@@ -55,13 +55,13 @@ class ModInstallWorker(BaseInstallWorker):
                     return False
             mod_config_path = None
             for root, dirs, files in os.walk(content_path):
-                if 'mod_config.json' in files:
-                    mod_config_path = os.path.join(root, 'mod_config.json')
+                if MOD_CONFIG_FILENAME in files:
+                    mod_config_path = os.path.join(root, MOD_CONFIG_FILENAME)
                     break
             if not mod_config_path:
                 for root, dirs, files in os.walk(content_path):
-                    if 'config.json' in files:
-                        mod_config_path = os.path.join(root, 'config.json')
+                    if LEGACY_MOD_CONFIG_FILENAME in files:
+                        mod_config_path = os.path.join(root, LEGACY_MOD_CONFIG_FILENAME)
                         break
             if not mod_config_path:
                 logging.error('ModInstallWorker: mod_config.json or config.json not found in mod archive')
@@ -95,7 +95,7 @@ class ModInstallWorker(BaseInstallWorker):
                     shutil.copytree(src_path, dst_path)
                 else:
                     shutil.copy2(src_path, dst_path)
-            target_config_path = os.path.join(target_mod_dir, 'mod_config.json')
+            target_config_path = os.path.join(target_mod_dir, MOD_CONFIG_FILENAME)
             from utils.file_utils import migrate_mod_config
             migrate_mod_config(target_mod_dir)
             if self.gamebanana_metadata:
@@ -155,7 +155,7 @@ class ModInstallWorker(BaseInstallWorker):
                                     chapter_data['data_file_url'] = file
                                     config_updated = True
                                     break
-            final_config_path = target_config_path if os.path.exists(target_config_path) else os.path.join(target_mod_dir, 'mod_config.json')
+            final_config_path = target_config_path if os.path.exists(target_config_path) else os.path.join(target_mod_dir, MOD_CONFIG_FILENAME)
             if config_updated or not os.path.exists(final_config_path):
                 from utils.file_utils import atomic_write_json
                 atomic_write_json(final_config_path, config_data, indent=2)

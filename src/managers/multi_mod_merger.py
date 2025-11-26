@@ -1595,12 +1595,12 @@ class MultiModMerger(QObject):
 
     def _extract_archive_to_target(self, archive_path: str, target_dir: str) -> bool:
         try:
-            from utils.archive_utils import ArchiveExtractor
+            from utils.file_utils import extract_any_archive
             import tempfile
             archive_lower = os.path.basename(archive_path).lower()
             chapter_id = self._extract_chapter_id_from_path(target_dir)
             with tempfile.TemporaryDirectory(prefix='mm_extract_') as temp_extract_dir:
-                ArchiveExtractor.extract(archive_path, temp_extract_dir)
+                extract_any_archive(archive_path, temp_extract_dir)
                 for root, dirs, files in os.walk(temp_extract_dir):
                     rel_root = os.path.relpath(root, temp_extract_dir)
                     if rel_root == '.':

@@ -5,16 +5,6 @@ import sys
 from config.constants import GAME_EXECUTABLES
 
 
-def get_legacy_ylauncher_path() -> str:
-    system = platform.system()
-    if system == 'Windows':
-        return os.path.join(os.getenv('APPDATA', ''), 'YLauncher')
-    elif system == 'Darwin':
-        return os.path.join(os.path.expanduser('~'), 'Library', 'Application Support', 'YLauncher')
-    else:
-        return os.path.join(os.path.expanduser('~'), '.local', 'share', 'YLauncher')
-
-
 def get_launcher_dir() -> str:
     if getattr(sys, 'frozen', False):
         return os.path.dirname(sys.executable)

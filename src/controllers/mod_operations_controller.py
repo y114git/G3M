@@ -357,7 +357,6 @@ class ModOperationsController:
         self.app_state.current_install_is_gamebanana = False
         self._last_gamebanana_progress = -1
         self.set_install_buttons_enabled(True)
-        self._safe_execute(lambda: self.app.search_display.update_search_plaques(), 'Failed to refresh plaques after install')
         self._safe_execute(lambda: self.app.game_launch.update_button_state(), 'Failed to update button state')
         if not success:
             is_cancelled = message == tr('status.operation_cancelled') or 'cancelled' in message.lower() or self.app_state.operation_cancelled
@@ -382,6 +381,7 @@ class ModOperationsController:
             self.mod_manager.load_local_mods()
             logging.info('ModOperationsController: Local mods reloaded after installation')
             self.mod_manager.mod_list_updated.emit()
+            self._safe_execute(lambda: self.app.search_display.update_search_plaques(), 'Failed to refresh plaques after cache reload')
             if installed_mod_info and hasattr(self.app_state, 'all_mods'):
                 if not self.app_state.all_mods:
                     self.app_state.all_mods = []

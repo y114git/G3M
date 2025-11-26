@@ -4,7 +4,7 @@ from managers.localization_manager import tr
 from ui.common.styling import get_theme_color, load_mod_icon_universal
 from ui.widgets.common.outlined_label import OutlinedTextLabel
 from ui.widgets.common.screenshots_carousel import ScreenshotsCarousel
-from utils.thread_utils import safe_stop_thread
+from utils.ui_utils import safe_stop_thread
 import logging
 import webbrowser
 

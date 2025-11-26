@@ -280,23 +280,20 @@ def run_app():
                     import shutil
                     shutil.copy2(config_path, backup_path)
                     logging.warning(f'Corrupted config file detected, backed up to {backup_path}')
-                except Exception as backup_error:
-                    logging.warning(f'Failed to backup corrupted config: {backup_error}')
+                except Exception:
+                    pass
                 try:
                     os.remove(config_path)
                     logging.info(f'Removed corrupted config file: {config_path}')
-                except Exception as remove_error:
-                    logging.warning(f'Failed to remove corrupted config: {remove_error}')
+                except Exception:
+                    pass
                 safe_msg = sanitize_log_message(f'Failed to parse config JSON: {e}')
                 logging.warning(safe_msg)
                 config = {}
             if config_path == old_config_path and (not os.path.exists(settings_path)):
-                try:
-                    import shutil
-                    shutil.move(old_config_path, settings_path)
-                    logging.info('Migrated settings config.json to settings.json in startup')
-                except Exception as e:
-                    logging.warning(f'Failed to migrate settings config.json to settings.json in startup: {e}')
+                import shutil
+                shutil.move(old_config_path, settings_path)
+                logging.info('Migrated settings config.json to settings.json in startup')
     except (OSError, IOError) as e:
         safe_msg = sanitize_log_message(f'Failed to read config file: {e}')
         logging.warning(safe_msg)

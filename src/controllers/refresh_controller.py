@@ -4,7 +4,7 @@ from managers.localization_manager import localization_manager, tr
 from workers.fetch_mods import FetchModsThread
 from config.constants import UI_COLORS
 from utils.game_utils import is_game_running
-from utils.thread_utils import safe_stop_thread
+from utils.ui_utils import safe_stop_thread
 
 
 class RefreshController:

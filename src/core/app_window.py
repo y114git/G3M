@@ -14,10 +14,10 @@ from PyQt6.QtGui import QColor, QIcon, QPainter, QPixmap, QDesktopServices
 from PyQt6.QtWidgets import QApplication, QCheckBox, QFrame, QLabel, QProgressBar, QPushButton, QTabWidget, QVBoxLayout, QWidget, QHBoxLayout, QSizePolicy, QColorDialog
 from managers.localization_manager import localization_manager, tr
 from models.game_modes import FullGameMode, DemoGameMode, UndertaleGameMode, UndertaleYellowGameMode
-from config.constants import UI_COLORS, SOCIAL_LINKS, ONLINE_UPDATE_INTERVAL, INITIALIZATION_TIMEOUT, LEGACY_CLEANUP_DELAY, THREAD_WAIT_TIMEOUT, SLOT_ID_UNIVERSAL
+from config.constants import UI_COLORS, SOCIAL_LINKS, ONLINE_UPDATE_INTERVAL, INITIALIZATION_TIMEOUT, THREAD_WAIT_TIMEOUT, SLOT_ID_UNIVERSAL
 from utils.game_utils import is_game_running
-from utils.thread_utils import safe_stop_thread
-from utils.path_utils import get_user_data_root, resource_path, get_launcher_dir, get_legacy_ylauncher_path, get_user_plugins_dir
+from utils.ui_utils import safe_stop_thread
+from utils.path_utils import get_user_data_root, resource_path, get_launcher_dir, get_user_plugins_dir
 from workers.background_workers import PresenceWorker, FetchChangelogWorker
 from controllers.mod_operations_controller import ModOperationsController
 from controllers.library_display_controller import LibraryDisplayController
@@ -195,8 +195,6 @@ class AppWindow(QWidget):
         self.install_from_gb_signal.connect(lambda mod: self._install_single_mod(mod, force=True))
         self.initialization_finished.connect(self._handle_pending_install)
         self.app_state.all_mods_updated.connect(lambda mods: setattr(self.app_state, 'all_mods', mods))
-        self._legacy_cleanup_done = False
-        QTimer.singleShot(LEGACY_CLEANUP_DELAY, self._maybe_run_legacy_cleanup)
         self.initialization_timer = QTimer()
         self.initialization_timer.setSingleShot(True)
         self.initialization_timer.timeout.connect(self._force_finish_initialization)
@@ -1108,29 +1106,6 @@ class AppWindow(QWidget):
             logging.warning(f'Update dialog: conditions not met after max retries (init_completed={init_completed}, is_shown={is_shown}, is_visible={is_visible}), showing dialog anyway')
             self.show_update_prompt.emit(update_info)
 
-    def _maybe_run_legacy_cleanup(self):
-        if self._legacy_cleanup_done:
-            return
-        if self.app_state.initialization_completed and self.app_state.is_shown_to_user:
-            self._cleanup_legacy_ylauncher_folder()
-            self._legacy_cleanup_done = True
-        else:
-            QTimer.singleShot(1000, self._maybe_run_legacy_cleanup)
-
-    def _cleanup_legacy_ylauncher_folder(self):
-        try:
-            legacy_path = get_legacy_ylauncher_path()
-            if legacy_path and os.path.isdir(legacy_path):
-                try:
-                    shutil.rmtree(legacy_path, ignore_errors=True)
-                except (OSError, shutil.Error) as e:
-                    import logging
-                    logging.debug(f'Failed to remove legacy path: {e}')
-                self.feedback_manager.show_message('info', 'dialogs.legacy_cleanup_title', tr('dialogs.legacy_cleanup_message'))
-        except (OSError, AttributeError) as e:
-            import logging
-            logging.debug(f'Legacy cleanup failed: {e}', exc_info=True)
-
     def _perform_update_ui_prep(self):
         for widget in [self.action_button, self.chat_button, self.shortcut_button, self.change_path_button, self.open_deltahub_folder_button, self.change_background_button]:
             widget.setEnabled(False)
@@ -1478,38 +1453,13 @@ class AppWindow(QWidget):
             for thread in threads_to_stop:
                 self._safe_set_parent_none(thread)
                 safe_stop_thread(thread, timeout=THREAD_WAIT_TIMEOUT, blocking=False)
-            for attr in ('help_thread', 'changelog_thread'):
-                worker_attr = attr.replace('_thread', '_worker')
-                worker = getattr(self, worker_attr, None)
-                if worker:
-                    self._safe_set_parent_none(worker)
-                    try:
-                        worker.disconnect()
-                    except Exception:
-                        pass
             if self.presence_thread:
                 self._safe_set_parent_none(self.presence_thread)
                 safe_stop_thread(self.presence_thread, timeout=2000, blocking=False)
-                if not (self.presence_thread and self.presence_thread.isRunning()):
-                    self.presence_thread = None
-                    self.presence_worker = None
-            if hasattr(self.refresh_controller, 'fetch_thread') and self.refresh_controller.fetch_thread:
-                self._safe_set_parent_none(self.refresh_controller.fetch_thread)
-                safe_stop_thread(self.refresh_controller.fetch_thread, timeout=THREAD_WAIT_TIMEOUT, blocking=False)
-                if not (self.refresh_controller.fetch_thread and self.refresh_controller.fetch_thread.isRunning()):
-                    self.refresh_controller.fetch_thread = None
             self.game_launcher._cleanup_direct_launch_files()
             self.settings_manager.save_window_geometry(self)
             QApplication.processEvents()
             self.hide()
-            for thread in threads_to_stop:
-                if thread and thread.isRunning():
-                    thread_name = getattr(thread, '__class__', type(thread)).__name__
-                    logging.warning(f'closeEvent: {thread_name} still running after cleanup. Thread may be blocked. Consider checking isInterruptionRequested() in worker loops.')
-            critical_threads = [('presence_thread', self.presence_thread), ('fetch_thread', getattr(self.refresh_controller, 'fetch_thread', None)), ('details_thread', getattr(self.refresh_controller, 'details_thread', None)), ('metadata_thread', getattr(self.refresh_controller, 'metadata_thread', None)), ('monitor_thread', getattr(self.game_launcher, 'monitor_thread', None)), ('help_thread', getattr(self, 'help_thread', None)), ('changelog_thread', getattr(self, 'changelog_thread', None))]
-            for thread_name, thread in critical_threads:
-                if thread and thread.isRunning():
-                    logging.warning(f'closeEvent: {thread_name} still running after cleanup. Thread may be blocked.')
         except Exception as e:
             logging.error(f'closeEvent: error during cleanup: {e}', exc_info=True)
         finally:
@@ -1861,12 +1811,8 @@ class AppWindow(QWidget):
         old_config_path = os.path.join(self.app_state.config_dir, 'config.json')
         new_config_path = os.path.join(self.app_state.config_dir, 'settings.json')
         if os.path.exists(old_config_path) and (not os.path.exists(new_config_path)):
-            try:
-                import shutil
-                shutil.move(old_config_path, new_config_path)
-                logging.info('Migrated settings config.json to settings.json')
-            except Exception as e:
-                logging.warning(f'Failed to migrate settings config.json to settings.json: {e}')
+            shutil.move(old_config_path, new_config_path)
+            logging.info('Migrated settings config.json to settings.json')
 
     def _on_search_ui_button_text_update(self, widget_name: str, text: str):
         widget = getattr(self, widget_name, None)
