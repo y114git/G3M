@@ -1272,8 +1272,12 @@ class ModScanThread(QThread):
             logging.debug(f'ModScanThread: Failed to save cache to {self.cache_file}: {e}')
 
     def run(self):
-        disk_cache = self._load_cache()
+        disk_cache = {}
         cache = {}
+        try:
+            disk_cache = self._load_cache()
+        except Exception as e:
+            logging.warning(f'ModScanThread: Failed to load cache: {e}', exc_info=True)
         if not os.path.exists(self.mods_dir):
             self.scan_completed.emit(cache)
             return
@@ -1286,8 +1290,12 @@ class ModScanThread(QThread):
                         continue
                     folder_name = entry.name
                     folder_path = entry.path
-                    from utils.file_utils import migrate_mod_config
-                    migrate_mod_config(folder_path)
+                    try:
+                        from utils.file_utils import migrate_mod_config
+                        migrate_mod_config(folder_path)
+                    except Exception as e:
+                        safe_msg = sanitize_log_message(f'ModScanThread: failed to migrate mod config in {folder_path}: {e}')
+                        logging.warning(safe_msg, exc_info=True)
                     config_path = os.path.join(folder_path, MOD_CONFIG_FILENAME)
                     if not os.path.exists(config_path):
                         continue
@@ -1332,8 +1340,21 @@ class ModScanThread(QThread):
                         safe_msg = sanitize_log_message(f'ModScanThread: missing key in {config_path}: {e}')
                         logging.debug(safe_msg)
                         continue
+                    except Exception as e:
+                        safe_msg = sanitize_log_message(f'ModScanThread: unexpected error processing mod {folder_path}: {e}')
+                        logging.error(safe_msg, exc_info=True)
+                        continue
         except OSError as e:
             safe_msg = sanitize_log_message(f'ModScanThread: failed to list directory {self.mods_dir}: {e}')
             logging.error(safe_msg, exc_info=True)
-        self._save_cache(cache)
-        self.scan_completed.emit(cache)
+        except Exception as e:
+            safe_msg = sanitize_log_message(f'ModScanThread: unexpected error during scan: {e}')
+            logging.error(safe_msg, exc_info=True)
+        try:
+            self._save_cache(cache)
+        except Exception as e:
+            logging.warning(f'ModScanThread: Failed to save cache: {e}', exc_info=True)
+        try:
+            self.scan_completed.emit(cache)
+        except Exception as e:
+            logging.error(f'ModScanThread: Failed to emit scan_completed signal: {e}', exc_info=True)

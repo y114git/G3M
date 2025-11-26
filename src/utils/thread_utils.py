@@ -2,7 +2,7 @@ import logging
 from PyQt6.QtCore import QThread
 
 
-def safe_stop_thread(thread, timeout=2000, blocking=False):
+def safe_stop_thread(thread, timeout=2000, blocking=True):
     if not thread:
         return
     if isinstance(thread, QThread):

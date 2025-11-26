@@ -1014,31 +1014,44 @@ class AppWindow(QWidget):
         self._initialize_mutual_exclusions()
         self.settings_ui.on_toggle_steam_launch()
         self.theme.apply_theme()
-        from workers.background_workers import ModScanThread
-        from utils.path_utils import get_user_data_root
-        cache_dir = os.path.join(get_user_data_root(), 'cache')
-        self._mod_scan_thread = ModScanThread(self.app_state.mods_dir, self, cache_dir=cache_dir)
-        self._mod_scan_thread.scan_completed.connect(self._on_mod_scan_finished)
-        self._mod_scan_thread.start()
-        self.status_label.setText(tr('status.scanning_mods'))
+        try:
+            from workers.background_workers import ModScanThread
+            from utils.path_utils import get_user_data_root
+            cache_dir = os.path.join(get_user_data_root(), 'cache')
+            self._mod_scan_thread = ModScanThread(self.app_state.mods_dir, self, cache_dir=cache_dir)
+            self._mod_scan_thread.scan_completed.connect(self._on_mod_scan_finished)
+            self._mod_scan_thread.start()
+            self.status_label.setText(tr('status.scanning_mods'))
+        except Exception as e:
+            logging.error(f'AppWindow: Failed to start mod scan thread: {e}', exc_info=True)
+            self.feedback_manager.update_status(tr('status.mod_scan_init_error', details=str(e)), UI_COLORS['status_error'])
+            try:
+                self._on_mod_scan_finished({})
+            except Exception as scan_error:
+                logging.error(f'AppWindow: Failed to handle mod scan error: {scan_error}', exc_info=True)
         if not self.game_launcher._find_and_validate_game_path(is_initial=True):
             self.action_button.setEnabled(False)
 
     def _on_mod_scan_finished(self, scan_cache: dict):
-        if hasattr(self.mod_manager, '_mods_cache') and hasattr(self.mod_manager, '_cache_lock'):
-            with self.mod_manager._cache_lock:
-                self.mod_manager._mods_cache = scan_cache
-                self.mod_manager._mods_cache_valid = True
-        self.mod_manager.load_local_mods()
-        saved_chapter_mode = self.app_state.local_config.get('chapter_mode_enabled', False)
-        self.setEnabled(False)
-        self._load_mods_and_build_list_synchronously()
-        self.setEnabled(True)
-        QTimer.singleShot(500, self.slot_manager.load_used_mods_state)
-        if not saved_chapter_mode:
-            self.library_display.update_display()
-        elif saved_chapter_mode and hasattr(self, '_show_chapter_mode_instruction'):
-            QTimer.singleShot(800, self._show_chapter_mode_instruction)
+        try:
+            if hasattr(self.mod_manager, '_mods_cache') and hasattr(self.mod_manager, '_cache_lock'):
+                with self.mod_manager._cache_lock:
+                    self.mod_manager._mods_cache = scan_cache
+                    self.mod_manager._mods_cache_valid = True
+            self.mod_manager.load_local_mods()
+            saved_chapter_mode = self.app_state.local_config.get('chapter_mode_enabled', False)
+            self.setEnabled(False)
+            self._load_mods_and_build_list_synchronously()
+            self.setEnabled(True)
+            QTimer.singleShot(500, self.slot_manager.load_used_mods_state)
+            if not saved_chapter_mode:
+                self.library_display.update_display()
+            elif saved_chapter_mode and hasattr(self, '_show_chapter_mode_instruction'):
+                QTimer.singleShot(800, self._show_chapter_mode_instruction)
+        except Exception as e:
+            logging.error(f'AppWindow: Error in _on_mod_scan_finished: {e}', exc_info=True)
+            self.feedback_manager.update_status(tr('status.mod_scan_error', details=str(e)), UI_COLORS['status_error'])
+            self.setEnabled(True)
 
     def _load_mods_and_build_list_synchronously(self):
         try:

@@ -975,7 +975,7 @@ class ModManager(QObject):
         if success:
             self.invalidate_mods_cache()
             self.load_local_mods()
-        self.mod_list_updated.emit()
+            self.mod_list_updated.emit()
         if success:
             self.status_changed.emit(tr('status.mod_installed'), 'status_success')
         elif self.app_state.current_task and getattr(self.app_state.current_task, '_cancelled', False):
