@@ -38,7 +38,7 @@ class GameBananaAPI:
                     break
             if not game_name:
                 game_name = 'deltarune'
-            mapped_mods = []
+            mapped_mods: List[ModInfo] = []
             for record in records:
                 if record.get('_sModelName') == 'Mod':
                     mod_id = record.get('_idRow')
@@ -86,6 +86,15 @@ class GameBananaAPI:
                             needs_category = not current_category
                             if (needs_downloads or needs_tagline or needs_category) and (not cache_valid):
                                 mods_needing_metadata.append(mod_id_str)
+                                try:
+                                    mod_info.has_full_metadata = False
+                                except Exception:
+                                    pass
+                            else:
+                                try:
+                                    mod_info.has_full_metadata = True
+                                except Exception:
+                                    pass
                             mapped_mods.append(mod_info)
             return (mapped_mods, mods_needing_metadata)
         except requests.RequestException as e:
@@ -271,7 +280,7 @@ class GameBananaAPI:
         return self.get_mod_full_details_for_display(mod_id)
 
     def get_mod_details(self, mod_id: int) -> Optional[Dict]:
-        url = f'{self.base_url}/Mod/{mod_id}/ProfilePage'
+        url = f'{self.base_url}/Mod/{mod_id}'
         try:
             response = self.session.get(url, timeout=NETWORK_TIMEOUT_MEDIUM)
             response.raise_for_status()
@@ -766,6 +775,8 @@ class GameBananaAPI:
             data_dict['is_gamebanana_mod'] = True
             if 'gamebanana_mod_id' not in data_dict:
                 data_dict['gamebanana_mod_id'] = str(mod_id)
+            if 'has_full_metadata' not in data_dict:
+                data_dict['has_full_metadata'] = True
             return ModInfo.from_dict(data_dict)
         except Exception as e:
             logger.error(f'Error converting mod data to ModInfo: {e}', exc_info=True)

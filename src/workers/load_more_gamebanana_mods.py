@@ -37,14 +37,14 @@ class LoadMoreGameBananaModsThread(QThread):
                 self.result.emit([])
                 return
             for page in range(self.start_page, self.start_page + self.num_pages):
-                if self._cancelled:
+                if self._cancelled or self.isInterruptionRequested():
                     break
                 mods_data, mods_needing_metadata = self.api.get_game_mods(self.game_id, page=page, per_page=GAMEBANANA_PER_PAGE, sort=self.sort, metadata_cache=self.metadata_cache)
                 if not mods_data or len(mods_data) == 0:
                     break
                 self._mods_needing_metadata.extend(mods_needing_metadata)
                 for mod_info in mods_data:
-                    if self._cancelled:
+                    if self._cancelled or self.isInterruptionRequested():
                         break
                     if mod_info:
                         new_mods.append(mod_info)

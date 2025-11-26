@@ -60,6 +60,14 @@ class ImageLoaderRunnable(QRunnable):
                 except Exception as e:
                     logging.debug(f'ImageLoader.run: semaphore release failed: {e}')
             resp.raise_for_status()
+            try:
+                content_type = resp.headers.get('Content-Type', '') or ''
+            except Exception:
+                content_type = ''
+            if content_type and (not content_type.lower().startswith('image/')):
+                logging.debug(f'ImageLoader.run: Non-image content-type "{content_type}" for URL: {self.url[:100]}')
+                self._emit_error('non_image_content')
+                return
             content = resp.content
             if not content:
                 self._emit_error('empty response')

@@ -259,7 +259,8 @@
     "delete_button": "Удалить",
     "success": "Успех",
     "close_button": "Закрыть",
-    "online_status": "🟢 Онлайн: {count}"
+    "online_status": "🟢 Онлайн: {count}",
+    "loading_placeholder": "Загрузка..."
   },
   "files": {
     "archive_link": "Ссылка на архив",

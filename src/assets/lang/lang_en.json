@@ -259,7 +259,8 @@
     "delete_button": "Delete",
     "success": "Success",
     "close_button": "Close",
-    "online_status": "🟢 Online: {count}"
+    "online_status": "🟢 Online: {count}",
+    "loading_placeholder": "Loading..."
   },
   "files": {
     "archive_link": "Archive link",

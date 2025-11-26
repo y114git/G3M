@@ -16,6 +16,8 @@ class CompatibilityCheckThread(QThread):
 
     def run(self):
         try:
+            if self.isInterruptionRequested():
+                return
             if not hasattr(self.mod_data, 'is_gamebanana_mod') or not self.mod_data.is_gamebanana_mod:
                 return
             mod_id = getattr(self.mod_data, 'gamebanana_mod_id', None)
@@ -23,6 +25,8 @@ class CompatibilityCheckThread(QThread):
                 return
             from utils.gamebanana_api import GameBananaAPI
             api = GameBananaAPI()
+            if self.isInterruptionRequested():
+                return
             compat = api.get_supported_files_for_mod(int(mod_id))
             self.compatibility_checked.emit(self.mod_data, compat)
         except Exception as e:
@@ -62,6 +66,61 @@ class ModPlaqueWidget(BaseModWidget):
             self._apply_uninstall_button_style()
         if hasattr(self.mod_data, 'is_gamebanana_mod') and self.mod_data.is_gamebanana_mod:
             self._start_compatibility_check()
+        try:
+            self.destroyed.connect(self._cleanup_compatibility_thread)
+        except Exception:
+            pass
+
+    def _cleanup_compatibility_thread(self):
+        try:
+            thread = getattr(self, '_compatibility_thread', None)
+        except Exception:
+            thread = None
+        if not thread:
+            return
+        try:
+            if thread.isRunning():
+                try:
+                    thread.requestInterruption()
+                except Exception:
+                    pass
+                try:
+                    thread.quit()
+                except Exception:
+                    pass
+                try:
+                    thread.compatibility_checked.disconnect()
+                    thread.finished.disconnect()
+                except (TypeError, RuntimeError):
+                    pass
+
+                def cleanup_when_finished():
+                    try:
+                        if thread and thread.isFinished():
+                            thread.deleteLater()
+                    except Exception:
+                        pass
+                try:
+                    thread.finished.connect(cleanup_when_finished)
+                except (TypeError, RuntimeError):
+                    try:
+                        if thread.isRunning():
+                            thread.wait(2000)
+                        if thread.isFinished():
+                            thread.deleteLater()
+                    except Exception:
+                        pass
+            elif thread.isFinished():
+                try:
+                    thread.deleteLater()
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        try:
+            self._compatibility_thread = None
+        except Exception:
+            pass
 
     def _create_tags_layout_if_needed(self, info_layout):
         tags_layout = QHBoxLayout()
@@ -137,7 +196,22 @@ class ModPlaqueWidget(BaseModWidget):
 
     def _init_ui(self):
         super()._init_ui()
-        self.downloads_label = QLabel(f'⤓ {self.mod_data.downloads}')
+        downloads_text = ''
+        try:
+            if hasattr(self.mod_data, 'is_gamebanana_mod') and self.mod_data.is_gamebanana_mod:
+                has_full = getattr(self.mod_data, 'has_full_metadata', True)
+                if not has_full:
+                    downloads_text = tr('ui.loading_placeholder')
+                else:
+                    downloads_value = getattr(self.mod_data, 'downloads', 0) or 0
+                    downloads_text = f'⤓ {downloads_value}'
+            else:
+                downloads_value = getattr(self.mod_data, 'downloads', 0) or 0
+                downloads_text = f'⤓ {downloads_value}'
+        except Exception:
+            downloads_value = getattr(self.mod_data, 'downloads', 0) or 0
+            downloads_text = f'⤓ {downloads_value}'
+        self.downloads_label = QLabel(downloads_text)
         self.downloads_label.setObjectName('secondaryText')
         self.downloads_label.setToolTip(tr('ui.downloads_tooltip'))
         self.downloads_label.setAlignment(Qt.AlignmentFlag.AlignRight)
@@ -251,7 +325,21 @@ class ModPlaqueWidget(BaseModWidget):
                 self._compatibility_thread = None
             elif self._compatibility_thread.isRunning():
                 return
+        from PyQt6.QtCore import QTimer
+        if not hasattr(self, '_compatibility_check_timer'):
+            self._compatibility_check_timer = QTimer()
+            self._compatibility_check_timer.setSingleShot(True)
+            self._compatibility_check_timer.timeout.connect(self._do_start_compatibility_check)
+        import random
+        delay = 200 + random.randint(0, 300)
+        self._compatibility_check_timer.start(delay)
+
+    def _do_start_compatibility_check(self):
         try:
+            if getattr(self.mod_data, 'gamebanana_compatibility_checked', False):
+                return
+            if self._compatibility_thread and self._compatibility_thread.isRunning():
+                return
             self._compatibility_thread = CompatibilityCheckThread(self.mod_data, self)
             self._compatibility_thread.compatibility_checked.connect(self._on_compatibility_checked)
             self._compatibility_thread.finished.connect(lambda: setattr(self, '_compatibility_thread', None))
@@ -384,17 +472,43 @@ class ModPlaqueWidget(BaseModWidget):
                 from ui.common.styling import load_mod_icon_universal
                 load_mod_icon_universal(self.icon_label, self.mod_data, size=80)
             if hasattr(self, 'downloads_label'):
-                downloads = getattr(self.mod_data, 'downloads', 0) or 0
-                self.downloads_label.setText(f'⤓ {downloads}')
+                try:
+                    if hasattr(self.mod_data, 'is_gamebanana_mod') and self.mod_data.is_gamebanana_mod:
+                        has_full = getattr(self.mod_data, 'has_full_metadata', True)
+                        if not has_full:
+                            self.downloads_label.setText(tr('ui.loading_placeholder'))
+                        else:
+                            downloads = getattr(self.mod_data, 'downloads', 0) or 0
+                            self.downloads_label.setText(f'⤓ {downloads}')
+                    else:
+                        downloads = getattr(self.mod_data, 'downloads', 0) or 0
+                        self.downloads_label.setText(f'⤓ {downloads}')
+                except Exception:
+                    downloads = getattr(self.mod_data, 'downloads', 0) or 0
+                    self.downloads_label.setText(f'⤓ {downloads}')
             if hasattr(self, 'tagline_label'):
-                tagline = getattr(self.mod_data, 'tagline', '') or tr('ui.no_description')
-                if len(tagline) > 200:
-                    tagline = tagline[:197] + '...'
-                self.tagline_label.setText(tagline)
+                try:
+                    tagline = getattr(self.mod_data, 'tagline', '') or tr('ui.no_description')
+                    if hasattr(self.mod_data, 'is_gamebanana_mod') and self.mod_data.is_gamebanana_mod:
+                        has_full = getattr(self.mod_data, 'has_full_metadata', True)
+                        if not has_full:
+                            tagline = tr('ui.loading_placeholder')
+                    if len(tagline) > 200:
+                        tagline = tagline[:197] + '...'
+                    self.tagline_label.setText(tagline)
+                except Exception:
+                    tagline = getattr(self.mod_data, 'tagline', '') or tr('ui.no_description')
+                    if len(tagline) > 200:
+                        tagline = tagline[:197] + '...'
+                    self.tagline_label.setText(tagline)
             if hasattr(self.mod_data, 'is_gamebanana_mod') and self.mod_data.is_gamebanana_mod:
                 checked = bool(getattr(self.mod_data, 'gamebanana_compatibility_checked', False))
                 if not checked:
                     if self._compatibility_thread and self._compatibility_thread.isRunning():
+                        return
+                    if hasattr(self, '_compatibility_check_timer') and self._compatibility_check_timer.isActive():
+                        return
+                    if self._compatibility_thread and self._compatibility_thread.isFinished():
                         try:
                             self._compatibility_thread.compatibility_checked.disconnect()
                         except (TypeError, RuntimeError):

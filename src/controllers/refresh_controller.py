@@ -174,6 +174,11 @@ class RefreshController:
                                         if not hasattr(mod, 'gamebanana_category') or mod.gamebanana_category != category:
                                             mod.gamebanana_category = category
                                             logging.info(f'RefreshController: Restored category for mod {mod_id}: {category}')
+                                    try:
+                                        if hasattr(mod, 'is_gamebanana_mod') and mod.is_gamebanana_mod:
+                                            mod.has_full_metadata = True
+                                    except Exception:
+                                        pass
                                     restored_count += 1
                                     logging.debug(f'RefreshController: Restored metadata from cache for mod {mod_id} - downloads: {downloads}, has_desc: {bool(full_description)}, has_screenshots: {bool(screenshots)}, has_tagline: {bool(tagline)}, category: {category}')
                 except Exception as e:
@@ -211,7 +216,17 @@ class RefreshController:
         finally:
             self._fetch_finished_in_progress = False
             if fetch_thread:
-                fetch_thread.deleteLater()
+                if fetch_thread.isFinished():
+                    fetch_thread.deleteLater()
+                else:
+
+                    def cleanup_fetch_thread():
+                        try:
+                            if fetch_thread and fetch_thread.isFinished():
+                                fetch_thread.deleteLater()
+                        except Exception:
+                            pass
+                    fetch_thread.finished.connect(cleanup_fetch_thread)
             if update_plugin_tabs_callback:
                 update_plugin_tabs_callback()
             self._start_metadata_loading()
@@ -249,28 +264,47 @@ class RefreshController:
                         self.metadata_thread.cancel()
                     if self.metadata_thread.isRunning():
                         logging.debug('RefreshController: Metadata thread running, will clean up via finished signal')
-                    self.metadata_thread.deleteLater()
+                        try:
+                            self.metadata_thread.mod_updated.disconnect()
+                            self.metadata_thread.finished.disconnect()
+                            self.metadata_thread.progress.disconnect()
+                        except (TypeError, RuntimeError):
+                            pass
+
+                        def cleanup_old_thread():
+                            try:
+                                if self.metadata_thread and self.metadata_thread.isFinished():
+                                    self.metadata_thread.deleteLater()
+                            except Exception:
+                                pass
+                        self.metadata_thread.finished.connect(cleanup_old_thread)
+                    elif self.metadata_thread.isFinished():
+                        self.metadata_thread.deleteLater()
                 except Exception as e:
                     logging.warning(f'RefreshController: Error stopping metadata thread: {e}')
                 finally:
-                    self.metadata_thread = None
+                    if self.metadata_thread and (not self.metadata_thread.isRunning()):
+                        self.metadata_thread = None
             try:
                 from utils.gamebanana_cache import GameBananaMetadataCache
                 if not hasattr(self.app_state, 'config_dir') or not self.app_state.config_dir:
                     logging.warning('RefreshController: config_dir not available, cannot load metadata')
                     return
                 metadata_cache = GameBananaMetadataCache(self.app_state.config_dir)
-                mod_ids_to_load = list(self.app_state.gamebanana_mods_needing_metadata)
-                if not mod_ids_to_load:
+                all_mod_ids = list(self.app_state.gamebanana_mods_needing_metadata)
+                if not all_mod_ids:
                     return
-                self.app_state.gamebanana_mods_needing_metadata = []
+                MAX_METADATA_BATCH_SIZE = 20
+                mod_ids_to_load = all_mod_ids[:MAX_METADATA_BATCH_SIZE]
+                remaining_mod_ids = all_mod_ids[MAX_METADATA_BATCH_SIZE:]
+                self.app_state.gamebanana_mods_needing_metadata = remaining_mod_ids
                 from workers.load_gamebanana_metadata import LoadGameBananaMetadataThread
                 self.metadata_thread = LoadGameBananaMetadataThread(mod_ids_to_load, metadata_cache, parent=self.app_window)
                 if self.app_window and hasattr(self.app_window, 'search_display'):
                     self.metadata_thread.mod_updated.connect(self.app_window.search_display.on_metadata_updated)
                 self.metadata_thread.finished.connect(self._on_metadata_loading_finished)
                 self.metadata_thread.start()
-                logging.info(f'RefreshController: Started metadata loading for {len(mod_ids_to_load)} mods')
+                logging.info(f'RefreshController: Started metadata loading for {len(mod_ids_to_load)} mods ({len(remaining_mod_ids)} remaining in queue)')
             except Exception as e:
                 logging.error(f'RefreshController: Failed to start metadata loading: {e}', exc_info=True)
         except Exception as e:
@@ -294,7 +328,23 @@ class RefreshController:
                 logging.info(f'RefreshController: Found {len(self.app_state.gamebanana_mods_needing_metadata)} more mods needing metadata, starting another batch')
                 self._start_metadata_loading()
             if self.metadata_thread:
-                self.metadata_thread.deleteLater()
-                self.metadata_thread = None
+                try:
+                    if self.metadata_thread.isFinished():
+                        self.metadata_thread.deleteLater()
+                    else:
+
+                        def cleanup_thread():
+                            try:
+                                if self.metadata_thread and self.metadata_thread.isFinished():
+                                    self.metadata_thread.deleteLater()
+                                    self.metadata_thread = None
+                            except Exception:
+                                pass
+                        self.metadata_thread.finished.connect(cleanup_thread)
+                except Exception as e:
+                    logging.warning(f'RefreshController: Error cleaning up metadata thread: {e}')
+                finally:
+                    if self.metadata_thread and self.metadata_thread.isFinished():
+                        self.metadata_thread = None
         except Exception as e:
             logging.warning(f'RefreshController: Error in _on_metadata_loading_finished: {e}')

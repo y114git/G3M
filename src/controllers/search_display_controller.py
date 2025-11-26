@@ -215,7 +215,17 @@ class SearchDisplayController(QObject):
                 try:
                     if thread in self._load_more_threads:
                         self._load_more_threads.remove(thread)
-                    thread.deleteLater()
+                    if thread.isFinished():
+                        thread.deleteLater()
+                    else:
+
+                        def cleanup_when_really_finished():
+                            try:
+                                if thread and thread.isFinished():
+                                    thread.deleteLater()
+                            except Exception:
+                                pass
+                        thread.finished.connect(cleanup_when_really_finished)
                 except (RuntimeError, ValueError):
                     pass
             load_thread.finished.connect(on_thread_finished)
@@ -585,6 +595,10 @@ class SearchDisplayController(QObject):
                                 if not hasattr(mod, 'gamebanana_category') or mod.gamebanana_category != category:
                                     mod.gamebanana_category = category
                                     needs_refilter = True
+                            try:
+                                mod.has_full_metadata = True
+                            except Exception:
+                                pass
                             updated_mods.append(mod_id)
             self._pending_metadata_updates.clear()
             if downloads_changed or needs_resort or needs_refilter:
