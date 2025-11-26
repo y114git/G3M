@@ -246,9 +246,13 @@ class LibraryDisplayController:
             if self.feedback_manager.ask_question('dialogs.delete_confirmation', 'dialogs.delete_mod_confirmation', '', False, mod_name=get_mod_name(mod_data)):
                 self.mod_manager.delete_mod_files(mod_data)
                 self.slot_manager.remove_mod_from_all_chapters(mod_data)
+                self.mod_manager.invalidate_mods_cache()
+                self.mod_manager.load_local_mods()
+                self.mod_manager.mod_list_updated.emit()
                 self.update_display()
                 try:
                     self.app.search_display.update_search_plaques()
+                    self.app.search_display.update_filtered_mods(preserve_page=True)
                 except Exception as e:
                     import logging
                     logging.debug(f'Failed to update search plaques after mod removal: {e}')
@@ -491,7 +495,13 @@ class LibraryDisplayController:
         self.app_state.action_button_enabled = True
         self.app_state.clear_current_task()
         if success:
+            self.mod_manager.invalidate_mods_cache()
             self.mod_manager.load_local_mods()
+            self.mod_manager.mod_list_updated.emit()
+            self.update_display()
+            if hasattr(self.app, 'search_display'):
+                self.app.search_display.update_filtered_mods(preserve_page=True)
+                self.app.search_display.update_search_plaques()
             QTimer.singleShot(200, self.refresh_async)
             self.feedback_manager.show_message('success', 'dialogs.modpack_created_title', tr('dialogs.modpack_created_message', modpack_dir=modpack_dir))
         else:

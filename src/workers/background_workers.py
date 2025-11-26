@@ -979,8 +979,9 @@ class UrlInstallThread(QThread):
             with zipfile.ZipFile(theme_file_path, 'r') as zipf:
                 if 'theme.json' not in zipf.namelist():
                     raise ValueError('Missing theme.json')
+                from utils.file_utils import _safe_extract_zip
                 with tempfile.TemporaryDirectory(prefix='dh-theme-extract-') as temp_dir:
-                    zipf.extractall(temp_dir)
+                    _safe_extract_zip(theme_file_path, temp_dir)
                     theme_json_path = os.path.join(temp_dir, 'theme.json')
                     with open(theme_json_path, 'r', encoding='utf-8') as f:
                         theme_settings = json.load(f)
@@ -1264,7 +1265,7 @@ class ModScanThread(QThread):
             cache_to_save = {}
             for mod_key, info in cache.items():
                 if isinstance(info, dict):
-                    cache_to_save[mod_key] = {'config_mtime': info.get('config_mtime', 0), 'config_data': info.get('config_data', {}), 'folder_path': info.get('folder_path', ''), 'folder_name': info.get('folder_name', '')}
+                    cache_to_save[mod_key] = {'mod_key': info.get('mod_key', mod_key), 'config_mtime': info.get('config_mtime', 0), 'config_data': info.get('config_data', {}), 'folder_path': info.get('folder_path', ''), 'folder_name': info.get('folder_name', '')}
             with open(self.cache_file, 'w', encoding='utf-8') as f:
                 json.dump(cache_to_save, f, indent=2, ensure_ascii=False)
         except (OSError, TypeError) as e:
@@ -1297,8 +1298,15 @@ class ModScanThread(QThread):
                         if folder_path in [info.get('folder_path') for info in disk_cache.values()]:
                             cached_entry = next((info for info in disk_cache.values() if info.get('folder_path') == folder_path), None)
                             if cached_entry and cached_entry.get('config_mtime', 0) >= config_mtime:
-                                mod_key = cached_entry.get('config_data', {}).get('mod_key')
+                                mod_key = cached_entry.get('mod_key') or cached_entry.get('config_data', {}).get('mod_key')
+                                if not mod_key:
+                                    for cache_key, cache_info in disk_cache.items():
+                                        if cache_info.get('folder_path') == folder_path:
+                                            mod_key = cache_key
+                                            break
                                 if mod_key:
+                                    if 'mod_key' not in cached_entry:
+                                        cached_entry['mod_key'] = mod_key
                                     cache[mod_key] = cached_entry
                                     continue
                         with open(config_path, 'r', encoding='utf-8') as f:

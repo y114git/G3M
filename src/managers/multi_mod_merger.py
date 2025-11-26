@@ -952,12 +952,15 @@ class MultiModMerger(QObject):
             self.patching_logger.error('UTMTCLI not available for executing CSX scripts')
             self.status_update.emit(tr('errors.utmtcli_not_available', platform=self.utmt_wrapper.get_platform()), 'error')
             return False
+        env = {}
+        if self.temp_merge_dir and os.path.exists(os.path.join(self.temp_merge_dir, 'output')):
+            env['DELTAHUB_ROOT'] = self.temp_merge_dir
         for script_path in csx_scripts:
             if self._cancelled:
                 return False
             try:
                 self.patching_logger.info(f'Executing CSX script: {os.path.basename(script_path)}')
-                returncode, stdout, stderr = self.utmt_wrapper.execute_script(data_win_path, script_path, output_path=data_win_path, cwd=self.temp_merge_dir if self.temp_merge_dir else None)
+                returncode, stdout, stderr = self.utmt_wrapper.execute_script(data_win_path, script_path, output_path=data_win_path, cwd=self.temp_merge_dir if self.temp_merge_dir else None, env=env)
                 if returncode != 0:
                     self.patching_logger.error(f'CSX script execution failed: {stderr[:500]}')
                     self.status_update.emit(tr('errors.csx_script_failed', script=os.path.basename(script_path)), 'error')

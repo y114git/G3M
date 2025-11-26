@@ -103,10 +103,7 @@ class GameLaunchController(QObject):
             if merge_thread:
                 try:
                     if merge_thread.isRunning():
-                        if not merge_thread.wait(3000):
-                            logging.warning('Merge thread did not finish in time, requesting termination')
-                            merge_thread.terminate()
-                            merge_thread.wait(1000)
+                        logging.debug('Merge thread still running, will clean up via finished signal')
                     if merge_thread.merger:
                         merge_thread.merger.cleanup(force=True)
                     if not merge_thread.isRunning():

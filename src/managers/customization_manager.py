@@ -129,14 +129,18 @@ class CustomizationManager(QObject):
             self._bg_music_instance = None
             thr = getattr(self, '_bg_music_thread', None)
             if thr and thr.isRunning():
-                thr.wait(300)
+                thr.requestInterruption()
+                thr.quit()
             self._bg_music_thread = None
         except Exception:
             pass
         try:
             if hasattr(self, 'bg_fallback_proc') and self.bg_fallback_proc:
                 if self.bg_fallback_proc.poll() is None:
-                    self.bg_fallback_proc.terminate()
+                    try:
+                        self.bg_fallback_proc.kill()
+                    except Exception:
+                        pass
             if platform.system() == 'Windows':
                 try:
                     import winsound

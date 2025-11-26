@@ -25,6 +25,22 @@ class ImageLoaderRunnable(QRunnable):
     def run(self) -> None:
         import requests
         try:
+            if not self.url or not isinstance(self.url, str):
+                self._emit_error('invalid_url')
+                return
+            if '[INVALID_URL]' in self.url or '/[PATH]' in self.url:
+                logging.warning(f'ImageLoader.run: Invalid URL format detected: {self.url[:100]}')
+                self._emit_error('invalid_url')
+                return
+            url_lower = self.url.lower().strip()
+            if not url_lower.startswith(('http://', 'https://')):
+                logging.warning(f'ImageLoader.run: URL does not start with http:// or https://: {self.url[:100]}')
+                self._emit_error('invalid_url')
+                return
+            if '..' in self.url or len(self.url) > 2048:
+                logging.warning(f'ImageLoader.run: Suspicious URL detected: {self.url[:100]}')
+                self._emit_error('invalid_url')
+                return
             cached = get_from_cache(self.url)
             if cached is not None and (not cached.isNull()):
                 try:

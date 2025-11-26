@@ -84,19 +84,20 @@ class ModOperationsController:
                         logging.warning(f'ModOperationsController: Error cancelling previous task: {e}')
                 self.app_state.clear_current_task()
 
-                def start_new_install_after_delay():
-                    if previous_task.isRunning():
-                        logging.debug('ModOperationsController: Previous task still running, waiting more...')
-                        QTimer.singleShot(200, start_new_install_after_delay)
-                    else:
-                        logging.info('ModOperationsController: Previous task finished, starting new installation')
-                        try:
-                            if previous_task.isFinished():
-                                previous_task.deleteLater()
-                        except Exception as e:
-                            logging.debug(f'ModOperationsController: Error deleting previous task: {e}')
-                        self._start_gamebanana_install(mod, force, is_update)
-                QTimer.singleShot(300, start_new_install_after_delay)
+                def on_previous_task_finished():
+                    logging.info('ModOperationsController: Previous task finished, starting new installation')
+                    try:
+                        if previous_task.isFinished():
+                            previous_task.deleteLater()
+                    except Exception as e:
+                        logging.debug(f'ModOperationsController: Error deleting previous task: {e}')
+                    self._start_gamebanana_install(mod, force, is_update)
+                if hasattr(previous_task, 'finished'):
+                    previous_task.finished.connect(on_previous_task_finished)
+                elif not previous_task.isRunning():
+                    on_previous_task_finished()
+                else:
+                    QTimer.singleShot(100, lambda: on_previous_task_finished() if not previous_task.isRunning() else None)
                 return
             if self.app_state.current_task:
                 logging.info('ModOperationsController: Cleaning up finished previous task')
@@ -357,7 +358,7 @@ class ModOperationsController:
         self._last_gamebanana_progress = -1
         self.set_install_buttons_enabled(True)
         self._safe_execute(lambda: self.app.search_display.update_search_plaques(), 'Failed to refresh plaques after install')
-        QTimer.singleShot(50, lambda: self._safe_execute(lambda: self.app.game_launch.update_button_state(), 'Failed to update button state'))
+        self._safe_execute(lambda: self.app.game_launch.update_button_state(), 'Failed to update button state')
         if not success:
             is_cancelled = message == tr('status.operation_cancelled') or 'cancelled' in message.lower() or self.app_state.operation_cancelled
             if is_cancelled:
@@ -380,6 +381,7 @@ class ModOperationsController:
         try:
             self.mod_manager.load_local_mods()
             logging.info('ModOperationsController: Local mods reloaded after installation')
+            self.mod_manager.mod_list_updated.emit()
             if installed_mod_info and hasattr(self.app_state, 'all_mods'):
                 if not self.app_state.all_mods:
                     self.app_state.all_mods = []
@@ -458,7 +460,7 @@ class ModOperationsController:
                                 if installed_mod_page != self.app_state.current_page:
                                     logging.info(f'ModOperationsController: Navigating to page {installed_mod_page} to show installed mod')
                                     self.app_state.current_page = installed_mod_page
-                                QTimer.singleShot(100, lambda: self._safe_execute(lambda: self.app.search_display.update_display(), 'Failed to update display after installation'))
+                                self._safe_execute(lambda: self.app.search_display.update_display(), 'Failed to update display after installation')
                             elif not installed_mod_found:
                                 logging.error('ModOperationsController: Installed mod was not found in filtered_mods after installation! This is a bug.')
                         except Exception as e:
@@ -506,14 +508,14 @@ class ModOperationsController:
             self._update_debounce_short = DebounceTimer(delay_ms=200)
         if not hasattr(self, '_update_debounce_long'):
             self._update_debounce_long = DebounceTimer(delay_ms=1000)
+        if current_task and installed_mod_info:
+            self.refresh_specific_mod_widget_after_update(installed_mod_info)
         self._update_debounce_short.call(check_cache_and_update)
         self._update_debounce_short.call(update_filtered_mods)
         self._update_debounce_short.call(update_plaques_with_retry)
         self._update_debounce_short.call(update_library_with_retry)
         self._update_debounce_long.call(update_plaques_with_retry)
         self._update_debounce_long.call(update_library_with_retry)
-        if current_task and installed_mod_info:
-            QTimer.singleShot(100, lambda: self.refresh_specific_mod_widget_after_update(installed_mod_info))
         if message:
             self.feedback_manager.update_status(message, UI_COLORS['status_success'])
         else:
@@ -557,7 +559,12 @@ class ModOperationsController:
 
     def uninstall_mod(self, mod):
         self.mod_manager.uninstall_mod(mod)
+        self.mod_manager.mod_list_updated.emit()
         self.app.search_display.update_search_plaques()
+        if hasattr(self.app, 'library_display'):
+            self.app.library_display.update_display()
+        if hasattr(self.app, 'search_display'):
+            self.app.search_display.update_filtered_mods(preserve_page=True)
 
     def set_install_buttons_enabled(self, enabled: bool):
         self._safe_execute(lambda: (self.app.action_button.setEnabled(True if self.app_state.is_installing else enabled), self.app.saves_button.setEnabled(True), self.app.shortcut_button.setEnabled(enabled)), 'Failed to set install buttons enabled')

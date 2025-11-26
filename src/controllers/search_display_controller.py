@@ -42,48 +42,36 @@ class SearchDisplayController(QObject):
     def prev_page(self):
         try:
             self._cleanup_details_threads()
-
-            def do_page_change():
-                try:
-                    if self.app_state.current_page > 1:
-                        self.app_state.current_page -= 1
-                        self.update_display()
-                except Exception as e:
-                    logger.error(f'SearchDisplayController: Error in prev_page do_page_change: {e}', exc_info=True)
-            QTimer.singleShot(200, do_page_change)
+            if self.app_state.current_page > 1:
+                self.app_state.current_page -= 1
+                self.update_display()
         except Exception as e:
             logger.error(f'SearchDisplayController: Error in prev_page: {e}', exc_info=True)
 
     def next_page(self):
         try:
             self._cleanup_details_threads()
-
-            def do_page_change():
-                try:
-                    total_mods = len(self.app_state.filtered_mods) if self.app_state.filtered_mods else 0
-                    current_page = self.app_state.current_page
-                    next_page_num = current_page + 1
-                    items_needed = next_page_num * self.app_state.mods_per_page
-                    should_load_more = False
-                    preferred_game = self._determine_preferred_game_for_page(next_page_num)
-                    if self.app_state.mods_loaded:
-                        if total_mods < items_needed:
-                            should_load_more = True
-                            self._load_more_gamebanana_mods_if_needed(items_needed, preferred_game)
-                    max_available_page = max(1, (total_mods - 1) // self.app_state.mods_per_page + 1) if total_mods > 0 else 1
-                    can_advance = False
-                    if should_load_more and self.app_state.gamebanana_loading:
-                        can_advance = True
-                    elif current_page < max_available_page:
-                        can_advance = True
-                    elif total_mods > 0 and self.app_state.gamebanana_loading:
-                        can_advance = True
-                    if can_advance:
-                        self.app_state.current_page += 1
-                        self.update_display()
-                except Exception as e:
-                    logger.error(f'SearchDisplayController: Error in next_page do_page_change: {e}', exc_info=True)
-            QTimer.singleShot(200, do_page_change)
+            total_mods = len(self.app_state.filtered_mods) if self.app_state.filtered_mods else 0
+            current_page = self.app_state.current_page
+            next_page_num = current_page + 1
+            items_needed = next_page_num * self.app_state.mods_per_page
+            should_load_more = False
+            preferred_game = self._determine_preferred_game_for_page(next_page_num)
+            if self.app_state.mods_loaded:
+                if total_mods < items_needed:
+                    should_load_more = True
+                    self._load_more_gamebanana_mods_if_needed(items_needed, preferred_game)
+            max_available_page = max(1, (total_mods - 1) // self.app_state.mods_per_page + 1) if total_mods > 0 else 1
+            can_advance = False
+            if should_load_more and self.app_state.gamebanana_loading:
+                can_advance = True
+            elif current_page < max_available_page:
+                can_advance = True
+            elif total_mods > 0 and self.app_state.gamebanana_loading:
+                can_advance = True
+            if can_advance:
+                self.app_state.current_page += 1
+                self.update_display()
         except Exception as e:
             logger.error(f'SearchDisplayController: Error in next_page: {e}', exc_info=True)
 
@@ -411,7 +399,7 @@ class SearchDisplayController(QObject):
                         logger.error(f"Error processing plaque for mod {(mod.name if mod else 'unknown')} at index {start_index + idx}: {e}", exc_info=True)
                         continue
                 current_page_cache_keys = {get_mod_cache_key(mod) for mod in current_page_mods if mod is not None}
-                widgets_to_remove = []
+                widgets_to_hide = []
                 for i in range(self.app.mod_list_layout.count() - 1):
                     item = self.app.mod_list_layout.itemAt(i)
                     if item and item.widget():
@@ -419,8 +407,8 @@ class SearchDisplayController(QObject):
                         if isinstance(widget, ModPlaqueWidget):
                             widget_cache_key = get_mod_cache_key(widget.mod_data) if hasattr(widget, 'mod_data') and widget.mod_data else None
                             if widget_cache_key and widget_cache_key not in current_page_cache_keys:
-                                widgets_to_remove.append(widget)
-                for widget in widgets_to_remove:
+                                widgets_to_hide.append(widget)
+                for widget in widgets_to_hide:
                     try:
                         self.app.mod_list_layout.removeWidget(widget)
                         widget.hide()

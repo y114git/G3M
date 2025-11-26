@@ -159,21 +159,84 @@ def _extract_archive_raw(src_path: str, fname_lower: str, out_dir: str) -> None:
     except Exception as e:
         logging.debug(f'_extract_archive_raw: py7zr import failed (not installed): {e}')
         py7zr = None
+    out_dir_abs = os.path.abspath(out_dir)
+    os.makedirs(out_dir_abs, exist_ok=True)
     if fname_lower.endswith('.zip'):
         with zipfile.ZipFile(src_path, 'r') as zf:
-            zf.extractall(out_dir)
+            for member in zf.namelist():
+                if '..' in member or member.startswith('/'):
+                    logging.warning(f'_extract_archive_raw: Skipping suspicious path in ZIP: {member}')
+                    continue
+                try:
+                    target_path = _safe_join(out_dir_abs, member)
+                    if not os.path.abspath(target_path).startswith(out_dir_abs):
+                        logging.warning(f'_extract_archive_raw: Path traversal attempt blocked: {member}')
+                        continue
+                    parent_dir = os.path.dirname(target_path)
+                    if parent_dir:
+                        os.makedirs(parent_dir, exist_ok=True)
+                    if not member.endswith('/'):
+                        with zf.open(member) as source, open(target_path, 'wb') as target:
+                            shutil.copyfileobj(source, target)
+                except (ValueError, OSError) as e:
+                    logging.warning(f'_extract_archive_raw: Failed to extract {member}: {e}')
+                    continue
         return
     if fname_lower.endswith('.tar.gz'):
         with tarfile.open(src_path, 'r:gz') as tf:
-            tf.extractall(out_dir)
+            for member in tf.getmembers():
+                if '..' in member.name or member.name.startswith('/'):
+                    logging.warning(f'_extract_archive_raw: Skipping suspicious path in TAR: {member.name}')
+                    continue
+                try:
+                    target_path = _safe_join(out_dir_abs, member.name)
+                    if not os.path.abspath(target_path).startswith(out_dir_abs):
+                        logging.warning(f'_extract_archive_raw: Path traversal attempt blocked: {member.name}')
+                        continue
+                    tf.extract(member, out_dir_abs)
+                except (ValueError, OSError, tarfile.TarError) as e:
+                    logging.warning(f'_extract_archive_raw: Failed to extract {member.name}: {e}')
+                    continue
         return
     if fname_lower.endswith('.rar'):
         with rarfile.RarFile(src_path, 'r') as rf:
-            rf.extractall(out_dir)
+            for member in rf.namelist():
+                if '..' in member or member.startswith('/'):
+                    logging.warning(f'_extract_archive_raw: Skipping suspicious path in RAR: {member}')
+                    continue
+                try:
+                    target_path = _safe_join(out_dir_abs, member)
+                    if not os.path.abspath(target_path).startswith(out_dir_abs):
+                        logging.warning(f'_extract_archive_raw: Path traversal attempt blocked: {member}')
+                        continue
+                    parent_dir = os.path.dirname(target_path)
+                    if parent_dir:
+                        os.makedirs(parent_dir, exist_ok=True)
+                    if not member.endswith('/'):
+                        rf.extract(member, out_dir_abs)
+                except (ValueError, OSError, rarfile.RarCannotExec) as e:
+                    logging.warning(f'_extract_archive_raw: Failed to extract {member}: {e}')
+                    continue
         return
     if fname_lower.endswith('.7z') and py7zr is not None:
         with py7zr.SevenZipFile(src_path, mode='r') as zf:
-            zf.extractall(path=out_dir)
+            for member in zf.getnames():
+                if '..' in member or member.startswith('/'):
+                    logging.warning(f'_extract_archive_raw: Skipping suspicious path in 7Z: {member}')
+                    continue
+                try:
+                    target_path = _safe_join(out_dir_abs, member)
+                    if not os.path.abspath(target_path).startswith(out_dir_abs):
+                        logging.warning(f'_extract_archive_raw: Path traversal attempt blocked: {member}')
+                        continue
+                    parent_dir = os.path.dirname(target_path)
+                    if parent_dir:
+                        os.makedirs(parent_dir, exist_ok=True)
+                    if not member.endswith('/'):
+                        zf.extract(member, out_dir_abs)
+                except (ValueError, OSError) as e:
+                    logging.warning(f'_extract_archive_raw: Failed to extract {member}: {e}')
+                    continue
         return
     if fname_lower.endswith('.lzma'):
         _extract_lzma(src_path, out_dir, fname_lower)
@@ -194,6 +257,30 @@ def _safe_join(base: str, *paths: str) -> str:
     if os.path.commonpath([final, base_abs]) != base_abs:
         raise ValueError('path_traversal')
     return final
+
+
+def _safe_extract_zip(zip_path: str, out_dir: str) -> None:
+    out_dir_abs = os.path.abspath(out_dir)
+    os.makedirs(out_dir_abs, exist_ok=True)
+    with zipfile.ZipFile(zip_path, 'r') as zf:
+        for member in zf.namelist():
+            if '..' in member or member.startswith('/'):
+                logging.warning(f'_safe_extract_zip: Skipping suspicious path in ZIP: {member}')
+                continue
+            try:
+                target_path = _safe_join(out_dir_abs, member)
+                if not os.path.abspath(target_path).startswith(out_dir_abs):
+                    logging.warning(f'_safe_extract_zip: Path traversal attempt blocked: {member}')
+                    continue
+                parent_dir = os.path.dirname(target_path)
+                if parent_dir:
+                    os.makedirs(parent_dir, exist_ok=True)
+                if not member.endswith('/'):
+                    with zf.open(member) as source, open(target_path, 'wb') as target:
+                        shutil.copyfileobj(source, target)
+            except (ValueError, OSError) as e:
+                logging.warning(f'_safe_extract_zip: Failed to extract {member}: {e}')
+                continue
 
 
 def _move_tree_safely(src_root: str, dst_root: str) -> None:
@@ -368,6 +455,8 @@ def atomic_write_json(path: str, data: Dict, indent: int = 2) -> None:
     try:
         with open(tmp, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=indent, ensure_ascii=False)
+            f.flush()
+            os.fsync(f.fileno())
         os.replace(tmp, path)
     except (PermissionError, OSError) as e:
         try:

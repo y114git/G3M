@@ -1,4 +1,5 @@
 import os
+import logging
 from PyQt6.QtCore import Qt, QThreadPool
 import weakref
 from PyQt6 import sip
@@ -67,7 +68,7 @@ def create_file_group_universal(label_text, button_text, file_filter, line_edit,
     return (group_box, button)
 
 
-def clear_layout_widgets(layout, keep_last_n=1):
+def clear_layout_widgets(layout, keep_last_n=1, hide_instead_of_delete=True):
     if not layout:
         return
     end_index = layout.count() - keep_last_n
@@ -83,8 +84,12 @@ def clear_layout_widgets(layout, keep_last_n=1):
     for widget in widgets_to_remove:
         try:
             layout.removeWidget(widget)
-            widget.setParent(None)
-            widget.deleteLater()
+            if hide_instead_of_delete:
+                widget.hide()
+                widget.setParent(None)
+            else:
+                widget.setParent(None)
+                widget.deleteLater()
         except (RuntimeError, AttributeError):
             pass
 
@@ -140,7 +145,15 @@ def load_mod_icon_universal(icon_label, mod_data, size=80):
                         lbl = label_ref()
                         if not lbl:
                             return
-                        if sip.isdeleted(lbl):
+                        try:
+                            if sip.isdeleted(lbl):
+                                return
+                        except (RuntimeError, AttributeError):
+                            return
+                        try:
+                            if not hasattr(lbl, 'parent') or (hasattr(lbl, 'parent') and lbl.parent() is None and (not hasattr(lbl, 'window'))):
+                                pass
+                        except (RuntimeError, AttributeError):
                             return
                         if img is not None and (not getattr(img, 'isNull', lambda: True)()):
                             pm = QPixmap.fromImage(img)
@@ -149,8 +162,10 @@ def load_mod_icon_universal(icon_label, mod_data, size=80):
                                 cropped = pm.copy((pm.width() - icon_size) // 2, (pm.height() - icon_size) // 2, icon_size, icon_size)
                                 scaled_pixmap = cropped.scaled(size, size, Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation)
                                 lbl.setPixmap(scaled_pixmap)
-                    except Exception:
-                        pass
+                    except (RuntimeError, AttributeError) as e:
+                        logging.debug(f'load_mod_icon_universal: Widget deleted during image load: {e}')
+                    except Exception as e:
+                        logging.debug(f'load_mod_icon_universal: Error setting pixmap: {e}')
 
                 def _on_error(url, err):
                     pass

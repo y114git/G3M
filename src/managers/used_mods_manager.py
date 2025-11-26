@@ -165,6 +165,8 @@ class UsedModsManager(QObject):
                 mod_key = get_mod_key(mod_data)
                 if mod_key:
                     mod_keys.append(mod_key)
+                    mod_name = get_mod_name(mod_data, 'Unknown')
+                    logging.debug(f'save_used_mods_state: Saving mod {mod_name} with key {mod_key} for chapter {chapter_id}')
             if mod_keys:
                 if len(mod_keys) == 1:
                     used_mods_data[str(chapter_id)] = mod_keys[0]
@@ -172,6 +174,7 @@ class UsedModsManager(QObject):
                     used_mods_data[str(chapter_id)] = mod_keys
         self.app_state.local_config[config_key] = used_mods_data
         self.settings_manager.write_local_config()
+        logging.info(f'save_used_mods_state: Saved {len(used_mods_data)} chapter(s) with mods')
 
     def load_used_mods_state(self, mode=None):
         logging.info('Loading used mods state')
@@ -226,8 +229,10 @@ class UsedModsManager(QObject):
                 mod_data = None
                 if hasattr(self.app_state, 'all_mods') and self.app_state.all_mods:
                     for mod in self.app_state.all_mods:
-                        if getattr(mod, 'key', None) == mod_key:
+                        mod_mod_key = get_mod_key(mod)
+                        if mod_mod_key == mod_key:
                             mod_data = mod
+                            logging.debug(f"load_used_mods_state: Found mod {get_mod_name(mod, 'Unknown')} with key {mod_key} in all_mods")
                             break
                 if not mod_data and hasattr(self.app_state, 'all_mods') and self.app_state.all_mods:
                     if mod_key.startswith('gb_'):
@@ -260,11 +265,13 @@ class UsedModsManager(QObject):
                     mod_config = self.mod_manager.get_mod_config(mod_key)
                     if mod_config:
                         mod_data = self.mod_manager.create_mod_object_from_info(mod_config, getattr(self.app_state, 'all_mods', None))
+                        if mod_data:
+                            logging.debug(f'load_used_mods_state: Created mod object from config for key {mod_key}')
                 if mod_data:
                     mods_list.append(mod_data)
                 else:
                     missing_mod_keys.append(mod_key)
-                    logging.debug(f'Mod with key {mod_key} not found during initial load, will retry after mods are fully loaded')
+                    logging.warning(f"Mod with key {mod_key} not found during initial load, will retry after mods are fully loaded. Available mod keys: {[get_mod_key(m) for m in (self.app_state.all_mods[:10] if hasattr(self.app_state, 'all_mods') and self.app_state.all_mods else [])]}")
             if mods_list:
                 self.used_mods[chapter_id] = mods_list
                 logging.info(f"Loaded {len(mods_list)} mod(s) for chapter {chapter_id}: {[get_mod_name(m, 'Unknown') for m in mods_list]}")
@@ -300,7 +307,8 @@ class UsedModsManager(QObject):
                 mod_data = None
                 if hasattr(self.app_state, 'all_mods') and self.app_state.all_mods:
                     for mod in self.app_state.all_mods:
-                        if getattr(mod, 'key', None) == mod_key:
+                        mod_mod_key = get_mod_key(mod)
+                        if mod_mod_key == mod_key:
                             mod_data = mod
                             break
                         if not mod_data and mod_key.startswith('gb_'):

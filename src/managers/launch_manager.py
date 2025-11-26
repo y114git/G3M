@@ -53,10 +53,8 @@ class GameLauncher(QObject):
             if self.monitor_thread.isRunning():
                 self.monitor_thread.requestInterruption()
                 self.monitor_thread.quit()
-                if not self.monitor_thread.wait(2000):
-                    logging.warning('monitor thread did not stop in time')
-                    self.monitor_thread.terminate()
-                    self.monitor_thread.wait(1000)
+                if self.monitor_thread.isRunning():
+                    logging.debug('monitor thread still running, will clean up via finished signal')
             self.monitor_thread.deleteLater()
             if hasattr(self, 'monitor_worker') and self.monitor_worker is not None:
                 self.monitor_worker.deleteLater()
@@ -102,11 +100,7 @@ class GameLauncher(QObject):
         has_list_format = any((isinstance(mods_list, list) for mods_list in selections.values()))
         needs_multi_mod = has_list_format and any((len(mods_list) > 0 for mods_list in selections.values() if isinstance(mods_list, list)))
         logging.info(f'Multi-mod check: needs_multi_mod={needs_multi_mod} (has_list_format={has_list_format})')
-        total_mods_count = 0
-        for mods_list in selections.values():
-            if isinstance(mods_list, list):
-                total_mods_count += len(mods_list)
-        if total_mods_count >= 2:
+        if needs_multi_mod:
             clear_conflicts_log()
         if needs_multi_mod:
             logging.info('Using multi-mod merger for game launch')
@@ -317,10 +311,18 @@ class GameLauncher(QObject):
         if merge_thread:
             try:
                 if merge_thread.isRunning():
-                    merge_thread.wait(5000)
+                    logging.debug('Merge thread still running, will clean up via finished signal')
                 if merge_thread.merger:
                     self.multi_mod_merger = merge_thread.merger
-                merge_thread.deleteLater()
+                if not merge_thread.isRunning():
+                    merge_thread.deleteLater()
+                else:
+
+                    def cleanup_merge_thread():
+                        if merge_thread.merger:
+                            self.multi_mod_merger = merge_thread.merger
+                        merge_thread.deleteLater()
+                    merge_thread.finished.connect(cleanup_merge_thread)
             except Exception as e:
                 logging.error(f'Error cleaning up merge thread: {e}', exc_info=True)
             finally:

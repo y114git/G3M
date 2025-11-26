@@ -263,9 +263,12 @@ class AppWindow(QWidget):
                     if self.mod_manager:
                         self.mod_manager.invalidate_mods_cache()
                         self.mod_manager.load_local_mods(_skip_conversion=True)
-                        QTimer.singleShot(300, lambda: self.mod_manager.mod_list_updated.emit())
+                        self.mod_manager.mod_list_updated.emit()
                     if hasattr(self, 'library_display'):
-                        QTimer.singleShot(500, lambda: self.library_display.update_display() if hasattr(self, 'library_display') else None)
+                        self.library_display.update_display()
+                    if hasattr(self, 'search_display'):
+                        self.search_display.update_search_plaques()
+                        self.search_display.update_filtered_mods(preserve_page=True)
                     if hasattr(self, 'settings_manager'):
                         self.settings_manager.theme_changed.emit()
                     self.feedback_manager.update_status(message, UI_COLORS['status_success'])
@@ -286,7 +289,11 @@ class AppWindow(QWidget):
         self.app_state.is_installing = False
         self.mod_ops.set_install_buttons_enabled(True)
         self.progress_bar.setVisible(False)
-        self.library_display.update_display()
+        if success:
+            self.library_display.update_display()
+            if hasattr(self, 'search_display'):
+                self.search_display.update_search_plaques()
+                self.search_display.update_filtered_mods(preserve_page=True)
         status_color = UI_COLORS['status_success'] if success else UI_COLORS['status_error']
         self._update_status(message, status_color)
 
@@ -817,11 +824,8 @@ class AppWindow(QWidget):
                                     self.refresh_controller.metadata_thread.finished.disconnect()
                                 except (TypeError, RuntimeError):
                                     pass
-                                self.refresh_controller.metadata_thread.wait(2000)
                                 if self.refresh_controller.metadata_thread.isRunning():
-                                    logging.warning('AppWindow: Metadata thread still running after sort change, terminating')
-                                    self.refresh_controller.metadata_thread.terminate()
-                                    self.refresh_controller.metadata_thread.wait(1000)
+                                    logging.debug('AppWindow: Metadata thread still running after sort change, will clean up via finished signal.')
                             self.refresh_controller.metadata_thread.deleteLater()
                             self.refresh_controller.metadata_thread = None
                         except Exception as e:
@@ -1460,7 +1464,7 @@ class AppWindow(QWidget):
                 threads_to_stop.append(bg_loader)
             for thread in threads_to_stop:
                 self._safe_set_parent_none(thread)
-                safe_stop_thread(thread, timeout=THREAD_WAIT_TIMEOUT)
+                safe_stop_thread(thread, timeout=THREAD_WAIT_TIMEOUT, blocking=False)
             for attr in ('help_thread', 'changelog_thread'):
                 worker_attr = attr.replace('_thread', '_worker')
                 worker = getattr(self, worker_attr, None)
@@ -1472,44 +1476,27 @@ class AppWindow(QWidget):
                         pass
             if self.presence_thread:
                 self._safe_set_parent_none(self.presence_thread)
-                safe_stop_thread(self.presence_thread, timeout=2000)
+                safe_stop_thread(self.presence_thread, timeout=2000, blocking=False)
                 if not (self.presence_thread and self.presence_thread.isRunning()):
                     self.presence_thread = None
                     self.presence_worker = None
             if hasattr(self.refresh_controller, 'fetch_thread') and self.refresh_controller.fetch_thread:
                 self._safe_set_parent_none(self.refresh_controller.fetch_thread)
-                safe_stop_thread(self.refresh_controller.fetch_thread, timeout=THREAD_WAIT_TIMEOUT)
+                safe_stop_thread(self.refresh_controller.fetch_thread, timeout=THREAD_WAIT_TIMEOUT, blocking=False)
                 if not (self.refresh_controller.fetch_thread and self.refresh_controller.fetch_thread.isRunning()):
                     self.refresh_controller.fetch_thread = None
             self.game_launcher._cleanup_direct_launch_files()
             self.settings_manager.save_window_geometry(self)
             QApplication.processEvents()
-            import time
-            time.sleep(0.1)
+            self.hide()
             for thread in threads_to_stop:
                 if thread and thread.isRunning():
                     thread_name = getattr(thread, '__class__', type(thread)).__name__
-                    logging.warning(f'closeEvent: {thread_name} still running after cleanup, forcing termination')
-                    try:
-                        thread.terminate()
-                        if not thread.wait(1000):
-                            logging.error(f'closeEvent: failed to terminate {thread_name} even after force terminate')
-                        if thread.isRunning():
-                            logging.error(f'closeEvent: {thread_name} is still running after force terminate, this may cause resource leaks')
-                    except Exception as e:
-                        logging.error(f'closeEvent: error terminating {thread_name}: {e}', exc_info=True)
+                    logging.warning(f'closeEvent: {thread_name} still running after cleanup. Thread may be blocked. Consider checking isInterruptionRequested() in worker loops.')
             critical_threads = [('presence_thread', self.presence_thread), ('fetch_thread', getattr(self.refresh_controller, 'fetch_thread', None)), ('details_thread', getattr(self.refresh_controller, 'details_thread', None)), ('metadata_thread', getattr(self.refresh_controller, 'metadata_thread', None)), ('monitor_thread', getattr(self.game_launcher, 'monitor_thread', None)), ('help_thread', getattr(self, 'help_thread', None)), ('changelog_thread', getattr(self, 'changelog_thread', None))]
             for thread_name, thread in critical_threads:
                 if thread and thread.isRunning():
-                    logging.warning(f'closeEvent: {thread_name} still running after cleanup, forcing termination')
-                    try:
-                        thread.terminate()
-                        if not thread.wait(1000):
-                            logging.error(f'closeEvent: failed to terminate {thread_name} even after force terminate')
-                        if thread.isRunning():
-                            logging.error(f'closeEvent: {thread_name} is still running after force terminate, this may cause resource leaks')
-                    except Exception as e:
-                        logging.error(f'closeEvent: error terminating {thread_name}: {e}', exc_info=True)
+                    logging.warning(f'closeEvent: {thread_name} still running after cleanup. Thread may be blocked.')
         except Exception as e:
             logging.error(f'closeEvent: error during cleanup: {e}', exc_info=True)
         finally:

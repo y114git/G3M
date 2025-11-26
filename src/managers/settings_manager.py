@@ -353,8 +353,9 @@ class SettingsManager(QObject):
             with zipfile.ZipFile(theme_file_path, 'r') as zipf:
                 if 'theme.json' not in zipf.namelist():
                     raise ValueError('Missing theme.json')
+                from utils.file_utils import _safe_extract_zip
                 with tempfile.TemporaryDirectory() as temp_dir:
-                    zipf.extractall(temp_dir)
+                    _safe_extract_zip(theme_file_path, temp_dir)
                     with open(os.path.join(temp_dir, 'theme.json'), 'r') as f:
                         theme_settings = json.load(f)
                     for key, value in theme_settings.items():
