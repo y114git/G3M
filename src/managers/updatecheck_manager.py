@@ -6,6 +6,7 @@ import shutil
 import threading
 import subprocess
 import logging
+import time
 from utils.network_utils import get_session
 from PyQt6.QtCore import QObject, pyqtSignal
 from managers.localization_manager import tr
@@ -64,6 +65,41 @@ class UpdateChecker(QObject):
     def perform_update(self, update_info):
         self.status_changed.emit(tr('status.update_available'), UI_COLORS['status_info'])
         threading.Thread(target=self._update_worker, args=(update_info,), daemon=True).start()
+
+    def _perform_unix_update(self, current_exe_path, new_content_path):
+        system = platform.system()
+        target_dir = os.path.dirname(current_exe_path)
+        if not os.access(target_dir, os.W_OK):
+            error_msg = tr('errors.update_permission_error_no_write_access', path=target_dir)
+            logging.error(f'[UPDATE] {error_msg}')
+            raise PermissionError(error_msg)
+        updater_script_path = os.path.join(tempfile.gettempdir(), f'deltahub_updater_{int(time.time())}.sh')
+        current_pid = os.getpid()
+        safe_old = current_exe_path.replace('"', '\\"')
+        safe_new = new_content_path.replace('"', '\\"')
+        if system == 'Darwin':
+            launch_cmd = f'open "{safe_old}"'
+        else:
+            launch_cmd = f'"{safe_old}" &'
+        new_content_parent = os.path.dirname(new_content_path).replace('"', '\\"')
+        script_content = f'''#!/bin/bash\n# DELTAHUB Updater Script\n# Generated at {time.strftime('%Y-%m-%d %H:%M:%S')}\n\nPID={current_pid}\nOLD_PATH="{safe_old}"\nNEW_PATH="{safe_new}"\nTEMP_DIR="{new_content_parent}"\nLOG_FILE="/tmp/deltahub_update.log"\n\n# 1. Ждем завершения основного процесса\necho "Waiting for PID $PID to close..." > "$LOG_FILE"\nwhile kill -0 "$PID" 2>/dev/null; do\n   sleep 0.5\ndone\n\necho "Process closed. Updating..." >> "$LOG_FILE"\n\n# 2. Удаляем старую версию (или перемещаем в бекап)\n# На macOS это удаление папки .app, на Linux файла\nrm -rf "$OLD_PATH" 2>> "$LOG_FILE"\n\n# 3. Перемещаем новую версию на место старой\nmv -f "$NEW_PATH" "$OLD_PATH" 2>> "$LOG_FILE"\n\n# 4. Восстанавливаем права на исполнение (критично для Linux/Mac)\nchmod -R 755 "$OLD_PATH" 2>> "$LOG_FILE"\n\n# 5. (Только macOS) Снимаем карантин, если нужно\nif [[ "$OSTYPE" == "darwin"* ]]; then\n   xattr -r -d com.apple.quarantine "$OLD_PATH" 2>> "$LOG_FILE" || true\nfi\n\n# 6. Запускаем новую версию\necho "Launching new version..." >> "$LOG_FILE"\n{launch_cmd} >> "$LOG_FILE" 2>&1\n\n# 7. Очищаем временную папку (если она пуста)\nrm -rf "$TEMP_DIR" 2>/dev/null || true\n\n# 8. Самоудаление скрипта (опционально, но чистоплотно)\nrm -f "$0" 2>/dev/null || true\n'''
+        with open(updater_script_path, 'w', encoding='utf-8') as f:
+            f.write(script_content)
+        os.chmod(updater_script_path, 0o755)
+        logging.info(f'[UPDATE] Created updater script: {updater_script_path}')
+        logging.info(f'[UPDATE] Launching updater script for PID {current_pid}')
+        try:
+            subprocess.Popen(['/bin/bash', updater_script_path], start_new_session=True, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            logging.info('[UPDATE] Updater script launched successfully')
+        except Exception as e:
+            logging.error(f'[UPDATE] Failed to launch updater script: {e}')
+            try:
+                os.remove(updater_script_path)
+            except BaseException:
+                pass
+            raise
+        self.feedback_manager.update_status(tr('status.restarting'), UI_COLORS['status_success'])
+        self.quit_requested.emit()
 
     def _update_worker(self, update_info):
         installer_launched = False
@@ -127,11 +163,17 @@ class UpdateChecker(QObject):
                         logging.error(f'[UPDATE] Failed to launch installer (result code: {result})')
                         raise RuntimeError(tr('errors.installer_launch_failed', code=result))
                 current_exe_path = os.path.realpath(sys.executable)
-                replace_target = os.path.abspath(os.path.join(os.path.dirname(current_exe_path), '..', '..')) if system == 'Darwin' else current_exe_path
-                backup_path = f'{replace_target}.old'
-                logging.info(f'[UPDATE] Current executable: {current_exe_path}')
+                if system == 'Darwin':
+                    while current_exe_path != '/' and (not current_exe_path.endswith('.app')):
+                        current_exe_path = os.path.dirname(current_exe_path)
+                    if not current_exe_path.endswith('.app'):
+                        logging.error('[UPDATE] Could not find .app bundle in executable path')
+                        raise RuntimeError(tr('errors.app_path_not_found'))
+                    replace_target = current_exe_path
+                else:
+                    replace_target = current_exe_path
+                logging.info(f'[UPDATE] Current executable: {sys.executable}')
                 logging.info(f'[UPDATE] Replace target: {replace_target}')
-                logging.info(f'[UPDATE] Backup path: {backup_path}')
                 if system == 'Darwin':
                     logging.info('[UPDATE] Processing macOS update')
                     if archive_path.lower().endswith('.zip'):
@@ -148,36 +190,46 @@ class UpdateChecker(QObject):
                     logging.info('[UPDATE] Fixed Python symlink in .app bundle')
                 else:
                     logging.info('[UPDATE] Processing Linux update')
-                    new_content_path = next((os.path.join(root, file) for root, _, files in os.walk(extraction_dir) for file in files if os.path.isfile(os.path.join(root, file)) and os.access(os.path.join(root, file), os.X_OK)), None)
+                    new_content_path = None
+                    for root, _, files in os.walk(extraction_dir):
+                        for file in files:
+                            file_path = os.path.join(root, file)
+                            if os.path.isfile(file_path) and os.access(file_path, os.X_OK):
+                                new_content_path = file_path
+                                break
+                        if new_content_path:
+                            break
+                    if new_content_path is None:
+                        largest_file = None
+                        largest_size = 0
+                        for root, _, files in os.walk(extraction_dir):
+                            for file in files:
+                                file_path = os.path.join(root, file)
+                                if os.path.isfile(file_path):
+                                    if '.' not in file or file.endswith('.AppImage'):
+                                        size = os.path.getsize(file_path)
+                                        if size > largest_size:
+                                            largest_size = size
+                                            largest_file = file_path
+                        new_content_path = largest_file
                     if new_content_path is None or not os.path.exists(new_content_path):
                         logging.error('[UPDATE] Executable not found in extracted archive')
                         raise RuntimeError(tr('errors.executable_not_found_after_unpack'))
                     logging.info(f'[UPDATE] Found executable: {new_content_path}')
-                    os.chmod(new_content_path, 493)
+                    os.chmod(new_content_path, 0o755)
                     logging.info('[UPDATE] Set executable permissions on new launcher')
-                if os.path.exists(backup_path):
-                    logging.info(f'[UPDATE] Removing old backup: {backup_path}')
-                    shutil.rmtree(backup_path, ignore_errors=True)
-                logging.info(f'[UPDATE] Creating backup: {replace_target} -> {backup_path}')
-                os.rename(replace_target, backup_path)
-                logging.info(f'[UPDATE] Replacing launcher: {new_content_path} -> {replace_target}')
+                persistent_temp_dir = tempfile.mkdtemp(prefix='deltahub-update-persistent-')
                 if system == 'Darwin':
-                    shutil.copytree(new_content_path, replace_target)
+                    persistent_new_path = os.path.join(persistent_temp_dir, os.path.basename(new_content_path))
+                    logging.info(f'[UPDATE] Copying .app bundle to persistent temp: {persistent_new_path}')
+                    shutil.copytree(new_content_path, persistent_new_path)
                 else:
-                    shutil.move(new_content_path, replace_target)
-                if not os.path.exists(replace_target):
-                    logging.error(f'[UPDATE] Replacement failed: {replace_target} does not exist after replacement')
-                    if os.path.exists(backup_path):
-                        logging.info('[UPDATE] Attempting to restore backup')
-                        if system == 'Darwin':
-                            shutil.rmtree(replace_target, ignore_errors=True)
-                            shutil.copytree(backup_path, replace_target)
-                        else:
-                            shutil.move(backup_path, replace_target)
-                    raise RuntimeError(tr('errors.update_replacement_failed'))
-                logging.info('[UPDATE] Replacement successful, restarting launcher')
-                self.feedback_manager.update_status(tr('status.restarting'), UI_COLORS['status_success'])
-                os.execv(current_exe_path, sys.argv)
+                    persistent_new_path = os.path.join(persistent_temp_dir, os.path.basename(new_content_path))
+                    logging.info(f'[UPDATE] Copying executable to persistent temp: {persistent_new_path}')
+                    shutil.copy2(new_content_path, persistent_new_path)
+                    os.chmod(persistent_new_path, 0o755)
+                logging.info(f'[UPDATE] Unix update: Replacing {replace_target} with {persistent_new_path}')
+                self._perform_unix_update(replace_target, persistent_new_path)
         except PermissionError as e:
             logging.error(f'[UPDATE] Permission error during update: {e}', exc_info=True)
             self.feedback_manager.update_status(tr('errors.update_permission_error'), UI_COLORS['status_error'])

@@ -677,6 +677,8 @@
     "update_list_failed": "List update error: {0}",
     "update_local_as_public": "Attempt to update local mod as public.",
     "update_permission_error": "Permission error during update.",
+    "update_permission_error_no_write_access": "No write permission to update launcher in: {path}\n\nPlease download the update manually or run the launcher with administrator/sudo privileges.",
+    "app_path_not_found": "Could not find .app bundle path in executable location.",
     "url_error": "URL Error",
     "validation_data_error": "Data validation error. Check all fields are correct.",
     "validation_error": "(❌ validation error)",

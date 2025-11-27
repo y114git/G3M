@@ -587,6 +587,7 @@
   "errors": {
     "access_permission_error": "Error de acceso. Verifica los permisos de edición del mod.",
     "app_not_found_after_unpack": "DELTAHUB.app no encontrado después de descomprimir.",
+    "app_path_not_found": "No se pudo encontrar la ruta del paquete .app en la ubicación del ejecutable.",
     "archive_unpack_error": "Error al descomprimir archivo {archive_name}: {error}",
     "modpack_creation_failed": "Error al crear modpack",
     "changelog_load_failed": "Error al cargar registro de cambios",
@@ -676,6 +677,7 @@
     "update_list_failed": "Error de actualización de lista: {0}",
     "update_local_as_public": "Intento de actualizar mod local como público.",
     "update_permission_error": "Error de permisos durante actualización.",
+    "update_permission_error_no_write_access": "Sin permiso de escritura para actualizar el launcher en: {path}\n\nPor favor, descarga la actualización manualmente o ejecuta el launcher con privilegios de administrador/sudo.",
     "url_error": "Error de URL",
     "validation_data_error": "Error de validación de datos. Verifica que todos los campos sean correctos.",
     "validation_error": "(❌ error de validación)",

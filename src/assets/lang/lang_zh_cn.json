@@ -586,6 +586,7 @@
   "errors": {
     "access_permission_error": "访问错误。检查模组编辑权限。",
     "app_not_found_after_unpack": "解压后未找到DELTAHUB.app。",
+    "app_path_not_found": "在可执行文件位置找不到.app包路径。",
     "archive_unpack_error": "解压压缩文件 {archive_name} 时出错：{error}",
     "modpack_creation_failed": "创建模组包失败",
     "changelog_load_failed": "加载更新日志失败",
@@ -675,6 +676,7 @@
     "update_list_failed": "列表更新错误：{0}",
     "update_local_as_public": "尝试将本地模组更新为公开模组。",
     "update_permission_error": "更新时权限错误。",
+    "update_permission_error_no_write_access": "没有写入权限以更新启动器于：{path}\n\n请手动下载更新或使用管理员/sudo权限运行启动器。",
     "url_error": "URL错误",
     "validation_data_error": "数据验证错误。请检查所有字段是否正确。",
     "validation_error": "(❌ 验证错误)",

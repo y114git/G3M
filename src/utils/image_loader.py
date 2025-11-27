@@ -18,7 +18,8 @@ class ImageLoaderRunnable(QRunnable):
         try:
             self.signals.error.emit(self.url, message)
         except Exception as e:
-            safe_msg = sanitize_log_message(f'ImageLoader._emit_error: signal emit failed: {e}')
+            safe_exception = sanitize_log_message(str(e))
+            safe_msg = sanitize_log_message(f'ImageLoader._emit_error: signal emit failed: {safe_exception}')
             logging.debug(safe_msg)
 
     def run(self) -> None:
@@ -49,7 +50,8 @@ class ImageLoaderRunnable(QRunnable):
                     self.signals.result.emit(cached)
                     return
                 except Exception as e:
-                    safe_msg = sanitize_log_message(f'ImageLoader.run: Error emitting cached image: {e}')
+                    safe_exception = sanitize_log_message(str(e))
+                    safe_msg = sanitize_log_message(f'ImageLoader.run: Error emitting cached image: {safe_exception}')
                     logging.debug(safe_msg)
             if _NET_SEM:
                 _NET_SEM.acquire()
@@ -61,7 +63,8 @@ class ImageLoaderRunnable(QRunnable):
                     if _NET_SEM:
                         _NET_SEM.release()
                 except Exception as e:
-                    safe_msg = sanitize_log_message(f'ImageLoader.run: semaphore release failed: {e}')
+                    safe_exception = sanitize_log_message(str(e))
+                    safe_msg = sanitize_log_message(f'ImageLoader.run: semaphore release failed: {safe_exception}')
                     logging.debug(safe_msg)
             resp.raise_for_status()
             try:
@@ -92,13 +95,18 @@ class ImageLoaderRunnable(QRunnable):
             try:
                 self.signals.result.emit(img)
             except Exception as e:
-                safe_msg = sanitize_log_message(f'ImageLoader.run: Error emitting result: {e}')
+                safe_exception = sanitize_log_message(str(e))
+                safe_msg = sanitize_log_message(f'ImageLoader.run: Error emitting result: {safe_exception}')
                 logging.debug(safe_msg)
         except requests.RequestException as e:
-            safe_msg = sanitize_log_message(f'ImageLoader.run: Request exception for URL {self.url[:100]}: {e}')
+            safe_exception = sanitize_log_message(str(e))
+            safe_url = sanitize_log_message(self.url[:100])
+            safe_msg = sanitize_log_message(f'ImageLoader.run: Request exception for URL {safe_url}: {safe_exception}')
             logging.debug(safe_msg)
-            self._emit_error(f'network:{e}')
+            self._emit_error(f'network:{safe_exception}')
         except Exception as e:
-            safe_msg = sanitize_log_message(f'ImageLoader.run: Unexpected error for URL {self.url[:100]}: {e}')
+            safe_exception = sanitize_log_message(str(e))
+            safe_url = sanitize_log_message(self.url[:100])
+            safe_msg = sanitize_log_message(f'ImageLoader.run: Unexpected error for URL {safe_url}: {safe_exception}')
             logging.error(safe_msg, exc_info=True)
-            self._emit_error(str(e))
+            self._emit_error(safe_exception)
