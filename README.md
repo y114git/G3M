@@ -12,7 +12,7 @@
 
 ### Mod Management
 
-- **Mod Search:** Browse a convenient page with a huge number of diverse mods. You can view their details (or even their GameBanana page) and install with a single click! Filter mods by downloads, creation/update date, specific games, tags, and even by name or description. You can also install mods directly from GameBanana! Customize how many mods you want to see per page for optimal search experience.
+- **Mod Search:** Browse a huge number of diverse mods. You can view their details and install with a single click! Filter mods by downloads, creation/update date, specific games, tags, and even by name or description. You can also install mods directly from GameBanana! Customize how many mods you want to see per page for optimal search experience.
 
 - **Mod Library:** All your installed mods are here! Simply click on a mod to use it. Select multiple mods at once and play with them simultaneously! After exiting, all original files are restored, so DH will never damage your game files.
 

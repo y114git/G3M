@@ -74,6 +74,7 @@ class AppState(QObject):
         self._progress_bar_visible: bool = False
         self._progress_bar_value: int = 0
         self.gamebanana_loaded_pages: Dict[int, int] = {}
+        self.gamebanana_search_loaded_pages: Dict[str, Dict[int, int]] = {}
         self.gamebanana_loading: bool = False
         self.gamebanana_sort: str = 'default'
         self.gamebanana_mods_needing_metadata: List[str] = []

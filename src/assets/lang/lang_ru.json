@@ -260,7 +260,8 @@
     "success": "Успех",
     "close_button": "Закрыть",
     "online_status": "🟢 Онлайн: {count}",
-    "loading_placeholder": "Загрузка..."
+    "loading_placeholder": "Загрузка...",
+    "no_search_results": "Ничего не найдено..."
   },
   "files": {
     "archive_link": "Ссылка на архив",

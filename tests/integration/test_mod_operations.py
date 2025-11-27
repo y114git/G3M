@@ -18,12 +18,13 @@ class TestModInstallation:
             with zipfile.ZipFile(archive_path, 'w') as zf:
                 mod_config = {'mod_key': 'test_install_mod', 'name': 'Test Install Mod', 'version': '1.0.0'}
                 zf.writestr('mod_config.json', json.dumps(mod_config))
-                zf.writestr('deltamod.info', 'test content')
+                # Используем правильное имя файла meta.json вместо deltamod.info
+                zf.writestr('meta.json', '{"metadata": {"name": "Test Mod"}}')
                 zf.writestr('file1.txt', 'test file content')
         try:
             with zipfile.ZipFile(archive_path, 'r') as zf:
                 assert 'mod_config.json' in zf.namelist()
-                assert 'deltamod.info' in zf.namelist()
+                assert 'meta.json' in zf.namelist()
         finally:
             os.unlink(archive_path)
 

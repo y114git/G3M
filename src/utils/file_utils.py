@@ -603,6 +603,9 @@ def find_deltamod_info_file(directory: str) -> str | None:
     info_path = os.path.join(directory, META_JSON_FILENAME)
     if os.path.exists(info_path):
         return info_path
+    legacy_info_path = os.path.join(directory, LEGACY_META_JSON_FILENAME)
+    if os.path.exists(legacy_info_path):
+        return legacy_info_path
     return None
 
 
@@ -613,7 +616,7 @@ def has_deltamod_info_file(file_list: list[str] | set[str]) -> bool:
 
 def check_filename_is_deltamod_info(filename: str) -> bool:
     filename_lower = filename.lower()
-    return filename == META_JSON_FILENAME or filename_lower == META_JSON_FILENAME.lower()
+    return filename == META_JSON_FILENAME or filename_lower == META_JSON_FILENAME.lower() or filename == LEGACY_META_JSON_FILENAME or (filename_lower == LEGACY_META_JSON_FILENAME.lower())
 
 
 def safe_remove(path: str, max_retries: int = 5, delay: float = 0.1) -> bool:

@@ -18,8 +18,8 @@ class ImageLoaderRunnable(QRunnable):
         try:
             self.signals.error.emit(self.url, message)
         except Exception as e:
-            safe_exception = sanitize_log_message(str(e))
-            safe_msg = sanitize_log_message(f'ImageLoader._emit_error: signal emit failed: {safe_exception}')
+            exception_type = type(e).__name__
+            safe_msg = sanitize_log_message(f'ImageLoader._emit_error: signal emit failed: {exception_type}')
             logging.debug(safe_msg)
 
     def run(self) -> None:
@@ -29,18 +29,21 @@ class ImageLoaderRunnable(QRunnable):
                 self._emit_error('invalid_url')
                 return
             if '[INVALID_URL]' in self.url or '/[PATH]' in self.url:
-                safe_msg = sanitize_log_message(f'ImageLoader.run: Invalid URL format detected: {self.url[:100]}')
+                masked_url = mask_url(self.url)
+                safe_msg = sanitize_log_message(f'ImageLoader.run: Invalid URL format detected: {masked_url}')
                 logging.warning(safe_msg)
                 self._emit_error('invalid_url')
                 return
             url_lower = self.url.lower().strip()
             if not url_lower.startswith(('http://', 'https://')):
-                safe_msg = sanitize_log_message(f'ImageLoader.run: URL does not start with http:// or https://: {self.url[:100]}')
+                masked_url = mask_url(self.url)
+                safe_msg = sanitize_log_message(f'ImageLoader.run: URL does not start with http:// or https://: {masked_url}')
                 logging.warning(safe_msg)
                 self._emit_error('invalid_url')
                 return
             if '..' in self.url or len(self.url) > 2048:
-                safe_msg = sanitize_log_message(f'ImageLoader.run: Suspicious URL detected: {self.url[:100]}')
+                masked_url = mask_url(self.url)
+                safe_msg = sanitize_log_message(f'ImageLoader.run: Suspicious URL detected: {masked_url}')
                 logging.warning(safe_msg)
                 self._emit_error('invalid_url')
                 return
@@ -50,8 +53,8 @@ class ImageLoaderRunnable(QRunnable):
                     self.signals.result.emit(cached)
                     return
                 except Exception as e:
-                    safe_exception = sanitize_log_message(str(e))
-                    safe_msg = sanitize_log_message(f'ImageLoader.run: Error emitting cached image: {safe_exception}')
+                    exception_type = type(e).__name__
+                    safe_msg = sanitize_log_message(f'ImageLoader.run: Error emitting cached image: {exception_type}')
                     logging.debug(safe_msg)
             if _NET_SEM:
                 _NET_SEM.acquire()
@@ -63,8 +66,8 @@ class ImageLoaderRunnable(QRunnable):
                     if _NET_SEM:
                         _NET_SEM.release()
                 except Exception as e:
-                    safe_exception = sanitize_log_message(str(e))
-                    safe_msg = sanitize_log_message(f'ImageLoader.run: semaphore release failed: {safe_exception}')
+                    exception_type = type(e).__name__
+                    safe_msg = sanitize_log_message(f'ImageLoader.run: semaphore release failed: {exception_type}')
                     logging.debug(safe_msg)
             resp.raise_for_status()
             try:
@@ -72,7 +75,8 @@ class ImageLoaderRunnable(QRunnable):
             except Exception:
                 content_type = ''
             if content_type and (not content_type.lower().startswith('image/')):
-                safe_msg = sanitize_log_message(f'ImageLoader.run: Non-image content-type "{content_type}" for URL: {self.url[:100]}')
+                masked_url = mask_url(self.url)
+                safe_msg = sanitize_log_message(f'ImageLoader.run: Non-image content-type "{content_type}" for URL: {masked_url}')
                 logging.debug(safe_msg)
                 self._emit_error('non_image_content')
                 return
@@ -82,12 +86,14 @@ class ImageLoaderRunnable(QRunnable):
                 return
             img = QImage()
             if not img.loadFromData(content):
-                safe_msg = sanitize_log_message(f'ImageLoader.run: Failed to load image from data for URL: {self.url[:100]}')
+                masked_url = mask_url(self.url)
+                safe_msg = sanitize_log_message(f'ImageLoader.run: Failed to load image from data for URL: {masked_url}')
                 logging.warning(safe_msg)
                 self._emit_error('decode')
                 return
             if img.isNull():
-                safe_msg = sanitize_log_message(f'ImageLoader.run: Loaded image is null for URL: {self.url[:100]}')
+                masked_url = mask_url(self.url)
+                safe_msg = sanitize_log_message(f'ImageLoader.run: Loaded image is null for URL: {masked_url}')
                 logging.warning(safe_msg)
                 self._emit_error('null image')
                 return
@@ -100,16 +106,14 @@ class ImageLoaderRunnable(QRunnable):
                 logging.debug(safe_msg)
         except requests.RequestException as e:
             masked_url = mask_url(self.url)
-            masked_exception = mask_api_key(str(e))
-            safe_msg = sanitize_log_message(f'ImageLoader.run: Request exception for URL {masked_url}: {masked_exception}')
-            logging.debug(safe_msg)
             exception_type = type(e).__name__
+            safe_msg = sanitize_log_message(f'ImageLoader.run: Request exception ({exception_type}) for URL {masked_url}')
+            logging.debug(safe_msg)
             self._emit_error(f'network:{exception_type}')
         except Exception as e:
             logging.error('ImageLoader.run: Unexpected error occurred during image loading')
             masked_url = mask_url(self.url)
-            masked_exception = mask_api_key(str(e))
             exception_type = type(e).__name__
-            safe_msg = sanitize_log_message(f'ImageLoader.run: Unexpected error details - Type: {exception_type}, URL: {masked_url}, Message: {masked_exception}')
+            safe_msg = sanitize_log_message(f'ImageLoader.run: Unexpected error details - Type: {exception_type}, URL: {masked_url}')
             logging.debug(safe_msg)
             self._emit_error(exception_type)

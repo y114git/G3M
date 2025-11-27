@@ -258,7 +258,9 @@
     "delete_button": "刪除",
     "success": "成功",
     "close_button": "關閉",
-    "online_status": "🟢 在線：{count}"
+    "online_status": "🟢 在線：{count}",
+    "loading_placeholder": "載入中...",
+    "no_search_results": "未找到任何結果..."
   },
   "files": {
     "archive_link": "壓縮檔案連結",

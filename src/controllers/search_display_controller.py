@@ -1,10 +1,11 @@
 from utils.mod_filter_utils import filter_and_sort_mods
-from PyQt6.QtWidgets import QInputDialog
+from PyQt6.QtWidgets import QInputDialog, QMessageBox
 from PyQt6.QtCore import QTimer, QObject, pyqtSignal
 from managers.localization_manager import tr
 from ui.dialogs.mod_details import open_mod_details_dialog
 from ui.widgets.mod.mod_plaque_widget import ModPlaqueWidget
 from workers.load_more_gamebanana_mods import LoadMoreGameBananaModsThread
+from workers.search_gamebanana_mods import SearchGameBananaModsThread
 from config.constants import GAMEBANANA_GAME_IDS, GAMEBANANA_PER_PAGE
 from utils.ui_utils import DebounceTimer
 import logging
@@ -39,6 +40,8 @@ class SearchDisplayController(QObject):
         self.plaque_widget_cache: dict[str, ModPlaqueWidget] = {}
         self._update_display_debounce = DebounceTimer(delay_ms=200)
         self._initial_mods_display_done = False
+        self._active_search_timers = []
+        self._current_search_text = ''
 
     def prev_page(self):
         try:
@@ -83,6 +86,10 @@ class SearchDisplayController(QObject):
             return
         self._load_more_threads = [t for t in self._load_more_threads if t and t.isRunning()]
         if self._load_more_threads:
+            return
+        search_text = self.app_state.search_text
+        if search_text and len(search_text.strip()) >= 2:
+            self._load_search_results_if_needed(items_needed, preferred_modgame)
             return
         selected_modgame = 'deltarune'
         if hasattr(self.app, 'modgame_combo'):
@@ -232,8 +239,243 @@ class SearchDisplayController(QObject):
             self._load_more_threads.append(load_thread)
             load_thread.start()
 
+    def _load_search_results_if_needed(self, items_needed: int, preferred_modgame: str | None = None):
+        if not self.app_state.mods_loaded:
+            return
+        if self.app_state.gamebanana_loading:
+            return
+        self._load_more_threads = [t for t in self._load_more_threads if t and t.isRunning()]
+        if self._load_more_threads:
+            return
+        search_text = self.app_state.search_text
+        if not search_text or len(search_text.strip()) < 2:
+            return
+        selected_modgame = 'deltarune'
+        if hasattr(self.app, 'modgame_combo'):
+            selected_modgame = self.app.modgame_combo.currentData() or 'deltarune'
+        gamebanana_game = self._map_modgame_to_gamebanana(selected_modgame)
+        if not gamebanana_game:
+            gamebanana_game = 'deltarune'
+        if gamebanana_game not in GAMEBANANA_GAME_IDS:
+            gamebanana_game = 'deltarune'
+        game_id = GAMEBANANA_GAME_IDS[gamebanana_game]
+        search_key = search_text.strip().lower()
+        if not hasattr(self.app_state, 'gamebanana_search_loaded_pages'):
+            self.app_state.gamebanana_search_loaded_pages = {}
+        if search_key not in self.app_state.gamebanana_search_loaded_pages:
+            self.app_state.gamebanana_search_loaded_pages[search_key] = {}
+        search_pages = self.app_state.gamebanana_search_loaded_pages[search_key]
+        last_page = search_pages.get(game_id, 0)
+        current_page = self.app_state.current_page
+        pages_needed = []
+        if current_page > last_page:
+            for page in range(last_page + 1, current_page + 1):
+                pages_needed.append(page)
+        next_page = current_page + 1
+        if next_page > last_page:
+            pages_needed.append(next_page)
+        if not pages_needed:
+            return
+        for timer in self._active_search_timers[:]:
+            try:
+                timer.stop()
+                timer.deleteLater()
+            except (RuntimeError, ValueError):
+                pass
+        self._active_search_timers.clear()
+        self._current_search_text = search_text
+        self.app_state.gamebanana_loading = True
+        all_new_mods = []
+        results_received = [0]
+        expected_results = len(pages_needed)
+        sort_param = 'best_match'
+        search_timeout_timer = QTimer()
+        search_timeout_timer.setSingleShot(True)
+        self._active_search_timers.append(search_timeout_timer)
+
+        def handle_timeout():
+            if self._current_search_text != search_text:
+                return
+            if self.app_state.gamebanana_loading and self.app_state.search_text == search_text:
+                logger.warning('SearchDisplayController: Search timeout after 10 seconds')
+                self.app_state.gamebanana_loading = False
+                for thread in self._load_more_threads[:]:
+                    if isinstance(thread, SearchGameBananaModsThread):
+                        thread.cancel()
+                if self.app_state.search_text == search_text:
+                    self.update_filtered_mods(preserve_page=True)
+                    filtered_count = len(self.app_state.filtered_mods) if self.app_state.filtered_mods else 0
+                    if filtered_count == 0:
+
+                        def show_no_results_dialog():
+                            if self.app_state.search_text == search_text:
+                                msg_box = QMessageBox(self.app)
+                                msg_box.setIcon(QMessageBox.Icon.Information)
+                                msg_box.setWindowTitle(tr('ui.search_tab'))
+                                msg_box.setText(tr('ui.no_search_results'))
+                                msg_box.exec()
+                                if self.app_state.search_text == search_text:
+                                    self.app_state.search_text = ''
+                                    self._current_search_text = ''
+                                    self.ui_button_text_update.emit('search_button', '🔍')
+                                    self.ui_button_tooltip_update.emit('search_button', tr('ui.search_placeholder'))
+                                    self.update_filtered_mods()
+                        QTimer.singleShot(100, show_no_results_dialog)
+                    else:
+                        self.update_display()
+                else:
+                    self.update_filtered_mods(preserve_page=True)
+                    self.update_display()
+                self.update_pagination()
+            try:
+                if search_timeout_timer in self._active_search_timers:
+                    self._active_search_timers.remove(search_timeout_timer)
+            except (ValueError, RuntimeError):
+                pass
+        search_timeout_timer.timeout.connect(handle_timeout)
+
+        def on_all_results_received():
+            search_timeout_timer.stop()
+            try:
+                if search_timeout_timer in self._active_search_timers:
+                    self._active_search_timers.remove(search_timeout_timer)
+            except (ValueError, RuntimeError):
+                pass
+            if self._current_search_text != search_text:
+                return
+            from PyQt6.QtCore import QThread
+            from PyQt6.QtWidgets import QApplication
+            current_thread = QThread.currentThread()
+            app_instance = QApplication.instance()
+            if app_instance and current_thread != app_instance.thread():
+                QTimer.singleShot(0, on_all_results_received)
+                return
+            try:
+                if self.app_state.search_text != search_text:
+                    return
+                self.app_state.gamebanana_loading = False
+                if self.app_state.search_text == search_text and len(all_new_mods) == 0:
+
+                    def show_no_results_dialog():
+                        msg_box = QMessageBox(self.app)
+                        msg_box.setIcon(QMessageBox.Icon.Information)
+                        msg_box.setWindowTitle(tr('ui.search_tab'))
+                        msg_box.setText(tr('ui.no_search_results'))
+                        msg_box.exec()
+                        self.app_state.search_text = ''
+                        self.ui_button_text_update.emit('search_button', '🔍')
+                        self.ui_button_tooltip_update.emit('search_button', tr('ui.search_placeholder'))
+                        self.update_filtered_mods()
+                    QTimer.singleShot(100, show_no_results_dialog)
+                    self.update_pagination()
+                    return
+                if not hasattr(self.app_state, 'all_mods'):
+                    self.update_filtered_mods(preserve_page=True)
+                    self.update_pagination()
+                    return
+                existing_ids = {str(m.gamebanana_mod_id) for m in self.app_state.all_mods if hasattr(m, 'gamebanana_mod_id') and m.gamebanana_mod_id}
+                new_mods_to_add = [m for m in all_new_mods if hasattr(m, 'gamebanana_mod_id') and m.gamebanana_mod_id and (str(m.gamebanana_mod_id) not in existing_ids)]
+                if self.app_state.search_text == search_text and len(new_mods_to_add) == 0:
+
+                    def show_no_results_dialog():
+                        if self.app_state.search_text == search_text:
+                            msg_box = QMessageBox(self.app)
+                            msg_box.setIcon(QMessageBox.Icon.Information)
+                            msg_box.setWindowTitle(tr('ui.search_tab'))
+                            msg_box.setText(tr('ui.no_search_results'))
+                            msg_box.exec()
+                            if self.app_state.search_text == search_text:
+                                self.app_state.search_text = ''
+                                self._current_search_text = ''
+                                self.ui_button_text_update.emit('search_button', '🔍')
+                                self.ui_button_tooltip_update.emit('search_button', tr('ui.search_placeholder'))
+                                self.update_filtered_mods()
+                    QTimer.singleShot(100, show_no_results_dialog)
+                    self.update_pagination()
+                    return
+                if self.app_state.search_text == search_text and new_mods_to_add:
+                    self.app_state.extend_all_mods(new_mods_to_add)
+                    max_loaded_page = max(pages_needed) if pages_needed else last_page
+                    search_pages[game_id] = max(search_pages.get(game_id, 0), max_loaded_page)
+                    if hasattr(self.app_state, 'gamebanana_mods_needing_metadata') and self.app_state.gamebanana_mods_needing_metadata:
+
+                        def trigger_metadata_loading():
+                            try:
+                                if hasattr(self.app, 'refresh_controller'):
+                                    self.app.refresh_controller._start_metadata_loading()
+                            except Exception:
+                                pass
+                        QTimer.singleShot(200, trigger_metadata_loading)
+                if self.app_state.search_text == search_text:
+                    self.update_filtered_mods(preserve_page=True)
+                    self.update_display()
+                self.update_pagination()
+            except Exception as e:
+                logger.error(f'SearchDisplayController: Error in on_all_results_received: {e}', exc_info=True)
+                if self.app_state.search_text == search_text:
+                    self.app_state.gamebanana_loading = False
+                    self.update_filtered_mods(preserve_page=True)
+                    self.update_display()
+                self.update_pagination()
+        search_timeout_timer.start(10000)
+        metadata_cache = None
+        if hasattr(self.app_state, 'config_dir') and self.app_state.config_dir:
+            try:
+                from utils.gamebanana_cache import GameBananaMetadataCache
+                metadata_cache = GameBananaMetadataCache(self.app_state.config_dir)
+            except Exception as e:
+                logger.warning(f'SearchDisplayController: Failed to initialize metadata cache: {e}', exc_info=True)
+        for page in pages_needed:
+            search_thread = SearchGameBananaModsThread(game_id=game_id, search_string=search_text, start_page=page, num_pages=1, sort=sort_param, parent=self.app, metadata_cache=metadata_cache)
+
+            def make_on_result(pg):
+
+                def on_result(mods_list):
+                    if mods_list:
+                        all_new_mods.extend(mods_list)
+                        search_pages[game_id] = max(search_pages.get(game_id, 0), pg)
+                    results_received[0] += 1
+                    if results_received[0] >= expected_results:
+                        search_timeout_timer.stop()
+                        QTimer.singleShot(0, on_all_results_received)
+                return on_result
+            search_thread.result.connect(make_on_result(page))
+
+            def on_thread_finished(thread=search_thread):
+                try:
+                    if thread in self._load_more_threads:
+                        self._load_more_threads.remove(thread)
+                    if thread.isFinished():
+                        thread.deleteLater()
+                    else:
+
+                        def cleanup_when_really_finished():
+                            try:
+                                if thread and thread.isFinished():
+                                    thread.deleteLater()
+                            except Exception:
+                                pass
+                        thread.finished.connect(cleanup_when_really_finished)
+                except (RuntimeError, ValueError):
+                    pass
+            search_thread.finished.connect(on_thread_finished)
+            self._load_more_threads.append(search_thread)
+            search_thread.start()
+
     def show_search_dialog(self):
         if self.app_state.search_text:
+            for timer in self._active_search_timers[:]:
+                try:
+                    timer.stop()
+                    timer.deleteLater()
+                except (RuntimeError, ValueError):
+                    pass
+            self._active_search_timers.clear()
+            for thread in self._load_more_threads[:]:
+                if isinstance(thread, SearchGameBananaModsThread):
+                    thread.cancel()
+            self.app_state.gamebanana_loading = False
+            self._current_search_text = ''
             self.app_state.search_text = ''
             self.ui_button_text_update.emit('search_button', '🔍')
             self.ui_button_tooltip_update.emit('search_button', tr('ui.search_placeholder'))
@@ -241,10 +483,17 @@ class SearchDisplayController(QObject):
         else:
             text, ok = QInputDialog.getText(self.app, tr('ui.search_tab'), tr('ui.search_in_name_description'))
             if ok and text.strip():
-                self.app_state.search_text = text.strip()
+                search_text = text.strip()
+                search_key = search_text.lower()
+                if hasattr(self.app_state, 'gamebanana_search_loaded_pages') and search_key in self.app_state.gamebanana_search_loaded_pages:
+                    self.app_state.gamebanana_search_loaded_pages[search_key] = {}
+                self.app_state.search_text = search_text
                 self.ui_button_text_update.emit('search_button', '↻')
                 self.ui_button_tooltip_update.emit('search_button', tr('ui.clear_search_tooltip', text=self.app_state.search_text))
+                self.app_state.current_page = 1
                 self.update_filtered_mods()
+                if self.app_state.mods_loaded:
+                    QTimer.singleShot(100, lambda: self._load_search_results_if_needed(self.app_state.mods_per_page))
 
     def _build_filters_and_sort(self):
         selected_tags = []

@@ -58,7 +58,8 @@ class TestGameBananaConverter:
         with tempfile.NamedTemporaryFile(suffix='.zip', delete=False) as tmp_archive:
             archive_path = tmp_archive.name
             with zipfile.ZipFile(archive_path, 'w') as zf:
-                zf.writestr('deltamod.info', 'test content')
+                # Используем правильное имя файла meta.json вместо deltamod.info
+                zf.writestr('meta.json', '{"metadata": {"name": "Test Mod"}}')
                 zf.writestr('file1.txt', 'test')
         try:
             converter = GameBananaConverter(archive_path=archive_path, mods_dir=temp_mods_dir, gamebanana_metadata={'mod_id': 12345})

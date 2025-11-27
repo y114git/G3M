@@ -259,7 +259,9 @@
     "delete_button": "Eliminar",
     "success": "Éxito",
     "close_button": "Cerrar",
-    "online_status": "🟢 En línea: {count}"
+    "online_status": "🟢 En línea: {count}",
+    "loading_placeholder": "Cargando...",
+    "no_search_results": "No se encontró nada..."
   },
   "files": {
     "archive_link": "Enlace de archivo",
