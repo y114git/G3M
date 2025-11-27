@@ -52,7 +52,7 @@ env:
 
 jobs:
   linux:
-    name: Linux · onefile (spec)
+    name: Linux · Build & Test
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
@@ -109,54 +109,36 @@ jobs:
           mkdir -p archive_content
           mv dist/DELTAHUB archive_content/
           zip -r ${{ steps.set_names.outputs.archive_path }} archive_content
-      - uses: actions/upload-artifact@v4
-        with:
-          name: DELTAHUB-Linux
-          path: ${{ steps.set_names.outputs.archive_path }}
-
-  test-startup-linux:
-    name: Test Startup (Linux)
-    runs-on: ubuntu-22.04
-    needs: linux
-    steps:
-      - uses: actions/checkout@v4
-      - name: Download build artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: DELTAHUB-Linux
-          path: ./test_artifacts
-      - name: Extract and test startup
+      
+      # === MERGED TEST STEP ===
+      - name: Test Startup (Linux)
         run: |
-          cd test_artifacts
-          unzip -q *.zip || true
-          if [ -f archive_content/DELTAHUB ]; then
-            chmod +x archive_content/DELTAHUB
+          echo "=== Unpacking archive for test ==="
+          mkdir -p test_env
+          unzip -q ${{ steps.set_names.outputs.archive_path }} -d test_env
+          
+          if [ -f test_env/archive_content/DELTAHUB ]; then
+            chmod +x test_env/archive_content/DELTAHUB
             echo "=== Testing startup ==="
-            OUTPUT=$(timeout 10 ./archive_content/DELTAHUB --help 2>&1 || true)
+            OUTPUT=$(timeout 10 ./test_env/archive_content/DELTAHUB --help 2>&1 || true)
             echo "$OUTPUT"
             if echo "$OUTPUT" | grep -q "STARTUP ERROR"; then
-              echo ""
               echo "=== STARTUP ERROR DETECTED ==="
-              echo "Full error output:"
-              echo "$OUTPUT"
-              echo ""
-              echo "=== Attempting to get more details ==="
-              ./archive_content/DELTAHUB --help 2>&1 || true
-              echo ""
-              echo "=== File information ==="
-              file archive_content/DELTAHUB || true
-              ldd archive_content/DELTAHUB 2>&1 | head -20 || true
               exit 1
             fi
             echo "✓ Startup test passed"
           else
             echo "ERROR: DELTAHUB executable not found in archive"
-            ls -la archive_content/ || true
             exit 1
           fi
 
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DELTAHUB-Linux
+          path: ${{ steps.set_names.outputs.archive_path }}
+
   macos-x64:
-    name: macOS · x86_64 (spec)
+    name: macOS · x86_64 · Build & Test
     runs-on: macos-15-intel
     steps:
       - uses: actions/checkout@v4
@@ -202,53 +184,35 @@ jobs:
         run: rm -f secrets_embed.py || true
       - name: Create archive
         run: ditto -c -k --sequesterRsrc --keepParent "dist/DELTAHUB.app" "${{ steps.set_names.outputs.archive_path }}"
-      - uses: actions/upload-artifact@v4
-        with:
-          name: DELTAHUB-macOS-x86_64
-          path: ${{ steps.set_names.outputs.archive_path }}
 
-  test-startup-macos-x64:
-    name: Test Startup (macOS x64)
-    runs-on: macos-15-intel
-    needs: macos-x64
-    steps:
-      - uses: actions/checkout@v4
-      - name: Download build artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: DELTAHUB-macOS-x86_64
-          path: ./test_artifacts
-      - name: Extract and test startup
+      # === MERGED TEST STEP ===
+      - name: Test Startup (macOS x64)
         run: |
-          cd test_artifacts
-          unzip -q *.zip || true
-          if [ -d DELTAHUB.app ]; then
+          echo "=== Unpacking archive for test ==="
+          mkdir -p test_env
+          unzip -q "${{ steps.set_names.outputs.archive_path }}" -d test_env
+          
+          if [ -d test_env/DELTAHUB.app ]; then
             echo "=== Testing startup ==="
-            OUTPUT=$(timeout 10 DELTAHUB.app/Contents/MacOS/DELTAHUB --help 2>&1 || true)
+            OUTPUT=$(timeout 10 test_env/DELTAHUB.app/Contents/MacOS/DELTAHUB --help 2>&1 || true)
             echo "$OUTPUT"
             if echo "$OUTPUT" | grep -q "STARTUP ERROR"; then
-              echo ""
               echo "=== STARTUP ERROR DETECTED ==="
-              echo "Full error output:"
-              echo "$OUTPUT"
-              echo ""
-              echo "=== Attempting to get more details ==="
-              DELTAHUB.app/Contents/MacOS/DELTAHUB --help 2>&1 || true
-              echo ""
-              echo "=== File information ==="
-              file DELTAHUB.app/Contents/MacOS/DELTAHUB || true
-              otool -L DELTAHUB.app/Contents/MacOS/DELTAHUB 2>&1 | head -20 || true
               exit 1
             fi
             echo "✓ Startup test passed"
           else
             echo "ERROR: DELTAHUB.app not found in archive"
-            ls -la || true
             exit 1
           fi
 
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DELTAHUB-macOS-x86_64
+          path: ${{ steps.set_names.outputs.archive_path }}
+
   macos-arm64:
-    name: macOS · arm64 (spec)
+    name: macOS · arm64 · Build & Test
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
@@ -294,53 +258,35 @@ jobs:
         run: rm -f secrets_embed.py || true
       - name: Create archive
         run: ditto -c -k --sequesterRsrc --keepParent "dist/DELTAHUB.app" "${{ steps.set_names.outputs.archive_path }}"
-      - uses: actions/upload-artifact@v4
-        with:
-          name: DELTAHUB-macOS-arm64
-          path: ${{ steps.set_names.outputs.archive_path }}
 
-  test-startup-macos-arm64:
-    name: Test Startup (macOS arm64)
-    runs-on: macos-15
-    needs: macos-arm64
-    steps:
-      - uses: actions/checkout@v4
-      - name: Download build artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: DELTAHUB-macOS-arm64
-          path: ./test_artifacts
-      - name: Extract and test startup
+      # === MERGED TEST STEP ===
+      - name: Test Startup (macOS arm64)
         run: |
-          cd test_artifacts
-          unzip -q *.zip || true
-          if [ -d DELTAHUB.app ]; then
+          echo "=== Unpacking archive for test ==="
+          mkdir -p test_env
+          unzip -q "${{ steps.set_names.outputs.archive_path }}" -d test_env
+          
+          if [ -d test_env/DELTAHUB.app ]; then
             echo "=== Testing startup ==="
-            OUTPUT=$(timeout 10 DELTAHUB.app/Contents/MacOS/DELTAHUB --help 2>&1 || true)
+            OUTPUT=$(timeout 10 test_env/DELTAHUB.app/Contents/MacOS/DELTAHUB --help 2>&1 || true)
             echo "$OUTPUT"
             if echo "$OUTPUT" | grep -q "STARTUP ERROR"; then
-              echo ""
               echo "=== STARTUP ERROR DETECTED ==="
-              echo "Full error output:"
-              echo "$OUTPUT"
-              echo ""
-              echo "=== Attempting to get more details ==="
-              DELTAHUB.app/Contents/MacOS/DELTAHUB --help 2>&1 || true
-              echo ""
-              echo "=== File information ==="
-              file DELTAHUB.app/Contents/MacOS/DELTAHUB || true
-              otool -L DELTAHUB.app/Contents/MacOS/DELTAHUB 2>&1 | head -20 || true
               exit 1
             fi
             echo "✓ Startup test passed"
           else
             echo "ERROR: DELTAHUB.app not found in archive"
-            ls -la || true
             exit 1
           fi
 
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DELTAHUB-macOS-arm64
+          path: ${{ steps.set_names.outputs.archive_path }}
+
   windows:
-    name: Windows · exe (spec + Inno)
+    name: Windows · Build & Test
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -383,6 +329,29 @@ jobs:
       - name: Create archive for portable exe
         shell: powershell
         run: Compress-Archive -Path dist\DELTAHUB.exe -DestinationPath "${{ steps.set_names.outputs.archive_path }}"
+      
+      # === MERGED TEST STEP (Testing the portable version) ===
+      - name: Test Startup (Windows)
+        shell: powershell
+        run: |
+          Write-Host "=== Unpacking archive for test ==="
+          New-Item -ItemType Directory -Force -Path "test_env" | Out-Null
+          Expand-Archive -Path "${{ steps.set_names.outputs.archive_path }}" -DestinationPath "test_env" -Force
+          
+          if (Test-Path 'test_env\DELTAHUB.exe') {
+            Write-Host '=== Testing startup ==='
+            $output = & .\test_env\DELTAHUB.exe --help 2>&1
+            Write-Host $output
+            if ($output -match 'STARTUP ERROR') {
+              Write-Host '=== STARTUP ERROR DETECTED ==='
+              exit 1
+            }
+            Write-Host '✓ Startup test passed'
+          } else {
+            Write-Host 'ERROR: DELTAHUB.exe not found in archive'
+            exit 1
+          }
+
       - uses: actions/upload-artifact@v4
         with:
           name: DELTAHUB-Windows
@@ -414,60 +383,10 @@ jobs:
           name: DELTAHUB-Windows-Setup
           path: ${{ steps.set_names.outputs.setup_archive_path }}
 
-  test-startup-windows:
-    name: Test Startup (Windows)
-    runs-on: windows-latest
-    needs: windows
-    steps:
-      - uses: actions/checkout@v4
-      - name: Download build artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: DELTAHUB-Windows
-          path: ./test_artifacts
-      - name: Extract and test startup
-        shell: powershell
-        run: |
-          cd test_artifacts
-          Expand-Archive -Path *.zip -DestinationPath . -Force
-          if (Test-Path 'DELTAHUB.exe') {
-            Write-Host '=== Testing startup ==='
-            $output = & .\DELTAHUB.exe --help 2>&1
-            Write-Host $output
-            if ($output -match 'STARTUP ERROR') {
-              Write-Host ''
-              Write-Host '=== STARTUP ERROR DETECTED ==='
-              Write-Host 'Full error output:'
-              Write-Host $output
-              Write-Host ''
-              Write-Host '=== Attempting to get more details ==='
-              & .\DELTAHUB.exe --help 2>&1
-              Write-Host ''
-              Write-Host '=== File information ==='
-              Get-Item .\DELTAHUB.exe | Select-Object FullName, Length, LastWriteTime
-              exit 1
-            }
-            Write-Host '✓ Startup test passed'
-          } else {
-            Write-Host 'ERROR: DELTAHUB.exe not found in archive'
-            Get-ChildItem -Recurse | Select-Object FullName
-            exit 1
-          }
-
   release:
     name: Create GitHub Release and upload assets
     runs-on: ubuntu-latest
-    needs:
-      [
-        linux,
-        macos-x64,
-        macos-arm64,
-        windows,
-        test-startup-linux,
-        test-startup-macos-x64,
-        test-startup-macos-arm64,
-        test-startup-windows,
-      ]
+    needs: [linux, macos-x64, macos-arm64, windows]
     if: ${{ inputs.publish_release != false }}
     steps:
       - name: Validate release inputs
