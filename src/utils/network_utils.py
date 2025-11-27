@@ -212,13 +212,27 @@ def check_internet_connection(max_attempts: int = 2) -> bool:
     return False
 
 
+def safe_request(method: str, url: str, session=None, timeout=None, **kwargs):
+    if session is None:
+        session = get_session()
+    if timeout is None:
+        timeout = NETWORK_TIMEOUT_MEDIUM
+    try:
+        method_func = getattr(session, method.lower())
+        return method_func(url, timeout=timeout, **kwargs)
+    except requests.RequestException as e:
+        safe_msg = sanitize_log_message(f'safe_request {method.upper()} {url}: {e}')
+        logging.debug(safe_msg)
+        return None
+    except Exception as e:
+        safe_msg = sanitize_log_message(f'safe_request {method.upper()} {url}: unexpected error: {e}')
+        logging.error(safe_msg, exc_info=True)
+        return None
+
+
 def increment_launch_counter() -> None:
     from config.constants import CLOUD_FUNCTIONS_BASE_URL
     os_map = {'Windows': 'windows', 'Linux': 'linux', 'Darwin': 'macos'}
     os_key = os_map.get(platform.system(), 'other')
-    try:
-        url = f'{CLOUD_FUNCTIONS_BASE_URL}/incrementLaunches'
-        session = get_session()
-        session.post(url, json={'os': os_key}, timeout=NETWORK_TIMEOUT_SHORT)
-    except requests.RequestException as e:
-        logging.debug(f'increment_launch_count: Failed to increment launch count: {e}')
+    url = f'{CLOUD_FUNCTIONS_BASE_URL}/incrementLaunches'
+    safe_request('post', url, json={'os': os_key}, timeout=NETWORK_TIMEOUT_SHORT)

@@ -202,21 +202,46 @@ def cleanup_old_temp_directories():
         logging.info(f'Cleaned up {cleaned_count} old temporary directory(ies) from previous sessions')
 
 
+def _load_config_file() -> dict:
+    user_root = get_user_data_root()
+    settings_path = os.path.join(user_root, 'settings', 'settings.json')
+    old_config_path = os.path.join(user_root, 'settings', 'config.json')
+    config_path = settings_path if os.path.exists(settings_path) else old_config_path
+    if not os.path.exists(config_path):
+        return {}
+    try:
+        import json
+        with open(config_path, 'r', encoding='utf-8') as f:
+            config = json.load(f)
+        if config_path == old_config_path and (not os.path.exists(settings_path)):
+            import shutil
+            shutil.move(old_config_path, settings_path)
+            logging.info('Migrated settings config.json to settings.json in startup')
+        return config
+    except json.JSONDecodeError as e:
+        backup_path = f'{config_path}.invalid.bak'
+        try:
+            import shutil
+            shutil.copy2(config_path, backup_path)
+            logging.warning(f'Corrupted config file detected, backed up to {backup_path}')
+            os.remove(config_path)
+            logging.info(f'Removed corrupted config file: {config_path}')
+        except Exception:
+            pass
+        safe_msg = sanitize_log_message(f'Failed to parse config JSON: {e}')
+        logging.warning(safe_msg)
+        return {}
+    except Exception as e:
+        safe_msg = sanitize_log_message(f'Failed to read config file: {e}')
+        logging.warning(safe_msg)
+        return {}
+
+
 def run_app():
     try:
         user_root = get_user_data_root()
-        clear_logs = False
-        try:
-            settings_path = os.path.join(user_root, 'settings', 'settings.json')
-            old_config_path = os.path.join(user_root, 'settings', 'config.json')
-            config_path = settings_path if os.path.exists(settings_path) else old_config_path
-            if os.path.exists(config_path):
-                import json
-                with open(config_path, 'r', encoding='utf-8') as f:
-                    config = json.load(f)
-                    clear_logs = config.get('clear_logs_on_startup', False)
-        except Exception:
-            pass
+        config = _load_config_file()
+        clear_logs = config.get('clear_logs_on_startup', False)
         configure_logging('DELTAHUB', user_root, clear_logs=clear_logs)
         install_excepthook()
         cleanup_old_temp_directories()
@@ -264,89 +289,47 @@ def run_app():
             QMessageBox.critical(None, tr('errors.error'), error_msg)
             sys.exit(1)
         return
-    config = {}
-    try:
-        settings_path = os.path.join(get_user_data_root(), 'settings', 'settings.json')
-        old_config_path = os.path.join(get_user_data_root(), 'settings', 'config.json')
-        config_path = settings_path if os.path.exists(settings_path) else old_config_path
-        if os.path.exists(config_path):
-            import json
-            try:
-                with open(config_path, 'r', encoding='utf-8') as f:
-                    config = json.load(f)
-            except json.JSONDecodeError as e:
-                backup_path = f'{config_path}.invalid.bak'
-                try:
-                    import shutil
-                    shutil.copy2(config_path, backup_path)
-                    logging.warning(f'Corrupted config file detected, backed up to {backup_path}')
-                except Exception as backup_error:
-                    logging.warning(f'Failed to backup corrupted config: {backup_error}')
-                try:
-                    os.remove(config_path)
-                    logging.info(f'Removed corrupted config file: {config_path}')
-                except Exception as remove_error:
-                    logging.warning(f'Failed to remove corrupted config: {remove_error}')
-                safe_msg = sanitize_log_message(f'Failed to parse config JSON: {e}')
-                logging.warning(safe_msg)
-                config = {}
-            if config_path == old_config_path and (not os.path.exists(settings_path)):
-                try:
-                    import shutil
-                    shutil.move(old_config_path, settings_path)
-                    logging.info('Migrated settings config.json to settings.json in startup')
-                except Exception as e:
-                    logging.warning(f'Failed to migrate settings config.json to settings.json in startup: {e}')
-    except (OSError, IOError) as e:
-        safe_msg = sanitize_log_message(f'Failed to read config file: {e}')
-        logging.warning(safe_msg)
-    except ValueError as e:
-        safe_msg = sanitize_log_message(f'Failed to parse config JSON: {e}')
-        logging.warning(safe_msg)
-    except Exception as e:
-        safe_msg = sanitize_log_message(f'Unexpected error loading config: {e}')
-        logging.warning(safe_msg)
+    config = _load_config_file()
     splash_disabled_by_user = config.get('disable_splash', False)
     show_animated_splash = not splash_disabled_by_user
 
     def create_launcher_and_show_splash(app, initial_url, show_animation: bool):
         global _splash_start_time
         launcher_app = {}
+        splash = create_png_splash()
         if show_animation:
             from config.constants import SPLASH_SOUND_DELAY
             _splash_start_time = time.time()
             from core.splash import CustomSplashScreen
             gif_path = resource_path('assets/images/splash.gif')
             if os.path.exists(gif_path):
-                splash = CustomSplashScreen(gif_path=gif_path)
-                if not (hasattr(splash, 'movie') and splash.movie.isValid()):
-                    splash = create_png_splash()
-            else:
-                splash = create_png_splash()
-            splash.show()
-            app.processEvents()
+                gif_splash = CustomSplashScreen(gif_path=gif_path)
+                if hasattr(gif_splash, 'movie') and gif_splash.movie.isValid():
+                    splash = gif_splash
 
             def start_splash_and_sound():
                 if hasattr(splash, 'movie'):
                     splash.start_gif_animation()
                 _audio_manager.play_deltahub_sound()
             QTimer.singleShot(SPLASH_SOUND_DELAY, start_splash_and_sound)
-        else:
-            splash = create_png_splash()
-            splash.show()
-            app.processEvents()
+        splash.show()
+        app.processEvents()
 
         def show_launcher_window(ex):
             if ex:
                 if hasattr(ex, 'app_state') and getattr(ex.app_state, 'game_is_running', False):
                     return
-                ex.show()
-                ex.is_shown_to_user = True
-                if hasattr(ex, 'app_state'):
-                    ex.app_state.is_shown_to_user = True
-                ex.activateWindow()
-                ex.raise_()
-                ex.setWindowState(ex.windowState() & ~Qt.WindowState.WindowMinimized | Qt.WindowState.WindowActive)
+                try:
+                    ex.show()
+                    ex.is_shown_to_user = True
+                    if hasattr(ex, 'app_state'):
+                        ex.app_state.is_shown_to_user = True
+                    from PyQt6.QtWidgets import QApplication
+                    qapp = QApplication.instance()
+                    if qapp:
+                        qapp.processEvents()
+                except Exception as e:
+                    logging.error(f'Error showing launcher window: {e}', exc_info=True)
 
         def close_splash():
             if hasattr(splash, 'movie'):
@@ -365,17 +348,9 @@ def run_app():
             show_launcher_window(ex)
 
         def close_splash_when_ready():
-            if show_animation:
-                if not check_minimum_splash_time():
-                    if _splash_start_time is not None:
-                        remaining_time = max(0, int((SPLASH_MIN_DURATION - (time.time() - _splash_start_time)) * 1000))
-                        QTimer.singleShot(remaining_time, lambda: (close_splash(), show_launcher_window(launcher_app.get('instance'))))
-                    else:
-                        close_splash()
-                        show_launcher_window(launcher_app.get('instance'))
-                else:
-                    close_splash()
-                    show_launcher_window(launcher_app.get('instance'))
+            if show_animation and (not check_minimum_splash_time()) and (_splash_start_time is not None):
+                remaining_time = max(0, int((SPLASH_MIN_DURATION - (time.time() - _splash_start_time)) * 1000))
+                QTimer.singleShot(remaining_time, lambda: (close_splash(), show_launcher_window(launcher_app.get('instance'))))
             else:
                 close_splash()
                 show_launcher_window(launcher_app.get('instance'))
@@ -394,13 +369,39 @@ def run_app():
                 if show_animation:
                     launcher_app['instance']._splash_was_shown = True
                 launcher_app['instance']._post_show_initialization()
+                mods_display_ready_flag = {'ready': False}
+                window_shown_flag = {'shown': False}
+
+                def on_mods_display_ready():
+                    if window_shown_flag['shown']:
+                        return
+                    mods_display_ready_flag['ready'] = True
+                    window_shown_flag['shown'] = True
+                    if show_animation:
+                        close_splash_when_ready()
+                    else:
+                        close_splash_and_show_launcher()
+                launcher_app['instance'].mods_display_ready.connect(on_mods_display_ready)
+                if hasattr(launcher_app['instance'], '_mods_display_ready_emitted'):
+                    if launcher_app['instance']._mods_display_ready_emitted:
+                        QTimer.singleShot(100, on_mods_display_ready)
+
+                def fallback_show_window():
+                    if window_shown_flag['shown']:
+                        return
+                    if not mods_display_ready_flag['ready']:
+                        logging.info('Fallback: Showing window after timeout (mods display not ready in time)')
+                        window_shown_flag['shown'] = True
+                        if show_animation:
+                            close_splash_when_ready()
+                        else:
+                            close_splash_and_show_launcher()
                 if show_animation:
-                    launcher_app['instance'].ui_ready.connect(close_splash_when_ready)
                     fallback_time = max(LAUNCHER_FALLBACK_TIMEOUT, int(SPLASH_MIN_DURATION * 1000))
-                    QTimer.singleShot(fallback_time, close_splash_when_ready)
+                    QTimer.singleShot(fallback_time, fallback_show_window)
                 else:
-                    launcher_app['instance'].initialization_finished.connect(close_splash_and_show_launcher)
-                    QTimer.singleShot(15000, close_splash_and_show_launcher)
+                    fallback_time = max(LAUNCHER_FALLBACK_TIMEOUT, 10000)
+                    QTimer.singleShot(fallback_time, fallback_show_window)
             except Exception as e:
                 import traceback
                 traceback.print_exc()

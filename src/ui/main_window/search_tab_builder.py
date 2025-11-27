@@ -64,11 +64,16 @@ class SearchTabBuilder:
         filters_layout.addWidget(sort_order_btn)
         filters_layout.addSpacing(20)
         modgame_combo = QComboBox()
-        modgame_combo.addItem(tr('dropdowns.all_mods'), '')
         modgame_combo.addItem(tr('ui.deltarune'), 'deltarune')
         modgame_combo.addItem(tr('ui.deltarunedemo'), 'deltarunedemo')
         modgame_combo.addItem(tr('ui.undertale'), 'undertale')
         modgame_combo.addItem(tr('ui.undertaleyellow'), 'undertaleyellow')
+        saved_game = self.app_state.local_config.get('selected_search_game', 'deltarune')
+        game_index = modgame_combo.findData(saved_game)
+        if game_index >= 0:
+            modgame_combo.setCurrentIndex(game_index)
+        else:
+            modgame_combo.setCurrentIndex(0)
         filters_layout.addWidget(modgame_combo)
         filters_layout.addSpacing(20)
         tags_label = QLabel(tr('ui.tags_label'))

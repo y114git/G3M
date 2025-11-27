@@ -9,6 +9,7 @@ from PyQt6.QtCore import Qt
 from managers.localization_manager import tr
 from utils.file_utils import extract_archive, find_deltamod_info_file
 from utils.deltamod_converter import DeltamodConverter
+from config.constants import MOD_CONFIG_FILENAME, LEGACY_MOD_CONFIG_FILENAME
 
 
 class ModImportExportController:
@@ -70,9 +71,12 @@ class ModImportExportController:
                         logging.error('[IMPORT] DELTAMOD conversion failed')
                         QMessageBox.critical(self.app_window, tr('errors.error'), tr('errors.mod_import_failed', error='Conversion failed'))
                     return
-                mod_config_path = os.path.join(content_path, 'mod_config.json')
-                old_config_path = os.path.join(content_path, 'config.json')
-                config_path_to_read = mod_config_path if os.path.exists(mod_config_path) else old_config_path
+                config_path_to_read = os.path.join(content_path, MOD_CONFIG_FILENAME)
+                if not os.path.exists(config_path_to_read):
+                    legacy_config_path = os.path.join(content_path, LEGACY_MOD_CONFIG_FILENAME)
+                    if os.path.exists(legacy_config_path):
+                        config_path_to_read = legacy_config_path
+                        logging.info(f'[IMPORT] Found legacy config.json, will migrate to mod_config.json')
                 logging.info(f'[IMPORT] Looking for mod config at: {config_path_to_read}')
                 if os.path.exists(config_path_to_read):
                     logging.info(f'[IMPORT] Found mod config, reading...')
@@ -95,8 +99,8 @@ class ModImportExportController:
                         target_mod_dir = os.path.join(self.app_state.mods_dir, folder_name_with_counter)
                         counter += 1
                     shutil.copytree(content_path, target_mod_dir)
-                    target_old_config_path = os.path.join(target_mod_dir, 'config.json')
-                    target_config_path = os.path.join(target_mod_dir, 'mod_config.json')
+                    target_config_path = os.path.join(target_mod_dir, MOD_CONFIG_FILENAME)
+                    target_old_config_path = os.path.join(target_mod_dir, LEGACY_MOD_CONFIG_FILENAME)
                     if os.path.exists(target_old_config_path) and (not os.path.exists(target_config_path)):
                         try:
                             shutil.move(target_old_config_path, target_config_path)
@@ -249,8 +253,7 @@ class ModImportExportController:
                     for entry in os.scandir(self.app_state.mods_dir):
                         if not entry.is_dir():
                             continue
-                        config_path = os.path.join(entry.path, 'mod_config.json')
-                        old_config_path = os.path.join(entry.path, 'config.json')
+                        config_path = os.path.join(entry.path, MOD_CONFIG_FILENAME)
                         if os.path.exists(config_path):
                             try:
                                 with open(config_path, 'r', encoding='utf-8') as f:

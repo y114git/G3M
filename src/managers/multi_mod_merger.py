@@ -115,6 +115,8 @@ class MultiModMerger(QObject):
             for chapter_id, mods_list in chapter_mods.items():
                 if not mods_list:
                     continue
+                if is_modpack and chapter_id == -1:
+                    continue
                 if self._cancelled:
                     if not is_modpack:
                         for cid in chapter_mods.keys():
@@ -682,6 +684,8 @@ class MultiModMerger(QObject):
                 mod_1_objects_dir = os.path.join(mod_1_export_dir, 'Objects')
                 os.makedirs(mod_1_objects_dir, exist_ok=True)
                 mod_1_data_win_dir = os.path.dirname(mod_1_patched_backup)
+                if self._cancelled:
+                    return False
                 export_script = self.utmt_wrapper.get_script_path('SmartExport')
                 returncode = 1
                 stderr = ''
@@ -948,12 +952,15 @@ class MultiModMerger(QObject):
             self.patching_logger.error('UTMTCLI not available for executing CSX scripts')
             self.status_update.emit(tr('errors.utmtcli_not_available', platform=self.utmt_wrapper.get_platform()), 'error')
             return False
+        env = {}
+        if self.temp_merge_dir and os.path.exists(os.path.join(self.temp_merge_dir, 'output')):
+            env['DELTAHUB_ROOT'] = self.temp_merge_dir
         for script_path in csx_scripts:
             if self._cancelled:
                 return False
             try:
                 self.patching_logger.info(f'Executing CSX script: {os.path.basename(script_path)}')
-                returncode, stdout, stderr = self.utmt_wrapper.execute_script(data_win_path, script_path, output_path=data_win_path, cwd=self.temp_merge_dir if self.temp_merge_dir else None)
+                returncode, stdout, stderr = self.utmt_wrapper.execute_script(data_win_path, script_path, output_path=data_win_path, cwd=self.temp_merge_dir if self.temp_merge_dir else None, env=env)
                 if returncode != 0:
                     self.patching_logger.error(f'CSX script execution failed: {stderr[:500]}')
                     self.status_update.emit(tr('errors.csx_script_failed', script=os.path.basename(script_path)), 'error')
@@ -1461,6 +1468,8 @@ class MultiModMerger(QObject):
         try:
             merge_temp_dir = os.path.join(self.temp_merge_dir, 'merge_temp')
             os.makedirs(merge_temp_dir, exist_ok=True)
+            if self._cancelled:
+                return False
             export_script = self.utmt_wrapper.get_script_path('SmartExport')
             if export_script:
                 export_temp = os.path.join(merge_temp_dir, 'other_export')
@@ -1586,12 +1595,12 @@ class MultiModMerger(QObject):
 
     def _extract_archive_to_target(self, archive_path: str, target_dir: str) -> bool:
         try:
-            from utils.archive_utils import ArchiveExtractor
+            from utils.file_utils import extract_any_archive
             import tempfile
             archive_lower = os.path.basename(archive_path).lower()
             chapter_id = self._extract_chapter_id_from_path(target_dir)
             with tempfile.TemporaryDirectory(prefix='mm_extract_') as temp_extract_dir:
-                ArchiveExtractor.extract(archive_path, temp_extract_dir)
+                extract_any_archive(archive_path, temp_extract_dir)
                 for root, dirs, files in os.walk(temp_extract_dir):
                     rel_root = os.path.relpath(root, temp_extract_dir)
                     if rel_root == '.':
@@ -1802,6 +1811,8 @@ class MultiModMerger(QObject):
                         shutil.copy2(previous_mod_data_win, vanilla_file)
                         self.patching_logger.info(f'Using previous mod {previous_mod_number} for incremental comparison (mod {mod_number})')
             if scripts:
+                if self._cancelled:
+                    return False
                 returncode, stdout, stderr = self.utmt_wrapper.execute_scripts(mod_data_win, scripts, output_path=mod_data_win, cwd=merge_root, env=env)
                 if returncode != 0:
                     self.patching_logger.warning(f'Export scripts failed for mod {mod_number}: {stderr[:500]}')
@@ -1822,6 +1833,8 @@ class MultiModMerger(QObject):
                         self.patching_logger.info(f'[EXPORT] Verified: {code_count_exported} code files, {sprite_count_exported} sprites in Objects directory after SmartExport')
                         if code_count_exported == 0 and sprite_count_exported == 0:
                             self.patching_logger.warning(f'[EXPORT] WARNING: SmartExport exported 0 resources for mod {mod_number}! This may indicate a problem with comparison file or mod has no changes.')
+                if self._cancelled:
+                    return False
                 export_rooms_script = self.utmt_wrapper.get_script_path('ExportRooms')
                 if export_rooms_script:
                     returncode, stdout, stderr = self.utmt_wrapper.execute_scripts(mod_data_win, ['ExportRooms'], output_path=mod_data_win, cwd=merge_root)
@@ -1829,6 +1842,8 @@ class MultiModMerger(QObject):
                         self.patching_logger.warning(f'ExportRooms failed for mod {mod_number}: {stderr[:500]}')
                     else:
                         self.patching_logger.info(f'Successfully exported rooms from mod {mod_number}')
+                if self._cancelled:
+                    return False
                 export_shaders_script = self.utmt_wrapper.get_script_path('ExportShaders')
                 if export_shaders_script:
                     returncode, stdout, stderr = self.utmt_wrapper.execute_scripts(mod_data_win, ['ExportShaders'], output_path=mod_data_win, cwd=merge_root)

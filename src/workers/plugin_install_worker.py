@@ -7,7 +7,7 @@ import tempfile
 from PyQt6.QtCore import QThread, pyqtSignal
 from managers.localization_manager import tr
 from utils.network_utils import get_session, download_file
-from utils.format_utils import format_size_mb
+from utils.ui_utils import format_size_mb
 from config.constants import NETWORK_TIMEOUT_HEAD, UI_COLORS
 
 

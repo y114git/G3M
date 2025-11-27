@@ -31,11 +31,11 @@ class LoadGameBananaMetadataThread(QThread):
                 return
             loaded_count = 0
             for i in range(0, total, self._batch_size):
-                if self._cancelled:
+                if self._cancelled or self.isInterruptionRequested():
                     break
                 batch = self.mod_ids[i:i + self._batch_size]
                 for mod_id_str in batch:
-                    if self._cancelled:
+                    if self._cancelled or self.isInterruptionRequested():
                         break
                     try:
                         mod_id = int(mod_id_str)
@@ -53,7 +53,7 @@ class LoadGameBananaMetadataThread(QThread):
                         logger.error(f'LoadGameBananaMetadataThread: Error loading metadata for mod {mod_id_str}: {e}', exc_info=True)
                         continue
                     self.progress.emit(loaded_count, total)
-                if i + self._batch_size < total and (not self._cancelled):
+                if i + self._batch_size < total and (not self._cancelled) and (not self.isInterruptionRequested()):
                     self.msleep(100)
             self.finished.emit()
         except Exception as e:

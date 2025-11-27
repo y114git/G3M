@@ -13,7 +13,7 @@ from managers.localization_manager import tr
 from utils.file_utils import get_unique_mod_dir, has_deltamod_info_file, check_filename_is_deltamod_info
 from utils.deltamod_converter import DeltamodConverter
 from utils.network_utils import download_file, sanitize_log_message
-from utils.format_utils import format_size_mb
+from utils.ui_utils import format_size_mb
 import logging
 
 
@@ -166,7 +166,7 @@ class FullInstallThread(QThread):
             def progress_callback(progress):
                 self.progress.emit(progress)
                 if total_size > 0:
-                    from utils.format_utils import format_size_mb
+                    from utils.ui_utils import format_size_mb
                     downloaded_mb = format_size_mb(downloaded_ref[0])
                     total_mb = format_size_mb(total_size)
                     self.status.emit(f"{tr('status.installing_game_files')} ({downloaded_mb} / {total_mb})", UI_COLORS['status_warning'])
@@ -239,7 +239,8 @@ class InstallModsThread(QThread):
     def _should_update_component(self, mod, chapter_id: int, existing_folder: str) -> dict:
         if not existing_folder:
             return {}
-        config_path = os.path.join(self.main_window.app_state.mods_dir, existing_folder, 'config.json')
+        from config.constants import MOD_CONFIG_FILENAME
+        config_path = os.path.join(self.main_window.app_state.mods_dir, existing_folder, MOD_CONFIG_FILENAME)
         if not os.path.exists(config_path):
             return {}
         try:
@@ -337,14 +338,14 @@ class InstallModsThread(QThread):
                 if os.path.exists(target_path):
                     try:
                         os.remove(target_path)
-                    except OSError as rm_e:
-                        logging.debug(f'_download_component_file: cleanup failed: {rm_e}')
+                    except OSError:
+                        pass
                 raise
             if os.path.exists(target_path):
                 try:
                     os.remove(target_path)
-                except OSError as rm_e:
-                    logging.debug(f'_download_component_file: cleanup failed: {rm_e}')
+                except OSError:
+                    pass
             safe_msg = sanitize_log_message(f'_download_component_file: unexpected error downloading file: {e}')
             logging.error(safe_msg, exc_info=True)
             raise
@@ -352,8 +353,8 @@ class InstallModsThread(QThread):
             if os.path.exists(target_path):
                 try:
                     os.remove(target_path)
-                except OSError as rm_e:
-                    logging.debug(f'_download_component_file: cleanup failed: {rm_e}')
+                except OSError:
+                    pass
             safe_msg = sanitize_log_message(f'_download_component_file: unexpected error downloading file: {e}')
             logging.error(safe_msg, exc_info=True)
             raise
@@ -616,7 +617,8 @@ class InstallModsThread(QThread):
                 folder_name = info['folder_name']
                 config_data = info['config']
                 mod_dir = os.path.join(self.main_window.app_state.mods_dir, folder_name)
-                config_path = os.path.join(mod_dir, 'config.json')
+                from config.constants import MOD_CONFIG_FILENAME
+                config_path = os.path.join(mod_dir, MOD_CONFIG_FILENAME)
                 self.main_window.settings_manager.write_json(config_path, config_data)
             metadata = self.main_window.mod_manager._read_metadata()
             for mod_key in installed_mods.keys():
@@ -979,8 +981,9 @@ class UrlInstallThread(QThread):
             with zipfile.ZipFile(theme_file_path, 'r') as zipf:
                 if 'theme.json' not in zipf.namelist():
                     raise ValueError('Missing theme.json')
+                from utils.file_utils import extract_any_archive
                 with tempfile.TemporaryDirectory(prefix='dh-theme-extract-') as temp_dir:
-                    zipf.extractall(temp_dir)
+                    extract_any_archive(theme_file_path, temp_dir)
                     theme_json_path = os.path.join(temp_dir, 'theme.json')
                     with open(theme_json_path, 'r', encoding='utf-8') as f:
                         theme_settings = json.load(f)
@@ -1082,10 +1085,9 @@ class UrlInstallThread(QThread):
                     content_path = os.path.join(unpack_dir, unpacked_items[0])
                 files_in_root = os.listdir(content_path)
                 redirect_config_path = None
-                if 'mod_config.json' in files_in_root and len(files_in_root) == 1:
+                from config.constants import MOD_CONFIG_FILENAME
+                if MOD_CONFIG_FILENAME in files_in_root and len(files_in_root) == 1:
                     redirect_config_path = os.path.join(content_path, MOD_CONFIG_FILENAME)
-                elif 'config.json' in files_in_root and len(files_in_root) == 1:
-                    redirect_config_path = os.path.join(content_path, 'config.json')
                 if redirect_config_path:
                     try:
                         with open(redirect_config_path, 'r', encoding='utf-8') as f:
@@ -1264,15 +1266,19 @@ class ModScanThread(QThread):
             cache_to_save = {}
             for mod_key, info in cache.items():
                 if isinstance(info, dict):
-                    cache_to_save[mod_key] = {'config_mtime': info.get('config_mtime', 0), 'config_data': info.get('config_data', {}), 'folder_path': info.get('folder_path', ''), 'folder_name': info.get('folder_name', '')}
+                    cache_to_save[mod_key] = {'mod_key': info.get('mod_key', mod_key), 'config_mtime': info.get('config_mtime', 0), 'config_data': info.get('config_data', {}), 'folder_path': info.get('folder_path', ''), 'folder_name': info.get('folder_name', '')}
             with open(self.cache_file, 'w', encoding='utf-8') as f:
                 json.dump(cache_to_save, f, indent=2, ensure_ascii=False)
         except (OSError, TypeError) as e:
             logging.debug(f'ModScanThread: Failed to save cache to {self.cache_file}: {e}')
 
     def run(self):
-        disk_cache = self._load_cache()
+        disk_cache = {}
         cache = {}
+        try:
+            disk_cache = self._load_cache()
+        except Exception as e:
+            logging.warning(f'ModScanThread: Failed to load cache: {e}', exc_info=True)
         if not os.path.exists(self.mods_dir):
             self.scan_completed.emit(cache)
             return
@@ -1285,8 +1291,12 @@ class ModScanThread(QThread):
                         continue
                     folder_name = entry.name
                     folder_path = entry.path
-                    from utils.file_utils import migrate_mod_config
-                    migrate_mod_config(folder_path)
+                    try:
+                        from utils.file_utils import migrate_mod_config
+                        migrate_mod_config(folder_path)
+                    except Exception as e:
+                        safe_msg = sanitize_log_message(f'ModScanThread: failed to migrate mod config in {folder_path}: {e}')
+                        logging.warning(safe_msg, exc_info=True)
                     config_path = os.path.join(folder_path, MOD_CONFIG_FILENAME)
                     if not os.path.exists(config_path):
                         continue
@@ -1297,8 +1307,15 @@ class ModScanThread(QThread):
                         if folder_path in [info.get('folder_path') for info in disk_cache.values()]:
                             cached_entry = next((info for info in disk_cache.values() if info.get('folder_path') == folder_path), None)
                             if cached_entry and cached_entry.get('config_mtime', 0) >= config_mtime:
-                                mod_key = cached_entry.get('config_data', {}).get('mod_key')
+                                mod_key = cached_entry.get('mod_key') or cached_entry.get('config_data', {}).get('mod_key')
+                                if not mod_key:
+                                    for cache_key, cache_info in disk_cache.items():
+                                        if cache_info.get('folder_path') == folder_path:
+                                            mod_key = cache_key
+                                            break
                                 if mod_key:
+                                    if 'mod_key' not in cached_entry:
+                                        cached_entry['mod_key'] = mod_key
                                     cache[mod_key] = cached_entry
                                     continue
                         with open(config_path, 'r', encoding='utf-8') as f:
@@ -1324,8 +1341,21 @@ class ModScanThread(QThread):
                         safe_msg = sanitize_log_message(f'ModScanThread: missing key in {config_path}: {e}')
                         logging.debug(safe_msg)
                         continue
+                    except Exception as e:
+                        safe_msg = sanitize_log_message(f'ModScanThread: unexpected error processing mod {folder_path}: {e}')
+                        logging.error(safe_msg, exc_info=True)
+                        continue
         except OSError as e:
             safe_msg = sanitize_log_message(f'ModScanThread: failed to list directory {self.mods_dir}: {e}')
             logging.error(safe_msg, exc_info=True)
-        self._save_cache(cache)
-        self.scan_completed.emit(cache)
+        except Exception as e:
+            safe_msg = sanitize_log_message(f'ModScanThread: unexpected error during scan: {e}')
+            logging.error(safe_msg, exc_info=True)
+        try:
+            self._save_cache(cache)
+        except Exception as e:
+            logging.warning(f'ModScanThread: Failed to save cache: {e}', exc_info=True)
+        try:
+            self.scan_completed.emit(cache)
+        except Exception as e:
+            logging.error(f'ModScanThread: Failed to emit scan_completed signal: {e}', exc_info=True)

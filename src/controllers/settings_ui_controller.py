@@ -29,17 +29,24 @@ class SettingsUiController:
             self.app.settings_widget.setVisible(True)
             self.switch_settings_page(self.app.settings_menu_page)
             self.update_settings_page_visibility()
-            self.customization_manager.load_custom_style_settings(self.app.color_widgets, self.app.theme.apply_theme)
+            from PyQt6.QtCore import QTimer
+            QTimer.singleShot(0, lambda: self.customization_manager.load_custom_style_settings(self.app.color_widgets, self.app.theme.apply_theme))
             self.app._update_status(tr('status.launcher_settings'), UI_COLORS['status_info'])
         else:
             self.app.settings_button.setText(tr('ui.settings_title'))
-            self.app.theme.apply_theme()
+            self.app.setUpdatesEnabled(False)
             self.app.settings_widget.setVisible(False)
             self.app.main_tab_widget.setVisible(True)
             self.app.bottom_widget.setVisible(True)
-            self.app.update()
-            self.app.repaint()
-            self.app.game_launch.update_button_state()
+            from PyQt6.QtCore import QTimer
+
+            def apply_theme_and_enable_updates():
+                self.app.theme.apply_theme()
+                self.app.setUpdatesEnabled(True)
+                self.app.update()
+                self.app.repaint()
+                self.app.game_launch.update_button_state()
+            QTimer.singleShot(0, apply_theme_and_enable_updates)
 
     def toggle_help_view(self):
         self.app_state.is_help_view = not self.app_state.is_help_view

@@ -124,11 +124,28 @@ class ModManager(QObject):
             cache = {}
             mods_by_name = {}
             for mod_key, mod_info_dict in cache_dict.items():
-                mod_info = ModFolderInfo(mod_key=mod_info_dict['mod_key'], folder_path=mod_info_dict['folder_path'], folder_name=mod_info_dict['folder_name'], config_data=mod_info_dict['config_data'], config_mtime=mod_info_dict['config_mtime'])
-                cache[mod_key] = mod_info
-                mod_name = mod_info_dict['config_data'].get('name', '')
-                if mod_name:
-                    mods_by_name[mod_name.lower()] = mod_key
+                try:
+                    effective_mod_key = mod_info_dict.get('mod_key', mod_key)
+                    config_data = mod_info_dict.get('config_data', {})
+                    folder_path = mod_info_dict.get('folder_path', '')
+                    folder_name = mod_info_dict.get('folder_name', '')
+                    config_mtime = mod_info_dict.get('config_mtime', 0.0)
+                    if not effective_mod_key and config_data.get('is_gamebanana_mod') and config_data.get('gamebanana_mod_id'):
+                        mod_id = config_data.get('gamebanana_mod_id')
+                        effective_mod_key = f'gb_{mod_id}'
+                        logging.warning(f'_on_scan_completed: Found GameBanana mod with empty mod_key, recovering as {effective_mod_key} (ID: {mod_id})')
+                        config_data['mod_key'] = effective_mod_key
+                    elif not effective_mod_key:
+                        logging.warning(f'_on_scan_completed: Found mod with empty mod_key in {folder_path}, skipping')
+                        continue
+                    mod_info = ModFolderInfo(mod_key=effective_mod_key, folder_path=folder_path, folder_name=folder_name, config_data=config_data, config_mtime=config_mtime)
+                    cache[effective_mod_key] = mod_info
+                    mod_name = config_data.get('name', '')
+                    if mod_name:
+                        mods_by_name[mod_name.lower()] = effective_mod_key
+                except (KeyError, TypeError) as e:
+                    logging.warning(f'_on_scan_completed: Error processing mod {mod_key}: {e}', exc_info=True)
+                    continue
             self._mods_cache = cache
             self._mods_by_name = mods_by_name
             self._mods_cache_valid = True
@@ -263,36 +280,23 @@ class ModManager(QObject):
             conversion_happened = self.convert_legacy_mods()
             if conversion_happened:
                 return self.load_local_mods(_skip_conversion=True)
-        self._get_mods_cache()
+        cache = self._get_mods_cache(use_async=False)
         installed_mods = {}
         try:
-            for item_name in os.listdir(self.app_state.mods_dir):
-                item_path = os.path.join(self.app_state.mods_dir, item_name)
-                if not os.path.isdir(item_path):
+            for mod_key, mod_info in cache.items():
+                config_data = mod_info.config_data
+                if not config_data:
                     continue
-                from utils.file_utils import migrate_mod_config
-                migrate_mod_config(item_path)
-                config_path = os.path.join(item_path, 'mod_config.json')
-                if not os.path.exists(config_path):
+                if not mod_key and config_data.get('is_gamebanana_mod') and config_data.get('gamebanana_mod_id'):
+                    mod_id = config_data.get('gamebanana_mod_id')
+                    recovered_key = f'gb_{mod_id}'
+                    logging.warning(f'load_local_mods: Found GameBanana mod with empty mod_key, recovering as {recovered_key} (ID: {mod_id})')
+                    config_data['mod_key'] = recovered_key
+                    mod_key = recovered_key
+                elif not mod_key:
+                    logging.warning(f'load_local_mods: Found mod with empty mod_key, skipping')
                     continue
-                try:
-                    with open(config_path, 'r', encoding='utf-8') as f:
-                        config_data = json.load(f)
-                    if not config_data:
-                        continue
-                    mod_key = config_data.get('mod_key')
-                    if mod_key:
-                        installed_mods[mod_key] = config_data
-                    elif config_data.get('is_gamebanana_mod') and config_data.get('gamebanana_mod_id'):
-                        mod_id = config_data.get('gamebanana_mod_id')
-                        recovered_key = f'gb_{mod_id}'
-                        logging.warning(f'load_local_mods: Found GameBanana mod with empty mod_key in {item_path}, recovering as {recovered_key} (ID: {mod_id})')
-                        config_data['mod_key'] = recovered_key
-                        installed_mods[recovered_key] = config_data
-                    else:
-                        logging.warning(f'load_local_mods: Found mod with empty mod_key in {item_path}, skipping')
-                except (OSError, json.JSONDecodeError, KeyError) as e:
-                    logging.debug(f'load_local_mods: failed to load mod from {item_path}: {e}')
+                installed_mods[mod_key] = config_data
             installed_gamebanana_by_id = {}
             installed_gamebanana_by_key = {}
             for mod_key, config_data in installed_mods.items():
@@ -408,7 +412,7 @@ class ModManager(QObject):
                                     logging.debug(f'Loaded icon_url from API for GameBanana mod {mod_id}: {icon_url_from_api}')
                                     config_data['icon_url'] = icon_url
                                     from utils.file_utils import atomic_write_json
-                                    config_path = os.path.join(mod_folder_path, 'mod_config.json')
+                                    config_path = os.path.join(mod_folder_path, MOD_CONFIG_FILENAME)
                                     atomic_write_json(config_path, config_data, indent=2)
                         except Exception as e:
                             logging.debug(f"Failed to load icon_url for GameBanana mod {config_data.get('gamebanana_mod_id')}: {e}")
@@ -467,7 +471,8 @@ class ModManager(QObject):
                     logging.debug(f'load_local_mods: Skipping local mod {mod_key} - already in all_mods')
                     continue
                 try:
-                    mod_folder_for_icon = self.get_mod_folder_path(mod_key)
+                    mod_folder_path = mod_info.folder_path if hasattr(mod_info, 'folder_path') else self.get_mod_folder_path(mod_key)
+                    mod_folder_for_icon = mod_folder_path or self.get_mod_folder_path(mod_key)
                     icon_url = ''
                     if mod_folder_for_icon:
                         resolved_icon = resolve_mod_icon(config_data, mod_folder_for_icon)
@@ -476,22 +481,6 @@ class ModManager(QObject):
                     safe_mod_info = {'key': mod_key, 'name': config_data.get('name', tr('defaults.local_mod')), 'version': config_data.get('version', '1.0.0'), 'author': config_data.get('author', tr('defaults.unknown')), 'tagline': config_data.get('tagline', tr('defaults.no_description')), 'game_version': config_data.get('game_version', tr('defaults.not_specified')), 'description_url': '', 'downloads': 0, 'modgame': config_data.get('modgame', 'deltarune'), 'is_verified': False, 'icon_url': icon_url, 'tags': ['local'], 'hide_mod': False, 'is_local_mod': config_data.get('is_local_mod', True), 'ban_status': False, 'demo_url': None, 'demo_version': '1.0.0', 'created_date': config_data.get('created_date', 'N/A'), 'last_updated': config_data.get('created_date', 'N/A'), 'external_url': config_data.get('external_url'), 'is_gamebanana_mod': config_data.get('is_gamebanana_mod', False), 'gamebanana_mod_id': config_data.get('gamebanana_mod_id'), 'gamebanana_mod_type': config_data.get('gamebanana_mod_type'), 'gamebanana_last_update_timestamp': config_data.get('gamebanana_last_update_timestamp')}
                     mod = mod_models.ModInfo(**safe_mod_info)
                     files_data = config_data.get('files', {})
-                    mod_folder_path = None
-                    for folder_name in os.listdir(self.app_state.mods_dir):
-                        folder_path = os.path.join(self.app_state.mods_dir, folder_name)
-                        from utils.file_utils import migrate_mod_config
-                        migrate_mod_config(folder_path)
-                        test_config_path = os.path.join(folder_path, 'mod_config.json')
-                        if os.path.isfile(test_config_path):
-                            try:
-                                with open(test_config_path, 'r', encoding='utf-8') as f:
-                                    test_config = json.load(f)
-                                    if test_config.get('mod_key') == mod_key:
-                                        mod_folder_path = folder_path
-                                        break
-                            except Exception as e:
-                                logging.warning(f'Failed reading config {test_config_path}: {e}')
-                                continue
                     for file_key, ch_info in list(files_data.items()):
                         chapter_files = ch_info
                         if mod_folder_path:
@@ -668,17 +657,153 @@ class ModManager(QObject):
 
     def delete_mod_files(self, mod_data):
         try:
-            mod_key = mod_data.get('key', '') if isinstance(mod_data, dict) else mod_data.key
+            from utils.mod_utils import get_mod_key, get_mod_name
+            import shutil
+            folder_path = None
+            if hasattr(mod_data, 'folder_path'):
+                folder_path = mod_data.folder_path
+            elif isinstance(mod_data, dict) and 'folder_path' in mod_data:
+                folder_path = mod_data['folder_path']
+            mod_key = get_mod_key(mod_data)
+            mod_name = get_mod_name(mod_data)
+            logging.info(f'delete_mod_files: mod_key={mod_key}, mod_name={mod_name}, folder_path={folder_path}, type={type(mod_data)}')
+            if folder_path and os.path.exists(folder_path):
+                logging.info(f'delete_mod_files: Deleting mod folder directly by folder_path: {folder_path}')
+                try:
+                    shutil.rmtree(folder_path)
+                    self.invalidate_mods_cache()
+                    logging.info(f'delete_mod_files: Successfully deleted mod folder by folder_path: {folder_path}')
+                    return
+                except Exception as e:
+                    logging.error(f'delete_mod_files: Failed to delete folder {folder_path}: {e}', exc_info=True)
+                    raise
+            if mod_key:
+                folder_path_from_key = self.get_mod_folder_path(mod_key)
+                if folder_path_from_key and os.path.exists(folder_path_from_key):
+                    logging.info(f'delete_mod_files: Deleting mod folder by get_mod_folder_path: {folder_path_from_key}')
+                    try:
+                        shutil.rmtree(folder_path_from_key)
+                        self.invalidate_mods_cache()
+                        logging.info(f'delete_mod_files: Successfully deleted mod folder by get_mod_folder_path: {folder_path_from_key}')
+                        return
+                    except Exception as e:
+                        logging.error(f'delete_mod_files: Failed to delete folder {folder_path_from_key}: {e}', exc_info=True)
+                        raise
+            if mod_name:
+                folder_path = os.path.join(self.app_state.mods_dir, mod_name)
+                if os.path.exists(folder_path):
+                    logging.info(f'delete_mod_files: Deleting mod folder by mod_name: {folder_path}')
+                    try:
+                        shutil.rmtree(folder_path)
+                        self.invalidate_mods_cache()
+                        logging.info(f'delete_mod_files: Successfully deleted mod folder by mod_name: {folder_path}')
+                        return
+                    except Exception as e:
+                        logging.error(f'delete_mod_files: Failed to delete folder {folder_path}: {e}', exc_info=True)
+                        raise
+            if not mod_key:
+                logging.error(f'delete_mod_files: Cannot determine mod_key or folder_path for mod_data')
+                return
+            logging.info(f'delete_mod_files: Attempting to delete mod with key: {mod_key}')
             cache = self._get_mods_cache()
             mod_info = cache.get(mod_key)
             if not mod_info:
-                return
+                logging.warning(f'delete_mod_files: Mod with key {mod_key} not found in cache. Cache has {len(cache)} entries.')
+                cache_keys = list(cache.keys())[:10]
+                logging.info(f'delete_mod_files: Cache keys (first 10): {cache_keys}')
+                from utils.mod_utils import get_mod_name
+                mod_name = get_mod_name(mod_data)
+                if mod_name:
+                    logging.info(f'delete_mod_files: Trying to find mod by name: {mod_name}')
+                    with self._cache_lock:
+                        mod_key_from_name = self._mods_by_name.get(mod_name.lower())
+                        if mod_key_from_name and mod_key_from_name in cache:
+                            mod_info = cache[mod_key_from_name]
+                            mod_key = mod_key_from_name
+                            logging.info(f'delete_mod_files: Found mod by name mapping: {mod_name} -> {mod_key_from_name}')
+                    if not mod_info:
+                        for cached_key, cached_info in cache.items():
+                            cached_folder_name = cached_info.folder_name if hasattr(cached_info, 'folder_name') else cached_info.get('folder_name') if isinstance(cached_info, dict) else None
+                            if cached_folder_name == mod_name:
+                                mod_info = cached_info
+                                mod_key = cached_key
+                                logging.info(f'delete_mod_files: Found mod by folder name: {mod_name}, key: {cached_key}')
+                                break
+                    if not mod_info:
+                        for cached_key, cached_info in cache.items():
+                            config_data = cached_info.config_data if hasattr(cached_info, 'config_data') else cached_info.get('config_data', {}) if isinstance(cached_info, dict) else {}
+                            config_name = config_data.get('name', '')
+                            if config_name == mod_name:
+                                mod_info = cached_info
+                                mod_key = cached_key
+                                logging.info(f'delete_mod_files: Found mod by config name: {mod_name}, key: {cached_key}')
+                                break
+                    if not mod_info:
+                        folder_path = None
+                        if hasattr(mod_data, 'folder_path'):
+                            folder_path = mod_data.folder_path
+                        elif isinstance(mod_data, dict) and 'folder_path' in mod_data:
+                            folder_path = mod_data['folder_path']
+                        else:
+                            folder_path = os.path.join(self.app_state.mods_dir, mod_name)
+                        logging.info(f'delete_mod_files: Attempting to delete folder by path: {folder_path}')
+                        if folder_path and os.path.exists(folder_path):
+                            import shutil
+                            logging.info(f'delete_mod_files: Deleting mod folder directly by path: {folder_path}')
+                            try:
+                                shutil.rmtree(folder_path)
+                                self.invalidate_mods_cache()
+                                logging.info(f'delete_mod_files: Successfully deleted mod folder by path: {folder_path}')
+                                return
+                            except Exception as e:
+                                logging.error(f'delete_mod_files: Failed to delete folder {folder_path}: {e}', exc_info=True)
+                                raise
+                        else:
+                            logging.warning(f"delete_mod_files: Folder path does not exist: {(folder_path if folder_path else 'None')}")
+                if not mod_info:
+                    folder_path = os.path.join(self.app_state.mods_dir, mod_key)
+                    logging.info(f'delete_mod_files: Trying to delete folder by mod_key as folder name: {folder_path}')
+                    if os.path.exists(folder_path):
+                        import shutil
+                        logging.info(f'delete_mod_files: Deleting mod folder by mod_key path: {folder_path}')
+                        try:
+                            shutil.rmtree(folder_path)
+                            self.invalidate_mods_cache()
+                            logging.info(f'delete_mod_files: Successfully deleted mod folder by mod_key path: {folder_path}')
+                            return
+                        except Exception as e:
+                            logging.error(f'delete_mod_files: Failed to delete folder {folder_path}: {e}', exc_info=True)
+                            raise
+                    else:
+                        logging.warning(f'delete_mod_files: Folder path does not exist: {folder_path}')
+                if not mod_info and mod_name:
+                    folder_path = os.path.join(self.app_state.mods_dir, mod_name)
+                    logging.info(f'delete_mod_files: Last resort - trying to delete by mod_name as folder name: {folder_path}')
+                    if os.path.exists(folder_path):
+                        import shutil
+                        logging.info(f'delete_mod_files: Deleting mod folder by mod_name path (last resort): {folder_path}')
+                        try:
+                            shutil.rmtree(folder_path)
+                            self.invalidate_mods_cache()
+                            logging.info(f'delete_mod_files: Successfully deleted mod folder by mod_name path: {folder_path}')
+                            return
+                        except Exception as e:
+                            logging.error(f'delete_mod_files: Failed to delete folder {folder_path}: {e}', exc_info=True)
+                            raise
+                if not mod_info:
+                    logging.error(f"delete_mod_files: Cannot delete mod - not found in cache and folder paths do not exist. mod_key={mod_key}, mod_name={(mod_name if mod_name else 'None')}")
+                    return
             if os.path.exists(mod_info.folder_path):
                 import shutil
+                logging.info(f'delete_mod_files: Deleting mod folder: {mod_info.folder_path}')
                 shutil.rmtree(mod_info.folder_path)
                 self.invalidate_mods_cache()
+                logging.info(f'delete_mod_files: Successfully deleted mod with key: {mod_key}')
+            else:
+                logging.warning(f'delete_mod_files: Mod folder does not exist: {mod_info.folder_path}')
+                self.invalidate_mods_cache()
         except Exception as e:
-            logging.error(f'uninstall_mod: cleanup failed: {e}', exc_info=True)
+            logging.error(f'delete_mod_files: cleanup failed: {e}', exc_info=True)
 
     def get_mod_status(self, mod: mod_models.ModInfo, chapter_id: int) -> str:
         if mod.is_local_mod:
@@ -847,9 +972,10 @@ class ModManager(QObject):
     def _on_url_install_finished(self, success: bool, message: str):
         self.app_state.is_installing = False
         self.app_state.clear_current_task()
-        self.mod_list_updated.emit()
         if success:
             self.invalidate_mods_cache()
+            self.load_local_mods()
+            self.mod_list_updated.emit()
             self.status_changed.emit(tr('status.mod_installed'), 'status_success')
         elif self.app_state.current_task and getattr(self.app_state.current_task, '_cancelled', False):
             self.status_changed.emit(tr('status.install_cancelled_by_user'), 'status_info')
@@ -961,7 +1087,7 @@ class ModManager(QObject):
                 continue
             from utils.file_utils import migrate_mod_config
             migrate_mod_config(folder_path)
-            config_path = os.path.join(folder_path, 'mod_config.json')
+            config_path = os.path.join(folder_path, MOD_CONFIG_FILENAME)
             if not os.path.exists(config_path):
                 continue
             try:
@@ -985,7 +1111,7 @@ class ModManager(QObject):
                 continue
             from utils.file_utils import migrate_mod_config
             migrate_mod_config(folder_path)
-            config_path = os.path.join(folder_path, 'mod_config.json')
+            config_path = os.path.join(folder_path, MOD_CONFIG_FILENAME)
             if not os.path.exists(config_path):
                 continue
             try:
@@ -1025,7 +1151,7 @@ class ModManager(QObject):
                 continue
             from utils.file_utils import migrate_mod_config
             migrate_mod_config(folder_path)
-            config_path = os.path.join(folder_path, 'mod_config.json')
+            config_path = os.path.join(folder_path, MOD_CONFIG_FILENAME)
             if os.path.exists(config_path):
                 try:
                     with open(config_path, 'r', encoding='utf-8') as f:

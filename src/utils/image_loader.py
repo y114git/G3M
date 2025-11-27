@@ -4,7 +4,7 @@ from PyQt6.QtCore import QRunnable
 from PyQt6.QtGui import QImage
 from workers import WorkerSignals
 from utils.cache import _NET_SEM, get_from_cache, add_to_cache
-from utils.network_utils import get_session
+from utils.network_utils import get_session, sanitize_log_message
 
 
 class ImageLoaderRunnable(QRunnable):
@@ -18,20 +18,39 @@ class ImageLoaderRunnable(QRunnable):
         try:
             self.signals.error.emit(self.url, message)
         except Exception as e:
-            from utils.network_utils import sanitize_log_message
             safe_msg = sanitize_log_message(f'ImageLoader._emit_error: signal emit failed: {e}')
             logging.debug(safe_msg)
 
     def run(self) -> None:
         import requests
         try:
+            if not self.url or not isinstance(self.url, str):
+                self._emit_error('invalid_url')
+                return
+            if '[INVALID_URL]' in self.url or '/[PATH]' in self.url:
+                safe_msg = sanitize_log_message(f'ImageLoader.run: Invalid URL format detected: {self.url[:100]}')
+                logging.warning(safe_msg)
+                self._emit_error('invalid_url')
+                return
+            url_lower = self.url.lower().strip()
+            if not url_lower.startswith(('http://', 'https://')):
+                safe_msg = sanitize_log_message(f'ImageLoader.run: URL does not start with http:// or https://: {self.url[:100]}')
+                logging.warning(safe_msg)
+                self._emit_error('invalid_url')
+                return
+            if '..' in self.url or len(self.url) > 2048:
+                safe_msg = sanitize_log_message(f'ImageLoader.run: Suspicious URL detected: {self.url[:100]}')
+                logging.warning(safe_msg)
+                self._emit_error('invalid_url')
+                return
             cached = get_from_cache(self.url)
             if cached is not None and (not cached.isNull()):
                 try:
                     self.signals.result.emit(cached)
                     return
                 except Exception as e:
-                    logging.debug(f'ImageLoader.run: Error emitting cached image: {e}')
+                    safe_msg = sanitize_log_message(f'ImageLoader.run: Error emitting cached image: {e}')
+                    logging.debug(safe_msg)
             if _NET_SEM:
                 _NET_SEM.acquire()
             try:
@@ -42,29 +61,44 @@ class ImageLoaderRunnable(QRunnable):
                     if _NET_SEM:
                         _NET_SEM.release()
                 except Exception as e:
-                    logging.debug(f'ImageLoader.run: semaphore release failed: {e}')
+                    safe_msg = sanitize_log_message(f'ImageLoader.run: semaphore release failed: {e}')
+                    logging.debug(safe_msg)
             resp.raise_for_status()
+            try:
+                content_type = resp.headers.get('Content-Type', '') or ''
+            except Exception:
+                content_type = ''
+            if content_type and (not content_type.lower().startswith('image/')):
+                safe_msg = sanitize_log_message(f'ImageLoader.run: Non-image content-type "{content_type}" for URL: {self.url[:100]}')
+                logging.debug(safe_msg)
+                self._emit_error('non_image_content')
+                return
             content = resp.content
             if not content:
                 self._emit_error('empty response')
                 return
             img = QImage()
             if not img.loadFromData(content):
-                logging.warning(f'ImageLoader.run: Failed to load image from data for URL: {self.url[:100]}')
+                safe_msg = sanitize_log_message(f'ImageLoader.run: Failed to load image from data for URL: {self.url[:100]}')
+                logging.warning(safe_msg)
                 self._emit_error('decode')
                 return
             if img.isNull():
-                logging.warning(f'ImageLoader.run: Loaded image is null for URL: {self.url[:100]}')
+                safe_msg = sanitize_log_message(f'ImageLoader.run: Loaded image is null for URL: {self.url[:100]}')
+                logging.warning(safe_msg)
                 self._emit_error('null image')
                 return
             add_to_cache(self.url, img)
             try:
                 self.signals.result.emit(img)
             except Exception as e:
-                logging.debug(f'ImageLoader.run: Error emitting result: {e}')
+                safe_msg = sanitize_log_message(f'ImageLoader.run: Error emitting result: {e}')
+                logging.debug(safe_msg)
         except requests.RequestException as e:
-            logging.debug(f'ImageLoader.run: Request exception for URL {self.url[:100]}: {e}')
+            safe_msg = sanitize_log_message(f'ImageLoader.run: Request exception for URL {self.url[:100]}: {e}')
+            logging.debug(safe_msg)
             self._emit_error(f'network:{e}')
         except Exception as e:
-            logging.error(f'ImageLoader.run: Unexpected error for URL {self.url[:100]}: {e}', exc_info=True)
+            safe_msg = sanitize_log_message(f'ImageLoader.run: Unexpected error for URL {self.url[:100]}: {e}')
+            logging.error(safe_msg, exc_info=True)
             self._emit_error(str(e))

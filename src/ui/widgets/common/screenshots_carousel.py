@@ -3,6 +3,7 @@ from PyQt6.QtGui import QImage, QPixmap, QColor, QPainter
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QSizePolicy
 from managers.localization_manager import tr
 from utils.image_loader import ImageLoaderRunnable
+import logging
 from workers import WorkerSignals
 
 
@@ -199,22 +200,38 @@ class ScreenshotsCarousel(QWidget):
     def _set_pixmap(self, qimg: QImage):
         try:
             from PyQt6 import sip as _sip
-            if not hasattr(self, 'image_label') or _sip.isdeleted(self.image_label):
+            if not hasattr(self, 'image_label'):
                 return
-        except Exception:
-            pass
-        label_w = self.image_label.width() or 760
-        label_h = self.image_label.height() or 220
-        pm = QPixmap.fromImage(qimg)
-        scaled = pm.scaled(label_w, label_h, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
-        canvas = QPixmap(label_w, label_h)
-        canvas.fill(QColor('black'))
-        painter = QPainter(canvas)
-        x = (label_w - scaled.width()) // 2
-        y = (label_h - scaled.height()) // 2
-        painter.drawPixmap(x, y, scaled)
-        painter.end()
-        self.image_label.setPixmap(canvas)
+            try:
+                if _sip.isdeleted(self.image_label):
+                    return
+            except (RuntimeError, AttributeError):
+                return
+            try:
+                if not hasattr(self.image_label, 'parent'):
+                    return
+            except (RuntimeError, AttributeError):
+                return
+        except Exception as e:
+            logging.debug(f'ScreenshotsCarousel._set_pixmap: Error checking widget validity: {e}')
+            return
+        try:
+            label_w = self.image_label.width() or 760
+            label_h = self.image_label.height() or 220
+            pm = QPixmap.fromImage(qimg)
+            scaled = pm.scaled(label_w, label_h, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            canvas = QPixmap(label_w, label_h)
+            canvas.fill(QColor('black'))
+            painter = QPainter(canvas)
+            x = (label_w - scaled.width()) // 2
+            y = (label_h - scaled.height()) // 2
+            painter.drawPixmap(x, y, scaled)
+            painter.end()
+            self.image_label.setPixmap(canvas)
+        except (RuntimeError, AttributeError) as e:
+            logging.debug(f'ScreenshotsCarousel._set_pixmap: Widget deleted during pixmap set: {e}')
+        except Exception as e:
+            logging.debug(f'ScreenshotsCarousel._set_pixmap: Error setting pixmap: {e}')
 
     def resizeEvent(self, event):
         super().resizeEvent(event)

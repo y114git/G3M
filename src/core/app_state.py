@@ -24,6 +24,7 @@ class AppState(QObject):
     progress_bar_visible_changed = pyqtSignal(bool)
     progress_bar_value_changed = pyqtSignal(int)
     all_mods_updated = pyqtSignal(list)
+    _reactive_attrs = {'_is_installing': 'is_installing_changed', '_is_merging': 'is_merging_changed', '_game_mode': 'game_mode_changed', '_current_mode': 'current_mode_changed', '_selected_chapter_id': 'selected_chapter_changed', '_operation_cancelled': 'operation_cancelled_changed', '_filtered_mods': 'filtered_mods_changed', '_current_page': 'current_page_changed', '_search_text': 'search_text_changed', '_library_search_text': 'library_search_text_changed', '_mods_per_page': 'mods_per_page_changed', '_current_task': 'current_task_changed', '_action_button_text': 'action_button_text_changed', '_action_button_enabled': 'action_button_enabled_changed', '_progress_bar_visible': 'progress_bar_visible_changed', '_progress_bar_value': 'progress_bar_value_changed'}
 
     def __init__(self):
         super().__init__()
@@ -83,6 +84,19 @@ class AppState(QObject):
         self.current_install_progress: int = 0
         self.network_session: Optional[Any] = None
 
+    def __setattr__(self, name: str, value: Any) -> None:
+        reactive_attrs = getattr(type(self), '_reactive_attrs', None)
+        if reactive_attrs and name in reactive_attrs:
+            old_value = getattr(self, name, None) if hasattr(self, name) else None
+            super().__setattr__(name, value)
+            if old_value != value:
+                signal_name = reactive_attrs[name]
+                signal = getattr(self, signal_name, None)
+                if signal:
+                    signal.emit(value)
+        else:
+            super().__setattr__(name, value)
+
     def get_all_mods(self) -> List[ModInfo]:
         with self._mods_metadata_lock:
             return list(self._all_mods)
@@ -128,9 +142,7 @@ class AppState(QObject):
 
     @is_installing.setter
     def is_installing(self, value: bool) -> None:
-        if self._is_installing != value:
-            self._is_installing = value
-            self.is_installing_changed.emit(value)
+        self._is_installing = value
 
     @property
     def is_merging(self) -> bool:
@@ -138,9 +150,7 @@ class AppState(QObject):
 
     @is_merging.setter
     def is_merging(self, value: bool) -> None:
-        if self._is_merging != value:
-            self._is_merging = value
-            self.is_merging_changed.emit(value)
+        self._is_merging = value
 
     @property
     def game_mode(self) -> GameMode:
@@ -148,9 +158,7 @@ class AppState(QObject):
 
     @game_mode.setter
     def game_mode(self, mode: GameMode) -> None:
-        if self._game_mode != mode:
-            self._game_mode = mode
-            self.game_mode_changed.emit(mode)
+        self._game_mode = mode
 
     @property
     def current_mode(self) -> str:
@@ -158,9 +166,7 @@ class AppState(QObject):
 
     @current_mode.setter
     def current_mode(self, mode: str) -> None:
-        if self._current_mode != mode:
-            self._current_mode = mode
-            self.current_mode_changed.emit(mode)
+        self._current_mode = mode
 
     @property
     def selected_chapter_id(self) -> Optional[int]:
@@ -168,9 +174,7 @@ class AppState(QObject):
 
     @selected_chapter_id.setter
     def selected_chapter_id(self, chapter_id: Optional[int]) -> None:
-        if self._selected_chapter_id != chapter_id:
-            self._selected_chapter_id = chapter_id
-            self.selected_chapter_changed.emit(chapter_id)
+        self._selected_chapter_id = chapter_id
 
     @property
     def operation_cancelled(self) -> bool:
@@ -178,9 +182,7 @@ class AppState(QObject):
 
     @operation_cancelled.setter
     def operation_cancelled(self, value: bool) -> None:
-        if self._operation_cancelled != value:
-            self._operation_cancelled = value
-            self.operation_cancelled_changed.emit(value)
+        self._operation_cancelled = value
 
     @property
     def filtered_mods(self) -> List[ModInfo]:
@@ -188,9 +190,7 @@ class AppState(QObject):
 
     @filtered_mods.setter
     def filtered_mods(self, value: List[ModInfo]) -> None:
-        if self._filtered_mods != value:
-            self._filtered_mods = value
-            self.filtered_mods_changed.emit(value)
+        self._filtered_mods = value
 
     @property
     def current_page(self) -> int:
@@ -198,9 +198,7 @@ class AppState(QObject):
 
     @current_page.setter
     def current_page(self, value: int) -> None:
-        if self._current_page != value:
-            self._current_page = value
-            self.current_page_changed.emit(value)
+        self._current_page = value
 
     @property
     def search_text(self) -> str:
@@ -208,9 +206,7 @@ class AppState(QObject):
 
     @search_text.setter
     def search_text(self, value: str) -> None:
-        if self._search_text != value:
-            self._search_text = value
-            self.search_text_changed.emit(value)
+        self._search_text = value
 
     @property
     def library_search_text(self) -> str:
@@ -218,9 +214,7 @@ class AppState(QObject):
 
     @library_search_text.setter
     def library_search_text(self, value: str) -> None:
-        if self._library_search_text != value:
-            self._library_search_text = value
-            self.library_search_text_changed.emit(value)
+        self._library_search_text = value
 
     @property
     def mods_per_page(self) -> int:
@@ -228,9 +222,7 @@ class AppState(QObject):
 
     @mods_per_page.setter
     def mods_per_page(self, value: int) -> None:
-        if self._mods_per_page != value:
-            self._mods_per_page = value
-            self.mods_per_page_changed.emit(value)
+        self._mods_per_page = value
 
     @property
     def current_task(self) -> Optional[QThread]:
@@ -238,29 +230,7 @@ class AppState(QObject):
 
     @current_task.setter
     def current_task(self, task: Optional[QThread]) -> None:
-        if self._current_task != task:
-            self._current_task = task
-            self.current_task_changed.emit(task)
-
-    def clear_current_task(self) -> None:
-        self.current_task = None
-
-    def cancel_current_operation(self):
-        import logging
-        self.operation_cancelled = True
-        logging.info('AppState: Cancel button clicked')
-        if self.current_task:
-            if hasattr(self.current_task, 'cancel') and callable(getattr(self.current_task, 'cancel', None)):
-                logging.info(f'AppState: Calling cancel() on current_task: {type(self.current_task).__name__}')
-                try:
-                    cancel_method = getattr(self.current_task, 'cancel')
-                    cancel_method()
-                except Exception as e:
-                    logging.error(f'AppState: Error calling cancel() on task: {e}', exc_info=True)
-            else:
-                logging.warning(f'AppState: current_task {type(self.current_task).__name__} does not have cancel() method')
-        else:
-            logging.warning('AppState: No current_task to cancel')
+        self._current_task = task
 
     @property
     def action_button_text(self) -> str:
@@ -268,9 +238,7 @@ class AppState(QObject):
 
     @action_button_text.setter
     def action_button_text(self, value: str) -> None:
-        if self._action_button_text != value:
-            self._action_button_text = value
-            self.action_button_text_changed.emit(value)
+        self._action_button_text = value
 
     @property
     def action_button_enabled(self) -> bool:
@@ -278,9 +246,7 @@ class AppState(QObject):
 
     @action_button_enabled.setter
     def action_button_enabled(self, value: bool) -> None:
-        if self._action_button_enabled != value:
-            self._action_button_enabled = value
-            self.action_button_enabled_changed.emit(value)
+        self._action_button_enabled = value
 
     @property
     def progress_bar_visible(self) -> bool:
@@ -288,9 +254,7 @@ class AppState(QObject):
 
     @progress_bar_visible.setter
     def progress_bar_visible(self, value: bool) -> None:
-        if self._progress_bar_visible != value:
-            self._progress_bar_visible = value
-            self.progress_bar_visible_changed.emit(value)
+        self._progress_bar_visible = value
 
     @property
     def progress_bar_value(self) -> int:
@@ -298,6 +262,23 @@ class AppState(QObject):
 
     @progress_bar_value.setter
     def progress_bar_value(self, value: int) -> None:
-        if self._progress_bar_value != value:
-            self._progress_bar_value = value
-            self.progress_bar_value_changed.emit(value)
+        self._progress_bar_value = value
+
+    def clear_current_task(self) -> None:
+        self._current_task = None
+
+    def cancel_current_operation(self):
+        import logging
+        self._operation_cancelled = True
+        logging.info('AppState: Cancel button clicked')
+        if not self._current_task:
+            logging.warning('AppState: No current_task to cancel')
+            return
+        if hasattr(self._current_task, 'cancel') and callable(self._current_task.cancel):
+            logging.info(f'AppState: Calling cancel() on current_task: {type(self._current_task).__name__}')
+            try:
+                self._current_task.cancel()
+            except Exception as e:
+                logging.error(f'AppState: Error calling cancel() on task: {e}', exc_info=True)
+        else:
+            logging.warning(f'AppState: current_task {type(self._current_task).__name__} does not have cancel() method')

@@ -38,7 +38,7 @@ class TestModWidgets:
         from ui.widgets.mod.mod_plaque_widget import ModPlaqueWidget
         from models.mod_models import ModInfo
         from unittest.mock import patch
-        from utils.thread_utils import safe_stop_thread
+        from utils.ui_utils import safe_stop_thread
         mod_data = ModInfo(key='test_mod', name='Test Mod', version='1.0.0', author='Test Author', tagline='Test tagline', game_version='', description_url='', downloads=0, modgame='deltarune', is_verified=False)
         mod_data.is_gamebanana_mod = False
         with patch('ui.widgets.mod.base_mod_widget.load_mod_icon_universal'):

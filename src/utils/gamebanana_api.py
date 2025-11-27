@@ -20,6 +20,26 @@ class GameBananaAPI:
         self.session = get_session()
         self._compatibility_cache: Dict[int, Dict[str, Any]] = {}
 
+    def _handle_request_exception(self, e: Exception, mod_id: Optional[int] = None, operation: str = 'operation') -> None:
+        status_code = None
+        if hasattr(e, 'response') and e.response is not None:
+            status_code = e.response.status_code
+            if status_code == 400:
+                if mod_id:
+                    logger.debug(f'{operation} for mod {mod_id} failed (400 Bad Request - mod may not exist): {e}')
+                else:
+                    logger.debug(f'{operation} failed (400 Bad Request): {e}')
+                return
+        if status_code and status_code >= 500:
+            if mod_id:
+                logger.error(f'{operation} for mod {mod_id}: Server error {status_code}: {e}')
+            else:
+                logger.error(f'{operation}: Server error {status_code}: {e}')
+        elif mod_id:
+            logger.warning(f'{operation} for mod {mod_id}: {e}')
+        else:
+            logger.warning(f'{operation}: {e}')
+
     def get_game_mods(self, game_id: int, page: int = 1, per_page: int = 20, sort: str = 'default', metadata_cache=None) -> Tuple[Optional[List[ModInfo]], List[str]]:
         valid_sorts = ['default', 'new', 'updated']
         effective_sort = sort if sort in valid_sorts else 'default'
@@ -38,7 +58,7 @@ class GameBananaAPI:
                     break
             if not game_name:
                 game_name = 'deltarune'
-            mapped_mods = []
+            mapped_mods: List[ModInfo] = []
             for record in records:
                 if record.get('_sModelName') == 'Mod':
                     mod_id = record.get('_idRow')
@@ -86,6 +106,15 @@ class GameBananaAPI:
                             needs_category = not current_category
                             if (needs_downloads or needs_tagline or needs_category) and (not cache_valid):
                                 mods_needing_metadata.append(mod_id_str)
+                                try:
+                                    mod_info.has_full_metadata = False
+                                except Exception:
+                                    pass
+                            else:
+                                try:
+                                    mod_info.has_full_metadata = True
+                                except Exception:
+                                    pass
                             mapped_mods.append(mod_info)
             return (mapped_mods, mods_needing_metadata)
         except requests.RequestException as e:
@@ -128,9 +157,7 @@ class GameBananaAPI:
                     return None
             return field_value
         except requests.RequestException as e:
-            logger.error(f'Error fetching {field_name} for mod {mod_id}: {e}')
-            if hasattr(e, 'response') and e.response is not None:
-                logger.error(f'Response status: {e.response.status_code}, response text: {e.response.text[:500]}')
+            self._handle_request_exception(e, mod_id, f'Error fetching {field_name}')
             return None
         except Exception as e:
             logger.error(f'Unexpected error fetching {field_name} for mod {mod_id}: {e}', exc_info=True)
@@ -215,10 +242,7 @@ class GameBananaAPI:
             logger.debug(f"get_mod_text_and_screenshots: Successfully parsed details for mod {mod_id}, has text: {bool(result.get('text'))}, has screenshots: {result.get('screenshots') is not None}")
             return result if result.get('text') or result.get('screenshots') else None
         except requests.RequestException as e:
-            logger.error(f'Error fetching text and screenshots for mod {mod_id}: {e}')
-            if hasattr(e, 'response') and e.response is not None:
-                logger.error(f'Response status: {e.response.status_code}, response text: {e.response.text[:500]}')
-                logger.error(f'Request URL: {url}, params: {params}')
+            self._handle_request_exception(e, mod_id, 'Error fetching text and screenshots')
             return None
         except Exception as e:
             logger.error(f'Unexpected error fetching text and screenshots for mod {mod_id}: {e}', exc_info=True)
@@ -258,10 +282,7 @@ class GameBananaAPI:
                 logger.warning(f'get_mod_full_details_for_display: Unexpected response format for mod {mod_id}: {type(data)}, value: {str(data)[:200]}')
                 return None
         except requests.RequestException as e:
-            logger.error(f'Error fetching full details for mod {mod_id}: {e}')
-            if hasattr(e, 'response') and e.response is not None:
-                logger.error(f'Response status: {e.response.status_code}, response text: {e.response.text[:500]}')
-                logger.error(f'Request URL: {url}, params: {params}')
+            self._handle_request_exception(e, mod_id, 'Error fetching full details')
             return None
         except Exception as e:
             logger.error(f'Unexpected error fetching full details for mod {mod_id}: {e}', exc_info=True)
@@ -271,7 +292,7 @@ class GameBananaAPI:
         return self.get_mod_full_details_for_display(mod_id)
 
     def get_mod_details(self, mod_id: int) -> Optional[Dict]:
-        url = f'{self.base_url}/Mod/{mod_id}/ProfilePage'
+        url = f'{self.base_url}/Mod/{mod_id}'
         try:
             response = self.session.get(url, timeout=NETWORK_TIMEOUT_MEDIUM)
             response.raise_for_status()
@@ -281,9 +302,7 @@ class GameBananaAPI:
                 return None
             return data
         except requests.RequestException as e:
-            logger.error(f'Error fetching mod details for {mod_id}: {e}')
-            if hasattr(e, 'response') and e.response is not None:
-                logger.debug(f'Response status: {e.response.status_code}')
+            self._handle_request_exception(e, mod_id, 'Error fetching mod details')
             return None
         except (json.JSONDecodeError, ValueError) as e:
             logger.error(f'Error parsing mod details JSON for {mod_id}: {e}')
@@ -309,7 +328,7 @@ class GameBananaAPI:
                 return data
             return None
         except requests.RequestException as e:
-            logger.error(f'Error fetching preview media for mod {mod_id}: {e}')
+            self._handle_request_exception(e, mod_id, 'Error fetching preview media')
             return None
         except Exception as e:
             logger.error(f'Unexpected error fetching preview media for mod {mod_id}: {e}', exc_info=True)
@@ -327,7 +346,7 @@ class GameBananaAPI:
             logger.warning(f'get_mod_profile_page: Unexpected response type for mod {mod_id}: {type(data)}')
             return None
         except requests.RequestException as e:
-            logger.error(f'Error fetching profile page for mod {mod_id}: {e}')
+            self._handle_request_exception(e, mod_id, 'Error fetching profile page')
             return None
         except Exception as e:
             logger.error(f'Unexpected error fetching profile page for mod {mod_id}: {e}', exc_info=True)
@@ -362,9 +381,7 @@ class GameBananaAPI:
                 logger.warning(f"get_mod_files: Unexpected response format for mod {mod_id}: {type(data)}, length: {(len(data) if isinstance(data, list) else 'N/A')}")
             return None
         except requests.RequestException as e:
-            logger.error(f'Error fetching mod files for {mod_id}: {e}, URL was: {url}, params: {params}')
-            if hasattr(e, 'response') and e.response is not None:
-                logger.error(f'Response status: {e.response.status_code}, response text: {e.response.text[:200]}')
+            self._handle_request_exception(e, mod_id, 'Error fetching mod files')
             return None
         except Exception as e:
             logger.error(f'Unexpected error fetching mod files for {mod_id}: {e}', exc_info=True)
@@ -766,6 +783,8 @@ class GameBananaAPI:
             data_dict['is_gamebanana_mod'] = True
             if 'gamebanana_mod_id' not in data_dict:
                 data_dict['gamebanana_mod_id'] = str(mod_id)
+            if 'has_full_metadata' not in data_dict:
+                data_dict['has_full_metadata'] = True
             return ModInfo.from_dict(data_dict)
         except Exception as e:
             logger.error(f'Error converting mod data to ModInfo: {e}', exc_info=True)

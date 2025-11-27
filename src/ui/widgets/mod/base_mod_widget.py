@@ -72,6 +72,14 @@ class BaseModWidget(QFrame):
         self.metadata_layout = metadata_layout
         info_layout.addLayout(metadata_layout)
         tagline_text = self.mod_data.tagline or tr('ui.no_description')
+        try:
+            if getattr(self.mod_data, 'is_gamebanana_mod', False):
+                has_full = getattr(self.mod_data, 'has_full_metadata', True)
+                if not has_full:
+                    placeholder = tr('ui.loading_placeholder')
+                    tagline_text = placeholder
+        except Exception:
+            pass
         if len(tagline_text) > 200:
             tagline_text = tagline_text[:197] + '...'
         self.tagline_label = QLabel(tagline_text)

@@ -4,16 +4,30 @@
 
 string FindDeltahubRoot()
 {
+    
+    string envRoot = Environment.GetEnvironmentVariable("DELTAHUB_ROOT");
+    if (!string.IsNullOrWhiteSpace(envRoot) && Directory.Exists(envRoot))
+    {
+        if (Directory.Exists(Path.Combine(envRoot, "output")))
+        {
+            return envRoot;
+        }
+    }
+    
+    
     var probe = new DirectoryInfo(Directory.GetCurrentDirectory());
-    while (probe != null)
+    int maxDepth = 20; 
+    int depth = 0;
+    while (probe != null && depth < maxDepth)
     {
         if (Directory.Exists(Path.Combine(probe.FullName, "output")))
         {
             return probe.FullName;
         }
         probe = probe.Parent;
+        depth++;
     }
-    throw new ScriptException("DELTAHUB root not found (no /output ancestor).");
+    throw new ScriptException("DELTAHUB root not found (no /output ancestor and DELTAHUB_ROOT env var not set).");
 }
 
 

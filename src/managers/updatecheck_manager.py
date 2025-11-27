@@ -66,6 +66,7 @@ class UpdateChecker(QObject):
         threading.Thread(target=self._update_worker, args=(update_info,), daemon=True).start()
 
     def _update_worker(self, update_info):
+        installer_launched = False
         try:
             logging.info(f"[UPDATE] Starting update process for version {update_info['version']}")
             with tempfile.TemporaryDirectory(prefix='deltahub-update-') as tmp_dir:
@@ -101,10 +102,25 @@ class UpdateChecker(QObject):
                     logging.info(f'[UPDATE] Found installer executable: {new_exe_path}')
                     logging.info('[UPDATE] Launching installer with elevated privileges (runas)')
                     import ctypes
+                    import time
                     result = ctypes.windll.shell32.ShellExecuteW(None, 'runas', new_exe_path, None, None, 1)
                     if result > 32:
-                        logging.info(f'[UPDATE] Installer launched successfully (result code: {result}), waiting for installation to complete')
+                        time.sleep(0.5)
+                        installer_name = os.path.basename(new_exe_path)
+                        try:
+                            import psutil
+                            processes = [p for p in psutil.process_iter(['pid', 'name']) if p.info['name'].lower() == installer_name.lower()]
+                            if processes:
+                                logging.info(f"[UPDATE] Installer process confirmed running (PID: {processes[0].info['pid']})")
+                            else:
+                                logging.warning('[UPDATE] Installer process not found immediately, but launch was successful')
+                        except ImportError:
+                            logging.info('[UPDATE] psutil not available, skipping process verification')
+                        except Exception as e:
+                            logging.warning(f'[UPDATE] Could not verify installer process: {e}')
+                        logging.info(f'[UPDATE] Installer launched successfully (result code: {result}), closing launcher')
                         self.feedback_manager.update_status(tr('status.installer_launched_closing'), UI_COLORS['status_success'])
+                        installer_launched = True
                         self.quit_requested.emit()
                         return
                     else:
@@ -171,5 +187,8 @@ class UpdateChecker(QObject):
             self.feedback_manager.update_status(tr('errors.update_failed', error=str(e)), UI_COLORS['status_error'])
             self.update_error.emit(tr('errors.update_could_not_complete', error=str(e)))
         finally:
-            logging.info('[UPDATE] Update process finished')
-            self.update_finished.emit()
+            if not installer_launched:
+                logging.info('[UPDATE] Update process finished')
+                self.update_finished.emit()
+            else:
+                logging.info('[UPDATE] Installer launched, launcher closing')

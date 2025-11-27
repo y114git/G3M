@@ -14,7 +14,7 @@ from utils.game_utils import is_game_running, get_game_type_string, get_game_nam
 from models.game_modes import UndertaleGameMode, UndertaleYellowGameMode
 from utils.path_utils import find_chapter_resource_dir, resolve_game_executable
 from utils.mod_utils import get_mod_key
-from utils.patching_logger import clear_patching_logs
+from utils.patching_logger import clear_patching_logs, clear_conflicts_log
 from workers.game_monitor import GameMonitorWorker
 from managers.multi_mod_merger import MultiModMerger
 from config.constants import UI_COLORS, SLOT_ID_UNIVERSAL, GAME_EXECUTABLES
@@ -53,10 +53,8 @@ class GameLauncher(QObject):
             if self.monitor_thread.isRunning():
                 self.monitor_thread.requestInterruption()
                 self.monitor_thread.quit()
-                if not self.monitor_thread.wait(2000):
-                    logging.warning('monitor thread did not stop in time')
-                    self.monitor_thread.terminate()
-                    self.monitor_thread.wait(1000)
+                if self.monitor_thread.isRunning():
+                    logging.debug('monitor thread still running, will clean up via finished signal')
             self.monitor_thread.deleteLater()
             if hasattr(self, 'monitor_worker') and self.monitor_worker is not None:
                 self.monitor_worker.deleteLater()
@@ -102,6 +100,8 @@ class GameLauncher(QObject):
         has_list_format = any((isinstance(mods_list, list) for mods_list in selections.values()))
         needs_multi_mod = has_list_format and any((len(mods_list) > 0 for mods_list in selections.values() if isinstance(mods_list, list)))
         logging.info(f'Multi-mod check: needs_multi_mod={needs_multi_mod} (has_list_format={has_list_format})')
+        if needs_multi_mod:
+            clear_conflicts_log()
         if needs_multi_mod:
             logging.info('Using multi-mod merger for game launch')
             self.app_state.progress_bar_visible = True
@@ -311,10 +311,18 @@ class GameLauncher(QObject):
         if merge_thread:
             try:
                 if merge_thread.isRunning():
-                    merge_thread.wait(5000)
+                    logging.debug('Merge thread still running, will clean up via finished signal')
                 if merge_thread.merger:
                     self.multi_mod_merger = merge_thread.merger
-                merge_thread.deleteLater()
+                if not merge_thread.isRunning():
+                    merge_thread.deleteLater()
+                else:
+
+                    def cleanup_merge_thread():
+                        if merge_thread.merger:
+                            self.multi_mod_merger = merge_thread.merger
+                        merge_thread.deleteLater()
+                    merge_thread.finished.connect(cleanup_merge_thread)
             except Exception as e:
                 logging.error(f'Error cleaning up merge thread: {e}', exc_info=True)
             finally:

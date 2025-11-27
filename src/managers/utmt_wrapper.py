@@ -22,6 +22,22 @@ class UtmtWrapper:
     def execute_script(self, data_win_path: str, script_name: str, output_path: Optional[str] = None, cwd: Optional[str] = None, env: Optional[Dict] = None) -> Tuple[int, str, str]:
         if output_path is None:
             output_path = data_win_path
+        if env is None:
+            env = {}
+        else:
+            env = env.copy()
+        if 'DELTAHUB_ROOT' not in env:
+            from utils.path_utils import get_launcher_dir
+            launcher_dir = get_launcher_dir()
+            import os
+            if os.path.exists(os.path.join(launcher_dir, 'output')):
+                env['DELTAHUB_ROOT'] = launcher_dir
+            else:
+                parent_dir = os.path.dirname(launcher_dir)
+                if os.path.exists(os.path.join(parent_dir, 'output')):
+                    env['DELTAHUB_ROOT'] = parent_dir
+                else:
+                    env['DELTAHUB_ROOT'] = launcher_dir
         self.patching_logger.info(f'[UTMT] Executing script: {script_name} on {data_win_path}')
         returncode, stdout, stderr = self.utmtcli.execute_with_scripts(data_win_path, [script_name], output_path=output_path, cwd=cwd, env=env)
         if returncode != 0:
@@ -34,6 +50,22 @@ class UtmtWrapper:
     def execute_scripts(self, data_win_path: str, script_names: List[str], output_path: Optional[str] = None, cwd: Optional[str] = None, env: Optional[Dict] = None) -> Tuple[int, str, str]:
         if output_path is None:
             output_path = data_win_path
+        if env is None:
+            env = {}
+        else:
+            env = env.copy()
+        if 'DELTAHUB_ROOT' not in env:
+            from utils.path_utils import get_launcher_dir
+            launcher_dir = get_launcher_dir()
+            import os
+            if os.path.exists(os.path.join(launcher_dir, 'output')):
+                env['DELTAHUB_ROOT'] = launcher_dir
+            else:
+                parent_dir = os.path.dirname(launcher_dir)
+                if os.path.exists(os.path.join(parent_dir, 'output')):
+                    env['DELTAHUB_ROOT'] = parent_dir
+                else:
+                    env['DELTAHUB_ROOT'] = launcher_dir
         self.patching_logger.info(f"[UTMT] Executing scripts: {', '.join(script_names)} on {data_win_path}")
         returncode, stdout, stderr = self.utmtcli.execute_with_scripts(data_win_path, script_names, output_path=output_path, cwd=cwd, env=env)
         if returncode != 0:

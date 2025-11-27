@@ -18,107 +18,52 @@ def qapp():
         app = QApplication(sys.argv)
     yield app
     import time
-    from PyQt6.QtCore import QThreadPool
+    from PyQt6.QtCore import QThreadPool, QThread
+    from utils.ui_utils import safe_stop_thread
     app.processEvents()
     time.sleep(0.2)
     app.processEvents()
     thread_pool = QThreadPool.globalInstance()
     if thread_pool is not None:
-        thread_pool.waitForDone(2000)
+        thread_pool.clear()
+        if thread_pool.activeThreadCount() > 0:
+            thread_pool.waitForDone(2000)
+    for widget in app.allWidgets():
+        for attr_name in ['_compatibility_thread', '_icon_loader_runnable', 'thread', '_thread', 'worker_thread', '_worker_thread', 'monitor_thread', 'fetch_thread', 'details_thread', 'metadata_thread']:
+            try:
+                thread = getattr(widget, attr_name, None)
+                if thread and isinstance(thread, QThread):
+                    safe_stop_thread(thread, timeout=500, blocking=False)
+            except Exception:
+                pass
+    app.processEvents()
+    time.sleep(0.1)
 
 
 @pytest.fixture(autouse=True)
 def cleanup_threads(qapp):
     yield
     import time
-    from PyQt6.QtCore import QThreadPool, QThread, QObject
-    from PyQt6.QtWidgets import QWidget
-    from utils.thread_utils import safe_stop_thread
+    from PyQt6.QtCore import QThreadPool, QThread
+    from utils.ui_utils import safe_stop_thread
     for _ in range(3):
         qapp.processEvents()
         time.sleep(0.05)
-
-    def find_and_stop_threads(obj, visited=None):
-        if visited is None:
-            visited = set()
-        try:
-            obj_id = id(obj)
-        except Exception:
-            return
-        if obj_id in visited:
-            return
-        visited.add(obj_id)
-        try:
-            import sip
-            if hasattr(sip, 'isdeleted') and sip.isdeleted(obj):
-                return
-        except (ImportError, AttributeError):
-            pass
-        try:
-            if isinstance(obj, QThread):
-                try:
-                    if obj.isRunning():
-                        try:
-                            obj.blockSignals(True)
-                            for signal_name in ['finished', 'compatibility_checked', 'result', 'error', 'progress']:
-                                if hasattr(obj, signal_name):
-                                    try:
-                                        signal = getattr(obj, signal_name)
-                                        signal.disconnect()
-                                    except (TypeError, RuntimeError):
-                                        pass
-                            obj.blockSignals(False)
-                        except Exception:
-                            pass
-                        safe_stop_thread(obj, timeout=1000)
-                    if not obj.isRunning():
-                        try:
-                            obj.deleteLater()
-                        except Exception:
-                            pass
-                except Exception:
-                    pass
-                return
-            if isinstance(obj, (QWidget, QObject)):
-                for attr_name in ['_compatibility_thread', '_icon_loader_runnable', '_icon_loader_signals', 'thread', '_thread', 'worker_thread', '_worker_thread']:
-                    try:
-                        if hasattr(obj, attr_name):
-                            thread = getattr(obj, attr_name)
-                            if thread and isinstance(thread, QThread):
-                                try:
-                                    if thread.isRunning():
-                                        try:
-                                            thread.blockSignals(True)
-                                            for signal_name in ['finished', 'compatibility_checked', 'result', 'error']:
-                                                if hasattr(thread, signal_name):
-                                                    try:
-                                                        getattr(thread, signal_name).disconnect()
-                                                    except (TypeError, RuntimeError):
-                                                        pass
-                                            thread.blockSignals(False)
-                                        except Exception:
-                                            pass
-                                        safe_stop_thread(thread, timeout=1000)
-                                    if not thread.isRunning():
-                                        try:
-                                            thread.deleteLater()
-                                        except Exception:
-                                            pass
-                                except Exception:
-                                    pass
-                    except Exception:
-                        pass
-                try:
-                    children = obj.children()
-                    for child in children:
-                        find_and_stop_threads(child, visited)
-                except Exception:
-                    pass
-        except Exception:
-            pass
     try:
         for widget in qapp.allWidgets():
-            find_and_stop_threads(widget)
+            for attr_name in ['_compatibility_thread', '_icon_loader_runnable', 'thread', '_thread', 'worker_thread', '_worker_thread', 'monitor_thread', 'fetch_thread', 'details_thread', 'metadata_thread', 'install_thread', 'full_install_thread', 'current_install_thread', 'help_thread', 'changelog_thread', 'presence_thread']:
+                thread = getattr(widget, attr_name, None)
+                if thread and isinstance(thread, QThread):
+                    if thread.isRunning():
+                        thread.requestInterruption()
+                        thread.quit()
+                        if not thread.wait(500):
+                            thread.terminate()
+                            thread.wait(200)
+                    try:
+                        thread.deleteLater()
+                    except Exception:
+                        pass
     except Exception:
         pass
     for _ in range(3):
