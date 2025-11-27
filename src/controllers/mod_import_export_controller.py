@@ -72,6 +72,11 @@ class ModImportExportController:
                         QMessageBox.critical(self.app_window, tr('errors.error'), tr('errors.mod_import_failed', error='Conversion failed'))
                     return
                 config_path_to_read = os.path.join(content_path, MOD_CONFIG_FILENAME)
+                if not os.path.exists(config_path_to_read):
+                    legacy_config_path = os.path.join(content_path, LEGACY_MOD_CONFIG_FILENAME)
+                    if os.path.exists(legacy_config_path):
+                        config_path_to_read = legacy_config_path
+                        logging.info(f'[IMPORT] Found legacy config.json, will migrate to mod_config.json')
                 logging.info(f'[IMPORT] Looking for mod config at: {config_path_to_read}')
                 if os.path.exists(config_path_to_read):
                     logging.info(f'[IMPORT] Found mod config, reading...')

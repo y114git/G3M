@@ -19,17 +19,25 @@ class ThemeController:
         theme = THEMES['default']
         background_path = None
         background_disabled = self.app_state.local_config.get('background_disabled', False)
-        if self.app.background_movie is not None:
-            self.app.background_movie.stop()
-            self.app.background_movie.deleteLater()
-            self.app.background_movie = None
-        self.app.background_pixmap = None
+        new_background_path = None
         if not background_disabled:
-            background_path = self.app_state.local_config.get('custom_background_path') or resource_path(f"assets/{theme.get('background', '')}")
-            if background_path:
-                self.app._bg_loader = BgLoader(background_path, self.app.size())
+            new_background_path = self.app_state.local_config.get('custom_background_path') or resource_path(f"assets/{theme.get('background', '')}")
+        current_bg_path = getattr(self.app, '_current_background_path', None)
+        background_was_disabled = getattr(self.app, '_background_was_disabled', False)
+        background_changed = new_background_path != current_bg_path or background_disabled != background_was_disabled
+        if background_changed:
+            if self.app.background_movie is not None:
+                self.app.background_movie.stop()
+                self.app.background_movie.deleteLater()
+                self.app.background_movie = None
+            if background_disabled or new_background_path != current_bg_path:
+                self.app.background_pixmap = None
+            if not background_disabled and new_background_path:
+                self.app._bg_loader = BgLoader(new_background_path, self.app.size())
                 self.app._bg_loader.loaded.connect(self.on_background_ready)
                 self.app._bg_loader.start()
+            self.app._current_background_path = new_background_path
+            self.app._background_was_disabled = background_disabled
         user_bg_hex = self.app_state.local_config.get('custom_color_background')
         if user_bg_hex and self.settings_manager.is_valid_hex_color(user_bg_hex):
             frame_bg_color = f"#C0{user_bg_hex.lstrip('#')}"
@@ -57,11 +65,28 @@ class ThemeController:
         app_inst = QApplication.instance()
         (app_inst if isinstance(app_inst, QApplication) else self.app).setStyleSheet(style_sheet)
         from PyQt6.QtWidgets import QWidget
+        from PyQt6.QtCore import QTimer
+        visible_widgets = []
+        all_widgets = []
         for widget in self.app.findChildren(QWidget):
+            all_widgets.append(widget)
+            if widget.isVisible():
+                visible_widgets.append(widget)
+        for widget in visible_widgets:
             style = widget.style()
             if style:
                 style.unpolish(widget)
                 style.polish(widget)
+        if len(all_widgets) > len(visible_widgets):
+
+            def update_hidden_widgets():
+                for widget in all_widgets:
+                    if not widget.isVisible():
+                        style = widget.style()
+                        if style:
+                            style.unpolish(widget)
+                            style.polish(widget)
+            QTimer.singleShot(50, update_hidden_widgets)
         mod_list = getattr(self.app, 'mod_list_widget', None)
         installed_mods = getattr(self.app, 'installed_mods_widget', None)
         self.customization_manager.update_mod_plaques_styles(mod_list, installed_mods)

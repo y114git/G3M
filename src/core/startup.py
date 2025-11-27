@@ -319,13 +319,17 @@ def run_app():
             if ex:
                 if hasattr(ex, 'app_state') and getattr(ex.app_state, 'game_is_running', False):
                     return
-                ex.show()
-                ex.is_shown_to_user = True
-                if hasattr(ex, 'app_state'):
-                    ex.app_state.is_shown_to_user = True
-                ex.activateWindow()
-                ex.raise_()
-                ex.setWindowState(ex.windowState() & ~Qt.WindowState.WindowMinimized | Qt.WindowState.WindowActive)
+                try:
+                    ex.show()
+                    ex.is_shown_to_user = True
+                    if hasattr(ex, 'app_state'):
+                        ex.app_state.is_shown_to_user = True
+                    from PyQt6.QtWidgets import QApplication
+                    qapp = QApplication.instance()
+                    if qapp:
+                        qapp.processEvents()
+                except Exception as e:
+                    logging.error(f'Error showing launcher window: {e}', exc_info=True)
 
         def close_splash():
             if hasattr(splash, 'movie'):
@@ -365,13 +369,39 @@ def run_app():
                 if show_animation:
                     launcher_app['instance']._splash_was_shown = True
                 launcher_app['instance']._post_show_initialization()
+                mods_display_ready_flag = {'ready': False}
+                window_shown_flag = {'shown': False}
+
+                def on_mods_display_ready():
+                    if window_shown_flag['shown']:
+                        return
+                    mods_display_ready_flag['ready'] = True
+                    window_shown_flag['shown'] = True
+                    if show_animation:
+                        close_splash_when_ready()
+                    else:
+                        close_splash_and_show_launcher()
+                launcher_app['instance'].mods_display_ready.connect(on_mods_display_ready)
+                if hasattr(launcher_app['instance'], '_mods_display_ready_emitted'):
+                    if launcher_app['instance']._mods_display_ready_emitted:
+                        QTimer.singleShot(100, on_mods_display_ready)
+
+                def fallback_show_window():
+                    if window_shown_flag['shown']:
+                        return
+                    if not mods_display_ready_flag['ready']:
+                        logging.info('Fallback: Showing window after timeout (mods display not ready in time)')
+                        window_shown_flag['shown'] = True
+                        if show_animation:
+                            close_splash_when_ready()
+                        else:
+                            close_splash_and_show_launcher()
                 if show_animation:
-                    launcher_app['instance'].ui_ready.connect(close_splash_when_ready)
                     fallback_time = max(LAUNCHER_FALLBACK_TIMEOUT, int(SPLASH_MIN_DURATION * 1000))
-                    QTimer.singleShot(fallback_time, close_splash_when_ready)
+                    QTimer.singleShot(fallback_time, fallback_show_window)
                 else:
-                    launcher_app['instance'].initialization_finished.connect(close_splash_and_show_launcher)
-                    QTimer.singleShot(15000, close_splash_and_show_launcher)
+                    fallback_time = max(LAUNCHER_FALLBACK_TIMEOUT, 10000)
+                    QTimer.singleShot(fallback_time, fallback_show_window)
             except Exception as e:
                 import traceback
                 traceback.print_exc()

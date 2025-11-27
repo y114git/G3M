@@ -38,6 +38,7 @@ class SearchDisplayController(QObject):
         self._metadata_update_timer = None
         self.plaque_widget_cache: dict[str, ModPlaqueWidget] = {}
         self._update_display_debounce = DebounceTimer(delay_ms=200)
+        self._initial_mods_display_done = False
 
     def prev_page(self):
         try:
@@ -83,16 +84,15 @@ class SearchDisplayController(QObject):
         self._load_more_threads = [t for t in self._load_more_threads if t and t.isRunning()]
         if self._load_more_threads:
             return
-        selected_modgame = ''
+        selected_modgame = 'deltarune'
         if hasattr(self.app, 'modgame_combo'):
-            selected_modgame = self.app.modgame_combo.currentData() or ''
-        games_to_load = {}
-        if selected_modgame == 'deltarune':
-            games_to_load = {'deltarune': GAMEBANANA_GAME_IDS['deltarune']}
-        elif selected_modgame == 'undertale':
-            games_to_load = {'undertale': GAMEBANANA_GAME_IDS['undertale']}
-        else:
-            games_to_load = GAMEBANANA_GAME_IDS
+            selected_modgame = self.app.modgame_combo.currentData() or 'deltarune'
+        gamebanana_game = self._map_modgame_to_gamebanana(selected_modgame)
+        if not gamebanana_game:
+            gamebanana_game = 'deltarune'
+        if gamebanana_game not in GAMEBANANA_GAME_IDS:
+            gamebanana_game = 'deltarune'
+        games_to_load = {gamebanana_game: GAMEBANANA_GAME_IDS[gamebanana_game]}
         games_to_load_filtered = {}
         for game_name, game_id in games_to_load.items():
             last_page = self.app_state.gamebanana_loaded_pages.get(game_id, 0)
@@ -252,9 +252,9 @@ class SearchDisplayController(QObject):
         for attr_name, tag_value in tag_checkboxes.items():
             if hasattr(self.app, attr_name) and getattr(self.app, attr_name).isChecked():
                 selected_tags.append(tag_value)
-        selected_modgame = ''
+        selected_modgame = 'deltarune'
         if hasattr(self.app, 'modgame_combo'):
-            selected_modgame = self.app.modgame_combo.currentData() or ''
+            selected_modgame = self.app.modgame_combo.currentData() or 'deltarune'
         filters = {'tags': selected_tags, 'modgame': selected_modgame, 'search_text': self.app_state.search_text, 'hide_banned': True, 'hide_local': True, 'status_filter': ['approved', 'pending']}
         sort_config = None
         if hasattr(self.app, 'sort_combo'):
@@ -266,6 +266,8 @@ class SearchDisplayController(QObject):
     def update_filtered_mods(self, preserve_page=False):
         if not hasattr(self.app_state, 'all_mods') or not self.app_state.all_mods:
             self.app_state.filtered_mods = []
+            if not preserve_page:
+                self.app_state.current_page = 1
             self.update_display()
             return
         filters, sort_config = self._build_filters_and_sort()
@@ -335,6 +337,30 @@ class SearchDisplayController(QObject):
                 logger.warning('SearchDisplayController: mod_list_widget not available')
                 self._update_display_in_progress = False
                 return
+            if self.app_state.gamebanana_loading and len(current_page_mods) == 0:
+                for i in range(self.app.mod_list_layout.count() - 1):
+                    item = self.app.mod_list_layout.itemAt(i)
+                    if item and item.widget():
+                        widget = item.widget()
+                        if hasattr(widget, 'objectName') and widget.objectName() == 'loading_indicator':
+                            self.app.mod_list_layout.removeWidget(widget)
+                            widget.deleteLater()
+                from PyQt6.QtWidgets import QLabel
+                from PyQt6.QtCore import Qt
+                loading_label = QLabel(tr('ui.loading_placeholder'))
+                loading_label.setObjectName('loading_indicator')
+                loading_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                loading_label.setStyleSheet('font-size: 16px; padding: 20px; color: gray;')
+                self.app.mod_list_layout.insertWidget(0, loading_label)
+                self._update_display_in_progress = False
+                return
+            for i in range(self.app.mod_list_layout.count() - 1):
+                item = self.app.mod_list_layout.itemAt(i)
+                if item and item.widget():
+                    widget = item.widget()
+                    if hasattr(widget, 'objectName') and widget.objectName() == 'loading_indicator':
+                        self.app.mod_list_layout.removeWidget(widget)
+                        widget.deleteLater()
 
             def get_mod_cache_key(mod):
                 if hasattr(mod, 'is_gamebanana_mod') and mod.is_gamebanana_mod:
@@ -433,6 +459,67 @@ class SearchDisplayController(QObject):
             finally:
                 self.ui_widget_updates_enabled.emit('mod_list_widget', True)
             self.update_pagination()
+            if not self._initial_mods_display_done and self.app_state.current_page == 1:
+                has_mods_to_display = len(current_page_mods) > 0 if current_page_mods else False
+                expected_widget_count = len(current_page_mods) if current_page_mods else 0
+
+                def check_and_emit_ready():
+                    try:
+                        from PyQt6.QtWidgets import QApplication
+                        app = QApplication.instance()
+                        if app:
+                            for _ in range(5):
+                                app.processEvents()
+                        widgets_ready = True
+                        widget_count = 0
+                        visible_widget_count = 0
+                        try:
+                            for i in range(self.app.mod_list_layout.count() - 1):
+                                item = self.app.mod_list_layout.itemAt(i)
+                                if item and item.widget():
+                                    widget = item.widget()
+                                    if isinstance(widget, ModPlaqueWidget):
+                                        widget_count += 1
+                                        if not widget.isVisible():
+                                            widgets_ready = False
+                                            break
+                                        visible_widget_count += 1
+                                        if not hasattr(widget, 'mod_data') or widget.mod_data is None:
+                                            widgets_ready = False
+                                            break
+                                        if not widget.parent():
+                                            widgets_ready = False
+                                            break
+                                        if widget.width() <= 0 or widget.height() <= 0:
+                                            widgets_ready = False
+                                            break
+                        except Exception as e:
+                            logger.warning(f'Error checking widget readiness: {e}')
+                            widgets_ready = False
+                        should_emit = False
+                        if has_mods_to_display and expected_widget_count > 0:
+                            if widgets_ready and widget_count >= expected_widget_count and (visible_widget_count >= expected_widget_count):
+                                should_emit = True
+                                logger.info(f'SearchDisplayController: First page plaques ready ({visible_widget_count}/{expected_widget_count} visible widgets)')
+                            else:
+                                logger.debug(f'SearchDisplayController: First page not ready yet - widgets: {widget_count}/{expected_widget_count}, visible: {visible_widget_count}/{expected_widget_count}')
+                        elif expected_widget_count == 0 and (not has_mods_to_display):
+                            should_emit = True
+                            logger.info('SearchDisplayController: First page ready (empty), mods may still be loading')
+                        if should_emit:
+                            self._initial_mods_display_done = True
+                            if hasattr(self.app, 'mods_display_ready'):
+                                logger.info(f'SearchDisplayController: First page plaques ready ({visible_widget_count} widgets visible), emitting mods_display_ready signal')
+                                self.app._mods_display_ready_emitted = True
+                                if app:
+                                    app.processEvents()
+                                QTimer.singleShot(100, lambda: self.app.mods_display_ready.emit())
+                        else:
+                            logger.debug('SearchDisplayController: First page not ready, will check again')
+                            QTimer.singleShot(200, check_and_emit_ready)
+                    except Exception as e:
+                        logger.error(f'Error in check_and_emit_ready: {e}', exc_info=True)
+                QTimer.singleShot(300, check_and_emit_ready)
         except Exception as e:
             logger.error(f'SearchDisplayController: Error in update_display: {e}', exc_info=True)
         finally:
@@ -521,6 +608,77 @@ class SearchDisplayController(QObject):
     def _map_modgame_to_gamebanana(self, modgame: str) -> str:
         mapping = {'deltarune': 'deltarune', 'deltarunedemo': 'deltarune', 'undertale': 'undertale', 'undertaleyellow': 'undertaleyellow'}
         return mapping.get((modgame or '').lower(), '')
+
+    def load_mods_for_selected_game(self):
+        if not hasattr(self.app, 'modgame_combo'):
+            return
+        selected_modgame = self.app.modgame_combo.currentData() or 'deltarune'
+        gamebanana_game = self._map_modgame_to_gamebanana(selected_modgame)
+        if not gamebanana_game:
+            gamebanana_game = 'deltarune'
+        game_id = GAMEBANANA_GAME_IDS.get(gamebanana_game)
+        if not game_id:
+            return
+        last_page = self.app_state.gamebanana_loaded_pages.get(game_id, 0)
+        if last_page > 0:
+            self.update_filtered_mods()
+            return
+        if self.app_state.gamebanana_loading:
+            return
+        self.app_state.gamebanana_loading = True
+        self.app_state.filtered_mods = []
+        self.update_display()
+        from workers.load_more_gamebanana_mods import LoadMoreGameBananaModsThread
+        from utils.gamebanana_cache import GameBananaMetadataCache
+        metadata_cache = None
+        if hasattr(self.app_state, 'config_dir') and self.app_state.config_dir:
+            try:
+                metadata_cache = GameBananaMetadataCache(self.app_state.config_dir)
+            except Exception as e:
+                logger.warning(f'SearchDisplayController: Failed to initialize metadata cache: {e}', exc_info=True)
+        sort_param = getattr(self.app_state, 'gamebanana_sort', 'default')
+        load_thread = LoadMoreGameBananaModsThread(game_id, start_page=1, num_pages=3, sort=sort_param, parent=self.app, metadata_cache=metadata_cache)
+
+        def on_result(mods_list):
+            try:
+                self.app_state.gamebanana_loading = False
+                if mods_list:
+                    existing_ids = {str(m.gamebanana_mod_id) for m in self.app_state.all_mods if hasattr(m, 'gamebanana_mod_id') and m.gamebanana_mod_id}
+                    new_mods_to_add = [m for m in mods_list if hasattr(m, 'gamebanana_mod_id') and m.gamebanana_mod_id and (str(m.gamebanana_mod_id) not in existing_ids)]
+                    if new_mods_to_add:
+                        self.app_state.extend_all_mods(new_mods_to_add)
+                        pages_loaded = 3
+                        self.app_state.gamebanana_loaded_pages[game_id] = pages_loaded
+                        mods_needing_metadata = []
+                        for mod in new_mods_to_add:
+                            if hasattr(mod, 'is_gamebanana_mod') and mod.is_gamebanana_mod and mod.gamebanana_mod_id:
+                                mod_id_str = str(mod.gamebanana_mod_id)
+                                needs_metadata = False
+                                if not hasattr(mod, 'tagline') or not mod.tagline or mod.tagline.strip() == '':
+                                    needs_metadata = True
+                                if not hasattr(mod, 'downloads') or mod.downloads is None or mod.downloads == 0:
+                                    needs_metadata = True
+                                if needs_metadata:
+                                    mods_needing_metadata.append(mod_id_str)
+                        if mods_needing_metadata:
+                            if not hasattr(self.app_state, 'gamebanana_mods_needing_metadata'):
+                                self.app_state.gamebanana_mods_needing_metadata = []
+                            existing = set(self.app_state.gamebanana_mods_needing_metadata)
+                            new_ids = set(mods_needing_metadata)
+                            self.app_state.gamebanana_mods_needing_metadata = list(existing | new_ids)
+                            logger.info(f'SearchDisplayController: Added {len(new_ids)} mod IDs to metadata loading queue')
+                            if hasattr(self.app, 'refresh_controller') and self.app.refresh_controller:
+                                QTimer.singleShot(500, lambda: self.app.refresh_controller._start_metadata_loading())
+                        self.update_filtered_mods()
+                else:
+                    self.app_state.gamebanana_loaded_pages[game_id] = 100
+                    self.update_filtered_mods()
+            except Exception as e:
+                logger.error(f'SearchDisplayController: Error in on_result for game load: {e}', exc_info=True)
+                self.app_state.gamebanana_loading = False
+                self.update_filtered_mods()
+        load_thread.result.connect(on_result)
+        load_thread.start()
 
     def _determine_preferred_game_for_page(self, page_num: int) -> str:
         try:

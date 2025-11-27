@@ -32,9 +32,13 @@ class SettingsManager(QObject):
 
     def read_json(self, path: str):
         try:
+            if path.endswith('mod_config.json') and (not os.path.exists(path)):
+                legacy_path = path.replace('mod_config.json', 'config.json')
+                if os.path.exists(legacy_path):
+                    path = legacy_path
             with open(path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-            if isinstance(data, dict) and path.endswith('mod_config.json'):
+            if isinstance(data, dict) and (path.endswith('mod_config.json') or (path.endswith('config.json') and 'mod_key' in data)):
                 needs_migration = False
                 if 'chapters' in data and 'files' not in data:
                     data['files'] = data['chapters']

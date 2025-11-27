@@ -56,6 +56,7 @@ class AppWindow(QWidget):
     restore_window_signal = pyqtSignal()
     mods_loaded_signal = pyqtSignal()
     url_received_signal = pyqtSignal(str)
+    mods_display_ready = pyqtSignal()
     install_from_gb_signal = pyqtSignal(object)
 
     def __init__(self, args: Optional[argparse.Namespace] = None, parent_for_dialogs: Optional[QWidget] = None, initial_url: str | None = None):
@@ -117,6 +118,7 @@ class AppWindow(QWidget):
         self._last_online_count = 0
         self._install_op_id = 0
         self.pending_updates = []
+        self._mods_display_ready_emitted = False
         self.feedback_manager.status_updated.connect(self.update_status_signal.emit)
         self.settings_manager.language_changed.connect(lambda _: self._retranslate_ui())
         self.settings_manager.restart_required.connect(lambda msg: self.feedback_manager.show_message('info', 'dialogs.restart_required', msg))
@@ -483,7 +485,18 @@ class AppWindow(QWidget):
         self.gb_sort_combo.currentIndexChanged.connect(self._on_gamebanana_sort_changed)
         self.sort_combo.currentIndexChanged.connect(self._on_search_sort_changed)
         self.sort_order_btn.clicked.connect(self._toggle_sort_order)
-        self.modgame_combo.currentIndexChanged.connect(lambda: (setattr(self.app_state, 'current_page', 1), self.search_display.update_filtered_mods()))
+        if 'selected_search_game' not in self.app_state.local_config:
+            default_game = self.modgame_combo.currentData() or 'deltarune'
+            self.app_state.local_config['selected_search_game'] = default_game
+            self.settings_manager.write_local_config()
+
+        def on_modgame_changed():
+            selected_game = self.modgame_combo.currentData() or 'deltarune'
+            self.app_state.local_config['selected_search_game'] = selected_game
+            self.settings_manager.write_local_config()
+            self.app_state.current_page = 1
+            self.search_display.load_mods_for_selected_game()
+        self.modgame_combo.currentIndexChanged.connect(on_modgame_changed)
         self.tag_textedit.stateChanged.connect(lambda: (setattr(self.app_state, 'current_page', 1), self.search_display.update_filtered_mods()))
         self.tag_customization.stateChanged.connect(lambda: (setattr(self.app_state, 'current_page', 1), self.search_display.update_filtered_mods()))
         self.tag_gameplay.stateChanged.connect(lambda: (setattr(self.app_state, 'current_page', 1), self.search_display.update_filtered_mods()))
@@ -1697,7 +1710,8 @@ class AppWindow(QWidget):
             self.previous_tab_index = index
             return
         if index == 1:
-            self.library_display.update_display()
+            from PyQt6.QtCore import QTimer
+            QTimer.singleShot(0, self.library_display.update_display)
             self.previous_tab_index = index
         else:
             self.previous_tab_index = index

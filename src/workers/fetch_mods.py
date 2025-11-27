@@ -64,27 +64,36 @@ class FetchModsThread(QThread):
 
                 class GameBananaFetcher:
 
-                    def __init__(self, sort_param='default', metadata_cache=None):
+                    def __init__(self, sort_param='default', metadata_cache=None, app_state=None):
                         self.all_mods = []
                         self.all_mods_needing_metadata = []
                         self.api = None
                         self.sort_param = sort_param
                         self.metadata_cache = metadata_cache
+                        self.app_state = app_state
                         self.status: Optional[Any] = None
 
                     def fetch_mods(self, initial_pages: int = 3):
                         from utils.gamebanana_api import GameBananaAPI
                         from config.constants import GAMEBANANA_GAME_IDS
                         self.api = GameBananaAPI()
-                        logger.info(f'GameBananaFetcher.fetch_mods: Starting fetch with sort={self.sort_param}, initial_pages={initial_pages}')
-                        for game_name, game_id in GAMEBANANA_GAME_IDS.items():
-                            if hasattr(self, 'status') and self.status:
-                                self.status(tr('status.fetching_gamebanana_mods', game=game_name.upper()), UI_COLORS['status_info'])
-                            game_mods, game_mods_needing_metadata = self._fetch_game_mods(game_name, game_id, start_page=1, num_pages=initial_pages, sort=self.sort_param)
-                            if game_mods:
-                                self.all_mods.extend(game_mods)
-                                self.all_mods_needing_metadata.extend(game_mods_needing_metadata)
-                                logger.info(f'GameBananaFetcher: Fetched {len(game_mods)} mods for {game_name} (pages 1-{initial_pages}), {len(game_mods_needing_metadata)} need metadata')
+                        selected_game = 'deltarune'
+                        if self.app_state and hasattr(self.app_state, 'local_config'):
+                            selected_game = self.app_state.local_config.get('selected_search_game', 'deltarune')
+                        game_mapping = {'deltarune': 'deltarune', 'deltarunedemo': 'deltarune', 'undertale': 'undertale', 'undertaleyellow': 'undertaleyellow'}
+                        gamebanana_game = game_mapping.get(selected_game, 'deltarune')
+                        if gamebanana_game not in GAMEBANANA_GAME_IDS:
+                            logger.warning(f'GameBananaFetcher: Unknown game {gamebanana_game}, defaulting to deltarune')
+                            gamebanana_game = 'deltarune'
+                        game_id = GAMEBANANA_GAME_IDS[gamebanana_game]
+                        logger.info(f'GameBananaFetcher.fetch_mods: Starting fetch for {selected_game} (GameBanana: {gamebanana_game}) with sort={self.sort_param}, initial_pages={initial_pages}')
+                        if hasattr(self, 'status') and self.status:
+                            self.status(tr('status.fetching_gamebanana_mods', game=gamebanana_game.upper()), UI_COLORS['status_info'])
+                        game_mods, game_mods_needing_metadata = self._fetch_game_mods(gamebanana_game, game_id, start_page=1, num_pages=initial_pages, sort=self.sort_param)
+                        if game_mods:
+                            self.all_mods.extend(game_mods)
+                            self.all_mods_needing_metadata.extend(game_mods_needing_metadata)
+                            logger.info(f'GameBananaFetcher: Fetched {len(game_mods)} mods for {gamebanana_game} (pages 1-{initial_pages}), {len(game_mods_needing_metadata)} need metadata')
                         logger.info(f'GameBananaFetcher.fetch_mods: Total fetched {len(self.all_mods)} mods')
                         return (self.all_mods, self.all_mods_needing_metadata)
 
@@ -110,7 +119,7 @@ class FetchModsThread(QThread):
                         except Exception as e:
                             logger.error(f'Error fetching mods for {game_name}: {e}', exc_info=True)
                         return (mods, mods_needing_metadata)
-                fetcher = GameBananaFetcher(sort_param=sort_param, metadata_cache=metadata_cache)
+                fetcher = GameBananaFetcher(sort_param=sort_param, metadata_cache=metadata_cache, app_state=app_state)
 
                 def emit_status(msg, color):
                     self.status.emit(msg, color)
@@ -129,8 +138,12 @@ class FetchModsThread(QThread):
                             app_state.gamebanana_mods_needing_metadata = unique_mods_needing_metadata
                     app_state = getattr(self.main_window, 'app_state', None)
                     if app_state:
-                        for game_name, game_id in GAMEBANANA_GAME_IDS.items():
-                            game_mods_count = len([m for m in gamebanana_mods if hasattr(m, 'modgame') and m.modgame == game_name])
+                        selected_game = app_state.local_config.get('selected_search_game', 'deltarune') if hasattr(app_state, 'local_config') else 'deltarune'
+                        game_mapping = {'deltarune': 'deltarune', 'deltarunedemo': 'deltarune', 'undertale': 'undertale', 'undertaleyellow': 'undertaleyellow'}
+                        gamebanana_game = game_mapping.get(selected_game, 'deltarune')
+                        if gamebanana_game in GAMEBANANA_GAME_IDS:
+                            game_id = GAMEBANANA_GAME_IDS[gamebanana_game]
+                            game_mods_count = len(gamebanana_mods)
                             pages_loaded = (game_mods_count - 1) // GAMEBANANA_PER_PAGE + 1 if game_mods_count > 0 else initial_pages
                             app_state.gamebanana_loaded_pages[game_id] = pages_loaded
             except Exception as e:

@@ -616,20 +616,16 @@ def check_filename_is_deltamod_info(filename: str) -> bool:
     return filename == META_JSON_FILENAME or filename_lower == META_JSON_FILENAME.lower()
 
 
-def _make_writable(path: str) -> None:
-    if platform.system() == 'Windows':
-        try:
-            os.chmod(path, stat.S_IWRITE)
-        except OSError:
-            pass
-
-
 def safe_remove(path: str, max_retries: int = 5, delay: float = 0.1) -> bool:
     if not os.path.exists(path):
         return True
     for attempt in range(max_retries):
         try:
-            _make_writable(path)
+            if platform.system() == 'Windows':
+                try:
+                    os.chmod(path, stat.S_IWRITE | stat.S_IREAD)
+                except OSError:
+                    pass
             os.remove(path)
             return True
         except (OSError, PermissionError) as e:
@@ -655,7 +651,10 @@ def safe_move(src: str, dst: str, max_retries: int = 5, delay: float = 0.1) -> b
     for attempt in range(max_retries):
         try:
             if platform.system() == 'Windows' and os.path.isfile(src):
-                _make_writable(src)
+                try:
+                    os.chmod(src, stat.S_IWRITE | stat.S_IREAD)
+                except OSError:
+                    pass
             shutil.move(src, dst)
             return True
         except (OSError, PermissionError, shutil.Error) as e:
@@ -673,52 +672,45 @@ def safe_rmtree(path: str, max_retries: int = 5, delay: float = 0.1) -> bool:
         return True
     if not os.path.isdir(path):
         return safe_remove(path, max_retries, delay)
-    if platform.system() == 'Windows':
-        try:
-            ensure_writable(path)
-        except Exception:
-            pass
+
+    def handle_rmtree_error(func, path, exc_info):
+        if platform.system() == 'Windows':
+            try:
+                os.chmod(path, stat.S_IWRITE | stat.S_IREAD | stat.S_IEXEC)
+            except OSError:
+                pass
+            try:
+                func(path)
+            except OSError:
+                pass
     for attempt in range(max_retries):
         try:
-            shutil.rmtree(path)
+            shutil.rmtree(path, onexc=handle_rmtree_error)
             return True
         except (OSError, PermissionError, shutil.Error) as e:
             if attempt < max_retries - 1:
                 logging.debug(f'safe_rmtree: Attempt {attempt + 1}/{max_retries} failed for {path}: {e}, retrying...')
-                if platform.system() == 'Windows':
-                    try:
-                        import gc
-                        gc.collect()
-                        for root, dirs, files in os.walk(path):
-                            for item in list(files) + list(dirs):
-                                try:
-                                    _make_writable(os.path.join(root, item))
-                                except OSError:
-                                    pass
-                    except Exception:
-                        pass
                 time.sleep(delay * (attempt + 1))
             else:
-                logging.debug(f'safe_rmtree: Could not remove {path} after {max_retries} attempts (file may be in use): {e}')
-                try:
-                    import tempfile
-                    import threading
-                    temp_dir = tempfile.gettempdir()
-                    renamed_path = os.path.join(temp_dir, f'deltahub_temp_cleanup_{int(time.time())}')
-                    if not os.path.exists(renamed_path):
-                        os.rename(path, renamed_path)
-                        logging.debug(f'safe_rmtree: Renamed {path} to {renamed_path} for later cleanup')
+                logging.warning(f'safe_rmtree: Failed to remove {path} after {max_retries} attempts: {e}')
+                if platform.system() != 'Windows':
+                    try:
+                        temp_dir = tempfile.gettempdir()
+                        renamed_path = os.path.join(temp_dir, f'deltahub_temp_cleanup_{int(time.time())}')
+                        if not os.path.exists(renamed_path):
+                            os.rename(path, renamed_path)
+                            logging.debug(f'safe_rmtree: Renamed {path} to {renamed_path} for later cleanup')
 
-                        def delayed_cleanup():
-                            time.sleep(5)
-                            try:
-                                shutil.rmtree(renamed_path, ignore_errors=True)
-                            except Exception:
-                                pass
-                        threading.Thread(target=delayed_cleanup, daemon=True).start()
-                        return True
-                except Exception:
-                    pass
+                            def delayed_cleanup():
+                                time.sleep(5)
+                                try:
+                                    shutil.rmtree(renamed_path, ignore_errors=True)
+                                except Exception:
+                                    pass
+                            threading.Thread(target=delayed_cleanup, daemon=True).start()
+                            return True
+                    except Exception:
+                        pass
                 return False
     return False
 

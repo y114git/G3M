@@ -183,6 +183,10 @@ class RefreshController:
                                     logging.debug(f'RefreshController: Restored metadata from cache for mod {mod_id} - downloads: {downloads}, has_desc: {bool(full_description)}, has_screenshots: {bool(screenshots)}, has_tagline: {bool(tagline)}, category: {category}')
                 except Exception as e:
                     logging.warning(f'RefreshController: Error restoring metadata from cache: {e}', exc_info=True)
+            if not self.app_state.mods_loaded:
+                self.app_state.mods_loaded = True
+                if mods_loaded_signal:
+                    mods_loaded_signal.emit()
             if update_filtered_mods_callback and (not downloads_restored):
                 try:
                     update_filtered_mods_callback()
@@ -194,10 +198,6 @@ class RefreshController:
                         self.app_window.search_display.update_filtered_mods(preserve_page=True)
                 except Exception as e:
                     logging.error(f'RefreshController: Error re-sorting after cache restore: {e}', exc_info=True)
-            if not self.app_state.mods_loaded:
-                self.app_state.mods_loaded = True
-                if mods_loaded_signal:
-                    mods_loaded_signal.emit()
             if update_installed_mods_callback:
                 update_installed_mods_callback()
             self.game_launch_controller.refresh_mods_in_use()
