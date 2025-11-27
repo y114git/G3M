@@ -15,7 +15,7 @@ import time
 from pathlib import Path
 from typing import Dict, Optional
 from utils.network_utils import download_file, get_filename_from_url, get_session
-from config.constants import MOD_CONFIG_FILENAME, DATA_WIN_FILENAME, META_JSON_FILENAME, ICON_PNG_FILENAME, LEGACY_MOD_CONFIG_FILENAME, LEGACY_META_JSON_FILENAME
+from config.constants import MOD_CONFIG_FILENAME, META_JSON_FILENAME, ICON_PNG_FILENAME, LEGACY_MOD_CONFIG_FILENAME, LEGACY_META_JSON_FILENAME
 import errno
 
 
@@ -164,6 +164,10 @@ def extract_archive_with_backup(archive_path: str, target_dir: str, backup_temp_
     return extracted_files
 
 
+def _is_safe_path(path: str) -> bool:
+    return not ('..' in path or path.startswith('/'))
+
+
 def _extract_archive_raw(src_path: str, fname_lower: str, out_dir: str) -> None:
     import rarfile
     try:
@@ -176,14 +180,11 @@ def _extract_archive_raw(src_path: str, fname_lower: str, out_dir: str) -> None:
     if fname_lower.endswith('.zip'):
         with zipfile.ZipFile(src_path, 'r') as zf:
             for member in zf.namelist():
-                if '..' in member or member.startswith('/'):
+                if not _is_safe_path(member):
                     logging.warning(f'_extract_archive_raw: Skipping suspicious path in ZIP: {member}')
                     continue
                 try:
                     target_path = _safe_join(out_dir_abs, member)
-                    if not os.path.abspath(target_path).startswith(out_dir_abs):
-                        logging.warning(f'_extract_archive_raw: Path traversal attempt blocked: {member}')
-                        continue
                     parent_dir = os.path.dirname(target_path)
                     if parent_dir:
                         os.makedirs(parent_dir, exist_ok=True)
@@ -197,14 +198,11 @@ def _extract_archive_raw(src_path: str, fname_lower: str, out_dir: str) -> None:
     if fname_lower.endswith('.tar.gz'):
         with tarfile.open(src_path, 'r:gz') as tf:
             for member in tf.getmembers():
-                if '..' in member.name or member.name.startswith('/'):
+                if not _is_safe_path(member.name):
                     logging.warning(f'_extract_archive_raw: Skipping suspicious path in TAR: {member.name}')
                     continue
                 try:
                     target_path = _safe_join(out_dir_abs, member.name)
-                    if not os.path.abspath(target_path).startswith(out_dir_abs):
-                        logging.warning(f'_extract_archive_raw: Path traversal attempt blocked: {member.name}')
-                        continue
                     tf.extract(member, out_dir_abs)
                 except (ValueError, OSError, tarfile.TarError) as e:
                     logging.warning(f'_extract_archive_raw: Failed to extract {member.name}: {e}')
@@ -213,14 +211,11 @@ def _extract_archive_raw(src_path: str, fname_lower: str, out_dir: str) -> None:
     if fname_lower.endswith('.rar'):
         with rarfile.RarFile(src_path, 'r') as rf:
             for member in rf.namelist():
-                if '..' in member or member.startswith('/'):
+                if not _is_safe_path(member):
                     logging.warning(f'_extract_archive_raw: Skipping suspicious path in RAR: {member}')
                     continue
                 try:
                     target_path = _safe_join(out_dir_abs, member)
-                    if not os.path.abspath(target_path).startswith(out_dir_abs):
-                        logging.warning(f'_extract_archive_raw: Path traversal attempt blocked: {member}')
-                        continue
                     parent_dir = os.path.dirname(target_path)
                     if parent_dir:
                         os.makedirs(parent_dir, exist_ok=True)
@@ -233,14 +228,11 @@ def _extract_archive_raw(src_path: str, fname_lower: str, out_dir: str) -> None:
     if fname_lower.endswith('.7z') and py7zr is not None:
         with py7zr.SevenZipFile(src_path, mode='r') as zf:
             for member in zf.getnames():
-                if '..' in member or member.startswith('/'):
+                if not _is_safe_path(member):
                     logging.warning(f'_extract_archive_raw: Skipping suspicious path in 7Z: {member}')
                     continue
                 try:
                     target_path = _safe_join(out_dir_abs, member)
-                    if not os.path.abspath(target_path).startswith(out_dir_abs):
-                        logging.warning(f'_extract_archive_raw: Path traversal attempt blocked: {member}')
-                        continue
                     parent_dir = os.path.dirname(target_path)
                     if parent_dir:
                         os.makedirs(parent_dir, exist_ok=True)
@@ -624,16 +616,20 @@ def check_filename_is_deltamod_info(filename: str) -> bool:
     return filename == META_JSON_FILENAME or filename_lower == META_JSON_FILENAME.lower()
 
 
+def _make_writable(path: str) -> None:
+    if platform.system() == 'Windows':
+        try:
+            os.chmod(path, stat.S_IWRITE)
+        except OSError:
+            pass
+
+
 def safe_remove(path: str, max_retries: int = 5, delay: float = 0.1) -> bool:
     if not os.path.exists(path):
         return True
     for attempt in range(max_retries):
         try:
-            if platform.system() == 'Windows':
-                try:
-                    os.chmod(path, stat.S_IWRITE)
-                except OSError:
-                    pass
+            _make_writable(path)
             os.remove(path)
             return True
         except (OSError, PermissionError) as e:
@@ -659,10 +655,7 @@ def safe_move(src: str, dst: str, max_retries: int = 5, delay: float = 0.1) -> b
     for attempt in range(max_retries):
         try:
             if platform.system() == 'Windows' and os.path.isfile(src):
-                try:
-                    os.chmod(src, stat.S_IWRITE)
-                except OSError:
-                    pass
+                _make_writable(src)
             shutil.move(src, dst)
             return True
         except (OSError, PermissionError, shutil.Error) as e:
@@ -697,43 +690,32 @@ def safe_rmtree(path: str, max_retries: int = 5, delay: float = 0.1) -> bool:
                         import gc
                         gc.collect()
                         for root, dirs, files in os.walk(path):
-                            for name in files:
-                                file_path = os.path.join(root, name)
+                            for item in list(files) + list(dirs):
                                 try:
-                                    os.chmod(file_path, stat.S_IWRITE)
-                                except OSError:
-                                    pass
-                            for name in dirs:
-                                dir_path = os.path.join(root, name)
-                                try:
-                                    os.chmod(dir_path, stat.S_IWRITE)
+                                    _make_writable(os.path.join(root, item))
                                 except OSError:
                                     pass
                     except Exception:
                         pass
-                retry_delay = delay * (attempt + 1)
-                time.sleep(retry_delay)
+                time.sleep(delay * (attempt + 1))
             else:
                 logging.debug(f'safe_rmtree: Could not remove {path} after {max_retries} attempts (file may be in use): {e}')
                 try:
                     import tempfile
+                    import threading
                     temp_dir = tempfile.gettempdir()
                     renamed_path = os.path.join(temp_dir, f'deltahub_temp_cleanup_{int(time.time())}')
                     if not os.path.exists(renamed_path):
                         os.rename(path, renamed_path)
                         logging.debug(f'safe_rmtree: Renamed {path} to {renamed_path} for later cleanup')
-                        try:
-                            import threading
 
-                            def delayed_cleanup():
-                                time.sleep(5)
-                                try:
-                                    shutil.rmtree(renamed_path, ignore_errors=True)
-                                except Exception:
-                                    pass
-                            threading.Thread(target=delayed_cleanup, daemon=True).start()
-                        except Exception:
-                            pass
+                        def delayed_cleanup():
+                            time.sleep(5)
+                            try:
+                                shutil.rmtree(renamed_path, ignore_errors=True)
+                            except Exception:
+                                pass
+                        threading.Thread(target=delayed_cleanup, daemon=True).start()
                         return True
                 except Exception:
                     pass
@@ -746,7 +728,5 @@ def migrate_mod_config(mod_dir: str) -> bool:
     config_path = os.path.join(mod_dir, MOD_CONFIG_FILENAME)
     if os.path.exists(old_config_path) and (not os.path.exists(config_path)):
         safe_move(old_config_path, config_path)
-        folder_name = os.path.basename(mod_dir)
-        logging.info(f'Migrated mod config.json to mod_config.json in {folder_name}')
-        return True
+        logging.info(f'Migrated mod config.json to mod_config.json in {os.path.basename(mod_dir)}')
     return True

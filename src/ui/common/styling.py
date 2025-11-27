@@ -72,7 +72,7 @@ def create_file_group_universal(label_text, button_text, file_filter, line_edit,
     return (group_box, button)
 
 
-def clear_layout_widgets(layout, keep_last_n=1, hide_instead_of_delete=True):
+def clear_layout_widgets(layout, keep_last_n=1, hide_instead_of_delete=False):
     if not layout:
         return
     end_index = layout.count() - keep_last_n

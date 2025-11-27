@@ -353,28 +353,28 @@ class SettingsManager(QObject):
             with zipfile.ZipFile(theme_file_path, 'r') as zipf:
                 if 'theme.json' not in zipf.namelist():
                     raise ValueError('Missing theme.json')
-                from utils.file_utils import extract_any_archive
-                with tempfile.TemporaryDirectory() as temp_dir:
-                    extract_any_archive(theme_file_path, temp_dir)
-                    with open(os.path.join(temp_dir, 'theme.json'), 'r') as f:
-                        theme_settings = json.load(f)
-                    for key, value in theme_settings.items():
-                        self.app_state.local_config[key] = value
-                    for old_file in ['custom_background_music.mp3', 'custom_background_music.wav', 'custom_startup_sound.mp3', 'custom_startup_sound.wav']:
-                        if os.path.exists(os.path.join(self.app_state.config_dir, old_file)):
-                            os.remove(os.path.join(self.app_state.config_dir, old_file))
-                    self.app_state.local_config['custom_background_path'] = ''
-                    for filename in os.listdir(temp_dir):
-                        src_path = os.path.join(temp_dir, filename)
-                        if filename.startswith('background.'):
-                            ext = os.path.splitext(filename)[1]
-                            dest_path = os.path.join(self.app_state.config_dir, f'custom_background{ext}')
-                            shutil.copy2(src_path, dest_path)
-                            self.app_state.local_config['custom_background_path'] = dest_path
-                        elif filename.startswith('background_music.'):
-                            shutil.copy2(src_path, os.path.join(self.app_state.config_dir, f'custom_background_music{os.path.splitext(filename)[1]}'))
-                        elif filename.startswith('startup_sound.'):
-                            shutil.copy2(src_path, os.path.join(self.app_state.config_dir, f'custom_startup_sound{os.path.splitext(filename)[1]}'))
+            from utils.file_utils import extract_any_archive
+            with tempfile.TemporaryDirectory() as temp_dir:
+                extract_any_archive(theme_file_path, temp_dir)
+                with open(os.path.join(temp_dir, 'theme.json'), 'r') as f:
+                    theme_settings = json.load(f)
+                for key, value in theme_settings.items():
+                    self.app_state.local_config[key] = value
+                for old_file in ['custom_background_music.mp3', 'custom_background_music.wav', 'custom_startup_sound.mp3', 'custom_startup_sound.wav']:
+                    if os.path.exists(os.path.join(self.app_state.config_dir, old_file)):
+                        os.remove(os.path.join(self.app_state.config_dir, old_file))
+                self.app_state.local_config['custom_background_path'] = ''
+                for filename in os.listdir(temp_dir):
+                    src_path = os.path.join(temp_dir, filename)
+                    if filename.startswith('background.'):
+                        ext = os.path.splitext(filename)[1]
+                        dest_path = os.path.join(self.app_state.config_dir, f'custom_background{ext}')
+                        shutil.copy2(src_path, dest_path)
+                        self.app_state.local_config['custom_background_path'] = dest_path
+                    elif filename.startswith('background_music.'):
+                        shutil.copy2(src_path, os.path.join(self.app_state.config_dir, f'custom_background_music{os.path.splitext(filename)[1]}'))
+                    elif filename.startswith('startup_sound.'):
+                        shutil.copy2(src_path, os.path.join(self.app_state.config_dir, f'custom_startup_sound{os.path.splitext(filename)[1]}'))
             self.write_local_config()
             self.app_state.local_config['first_launch_splash_shown'] = True
             if 'disable_splash' in theme_settings:

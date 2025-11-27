@@ -232,26 +232,6 @@ class AppState(QObject):
     def current_task(self, task: Optional[QThread]) -> None:
         self._current_task = task
 
-    def clear_current_task(self) -> None:
-        self.current_task = None
-
-    def cancel_current_operation(self):
-        import logging
-        self.operation_cancelled = True
-        logging.info('AppState: Cancel button clicked')
-        if self.current_task:
-            if hasattr(self.current_task, 'cancel') and callable(getattr(self.current_task, 'cancel', None)):
-                logging.info(f'AppState: Calling cancel() on current_task: {type(self.current_task).__name__}')
-                try:
-                    cancel_method = getattr(self.current_task, 'cancel')
-                    cancel_method()
-                except Exception as e:
-                    logging.error(f'AppState: Error calling cancel() on task: {e}', exc_info=True)
-            else:
-                logging.warning(f'AppState: current_task {type(self.current_task).__name__} does not have cancel() method')
-        else:
-            logging.warning('AppState: No current_task to cancel')
-
     @property
     def action_button_text(self) -> str:
         return self._action_button_text
@@ -283,3 +263,22 @@ class AppState(QObject):
     @progress_bar_value.setter
     def progress_bar_value(self, value: int) -> None:
         self._progress_bar_value = value
+
+    def clear_current_task(self) -> None:
+        self._current_task = None
+
+    def cancel_current_operation(self):
+        import logging
+        self._operation_cancelled = True
+        logging.info('AppState: Cancel button clicked')
+        if not self._current_task:
+            logging.warning('AppState: No current_task to cancel')
+            return
+        if hasattr(self._current_task, 'cancel') and callable(self._current_task.cancel):
+            logging.info(f'AppState: Calling cancel() on current_task: {type(self._current_task).__name__}')
+            try:
+                self._current_task.cancel()
+            except Exception as e:
+                logging.error(f'AppState: Error calling cancel() on task: {e}', exc_info=True)
+        else:
+            logging.warning(f'AppState: current_task {type(self._current_task).__name__} does not have cancel() method')
