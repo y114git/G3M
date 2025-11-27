@@ -1,8 +1,9 @@
 #define AppName        "DELTAHUB"
-#define AppVersion     "2.3.3"
+#define AppVersion     "2.3.4stable"
 #define AppExeName     "DELTAHUB.exe"
 #define AppIcon        "..\\src\\assets\\icons\\icon.ico"
 #define AppSmallIcon   "..\\src\\assets\\icons\\icon_small.bmp"
+#define AppWizardImage "..\\src\\assets\\images\\vertical_banner.bmp"
 
 [Setup]
 AppId={{6A8E9F32-1B3A-4F2F-9C0A-6E28B9B8C5D1}}
@@ -17,6 +18,7 @@ WizardStyle=modern
 DisableDirPage=no
 UsePreviousAppDir=no
 WizardSmallImageFile={#AppSmallIcon}
+WizardImageFile={#AppWizardImage}
 OutputBaseFilename={#AppName}_setup_v{#AppVersion}
 OutputDir=..\\Output
 ArchitecturesAllowed=x64
