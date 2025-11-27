@@ -85,7 +85,7 @@ class UpdateChecker(QObject):
         script_content = f'''#!/bin/bash\n# DELTAHUB Updater Script\n# Generated at {time.strftime('%Y-%m-%d %H:%M:%S')}\n\nPID={current_pid}\nOLD_PATH="{safe_old}"\nNEW_PATH="{safe_new}"\nTEMP_DIR="{new_content_parent}"\nLOG_FILE="/tmp/deltahub_update.log"\n\n# 1. Ждем завершения основного процесса\necho "Waiting for PID $PID to close..." > "$LOG_FILE"\nwhile kill -0 "$PID" 2>/dev/null; do\n   sleep 0.5\ndone\n\necho "Process closed. Updating..." >> "$LOG_FILE"\n\n# 2. Удаляем старую версию (или перемещаем в бекап)\n# На macOS это удаление папки .app, на Linux файла\nrm -rf "$OLD_PATH" 2>> "$LOG_FILE"\n\n# 3. Перемещаем новую версию на место старой\nmv -f "$NEW_PATH" "$OLD_PATH" 2>> "$LOG_FILE"\n\n# 4. Восстанавливаем права на исполнение (критично для Linux/Mac)\nchmod -R 755 "$OLD_PATH" 2>> "$LOG_FILE"\n\n# 5. (Только macOS) Снимаем карантин, если нужно\nif [[ "$OSTYPE" == "darwin"* ]]; then\n   xattr -r -d com.apple.quarantine "$OLD_PATH" 2>> "$LOG_FILE" || true\nfi\n\n# 6. Запускаем новую версию\necho "Launching new version..." >> "$LOG_FILE"\n{launch_cmd} >> "$LOG_FILE" 2>&1\n\n# 7. Очищаем временную папку (если она пуста)\nrm -rf "$TEMP_DIR" 2>/dev/null || true\n\n# 8. Самоудаление скрипта (опционально, но чистоплотно)\nrm -f "$0" 2>/dev/null || true\n'''
         with open(updater_script_path, 'w', encoding='utf-8') as f:
             f.write(script_content)
-        os.chmod(updater_script_path, 0o755)
+        os.chmod(updater_script_path, 493)
         logging.info(f'[UPDATE] Created updater script: {updater_script_path}')
         logging.info(f'[UPDATE] Launching updater script for PID {current_pid}')
         try:
@@ -216,7 +216,7 @@ class UpdateChecker(QObject):
                         logging.error('[UPDATE] Executable not found in extracted archive')
                         raise RuntimeError(tr('errors.executable_not_found_after_unpack'))
                     logging.info(f'[UPDATE] Found executable: {new_content_path}')
-                    os.chmod(new_content_path, 0o755)
+                    os.chmod(new_content_path, 493)
                     logging.info('[UPDATE] Set executable permissions on new launcher')
                 persistent_temp_dir = tempfile.mkdtemp(prefix='deltahub-update-persistent-')
                 if system == 'Darwin':
@@ -227,7 +227,7 @@ class UpdateChecker(QObject):
                     persistent_new_path = os.path.join(persistent_temp_dir, os.path.basename(new_content_path))
                     logging.info(f'[UPDATE] Copying executable to persistent temp: {persistent_new_path}')
                     shutil.copy2(new_content_path, persistent_new_path)
-                    os.chmod(persistent_new_path, 0o755)
+                    os.chmod(persistent_new_path, 493)
                 logging.info(f'[UPDATE] Unix update: Replacing {replace_target} with {persistent_new_path}')
                 self._perform_unix_update(replace_target, persistent_new_path)
         except PermissionError as e:

@@ -4,7 +4,7 @@ from PyQt6.QtCore import QRunnable
 from PyQt6.QtGui import QImage
 from workers import WorkerSignals
 from utils.cache import _NET_SEM, get_from_cache, add_to_cache
-from utils.network_utils import get_session, sanitize_log_message
+from utils.network_utils import get_session, sanitize_log_message, mask_url, mask_api_key
 
 
 class ImageLoaderRunnable(QRunnable):
@@ -95,18 +95,21 @@ class ImageLoaderRunnable(QRunnable):
             try:
                 self.signals.result.emit(img)
             except Exception as e:
-                safe_exception = sanitize_log_message(str(e))
-                safe_msg = sanitize_log_message(f'ImageLoader.run: Error emitting result: {safe_exception}')
+                exception_type = type(e).__name__
+                safe_msg = sanitize_log_message(f'ImageLoader.run: Error emitting result: {exception_type}')
                 logging.debug(safe_msg)
         except requests.RequestException as e:
-            safe_exception = sanitize_log_message(str(e))
-            safe_url = sanitize_log_message(self.url[:100])
-            safe_msg = sanitize_log_message(f'ImageLoader.run: Request exception for URL {safe_url}: {safe_exception}')
+            masked_url = mask_url(self.url)
+            masked_exception = mask_api_key(str(e))
+            safe_msg = sanitize_log_message(f'ImageLoader.run: Request exception for URL {masked_url}: {masked_exception}')
             logging.debug(safe_msg)
-            self._emit_error(f'network:{safe_exception}')
+            exception_type = type(e).__name__
+            self._emit_error(f'network:{exception_type}')
         except Exception as e:
-            safe_exception = sanitize_log_message(str(e))
-            safe_url = sanitize_log_message(self.url[:100])
-            safe_msg = sanitize_log_message(f'ImageLoader.run: Unexpected error for URL {safe_url}: {safe_exception}')
-            logging.error(safe_msg, exc_info=True)
-            self._emit_error(safe_exception)
+            logging.error('ImageLoader.run: Unexpected error occurred during image loading')
+            masked_url = mask_url(self.url)
+            masked_exception = mask_api_key(str(e))
+            exception_type = type(e).__name__
+            safe_msg = sanitize_log_message(f'ImageLoader.run: Unexpected error details - Type: {exception_type}, URL: {masked_url}, Message: {masked_exception}')
+            logging.debug(safe_msg)
+            self._emit_error(exception_type)
