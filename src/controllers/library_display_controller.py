@@ -88,6 +88,7 @@ class LibraryDisplayController:
                 is_used = self.slot_manager.is_mod_used_for_chapter(mod_data, selected_chapter_id)
                 mod_widget.set_in_slot(is_used)
                 self.app.installed_mods_layout.insertWidget(self.app.installed_mods_layout.count() - 1, mod_widget)
+                mod_widget.show()
         if self.app.installed_mods_layout.count() <= 1:
             chapter_names = {SLOT_ID_UNIVERSAL: tr('ui.mod_slot'), SLOT_ID_MENU: tr('chapters.menu'), SLOT_ID_CHAPTER_1: tr('tabs.chapter_1'), SLOT_ID_CHAPTER_2: tr('tabs.chapter_2'), SLOT_ID_CHAPTER_3: tr('tabs.chapter_3'), SLOT_ID_CHAPTER_4: tr('tabs.chapter_4')}
             chapter_name = chapter_names.get(selected_chapter_id, tr('ui.chapter_n', chapter=str(selected_chapter_id)))
@@ -179,6 +180,7 @@ class LibraryDisplayController:
                             mod_widget.remove_requested.connect(self.on_mod_remove)
                             mod_widget.use_requested.connect(self.on_mod_use)
                             self.app.installed_mods_layout.insertWidget(self.app.installed_mods_layout.count() - 1, mod_widget)
+                            mod_widget.show()
                     batch_index = end
                     if end >= len(mods):
                         if self.app.installed_mods_layout.count() <= 1:

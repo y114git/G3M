@@ -11,6 +11,7 @@ class InstalledModWidget(BaseModWidget):
 
     def __init__(self, mod_data, is_local=False, is_available=True, has_update=False, parent=None, installed_date=None):
         super().__init__(mod_data, parent)
+        self.hide()
         self.use_button = None
         self.is_local = is_local
         self.is_available = is_available

@@ -40,6 +40,7 @@ class ModPlaqueWidget(BaseModWidget):
 
     def __init__(self, mod_data, parent=None, parent_app=None):
         super().__init__(mod_data, parent)
+        self.hide()
         if parent_app:
             self.parent_app = parent_app
         elif parent and hasattr(parent, 'parent_app'):

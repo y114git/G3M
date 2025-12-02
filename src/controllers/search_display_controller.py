@@ -668,7 +668,6 @@ class SearchDisplayController(QObject):
                         else:
                             parent_widget = self.app.mod_list_widget if hasattr(self.app, 'mod_list_widget') else self.app
                             plaque = ModPlaqueWidget(mod, parent=parent_widget, parent_app=self.app)
-                            plaque.hide()
                             plaque.install_requested.connect(self.mod_ops.on_mod_install_requested)
                             plaque.uninstall_requested.connect(self.mod_ops.on_mod_uninstall_requested)
                             plaque.clicked.connect(self.on_mod_clicked)
