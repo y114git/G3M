@@ -685,6 +685,11 @@ class MultiModMerger(QObject):
                     env = os.environ.copy()
                     env['SMARTEXPORT_VANILLA_PATH'] = original_data_win
                     returncode, stdout, stderr = self.utmt_wrapper.execute_scripts(mod_1_patched_backup, ['SmartExport'], cwd=mod_1_data_win_dir, env=env)
+                    try:
+                        self._check_critical_script_errors(stderr, 'SmartExport', 'highest priority mod')
+                    except RuntimeError:
+                        self.patching_logger.error('Процесс слияния прерван из-за критической ошибки в SmartExport для highest priority mod')
+                        raise
                 else:
                     export_script = self.utmt_wrapper.get_script_path('ExportAllCode')
                     if export_script:
@@ -1414,43 +1419,56 @@ class MultiModMerger(QObject):
         except Exception:
             pass
         os.makedirs(target_objects_dir, exist_ok=True)
-        subdirs_to_merge = [('Sprites', 'sprite', True), ('Backgrounds', 'background', False), ('Rooms', 'room', False), ('Tilesets', 'tileset', False), ('Shaders', 'shader', False)]
+        subdirs_to_merge = [('Sprites', 'sprite', True), ('Backgrounds', 'background', False), ('Rooms', 'room', False), ('Tilesets', 'tileset', False), ('Shaders', 'shader', False), ('Fonts', 'font', False), ('Sounds', 'sound', False), ('NewObjects', 'new_object', False), ('ExistingObjects', 'existing_object', False)]
         for folder_name, resource_type, track_history in subdirs_to_merge:
             self._merge_subdirectory(target_objects_dir, source_objects_dir, folder_name, resource_type, source_mod_name, track_history)
         source_code = os.path.join(source_objects_dir, 'CodeEntries')
         target_code = os.path.join(target_objects_dir, 'CodeEntries')
         if os.path.exists(source_code):
-            if os.path.exists(target_code):
-                for file in os.listdir(source_code):
-                    src_file = os.path.join(source_code, file)
-                    dst_file = os.path.join(target_code, file)
-                    if os.path.isfile(src_file):
-                        if os.path.exists(dst_file):
-                            code_name = os.path.splitext(file)[0]
-                            if code_name in self.resource_modification_history:
-                                prev_mods = [h['mod'] for h in self.resource_modification_history[code_name]]
-                                if prev_mods and source_mod_name not in prev_mods:
-                                    conflict_msg = f'''Code "{code_name}" was modified by: {', '.join(prev_mods)} before "{source_mod_name}". Higher priority mod ({source_mod_name}) will overwrite.'''
-                                    self.patching_logger.warning(f'[CONFLICT] {conflict_msg}')
-                                    self.conflicts_logger.info(f'''Resource: GML Code "{code_name}" | Conflict between: {', '.join(prev_mods)} vs "{source_mod_name}" | Resolution: Using "{source_mod_name}" (higher priority)''')
-                                    self.detected_conflicts.append({'resource_type': 'code', 'resource_name': code_name, 'mods': prev_mods + [source_mod_name], 'resolution': source_mod_name})
-                        self._safe_copy2(src_file, dst_file)
+            os.makedirs(target_code, exist_ok=True)
+            for file in os.listdir(source_code):
+                src_file = os.path.join(source_code, file)
+                dst_file = os.path.join(target_code, file)
+                if os.path.isfile(src_file):
+                    if os.path.exists(dst_file):
                         code_name = os.path.splitext(file)[0]
-                        if code_name not in self.resource_modification_history:
-                            self.resource_modification_history[code_name] = []
-                        self.resource_modification_history[code_name].append({'type': 'code', 'mod': source_mod_name, 'action': 'merged', 'timestamp': time.time()})
+                        if code_name in self.resource_modification_history:
+                            prev_mods = [h['mod'] for h in self.resource_modification_history[code_name]]
+                            if prev_mods and source_mod_name not in prev_mods:
+                                conflict_msg = f'''Code "{code_name}" was modified by: {', '.join(prev_mods)} before "{source_mod_name}". Higher priority mod ({source_mod_name}) will overwrite.'''
+                                self.patching_logger.warning(f'[CONFLICT] {conflict_msg}')
+                                self.conflicts_logger.info(f'''Resource: GML Code "{code_name}" | Conflict between: {', '.join(prev_mods)} vs "{source_mod_name}" | Resolution: Using "{source_mod_name}" (higher priority)''')
+                                self.detected_conflicts.append({'resource_type': 'code', 'resource_name': code_name, 'mods': prev_mods + [source_mod_name], 'resolution': source_mod_name})
+                    self._safe_copy2(src_file, dst_file)
+                    code_name = os.path.splitext(file)[0]
+                    if code_name not in self.resource_modification_history:
+                        self.resource_modification_history[code_name] = []
+                    self.resource_modification_history[code_name].append({'type': 'code', 'mod': source_mod_name, 'action': 'merged', 'timestamp': time.time()})
+        for code_folder in ['AppendCode', 'PrependCode']:
+            self._merge_subdirectory(target_objects_dir, source_objects_dir, code_folder, 'code_injection', source_mod_name, track_history=False)
+        source_patches = os.path.join(source_objects_dir, 'CodePatches.json')
+        target_patches = os.path.join(target_objects_dir, 'CodePatches.json')
+        if os.path.exists(source_patches):
+            if os.path.exists(target_patches):
+                try:
+                    import json
+                    with open(target_patches, 'r', encoding='utf-8') as f_t:
+                        target_json = json.load(f_t)
+                    with open(source_patches, 'r', encoding='utf-8') as f_s:
+                        source_json = json.load(f_s)
+                    if isinstance(target_json, dict) and isinstance(source_json, dict):
+                        target_json.update(source_json)
+                        with open(target_patches, 'w', encoding='utf-8') as f_out:
+                            json.dump(target_json, f_out, indent=2)
+                except Exception as e:
+                    self.patching_logger.warning(f'Failed to merge CodePatches.json: {e}')
+                    self._safe_copy2(source_patches, target_patches)
             else:
-                shutil.copytree(source_code, target_code, dirs_exist_ok=True)
+                self._safe_copy2(source_patches, target_patches)
         source_asset_order = os.path.join(source_objects_dir, 'AssetOrder.txt')
         target_asset_order = os.path.join(target_objects_dir, 'AssetOrder.txt')
         if os.path.exists(source_asset_order):
             self._safe_copy2(source_asset_order, target_asset_order)
-        source_new_objects = os.path.join(source_objects_dir, 'NewObjects')
-        target_new_objects = os.path.join(target_objects_dir, 'NewObjects')
-        if os.path.exists(source_new_objects):
-            if os.path.exists(target_new_objects):
-                safe_rmtree(target_new_objects)
-            shutil.copytree(source_new_objects, target_new_objects, dirs_exist_ok=True)
 
     def _merge_two_data_win_files(self, base_file: str, other_file: str, mod_dir: Optional[str] = None) -> bool:
         if not self.temp_merge_dir:
@@ -1466,6 +1484,11 @@ class MultiModMerger(QObject):
                 export_temp = os.path.join(merge_temp_dir, 'other_export')
                 os.makedirs(export_temp, exist_ok=True)
                 returncode, stdout, stderr = self.utmt_wrapper.execute_scripts(other_file, ['SmartExport'], cwd=export_temp)
+                try:
+                    self._check_critical_script_errors(stderr, 'SmartExport', 'other files export')
+                except RuntimeError:
+                    self.patching_logger.error('Процесс слияния прерван из-за критической ошибки в SmartExport для других файлов')
+                    raise
                 if returncode == 0:
                     if mod_dir:
                         export_objects_dir = os.path.join(export_temp, 'Objects')
@@ -1766,6 +1789,28 @@ class MultiModMerger(QObject):
         comparison_file = 'vanilla'
         return (scripts, comparison_file)
 
+    def _check_critical_script_errors(self, stderr: str, script_name: str, context: str = '') -> None:
+        if not stderr:
+            return
+        stderr_upper = stderr.upper()
+        critical_patterns = ['COMPILATIONERROREXCEPTION', 'CS0103', 'CS8098', 'CS0234', 'CS0246', 'CS0006', 'CS0012']
+        for pattern in critical_patterns:
+            if pattern in stderr_upper:
+                error_msg = f'КРИТИЧЕСКАЯ ОШИБКА: Ошибка компиляции в скрипте {script_name}'
+                if context:
+                    error_msg += f' ({context})'
+                error_msg += f'\n\nДетали ошибки:\n{stderr[:1000]}'
+                self.patching_logger.error(error_msg)
+                raise RuntimeError(error_msg)
+        cs_error_pattern = 'CS\\d{4}'
+        if re.search(cs_error_pattern, stderr):
+            error_msg = f'КРИТИЧЕСКАЯ ОШИБКА: Ошибка компиляции C# в скрипте {script_name}'
+            if context:
+                error_msg += f' ({context})'
+            error_msg += f'\n\nДетали ошибки:\n{stderr[:1000]}'
+            self.patching_logger.error(error_msg)
+            raise RuntimeError(error_msg)
+
     def _export_mod_assets_optimized(self, mod_data_win: str, mod_number: int, scripts: List[str], comparison_file: Optional[str], vanilla_file: str, merge_root: str, cache_running_dir: str, chapter_str: str) -> bool:
         vanilla_backup = None
         try:
@@ -1805,6 +1850,12 @@ class MultiModMerger(QObject):
                 if self._cancelled:
                     return False
                 returncode, stdout, stderr = self.utmt_wrapper.execute_scripts(mod_data_win, scripts, output_path=mod_data_win, cwd=merge_root, env=env)
+                if 'SmartExport' in scripts:
+                    try:
+                        self._check_critical_script_errors(stderr, 'SmartExport', f'мод {mod_number}')
+                    except RuntimeError:
+                        self.patching_logger.error(f'Процесс слияния прерван из-за критической ошибки в SmartExport для мода {mod_number}')
+                        raise
                 if returncode != 0:
                     self.patching_logger.warning(f'Export scripts failed for mod {mod_number}: {stderr[:500]}')
                     return False

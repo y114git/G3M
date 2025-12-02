@@ -1,7 +1,4 @@
-
-
-
-
+#load "SharedPaths.csx"
 using System;
 using System.IO;
 using System.Text;
@@ -13,13 +10,13 @@ using UndertaleModLib;
 using UndertaleModLib.Models;
 using UndertaleModLib.Util;
 
+
 void PrintLine(string s) => Console.WriteLine(s);
 bool DEBUG = Environment.GetEnvironmentVariable("DELTAHUB_DEBUG") == "1";
 void DebugLog(string s) { if (DEBUG) PrintLine($"[DEBUG] {s}"); }
 
 string FixEventNameCasing(string codeName)
 {
-    
     var eventMappings = new Dictionary<string, string>
     {
         {"_create_", "_Create_"},
@@ -42,7 +39,6 @@ string FixEventNameCasing(string codeName)
     {
         if (result.Contains(mapping.Key, StringComparison.OrdinalIgnoreCase))
         {
-            
             int index = result.IndexOf(mapping.Key, StringComparison.OrdinalIgnoreCase);
             if (index >= 0)
             {
@@ -61,23 +57,17 @@ string SafeName(string name)
     return sb.ToString();
 }
 
-string ReadAllTextSafe(string path)
-{
-    try { return File.ReadAllText(path).Trim(); } catch { return null; }
-}
-
 object GetProp(object obj, string name)
     => obj?.GetType().GetProperty(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.IgnoreCase)?.GetValue(obj);
 
 EnsureDataLoaded();
+
 if (Data.IsYYC())
 {
     PrintLine("[SmartExport] YYC build detected – code export not available.");
     return;
 }
 
-
-#load "SharedPaths.csx"
 
 string deltahubRoot = null;
 try
@@ -95,18 +85,14 @@ catch
 
     var got = TryRoot(@Convert.ToString(Directory.GetParent(Convert.ToString(Directory.GetParent(Convert.ToString(Assembly.GetEntryAssembly().Location))))));
     if (got != null) { deltahubRoot = got; }
-    
     if (deltahubRoot == null) throw new ScriptException("DELTAHUB root not found (no /output ancestor).");
 }
-}
-
 
 string chapterNo = ReadAllTextSafe(Path.Combine(deltahubRoot, "output", "Cache", "running", "chapterNumber.txt"));
 string modNo     = ReadAllTextSafe(Path.Combine(deltahubRoot, "output", "Cache", "running", "modNumbersCache.txt"));
+
 if (string.IsNullOrWhiteSpace(chapterNo) || string.IsNullOrWhiteSpace(modNo))
-    throw new ScriptException("chapterNumber/modNumbersCache missing in /output/Cache/running/." + Convert.ToString(Path.Combine(deltahubRoot, "output", "Cache", "running", "modNumbersCache.txt")));
-
-
+    throw new ScriptException("chapterNumber/modNumbersCache missing in /output/Cache/running/.");
 
 string comparisonPath = null;
 string customVanillaPath = Environment.GetEnvironmentVariable("SMARTEXPORT_VANILLA_PATH");
