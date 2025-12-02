@@ -42,6 +42,7 @@ class AppState(QObject):
         self.config_path: str = ''
         self._all_mods: List[ModInfo] = []
         self.mods_loaded: bool = False
+        self.library_initialized: bool = False
         self.is_settings_view: bool = False
         self.is_changelog_view: bool = False
         self.is_help_view: bool = False

@@ -144,7 +144,6 @@ class LibraryDisplayController:
                 else:
                     self.update_for_chapter_mode(selected_id)
                     return
-            self.app.installed_mods_container.setUpdatesEnabled(False)
             clear_layout_widgets(self.app.installed_mods_layout, keep_last_n=1)
             self.cleanup_missing_mods(installed_mods)
             existing_mods = [mod_info for mod_info in installed_mods if self.mod_manager.check_mod_exists(mod_info)]
@@ -155,29 +154,50 @@ class LibraryDisplayController:
                 if sort_type == 0:
                     reverse = not self.app.library_sort_ascending
                     filtered_mods.sort(key=lambda mod: mod.get('name', '').lower(), reverse=reverse)
-            for idx, mod_info in enumerate(filtered_mods):
-                is_local = mod_info.get('is_local_mod', False)
-                is_available = mod_info.get('is_available_on_server', True)
-                has_update = False
-                if not is_local and is_available:
-                    public_mod = next((mod for mod in self.app_state.all_mods if mod.key == mod_info.get('key')), None)
-                    if public_mod:
-                        has_update = any((self.mod_manager.mod_has_files_for_chapter(public_mod, i) and self.mod_manager.get_mod_status(public_mod, i) == 'update' for i in range(5)))
-                mod_data = self.mod_manager.create_mod_object_from_info(mod_info, getattr(self.app_state, 'all_mods', None))
-                if mod_data:
-                    mod_widget = InstalledModWidget(mod_data, is_local, is_available, has_update, parent=self.app)
-                    mod_widget.clicked.connect(self.on_mod_clicked)
-                    mod_widget.remove_requested.connect(self.on_mod_remove)
-                    mod_widget.use_requested.connect(self.on_mod_use)
-                    self.app.installed_mods_layout.insertWidget(self.app.installed_mods_layout.count() - 1, mod_widget)
-            if self.app.installed_mods_layout.count() <= 1:
-                show_empty_message_in_layout(self.app.installed_mods_layout, tr('ui.empty'), self.app_state.local_config, font_size=18)
-            self.update_mod_widgets_slot_status()
-            self.app.game_launch.update_button_state()
-            self.app.installed_mods_container.setUpdatesEnabled(True)
+            from PyQt6.QtCore import QTimer
+            mods = list(filtered_mods)
+            batch_index = 0
+
+            def _build_next_batch(batch_size=25):
+                nonlocal batch_index, mods
+                try:
+                    start = batch_index
+                    end = min(start + batch_size, len(mods))
+                    for idx in range(start, end):
+                        mod_info = mods[idx]
+                        is_local = mod_info.get('is_local_mod', False)
+                        is_available = mod_info.get('is_available_on_server', True)
+                        has_update = False
+                        if not is_local and is_available and hasattr(self.app_state, 'all_mods') and self.app_state.all_mods:
+                            public_mod = next((mod for mod in self.app_state.all_mods if getattr(mod, 'key', None) == mod_info.get('key')), None)
+                            if public_mod:
+                                has_update = any((self.mod_manager.mod_has_files_for_chapter(public_mod, i) and self.mod_manager.get_mod_status(public_mod, i) == 'update' for i in range(5)))
+                        mod_data = self.mod_manager.create_mod_object_from_info(mod_info, getattr(self.app_state, 'all_mods', None))
+                        if mod_data:
+                            mod_widget = InstalledModWidget(mod_data, is_local, is_available, has_update, parent=self.app)
+                            mod_widget.clicked.connect(self.on_mod_clicked)
+                            mod_widget.remove_requested.connect(self.on_mod_remove)
+                            mod_widget.use_requested.connect(self.on_mod_use)
+                            self.app.installed_mods_layout.insertWidget(self.app.installed_mods_layout.count() - 1, mod_widget)
+                    batch_index = end
+                    if end >= len(mods):
+                        if self.app.installed_mods_layout.count() <= 1:
+                            show_empty_message_in_layout(self.app.installed_mods_layout, tr('ui.empty'), self.app_state.local_config, font_size=18)
+                        self.update_mod_widgets_slot_status()
+                        self.app.game_launch.update_button_state()
+                    else:
+                        QTimer.singleShot(0, _build_next_batch)
+                except Exception:
+                    try:
+                        if self.app.installed_mods_layout.count() <= 1:
+                            show_empty_message_in_layout(self.app.installed_mods_layout, tr('ui.empty'), self.app_state.local_config, font_size=18)
+                        self.update_mod_widgets_slot_status()
+                        self.app.game_launch.update_button_state()
+                    except Exception:
+                        pass
+            _build_next_batch()
         except Exception:
-            if hasattr(self.app, 'installed_mods_container'):
-                self.app.installed_mods_container.setUpdatesEnabled(True)
+            pass
 
     def cleanup_missing_mods(self, installed_mods):
         installed_mod_keys = {mod.get('mod_key') for mod in installed_mods if mod.get('mod_key')}

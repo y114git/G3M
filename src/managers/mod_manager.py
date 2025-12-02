@@ -48,6 +48,8 @@ class ModManager(QObject):
         self._mods_cache_valid = False
         self._scan_thread: Optional[ModScanThread] = None
         self._scan_in_progress = False
+        self._installed_mods_cache: List[dict] = []
+        self._installed_mods_cache_valid: bool = False
 
     def _scan_mods_directory(self, old_cache: Optional[Dict[str, ModFolderInfo]] = None) -> Dict[str, ModFolderInfo]:
         cache: Dict[str, ModFolderInfo] = {}
@@ -118,6 +120,7 @@ class ModManager(QObject):
         with self._cache_lock:
             self._mods_cache_valid = False
             self._mods_by_name.clear()
+            self._installed_mods_cache_valid = False
 
     def _on_scan_completed(self, cache_dict: Dict):
         with self._cache_lock:
@@ -1142,38 +1145,63 @@ class ModManager(QObject):
         installed_mods: List[dict] = []
         if not hasattr(self.app_state, 'mods_dir') or not os.path.exists(self.app_state.mods_dir):
             return installed_mods
+        cache_snapshot: Optional[Dict[str, ModFolderInfo]] = None
+        with self._cache_lock:
+            if self._mods_cache_valid and self._mods_cache:
+                cache_snapshot = dict(self._mods_cache)
         mods_metadata = self._read_metadata()
         metadata_updated = False
         found_mod_keys: Set[str] = set()
-        for folder_name in os.listdir(self.app_state.mods_dir):
-            folder_path = os.path.join(self.app_state.mods_dir, folder_name)
-            if not os.path.isdir(folder_path):
-                continue
-            from utils.file_utils import migrate_mod_config
-            migrate_mod_config(folder_path)
-            config_path = os.path.join(folder_path, MOD_CONFIG_FILENAME)
-            if os.path.exists(config_path):
+
+        def _append_from_config(config_data: dict, folder_name: str) -> None:
+            nonlocal metadata_updated
+            if not config_data:
+                return
+            mod_key = config_data.get('mod_key')
+            if not mod_key:
+                return
+            found_mod_keys.add(mod_key)
+            mod_meta = mods_metadata.get(mod_key)
+            if not mod_meta:
+                mods_metadata[mod_key] = {'installed_date': time.strftime('%Y-%m-%d %H:%M:%S'), 'is_available_on_server': not config_data.get('is_local_mod', False)}
+                metadata_updated = True
+                mod_meta = mods_metadata[mod_key]
+            cfg = dict(config_data)
+            cfg['installed_date'] = mod_meta.get('installed_date')
+            cfg['is_available_on_server'] = mod_meta.get('is_available_on_server', False)
+            cfg['is_local_mod'] = cfg.get('is_local_mod', False)
+            cfg['folder_name'] = folder_name
+            installed_mods.append(cfg)
+        if cache_snapshot is not None:
+            for mod_key, info in cache_snapshot.items():
                 try:
-                    with open(config_path, 'r', encoding='utf-8') as f:
-                        config_data = json.load(f)
-                    if config_data:
-                        mod_key = config_data.get('mod_key')
-                        if not mod_key:
-                            continue
-                        found_mod_keys.add(mod_key)
-                        mod_meta = mods_metadata.get(mod_key)
-                        if not mod_meta:
-                            mods_metadata[mod_key] = {'installed_date': time.strftime('%Y-%m-%d %H:%M:%S'), 'is_available_on_server': not config_data.get('is_local_mod', False)}
-                            metadata_updated = True
-                            mod_meta = mods_metadata[mod_key]
-                        config_data['installed_date'] = mod_meta.get('installed_date')
-                        config_data['is_available_on_server'] = mod_meta.get('is_available_on_server', False)
-                        config_data['is_local_mod'] = config_data.get('is_local_mod', False)
-                        config_data['folder_name'] = folder_name
-                        installed_mods.append(config_data)
+                    if isinstance(info, ModFolderInfo):
+                        config_data = info.config_data or {}
+                        folder_name = info.folder_name
+                    elif isinstance(info, dict):
+                        config_data = info.get('config_data', {}) or {}
+                        folder_name = info.get('folder_name', '')
+                    else:
+                        continue
+                    _append_from_config(config_data, folder_name)
                 except Exception as e:
-                    logging.warning(f'Failed to read config {config_path}: {e}')
+                    logging.warning(f'Failed to build installed mod from cache for key {mod_key}: {e}', exc_info=True)
+        else:
+            for folder_name in os.listdir(self.app_state.mods_dir):
+                folder_path = os.path.join(self.app_state.mods_dir, folder_name)
+                if not os.path.isdir(folder_path):
                     continue
+                from utils.file_utils import migrate_mod_config
+                migrate_mod_config(folder_path)
+                config_path = os.path.join(folder_path, MOD_CONFIG_FILENAME)
+                if os.path.exists(config_path):
+                    try:
+                        with open(config_path, 'r', encoding='utf-8') as f:
+                            config_data = json.load(f)
+                        _append_from_config(config_data, folder_name)
+                    except Exception as e:
+                        logging.warning(f'Failed to read config {config_path}: {e}')
+                        continue
         orphaned_keys = set(mods_metadata.keys()) - found_mod_keys
         if orphaned_keys:
             for key in list(orphaned_keys):
@@ -1181,6 +1209,9 @@ class ModManager(QObject):
             metadata_updated = True
         if metadata_updated:
             self._write_metadata(mods_metadata)
+        with self._cache_lock:
+            self._installed_mods_cache = list(installed_mods)
+            self._installed_mods_cache_valid = True
         return installed_mods
 
 

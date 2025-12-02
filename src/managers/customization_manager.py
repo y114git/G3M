@@ -194,19 +194,25 @@ class CustomizationManager(QObject):
             if layout:
                 for i in range(layout.count() - 1):
                     item = layout.itemAt(i)
-                    if item and item.widget():
-                        widget = item.widget()
-                        if isinstance(widget, ModPlaqueWidget):
-                            widget._update_style()
+                    if not item:
+                        continue
+                    widget = item.widget()
+                    if not widget or not widget.isVisible():
+                        continue
+                    if isinstance(widget, ModPlaqueWidget):
+                        widget._update_style()
         if installed_mods_widget:
             layout = installed_mods_widget.layout()
             if layout:
                 for i in range(layout.count() - 1):
                     item = layout.itemAt(i)
-                    if item and item.widget():
-                        widget = item.widget()
-                        if isinstance(widget, InstalledModWidget):
-                            widget._update_style()
+                    if not item:
+                        continue
+                    widget = item.widget()
+                    if not widget or not widget.isVisible():
+                        continue
+                    if isinstance(widget, InstalledModWidget):
+                        widget._update_style()
 
     def load_launcher_icon(self, icon_label: QLabel):
         try:

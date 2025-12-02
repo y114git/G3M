@@ -64,29 +64,6 @@ class ThemeController:
         style_sheet = build_stylesheet(frame_bg_color=frame_bg_color, button_color=button_color, border_color=border_color, button_hover_color=button_hover_color, main_text_color=main_text_color, font_family_main=font_family_main, font_size_main=font_size_main, font_size_small=font_size_small, checkbox_checked_color=checkbox_checked_color, scroll_handle_color=scroll_handle_color)
         app_inst = QApplication.instance()
         (app_inst if isinstance(app_inst, QApplication) else self.app).setStyleSheet(style_sheet)
-        from PyQt6.QtWidgets import QWidget
-        from PyQt6.QtCore import QTimer
-        visible_widgets = []
-        all_widgets = []
-        for widget in self.app.findChildren(QWidget):
-            all_widgets.append(widget)
-            if widget.isVisible():
-                visible_widgets.append(widget)
-        for widget in visible_widgets:
-            style = widget.style()
-            if style:
-                style.unpolish(widget)
-                style.polish(widget)
-        if len(all_widgets) > len(visible_widgets):
-
-            def update_hidden_widgets():
-                for widget in all_widgets:
-                    if not widget.isVisible():
-                        style = widget.style()
-                        if style:
-                            style.unpolish(widget)
-                            style.polish(widget)
-            QTimer.singleShot(50, update_hidden_widgets)
         mod_list = getattr(self.app, 'mod_list_widget', None)
         installed_mods = getattr(self.app, 'installed_mods_widget', None)
         self.customization_manager.update_mod_plaques_styles(mod_list, installed_mods)

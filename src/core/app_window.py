@@ -1057,6 +1057,7 @@ class AppWindow(QWidget):
             QTimer.singleShot(500, self.slot_manager.load_used_mods_state)
             if not saved_chapter_mode:
                 self.library_display.update_display()
+                self.app_state.library_initialized = True
             elif saved_chapter_mode and hasattr(self, '_show_chapter_mode_instruction'):
                 QTimer.singleShot(800, self._show_chapter_mode_instruction)
         except Exception as e:
@@ -1710,8 +1711,10 @@ class AppWindow(QWidget):
             self.previous_tab_index = index
             return
         if index == 1:
-            from PyQt6.QtCore import QTimer
-            QTimer.singleShot(0, self.library_display.update_display)
+            if not getattr(self.app_state, 'library_initialized', False):
+                from PyQt6.QtCore import QTimer
+                QTimer.singleShot(0, self.library_display.update_display)
+                self.app_state.library_initialized = True
             self.previous_tab_index = index
         else:
             self.previous_tab_index = index

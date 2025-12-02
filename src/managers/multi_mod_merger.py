@@ -280,7 +280,7 @@ class MultiModMerger(QObject):
             priority = len(mods_list) - idx
             if not hasattr(mod_data, 'priority') or getattr(mod_data, 'priority', None) is None:
                 setattr(mod_data, 'priority', priority)
-        mods_to_apply = list(reversed(mods_list))
+        mods_to_apply = list(mods_list)
         mods_count = len(mods_to_apply)
         self.patching_logger.info(f"Processing {mods_count} mod(s): {[getattr(m, 'name', 'Unknown') for m in mods_to_apply]}")
         highest_priority_mod_name = getattr(mods_list[0], 'name', 'Unknown') if mods_list else 'None'
@@ -373,7 +373,7 @@ class MultiModMerger(QObject):
             if self._cancelled:
                 return False
             mod_name = getattr(mod_data, 'name', 'Unknown')
-            mod_number = mods_count - idx
+            mod_number = idx + 1
             mod_progress_start = progress_base + int(idx / mods_count * xdelta_progress) if mods_count > 0 else progress_base
             mod_progress_end = progress_base + int((idx + 1) / mods_count * xdelta_progress) if mods_count > 0 else progress_base + xdelta_progress
             mod_progress_range = mod_progress_end - mod_progress_start
@@ -392,16 +392,7 @@ class MultiModMerger(QObject):
             os.makedirs(mod_dir, exist_ok=True)
             original_filename = os.path.basename(original_data_win)
             mod_data_win = os.path.join(mod_dir, original_filename)
-            if mod_number > 1:
-                previous_mod_number = mod_number - 1
-                previous_mod_dir = os.path.join(xdelta_combiner_dir, str(previous_mod_number))
-                previous_mod_data_win = os.path.join(previous_mod_dir, original_filename)
-                if os.path.exists(previous_mod_data_win):
-                    shutil.copy2(previous_mod_data_win, mod_data_win)
-                else:
-                    shutil.copy2(original_data_win, mod_data_win)
-            else:
-                shutil.copy2(original_data_win, mod_data_win)
+            shutil.copy2(original_data_win, mod_data_win)
             ready_data_win_files = self._find_ready_data_win_files(mod_source_dir)
             data_patches = self._find_data_patches(mod_source_dir)
             csx_scripts = self._find_csx_scripts(mod_source_dir)
@@ -455,14 +446,14 @@ class MultiModMerger(QObject):
             if mod_number not in mod_patched_files:
                 mod_patched_files[mod_number] = mod_data_win
             self.progress_update.emit(min(mod_progress_end, 95), f'Completed {mod_name}')
-        mods_to_export = [m for i, m in enumerate(mods_to_apply) if mods_count - i not in mods_already_exported]
+        mods_to_export = [m for i, m in enumerate(mods_to_apply) if i + 1 not in mods_already_exported]
         highest_priority_mod_exported_files = set()
         for idx, mod_data in enumerate(mods_to_export):
             if self._cancelled:
                 return False
             mod_name = getattr(mod_data, 'name', 'Unknown')
             original_idx = mods_to_apply.index(mod_data)
-            mod_number = mods_count - original_idx
+            mod_number = original_idx + 1
             export_step = idx / len(mods_to_export) * export_progress if mods_to_export else 0
             current_progress = progress_base + int(xdelta_progress + export_step)
             try:
@@ -563,10 +554,10 @@ class MultiModMerger(QObject):
         highest_priority_value = -1
         highest_priority_mod_number = None
         for idx, mod_data in enumerate(mods_to_apply):
-            mod_number = mods_count - idx
+            mod_number = idx + 1
             mod_priority = getattr(mod_data, 'priority', None)
             if mod_priority is None:
-                mod_priority = mods_count - idx
+                mod_priority = len(mods_to_apply) - idx
             if mod_priority > highest_priority_value:
                 highest_priority_value = mod_priority
                 highest_priority_mod = mod_data
@@ -594,10 +585,10 @@ class MultiModMerger(QObject):
         objects_dirs_to_import = []
         for idx, mod_data in enumerate(mods_to_apply):
             mod_name = getattr(mod_data, 'name', 'Unknown')
-            mod_number = mods_count - idx
+            mod_number = idx + 1
             mod_priority = getattr(mod_data, 'priority', None)
             if mod_priority is None:
-                mod_priority = mod_number
+                mod_priority = len(mods_to_apply) - idx
             mod_dir = os.path.join(xdelta_combiner_dir, str(mod_number))
             objects_dir = os.path.join(mod_dir, 'Objects')
             if os.path.exists(objects_dir):
@@ -1132,7 +1123,7 @@ class MultiModMerger(QObject):
                                 mod_number = int(mod_number_str)
                                 if mods_to_apply and mods_count > 0:
                                     for mod_idx, mod_data in enumerate(mods_to_apply):
-                                        actual_mod_number = mods_count - mod_idx
+                                        actual_mod_number = mod_idx + 1
                                         if actual_mod_number == mod_number:
                                             mod_name_for_tracking = getattr(mod_data, 'name', f'mod_{mod_number}')
                                             break
