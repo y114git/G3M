@@ -4,6 +4,7 @@ from config.constants import THEMES, UI_COLORS
 from utils.path_utils import resource_path
 from workers.background_workers import BgLoader
 from ui.styles import build_stylesheet
+from utils.ui_utils import DebounceTimer
 
 
 class ThemeController:
@@ -14,6 +15,7 @@ class ThemeController:
         self.settings_manager = settings_manager
         self.customization_manager = customization_manager
         self.app = app_window
+        self._debounce_timer = DebounceTimer(delay_ms=400)
 
     def apply_theme(self):
         theme = THEMES['default']
@@ -116,7 +118,7 @@ class ThemeController:
 
     def on_custom_style_edited(self):
         self.settings_manager.on_custom_style_edited(self.app.color_widgets)
-        self.apply_theme()
+        self._debounce_timer.call(self.apply_theme)
 
     def update_dynamic_elements(self):
         if hasattr(self.app, 'sort_combo') and hasattr(self.app, 'sort_order_btn'):
