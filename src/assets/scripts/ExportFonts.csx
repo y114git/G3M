@@ -1,3 +1,4 @@
+#load "SharedPaths.csx"
 
 using System;
 using System.IO;
@@ -21,11 +22,6 @@ string SafeName(string name)
     return sb.ToString();
 }
 
-string ReadAllTextSafe(string path)
-{
-    try { return File.ReadAllText(path).Trim(); } catch { return null; }
-}
-
 EnsureDataLoaded();
 
 if (Data.IsYYC())
@@ -33,8 +29,6 @@ if (Data.IsYYC())
     PrintLine("[ExportFonts] YYC build detected – font export not available.");
     return;
 }
-
-#load "SharedPaths.csx"
 
 string deltahubRoot = FindDeltahubRoot();
 string chapterNo = GetChapterNumber(deltahubRoot);

@@ -1,4 +1,6 @@
-﻿using System.Text;
+﻿#load "SharedPaths.csx"
+
+using System.Text;
 using System;
 using System.IO;
 using System.Threading;
@@ -14,9 +16,6 @@ if (Data.IsYYC())
     ScriptError("The opened game uses YYC: no code is available.");
     return;
 }
-
-
-#load "SharedPaths.csx"
 
 string deltahubRoot = null;
 try
@@ -38,10 +37,18 @@ catch
     
     if (deltahubRoot == null)
     {
-        var assemblyRoot = Directory.GetParent(Directory.GetParent(Assembly.GetEntryAssembly().Location));
-        if (assemblyRoot != null && Directory.Exists(Path.Combine(assemblyRoot.FullName, "output")))
+        var entryAssembly = Assembly.GetEntryAssembly();
+        if (entryAssembly != null && !string.IsNullOrEmpty(entryAssembly.Location))
         {
-            deltahubRoot = assemblyRoot.FullName;
+            var firstParent = Directory.GetParent(entryAssembly.Location);
+            if (firstParent != null)
+            {
+                var assemblyRoot = Directory.GetParent(firstParent.FullName);
+                if (assemblyRoot != null && Directory.Exists(Path.Combine(assemblyRoot.FullName, "output")))
+                {
+                    deltahubRoot = assemblyRoot.FullName;
+                }
+            }
         }
     }
     
@@ -60,22 +67,70 @@ if (string.IsNullOrEmpty(codeFolder) || !Directory.Exists(codeFolder))
 GlobalDecompileContext globalDecompileContext = new(Data);
 Underanalyzer.Decompiler.IDecompileSettings decompilerSettings = Data.ToolInfo.DecompilerSettings;
 
+
+UndertaleData vanillaData = LoadVanillaData();
+Dictionary<string, UndertaleCode> vanillaCodes = new Dictionary<string, UndertaleCode>();
+if (vanillaData != null)
+{
+    foreach(var c in vanillaData.Code)
+        if (c.Name?.Content != null) vanillaCodes[c.Name.Content] = c;
+}
+
 List<UndertaleCode> toDump = Data.Code.Where(c => c.ParentEntry is null).ToList();
 
-SetProgressBar(null, "Code Entries", 0, toDump.Count);
+
+List<UndertaleCode> reallyChanged = new List<UndertaleCode>();
+
+foreach (var code in toDump)
+{
+    string name = code.Name.Content;
+    if (vanillaData == null || !vanillaCodes.ContainsKey(name))
+    {
+        reallyChanged.Add(code); 
+        LogDiff("Code", name, "New entry");
+        continue;
+    }
+
+    var vCode = vanillaCodes[name];
+    
+    
+    
+    if (code.Instructions.Count != vCode.Instructions.Count)
+    {
+        reallyChanged.Add(code);
+        LogDiff("Code", name, $"Instruction count diff ({code.Instructions.Count} vs {vCode.Instructions.Count})");
+        continue;
+    }
+
+    bool diff = false;
+    for (int i = 0; i < code.Instructions.Count; i++)
+    {
+        
+        if (code.Instructions[i].ToString() != vCode.Instructions[i].ToString()) 
+        {
+            diff = true; 
+            break; 
+        }
+    }
+
+    if (diff) { reallyChanged.Add(code); LogDiff("Code", name, "Bytecode mismatch"); }
+    else LogSkip("Code", name);
+}
+
+SetProgressBar(null, "Exporting Changed Code", 0, reallyChanged.Count);
 StartProgressBarUpdater();
 
-await DumpCode();
+await DumpCode(reallyChanged);
 
 await StopProgressBarUpdater();
 HideProgressBar();
 
-async Task DumpCode()
+async Task DumpCode(List<UndertaleCode> list)
 {
-    await Task.Run(() => Parallel.ForEach(toDump, DumpCode));
+    await Task.Run(() => Parallel.ForEach(list, DumpCodeItem));
 }
 
-void DumpCode(UndertaleCode code)
+void DumpCodeItem(UndertaleCode code)
 {
     if (code is not null)
     {

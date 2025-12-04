@@ -1,5 +1,4 @@
-
-
+#load "SharedPaths.csx"
 
 using System;
 using System.IO;
@@ -16,9 +15,6 @@ if (Data.IsVersionAtLeast(2024, 11))
 {
     ScriptWarning("This script may act erroneously on GameMaker version 2024.11 and later.");
 }
-
-
-#load "SharedPaths.csx"
 
 string deltahubRoot = null;
 try

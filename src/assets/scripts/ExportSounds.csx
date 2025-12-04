@@ -1,3 +1,4 @@
+#load "SharedPaths.csx"
 
 using System;
 using System.IO;
@@ -20,14 +21,7 @@ string SafeName(string name)
     return sb.ToString();
 }
 
-string ReadAllTextSafe(string path)
-{
-    try { return File.ReadAllText(path).Trim(); } catch { return null; }
-}
-
 EnsureDataLoaded();
-
-#load "SharedPaths.csx"
 
 string deltahubRoot = FindDeltahubRoot();
 string chapterNo = GetChapterNumber(deltahubRoot);

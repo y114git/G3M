@@ -1,3 +1,5 @@
+#load "SharedPaths.csx"
+
 using System;
 using System.IO;
 using System.Collections;
@@ -11,9 +13,6 @@ using UndertaleModLib.Util;
 using UndertaleModCli;
 
 EnsureDataLoaded();
-
-
-#load "SharedPaths.csx"
 
 string deltahubRoot = null;
 try
@@ -35,10 +34,18 @@ catch
     
     if (deltahubRoot == null)
     {
-        var assemblyRoot = Directory.GetParent(Directory.GetParent(Assembly.GetEntryAssembly().Location));
-        if (assemblyRoot != null && Directory.Exists(Path.Combine(assemblyRoot.FullName, "output")))
+        var entryAssembly = Assembly.GetEntryAssembly();
+        if (entryAssembly != null && !string.IsNullOrEmpty(entryAssembly.Location))
         {
-            deltahubRoot = assemblyRoot.FullName;
+            var firstParent = Directory.GetParent(entryAssembly.Location);
+            if (firstParent != null)
+            {
+                var assemblyRoot = Directory.GetParent(firstParent.FullName);
+                if (assemblyRoot != null && Directory.Exists(Path.Combine(assemblyRoot.FullName, "output")))
+                {
+                    deltahubRoot = assemblyRoot.FullName;
+                }
+            }
         }
     }
     
@@ -62,14 +69,94 @@ Directory.CreateDirectory(fntFolder);
 string bgrFolder = Path.Combine(@texFolder, "Backgrounds");
 Directory.CreateDirectory(bgrFolder);
 
-SetProgressBar(null, "Textures", 0, Data.TexturePageItems.Count);
+
+UndertaleData vanillaData = LoadVanillaData();
+Dictionary<string, UndertaleSprite> vanillaSprites = new Dictionary<string, UndertaleSprite>();
+Dictionary<string, UndertaleBackground> vanillaBackgrounds = new Dictionary<string, UndertaleBackground>();
+Dictionary<string, UndertaleFont> vanillaFonts = new Dictionary<string, UndertaleFont>();
+
+if (vanillaData != null)
+{
+    foreach(var s in vanillaData.Sprites) if (s?.Name?.Content != null) vanillaSprites[s.Name.Content] = s;
+    foreach(var b in vanillaData.Backgrounds) if (b?.Name?.Content != null) vanillaBackgrounds[b.Name.Content] = b;
+    foreach(var f in vanillaData.Fonts) if (f?.Name?.Content != null) vanillaFonts[f.Name.Content] = f;
+}
+
+bool IsTextureItemChanged(UndertaleTexturePageItem current, UndertaleTexturePageItem vanilla)
+{
+    if (current == null && vanilla == null) return false;
+    if (current == null || vanilla == null) return true;
+    
+    
+    if (current.SourceX != vanilla.SourceX || current.SourceY != vanilla.SourceY ||
+        current.SourceWidth != vanilla.SourceWidth || current.SourceHeight != vanilla.SourceHeight)
+        return true;
+        
+    
+    
+    
+    
+    
+    if (current.TexturePage?.Name?.Content != vanilla.TexturePage?.Name?.Content)
+        return true;
+
+    return false;
+}
+
+
+List<UndertaleSprite> changedSprites = new List<UndertaleSprite>();
+foreach(var spr in Data.Sprites)
+{
+    string name = spr.Name.Content;
+    if (vanillaData == null || !vanillaSprites.ContainsKey(name)) { changedSprites.Add(spr); LogDiff("Sprite", name, "New"); continue; }
+    
+    var vSpr = vanillaSprites[name];
+    if (spr.Width != vSpr.Width || spr.Height != vSpr.Height || 
+        spr.MarginLeft != vSpr.MarginLeft || spr.MarginRight != vSpr.MarginRight ||
+        spr.MarginTop != vSpr.MarginTop || spr.MarginBottom != vSpr.MarginBottom ||
+        spr.OriginX != vSpr.OriginX || spr.OriginY != vSpr.OriginY ||
+        spr.Textures.Count != vSpr.Textures.Count)
+    {
+        changedSprites.Add(spr); LogDiff("Sprite", name, "Props mismatch"); continue;
+    }
+
+    bool texChanged = false;
+    for(int i=0; i<spr.Textures.Count; i++)
+    {
+        if (IsTextureItemChanged(spr.Textures[i].Texture, vSpr.Textures[i].Texture)) { texChanged = true; break; }
+    }
+    if (texChanged) { changedSprites.Add(spr); LogDiff("Sprite", name, "Texture changed"); }
+    else LogSkip("Sprite", name);
+}
+
+
+List<UndertaleBackground> changedBackgrounds = new List<UndertaleBackground>();
+foreach(var bg in Data.Backgrounds)
+{
+    string name = bg.Name.Content;
+    if (vanillaData == null || !vanillaBackgrounds.ContainsKey(name)) { changedBackgrounds.Add(bg); LogDiff("BG", name, "New"); continue; }
+    
+    var vBg = vanillaBackgrounds[name];
+    if (bg.Transparent != vBg.Transparent || bg.Preload != vBg.Preload ||
+        IsTextureItemChanged(bg.Texture, vBg.Texture))
+    {
+        changedBackgrounds.Add(bg); LogDiff("BG", name, "Changed");
+    }
+    else LogSkip("BG", name);
+}
+
+
+
+
+
+SetProgressBar(null, "Exporting Changed Textures", 0, changedSprites.Count + changedBackgrounds.Count);
 StartProgressBarUpdater();
 
 TextureWorker worker = null;
 using (worker = new())
 {
     await DumpSprites();
-    await DumpFonts();
+    
     await DumpBackgrounds();
 }
 
@@ -78,17 +165,12 @@ HideProgressBar();
 
 async Task DumpSprites()
 {
-    await Task.Run(() => Parallel.ForEach(Data.Sprites, DumpSprite));
+    await Task.Run(() => Parallel.ForEach(changedSprites, DumpSprite));
 }
 
 async Task DumpBackgrounds()
 {
-    await Task.Run(() => Parallel.ForEach(Data.Backgrounds, DumpBackground));
-}
-
-async Task DumpFonts()
-{
-    await Task.Run(() => Parallel.ForEach(Data.Fonts, DumpFont));
+    await Task.Run(() => Parallel.ForEach(changedBackgrounds, DumpBackground));
 }
 
 void DumpSprite(UndertaleSprite sprite)

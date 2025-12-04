@@ -1,5 +1,4 @@
-
-
+#load "SharedPaths.csx"
 
 using System;
 using System.IO;
@@ -10,8 +9,6 @@ using System.Text;
 using System.Text.RegularExpressions;
 using UndertaleModLib.Util;
 using System.Reflection;
-
-#load "SharedPaths.csx"
 
 EnsureDataLoaded();
 

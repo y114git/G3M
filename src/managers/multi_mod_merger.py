@@ -413,7 +413,7 @@ class MultiModMerger(QObject):
                         self.patching_logger.warning(f'Failed to apply file overrides from {mod_name} after ready data.win merge')
                 if not data_patches and (not csx_scripts):
                     mods_already_exported.add(mod_number)
-                    self.patching_logger.info(f'Mod {mod_name} (number {mod_number}) has only ready data.win, will skip SmartExport')
+                    self.patching_logger.info(f'Mod {mod_name} (number {mod_number}) has only ready data.win, will skip export scripts')
                 mod_patched_files[mod_number] = mod_data_win
             if data_patches:
                 self.patching_logger.info(f'Found {len(data_patches)} data patch(es) from {mod_name} (mod {mod_number}), applying to original')
@@ -677,27 +677,26 @@ class MultiModMerger(QObject):
                 mod_1_data_win_dir = os.path.dirname(mod_1_patched_backup)
                 if self._cancelled:
                     return False
-                export_script = self.utmt_wrapper.get_script_path('SmartExport')
+                export_scripts = []
+                if self.utmt_wrapper.get_script_path('ExportAllCode'):
+                    export_scripts.append('ExportAllCode')
+                if self.utmt_wrapper.get_script_path('ExportAllTexturesGrouped'):
+                    export_scripts.append('ExportAllTexturesGrouped')
+                if self.utmt_wrapper.get_script_path('ExportTilesets'):
+                    export_scripts.append('ExportTilesets')
                 returncode = 1
                 stderr = ''
-                if export_script:
-                    self.patching_logger.debug('Exporting modified GML code from highest priority mod using SmartExport')
-                    env = os.environ.copy()
-                    env['SMARTEXPORT_VANILLA_PATH'] = original_data_win
-                    returncode, stdout, stderr = self.utmt_wrapper.execute_scripts(mod_1_patched_backup, ['SmartExport'], cwd=mod_1_data_win_dir, env=env)
+                if export_scripts:
+                    self.patching_logger.debug(f'Exporting resources from highest priority mod using {export_scripts}')
+                    returncode, stdout, stderr = self.utmt_wrapper.execute_scripts(mod_1_patched_backup, export_scripts, cwd=mod_1_data_win_dir)
                     try:
-                        self._check_critical_script_errors(stderr, 'SmartExport', 'highest priority mod')
+                        for script in export_scripts:
+                            self._check_critical_script_errors(stderr, script, 'highest priority mod')
                     except RuntimeError:
-                        self.patching_logger.error('Процесс слияния прерван из-за критической ошибки в SmartExport для highest priority mod')
+                        self.patching_logger.error('Merge process aborted due to critical error in export scripts for highest priority mod')
                         raise
                 else:
-                    export_script = self.utmt_wrapper.get_script_path('ExportAllCode')
-                    if export_script:
-                        self.patching_logger.warning('SmartExport not found, falling back to ExportAllCode (may overwrite unmodified code)')
-                        self.patching_logger.debug('Exporting all GML code from highest priority mod using ExportAllCode')
-                        returncode, stdout, stderr = self.utmt_wrapper.execute_scripts(mod_1_patched_backup, ['ExportAllCode'], cwd=mod_1_data_win_dir)
-                    else:
-                        self.patching_logger.warning('SmartExport and ExportAllCode scripts not found, cannot export from highest priority mod')
+                    self.patching_logger.warning('Export scripts not found, cannot export from highest priority mod')
                 if returncode == 0:
                     mod_1_exported_objects = os.path.join(mod_1_data_win_dir, 'Objects')
                     if os.path.exists(mod_1_exported_objects):
@@ -763,9 +762,9 @@ class MultiModMerger(QObject):
                         else:
                             self.patching_logger.debug('No CodeEntries from highest priority mod to import - all resources already merged from main export')
                     else:
-                        self.patching_logger.debug('Objects directory not created by SmartExport/ExportAllCode for highest priority mod')
+                        self.patching_logger.debug('Objects directory not created by export scripts for highest priority mod')
                 else:
-                    self.patching_logger.warning(f'SmartExport/ExportAllCode failed for highest priority mod: {stderr[:300]}')
+                    self.patching_logger.warning(f'Export scripts failed for highest priority mod: {stderr[:300]}')
                 if not safe_rmtree(mod_1_export_dir):
                     self.patching_logger.warning(f'Failed to clean up temporary export directory: {mod_1_export_dir}')
                 if mod_1_patched_backup and os.path.exists(mod_1_patched_backup):
@@ -1479,15 +1478,22 @@ class MultiModMerger(QObject):
             os.makedirs(merge_temp_dir, exist_ok=True)
             if self._cancelled:
                 return False
-            export_script = self.utmt_wrapper.get_script_path('SmartExport')
-            if export_script:
+            export_scripts = []
+            if self.utmt_wrapper.get_script_path('ExportAllCode'):
+                export_scripts.append('ExportAllCode')
+            if self.utmt_wrapper.get_script_path('ExportAllTexturesGrouped'):
+                export_scripts.append('ExportAllTexturesGrouped')
+            if self.utmt_wrapper.get_script_path('ExportTilesets'):
+                export_scripts.append('ExportTilesets')
+            if export_scripts:
                 export_temp = os.path.join(merge_temp_dir, 'other_export')
                 os.makedirs(export_temp, exist_ok=True)
-                returncode, stdout, stderr = self.utmt_wrapper.execute_scripts(other_file, ['SmartExport'], cwd=export_temp)
+                returncode, stdout, stderr = self.utmt_wrapper.execute_scripts(other_file, export_scripts, cwd=export_temp)
                 try:
-                    self._check_critical_script_errors(stderr, 'SmartExport', 'other files export')
+                    for script in export_scripts:
+                        self._check_critical_script_errors(stderr, script, 'other files export')
                 except RuntimeError:
-                    self.patching_logger.error('Процесс слияния прерван из-за критической ошибки в SmartExport для других файлов')
+                    self.patching_logger.error('Merge process aborted due to critical error in export scripts for other files')
                     raise
                 if returncode == 0:
                     if mod_dir:
@@ -1758,7 +1764,7 @@ class MultiModMerger(QObject):
             if os.path.exists(data_win_path):
                 asset_types['has_code'] = True
                 asset_types['has_textures'] = True
-                self.patching_logger.debug(f'Objects directory not found for {mod_dir}, assuming mod has code and textures (will be verified by SmartExport)')
+                self.patching_logger.debug(f'Objects directory not found for {mod_dir}, assuming mod has code and textures (will be verified by export scripts)')
         return asset_types
 
     def _select_export_strategy(self, mod_type: Dict[str, bool], mod_asset_types: Dict[str, bool], mod_number: int, has_previous_mod: bool) -> tuple[List[str], Optional[str]]:
@@ -1767,8 +1773,10 @@ class MultiModMerger(QObject):
         if mod_type.get('has_ready_data_win') and (not mod_type.get('has_xdelta_patch')) and (not mod_type.get('has_csx_scripts')):
             return ([], None)
         if mod_type.get('has_csx_scripts') and (not mod_type.get('has_xdelta_patch')):
-            scripts.append('SmartExport')
-            comparison_file = 'vanilla'
+            scripts.append('ExportAllCode')
+            scripts.append('ExportAllTexturesGrouped')
+            scripts.append('ExportTilesets')
+            comparison_file = None
             return (scripts, comparison_file)
         if mod_type.get('has_xdelta_patch'):
             has_code = mod_asset_types.get('has_code', False)
@@ -1779,14 +1787,19 @@ class MultiModMerger(QObject):
                 return (scripts, comparison_file)
             if has_code:
                 scripts.append('ExportAllCode')
-                scripts.append('SmartExport')
-                comparison_file = 'vanilla'
+                scripts.append('ExportAllTexturesGrouped')
+                scripts.append('ExportTilesets')
+                comparison_file = None
                 return (scripts, comparison_file)
-            scripts.append('SmartExport')
-            comparison_file = 'vanilla'
+            scripts.append('ExportAllCode')
+            scripts.append('ExportAllTexturesGrouped')
+            scripts.append('ExportTilesets')
+            comparison_file = None
             return (scripts, comparison_file)
-        scripts.append('SmartExport')
-        comparison_file = 'vanilla'
+        scripts.append('ExportAllCode')
+        scripts.append('ExportAllTexturesGrouped')
+        scripts.append('ExportTilesets')
+        comparison_file = None
         return (scripts, comparison_file)
 
     def _check_critical_script_errors(self, stderr: str, script_name: str, context: str = '') -> None:
@@ -1796,18 +1809,18 @@ class MultiModMerger(QObject):
         critical_patterns = ['COMPILATIONERROREXCEPTION', 'CS0103', 'CS8098', 'CS0234', 'CS0246', 'CS0006', 'CS0012']
         for pattern in critical_patterns:
             if pattern in stderr_upper:
-                error_msg = f'КРИТИЧЕСКАЯ ОШИБКА: Ошибка компиляции в скрипте {script_name}'
+                error_msg = f'CRITICAL ERROR: Compilation error in script {script_name}'
                 if context:
                     error_msg += f' ({context})'
-                error_msg += f'\n\nДетали ошибки:\n{stderr[:1000]}'
+                error_msg += f'\n\nError details:\n{stderr[:1000]}'
                 self.patching_logger.error(error_msg)
                 raise RuntimeError(error_msg)
         cs_error_pattern = 'CS\\d{4}'
         if re.search(cs_error_pattern, stderr):
-            error_msg = f'КРИТИЧЕСКАЯ ОШИБКА: Ошибка компиляции C# в скрипте {script_name}'
+            error_msg = f'CRITICAL ERROR: C# compilation error in script {script_name}'
             if context:
                 error_msg += f' ({context})'
-            error_msg += f'\n\nДетали ошибки:\n{stderr[:1000]}'
+            error_msg += f'\n\nError details:\n{stderr[:1000]}'
             self.patching_logger.error(error_msg)
             raise RuntimeError(error_msg)
 
@@ -1826,55 +1839,28 @@ class MultiModMerger(QObject):
                 f.write(chapter_str)
             with open(mod_file, 'w', encoding='utf-8') as f:
                 f.write(str(mod_number))
-            env = None
-            if comparison_file and comparison_file == 'vanilla':
-                env = os.environ.copy()
-                env['SMARTEXPORT_VANILLA_PATH'] = vanilla_file
-                self.patching_logger.debug(f'Setting SMARTEXPORT_VANILLA_PATH={vanilla_file} for mod {mod_number}')
-            elif comparison_file and comparison_file == 'previous':
-                mod_dir_path = os.path.dirname(mod_data_win)
-                xdelta_combiner_dir = os.path.dirname(mod_dir_path)
-                previous_mod_number = mod_number - 1
-                if previous_mod_number >= 1 and os.path.exists(vanilla_file):
-                    previous_mod_dir = os.path.join(xdelta_combiner_dir, str(previous_mod_number))
-                    vanilla_filename = os.path.basename(vanilla_file)
-                    previous_mod_data_win = os.path.join(previous_mod_dir, vanilla_filename)
-                    if os.path.exists(previous_mod_data_win):
-                        vanilla_backup = vanilla_file + '.backup'
-                        if os.path.exists(vanilla_backup):
-                            safe_remove(vanilla_backup)
-                        shutil.copy2(vanilla_file, vanilla_backup)
-                        shutil.copy2(previous_mod_data_win, vanilla_file)
-                        self.patching_logger.info(f'Using previous mod {previous_mod_number} for incremental comparison (mod {mod_number})')
             if scripts:
                 if self._cancelled:
                     return False
-                returncode, stdout, stderr = self.utmt_wrapper.execute_scripts(mod_data_win, scripts, output_path=mod_data_win, cwd=merge_root, env=env)
-                if 'SmartExport' in scripts:
+                returncode, stdout, stderr = self.utmt_wrapper.execute_scripts(mod_data_win, scripts, output_path=mod_data_win, cwd=merge_root)
+                for script in scripts:
                     try:
-                        self._check_critical_script_errors(stderr, 'SmartExport', f'мод {mod_number}')
+                        self._check_critical_script_errors(stderr, script, f'mod {mod_number}')
                     except RuntimeError:
-                        self.patching_logger.error(f'Процесс слияния прерван из-за критической ошибки в SmartExport для мода {mod_number}')
+                        self.patching_logger.error(f'Merge process aborted due to critical error in {script} for mod {mod_number}')
                         raise
                 if returncode != 0:
                     self.patching_logger.warning(f'Export scripts failed for mod {mod_number}: {stderr[:500]}')
                     return False
                 self.patching_logger.info(f'Successfully exported assets from mod {mod_number} using {scripts}')
-                if 'SmartExport' in scripts:
-                    if stdout:
-                        for line in stdout.split('\n'):
-                            if '[SmartExport] Summary' in line or 'Total exports:' in line or 'NEW' in line or ('CHANGED' in line) or ('Loading comparison file' in line) or ('Using custom vanilla path' in line):
-                                self.patching_logger.info(f'[SmartExport] {line.strip()}')
-                    if stderr and ('ERROR' in stderr or 'Exception' in stderr):
-                        self.patching_logger.warning(f'[SmartExport] stderr: {stderr[:500]}')
-                    if os.path.exists(objects_dir):
-                        code_entries_exported = os.path.join(objects_dir, 'CodeEntries')
-                        sprites_exported = os.path.join(objects_dir, 'Sprites')
-                        code_count_exported = len([f for f in os.listdir(code_entries_exported) if f.endswith('.gml')]) if os.path.exists(code_entries_exported) else 0
-                        sprite_count_exported = len([d for d in os.listdir(sprites_exported) if os.path.isdir(os.path.join(sprites_exported, d))]) if os.path.exists(sprites_exported) else 0
-                        self.patching_logger.info(f'[EXPORT] Verified: {code_count_exported} code files, {sprite_count_exported} sprites in Objects directory after SmartExport')
-                        if code_count_exported == 0 and sprite_count_exported == 0:
-                            self.patching_logger.warning(f'[EXPORT] WARNING: SmartExport exported 0 resources for mod {mod_number}! This may indicate a problem with comparison file or mod has no changes.')
+                if os.path.exists(objects_dir):
+                    code_entries_exported = os.path.join(objects_dir, 'CodeEntries')
+                    sprites_exported = os.path.join(objects_dir, 'Sprites')
+                    code_count_exported = len([f for f in os.listdir(code_entries_exported) if f.endswith('.gml')]) if os.path.exists(code_entries_exported) else 0
+                    sprite_count_exported = len([d for d in os.listdir(sprites_exported) if os.path.isdir(os.path.join(sprites_exported, d))]) if os.path.exists(sprites_exported) else 0
+                    self.patching_logger.info(f'[EXPORT] Verified: {code_count_exported} code files, {sprite_count_exported} sprites in Objects directory after export')
+                    if code_count_exported == 0 and sprite_count_exported == 0:
+                        self.patching_logger.warning(f'[EXPORT] WARNING: Export scripts exported 0 resources for mod {mod_number}! This may indicate a problem or mod has no changes.')
                 if self._cancelled:
                     return False
                 export_rooms_script = self.utmt_wrapper.get_script_path('ExportRooms')

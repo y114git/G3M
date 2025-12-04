@@ -1,4 +1,4 @@
-
+#load "SharedPaths.csx"
 
 using System;
 using System.IO;
@@ -21,15 +21,8 @@ string SafeName(string name)
     return sb.ToString();
 }
 
-string ReadAllTextSafe(string path)
-{
-    try { return File.ReadAllText(path).Trim(); } catch { return null; }
-}
-
 object GetProp(object obj, string name)
     => obj?.GetType().GetProperty(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.IgnoreCase)?.GetValue(obj);
-
-#load "SharedPaths.csx"
 
 EnsureDataLoaded();
 
@@ -42,21 +35,7 @@ if (string.IsNullOrWhiteSpace(chapterNo) || string.IsNullOrWhiteSpace(modNo))
     throw new ScriptException("chapterNumber/modNumbersCache missing in /output/Cache/running/.");
 
 
-string comparisonPath = null;
-if (modNo != "0" && modNo != "1")
-{
-    int modNum = int.Parse(modNo);
-    string previousModPath = Path.Combine(deltahubRoot, "output", "xDeltaCombiner", chapterNo, (modNum - 1).ToString(), "data.win");
-    if (File.Exists(previousModPath))
-    {
-        comparisonPath = previousModPath;
-    }
-}
-if (comparisonPath == null)
-{
-    comparisonPath = Path.Combine(deltahubRoot, "output", "xDeltaCombiner", chapterNo, "0", "data.win");
-}
-
+UndertaleData comparison = LoadVanillaData();
 
 string modRoot         = Path.Combine(deltahubRoot, "output", "xDeltaCombiner", chapterNo, modNo);
 string outputRoot      = Path.Combine(modRoot, "Objects");
@@ -65,21 +44,13 @@ string roomsOut        = Path.Combine(outputRoot, "Rooms");
 Directory.CreateDirectory(outputRoot);
 Directory.CreateDirectory(roomsOut);
 
-
-UndertaleData comparison = null;
 Dictionary<string, UndertaleRoom> comparisonRooms = new Dictionary<string, UndertaleRoom>();
-if (File.Exists(comparisonPath))
+if (comparison != null)
 {
-    PrintLine($"[ExportRooms] Loading comparison file from: {comparisonPath}");
-    using (var fs = new FileStream(comparisonPath, FileMode.Open, FileAccess.Read, FileShare.Read))
-        comparison = UndertaleIO.Read(fs);
-    if (comparison != null)
+    foreach (var room in comparison.Rooms)
     {
-        foreach (var room in comparison.Rooms)
-        {
-            if (room?.Name?.Content != null)
-                comparisonRooms[room.Name.Content] = room;
-        }
+        if (room?.Name?.Content != null)
+            comparisonRooms[room.Name.Content] = room;
     }
 }
 

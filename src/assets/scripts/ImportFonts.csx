@@ -1,3 +1,4 @@
+#load "SharedPaths.csx"
 
 using System;
 using System.IO;
@@ -13,17 +14,10 @@ void PrintLine(string s) => Console.WriteLine(s);
 bool DEBUG = Environment.GetEnvironmentVariable("DELTAHUB_DEBUG") == "1";
 void DebugLog(string s) { if (DEBUG) PrintLine($"[DEBUG] {s}"); }
 
-string ReadAllTextSafe(string path)
-{
-    try { return File.ReadAllText(path, Encoding.UTF8); } catch { return null; }
-}
-
 byte[] ReadAllBytesSafe(string path)
 {
     try { return File.ReadAllBytes(path); } catch { return null; }
 }
-
-#load "SharedPaths.csx"
 
 EnsureDataLoaded();
 

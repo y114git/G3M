@@ -1,5 +1,7 @@
 
 using System.Text;
+using UndertaleModLib;
+using System.IO;
 
 
 string FindDeltahubRoot()
@@ -70,4 +72,36 @@ string ReadAllTextSafe(string path)
         return null;
     }
 }
+
+UndertaleData _cachedVanilla = null;
+UndertaleData LoadVanillaData()
+{
+    if (_cachedVanilla != null) return _cachedVanilla;
+
+    try 
+    {
+        string root = FindDeltahubRoot();
+        string chapter = GetChapterNumber(root);
+        
+        string vanillaPath = Path.Combine(root, "output", "xDeltaCombiner", chapter, "0", "data.win");
+        
+        
+        if (!File.Exists(vanillaPath)) return null;
+
+        using (var fs = new FileStream(vanillaPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+        {
+            _cachedVanilla = UndertaleIO.Read(fs);
+        }
+        return _cachedVanilla;
+    }
+    catch (Exception e)
+    {
+        Console.WriteLine("[SharedPaths] Warning: Could not load vanilla data for comparison: " + e.Message);
+        return null;
+    }
+}
+
+
+void LogDiff(string type, string name, string reason) => Console.WriteLine($"[DIFF] {type} '{name}' CHANGED: {reason}");
+void LogSkip(string type, string name) {  }
 

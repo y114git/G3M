@@ -1,3 +1,4 @@
+#load "SharedPaths.csx"
 
 using System;
 using System.IO;
@@ -21,11 +22,6 @@ string SafeName(string name)
     return sb.ToString();
 }
 
-string ReadAllTextSafe(string path)
-{
-    try { return File.ReadAllText(path).Trim(); } catch { return null; }
-}
-
 EnsureDataLoaded();
 
 if (Data.IsYYC())
@@ -34,16 +30,23 @@ if (Data.IsYYC())
     return;
 }
 
-#load "SharedPaths.csx"
-
 string deltahubRoot = FindDeltahubRoot();
 string chapterNo = GetChapterNumber(deltahubRoot);
 string modNo = GetModNumbersCache(deltahubRoot);
 if (string.IsNullOrWhiteSpace(chapterNo) || string.IsNullOrWhiteSpace(modNo))
     throw new ScriptException("chapterNumber/modNumbersCache missing in /output/Cache/running/.");
 
+
+UndertaleData vanillaData = LoadVanillaData();
+Dictionary<string, UndertaleBackground> vanillaTilesets = new Dictionary<string, UndertaleBackground>();
+if (vanillaData != null)
+{
+    foreach(var bg in vanillaData.Backgrounds)
+        if (bg.Name?.Content != null) vanillaTilesets[bg.Name.Content] = bg;
+}
+
 string outputRoot = Path.Combine(deltahubRoot, "output", "xDeltaCombiner", chapterNo, modNo);
-string backgroundsOut = Path.Combine(outputRoot, "Objects", "Backgrounds");
+string backgroundsOut = Path.Combine(outputRoot, "Objects", "Backgrounds"); 
 Directory.CreateDirectory(backgroundsOut);
 
 PrintLine($"[ExportTilesets] Exporting tilesets to: {backgroundsOut}");
@@ -56,7 +59,42 @@ using (var worker = new TextureWorker())
     foreach (var bg in Data.Backgrounds)
     {
         if (bg?.Name?.Content == null) continue;
+        
+        
+        
         string name = SafeName(bg.Name.Content);
+
+        bool isChanged = true;
+        if (vanillaData != null && vanillaTilesets.ContainsKey(bg.Name.Content))
+        {
+            var vBg = vanillaTilesets[bg.Name.Content];
+            
+            bool propsChanged = bg.TileWidth != vBg.TileWidth || bg.TileHeight != vBg.TileHeight ||
+                                bg.TileXOffset != vBg.TileXOffset || bg.TileYOffset != vBg.TileYOffset ||
+                                bg.TileXSep != vBg.TileXSep || bg.TileYSep != vBg.TileYSep;
+            
+            
+            bool texChanged = false;
+            if (bg.Texture != null && vBg.Texture != null)
+            {
+                 if (bg.Texture.SourceX != vBg.Texture.SourceX || bg.Texture.SourceY != vBg.Texture.SourceY ||
+                     bg.Texture.SourceWidth != vBg.Texture.SourceWidth || bg.Texture.SourceHeight != vBg.Texture.SourceHeight ||
+                     bg.Texture.TexturePage?.Name?.Content != vBg.Texture.TexturePage?.Name?.Content)
+                 {
+                     texChanged = true;
+                 }
+            }
+            else if (bg.Texture != vBg.Texture) texChanged = true; 
+
+            if (!propsChanged && !texChanged) isChanged = false;
+        }
+
+        if (!isChanged) 
+        {
+            LogSkip("Tileset", name);
+            skipped++;
+            continue;
+        }
         
         if (bg?.Texture == null)
         {
