@@ -52,11 +52,11 @@ class FetchModsThread(QThread):
                 metadata_cache = None
                 sort_param = 'default'
                 app_state = getattr(self.main_window, 'app_state', None)
-                if app_state and hasattr(app_state, 'config_dir'):
+                if app_state and hasattr(app_state, 'cache_dir'):
                     sort_param = getattr(app_state, 'gamebanana_sort', 'default')
                     try:
                         from utils.gamebanana_cache import GameBananaMetadataCache
-                        cache_dir = app_state.config_dir
+                        cache_dir = app_state.cache_dir
                         metadata_cache = GameBananaMetadataCache(cache_dir)
                         logger.info(f'FetchModsThread: Initialized metadata cache in {cache_dir}')
                     except Exception as e:

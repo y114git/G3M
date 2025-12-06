@@ -24,10 +24,10 @@ class RefreshController:
 
     def refresh_mods_list(self, is_initial=False, language_combo=None, retranslate_callback=None, on_fetch_finished_kwargs=None):
         try:
-            if hasattr(self.app_state, 'config_dir') and self.app_state.config_dir:
+            if hasattr(self.app_state, 'cache_dir') and self.app_state.cache_dir:
                 try:
                     from utils.gamebanana_cache import GameBananaMetadataCache
-                    metadata_cache = GameBananaMetadataCache(self.app_state.config_dir)
+                    metadata_cache = GameBananaMetadataCache(self.app_state.cache_dir)
                     if hasattr(self.app_state, 'all_mods') and self.app_state.all_mods:
                         for mod in self.app_state.all_mods:
                             if hasattr(mod, 'is_gamebanana_mod') and mod.is_gamebanana_mod and mod.gamebanana_mod_id:
@@ -143,10 +143,10 @@ class RefreshController:
                 logging.info(f'RefreshController: Found {len(installed_gb_mods)} GameBanana mods in all_mods after load_local_mods')
                 for mod_info in installed_gb_mods[:10]:
                     logging.debug(f'RefreshController: GameBanana mod in all_mods: {mod_info}')
-            if hasattr(self.app_state, 'config_dir') and self.app_state.config_dir:
+            if hasattr(self.app_state, 'cache_dir') and self.app_state.cache_dir:
                 try:
                     from utils.gamebanana_cache import GameBananaMetadataCache
-                    metadata_cache = GameBananaMetadataCache(self.app_state.config_dir)
+                    metadata_cache = GameBananaMetadataCache(self.app_state.cache_dir)
                     restored_count = 0
                     downloads_restored = False
                     if hasattr(self.app_state, 'all_mods') and self.app_state.all_mods:
@@ -234,10 +234,10 @@ class RefreshController:
 
     def _validate_metadata_cache(self):
         try:
-            if not hasattr(self.app_state, 'config_dir') or not self.app_state.config_dir:
+            if not hasattr(self.app_state, 'cache_dir') or not self.app_state.cache_dir:
                 return
             from utils.gamebanana_cache import GameBananaMetadataCache
-            metadata_cache = GameBananaMetadataCache(self.app_state.config_dir)
+            metadata_cache = GameBananaMetadataCache(self.app_state.cache_dir)
             stale_count = metadata_cache.clear_stale()
             if stale_count > 0:
                 logging.info(f'RefreshController: Cleared {stale_count} stale metadata cache entries')
@@ -287,10 +287,10 @@ class RefreshController:
                         self.metadata_thread = None
             try:
                 from utils.gamebanana_cache import GameBananaMetadataCache
-                if not hasattr(self.app_state, 'config_dir') or not self.app_state.config_dir:
-                    logging.warning('RefreshController: config_dir not available, cannot load metadata')
+                if not hasattr(self.app_state, 'cache_dir') or not self.app_state.cache_dir:
+                    logging.warning('RefreshController: cache_dir not available, cannot load metadata')
                     return
-                metadata_cache = GameBananaMetadataCache(self.app_state.config_dir)
+                metadata_cache = GameBananaMetadataCache(self.app_state.cache_dir)
                 all_mod_ids = list(self.app_state.gamebanana_mods_needing_metadata)
                 if not all_mod_ids:
                     return

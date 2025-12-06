@@ -67,6 +67,7 @@ class AppWindow(QWidget):
         self.server: SingleInstanceServer | None = None
         self.is_shortcut_launch = args and args.shortcut_launch
         self.app_state.config_dir = os.path.join(get_user_data_root(), 'settings')
+        self.app_state.cache_dir = os.path.join(get_user_data_root(), 'cache')
         self.launcher_dir = get_launcher_dir()
         from utils.path_utils import get_user_mods_dir
         self.app_state.mods_dir = get_user_mods_dir()
@@ -74,6 +75,7 @@ class AppWindow(QWidget):
         self.app_state.mods_metadata_path = os.path.join(self.app_state.mods_dir, 'metadata.json')
         self.app_state.plugins_metadata_path = os.path.join(self.app_state.plugins_dir, 'metadata.json')
         os.makedirs(self.app_state.config_dir, exist_ok=True)
+        os.makedirs(self.app_state.cache_dir, exist_ok=True)
         os.makedirs(self.app_state.mods_dir, exist_ok=True)
         os.makedirs(self.app_state.plugins_dir, exist_ok=True)
         self.lang_manager = localization_manager

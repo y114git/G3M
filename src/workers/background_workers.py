@@ -1255,7 +1255,7 @@ class ModScanThread(QThread):
                 if isinstance(info, dict) and 'config_mtime' in info and ('config_data' in info):
                     cache[mod_key] = info
             return cache
-        except (json.JSONDecodeError, OSError, KeyError) as e:
+        except (json.JSONDecodeError, OSError, PermissionError, KeyError) as e:
             logging.debug(f'ModScanThread: Failed to load cache from {self.cache_file}: {e}')
             return {}
 
@@ -1269,7 +1269,7 @@ class ModScanThread(QThread):
                     cache_to_save[mod_key] = {'mod_key': info.get('mod_key', mod_key), 'config_mtime': info.get('config_mtime', 0), 'config_data': info.get('config_data', {}), 'folder_path': info.get('folder_path', ''), 'folder_name': info.get('folder_name', '')}
             with open(self.cache_file, 'w', encoding='utf-8') as f:
                 json.dump(cache_to_save, f, indent=2, ensure_ascii=False)
-        except (OSError, TypeError) as e:
+        except (OSError, PermissionError, TypeError) as e:
             logging.debug(f'ModScanThread: Failed to save cache to {self.cache_file}: {e}')
 
     def run(self):

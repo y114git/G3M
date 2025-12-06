@@ -219,6 +219,9 @@ def load_json(path: str, migrate_config: bool = True) -> Dict:
             pass
         logging.warning(f'Corrupted JSON file detected, backed up to {backup_path}')
         return {}
+    except (PermissionError, OSError) as e:
+        logging.warning(f'Error loading JSON from {path}: {e}')
+        return {}
     except Exception as e:
         logging.error(f'Error loading JSON from {path}: {e}', exc_info=True)
         return {}

@@ -177,10 +177,10 @@ class SearchDisplayController(QObject):
                 except BaseException:
                     pass
         metadata_cache = None
-        if hasattr(self.app_state, 'config_dir') and self.app_state.config_dir:
+        if hasattr(self.app_state, 'cache_dir') and self.app_state.cache_dir:
             try:
                 from utils.gamebanana_cache import GameBananaMetadataCache
-                metadata_cache = GameBananaMetadataCache(self.app_state.config_dir)
+                metadata_cache = GameBananaMetadataCache(self.app_state.cache_dir)
             except Exception as e:
                 logger.warning(f'SearchDisplayController: Failed to initialize metadata cache: {e}', exc_info=True)
         for game_name, game_id in games_to_load.items():
@@ -419,10 +419,10 @@ class SearchDisplayController(QObject):
                 self.update_pagination()
         search_timeout_timer.start(10000)
         metadata_cache = None
-        if hasattr(self.app_state, 'config_dir') and self.app_state.config_dir:
+        if hasattr(self.app_state, 'cache_dir') and self.app_state.cache_dir:
             try:
                 from utils.gamebanana_cache import GameBananaMetadataCache
-                metadata_cache = GameBananaMetadataCache(self.app_state.config_dir)
+                metadata_cache = GameBananaMetadataCache(self.app_state.cache_dir)
             except Exception as e:
                 logger.warning(f'SearchDisplayController: Failed to initialize metadata cache: {e}', exc_info=True)
         for page in pages_needed:
@@ -879,9 +879,9 @@ class SearchDisplayController(QObject):
         from workers.load_more_gamebanana_mods import LoadMoreGameBananaModsThread
         from utils.gamebanana_cache import GameBananaMetadataCache
         metadata_cache = None
-        if hasattr(self.app_state, 'config_dir') and self.app_state.config_dir:
+        if hasattr(self.app_state, 'cache_dir') and self.app_state.cache_dir:
             try:
-                metadata_cache = GameBananaMetadataCache(self.app_state.config_dir)
+                metadata_cache = GameBananaMetadataCache(self.app_state.cache_dir)
             except Exception as e:
                 logger.warning(f'SearchDisplayController: Failed to initialize metadata cache: {e}', exc_info=True)
         sort_param = getattr(self.app_state, 'gamebanana_sort', 'default')

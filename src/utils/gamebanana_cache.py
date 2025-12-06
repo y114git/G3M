@@ -32,7 +32,7 @@ class GameBananaMetadataCache:
                     else:
                         self._cache = {}
                         logger.warning('GameBananaMetadataCache: Invalid cache file format, starting with empty cache')
-            except (json.JSONDecodeError, IOError) as e:
+            except (json.JSONDecodeError, IOError, PermissionError, OSError) as e:
                 logger.warning(f'GameBananaMetadataCache: Failed to load cache: {e}, starting with empty cache')
                 self._cache = {}
 
@@ -43,7 +43,7 @@ class GameBananaMetadataCache:
                 from utils.file_utils import atomic_write_json
                 atomic_write_json(self.cache_file, self._cache, indent=2)
                 logger.debug(f'GameBananaMetadataCache: Saved {len(self._cache)} entries to cache')
-            except IOError as e:
+            except (IOError, PermissionError, OSError) as e:
                 logger.error(f'GameBananaMetadataCache: Failed to save cache: {e}', exc_info=True)
 
     def get(self, mod_id: str) -> Optional[Dict]:

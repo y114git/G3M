@@ -231,6 +231,10 @@ def _load_config_file() -> dict:
         safe_msg = sanitize_log_message(f'Failed to parse config JSON: {e}')
         logging.warning(safe_msg)
         return {}
+    except (PermissionError, OSError) as e:
+        safe_msg = sanitize_log_message(f'Failed to read config file: {e}')
+        logging.warning(safe_msg)
+        return {}
     except Exception as e:
         safe_msg = sanitize_log_message(f'Failed to read config file: {e}')
         logging.warning(safe_msg)

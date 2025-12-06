@@ -12,10 +12,10 @@ import webbrowser
 class LoadModDetailsThread(QThread):
     details_loaded = pyqtSignal(dict)
 
-    def __init__(self, mod_data, config_dir=None, parent=None):
+    def __init__(self, mod_data, cache_dir=None, parent=None):
         super().__init__(parent)
         self.mod_data = mod_data
-        self.config_dir = config_dir
+        self.cache_dir = cache_dir
 
     def run(self):
         try:
@@ -30,12 +30,12 @@ class LoadModDetailsThread(QThread):
             metadata_cache = None
             cached_text = None
             cached_screenshots = None
-            if self.config_dir:
+            if self.cache_dir:
                 try:
                     if self.isInterruptionRequested():
                         return
                     from utils.gamebanana_cache import GameBananaMetadataCache
-                    metadata_cache = GameBananaMetadataCache(self.config_dir)
+                    metadata_cache = GameBananaMetadataCache(self.cache_dir)
                     if metadata_cache.is_valid(mod_id_str):
                         cached_text = metadata_cache.get_full_description(mod_id_str)
                         cached_screenshots = metadata_cache.get_screenshots(mod_id_str)
@@ -378,10 +378,10 @@ def open_mod_details_dialog(parent, mod_data):
     load_thread = None
     if needs_load:
         desc_text.setPlainText(tr('status.loading_description'))
-        config_dir = None
-        if app_state and hasattr(app_state, 'config_dir'):
-            config_dir = app_state.config_dir
-        load_thread = LoadModDetailsThread(mod_data, config_dir=config_dir, parent=None)
+        cache_dir = None
+        if app_state and hasattr(app_state, 'cache_dir'):
+            cache_dir = app_state.cache_dir
+        load_thread = LoadModDetailsThread(mod_data, cache_dir=cache_dir, parent=None)
         load_thread.details_loaded.connect(update_ui_with_details)
         load_thread.start()
 

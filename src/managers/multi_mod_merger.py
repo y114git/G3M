@@ -280,6 +280,9 @@ class MultiModMerger(QObject):
             mod_name = getattr(mod_data, 'name', 'Unknown')
             mod_source_dir = self._get_mod_source_dir(mod_data, chapter_id)
             if mod_source_dir:
+                used_archive_names = set()
+                if not self._apply_file_overrides(mod_source_dir, target_dir, used_archive_names, False):
+                    self.patching_logger.warning(f'[SINGLE_MOD] Failed to apply file overrides from {mod_name}')
                 ready_data_win_files = self._find_ready_data_win_files(mod_source_dir)
                 data_patches = self._find_data_patches(mod_source_dir)
                 csx_scripts = self._find_csx_scripts(mod_source_dir)
@@ -301,9 +304,6 @@ class MultiModMerger(QObject):
                         shutil.copy2(ready_file, output_data_win_path)
                         file_size = os.path.getsize(output_data_win_path) if os.path.exists(output_data_win_path) else 0
                         self.patching_logger.info(f'[SINGLE_MOD] Successfully copied ready data.win/game.ios from {mod_name} to {output_data_win_path} (size: {file_size} bytes, chapter {chapter_id})')
-                        used_archive_names = set()
-                        if not self._apply_file_overrides(mod_source_dir, target_dir, used_archive_names, False):
-                            self.patching_logger.warning(f'[SINGLE_MOD] Failed to apply file overrides from {mod_name}')
                         return True
                     except Exception as e:
                         self.patching_logger.error(f'[SINGLE_MOD] Failed to copy ready data.win file from {mod_name}: {e}', exc_info=True)
@@ -323,9 +323,6 @@ class MultiModMerger(QObject):
                                 self.backup_manager.restore_backups(chapter_id)
                             return False
                         self.patching_logger.info(f'Successfully applied xdelta patches from {mod_name} to {output_data_win_path}')
-                        used_archive_names = set()
-                        if not self._apply_file_overrides(mod_source_dir, target_dir, used_archive_names, False):
-                            self.patching_logger.warning(f'Failed to apply file overrides from {mod_name}')
                         return True
                     except Exception as e:
                         self.patching_logger.error(f'Failed to apply xdelta patches: {e}', exc_info=True)
@@ -345,9 +342,6 @@ class MultiModMerger(QObject):
                                 self.backup_manager.restore_backups(chapter_id)
                             return False
                         self.patching_logger.info(f'Successfully executed CSX scripts from {mod_name} on {output_data_win_path}')
-                        used_archive_names = set()
-                        if not self._apply_file_overrides(mod_source_dir, target_dir, used_archive_names, False):
-                            self.patching_logger.warning(f'Failed to apply file overrides from {mod_name}')
                         return True
                     except Exception as e:
                         self.patching_logger.error(f'Failed to execute CSX scripts: {e}', exc_info=True)
@@ -357,7 +351,7 @@ class MultiModMerger(QObject):
         vanilla_objects_dir = os.path.join(vanilla_dir, 'Objects')
         vanilla_already_exported = os.path.exists(vanilla_objects_dir) and os.listdir(vanilla_objects_dir) if os.path.exists(vanilla_objects_dir) else False
         if not vanilla_already_exported:
-            self.patching_logger.info(f'Exporting vanilla mod (mod 0) assets...')
+            self.patching_logger.info('Exporting vanilla mod (mod 0) assets...')
             chapter_file = os.path.join(cache_running_dir, 'chapterNumber.txt')
             mod_file = os.path.join(cache_running_dir, 'modNumbersCache.txt')
             with open(chapter_file, 'w', encoding='utf-8') as f:
@@ -371,12 +365,12 @@ class MultiModMerger(QObject):
                 if returncode != 0:
                     self.patching_logger.warning(f'Vanilla ExportAllAssets failed: {stderr[:500]}')
                 else:
-                    self.patching_logger.info(f'Successfully exported vanilla assets using ExportAllAssets')
+                    self.patching_logger.info('Successfully exported vanilla assets using ExportAllAssets')
             else:
                 self.patching_logger.error('ExportAllAssets script not found! This is required for optimized export.')
                 return False
         else:
-            self.patching_logger.info(f'Vanilla mod (mod 0) already exported, skipping')
+            self.patching_logger.info('Vanilla mod (mod 0) already exported, skipping')
         max_mods = len(mods_list) + 2
         for mod_num in range(max_mods):
             mod_dir = os.path.join(xdelta_combiner_dir, str(mod_num))
@@ -420,6 +414,13 @@ class MultiModMerger(QObject):
             original_filename = os.path.basename(original_data_win)
             mod_data_win = os.path.join(mod_dir, original_filename)
             shutil.copy2(original_data_win, mod_data_win)
+            target_dir_result = self._get_target_dir(chapter_id)
+            if target_dir_result is not None and mod_source_dir:
+                used_archive_names = set()
+                if not self._apply_file_overrides(mod_source_dir, target_dir_result, used_archive_names, False):
+                    self.patching_logger.warning(f'Failed to apply file overrides from {mod_name} (mod {mod_number})')
+                else:
+                    self.patching_logger.info(f'Applied file overrides from {mod_name} (mod {mod_number})')
             ready_data_win_files = self._find_ready_data_win_files(mod_source_dir)
             data_patches = self._find_data_patches(mod_source_dir)
             csx_scripts = self._find_csx_scripts(mod_source_dir)
@@ -433,11 +434,6 @@ class MultiModMerger(QObject):
                         self.backup_manager.restore_backups(chapter_id)
                     return False
                 self.patching_logger.info(f'Successfully merged ready data.win files from {mod_name} (mod {mod_number})')
-                target_dir_result = self._get_target_dir(chapter_id)
-                if target_dir_result is not None and mod_source_dir:
-                    used_archive_names = set()
-                    if not self._apply_file_overrides(mod_source_dir, target_dir_result, used_archive_names, False):
-                        self.patching_logger.warning(f'Failed to apply file overrides from {mod_name} after ready data.win merge')
                 if not data_patches and (not csx_scripts):
                     mods_already_exported.add(mod_number)
                     self.patching_logger.info(f'Mod {mod_name} (number {mod_number}) has only ready data.win, will skip export scripts')
@@ -464,12 +460,6 @@ class MultiModMerger(QObject):
                     return False
                 self.patching_logger.info(f'Successfully executed CSX scripts from {mod_name} (mod {mod_number})')
                 mod_patched_files[mod_number] = mod_data_win
-            if not ready_data_win_files and (not data_patches) and (not csx_scripts):
-                target_dir_result = self._get_target_dir(chapter_id)
-                if target_dir_result is not None and mod_source_dir:
-                    used_archive_names = set()
-                    if self._apply_file_overrides(mod_source_dir, target_dir_result, used_archive_names, False):
-                        self.patching_logger.info(f'Applied file overrides from {mod_name} (mod {mod_number})')
             if mod_number not in mod_patched_files:
                 mod_patched_files[mod_number] = mod_data_win
             self.progress_update.emit(min(mod_progress_end, 95), f'Completed {mod_name}')
@@ -728,25 +718,6 @@ class MultiModMerger(QObject):
             if not is_modpack and self.backup_manager:
                 self.backup_manager.restore_backups(chapter_id)
             return False
-        if is_modpack:
-            if modpack_dir is None:
-                self.patching_logger.error('modpack_dir is None but is_modpack is True')
-                return False
-            for mod_data in mods_to_apply:
-                mod_source_dir = self._get_mod_source_dir(mod_data, chapter_id)
-                if mod_source_dir:
-                    if not self._apply_file_overrides(mod_source_dir, modpack_dir, set(), True):
-                        self.patching_logger.warning(f"Failed to apply file overrides from {getattr(mod_data, 'name', 'Unknown')}")
-        else:
-            used_archive_names = set()
-            for mod_data in mods_to_apply:
-                if self._cancelled and self.backup_manager:
-                    self.backup_manager.restore_backups(chapter_id)
-                    return False
-                mod_source_dir = self._get_mod_source_dir(mod_data, chapter_id)
-                if mod_source_dir:
-                    if not self._apply_file_overrides(mod_source_dir, target_dir, used_archive_names, False):
-                        self.patching_logger.warning(f"Failed to apply file overrides from {getattr(mod_data, 'name', 'Unknown')}")
         self.patching_logger.info('Multi-mod merge completed successfully')
         return True
 
@@ -1507,7 +1478,7 @@ class MultiModMerger(QObject):
         try:
             from utils.archive_utils import extract_any_archive
             import tempfile
-            archive_lower = os.path.basename(archive_path).lower()
+            os.path.basename(archive_path).lower()
             chapter_id = self._extract_chapter_id_from_path(target_dir)
             with tempfile.TemporaryDirectory(prefix='mm_extract_') as temp_extract_dir:
                 extract_any_archive(archive_path, temp_extract_dir)
