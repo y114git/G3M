@@ -43,52 +43,6 @@ class BaseInstallWorker(QThread):
             except Exception as e:
                 logger.debug(f'{self.__class__.__name__}.cancel: Error emitting status: {e}')
 
-    def _download_file(self, url: str, filename: str, temp_dir_prefix: str = 'download_') -> Optional[str]:
-        temp_dir = tempfile.mkdtemp(prefix=temp_dir_prefix)
-        archive_path = os.path.join(temp_dir, filename)
-        download_success = False
-        try:
-            from utils.file_utils import download_file_with_progress
-            session = get_session()
-            self._session = session
-            downloaded_ref = [0]
-            total_size_for_status = 0
-            try:
-                head_response = session.head(url, allow_redirects=True, timeout=10)
-                total_size_for_status = int(head_response.headers.get('content-length', 0))
-            except Exception:
-                pass
-
-            def progress_callback(progress):
-                if not self._cancelled:
-                    self.progress.emit(progress)
-                    if total_size_for_status > 0 and hasattr(self, 'status'):
-                        downloaded_mb = format_size_mb(downloaded_ref[0])
-                        total_mb = format_size_mb(total_size_for_status)
-                        current_status = getattr(self, '_current_status', tr('status.downloading_mod'))
-                        self.status.emit(f'{current_status} ({downloaded_mb} / {total_mb})', UI_COLORS['status_warning'])
-
-            def on_response(r):
-                self._active_response = r
-            try:
-                success = download_file_with_progress(url, archive_path, progress_callback=progress_callback, session=session, cancel_check=lambda: self._cancelled, on_response=on_response, downloaded_ref=downloaded_ref)
-                if not success:
-                    raise RuntimeError('download_failed')
-                download_success = True
-                return archive_path
-            except RuntimeError as e:
-                if str(e) == 'download_cancelled' or self._cancelled:
-                    self._cleanup_temp_files(archive_path, temp_dir)
-                    raise RuntimeError('download_cancelled')
-                raise
-        except Exception:
-            if not download_success:
-                try:
-                    self._cleanup_temp_files(archive_path, temp_dir)
-                except Exception as e:
-                    logger.debug(f'{self.__class__.__name__}: Error during cleanup after download failure: {e}')
-            raise
-
     def _cleanup_temp_files(self, archive_path: Optional[str] = None, archive_dir: Optional[str] = None):
         try:
             if archive_path and os.path.exists(archive_path):

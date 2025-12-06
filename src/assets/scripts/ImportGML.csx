@@ -29,68 +29,9 @@ string CorrectCodeEntryName(string filename)
     return corrected;
 }
 
-string deltahubRoot = null;
-try
-{
-    deltahubRoot = FindDeltahubRoot();
-}
-catch
-{
-    if (!string.IsNullOrEmpty(FilePath))
-    {
-        var dataWinDir = new DirectoryInfo(Path.GetDirectoryName(FilePath));
-        var probe = dataWinDir;
-        while (probe != null)
-        {
-            if (Directory.Exists(Path.Combine(probe.FullName, "output"))) { deltahubRoot = probe.FullName; break; }
-            probe = probe.Parent;
-        }
-    }
-    
-    if (deltahubRoot == null)
-    {
-        var assemblyRoot = Directory.GetParent(Directory.GetParent(Assembly.GetEntryAssembly().Location));
-        if (assemblyRoot != null && Directory.Exists(Path.Combine(assemblyRoot.FullName, "output")))
-        {
-            deltahubRoot = assemblyRoot.FullName;
-        }
-    }
-    
-    if (deltahubRoot == null) throw new ScriptException("DELTAHUB root not found (no /output ancestor).");
-}
-
-string ReadAllTextSafe(string path)
-{
-    try { return File.ReadAllText(path).Trim(); } catch { return null; }
-}
-
-string chapterNo = ReadAllTextSafe(Path.Combine(deltahubRoot, "output", "Cache", "running", "chapterNumber.txt"));
-string modNo = ReadAllTextSafe(Path.Combine(deltahubRoot, "output", "Cache", "running", "modNumbersCache.txt"));
-
-
-
-
-string objectsRoot = null;
-if (!string.IsNullOrEmpty(FilePath))
-{
-    string dataWinDir = Path.GetDirectoryName(FilePath);
-    string objectsNextToDataWin = Path.Combine(dataWinDir, "Objects");
-    if (Directory.Exists(objectsNextToDataWin))
-    {
-        objectsRoot = objectsNextToDataWin;
-        Console.WriteLine($"[ImportGML] Using Objects directory next to data.win: {objectsRoot}");
-    }
-}
-
-
-if (objectsRoot == null)
-{
-    if (string.IsNullOrWhiteSpace(chapterNo) || string.IsNullOrWhiteSpace(modNo))
-        throw new ScriptException("chapterNumber/modNumbersCache missing in /output/Cache/running/." + Convert.ToString(Path.Combine(deltahubRoot, "output", "Cache", "running", "modNumbersCache.txt")));
-
-    objectsRoot = Path.Combine(deltahubRoot, "output", "xDeltaCombiner", chapterNo, modNo, "Objects");
-    Console.WriteLine($"[ImportGML] Using Objects directory from modNumbersCache: {objectsRoot}");
-}
+var ctx = PrepareImportContext();
+string objectsRoot = ctx.InputRoot;
+Console.WriteLine($"[ImportGML] Using Objects directory: {objectsRoot}");
 
 string importFolder = Path.Combine(objectsRoot, "CodeEntries");
 string appendFolder = Path.Combine(objectsRoot, "AppendCode");

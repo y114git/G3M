@@ -64,7 +64,7 @@ class ThemeInstallWorker(QThread):
             theme_json_path = None
             if os.path.isfile(content_path) and content_path.endswith('.dhtheme'):
                 with tempfile.TemporaryDirectory(prefix='dh-theme-extract-') as extract_dir:
-                    from utils.file_utils import extract_any_archive
+                    from utils.archive_utils import extract_any_archive
                     with zipfile.ZipFile(content_path, 'r') as zipf:
                         if 'theme.json' not in zipf.namelist():
                             logging.error('ThemeInstallWorker: theme.json not found in theme archive')

@@ -96,7 +96,7 @@ class FetchChangelogWorker(QObject):
         try:
             if self.source.startswith(('http://', 'https://')):
                 params = {'ts': int(time.time())}
-                headers = {'Cache-Control': 'no-cache', 'Pragma': 'no-cache', 'User-Agent': 'DELTAHUB/1.0'}
+                headers = {'Cache-Control': 'no-cache', 'Pragma': 'no-cache'}
                 session = get_session()
                 with session.get(self.source, params=params, headers=headers, timeout=NETWORK_TIMEOUT_MEDIUM) as resp:
                     resp.raise_for_status()
@@ -981,7 +981,7 @@ class UrlInstallThread(QThread):
             with zipfile.ZipFile(theme_file_path, 'r') as zipf:
                 if 'theme.json' not in zipf.namelist():
                     raise ValueError('Missing theme.json')
-                from utils.file_utils import extract_any_archive
+                from utils.archive_utils import extract_any_archive
                 with tempfile.TemporaryDirectory(prefix='dh-theme-extract-') as temp_dir:
                     extract_any_archive(theme_file_path, temp_dir)
                     theme_json_path = os.path.join(temp_dir, 'theme.json')

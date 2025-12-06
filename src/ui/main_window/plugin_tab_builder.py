@@ -1,17 +1,9 @@
 from typing import Dict, Any
-from PyQt6.QtCore import Qt, QSize
+from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QFrame, QLabel, QPushButton, QScrollArea, QSizePolicy
 from managers.localization_manager import tr
+from ui.widgets.common.custom_controls import _ZeroHintWidget
 from ui.common.styling import get_theme_color
-
-
-class _ZeroHintWidget(QWidget):
-
-    def sizeHint(self) -> QSize:
-        return QSize(0, 0)
-
-    def minimumSizeHint(self) -> QSize:
-        return QSize(0, 0)
 
 
 class PluginTabBuilder:

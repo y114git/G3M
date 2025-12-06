@@ -31,22 +31,16 @@ class PluginManager(QObject):
         if not os.path.exists(self.app_state.plugins_metadata_path):
             return {}
         try:
-            if self.settings_manager:
-                return self.settings_manager.read_json(self.app_state.plugins_metadata_path) or {}
-            else:
-                with open(self.app_state.plugins_metadata_path, 'r', encoding='utf-8') as f:
-                    return json.load(f) or {}
+            from utils.file_utils import load_json
+            return load_json(self.app_state.plugins_metadata_path, migrate_config=False) or {}
         except Exception as e:
             logging.warning(f'_read_plugins_metadata: failed: {e}', exc_info=True)
             return {}
 
     def _write_plugins_metadata(self, data: Dict[str, Any]):
         try:
-            if self.settings_manager:
-                self.settings_manager.write_json(self.app_state.plugins_metadata_path, data)
-            else:
-                from utils.file_utils import atomic_write_json
-                atomic_write_json(self.app_state.plugins_metadata_path, data, indent=2)
+            from utils.file_utils import save_json
+            save_json(self.app_state.plugins_metadata_path, data, indent=2)
         except Exception as e:
             logging.error(f'_write_plugins_metadata: failed: {e}', exc_info=True)
 

@@ -265,9 +265,18 @@ class LibraryDisplayController:
 
     def on_mod_remove(self, mod_data):
         try:
-            if self.feedback_manager.ask_question('dialogs.delete_confirmation', 'dialogs.delete_mod_confirmation', '', False, mod_name=get_mod_name(mod_data)):
+            from utils.mod_utils import get_mod_key, get_mod_name
+            mod_key = get_mod_key(mod_data)
+            mod_name = get_mod_name(mod_data)
+            if self.feedback_manager.ask_question('dialogs.delete_confirmation', 'dialogs.delete_mod_confirmation', '', False, mod_name=mod_name):
                 self.mod_manager.delete_mod_files(mod_data)
-                self.slot_manager.remove_mod_from_all_chapters(mod_data)
+                if mod_key:
+                    minimal_mod_data = {'key': mod_key}
+                    if mod_name:
+                        minimal_mod_data['name'] = mod_name
+                    self.slot_manager.remove_mod_from_all_chapters(minimal_mod_data)
+                else:
+                    self.slot_manager.remove_mod_from_all_chapters(mod_data)
                 self.mod_manager.invalidate_mods_cache()
                 self.mod_manager.load_local_mods()
                 self.mod_manager.mod_list_updated.emit()

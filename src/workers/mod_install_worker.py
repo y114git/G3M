@@ -7,7 +7,8 @@ from typing import Optional, Dict
 from PyQt6.QtCore import QThread, pyqtSignal
 from managers.localization_manager import tr
 from utils.network_utils import get_session, download_file
-from utils.file_utils import extract_archive, sanitize_filename, has_deltamod_info_file
+from utils.archive_utils import extract_archive
+from utils.file_utils import sanitize_filename, has_deltamod_info_file
 from utils.deltamod_converter import DeltamodConverter
 from config.constants import NETWORK_TIMEOUT_HEAD, UI_COLORS, MOD_CONFIG_FILENAME, LEGACY_MOD_CONFIG_FILENAME
 from workers.base_install_worker import BaseInstallWorker
@@ -24,14 +25,53 @@ class ModInstallWorker(BaseInstallWorker):
 
     def _download_archive(self, url: str, target_path: str) -> bool:
         try:
+            from utils.file_utils import download_file_with_progress
+            from utils.ui_utils import format_size_mb
+            from config.constants import NETWORK_TIMEOUT_HEAD
             self.status.emit(tr('mods.downloading_mod'), UI_COLORS['status_warning'])
-            archive_path = self._download_file(url, os.path.basename(target_path), temp_dir_prefix='dh-mod-import-')
-            if archive_path and os.path.exists(archive_path):
-                target_dir = os.path.dirname(target_path)
-                os.makedirs(target_dir, exist_ok=True)
-                shutil.move(archive_path, target_path)
-                return True
-            return False
+            temp_dir = tempfile.mkdtemp(prefix='dh-mod-import-')
+            archive_path = os.path.join(temp_dir, os.path.basename(target_path))
+            try:
+                session = get_session()
+                self._session = session
+                downloaded_ref = [0]
+                total_size = 0
+                try:
+                    head_response = session.head(url, allow_redirects=True, timeout=NETWORK_TIMEOUT_HEAD)
+                    total_size = int(head_response.headers.get('content-length', 0))
+                except Exception:
+                    pass
+
+                def progress_callback(progress):
+                    if not self._cancelled:
+                        self.progress.emit(progress)
+                        if total_size > 0:
+                            downloaded_mb = format_size_mb(downloaded_ref[0])
+                            total_mb = format_size_mb(total_size)
+                            self.status.emit(f"{tr('mods.downloading_mod')} ({downloaded_mb} / {total_mb})", UI_COLORS['status_warning'])
+
+                def on_response(r):
+                    self._active_response = r
+                success = download_file_with_progress(url, archive_path, progress_callback=progress_callback, session=session, cancel_check=lambda: self._cancelled, on_response=on_response, downloaded_ref=downloaded_ref)
+                if not success:
+                    raise RuntimeError('download_failed')
+                if archive_path and os.path.exists(archive_path):
+                    target_dir = os.path.dirname(target_path)
+                    os.makedirs(target_dir, exist_ok=True)
+                    shutil.move(archive_path, target_path)
+                    return True
+                return False
+            except RuntimeError as e:
+                if str(e) == 'download_cancelled' or self._cancelled:
+                    self._cleanup_temp_files(archive_path, temp_dir)
+                    return False
+                raise
+            finally:
+                try:
+                    if os.path.exists(temp_dir):
+                        shutil.rmtree(temp_dir, ignore_errors=True)
+                except Exception:
+                    pass
         except RuntimeError as e:
             if str(e) == 'download_cancelled':
                 return False

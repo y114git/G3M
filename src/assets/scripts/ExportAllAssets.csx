@@ -1,0 +1,1129 @@
+#load "SharedPaths.csx"
+
+using System.Text;
+using System;
+using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
+using System.Collections.Generic;
+using System.Linq;
+using System.Reflection;
+using UndertaleModLib;
+using UndertaleModLib.Models;
+using UndertaleModLib.Util;
+
+void PrintLine(string s) => Console.WriteLine(s);
+bool DEBUG = Environment.GetEnvironmentVariable("DELTAHUB_DEBUG") == "1";
+void DebugLog(string s) { if (DEBUG) PrintLine($"[DEBUG] {s}"); }
+
+string SafeName(string name)
+{
+    var invalid = Path.GetInvalidFileNameChars();
+    var sb = new StringBuilder(name.Length);
+    foreach (var ch in name) sb.Append(invalid.Contains(ch) ? '_' : ch);
+    return sb.ToString();
+}
+
+object GetProp(object obj, string name)
+    => obj?.GetType().GetProperty(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.IgnoreCase)?.GetValue(obj);
+
+EnsureDataLoaded();
+
+if (Data.IsYYC())
+{
+    PrintLine("[ExportAllAssets] YYC build detected – code export not available.");
+    return;
+}
+
+string deltahubRoot = null;
+try
+{
+    deltahubRoot = FindDeltahubRoot();
+}
+catch
+{
+    if (!string.IsNullOrEmpty(FilePath))
+    {
+        var dataWinDir = new DirectoryInfo(Path.GetDirectoryName(FilePath));
+        var probe = dataWinDir;
+        while (probe != null)
+        {
+            if (Directory.Exists(Path.Combine(probe.FullName, "output"))) { deltahubRoot = probe.FullName; break; }
+            probe = probe.Parent;
+        }
+    }
+
+    if (deltahubRoot == null)
+    {
+        var entryAssembly = Assembly.GetEntryAssembly();
+        if (entryAssembly != null && !string.IsNullOrEmpty(entryAssembly.Location))
+        {
+            var firstParent = Directory.GetParent(entryAssembly.Location);
+            if (firstParent != null)
+            {
+                var assemblyRoot = Directory.GetParent(firstParent.FullName);
+                if (assemblyRoot != null && Directory.Exists(Path.Combine(assemblyRoot.FullName, "output")))
+                {
+                    deltahubRoot = assemblyRoot.FullName;
+                }
+            }
+        }
+    }
+
+    if (deltahubRoot == null)
+        throw new ScriptException("DELTAHUB root not found (no /output ancestor).");
+}
+
+string chapterNo = File.ReadAllText(Path.Combine(deltahubRoot, "output", "Cache", "running", "chapterNumber.txt"));
+string modNo = File.ReadAllText(Path.Combine(deltahubRoot, "output", "Cache", "running", "modNumbersCache.txt"));
+
+string modRoot = Path.Combine(deltahubRoot, "output", "xDeltaCombiner", chapterNo, modNo);
+string outputRoot = Path.Combine(modRoot, "Objects");
+Directory.CreateDirectory(outputRoot);
+
+string codeFolder = Path.Combine(outputRoot, "CodeEntries");
+string sprFolder = Path.Combine(outputRoot, "Sprites");
+string fntFolder = Path.Combine(outputRoot, "Fonts");
+string bgrFolder = Path.Combine(outputRoot, "Backgrounds");
+string roomsOut = Path.Combine(outputRoot, "Rooms");
+string shadersOut = Path.Combine(outputRoot, "Shaders");
+string soundsOut = Path.Combine(outputRoot, "Sounds");
+
+Directory.CreateDirectory(codeFolder);
+Directory.CreateDirectory(sprFolder);
+Directory.CreateDirectory(fntFolder);
+Directory.CreateDirectory(bgrFolder);
+Directory.CreateDirectory(roomsOut);
+Directory.CreateDirectory(shadersOut);
+Directory.CreateDirectory(soundsOut);
+
+UndertaleData vanillaData = LoadVanillaData();
+
+if (modNo == "0")
+{
+    vanillaData = null;
+}
+
+PrintLine($"[ExportAllAssets] Starting unified export for mod {modNo}...");
+
+GlobalDecompileContext globalDecompileContext = new(Data);
+Underanalyzer.Decompiler.IDecompileSettings decompilerSettings = Data.ToolInfo.DecompilerSettings;
+
+Dictionary<string, UndertaleCode> vanillaCodes = new Dictionary<string, UndertaleCode>();
+Dictionary<string, string> vanillaCodeHashes = new Dictionary<string, string>();
+Dictionary<string, UndertaleSprite> vanillaSprites = new Dictionary<string, UndertaleSprite>();
+Dictionary<string, UndertaleBackground> vanillaBackgrounds = new Dictionary<string, UndertaleBackground>();
+Dictionary<string, UndertaleFont> vanillaFonts = new Dictionary<string, UndertaleFont>();
+Dictionary<string, UndertaleRoom> vanillaRooms = new Dictionary<string, UndertaleRoom>();
+Dictionary<string, UndertaleShader> vanillaShaders = new Dictionary<string, UndertaleShader>();
+Dictionary<string, UndertaleSound> vanillaSounds = new Dictionary<string, UndertaleSound>();
+
+if (vanillaData != null)
+{
+    foreach (var c in vanillaData.Code)
+    {
+        if (c.Name?.Content != null)
+        {
+            vanillaCodes[c.Name.Content] = c;
+            vanillaCodeHashes[c.Name.Content] = GetCodeHash(c);
+        }
+    }
+    foreach (var s in vanillaData.Sprites)
+        if (s?.Name?.Content != null) vanillaSprites[s.Name.Content] = s;
+    foreach (var b in vanillaData.Backgrounds)
+        if (b?.Name?.Content != null) vanillaBackgrounds[b.Name.Content] = b;
+    foreach (var f in vanillaData.Fonts)
+        if (f?.Name?.Content != null) vanillaFonts[f.Name.Content] = f;
+    foreach (var r in vanillaData.Rooms)
+        if (r?.Name?.Content != null) vanillaRooms[r.Name.Content] = r;
+    foreach (var sh in vanillaData.Shaders)
+        if (sh?.Name?.Content != null) vanillaShaders[sh.Name.Content] = sh;
+    foreach (var so in vanillaData.Sounds)
+        if (so?.Name?.Content != null) vanillaSounds[so.Name.Content] = so;
+}
+else
+{
+    Console.WriteLine("[ExportAllAssets] WARNING: Vanilla data is null! All resources will be exported as NEW.");
+}
+
+string GetCodeHash(UndertaleCode code)
+{
+    if (code == null) return "null";
+    StringBuilder sb = new StringBuilder();
+
+    sb.Append(code.ArgumentsCount).Append('|');
+    sb.Append(code.LocalsCount).Append('|');
+
+    foreach (var instr in code.Instructions)
+    {
+        sb.Append(instr.ToString()).Append(';');
+    }
+
+    return ComputeSha256(sb.ToString());
+}
+
+bool IsTextureItemChanged(UndertaleTexturePageItem current, UndertaleTexturePageItem vanilla)
+{
+    if (current == null && vanilla == null) return false;
+    if (current == null || vanilla == null) return true;
+
+    if (current.SourceX != vanilla.SourceX || current.SourceY != vanilla.SourceY ||
+        current.SourceWidth != vanilla.SourceWidth || current.SourceHeight != vanilla.SourceHeight)
+        return true;
+
+    if (current.TargetWidth != vanilla.TargetWidth || current.TargetHeight != vanilla.TargetHeight)
+        return true;
+
+    if (current.TexturePage?.Name?.Content != vanilla.TexturePage?.Name?.Content)
+        return true;
+
+    return false;
+}
+
+void WriteJsonString(StringBuilder sb, string value)
+{
+    if (value == null) { sb.Append("null"); return; }
+    sb.Append("\"");
+    foreach (var ch in value)
+    {
+        if (ch == '"') sb.Append("\\\"");
+        else if (ch == '\\') sb.Append("\\\\");
+        else if (ch == '\n') sb.Append("\\n");
+        else if (ch == '\r') sb.Append("\\r");
+        else if (ch == '\t') sb.Append("\\t");
+        else sb.Append(ch);
+    }
+    sb.Append("\"");
+}
+
+void WriteJsonBool(StringBuilder sb, bool value) => sb.Append(value ? "true" : "false");
+void WriteJsonNumber(StringBuilder sb, int value) => sb.Append(value);
+void WriteJsonNumber(StringBuilder sb, uint value) => sb.Append(value);
+void WriteJsonNumber(StringBuilder sb, float value) => sb.Append(value.ToString("G9"));
+void WriteJsonNumber(StringBuilder sb, double value) => sb.Append(value.ToString("G9"));
+
+void ExportRoom(UndertaleRoom room, string outputPath)
+{
+    var sb = new StringBuilder();
+    sb.AppendLine("{");
+
+    WriteJsonString(sb, "name"); sb.Append(": "); WriteJsonString(sb, room.Name?.Content ?? ""); sb.AppendLine(",");
+    WriteJsonString(sb, "width"); sb.Append(": "); WriteJsonNumber(sb, room.Width); sb.AppendLine(",");
+    WriteJsonString(sb, "height"); sb.Append(": "); WriteJsonNumber(sb, room.Height); sb.AppendLine(",");
+    WriteJsonString(sb, "speed"); sb.Append(": "); WriteJsonNumber(sb, room.Speed); sb.AppendLine(",");
+    WriteJsonString(sb, "persistent"); sb.Append(": "); WriteJsonBool(sb, room.Persistent); sb.AppendLine(",");
+    WriteJsonString(sb, "backgroundColor"); sb.Append(": "); WriteJsonNumber(sb, (int)(room.BackgroundColor & 0xFFFFFF)); sb.AppendLine(",");
+    WriteJsonString(sb, "drawBackgroundColor"); sb.Append(": "); WriteJsonBool(sb, room.DrawBackgroundColor); sb.AppendLine(",");
+    WriteJsonString(sb, "creationCodeId"); sb.Append(": "); WriteJsonString(sb, room.CreationCodeId?.Name?.Content); sb.AppendLine(",");
+    WriteJsonString(sb, "flags"); sb.Append(": "); WriteJsonNumber(sb, (int)room.Flags); sb.AppendLine(",");
+    WriteJsonString(sb, "world"); sb.Append(": "); WriteJsonBool(sb, room.World); sb.AppendLine(",");
+    WriteJsonString(sb, "top"); sb.Append(": "); WriteJsonNumber(sb, room.Top); sb.AppendLine(",");
+    WriteJsonString(sb, "left"); sb.Append(": "); WriteJsonNumber(sb, room.Left); sb.AppendLine(",");
+    WriteJsonString(sb, "right"); sb.Append(": "); WriteJsonNumber(sb, room.Right); sb.AppendLine(",");
+    WriteJsonString(sb, "bottom"); sb.Append(": "); WriteJsonNumber(sb, room.Bottom); sb.AppendLine(",");
+    WriteJsonString(sb, "gravityX"); sb.Append(": "); WriteJsonNumber(sb, room.GravityX); sb.AppendLine(",");
+    WriteJsonString(sb, "gravityY"); sb.Append(": "); WriteJsonNumber(sb, room.GravityY); sb.AppendLine(",");
+    WriteJsonString(sb, "metersPerPixel"); sb.Append(": "); WriteJsonNumber(sb, room.MetersPerPixel); sb.AppendLine(",");
+
+    WriteJsonString(sb, "backgrounds"); sb.Append(": [");
+    bool first = true;
+    foreach (var bg in room.Backgrounds)
+    {
+        if (!first) sb.Append(",");
+        first = false;
+        sb.AppendLine();
+        sb.Append("    {");
+        WriteJsonString(sb, "enabled"); sb.Append(": "); WriteJsonBool(sb, bg.Enabled); sb.Append(",");
+        WriteJsonString(sb, "foreground"); sb.Append(": "); WriteJsonBool(sb, bg.Foreground); sb.Append(",");
+        WriteJsonString(sb, "backgroundDefinition"); sb.Append(": "); WriteJsonString(sb, bg.BackgroundDefinition?.Name?.Content); sb.Append(",");
+        WriteJsonString(sb, "x"); sb.Append(": "); WriteJsonNumber(sb, bg.X); sb.Append(",");
+        WriteJsonString(sb, "y"); sb.Append(": "); WriteJsonNumber(sb, bg.Y); sb.Append(",");
+        WriteJsonString(sb, "tiledHorizontally"); sb.Append(": "); WriteJsonBool(sb, bg.TiledHorizontally); sb.Append(",");
+        WriteJsonString(sb, "tiledVertically"); sb.Append(": "); WriteJsonBool(sb, bg.TiledVertically); sb.Append(",");
+        WriteJsonString(sb, "speedX"); sb.Append(": "); WriteJsonNumber(sb, bg.SpeedX); sb.Append(",");
+        WriteJsonString(sb, "speedY"); sb.Append(": "); WriteJsonNumber(sb, bg.SpeedY); sb.Append(",");
+        WriteJsonString(sb, "stretch"); sb.Append(": "); WriteJsonBool(sb, bg.Stretch);
+        sb.Append("}");
+    }
+    sb.AppendLine();
+    sb.AppendLine("],");
+
+    WriteJsonString(sb, "views"); sb.Append(": [");
+    first = true;
+    foreach (var view in room.Views)
+    {
+        if (!first) sb.Append(",");
+        first = false;
+        sb.AppendLine();
+        sb.Append("    {");
+        WriteJsonString(sb, "enabled"); sb.Append(": "); WriteJsonBool(sb, view.Enabled); sb.Append(",");
+        WriteJsonString(sb, "viewX"); sb.Append(": "); WriteJsonNumber(sb, view.ViewX); sb.Append(",");
+        WriteJsonString(sb, "viewY"); sb.Append(": "); WriteJsonNumber(sb, view.ViewY); sb.Append(",");
+        WriteJsonString(sb, "viewWidth"); sb.Append(": "); WriteJsonNumber(sb, view.ViewWidth); sb.Append(",");
+        WriteJsonString(sb, "viewHeight"); sb.Append(": "); WriteJsonNumber(sb, view.ViewHeight); sb.Append(",");
+        WriteJsonString(sb, "portX"); sb.Append(": "); WriteJsonNumber(sb, view.PortX); sb.Append(",");
+        WriteJsonString(sb, "portY"); sb.Append(": "); WriteJsonNumber(sb, view.PortY); sb.Append(",");
+        WriteJsonString(sb, "portWidth"); sb.Append(": "); WriteJsonNumber(sb, view.PortWidth); sb.Append(",");
+        WriteJsonString(sb, "portHeight"); sb.Append(": "); WriteJsonNumber(sb, view.PortHeight); sb.Append(",");
+        WriteJsonString(sb, "borderX"); sb.Append(": "); WriteJsonNumber(sb, view.BorderX); sb.Append(",");
+        WriteJsonString(sb, "borderY"); sb.Append(": "); WriteJsonNumber(sb, view.BorderY); sb.Append(",");
+        WriteJsonString(sb, "speedX"); sb.Append(": "); WriteJsonNumber(sb, view.SpeedX); sb.Append(",");
+        WriteJsonString(sb, "speedY"); sb.Append(": "); WriteJsonNumber(sb, view.SpeedY); sb.Append(",");
+        WriteJsonString(sb, "objectId"); sb.Append(": "); WriteJsonString(sb, view.ObjectId?.Name?.Content);
+        sb.Append("}");
+    }
+    sb.AppendLine();
+    sb.AppendLine("],");
+
+    WriteJsonString(sb, "gameObjects"); sb.Append(": [");
+    first = true;
+    foreach (var obj in room.GameObjects)
+    {
+        if (!first) sb.Append(",");
+        first = false;
+        sb.AppendLine();
+        sb.Append("    {");
+        WriteJsonString(sb, "x"); sb.Append(": "); WriteJsonNumber(sb, obj.X); sb.Append(",");
+        WriteJsonString(sb, "y"); sb.Append(": "); WriteJsonNumber(sb, obj.Y); sb.Append(",");
+        WriteJsonString(sb, "objectDefinition"); sb.Append(": "); WriteJsonString(sb, obj.ObjectDefinition?.Name?.Content); sb.Append(",");
+        WriteJsonString(sb, "instanceID"); sb.Append(": "); WriteJsonNumber(sb, obj.InstanceID); sb.Append(",");
+        WriteJsonString(sb, "creationCode"); sb.Append(": "); WriteJsonString(sb, obj.CreationCode?.Name?.Content); sb.Append(",");
+        WriteJsonString(sb, "scaleX"); sb.Append(": "); WriteJsonNumber(sb, obj.ScaleX); sb.Append(",");
+        WriteJsonString(sb, "scaleY"); sb.Append(": "); WriteJsonNumber(sb, obj.ScaleY); sb.Append(",");
+        WriteJsonString(sb, "color"); sb.Append(": "); WriteJsonNumber(sb, (int)obj.Color); sb.Append(",");
+        WriteJsonString(sb, "rotation"); sb.Append(": "); WriteJsonNumber(sb, obj.Rotation); sb.Append(",");
+        WriteJsonString(sb, "preCreateCode"); sb.Append(": "); WriteJsonString(sb, obj.PreCreateCode?.Name?.Content); sb.Append(",");
+        WriteJsonString(sb, "imageSpeed"); sb.Append(": "); WriteJsonNumber(sb, obj.ImageSpeed); sb.Append(",");
+        WriteJsonString(sb, "imageIndex"); sb.Append(": "); WriteJsonNumber(sb, obj.ImageIndex);
+        sb.Append("}");
+    }
+    sb.AppendLine();
+    sb.AppendLine("],");
+
+    WriteJsonString(sb, "tiles"); sb.Append(": [");
+    first = true;
+    foreach (var tile in room.Tiles)
+    {
+        if (!first) sb.Append(",");
+        first = false;
+        sb.AppendLine();
+        sb.Append("    {");
+        WriteJsonString(sb, "spriteMode"); sb.Append(": "); WriteJsonBool(sb, tile.spriteMode); sb.Append(",");
+        WriteJsonString(sb, "x"); sb.Append(": "); WriteJsonNumber(sb, tile.X); sb.Append(",");
+        WriteJsonString(sb, "y"); sb.Append(": "); WriteJsonNumber(sb, tile.Y); sb.Append(",");
+        WriteJsonString(sb, "backgroundDefinition"); sb.Append(": "); WriteJsonString(sb, tile.BackgroundDefinition?.Name?.Content); sb.Append(",");
+        WriteJsonString(sb, "spriteDefinition"); sb.Append(": "); WriteJsonString(sb, tile.SpriteDefinition?.Name?.Content); sb.Append(",");
+        WriteJsonString(sb, "sourceX"); sb.Append(": "); WriteJsonNumber(sb, tile.SourceX); sb.Append(",");
+        WriteJsonString(sb, "sourceY"); sb.Append(": "); WriteJsonNumber(sb, tile.SourceY); sb.Append(",");
+        WriteJsonString(sb, "width"); sb.Append(": "); WriteJsonNumber(sb, tile.Width); sb.Append(",");
+        WriteJsonString(sb, "height"); sb.Append(": "); WriteJsonNumber(sb, tile.Height); sb.Append(",");
+        WriteJsonString(sb, "tileDepth"); sb.Append(": "); WriteJsonNumber(sb, tile.TileDepth); sb.Append(",");
+        WriteJsonString(sb, "instanceID"); sb.Append(": "); WriteJsonNumber(sb, tile.InstanceID); sb.Append(",");
+        WriteJsonString(sb, "scaleX"); sb.Append(": "); WriteJsonNumber(sb, tile.ScaleX); sb.Append(",");
+        WriteJsonString(sb, "scaleY"); sb.Append(": "); WriteJsonNumber(sb, tile.ScaleY); sb.Append(",");
+        WriteJsonString(sb, "color"); sb.Append(": "); WriteJsonNumber(sb, (int)tile.Color);
+        sb.Append("}");
+    }
+    sb.AppendLine();
+    sb.AppendLine("],");
+
+    WriteJsonString(sb, "layers"); sb.Append(": [");
+    first = true;
+    foreach (var layer in room.Layers)
+    {
+        if (!first) sb.Append(",");
+        first = false;
+        sb.AppendLine();
+        sb.Append("    {");
+        WriteJsonString(sb, "layerName"); sb.Append(": "); WriteJsonString(sb, layer.LayerName?.Content); sb.Append(",");
+        WriteJsonString(sb, "layerId"); sb.Append(": "); WriteJsonNumber(sb, layer.LayerId); sb.Append(",");
+        WriteJsonString(sb, "layerType"); sb.Append(": "); WriteJsonNumber(sb, (int)layer.LayerType); sb.Append(",");
+        WriteJsonString(sb, "layerDepth"); sb.Append(": "); WriteJsonNumber(sb, layer.LayerDepth); sb.Append(",");
+        WriteJsonString(sb, "xOffset"); sb.Append(": "); WriteJsonNumber(sb, layer.XOffset); sb.Append(",");
+        WriteJsonString(sb, "yOffset"); sb.Append(": "); WriteJsonNumber(sb, layer.YOffset); sb.Append(",");
+        WriteJsonString(sb, "hSpeed"); sb.Append(": "); WriteJsonNumber(sb, layer.HSpeed); sb.Append(",");
+        WriteJsonString(sb, "vSpeed"); sb.Append(": "); WriteJsonNumber(sb, layer.VSpeed); sb.Append(",");
+        WriteJsonString(sb, "isVisible"); sb.Append(": "); WriteJsonBool(sb, layer.IsVisible);
+
+        sb.AppendLine(",");
+        WriteJsonString(sb, "layerData"); sb.Append(": {}");
+
+        sb.Append("}");
+    }
+    sb.AppendLine();
+    sb.Append("]");
+
+    sb.AppendLine();
+    sb.Append("}");
+
+    File.WriteAllText(outputPath, sb.ToString(), Encoding.UTF8);
+}
+
+void ExportShader(UndertaleShader shader, string outputDir)
+{
+    Directory.CreateDirectory(outputDir);
+
+    string shaderType = shader.Type.ToString();
+    File.WriteAllText(Path.Combine(outputDir, "Type.txt"), shaderType, Encoding.UTF8);
+
+    if (shader.GLSL_ES_Fragment != null)
+        File.WriteAllText(Path.Combine(outputDir, "GLSL_ES_Fragment.txt"), shader.GLSL_ES_Fragment.Content ?? "", Encoding.UTF8);
+    if (shader.GLSL_ES_Vertex != null)
+        File.WriteAllText(Path.Combine(outputDir, "GLSL_ES_Vertex.txt"), shader.GLSL_ES_Vertex.Content ?? "", Encoding.UTF8);
+    if (shader.GLSL_Fragment != null)
+        File.WriteAllText(Path.Combine(outputDir, "GLSL_Fragment.txt"), shader.GLSL_Fragment.Content ?? "", Encoding.UTF8);
+    if (shader.GLSL_Vertex != null)
+        File.WriteAllText(Path.Combine(outputDir, "GLSL_Vertex.txt"), shader.GLSL_Vertex.Content ?? "", Encoding.UTF8);
+    if (shader.HLSL9_Fragment != null)
+        File.WriteAllText(Path.Combine(outputDir, "HLSL9_Fragment.txt"), shader.HLSL9_Fragment.Content ?? "", Encoding.UTF8);
+    if (shader.HLSL9_Vertex != null)
+        File.WriteAllText(Path.Combine(outputDir, "HLSL9_Vertex.txt"), shader.HLSL9_Vertex.Content ?? "", Encoding.UTF8);
+
+    if (shader.HLSL11_VertexData != null && !shader.HLSL11_VertexData.IsNull && shader.HLSL11_VertexData.Data != null && shader.HLSL11_VertexData.Data.Length > 0)
+        File.WriteAllBytes(Path.Combine(outputDir, "HLSL11_VertexData.bin"), shader.HLSL11_VertexData.Data);
+    if (shader.HLSL11_PixelData != null && !shader.HLSL11_PixelData.IsNull && shader.HLSL11_PixelData.Data != null && shader.HLSL11_PixelData.Data.Length > 0)
+        File.WriteAllBytes(Path.Combine(outputDir, "HLSL11_PixelData.bin"), shader.HLSL11_PixelData.Data);
+    if (shader.PSSL_VertexData != null && !shader.PSSL_VertexData.IsNull && shader.PSSL_VertexData.Data != null && shader.PSSL_VertexData.Data.Length > 0)
+        File.WriteAllBytes(Path.Combine(outputDir, "PSSL_VertexData.bin"), shader.PSSL_VertexData.Data);
+    if (shader.PSSL_PixelData != null && !shader.PSSL_PixelData.IsNull && shader.PSSL_PixelData.Data != null && shader.PSSL_PixelData.Data.Length > 0)
+        File.WriteAllBytes(Path.Combine(outputDir, "PSSL_PixelData.bin"), shader.PSSL_PixelData.Data);
+    if (shader.Cg_PSVita_VertexData != null && !shader.Cg_PSVita_VertexData.IsNull && shader.Cg_PSVita_VertexData.Data != null && shader.Cg_PSVita_VertexData.Data.Length > 0)
+        File.WriteAllBytes(Path.Combine(outputDir, "Cg_PSVita_VertexData.bin"), shader.Cg_PSVita_VertexData.Data);
+    if (shader.Cg_PSVita_PixelData != null && !shader.Cg_PSVita_PixelData.IsNull && shader.Cg_PSVita_PixelData.Data != null && shader.Cg_PSVita_PixelData.Data.Length > 0)
+        File.WriteAllBytes(Path.Combine(outputDir, "Cg_PSVita_PixelData.bin"), shader.Cg_PSVita_PixelData.Data);
+    if (shader.Cg_PS3_VertexData != null && !shader.Cg_PS3_VertexData.IsNull && shader.Cg_PS3_VertexData.Data != null && shader.Cg_PS3_VertexData.Data.Length > 0)
+        File.WriteAllBytes(Path.Combine(outputDir, "Cg_PS3_VertexData.bin"), shader.Cg_PS3_VertexData.Data);
+    if (shader.Cg_PS3_PixelData != null && !shader.Cg_PS3_PixelData.IsNull && shader.Cg_PS3_PixelData.Data != null && shader.Cg_PS3_PixelData.Data.Length > 0)
+        File.WriteAllBytes(Path.Combine(outputDir, "Cg_PS3_PixelData.bin"), shader.Cg_PS3_PixelData.Data);
+
+    if (shader.VertexShaderAttributes != null && shader.VertexShaderAttributes.Count > 0)
+    {
+        var attrs = new StringBuilder();
+        for (int i = 0; i < shader.VertexShaderAttributes.Count; i++)
+        {
+            var attr = shader.VertexShaderAttributes[i];
+            if (attr != null && attr.Name != null)
+            {
+                attrs.AppendLine(attr.Name.Content ?? "");
+            }
+        }
+        File.WriteAllText(Path.Combine(outputDir, "VertexShaderAttributes.txt"), attrs.ToString(), Encoding.UTF8);
+    }
+}
+
+byte[] EMPTY_WAV_FILE_BYTES = Convert.FromBase64String("UklGRiQAAABXQVZFZm10IBAAAAABAAIAQB8AAAB9AAAEABAAZGF0YQAAAAA=");
+string DEFAULT_AUDIOGROUP_NAME = "audiogroup_default";
+
+Dictionary<string, IList<UndertaleEmbeddedAudio>> loadedAudioGroups = null;
+IList<UndertaleEmbeddedAudio> GetAudioGroupData(UndertaleSound sound, UndertaleData data, string comparisonPath)
+{
+    loadedAudioGroups ??= new Dictionary<string, IList<UndertaleEmbeddedAudio>>();
+
+    string audioGroupName = sound.AudioGroup is not null ? sound.AudioGroup.Name.Content : DEFAULT_AUDIOGROUP_NAME;
+    if (loadedAudioGroups.ContainsKey(audioGroupName))
+    {
+        return loadedAudioGroups[audioGroupName];
+    }
+
+    string relativeAudioGroupPath;
+    if (sound.AudioGroup is UndertaleAudioGroup { Path.Content: string customRelativePath })
+    {
+        relativeAudioGroupPath = customRelativePath;
+    }
+    else
+    {
+        relativeAudioGroupPath = $"audiogroup{sound.GroupID}.dat";
+    }
+    string groupFilePath = Path.Combine(Path.GetDirectoryName(comparisonPath), relativeAudioGroupPath);
+    if (!File.Exists(groupFilePath))
+    {
+        return null;
+    }
+
+    try
+    {
+        UndertaleData groupData = null;
+        using (var stream = new FileStream(groupFilePath, FileMode.Open, FileAccess.Read))
+        {
+            groupData = UndertaleIO.Read(stream);
+        }
+        loadedAudioGroups[audioGroupName] = groupData.EmbeddedAudio;
+        return groupData.EmbeddedAudio;
+    }
+    catch (Exception e)
+    {
+        PrintLine($"[ExportAllAssets] Error loading {audioGroupName}: {e.Message}");
+        return null;
+    }
+}
+
+byte[] GetSoundData(UndertaleSound sound, UndertaleData data, string comparisonPath)
+{
+    if (sound.AudioFile is not null)
+    {
+        return sound.AudioFile.Data;
+    }
+
+    if (sound.GroupID > data.GetBuiltinSoundGroupID())
+    {
+        IList<UndertaleEmbeddedAudio> audioGroup = GetAudioGroupData(sound, data, comparisonPath);
+        if (audioGroup is not null && sound.AudioID < audioGroup.Count)
+        {
+            return audioGroup[sound.AudioID].Data;
+        }
+    }
+
+    return EMPTY_WAV_FILE_BYTES;
+}
+
+string comparisonPath = null;
+if (modNo != "0" && modNo != "1")
+{
+    int modNum = int.Parse(modNo);
+    string previousModPath = Path.Combine(deltahubRoot, "output", "xDeltaCombiner", chapterNo, (modNum - 1).ToString(), "data.win");
+    if (File.Exists(previousModPath))
+    {
+        comparisonPath = previousModPath;
+    }
+}
+if (comparisonPath == null)
+{
+    comparisonPath = Path.Combine(deltahubRoot, "output", "xDeltaCombiner", chapterNo, "0", "data.win");
+}
+
+List<UndertaleCode> reallyChanged = new List<UndertaleCode>();
+List<UndertaleSprite> changedSprites = new List<UndertaleSprite>();
+List<UndertaleBackground> changedBackgrounds = new List<UndertaleBackground>();
+List<UndertaleFont> changedFonts = new List<UndertaleFont>();
+List<UndertaleRoom> changedRooms = new List<UndertaleRoom>();
+List<UndertaleShader> changedShaders = new List<UndertaleShader>();
+List<UndertaleSound> changedSounds = new List<UndertaleSound>();
+
+int codeNew = 0, codeChanged = 0;
+int spritesNew = 0, spritesChanged = 0;
+int backgroundsNew = 0, backgroundsChanged = 0;
+int fontsNew = 0, fontsChanged = 0;
+int roomsNew = 0, roomsChanged = 0;
+int shadersNew = 0, shadersChanged = 0;
+int soundsNew = 0, soundsChanged = 0;
+int tilesetsExported = 0, tilesetsSkipped = 0;
+
+PrintLine("[ExportAllAssets] Analyzing changes...");
+
+List<UndertaleCode> toDump = Data.Code.Where(c => c.ParentEntry is null).ToList();
+
+foreach (var code in toDump)
+{
+    string name = code.Name.Content;
+    if (vanillaData == null || !vanillaCodes.ContainsKey(name))
+    {
+        reallyChanged.Add(code);
+        codeNew++;
+        LogDiff("Code", name, "New entry");
+        continue;
+    }
+
+    var vCode = vanillaCodes[name];
+
+    if (code.Instructions.Count != vCode.Instructions.Count)
+    {
+        reallyChanged.Add(code);
+        codeChanged++;
+        LogDiff("Code", name, $"Instruction count diff ({code.Instructions.Count} vs {vCode.Instructions.Count})");
+        continue;
+    }
+
+    string currentHash = GetCodeHash(code);
+    string vanillaHash = vanillaCodeHashes.ContainsKey(name) ? vanillaCodeHashes[name] : GetCodeHash(vCode);
+
+    if (currentHash != vanillaHash)
+    {
+        reallyChanged.Add(code);
+        codeChanged++;
+        LogDiff("Code", name, "Hash mismatch");
+    }
+    else LogSkip("Code", name);
+}
+
+foreach (var spr in Data.Sprites)
+{
+    string name = spr.Name.Content;
+    if (vanillaData == null || !vanillaSprites.ContainsKey(name))
+    {
+        changedSprites.Add(spr);
+        spritesNew++;
+        LogDiff("Sprite", name, "New");
+        continue;
+    }
+
+    var vSpr = vanillaSprites[name];
+    if (spr.Width != vSpr.Width || spr.Height != vSpr.Height ||
+        spr.MarginLeft != vSpr.MarginLeft || spr.MarginRight != vSpr.MarginRight ||
+        spr.MarginTop != vSpr.MarginTop || spr.MarginBottom != vSpr.MarginBottom ||
+        spr.OriginX != vSpr.OriginX || spr.OriginY != vSpr.OriginY ||
+        spr.Textures.Count != vSpr.Textures.Count ||
+        spr.SepMasks != vSpr.SepMasks)
+    {
+        changedSprites.Add(spr);
+        spritesChanged++;
+        LogDiff("Sprite", name, "Props mismatch");
+        continue;
+    }
+
+    bool texChanged = false;
+    for (int i = 0; i < spr.Textures.Count; i++)
+    {
+        if (IsTextureItemChanged(spr.Textures[i].Texture, vSpr.Textures[i].Texture))
+        {
+            texChanged = true;
+            break;
+        }
+    }
+    if (texChanged)
+    {
+        changedSprites.Add(spr);
+        spritesChanged++;
+        LogDiff("Sprite", name, "Texture changed");
+    }
+    else LogSkip("Sprite", name);
+}
+
+foreach (var bg in Data.Backgrounds)
+{
+    string name = bg.Name.Content;
+    if (vanillaData == null || !vanillaBackgrounds.ContainsKey(name))
+    {
+        changedBackgrounds.Add(bg);
+        backgroundsNew++;
+        LogDiff("BG", name, "New");
+        continue;
+    }
+
+    var vBg = vanillaBackgrounds[name];
+    if (bg.Transparent != vBg.Transparent || bg.Preload != vBg.Preload ||
+        IsTextureItemChanged(bg.Texture, vBg.Texture))
+    {
+        changedBackgrounds.Add(bg);
+        backgroundsChanged++;
+        LogDiff("BG", name, "Changed");
+    }
+    else LogSkip("BG", name);
+}
+
+foreach (var font in Data.Fonts)
+{
+    if (font?.Name?.Content == null) continue;
+    string name = SafeName(font.Name.Content);
+
+    bool shouldExport = false;
+    if (!vanillaFonts.ContainsKey(font.Name.Content))
+    {
+        shouldExport = true;
+        fontsNew++;
+    }
+    else
+    {
+        var compFont = vanillaFonts[font.Name.Content];
+        if (font.Texture?.TexturePage?.Name?.Content != compFont.Texture?.TexturePage?.Name?.Content ||
+            font.DisplayName?.Content != compFont.DisplayName?.Content ||
+            font.EmSize != compFont.EmSize ||
+            font.Bold != compFont.Bold ||
+            font.Italic != compFont.Italic ||
+            font.Charset != compFont.Charset ||
+            font.AntiAliasing != compFont.AntiAliasing ||
+            font.ScaleX != compFont.ScaleX ||
+            font.ScaleY != compFont.ScaleY ||
+            font.Glyphs.Count != compFont.Glyphs.Count)
+        {
+            shouldExport = true;
+            fontsChanged++;
+        }
+        else
+        {
+            bool glyphsDiffer = false;
+            for (int i = 0; i < font.Glyphs.Count && i < compFont.Glyphs.Count; i++)
+            {
+                var g = font.Glyphs[i];
+                var cg = compFont.Glyphs[i];
+                if (g.Character != cg.Character ||
+                    g.SourceX != cg.SourceX ||
+                    g.SourceY != cg.SourceY ||
+                    g.SourceWidth != cg.SourceWidth ||
+                    g.SourceHeight != cg.SourceHeight ||
+                    g.Shift != cg.Shift ||
+                    g.Offset != cg.Offset)
+                {
+                    glyphsDiffer = true;
+                    break;
+                }
+            }
+            if (glyphsDiffer)
+            {
+                shouldExport = true;
+                fontsChanged++;
+            }
+        }
+    }
+
+    if (shouldExport)
+    {
+        changedFonts.Add(font);
+    }
+}
+
+foreach (var room in Data.Rooms)
+{
+    if (room?.Name?.Content == null) continue;
+
+    string roomName = room.Name.Content;
+    bool isNew = !vanillaRooms.ContainsKey(roomName);
+    bool isChanged = false;
+
+    if (!isNew)
+    {
+        var compRoom = vanillaRooms[roomName];
+
+        if (room.Width != compRoom.Width || room.Height != compRoom.Height ||
+            room.Speed != compRoom.Speed || room.Persistent != compRoom.Persistent ||
+            room.Backgrounds.Count != compRoom.Backgrounds.Count ||
+            room.Views.Count != compRoom.Views.Count ||
+            room.GameObjects.Count != compRoom.GameObjects.Count ||
+            room.Tiles.Count != compRoom.Tiles.Count ||
+            room.Layers.Count != compRoom.Layers.Count)
+        {
+            isChanged = true;
+        }
+    }
+
+    if (isNew || isChanged)
+    {
+        changedRooms.Add(room);
+        if (isNew) roomsNew++; else roomsChanged++;
+    }
+}
+
+foreach (var shader in Data.Shaders)
+{
+    if (shader?.Name?.Content == null) continue;
+
+    string shaderName = shader.Name.Content;
+    bool isNew = !vanillaShaders.ContainsKey(shaderName);
+    bool isChanged = false;
+
+    if (!isNew)
+    {
+        var compShader = vanillaShaders[shaderName];
+
+        if (shader.Type != compShader.Type ||
+            (shader.GLSL_ES_Fragment?.Content ?? "") != (compShader.GLSL_ES_Fragment?.Content ?? "") ||
+            (shader.GLSL_ES_Vertex?.Content ?? "") != (compShader.GLSL_ES_Vertex?.Content ?? "") ||
+            (shader.GLSL_Fragment?.Content ?? "") != (compShader.GLSL_Fragment?.Content ?? "") ||
+            (shader.GLSL_Vertex?.Content ?? "") != (compShader.GLSL_Vertex?.Content ?? ""))
+        {
+            isChanged = true;
+        }
+    }
+
+    if (isNew || isChanged)
+    {
+        changedShaders.Add(shader);
+        if (isNew) shadersNew++; else shadersChanged++;
+    }
+}
+
+foreach (var sound in Data.Sounds)
+{
+    if (sound?.Name?.Content == null) continue;
+    string name = SafeName(sound.Name.Content);
+
+    bool shouldExport = false;
+    if (!vanillaSounds.ContainsKey(sound.Name.Content))
+    {
+        shouldExport = true;
+        soundsNew++;
+    }
+    else
+    {
+        var compSound = vanillaSounds[sound.Name.Content];
+        if (sound.Flags != compSound.Flags ||
+            sound.Volume != compSound.Volume ||
+            sound.Pitch != compSound.Pitch ||
+            sound.GroupID != compSound.GroupID ||
+            sound.AudioID != compSound.AudioID ||
+            sound.Name.Content != compSound.Name.Content)
+        {
+            shouldExport = true;
+            soundsChanged++;
+        }
+        else
+        {
+            byte[] currentData = GetSoundData(sound, Data, comparisonPath);
+            byte[] compData = GetSoundData(compSound, vanillaData, comparisonPath);
+            if (!currentData.SequenceEqual(compData))
+            {
+                shouldExport = true;
+                soundsChanged++;
+            }
+        }
+    }
+
+    if (shouldExport)
+    {
+        changedSounds.Add(sound);
+    }
+}
+
+foreach (var bg in Data.Backgrounds)
+{
+    if (bg?.Name?.Content == null) continue;
+
+    string name = SafeName(bg.Name.Content);
+
+    bool isChanged = true;
+    if (vanillaData != null && vanillaBackgrounds.ContainsKey(bg.Name.Content))
+    {
+        var vBg = vanillaBackgrounds[bg.Name.Content];
+
+        uint bgTileWidth = (uint)(GetProp(bg, "TileWidth") ?? 0);
+        uint vBgTileWidth = (uint)(GetProp(vBg, "TileWidth") ?? 0);
+
+        uint bgTileHeight = (uint)(GetProp(bg, "TileHeight") ?? 0);
+        uint vBgTileHeight = (uint)(GetProp(vBg, "TileHeight") ?? 0);
+
+        uint bgTileXOffset = (uint)(GetProp(bg, "TileXOffset") ?? 0);
+        uint vBgTileXOffset = (uint)(GetProp(vBg, "TileXOffset") ?? 0);
+
+        uint bgTileYOffset = (uint)(GetProp(bg, "TileYOffset") ?? 0);
+        uint vBgTileYOffset = (uint)(GetProp(vBg, "TileYOffset") ?? 0);
+
+        uint bgTileXSep = (uint)(GetProp(bg, "TileXSep") ?? 0);
+        uint vBgTileXSep = (uint)(GetProp(vBg, "TileXSep") ?? 0);
+
+        uint bgTileYSep = (uint)(GetProp(bg, "TileYSep") ?? 0);
+        uint vBgTileYSep = (uint)(GetProp(vBg, "TileYSep") ?? 0);
+
+        bool propsChanged = bgTileWidth != vBgTileWidth || bgTileHeight != vBgTileHeight ||
+                            bgTileXOffset != vBgTileXOffset || bgTileYOffset != vBgTileYOffset ||
+                            bgTileXSep != vBgTileXSep || bgTileYSep != vBgTileYSep;
+
+        bool texChanged = false;
+        if (bg.Texture != null && vBg.Texture != null)
+        {
+            if (bg.Texture.SourceX != vBg.Texture.SourceX || bg.Texture.SourceY != vBg.Texture.SourceY ||
+                bg.Texture.SourceWidth != vBg.Texture.SourceWidth || bg.Texture.SourceHeight != vBg.Texture.SourceHeight ||
+                bg.Texture.TexturePage?.Name?.Content != vBg.Texture.TexturePage?.Name?.Content)
+            {
+                texChanged = true;
+            }
+        }
+        else if (bg.Texture != vBg.Texture) texChanged = true;
+
+        if (!propsChanged && !texChanged) isChanged = false;
+    }
+
+    if (!isChanged)
+    {
+        LogSkip("Tileset", name);
+        tilesetsSkipped++;
+        continue;
+    }
+
+    if (bg?.Texture == null)
+    {
+        DebugLog($"[ExportAllAssets] Skipping tileset {name}: no texture");
+        tilesetsSkipped++;
+        continue;
+    }
+
+    tilesetsExported++;
+}
+
+int totalItems = reallyChanged.Count + changedSprites.Count + changedBackgrounds.Count + changedFonts.Count + changedRooms.Count + changedShaders.Count + changedSounds.Count + tilesetsExported;
+
+SetProgressBar(null, "Exporting Changed Assets", 0, totalItems);
+StartProgressBarUpdater();
+
+TextureWorker worker = null;
+using (worker = new TextureWorker())
+{
+    await DumpCode();
+    await DumpSprites();
+    await DumpBackgrounds();
+    await DumpFonts();
+    await DumpRooms();
+    await DumpShaders();
+    await DumpSounds();
+    await DumpTilesets();
+}
+
+await StopProgressBarUpdater();
+HideProgressBar();
+
+async Task DumpCode()
+{
+    await Task.Run(() => Parallel.ForEach(reallyChanged, DumpCodeItem));
+}
+
+void DumpCodeItem(UndertaleCode code)
+{
+    if (code is not null)
+    {
+        string path = Path.Combine(codeFolder, code.Name.Content + ".gml");
+        try
+        {
+            File.WriteAllText(path, (code != null
+                ? new Underanalyzer.Decompiler.DecompileContext(globalDecompileContext, code, decompilerSettings).DecompileToString()
+                : ""));
+        }
+        catch (Exception e)
+        {
+            File.WriteAllText(path, "/*\nDECOMPILER FAILED!\n\n" + e.ToString() + "\n*/");
+        }
+    }
+
+    IncrementProgressParallel();
+}
+
+async Task DumpSprites()
+{
+    await Task.Run(() => Parallel.ForEach(changedSprites, DumpSprite));
+}
+
+void DumpSprite(UndertaleSprite sprite)
+{
+    if (sprite is null)
+    {
+        return;
+    }
+
+    for (int i = 0; i < sprite.Textures.Count; i++)
+    {
+        if (sprite.Textures[i]?.Texture is not null)
+        {
+            UndertaleTexturePageItem tex = sprite.Textures[i].Texture;
+            string sprFolder2 = Path.Combine(sprFolder, sprite.Name.Content);
+            Directory.CreateDirectory(sprFolder2);
+            worker.ExportAsPNG(tex, Path.Combine(sprFolder2, $"{sprite.Name.Content}_{i}.png"));
+        }
+    }
+
+    AddProgressParallel(sprite.Textures.Count);
+}
+
+async Task DumpBackgrounds()
+{
+    await Task.Run(() => Parallel.ForEach(changedBackgrounds, DumpBackground));
+}
+
+void DumpBackground(UndertaleBackground background)
+{
+    if (background?.Texture is null)
+    {
+        return;
+    }
+
+    UndertaleTexturePageItem tex = background.Texture;
+    string bgrFolder2 = Path.Combine(bgrFolder, background.Name.Content);
+    Directory.CreateDirectory(bgrFolder2);
+    worker.ExportAsPNG(tex, Path.Combine(bgrFolder2, $"{background.Name.Content}_0.png"));
+    IncrementProgressParallel();
+}
+
+async Task DumpFonts()
+{
+    await Task.Run(() => Parallel.ForEach(changedFonts, DumpFont));
+}
+
+void DumpFont(UndertaleFont font)
+{
+    if (font?.Texture is null)
+    {
+        return;
+    }
+
+    try
+    {
+        string name = SafeName(font.Name.Content);
+        if (font.Texture != null)
+        {
+            string png = Path.Combine(fntFolder, name + ".png");
+            worker.ExportAsPNG(font.Texture, png);
+        }
+
+        string csv = Path.Combine(fntFolder, $"glyphs_{name}.csv");
+        using (var writer = new StreamWriter(csv, false, Encoding.UTF8))
+        {
+            writer.WriteLine($"{font.DisplayName?.Content ?? ""};{font.EmSize};{font.Bold};{font.Italic};{font.Charset};{font.AntiAliasing};{font.ScaleX};{font.ScaleY}");
+
+            foreach (var g in font.Glyphs)
+            {
+                writer.WriteLine($"{g.Character};{g.SourceX};{g.SourceY};{g.SourceWidth};{g.SourceHeight};{g.Shift};{g.Offset}");
+            }
+        }
+    }
+    catch (Exception ex)
+    {
+        PrintLine($"[ExportAllAssets] Failed to export font {font.Name?.Content}: {ex.Message}");
+    }
+
+    IncrementProgressParallel();
+}
+
+async Task DumpRooms()
+{
+    await Task.Run(() => Parallel.ForEach(changedRooms, DumpRoom));
+}
+
+void DumpRoom(UndertaleRoom room)
+{
+    if (room?.Name?.Content == null) return;
+
+    string roomPath = Path.Combine(roomsOut, SafeName(room.Name.Content) + ".json");
+    ExportRoom(room, roomPath);
+    IncrementProgressParallel();
+}
+
+async Task DumpShaders()
+{
+    await Task.Run(() => Parallel.ForEach(changedShaders, DumpShader));
+}
+
+void DumpShader(UndertaleShader shader)
+{
+    if (shader?.Name?.Content == null) return;
+
+    string shaderDir = Path.Combine(shadersOut, SafeName(shader.Name.Content));
+    ExportShader(shader, shaderDir);
+    IncrementProgressParallel();
+}
+
+async Task DumpSounds()
+{
+    await Task.Run(() => Parallel.ForEach(changedSounds, DumpSound));
+}
+
+void DumpSound(UndertaleSound sound)
+{
+    if (sound?.Name?.Content == null) return;
+
+    try
+    {
+        string name = SafeName(sound.Name.Content);
+
+        bool flagCompressed = sound.Flags.HasFlag(UndertaleSound.AudioEntryFlags.IsCompressed);
+        bool flagEmbedded = sound.Flags.HasFlag(UndertaleSound.AudioEntryFlags.IsEmbedded);
+        string audioExt = ".ogg";
+        bool isEmbedded = true;
+
+        if (flagEmbedded && !flagCompressed)
+        {
+            audioExt = ".wav";
+        }
+        else if (!flagCompressed && !flagEmbedded)
+        {
+            audioExt = ".ogg";
+            isEmbedded = false;
+        }
+
+        if (isEmbedded)
+        {
+            byte[] soundData = GetSoundData(sound, Data, comparisonPath);
+            string soundFile = Path.Combine(soundsOut, name + audioExt);
+            File.WriteAllBytes(soundFile, soundData);
+        }
+    }
+    catch (Exception ex)
+    {
+        PrintLine($"[ExportAllAssets] Failed to export sound {sound.Name?.Content}: {ex.Message}");
+    }
+
+    IncrementProgressParallel();
+}
+
+async Task DumpTilesets()
+{
+    await Task.Run(() => Parallel.ForEach(Data.Backgrounds, DumpTileset));
+}
+
+void DumpTileset(UndertaleBackground bg)
+{
+    if (bg?.Name?.Content == null) return;
+
+    string name = SafeName(bg.Name.Content);
+
+    bool isChanged = true;
+    if (vanillaData != null && vanillaBackgrounds.ContainsKey(bg.Name.Content))
+    {
+        var vBg = vanillaBackgrounds[bg.Name.Content];
+
+        uint bgTileWidth = (uint)(GetProp(bg, "TileWidth") ?? 0);
+        uint vBgTileWidth = (uint)(GetProp(vBg, "TileWidth") ?? 0);
+
+        uint bgTileHeight = (uint)(GetProp(bg, "TileHeight") ?? 0);
+        uint vBgTileHeight = (uint)(GetProp(vBg, "TileHeight") ?? 0);
+
+        uint bgTileXOffset = (uint)(GetProp(bg, "TileXOffset") ?? 0);
+        uint vBgTileXOffset = (uint)(GetProp(vBg, "TileXOffset") ?? 0);
+
+        uint bgTileYOffset = (uint)(GetProp(bg, "TileYOffset") ?? 0);
+        uint vBgTileYOffset = (uint)(GetProp(vBg, "TileYOffset") ?? 0);
+
+        uint bgTileXSep = (uint)(GetProp(bg, "TileXSep") ?? 0);
+        uint vBgTileXSep = (uint)(GetProp(vBg, "TileXSep") ?? 0);
+
+        uint bgTileYSep = (uint)(GetProp(bg, "TileYSep") ?? 0);
+        uint vBgTileYSep = (uint)(GetProp(vBg, "TileYSep") ?? 0);
+
+        bool propsChanged = bgTileWidth != vBgTileWidth || bgTileHeight != vBgTileHeight ||
+                            bgTileXOffset != vBgTileXOffset || bgTileYOffset != vBgTileYOffset ||
+                            bgTileXSep != vBgTileXSep || bgTileYSep != vBgTileYSep;
+
+        bool texChanged = false;
+        if (bg.Texture != null && vBg.Texture != null)
+        {
+            if (bg.Texture.SourceX != vBg.Texture.SourceX || bg.Texture.SourceY != vBg.Texture.SourceY ||
+                bg.Texture.SourceWidth != vBg.Texture.SourceWidth || bg.Texture.SourceHeight != vBg.Texture.SourceHeight ||
+                bg.Texture.TexturePage?.Name?.Content != vBg.Texture.TexturePage?.Name?.Content)
+            {
+                texChanged = true;
+            }
+        }
+        else if (bg.Texture != vBg.Texture) texChanged = true;
+
+        if (!propsChanged && !texChanged) isChanged = false;
+    }
+
+    if (!isChanged)
+    {
+        return;
+    }
+
+    if (bg?.Texture == null)
+    {
+        return;
+    }
+
+    try
+    {
+        string png = Path.Combine(bgrFolder, name + ".png");
+        worker.ExportAsPNG(bg.Texture, png);
+    }
+    catch (Exception ex)
+    {
+        PrintLine($"[ExportAllAssets] Failed to export tileset {name}: {ex.Message}");
+    }
+
+    IncrementProgressParallel();
+}
+
+PrintLine($"\n[ExportAllAssets] Summary for Mod {modNo}:");
+PrintLine($"  Code - New: {codeNew}, Changed: {codeChanged}");
+PrintLine($"  Sprites - New: {spritesNew}, Changed: {spritesChanged}");
+PrintLine($"  Backgrounds - New: {backgroundsNew}, Changed: {backgroundsChanged}");
+PrintLine($"  Fonts - New: {fontsNew}, Changed: {fontsChanged}");
+PrintLine($"  Rooms - New: {roomsNew}, Changed: {roomsChanged}");
+PrintLine($"  Shaders - New: {shadersNew}, Changed: {shadersChanged}");
+PrintLine($"  Sounds - New: {soundsNew}, Changed: {soundsChanged}");
+PrintLine($"  Tilesets - Exported: {tilesetsExported}, Skipped: {tilesetsSkipped}");
+PrintLine("[ExportAllAssets] Done.");
+

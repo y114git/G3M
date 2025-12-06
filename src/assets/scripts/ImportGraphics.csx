@@ -54,6 +54,7 @@ try
     int textureSize = 2048;
     int PaddingValue = 2;
     bool debug = false;
+
     Packer packer = new Packer();
     packer.Process(sourcePath, searchPattern, textureSize, PaddingValue, debug);
     packer.SaveAtlasses(outName);

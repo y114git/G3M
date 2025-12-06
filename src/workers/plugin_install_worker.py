@@ -1,8 +1,6 @@
 import os
 import shutil
 import logging
-import zipfile
-import tarfile
 import tempfile
 from PyQt6.QtCore import QThread, pyqtSignal
 from managers.localization_manager import tr
@@ -33,44 +31,8 @@ class PluginInstallWorker(QThread):
                 logging.debug(f'PluginInstallWorker: Error closing session: {e}')
 
     def _check_archive_has_plugin_init_py(self, archive_path: str) -> bool:
-        archive_lower = archive_path.lower()
-        try:
-            if archive_lower.endswith('.zip'):
-                with zipfile.ZipFile(archive_path, 'r') as zf:
-                    for name in zf.namelist():
-                        normalized = name.replace('\\', '/').strip('/')
-                        if normalized == 'plugin_init.py' or normalized.endswith('/plugin_init.py'):
-                            return True
-            elif archive_lower.endswith('.tar.gz'):
-                with tarfile.open(archive_path, 'r:gz') as tf:
-                    for member in tf.getmembers():
-                        name = member.name.replace('\\', '/').strip('/')
-                        if name == 'plugin_init.py' or name.endswith('/plugin_init.py'):
-                            return True
-            elif archive_lower.endswith('.rar'):
-                try:
-                    import rarfile
-                    with rarfile.RarFile(archive_path, 'r') as rf:
-                        for name in rf.namelist():
-                            normalized = name.replace('\\', '/').strip('/')
-                            if normalized == 'plugin_init.py' or normalized.endswith('/plugin_init.py'):
-                                return True
-                except (OSError, ImportError):
-                    return False
-            elif archive_lower.endswith('.7z'):
-                try:
-                    import py7zr
-                    with py7zr.SevenZipFile(archive_path, mode='r') as zf:
-                        for name in zf.getnames():
-                            normalized = name.replace('\\', '/').strip('/')
-                            if normalized == 'plugin_init.py' or normalized.endswith('/plugin_init.py'):
-                                return True
-                except (OSError, ImportError):
-                    return False
-        except Exception as e:
-            logging.error(f'PluginInstallWorker: Error checking archive: {e}', exc_info=True)
-            return False
-        return False
+        from utils.archive_utils import ArchiveExtractor
+        return ArchiveExtractor.check_archive_has_file(archive_path, 'plugin_init.py')
 
     def _download_archive(self, url: str, target_path: str) -> bool:
         try:

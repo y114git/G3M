@@ -7,7 +7,8 @@ import zipfile
 from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QFileDialog, QMessageBox, QListWidget, QListWidgetItem, QCheckBox
 from PyQt6.QtCore import Qt
 from managers.localization_manager import tr
-from utils.file_utils import extract_archive, find_deltamod_info_file
+from utils.archive_utils import extract_archive
+from utils.file_utils import find_deltamod_info_file
 from utils.deltamod_converter import DeltamodConverter
 from config.constants import MOD_CONFIG_FILENAME, LEGACY_MOD_CONFIG_FILENAME
 
@@ -85,11 +86,16 @@ class ModImportExportController:
                     mod_key = config.get('mod_key')
                     mod_name = config.get('name', 'Unknown')
                     logging.info(f'[IMPORT] Mod name: {mod_name}, mod_key: {mod_key}')
+                    mod_key_generated = False
                     if not mod_key:
-                        logging.error('[IMPORT] Mod config missing mod_key field')
-                        QMessageBox.critical(self.app_window, tr('errors.error'), tr('errors.invalid_mod_format'))
-                        return
-                    from utils.file_utils import remove_archive_extension, sanitize_filename
+                        from utils.file_utils import sanitize_filename, save_json
+                        mod_key = f"local_{sanitize_filename(mod_name).lower().replace(' ', '_')}"
+                        config['mod_key'] = mod_key
+                        config['is_local_mod'] = True
+                        save_json(config_path_to_read, config, indent=2)
+                        mod_key_generated = True
+                        logging.info(f'[IMPORT] Generated mod_key: {mod_key}')
+                    from utils.file_utils import remove_archive_extension
                     archive_name = remove_archive_extension(os.path.basename(file_path))
                     folder_name = sanitize_filename(archive_name)
                     target_mod_dir = os.path.join(self.app_state.mods_dir, folder_name)
@@ -130,9 +136,9 @@ class ModImportExportController:
                                             chapter_data['data_file_url'] = file
                                             config_updated = True
                                             break
-                    if config_updated:
-                        with open(config_path, 'w', encoding='utf-8') as f:
-                            json.dump(config, f, indent=2, ensure_ascii=False)
+                    if config_updated or mod_key_generated:
+                        from utils.file_utils import save_json
+                        save_json(config_path, config, indent=2)
                     logging.info(f'[IMPORT] Mod installed successfully to: {target_mod_dir}')
                     self.mod_manager.invalidate_mods_cache()
                     self.mod_manager.load_local_mods(_skip_conversion=True)
@@ -270,25 +276,27 @@ class ModImportExportController:
                             except Exception as e:
                                 logging.warning(f'Error reading config {config_path}: {e}')
                                 continue
-                        elif os.path.exists(old_config_path):
-                            try:
-                                import shutil
-                                shutil.move(old_config_path, config_path)
-                                logging.info(f'Migrated mod config.json to mod_config.json during export in {entry.name}')
-                                with open(config_path, 'r', encoding='utf-8') as f:
-                                    config = json.load(f)
-                                config_mod_key = config.get('mod_key')
-                                config_mod_name = config.get('name', '')
-                                if config_mod_key:
-                                    if config_mod_key == mod.key:
-                                        mod_dir = entry.path
-                                        break
-                                    elif config_mod_name == mod.name:
-                                        mod_dir = entry.path
-                                        break
-                            except Exception as e:
-                                logging.warning(f'Error migrating or reading config in {entry.path}: {e}')
-                                continue
+                        else:
+                            old_config_path = os.path.join(entry.path, LEGACY_MOD_CONFIG_FILENAME)
+                            if os.path.exists(old_config_path):
+                                try:
+                                    import shutil
+                                    shutil.move(old_config_path, config_path)
+                                    logging.info(f'Migrated mod config.json to mod_config.json during export in {entry.name}')
+                                    with open(config_path, 'r', encoding='utf-8') as f:
+                                        config = json.load(f)
+                                    config_mod_key = config.get('mod_key')
+                                    config_mod_name = config.get('name', '')
+                                    if config_mod_key:
+                                        if config_mod_key == mod.key:
+                                            mod_dir = entry.path
+                                            break
+                                        elif config_mod_name == mod.name:
+                                            mod_dir = entry.path
+                                            break
+                                except Exception as e:
+                                    logging.warning(f'Error migrating or reading config in {entry.path}: {e}')
+                                    continue
                 else:
                     logging.error(f'Mods directory does not exist: {self.app_state.mods_dir}')
             if not mod_dir or not os.path.exists(mod_dir):

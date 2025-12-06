@@ -154,6 +154,186 @@ class ModManager(QObject):
             self._mods_cache_valid = True
             self._scan_in_progress = False
             self._scan_thread = None
+            self._fix_duplicate_mod_keys(cache)
+
+    def _fix_duplicate_mod_keys(self, cache: Dict[str, ModFolderInfo]) -> None:
+        mods_by_key: Dict[str, List[ModFolderInfo]] = {}
+        for mod_info in cache.values():
+            mod_key = mod_info.mod_key
+            if mod_key not in mods_by_key:
+                mods_by_key[mod_key] = []
+            mods_by_key[mod_key].append(mod_info)
+        duplicates_found = False
+        key_replacements: Dict[str, str] = {}
+        for mod_key, mods_list in mods_by_key.items():
+            if len(mods_list) > 1:
+                duplicates_found = True
+                logging.warning(f'_fix_duplicate_mod_keys: Found {len(mods_list)} mods with duplicate key "{mod_key}"')
+                mods_list_sorted = sorted(mods_list, key=lambda m: m.folder_path)
+                first_mod = mods_list_sorted[0]
+                if mod_key not in cache or cache[mod_key] != first_mod:
+                    cache[mod_key] = first_mod
+                for i, mod_info in enumerate(mods_list_sorted[1:], start=1):
+                    new_key = self._generate_unique_mod_key(mod_key, cache, key_replacements)
+                    old_key_for_mod = mod_info.mod_key
+                    key_replacements[old_key_for_mod] = new_key
+                    logging.info(f'_fix_duplicate_mod_keys: Assigning new key "{new_key}" to mod in folder "{mod_info.folder_path}" (was "{old_key_for_mod}")')
+                    self._update_mod_key_in_config(mod_info.folder_path, old_key_for_mod, new_key)
+                    if old_key_for_mod in cache and cache[old_key_for_mod] == mod_info:
+                        del cache[old_key_for_mod]
+                    mod_info.mod_key = new_key
+                    mod_info.config_data['mod_key'] = new_key
+                    cache[new_key] = mod_info
+        if duplicates_found and key_replacements:
+            self._replace_mod_keys_everywhere(key_replacements)
+            self._mods_cache = cache
+            logging.info(f'_fix_duplicate_mod_keys: Fixed {len(key_replacements)} duplicate mod key(s)')
+
+    def _generate_unique_mod_key(self, base_key: str, existing_cache: Dict[str, ModFolderInfo], key_replacements: Dict[str, str]) -> str:
+        if not base_key:
+            base_key = 'local_mod'
+        existing_keys = set(existing_cache.keys())
+        existing_keys.update(key_replacements.values())
+        existing_keys.update(key_replacements.keys())
+        unique_key = base_key
+        counter = 1
+        while unique_key in existing_keys:
+            unique_key = f'{base_key}_{counter}'
+            counter += 1
+            if counter > 10000:
+                import time
+                unique_key = f'{base_key}_{int(time.time())}'
+                break
+        return unique_key
+
+    def _update_mod_key_in_config(self, folder_path: str, old_key: str, new_key: str) -> None:
+        config_path = os.path.join(folder_path, MOD_CONFIG_FILENAME)
+        if not os.path.exists(config_path):
+            return
+        try:
+            with open(config_path, 'r', encoding='utf-8') as f:
+                config_data = json.load(f)
+            config_data['mod_key'] = new_key
+            with open(config_path, 'w', encoding='utf-8') as f:
+                json.dump(config_data, f, indent=2, ensure_ascii=False)
+            logging.info(f'_update_mod_key_in_config: Updated mod_key in "{config_path}" from "{old_key}" to "{new_key}"')
+        except (OSError, json.JSONDecodeError) as e:
+            logging.warning(f'_update_mod_key_in_config: Failed to update mod_key in "{config_path}": {e}')
+
+    def _replace_mod_keys_everywhere(self, key_replacements: Dict[str, str]) -> None:
+        self._replace_keys_in_metadata(key_replacements)
+        self._replace_keys_in_settings(key_replacements)
+        self._replace_keys_in_shortcuts(key_replacements)
+
+    def _replace_keys_in_metadata(self, key_replacements: Dict[str, str]) -> None:
+        if not key_replacements:
+            return
+        try:
+            mods_metadata = self._read_metadata()
+            if not mods_metadata:
+                return
+            metadata_updated = False
+            for old_key, new_key in key_replacements.items():
+                if old_key in mods_metadata:
+                    mods_metadata[new_key] = mods_metadata[old_key]
+                    del mods_metadata[old_key]
+                    metadata_updated = True
+                    logging.info(f'_replace_keys_in_metadata: Replaced key "{old_key}" with "{new_key}" in metadata')
+            if metadata_updated:
+                self._write_metadata(mods_metadata)
+        except Exception as e:
+            logging.warning(f'_replace_keys_in_metadata: Failed to replace keys in metadata: {e}', exc_info=True)
+
+    def _replace_keys_in_settings(self, key_replacements: Dict[str, str]) -> None:
+        if not key_replacements or not hasattr(self.app_state, 'local_config'):
+            return
+        try:
+            settings_updated = False
+            for config_key in list(self.app_state.local_config.keys()):
+                if not config_key.startswith('used_mods_'):
+                    continue
+                used_mods_data = self.app_state.local_config.get(config_key)
+                if not isinstance(used_mods_data, dict):
+                    continue
+                for chapter_id_str, mod_data in list(used_mods_data.items()):
+                    replaced = False
+                    if isinstance(mod_data, str):
+                        if mod_data in key_replacements:
+                            used_mods_data[chapter_id_str] = key_replacements[mod_data]
+                            replaced = True
+                    elif isinstance(mod_data, list):
+                        new_list = []
+                        for mod_key in mod_data:
+                            if mod_key in key_replacements:
+                                new_list.append(key_replacements[mod_key])
+                                replaced = True
+                            else:
+                                new_list.append(mod_key)
+                        if replaced:
+                            used_mods_data[chapter_id_str] = new_list
+                    if replaced:
+                        settings_updated = True
+                        logging.info(f'_replace_keys_in_settings: Replaced keys in "{config_key}" for chapter "{chapter_id_str}"')
+            if settings_updated and self.settings_manager:
+                self.settings_manager.write_local_config()
+                logging.info('_replace_keys_in_settings: Saved updated settings')
+        except Exception as e:
+            logging.warning(f'_replace_keys_in_settings: Failed to replace keys in settings: {e}', exc_info=True)
+
+    def _replace_keys_in_shortcuts(self, key_replacements: Dict[str, str]) -> None:
+        if not key_replacements:
+            return
+        try:
+            from utils.path_utils import get_user_data_root
+            shortcuts_dir = os.path.join(get_user_data_root(), 'shortcuts')
+            if not os.path.exists(shortcuts_dir):
+                return
+            shortcuts_updated = False
+            for filename in os.listdir(shortcuts_dir):
+                if not filename.endswith('.json'):
+                    continue
+                shortcut_path = os.path.join(shortcuts_dir, filename)
+                try:
+                    with open(shortcut_path, 'r', encoding='utf-8') as f:
+                        shortcut_data = json.load(f)
+                    if not isinstance(shortcut_data, dict):
+                        continue
+                    mods_data = shortcut_data.get('mods', {})
+                    if not isinstance(mods_data, dict):
+                        continue
+                    shortcut_file_updated = False
+                    for chapter_key, mod_keys in list(mods_data.items()):
+                        if mod_keys is None:
+                            continue
+                        replaced = False
+                        if isinstance(mod_keys, str):
+                            if mod_keys in key_replacements:
+                                mods_data[chapter_key] = key_replacements[mod_keys]
+                                replaced = True
+                        elif isinstance(mod_keys, list):
+                            new_list = []
+                            for mod_key in mod_keys:
+                                if mod_key in key_replacements:
+                                    new_list.append(key_replacements[mod_key])
+                                    replaced = True
+                                else:
+                                    new_list.append(mod_key)
+                            if replaced:
+                                mods_data[chapter_key] = new_list
+                        if replaced:
+                            shortcut_file_updated = True
+                            logging.info(f'_replace_keys_in_shortcuts: Replaced keys in shortcut "{filename}" for chapter "{chapter_key}"')
+                    if shortcut_file_updated:
+                        with open(shortcut_path, 'w', encoding='utf-8') as f:
+                            json.dump(shortcut_data, f, indent=2, ensure_ascii=False)
+                        shortcuts_updated = True
+                except (OSError, json.JSONDecodeError) as e:
+                    logging.debug(f'_replace_keys_in_shortcuts: Failed to process shortcut "{filename}": {e}')
+                    continue
+            if shortcuts_updated:
+                logging.info('_replace_keys_in_shortcuts: Updated shortcut files')
+        except Exception as e:
+            logging.warning(f'_replace_keys_in_shortcuts: Failed to replace keys in shortcuts: {e}', exc_info=True)
 
     def _get_mods_cache(self, use_async: bool = False) -> Dict[str, ModFolderInfo]:
         with self._cache_lock:
@@ -180,6 +360,7 @@ class ModManager(QObject):
             if hasattr(self, '_temp_mods_by_name'):
                 del self._temp_mods_by_name
             self._mods_cache = self._scan_mods_directory(old_cache=self._mods_cache)
+            self._fix_duplicate_mod_keys(self._mods_cache)
             if hasattr(self, '_temp_mods_by_name'):
                 self._mods_by_name = self._temp_mods_by_name.copy()
                 del self._temp_mods_by_name
@@ -661,7 +842,7 @@ class ModManager(QObject):
     def delete_mod_files(self, mod_data):
         try:
             from utils.mod_utils import get_mod_key, get_mod_name
-            import shutil
+            from utils.file_utils import safe_rmtree
             folder_path = None
             if hasattr(mod_data, 'folder_path'):
                 folder_path = mod_data.folder_path
@@ -673,10 +854,12 @@ class ModManager(QObject):
             if folder_path and os.path.exists(folder_path):
                 logging.info(f'delete_mod_files: Deleting mod folder directly by folder_path: {folder_path}')
                 try:
-                    shutil.rmtree(folder_path)
-                    self.invalidate_mods_cache()
-                    logging.info(f'delete_mod_files: Successfully deleted mod folder by folder_path: {folder_path}')
-                    return
+                    if safe_rmtree(folder_path):
+                        self.invalidate_mods_cache()
+                        logging.info(f'delete_mod_files: Successfully deleted mod folder by folder_path: {folder_path}')
+                        return
+                    else:
+                        logging.warning(f'delete_mod_files: safe_rmtree returned False for {folder_path}')
                 except Exception as e:
                     logging.error(f'delete_mod_files: Failed to delete folder {folder_path}: {e}', exc_info=True)
                     raise
@@ -685,10 +868,12 @@ class ModManager(QObject):
                 if folder_path_from_key and os.path.exists(folder_path_from_key):
                     logging.info(f'delete_mod_files: Deleting mod folder by get_mod_folder_path: {folder_path_from_key}')
                     try:
-                        shutil.rmtree(folder_path_from_key)
-                        self.invalidate_mods_cache()
-                        logging.info(f'delete_mod_files: Successfully deleted mod folder by get_mod_folder_path: {folder_path_from_key}')
-                        return
+                        if safe_rmtree(folder_path_from_key):
+                            self.invalidate_mods_cache()
+                            logging.info(f'delete_mod_files: Successfully deleted mod folder by get_mod_folder_path: {folder_path_from_key}')
+                            return
+                        else:
+                            logging.warning(f'delete_mod_files: safe_rmtree returned False for {folder_path_from_key}')
                     except Exception as e:
                         logging.error(f'delete_mod_files: Failed to delete folder {folder_path_from_key}: {e}', exc_info=True)
                         raise
@@ -697,10 +882,12 @@ class ModManager(QObject):
                 if os.path.exists(folder_path):
                     logging.info(f'delete_mod_files: Deleting mod folder by mod_name: {folder_path}')
                     try:
-                        shutil.rmtree(folder_path)
-                        self.invalidate_mods_cache()
-                        logging.info(f'delete_mod_files: Successfully deleted mod folder by mod_name: {folder_path}')
-                        return
+                        if safe_rmtree(folder_path):
+                            self.invalidate_mods_cache()
+                            logging.info(f'delete_mod_files: Successfully deleted mod folder by mod_name: {folder_path}')
+                            return
+                        else:
+                            logging.warning(f'delete_mod_files: safe_rmtree returned False for {folder_path}')
                     except Exception as e:
                         logging.error(f'delete_mod_files: Failed to delete folder {folder_path}: {e}', exc_info=True)
                         raise
@@ -751,13 +938,14 @@ class ModManager(QObject):
                             folder_path = os.path.join(self.app_state.mods_dir, mod_name)
                         logging.info(f'delete_mod_files: Attempting to delete folder by path: {folder_path}')
                         if folder_path and os.path.exists(folder_path):
-                            import shutil
                             logging.info(f'delete_mod_files: Deleting mod folder directly by path: {folder_path}')
                             try:
-                                shutil.rmtree(folder_path)
-                                self.invalidate_mods_cache()
-                                logging.info(f'delete_mod_files: Successfully deleted mod folder by path: {folder_path}')
-                                return
+                                if safe_rmtree(folder_path):
+                                    self.invalidate_mods_cache()
+                                    logging.info(f'delete_mod_files: Successfully deleted mod folder by path: {folder_path}')
+                                    return
+                                else:
+                                    logging.warning(f'delete_mod_files: safe_rmtree returned False for {folder_path}')
                             except Exception as e:
                                 logging.error(f'delete_mod_files: Failed to delete folder {folder_path}: {e}', exc_info=True)
                                 raise
@@ -767,13 +955,14 @@ class ModManager(QObject):
                     folder_path = os.path.join(self.app_state.mods_dir, mod_key)
                     logging.info(f'delete_mod_files: Trying to delete folder by mod_key as folder name: {folder_path}')
                     if os.path.exists(folder_path):
-                        import shutil
                         logging.info(f'delete_mod_files: Deleting mod folder by mod_key path: {folder_path}')
                         try:
-                            shutil.rmtree(folder_path)
-                            self.invalidate_mods_cache()
-                            logging.info(f'delete_mod_files: Successfully deleted mod folder by mod_key path: {folder_path}')
-                            return
+                            if safe_rmtree(folder_path):
+                                self.invalidate_mods_cache()
+                                logging.info(f'delete_mod_files: Successfully deleted mod folder by mod_key path: {folder_path}')
+                                return
+                            else:
+                                logging.warning(f'delete_mod_files: safe_rmtree returned False for {folder_path}')
                         except Exception as e:
                             logging.error(f'delete_mod_files: Failed to delete folder {folder_path}: {e}', exc_info=True)
                             raise
@@ -783,13 +972,14 @@ class ModManager(QObject):
                     folder_path = os.path.join(self.app_state.mods_dir, mod_name)
                     logging.info(f'delete_mod_files: Last resort - trying to delete by mod_name as folder name: {folder_path}')
                     if os.path.exists(folder_path):
-                        import shutil
                         logging.info(f'delete_mod_files: Deleting mod folder by mod_name path (last resort): {folder_path}')
                         try:
-                            shutil.rmtree(folder_path)
-                            self.invalidate_mods_cache()
-                            logging.info(f'delete_mod_files: Successfully deleted mod folder by mod_name path: {folder_path}')
-                            return
+                            if safe_rmtree(folder_path):
+                                self.invalidate_mods_cache()
+                                logging.info(f'delete_mod_files: Successfully deleted mod folder by mod_name path: {folder_path}')
+                                return
+                            else:
+                                logging.warning(f'delete_mod_files: safe_rmtree returned False for {folder_path}')
                         except Exception as e:
                             logging.error(f'delete_mod_files: Failed to delete folder {folder_path}: {e}', exc_info=True)
                             raise
@@ -797,11 +987,13 @@ class ModManager(QObject):
                     logging.error(f"delete_mod_files: Cannot delete mod - not found in cache and folder paths do not exist. mod_key={mod_key}, mod_name={(mod_name if mod_name else 'None')}")
                     return
             if os.path.exists(mod_info.folder_path):
-                import shutil
                 logging.info(f'delete_mod_files: Deleting mod folder: {mod_info.folder_path}')
-                shutil.rmtree(mod_info.folder_path)
-                self.invalidate_mods_cache()
-                logging.info(f'delete_mod_files: Successfully deleted mod with key: {mod_key}')
+                if safe_rmtree(mod_info.folder_path):
+                    self.invalidate_mods_cache()
+                    logging.info(f'delete_mod_files: Successfully deleted mod with key: {mod_key}')
+                else:
+                    logging.warning(f'delete_mod_files: safe_rmtree returned False for {mod_info.folder_path}')
+                    self.invalidate_mods_cache()
             else:
                 logging.warning(f'delete_mod_files: Mod folder does not exist: {mod_info.folder_path}')
                 self.invalidate_mods_cache()
@@ -952,11 +1144,8 @@ class ModManager(QObject):
             if not os.path.exists(self.app_state.mods_metadata_path):
                 return {}
             try:
-                if self.settings_manager:
-                    return self.settings_manager.read_json(self.app_state.mods_metadata_path) or {}
-                else:
-                    with open(self.app_state.mods_metadata_path, 'r', encoding='utf-8') as f:
-                        return json.load(f) or {}
+                from utils.file_utils import load_json
+                return load_json(self.app_state.mods_metadata_path, migrate_config=False) or {}
             except Exception as e:
                 logging.warning(f'_read_metadata: failed: {e}', exc_info=True)
                 return {}
@@ -964,11 +1153,8 @@ class ModManager(QObject):
     def _write_metadata(self, data: Dict):
         with self.app_state._mods_metadata_lock:
             try:
-                if self.settings_manager:
-                    self.settings_manager.write_json(self.app_state.mods_metadata_path, data)
-                else:
-                    from utils.file_utils import atomic_write_json
-                    atomic_write_json(self.app_state.mods_metadata_path, data, indent=2)
+                from utils.file_utils import save_json
+                save_json(self.app_state.mods_metadata_path, data, indent=2)
             except Exception as e:
                 logging.error(f'_write_metadata: failed: {e}', exc_info=True)
 

@@ -9,47 +9,13 @@ using System.Text;
 using System.Reflection;
 using UndertaleModLib.Util;
 
-EnsureDataLoaded();
-
 if (Data.IsVersionAtLeast(2024, 11))
 {
     ScriptWarning("This script may act erroneously on GameMaker version 2024.11 and later.");
 }
 
-string deltahubRoot = null;
-try
-{
-    deltahubRoot = FindDeltahubRoot();
-}
-catch
-{
-    if (!string.IsNullOrEmpty(FilePath))
-    {
-        var dataWinDir = new DirectoryInfo(Path.GetDirectoryName(FilePath));
-        var probe = dataWinDir;
-        while (probe != null)
-        {
-            if (Directory.Exists(Path.Combine(probe.FullName, "output"))) { deltahubRoot = probe.FullName; break; }
-            probe = probe.Parent;
-        }
-    }
-    
-    if (deltahubRoot == null)
-    {
-        var assemblyRoot = Directory.GetParent(Directory.GetParent(Assembly.GetEntryAssembly().Location));
-        if (assemblyRoot != null && Directory.Exists(Path.Combine(assemblyRoot.FullName, "output")))
-        {
-            deltahubRoot = assemblyRoot.FullName;
-        }
-    }
-}
-
-if (deltahubRoot == null)
-    throw new ScriptException("DELTAHUB root not found (no /output ancestor).");
-
-string chapterNo = File.ReadAllText(Path.Combine(deltahubRoot, "output", "Cache", "running", "chapterNumber.txt"));
-string modNo = File.ReadAllText(Path.Combine(deltahubRoot, "output", "Cache", "running", "modNumbersCache.txt"));
-string assetNamePath = Path.Combine(deltahubRoot, "output", "xDeltaCombiner", chapterNo, modNo, "Objects", "AssetOrder.txt");
+var ctx = PrepareImportContext();
+string assetNamePath = Path.Combine(ctx.InputRoot, "AssetOrder.txt");
 if (assetNamePath == null || !File.Exists(assetNamePath))
     throw new ScriptException("The asset name text file was not chosen or does not exist: " + assetNamePath);
 

@@ -19,33 +19,9 @@ byte[] ReadAllBytesSafe(string path)
     try { return File.ReadAllBytes(path); } catch { return null; }
 }
 
-EnsureDataLoaded();
-
-string deltahubRoot = FindDeltahubRoot();
-string chapterNo = GetChapterNumber(deltahubRoot);
-string modNo = GetModNumbersCache(deltahubRoot);
-
-string inputRoot = null;
-if (!string.IsNullOrEmpty(FilePath))
-{
-    string dataWinDir = Path.GetDirectoryName(FilePath);
-    string objectsNextToDataWin = Path.Combine(dataWinDir, "Objects");
-    if (Directory.Exists(objectsNextToDataWin))
-    {
-        inputRoot = objectsNextToDataWin;
-        Console.WriteLine($"[ImportFonts] Using Objects directory next to data.win: {inputRoot}");
-    }
-}
-
-if (inputRoot == null)
-{
-    if (string.IsNullOrWhiteSpace(chapterNo) || string.IsNullOrWhiteSpace(modNo))
-        throw new ScriptException("chapterNumber/modNumbersCache missing in /output/Cache/running/.");
-
-    string modRoot = Path.Combine(deltahubRoot, "output", "xDeltaCombiner", chapterNo, modNo);
-    inputRoot = Path.Combine(modRoot, "Objects");
-    Console.WriteLine($"[ImportFonts] Using Objects directory from modNumbersCache: {inputRoot}");
-}
+var ctx = PrepareImportContext();
+string inputRoot = ctx.InputRoot;
+Console.WriteLine($"[ImportFonts] Using Objects directory: {inputRoot}");
 
 string fontsIn = Path.Combine(inputRoot, "Fonts");
 

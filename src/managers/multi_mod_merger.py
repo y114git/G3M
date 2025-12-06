@@ -10,7 +10,7 @@ from managers.utmtcli_manager import UTMTCLIManager
 from managers.backup_manager import BackupManager
 from managers.utmt_wrapper import UtmtWrapper
 from utils.path_utils import get_xdelta_path, find_chapter_resource_dir
-from utils.file_utils import ensure_writable, sanitize_filename, safe_remove, safe_move, safe_rmtree
+from utils.file_utils import ensure_writable, sanitize_filename, safe_remove, safe_move, safe_rmtree, safe_copy
 from config.constants import DATA_WIN_FILENAME
 from managers.localization_manager import tr
 from utils.mod_utils import get_mod_key, get_mod_name
@@ -251,6 +251,9 @@ class MultiModMerger(QObject):
     def _perform_chapter_merge(self, chapter_id: int, mods_list: List[Any], output_data_win_path: str, target_dir: str, modpack_dir: Optional[str], progress_base: int, total_chapters: int, is_modpack: bool) -> bool:
         import platform
         original_data_win = output_data_win_path
+        if not mods_list or len(mods_list) == 0:
+            self.patching_logger.info(f'[OPTIMIZATION] No mods to apply for chapter {chapter_id}, skipping')
+            return True
         chapter_progress_range = 100 // total_chapters if total_chapters > 0 else 100
         xdelta_progress = chapter_progress_range * 0.3
         export_progress = chapter_progress_range * 0.3
@@ -271,25 +274,9 @@ class MultiModMerger(QObject):
         vanilla_data_win = os.path.join(vanilla_dir, original_filename)
         shutil.copy2(original_data_win, vanilla_data_win)
         self.patching_logger.info(f'Created vanilla copy at {vanilla_data_win} (from {original_data_win})')
-        max_mods = len(mods_list) + 2
-        for mod_num in range(max_mods):
-            mod_dir = os.path.join(xdelta_combiner_dir, str(mod_num))
-            objects_code_dir = os.path.join(mod_dir, 'Objects', 'CodeEntries')
-            os.makedirs(objects_code_dir, exist_ok=True)
-        for idx, mod_data in enumerate(mods_list):
-            priority = len(mods_list) - idx
-            if not hasattr(mod_data, 'priority') or getattr(mod_data, 'priority', None) is None:
-                setattr(mod_data, 'priority', priority)
-        mods_to_apply = list(mods_list)
-        mods_count = len(mods_to_apply)
-        self.patching_logger.info(f"Processing {mods_count} mod(s): {[getattr(m, 'name', 'Unknown') for m in mods_to_apply]}")
-        highest_priority_mod_name = getattr(mods_list[0], 'name', 'Unknown') if mods_list else 'None'
-        self.patching_logger.info(f'Highest priority mod (priority {len(mods_list)}): {highest_priority_mod_name}')
-        mod_patched_files = {}
-        existing_code_files = {}
-        existing_assets = {'sprites': {}, 'backgrounds': {}, 'rooms': {}, 'tilesets': {}, 'shaders': {}}
+        mods_count = len(mods_list)
         if not is_modpack and mods_count == 1:
-            mod_data = mods_to_apply[0]
+            mod_data = mods_list[0]
             mod_name = getattr(mod_data, 'name', 'Unknown')
             mod_source_dir = self._get_mod_source_dir(mod_data, chapter_id)
             if mod_source_dir:
@@ -324,7 +311,7 @@ class MultiModMerger(QObject):
                             self.backup_manager.restore_backups(chapter_id)
                         return False
                 if data_patches and (not ready_data_win_files) and (not csx_scripts):
-                    self.patching_logger.info(f'Single mod {mod_name} with only xdelta patch(es) - applying directly')
+                    self.patching_logger.info(f'[SINGLE_MOD] Single mod {mod_name} with only xdelta patch(es) - applying directly')
                     try:
                         if os.path.exists(output_data_win_path):
                             extracted_chapter_id = self._extract_chapter_id_from_path(target_dir)
@@ -346,7 +333,7 @@ class MultiModMerger(QObject):
                             self.backup_manager.restore_backups(chapter_id)
                         return False
                 if csx_scripts and (not ready_data_win_files) and (not data_patches):
-                    self.patching_logger.info(f'Single mod {mod_name} with only CSX script(s) - executing directly')
+                    self.patching_logger.info(f'[SINGLE_MOD] Single mod {mod_name} with only CSX script(s) - executing directly without vanilla export')
                     try:
                         if os.path.exists(output_data_win_path):
                             extracted_chapter_id = self._extract_chapter_id_from_path(target_dir)
@@ -367,6 +354,46 @@ class MultiModMerger(QObject):
                         if not is_modpack:
                             self.backup_manager.restore_backups(chapter_id)
                         return False
+        vanilla_objects_dir = os.path.join(vanilla_dir, 'Objects')
+        vanilla_already_exported = os.path.exists(vanilla_objects_dir) and os.listdir(vanilla_objects_dir) if os.path.exists(vanilla_objects_dir) else False
+        if not vanilla_already_exported:
+            self.patching_logger.info(f'Exporting vanilla mod (mod 0) assets...')
+            chapter_file = os.path.join(cache_running_dir, 'chapterNumber.txt')
+            mod_file = os.path.join(cache_running_dir, 'modNumbersCache.txt')
+            with open(chapter_file, 'w', encoding='utf-8') as f:
+                f.write(chapter_str)
+            with open(mod_file, 'w', encoding='utf-8') as f:
+                f.write('0')
+            vanilla_scripts = []
+            if self.utmt_wrapper.get_script_path('ExportAllAssets'):
+                vanilla_scripts.append('ExportAllAssets')
+                returncode, stdout, stderr = self.utmt_wrapper.execute_scripts(vanilla_data_win, vanilla_scripts, output_path=vanilla_data_win, cwd=merge_root)
+                if returncode != 0:
+                    self.patching_logger.warning(f'Vanilla ExportAllAssets failed: {stderr[:500]}')
+                else:
+                    self.patching_logger.info(f'Successfully exported vanilla assets using ExportAllAssets')
+            else:
+                self.patching_logger.error('ExportAllAssets script not found! This is required for optimized export.')
+                return False
+        else:
+            self.patching_logger.info(f'Vanilla mod (mod 0) already exported, skipping')
+        max_mods = len(mods_list) + 2
+        for mod_num in range(max_mods):
+            mod_dir = os.path.join(xdelta_combiner_dir, str(mod_num))
+            objects_code_dir = os.path.join(mod_dir, 'Objects', 'CodeEntries')
+            os.makedirs(objects_code_dir, exist_ok=True)
+        for idx, mod_data in enumerate(mods_list):
+            priority = len(mods_list) - idx
+            if not hasattr(mod_data, 'priority') or getattr(mod_data, 'priority', None) is None:
+                setattr(mod_data, 'priority', priority)
+        mods_to_apply = list(mods_list)
+        mods_count = len(mods_to_apply)
+        self.patching_logger.info(f"Processing {mods_count} mod(s): {[getattr(m, 'name', 'Unknown') for m in mods_to_apply]}")
+        highest_priority_mod_name = getattr(mods_list[0], 'name', 'Unknown') if mods_list else 'None'
+        self.patching_logger.info(f'Highest priority mod (priority {len(mods_list)}): {highest_priority_mod_name}')
+        mod_patched_files = {}
+        existing_code_files = {}
+        existing_assets = {'sprites': {}, 'backgrounds': {}, 'rooms': {}, 'tilesets': {}, 'shaders': {}}
         mods_already_exported = set()
         mod_types = {}
         for idx, mod_data in enumerate(mods_to_apply):
@@ -546,10 +573,6 @@ class MultiModMerger(QObject):
                             if os.path.isdir(os.path.join(shaders_dir, shader_name)):
                                 if shader_name not in existing_assets['shaders']:
                                     existing_assets['shaders'][shader_name] = mod_name
-                    code_conflicts = self.detect_code_conflicts(mod_source_dir, mod_name, existing_code_files)
-                    asset_conflicts = self.detect_asset_conflicts(mod_source_dir, mod_name, existing_assets)
-                    if code_conflicts or any(asset_conflicts.values()):
-                        self.patching_logger.warning(f'[CONFLICTS] Mod {mod_name} has conflicts: {len(code_conflicts)} code, {sum((len(v) for v in asset_conflicts.values()))} assets')
         highest_priority_mod = None
         highest_priority_value = -1
         highest_priority_mod_number = None
@@ -600,8 +623,15 @@ class MultiModMerger(QObject):
         base_objects_dir = os.path.join(base_mod_dir, 'Objects')
         objects_dirs_to_import.sort(key=lambda x: x[1])
         self.patching_logger.info(f'Merge order (by priority): {[(m[1], m[2]) for m in objects_dirs_to_import]}')
-        data_win_dir = os.path.dirname(base_data_win)
-        expected_objects_dir = os.path.join(data_win_dir, 'Objects')
+        merged_objects_dir = os.path.join(xdelta_combiner_dir, 'merged')
+        target_objects_dir = os.path.join(merged_objects_dir, 'Objects')
+        if os.path.exists(merged_objects_dir):
+            self.patching_logger.debug(f'Cleaning up previous merge directory: {merged_objects_dir}')
+            if not safe_rmtree(merged_objects_dir):
+                self.patching_logger.warning(f'Failed to clean up previous merge directory: {merged_objects_dir}')
+        os.makedirs(target_objects_dir, exist_ok=True)
+        self.patching_logger.info(f'Created clean merge directory: {target_objects_dir}')
+        self.patching_logger.info(f'[MERGE] Merging filtered mods into clean directory (vanilla-identical resources already filtered out)')
         for idx, (mod_number, mod_priority, mod_name, objects_dir) in enumerate(objects_dirs_to_import):
             if self._cancelled:
                 if not is_modpack and self.backup_manager:
@@ -614,30 +644,32 @@ class MultiModMerger(QObject):
             except BaseException:
                 merge_msg = f'Merging assets from {mod_name} ({idx + 1}/{len(objects_dirs_to_import)})...'
             self.progress_update.emit(min(current_progress, 90), merge_msg)
-            self.patching_logger.info(f'Merging Objects from mod {mod_number} ({mod_name}, priority {mod_priority}) into Objects directory (step {idx + 1}/{len(objects_dirs_to_import)})')
+            self.patching_logger.info(f'Merging Objects from mod {mod_number} ({mod_name}, priority {mod_priority}) into clean merge directory (step {idx + 1}/{len(objects_dirs_to_import)})')
             code_entries_dir = os.path.join(objects_dir, 'CodeEntries')
             sprites_dir = os.path.join(objects_dir, 'Sprites')
             code_count = len([f for f in os.listdir(code_entries_dir) if f.endswith('.gml')]) if os.path.exists(code_entries_dir) else 0
             sprite_count = len([d for d in os.listdir(sprites_dir) if os.path.isdir(os.path.join(sprites_dir, d))]) if os.path.exists(sprites_dir) else 0
-            self.patching_logger.debug(f'[MERGE] Mod {mod_number} ({mod_name}) has {code_count} code files, {sprite_count} sprites to merge')
-            if os.path.exists(expected_objects_dir):
-                self.patching_logger.debug(f'Merging Objects from mod {mod_number} ({mod_name}, priority {mod_priority}) into existing Objects directory (will overwrite conflicting files)')
-                self._merge_objects_directories(expected_objects_dir, objects_dir, mod_name)
-            elif os.path.exists(objects_dir):
-                self.patching_logger.debug(f'Copying Objects from mod {mod_number} ({mod_name}, priority {mod_priority}) to expected location (first mod)')
-                shutil.copytree(objects_dir, expected_objects_dir, dirs_exist_ok=True)
-        mod_1_patched_backup = None
-        if base_mod_number in mod_patched_files:
-            mod_1_patched = mod_patched_files.get(base_mod_number)
-            if mod_1_patched and os.path.exists(mod_1_patched):
-                mod_1_patched_backup = mod_1_patched + '.backup_for_export'
-                if os.path.exists(mod_1_patched_backup):
-                    safe_remove(mod_1_patched_backup)
-                shutil.copy2(mod_1_patched, mod_1_patched_backup)
-                self.patching_logger.info(f'Created backup of highest priority mod file: {mod_1_patched_backup}')
-        if os.path.exists(expected_objects_dir):
-            code_entries_before = os.path.join(expected_objects_dir, 'CodeEntries')
-            sprites_before = os.path.join(expected_objects_dir, 'Sprites')
+            self.patching_logger.debug(f'[MERGE] Mod {mod_number} ({mod_name}) has {code_count} code files, {sprite_count} sprites to merge (after filtering)')
+            if os.path.exists(objects_dir):
+                has_content = False
+                for root, dirs, files in os.walk(objects_dir):
+                    if dirs or files:
+                        has_content = True
+                        break
+                if has_content:
+                    self.patching_logger.debug(f'Merging Objects from mod {mod_number} ({mod_name}, priority {mod_priority}) into clean merge directory')
+                    self._merge_objects_directories(target_objects_dir, objects_dir, mod_name)
+                else:
+                    self.patching_logger.debug(f'Mod {mod_number} ({mod_name}) has no resources to merge after filtering (all identical to vanilla or previous mods)')
+        if os.path.exists(target_objects_dir):
+            sprites_dir = os.path.join(target_objects_dir, 'Sprites')
+            if os.path.exists(sprites_dir):
+                sprite_dirs = [d for d in os.listdir(sprites_dir) if os.path.isdir(os.path.join(sprites_dir, d))]
+                total_sprites = sum([len([f for f in os.listdir(os.path.join(sprites_dir, d)) if f.endswith('.png')]) for d in sprite_dirs if os.path.exists(os.path.join(sprites_dir, d))])
+                self.patching_logger.info(f'[OPTIMIZATION] Collected {total_sprites} sprite files from {len(sprite_dirs)} sprite directories - Packer will run once for all sprites')
+        if os.path.exists(target_objects_dir):
+            code_entries_before = os.path.join(target_objects_dir, 'CodeEntries')
+            sprites_before = os.path.join(target_objects_dir, 'Sprites')
             code_files_before = [f for f in os.listdir(code_entries_before) if f.endswith('.gml')] if os.path.exists(code_entries_before) else []
             sprite_dirs_before = [d for d in os.listdir(sprites_before) if os.path.isdir(os.path.join(sprites_before, d))] if os.path.exists(sprites_before) else []
             self.patching_logger.info(f'[IMPORT] Before import: {len(code_files_before)} code files, {len(sprite_dirs_before)} sprites in Objects directory')
@@ -656,7 +688,7 @@ class MultiModMerger(QObject):
             import_progress_step = progress_base + int(xdelta_progress + export_progress + import_progress * 0.5)
             self.progress_update.emit(min(import_progress_step, 95), 'Importing merged assets into data.win...')
             self.patching_logger.info('Importing merged Objects directory (contains all exported mods, sorted by priority) into data.win')
-            if not self._import_assets_from_objects_dir(base_data_win, expected_objects_dir, mods_to_apply, mods_count):
+            if not self._import_assets_from_objects_dir(base_data_win, target_objects_dir, mods_to_apply, mods_count):
                 self.patching_logger.warning('Failed to import merged assets into data.win')
                 if not is_modpack and self.backup_manager:
                     self.backup_manager.restore_backups(chapter_id)
@@ -667,116 +699,6 @@ class MultiModMerger(QObject):
             self.patching_logger.info(f'[IMPORT] After import: {len(code_files_after)} code files, {len(sprite_dirs_after)} sprites still in Objects directory')
         else:
             self.patching_logger.debug('No Objects directory to import after merging mods (only xdelta changes)')
-        self.patching_logger.info('Applying highest priority mod (mod_number=1) changes AFTER importing Objects')
-        if mod_1_patched_backup and os.path.exists(mod_1_patched_backup):
-            self.patching_logger.info('Exporting GML code from highest priority mod to apply over imported Objects')
-            try:
-                mod_1_export_dir = tempfile.mkdtemp(prefix='mod_1_export_')
-                mod_1_objects_dir = os.path.join(mod_1_export_dir, 'Objects')
-                os.makedirs(mod_1_objects_dir, exist_ok=True)
-                mod_1_data_win_dir = os.path.dirname(mod_1_patched_backup)
-                if self._cancelled:
-                    return False
-                export_scripts = []
-                if self.utmt_wrapper.get_script_path('ExportAllCode'):
-                    export_scripts.append('ExportAllCode')
-                if self.utmt_wrapper.get_script_path('ExportAllTexturesGrouped'):
-                    export_scripts.append('ExportAllTexturesGrouped')
-                if self.utmt_wrapper.get_script_path('ExportTilesets'):
-                    export_scripts.append('ExportTilesets')
-                returncode = 1
-                stderr = ''
-                if export_scripts:
-                    self.patching_logger.debug(f'Exporting resources from highest priority mod using {export_scripts}')
-                    returncode, stdout, stderr = self.utmt_wrapper.execute_scripts(mod_1_patched_backup, export_scripts, cwd=mod_1_data_win_dir)
-                    try:
-                        for script in export_scripts:
-                            self._check_critical_script_errors(stderr, script, 'highest priority mod')
-                    except RuntimeError:
-                        self.patching_logger.error('Merge process aborted due to critical error in export scripts for highest priority mod')
-                        raise
-                else:
-                    self.patching_logger.warning('Export scripts not found, cannot export from highest priority mod')
-                if returncode == 0:
-                    mod_1_exported_objects = os.path.join(mod_1_data_win_dir, 'Objects')
-                    if os.path.exists(mod_1_exported_objects):
-                        self.patching_logger.info('Copying all resources from highest priority mod export (including sprites, rooms, shaders, etc.)')
-                        for item in os.listdir(mod_1_exported_objects):
-                            src_item = os.path.join(mod_1_exported_objects, item)
-                            dst_item = os.path.join(mod_1_objects_dir, item)
-                            if os.path.isdir(src_item):
-                                if os.path.exists(dst_item) and os.path.isdir(dst_item):
-                                    highest_priority_mod_name = getattr(highest_priority_mod, 'name', 'highest_priority_mod') if highest_priority_mod else 'highest_priority_mod'
-                                    self._merge_objects_directories(dst_item, src_item, highest_priority_mod_name)
-                                else:
-                                    shutil.copytree(src_item, dst_item, dirs_exist_ok=True)
-                            elif os.path.isfile(src_item):
-                                self._safe_copy2(src_item, dst_item)
-                        mod_1_code_entries = os.path.join(mod_1_exported_objects, 'CodeEntries')
-                        mod_1_temp_code_entries = os.path.join(mod_1_objects_dir, 'CodeEntries')
-                        if os.path.exists(mod_1_code_entries):
-                            self.patching_logger.info('Successfully exported all resources from highest priority mod (including CodeEntries)')
-                            if os.path.exists(mod_1_temp_code_entries):
-                                exported_files = [f for f in os.listdir(mod_1_temp_code_entries) if f.endswith('.gml')]
-                                self.patching_logger.info(f'Exported {len(exported_files)} GML file(s) from highest priority mod')
-                                if exported_files:
-                                    for f in exported_files[:5]:
-                                        file_path = os.path.join(mod_1_temp_code_entries, f)
-                                        with open(file_path, 'r', encoding='utf-8') as code_file:
-                                            content = code_file.read()
-                                            self.patching_logger.debug(f'  File {f}: {len(content)} chars, preview: {content[:50]}...')
-                            else:
-                                self.patching_logger.debug('No CodeEntries directory found in exported Objects from highest priority mod')
-                        else:
-                            self.patching_logger.info('Successfully exported resources from highest priority mod (no CodeEntries found)')
-                        self.patching_logger.info('Importing GML code from highest priority mod to resolve conflicts')
-                        base_data_win_dir = os.path.dirname(base_data_win)
-                        target_objects_dir = os.path.join(base_data_win_dir, 'Objects')
-                        mod_1_code_entries = os.path.join(mod_1_objects_dir, 'CodeEntries')
-                        target_code_entries = os.path.join(target_objects_dir, 'CodeEntries')
-                        if os.path.exists(mod_1_code_entries):
-                            if os.path.exists(target_code_entries):
-                                self.patching_logger.debug(f'Merging highest priority mod CodeEntries into existing CodeEntries directory: {target_code_entries}')
-                                files_to_copy = []
-                                all_files = [f for f in os.listdir(mod_1_code_entries) if f.endswith('.gml')]
-                                for file in all_files:
-                                    code_name = os.path.splitext(file)[0]
-                                    if code_name in highest_priority_mod_exported_files:
-                                        files_to_copy.append(file)
-                                self.patching_logger.info(f'[IMPORT] Copying {len(files_to_copy)} code file(s) from highest priority mod (only files exported in main cycle, out of {len(all_files)} total)')
-                                for file in files_to_copy:
-                                    src_file = os.path.join(mod_1_code_entries, file)
-                                    dst_file = os.path.join(target_code_entries, file)
-                                    if os.path.isfile(src_file):
-                                        self._safe_copy2(src_file, dst_file)
-                                if len(files_to_copy) < len(all_files):
-                                    skipped = len(all_files) - len(files_to_copy)
-                                    self.patching_logger.info(f'[IMPORT] Skipped {skipped} code file(s) from highest priority mod (not exported in main cycle, likely not modified by this mod)')
-                            else:
-                                self.patching_logger.debug(f'Copying highest priority mod CodeEntries to: {target_code_entries}')
-                                shutil.copytree(mod_1_code_entries, target_code_entries, dirs_exist_ok=True)
-                            if self._import_assets_from_objects_dir(base_data_win, target_objects_dir, mods_to_apply, mods_count):
-                                self.patching_logger.info('Successfully applied highest priority mod GML code over imported Objects')
-                            else:
-                                self.patching_logger.warning('Failed to import GML code from highest priority mod')
-                        else:
-                            self.patching_logger.debug('No CodeEntries from highest priority mod to import - all resources already merged from main export')
-                    else:
-                        self.patching_logger.debug('Objects directory not created by export scripts for highest priority mod')
-                else:
-                    self.patching_logger.warning(f'Export scripts failed for highest priority mod: {stderr[:300]}')
-                if not safe_rmtree(mod_1_export_dir):
-                    self.patching_logger.warning(f'Failed to clean up temporary export directory: {mod_1_export_dir}')
-                if mod_1_patched_backup and os.path.exists(mod_1_patched_backup):
-                    if not safe_remove(mod_1_patched_backup):
-                        self.patching_logger.warning(f'Failed to clean up backup file: {mod_1_patched_backup}')
-            except Exception as e:
-                self.patching_logger.error(f'Failed to export/import from highest priority mod: {e}', exc_info=True)
-                if mod_1_patched_backup and os.path.exists(mod_1_patched_backup):
-                    if not safe_remove(mod_1_patched_backup):
-                        self.patching_logger.warning(f'Failed to clean up backup file after error: {mod_1_patched_backup}')
-        else:
-            self.patching_logger.debug('No highest priority mod changes to apply (no backup file created)')
         if self._cancelled:
             if not is_modpack and self.backup_manager:
                 self.backup_manager.restore_backups(chapter_id)
@@ -1027,9 +949,12 @@ class MultiModMerger(QObject):
                 if extra_name not in resource_names:
                     resource_names.append(extra_name)
         for resource_name in resource_names:
-            if resource_name not in self.resource_modification_history:
-                self.resource_modification_history[resource_name] = []
-            self.resource_modification_history[resource_name].append({'type': resource_type, 'mod': mod_name_for_tracking, 'action': resource_action, 'timestamp': time.time()})
+            if mod_name_for_tracking != '0' and mod_name_for_tracking != 'vanilla' and (mod_name_for_tracking != 'unknown_mod'):
+                if resource_name not in self.resource_modification_history:
+                    self.resource_modification_history[resource_name] = []
+                existing_mods = [h['mod'] for h in self.resource_modification_history[resource_name]]
+                if mod_name_for_tracking not in existing_mods:
+                    self.resource_modification_history[resource_name].append({'type': resource_type, 'mod': mod_name_for_tracking, 'action': resource_action, 'timestamp': time.time()})
         returncode, stdout, stderr = self.utmt_wrapper.execute_script(data_win_path, script_name, output_path=data_win_path, cwd=data_win_dir)
         if analyze_errors:
             self._analyze_compilation_errors(stdout, stderr, script_name, mod_name_for_tracking)
@@ -1045,26 +970,27 @@ class MultiModMerger(QObject):
                         history[-1]['error'] = error_msg
                         if len(history) > 1:
                             prev_mods = [h['mod'] for h in history[:-1]]
-                            prev_mods_unique = [m for m in prev_mods if m != mod_name_for_tracking]
-                            if prev_mods_unique:
-                                conflict_msg = f'''{resource_type.capitalize()} "{resource_name}" was modified by: {', '.join(prev_mods_unique)} before "{mod_name_for_tracking}". Higher priority mod ({mod_name_for_tracking}) will be used.'''
+                            prev_mods_filtered = [m for m in prev_mods if m not in ['0', 'vanilla', 'unknown_mod', mod_name_for_tracking]]
+                            if prev_mods_filtered:
+                                conflict_msg = f'''{resource_type.capitalize()} "{resource_name}" was modified by: {', '.join(prev_mods_filtered)} before "{mod_name_for_tracking}". Higher priority mod ({mod_name_for_tracking}) will be used.'''
                                 self.patching_logger.warning(f'[CONFLICT] {conflict_msg}')
-                                self.conflicts_logger.info(f'''Resource: {resource_type.capitalize()} "{resource_name}" | Conflict between: {', '.join(prev_mods_unique)} vs "{mod_name_for_tracking}" | Resolution: Using "{mod_name_for_tracking}" (higher priority)''')
-                                self.detected_conflicts.append({'resource_type': resource_type, 'resource_name': resource_name, 'mods': prev_mods_unique + [mod_name_for_tracking], 'resolution': mod_name_for_tracking})
-                                history[-1]['conflicts_with'] = prev_mods_unique
+                                self.conflicts_logger.info(f'''Resource: {resource_type.capitalize()} "{resource_name}" | Conflict between: {', '.join(prev_mods_filtered)} vs "{mod_name_for_tracking}" | Resolution: Using "{mod_name_for_tracking}" (higher priority)''')
+                                self.detected_conflicts.append({'resource_type': resource_type, 'resource_name': resource_name, 'mods': prev_mods_filtered + [mod_name_for_tracking], 'resolution': mod_name_for_tracking})
+                                history[-1]['conflicts_with'] = prev_mods_filtered
         else:
-            for resource_name in resource_names:
-                if resource_name in self.resource_modification_history:
-                    history = self.resource_modification_history[resource_name]
-                    if len(history) > 1:
-                        prev_mods = [h['mod'] for h in history[:-1]]
-                        prev_mods_unique = [m for m in prev_mods if m != mod_name_for_tracking]
-                        if prev_mods_unique:
-                            conflict_msg = f'''{resource_type.capitalize()} "{resource_name}" was modified by: {', '.join(prev_mods_unique)} before "{mod_name_for_tracking}". Higher priority mod ({mod_name_for_tracking}) will be used.'''
-                            self.patching_logger.warning(f'[CONFLICT] {conflict_msg}')
-                            self.conflicts_logger.info(f'''Resource: {resource_type.capitalize()} "{resource_name}" | Conflict between: {', '.join(prev_mods_unique)} vs "{mod_name_for_tracking}" | Resolution: Using "{mod_name_for_tracking}" (higher priority)''')
-                            self.detected_conflicts.append({'resource_type': resource_type, 'resource_name': resource_name, 'mods': prev_mods_unique + [mod_name_for_tracking], 'resolution': mod_name_for_tracking})
-                            history[-1]['conflicts_with'] = prev_mods_unique
+            if mod_name_for_tracking not in ['0', 'vanilla', 'unknown_mod']:
+                for resource_name in resource_names:
+                    if resource_name in self.resource_modification_history:
+                        history = self.resource_modification_history[resource_name]
+                        if len(history) > 1:
+                            prev_mods = [h['mod'] for h in history[:-1]]
+                            prev_mods_filtered = [m for m in prev_mods if m not in ['0', 'vanilla', 'unknown_mod', mod_name_for_tracking]]
+                            if prev_mods_filtered:
+                                conflict_msg = f'''{resource_type.capitalize()} "{resource_name}" was modified by: {', '.join(prev_mods_filtered)} before "{mod_name_for_tracking}". Higher priority mod ({mod_name_for_tracking}) will be used.'''
+                                self.patching_logger.warning(f'[CONFLICT] {conflict_msg}')
+                                self.conflicts_logger.info(f'''Resource: {resource_type.capitalize()} "{resource_name}" | Conflict between: {', '.join(prev_mods_filtered)} vs "{mod_name_for_tracking}" | Resolution: Using "{mod_name_for_tracking}" (higher priority)''')
+                                self.detected_conflicts.append({'resource_type': resource_type, 'resource_name': resource_name, 'mods': prev_mods_filtered + [mod_name_for_tracking], 'resolution': mod_name_for_tracking})
+                                history[-1]['conflicts_with'] = prev_mods_filtered
             self.patching_logger.info(f'Successfully imported {resource_type} from Objects directory')
         return returncode == 0
 
@@ -1076,21 +1002,10 @@ class MultiModMerger(QObject):
             data_win_dir = os.path.dirname(data_win_path)
             expected_objects_dir = os.path.join(data_win_dir, 'Objects')
             if objects_dir != expected_objects_dir:
-                self.patching_logger.warning(f'Objects directory is not next to data.win! Expected: {expected_objects_dir}, Got: {objects_dir}')
+                self.patching_logger.info(f'Copying merged Objects directory to expected location: {expected_objects_dir}')
                 if os.path.exists(expected_objects_dir):
-                    mod_name_from_path = 'unknown_mod'
-                    try:
-                        if 'xDeltaCombiner' in objects_dir:
-                            parts = objects_dir.split(os.sep)
-                            if 'xDeltaCombiner' in parts:
-                                idx = parts.index('xDeltaCombiner')
-                                if idx + 2 < len(parts):
-                                    mod_name_from_path = parts[idx + 2]
-                    except BaseException:
-                        pass
-                    self._merge_objects_directories(expected_objects_dir, objects_dir, mod_name_from_path)
-                else:
-                    shutil.copytree(objects_dir, expected_objects_dir, dirs_exist_ok=True)
+                    shutil.rmtree(expected_objects_dir)
+                shutil.copytree(objects_dir, expected_objects_dir, dirs_exist_ok=True)
                 objects_dir = expected_objects_dir
             sprites_dir = os.path.join(objects_dir, 'Sprites')
             backgrounds_dir = os.path.join(objects_dir, 'Backgrounds')
@@ -1102,39 +1017,16 @@ class MultiModMerger(QObject):
             has_gml = bool(os.path.exists(code_entries_dir) and os.listdir(code_entries_dir) or (os.path.exists(append_code_dir) and os.listdir(append_code_dir)) or (os.path.exists(prepend_code_dir) and os.listdir(prepend_code_dir)) or os.path.exists(code_patches_file))
             shaders_dir = os.path.join(objects_dir, 'Shaders')
             has_shaders = bool(os.path.exists(shaders_dir) and os.listdir(shaders_dir))
-            new_objects_dir = os.path.join(objects_dir, 'NewObjects')
-            has_new_objects = bool(os.path.exists(new_objects_dir) and os.listdir(new_objects_dir))
-            existing_objects_dir = os.path.join(objects_dir, 'ExistingObjects')
-            has_existing_objects = bool(os.path.exists(existing_objects_dir) and os.listdir(existing_objects_dir))
             rooms_dir = os.path.join(objects_dir, 'Rooms')
             has_rooms = bool(os.path.exists(rooms_dir) and os.listdir(rooms_dir))
             tilesets_dir = os.path.join(objects_dir, 'Tilesets')
             has_tilesets = bool(os.path.exists(tilesets_dir) and os.listdir(tilesets_dir))
             asset_order_path = os.path.join(objects_dir, 'AssetOrder.txt')
             has_asset_order = os.path.exists(asset_order_path)
-            if not (has_graphics or has_gml or has_shaders or has_new_objects or has_existing_objects or has_rooms or has_tilesets or has_asset_order):
+            if not (has_graphics or has_gml or has_shaders or has_rooms or has_tilesets or has_asset_order):
                 self.patching_logger.debug(f'Objects directory has no assets to import: {objects_dir}')
                 return True
-            mod_name_for_tracking = 'unknown_mod'
-            try:
-                if 'xDeltaCombiner' in objects_dir:
-                    parts = objects_dir.split(os.sep)
-                    if 'xDeltaCombiner' in parts:
-                        idx = parts.index('xDeltaCombiner')
-                        if idx + 2 < len(parts):
-                            mod_number_str = parts[idx + 2]
-                            try:
-                                mod_number = int(mod_number_str)
-                                if mods_to_apply and mods_count > 0:
-                                    for mod_idx, mod_data in enumerate(mods_to_apply):
-                                        actual_mod_number = mod_idx + 1
-                                        if actual_mod_number == mod_number:
-                                            mod_name_for_tracking = getattr(mod_data, 'name', f'mod_{mod_number}')
-                                            break
-                            except (ValueError, TypeError):
-                                pass
-            except BaseException:
-                pass
+            mod_name_for_tracking = 'merged_mods'
 
             def get_sprite_resources(obj_dir):
                 sprites_path = os.path.join(obj_dir, 'Sprites')
@@ -1148,12 +1040,6 @@ class MultiModMerger(QObject):
                 shaders_path = os.path.join(obj_dir, 'Shaders')
                 if os.path.exists(shaders_path):
                     return [d for d in os.listdir(shaders_path) if os.path.isdir(os.path.join(shaders_path, d))]
-                return []
-
-            def get_new_object_resources(obj_dir):
-                new_objects_path = os.path.join(obj_dir, 'NewObjects')
-                if os.path.exists(new_objects_path):
-                    return [os.path.splitext(f)[0] for f in os.listdir(new_objects_path) if f.endswith('.json')]
                 return []
 
             def get_gml_resources(obj_dir):
@@ -1177,12 +1063,6 @@ class MultiModMerger(QObject):
                 if code_files:
                     self.patching_logger.debug(f'[IMPORT] Code files to import: {code_files[:10]}...' if len(code_files) > 10 else f'[IMPORT] Code files to import: {code_files}')
                 return code_files
-
-            def get_existing_object_resources(obj_dir):
-                existing_objects_path = os.path.join(obj_dir, 'ExistingObjects')
-                if os.path.exists(existing_objects_path):
-                    return [os.path.splitext(f)[0] for f in os.listdir(existing_objects_path) if f.endswith('.json')]
-                return []
 
             def get_room_resources(obj_dir):
                 rooms_path = os.path.join(obj_dir, 'Rooms')
@@ -1213,7 +1093,7 @@ class MultiModMerger(QObject):
                 if os.path.exists(sounds_path):
                     return [os.path.splitext(f)[0] for f in os.listdir(sounds_path) if f.endswith(('.ogg', '.wav'))]
                 return []
-            asset_configs = [{'script_name': 'ImportGraphics', 'has_assets': has_graphics, 'step_number': '1/12', 'resource_type': 'sprite', 'resource_action': 'imported', 'get_resources_func': get_sprite_resources}, {'script_name': 'ImportShaders', 'has_assets': has_shaders, 'step_number': '2/12', 'resource_type': 'shader', 'resource_action': 'imported', 'get_resources_func': get_shader_resources}, {'script_name': 'ImportNewObjects', 'has_assets': has_new_objects, 'step_number': '3/12', 'resource_type': 'new_object', 'resource_action': 'created', 'get_resources_func': get_new_object_resources}, {'script_name': 'ImportGML', 'has_assets': has_gml, 'step_number': '5/12', 'resource_type': 'code', 'resource_action': 'modified', 'get_resources_func': get_gml_resources, 'analyze_errors': True}, {'script_name': 'ImportExistingObjects', 'has_assets': has_existing_objects, 'step_number': '9/12', 'resource_type': 'existing_object', 'resource_action': 'modified', 'get_resources_func': get_existing_object_resources}, {'script_name': 'ImportRooms', 'has_assets': has_rooms, 'step_number': '10/12', 'resource_type': 'room', 'resource_action': 'imported', 'get_resources_func': get_room_resources}, {'script_name': 'ImportTilesets', 'has_assets': has_tilesets, 'step_number': '10/14', 'resource_type': 'tileset', 'resource_action': 'imported', 'get_resources_func': get_tileset_resources, 'extra_resources_func': get_tileset_config_resource}, {'script_name': 'ImportFonts', 'has_assets': False, 'check_dir_func': lambda obj_dir: os.path.exists(os.path.join(obj_dir, 'Fonts')), 'step_number': '11/14', 'resource_type': 'font', 'resource_action': 'modified', 'get_resources_func': get_font_resources}, {'script_name': 'ImportSounds', 'has_assets': False, 'check_dir_func': lambda obj_dir: os.path.exists(os.path.join(obj_dir, 'Sounds')), 'step_number': '12/14', 'resource_type': 'sound', 'resource_action': 'modified', 'get_resources_func': get_sound_resources}]
+            asset_configs = [{'script_name': 'ImportGraphics', 'has_assets': has_graphics, 'step_number': '1/12', 'resource_type': 'sprite', 'resource_action': 'imported', 'get_resources_func': get_sprite_resources}, {'script_name': 'ImportShaders', 'has_assets': has_shaders, 'step_number': '2/12', 'resource_type': 'shader', 'resource_action': 'imported', 'get_resources_func': get_shader_resources}, {'script_name': 'ImportGML', 'has_assets': has_gml, 'step_number': '5/12', 'resource_type': 'code', 'resource_action': 'modified', 'get_resources_func': get_gml_resources, 'analyze_errors': True}, {'script_name': 'ImportRooms', 'has_assets': has_rooms, 'step_number': '10/12', 'resource_type': 'room', 'resource_action': 'imported', 'get_resources_func': get_room_resources}, {'script_name': 'ImportTilesets', 'has_assets': has_tilesets, 'step_number': '10/14', 'resource_type': 'tileset', 'resource_action': 'imported', 'get_resources_func': get_tileset_resources, 'extra_resources_func': get_tileset_config_resource}, {'script_name': 'ImportFonts', 'has_assets': False, 'check_dir_func': lambda obj_dir: os.path.exists(os.path.join(obj_dir, 'Fonts')), 'step_number': '11/14', 'resource_type': 'font', 'resource_action': 'modified', 'get_resources_func': get_font_resources}, {'script_name': 'ImportSounds', 'has_assets': False, 'check_dir_func': lambda obj_dir: os.path.exists(os.path.join(obj_dir, 'Sounds')), 'step_number': '12/14', 'resource_type': 'sound', 'resource_action': 'modified', 'get_resources_func': get_sound_resources}]
             for asset_config in asset_configs:
                 self._import_asset_type(asset_config, data_win_path, data_win_dir, objects_dir, mod_name_for_tracking)
             import_asset_order_script = self.utmt_wrapper.get_script_path('ImportAssetOrder')
@@ -1353,30 +1233,6 @@ class MultiModMerger(QObject):
         total_unique_conflicts = len(unique_resources)
         return {'has_conflicts': True, 'conflicting_mods': sorted(all_mods), 'mod_pairs': [list(pair) for pair in sorted(mod_pairs)], 'conflicts': self.detected_conflicts, 'total_conflicts': total_unique_conflicts}
 
-    def _safe_copy2(self, src: str, dst: str, max_retries: int = 5) -> None:
-        try:
-            if os.path.abspath(src) == os.path.abspath(dst):
-                self.patching_logger.debug(f'Skipping copy: source and destination are the same file: {src}')
-                return
-        except Exception:
-            pass
-        for attempt in range(max_retries):
-            try:
-                shutil.copy2(src, dst)
-                return
-            except PermissionError as e:
-                if attempt < max_retries - 1:
-                    time.sleep(0.1 * (attempt + 1))
-                else:
-                    self.patching_logger.error(f'Failed to copy {src} to {dst} after {max_retries} attempts: {e}')
-                    raise
-            except OSError as e:
-                if attempt < max_retries - 1:
-                    time.sleep(0.1 * (attempt + 1))
-                else:
-                    self.patching_logger.error(f'Failed to copy {src} to {dst} after {max_retries} attempts: {e}')
-                    raise
-
     def _merge_subdirectory(self, target_base: str, source_base: str, folder_name: str, resource_type: str, source_mod_name: str, track_history: bool = False) -> None:
         source_dir = os.path.join(source_base, folder_name)
         target_dir = os.path.join(target_base, folder_name)
@@ -1394,17 +1250,19 @@ class MultiModMerger(QObject):
                         resource_name = rel_path if rel_path != '.' else os.path.splitext(file)[0]
                         if resource_name in self.resource_modification_history:
                             prev_mods = [h['mod'] for h in self.resource_modification_history[resource_name]]
-                            if prev_mods and source_mod_name not in prev_mods:
-                                conflict_msg = f'''{resource_type.capitalize()} "{resource_name}" was modified by: {', '.join(prev_mods)} before "{source_mod_name}". Higher priority mod ({source_mod_name}) will overwrite.'''
+                            prev_mods_filtered = [m for m in prev_mods if m not in ['0', 'vanilla', 'unknown_mod']]
+                            if prev_mods_filtered and source_mod_name not in prev_mods_filtered:
+                                conflict_msg = f'''{resource_type.capitalize()} "{resource_name}" was modified by: {', '.join(prev_mods_filtered)} before "{source_mod_name}". Higher priority mod ({source_mod_name}) will overwrite.'''
                                 self.patching_logger.warning(f'[CONFLICT] {conflict_msg}')
-                                self.conflicts_logger.info(f'''Resource: {resource_type.capitalize()} "{resource_name}" | Conflict between: {', '.join(prev_mods)} vs "{source_mod_name}" | Resolution: Using "{source_mod_name}" (higher priority)''')
-                                self.detected_conflicts.append({'resource_type': resource_type, 'resource_name': resource_name, 'mods': prev_mods + [source_mod_name], 'resolution': source_mod_name})
-                    self._safe_copy2(src_file, dst_file)
+                                self.conflicts_logger.info(f'''Resource: {resource_type.capitalize()} "{resource_name}" | Conflict between: {', '.join(prev_mods_filtered)} vs "{source_mod_name}" | Resolution: Using "{source_mod_name}" (higher priority)''')
+                                self.detected_conflicts.append({'resource_type': resource_type, 'resource_name': resource_name, 'mods': prev_mods_filtered + [source_mod_name], 'resolution': source_mod_name})
+                    safe_copy(src_file, dst_file)
                     if track_history:
-                        resource_name = rel_path if rel_path != '.' else os.path.splitext(file)[0]
-                        if resource_name not in self.resource_modification_history:
-                            self.resource_modification_history[resource_name] = []
-                        self.resource_modification_history[resource_name].append({'type': resource_type, 'mod': source_mod_name, 'action': 'merged', 'timestamp': time.time()})
+                        if source_mod_name != '0' and source_mod_name != 'vanilla' and (source_mod_name != 'unknown_mod'):
+                            resource_name = rel_path if rel_path != '.' else os.path.splitext(file)[0]
+                            if resource_name not in self.resource_modification_history:
+                                self.resource_modification_history[resource_name] = []
+                            self.resource_modification_history[resource_name].append({'type': resource_type, 'mod': source_mod_name, 'action': 'merged', 'timestamp': time.time()})
         else:
             shutil.copytree(source_dir, target_dir, dirs_exist_ok=True)
 
@@ -1418,7 +1276,7 @@ class MultiModMerger(QObject):
         except Exception:
             pass
         os.makedirs(target_objects_dir, exist_ok=True)
-        subdirs_to_merge = [('Sprites', 'sprite', True), ('Backgrounds', 'background', False), ('Rooms', 'room', False), ('Tilesets', 'tileset', False), ('Shaders', 'shader', False), ('Fonts', 'font', False), ('Sounds', 'sound', False), ('NewObjects', 'new_object', False), ('ExistingObjects', 'existing_object', False)]
+        subdirs_to_merge = [('Sprites', 'sprite', True), ('Backgrounds', 'background', False), ('Rooms', 'room', False), ('Tilesets', 'tileset', False), ('Shaders', 'shader', False), ('Fonts', 'font', False), ('Sounds', 'sound', False)]
         for folder_name, resource_type, track_history in subdirs_to_merge:
             self._merge_subdirectory(target_objects_dir, source_objects_dir, folder_name, resource_type, source_mod_name, track_history)
         source_code = os.path.join(source_objects_dir, 'CodeEntries')
@@ -1433,16 +1291,20 @@ class MultiModMerger(QObject):
                         code_name = os.path.splitext(file)[0]
                         if code_name in self.resource_modification_history:
                             prev_mods = [h['mod'] for h in self.resource_modification_history[code_name]]
-                            if prev_mods and source_mod_name not in prev_mods:
-                                conflict_msg = f'''Code "{code_name}" was modified by: {', '.join(prev_mods)} before "{source_mod_name}". Higher priority mod ({source_mod_name}) will overwrite.'''
+                            prev_mods_filtered = [m for m in prev_mods if m not in ['0', 'vanilla', 'unknown_mod']]
+                            if prev_mods_filtered and source_mod_name not in prev_mods_filtered:
+                                conflict_msg = f'''Code "{code_name}" was modified by: {', '.join(prev_mods_filtered)} before "{source_mod_name}". Higher priority mod ({source_mod_name}) will overwrite.'''
                                 self.patching_logger.warning(f'[CONFLICT] {conflict_msg}')
-                                self.conflicts_logger.info(f'''Resource: GML Code "{code_name}" | Conflict between: {', '.join(prev_mods)} vs "{source_mod_name}" | Resolution: Using "{source_mod_name}" (higher priority)''')
-                                self.detected_conflicts.append({'resource_type': 'code', 'resource_name': code_name, 'mods': prev_mods + [source_mod_name], 'resolution': source_mod_name})
-                    self._safe_copy2(src_file, dst_file)
-                    code_name = os.path.splitext(file)[0]
-                    if code_name not in self.resource_modification_history:
-                        self.resource_modification_history[code_name] = []
-                    self.resource_modification_history[code_name].append({'type': 'code', 'mod': source_mod_name, 'action': 'merged', 'timestamp': time.time()})
+                                self.conflicts_logger.info(f'''Resource: GML Code "{code_name}" | Conflict between: {', '.join(prev_mods_filtered)} vs "{source_mod_name}" | Resolution: Using "{source_mod_name}" (higher priority)''')
+                                self.detected_conflicts.append({'resource_type': 'code', 'resource_name': code_name, 'mods': prev_mods_filtered + [source_mod_name], 'resolution': source_mod_name})
+                    safe_copy(src_file, dst_file)
+                    if source_mod_name != '0' and source_mod_name != 'vanilla' and (source_mod_name != 'unknown_mod'):
+                        code_name = os.path.splitext(file)[0]
+                        if code_name not in self.resource_modification_history:
+                            self.resource_modification_history[code_name] = []
+                        existing_mods = [h['mod'] for h in self.resource_modification_history[code_name]]
+                        if source_mod_name not in existing_mods:
+                            self.resource_modification_history[code_name].append({'type': 'code', 'mod': source_mod_name, 'action': 'merged', 'timestamp': time.time()})
         for code_folder in ['AppendCode', 'PrependCode']:
             self._merge_subdirectory(target_objects_dir, source_objects_dir, code_folder, 'code_injection', source_mod_name, track_history=False)
         source_patches = os.path.join(source_objects_dir, 'CodePatches.json')
@@ -1461,13 +1323,13 @@ class MultiModMerger(QObject):
                             json.dump(target_json, f_out, indent=2)
                 except Exception as e:
                     self.patching_logger.warning(f'Failed to merge CodePatches.json: {e}')
-                    self._safe_copy2(source_patches, target_patches)
+                    safe_copy(source_patches, target_patches)
             else:
                 self._safe_copy2(source_patches, target_patches)
         source_asset_order = os.path.join(source_objects_dir, 'AssetOrder.txt')
         target_asset_order = os.path.join(target_objects_dir, 'AssetOrder.txt')
         if os.path.exists(source_asset_order):
-            self._safe_copy2(source_asset_order, target_asset_order)
+            safe_copy(source_asset_order, target_asset_order)
 
     def _merge_two_data_win_files(self, base_file: str, other_file: str, mod_dir: Optional[str] = None) -> bool:
         if not self.temp_merge_dir:
@@ -1478,17 +1340,41 @@ class MultiModMerger(QObject):
             os.makedirs(merge_temp_dir, exist_ok=True)
             if self._cancelled:
                 return False
+            mod_number = None
+            chapter_str = None
+            if mod_dir:
+                parts = mod_dir.replace('\\', '/').split('/')
+                if 'xDeltaCombiner' in parts:
+                    idx = parts.index('xDeltaCombiner')
+                    if idx + 1 < len(parts):
+                        chapter_str = parts[idx + 1]
+                    if idx + 2 < len(parts):
+                        mod_number_str = parts[idx + 2]
+                        try:
+                            mod_number = int(mod_number_str)
+                        except ValueError:
+                            pass
+            if mod_number is not None and chapter_str is not None:
+                output_dir = os.path.join(self.temp_merge_dir, 'output')
+                cache_running_dir = os.path.join(output_dir, 'Cache', 'running')
+                os.makedirs(cache_running_dir, exist_ok=True)
+                chapter_file = os.path.join(cache_running_dir, 'chapterNumber.txt')
+                mod_file = os.path.join(cache_running_dir, 'modNumbersCache.txt')
+                with open(chapter_file, 'w', encoding='utf-8') as f:
+                    f.write(chapter_str)
+                with open(mod_file, 'w', encoding='utf-8') as f:
+                    f.write(str(mod_number))
+                self.patching_logger.debug(f'Set mod number cache: chapter={chapter_str}, mod={mod_number} for export from ready data.win')
             export_scripts = []
-            if self.utmt_wrapper.get_script_path('ExportAllCode'):
-                export_scripts.append('ExportAllCode')
-            if self.utmt_wrapper.get_script_path('ExportAllTexturesGrouped'):
-                export_scripts.append('ExportAllTexturesGrouped')
-            if self.utmt_wrapper.get_script_path('ExportTilesets'):
-                export_scripts.append('ExportTilesets')
+            if self.utmt_wrapper.get_script_path('ExportAllAssets'):
+                export_scripts.append('ExportAllAssets')
+            else:
+                self.patching_logger.error('ExportAllAssets script not found! This is required for optimized export.')
+                return False
             if export_scripts:
                 export_temp = os.path.join(merge_temp_dir, 'other_export')
                 os.makedirs(export_temp, exist_ok=True)
-                returncode, stdout, stderr = self.utmt_wrapper.execute_scripts(other_file, export_scripts, cwd=export_temp)
+                returncode, stdout, stderr = self.utmt_wrapper.execute_scripts(other_file, export_scripts, cwd=self.temp_merge_dir)
                 try:
                     for script in export_scripts:
                         self._check_critical_script_errors(stderr, script, 'other files export')
@@ -1497,26 +1383,30 @@ class MultiModMerger(QObject):
                     raise
                 if returncode == 0:
                     if mod_dir:
-                        export_objects_dir = os.path.join(export_temp, 'Objects')
                         mod_objects_dir = os.path.join(mod_dir, 'Objects')
+                        if os.path.exists(mod_objects_dir):
+                            code_entries_dir = os.path.join(mod_objects_dir, 'CodeEntries')
+                            sprites_dir = os.path.join(mod_objects_dir, 'Sprites')
+                            code_count = len([f for f in os.listdir(code_entries_dir) if f.endswith('.gml')]) if os.path.exists(code_entries_dir) else 0
+                            sprite_count = len([d for d in os.listdir(sprites_dir) if os.path.isdir(os.path.join(sprites_dir, d))]) if os.path.exists(sprites_dir) else 0
+                            self.patching_logger.debug(f'Exported resources from ready data.win: {code_count} code files, {sprite_count} sprites in {mod_objects_dir}')
+                        else:
+                            self.patching_logger.warning(f'Objects directory not found after export: {mod_objects_dir}')
+                        export_objects_dir = os.path.join(export_temp, 'Objects')
                         if os.path.exists(export_objects_dir):
                             if os.path.exists(mod_objects_dir):
                                 mod_name_from_dir = os.path.basename(mod_dir) if mod_dir else 'unknown_mod'
                                 self._merge_objects_directories(mod_objects_dir, export_objects_dir, mod_name_from_dir)
                             else:
                                 shutil.copytree(export_objects_dir, mod_objects_dir)
-                            self.patching_logger.info(f'Copied exported objects to {mod_objects_dir} for later import')
+                            self.patching_logger.info(f'Copied exported objects from export_temp to {mod_objects_dir} for later import')
                     scripts_to_run = []
                     if self.utmt_wrapper.get_script_path('ImportGraphics'):
                         scripts_to_run.append('ImportGraphics')
                     if self.utmt_wrapper.get_script_path('ImportShaders'):
                         scripts_to_run.append('ImportShaders')
-                    if self.utmt_wrapper.get_script_path('ImportNewObjects'):
-                        scripts_to_run.append('ImportNewObjects')
                     if self.utmt_wrapper.get_script_path('ImportGML'):
                         scripts_to_run.append('ImportGML')
-                    if self.utmt_wrapper.get_script_path('ImportExistingObjects'):
-                        scripts_to_run.append('ImportExistingObjects')
                     if self.utmt_wrapper.get_script_path('ImportRooms'):
                         scripts_to_run.append('ImportRooms')
                     if self.utmt_wrapper.get_script_path('ImportTilesets'):
@@ -1615,7 +1505,7 @@ class MultiModMerger(QObject):
 
     def _extract_archive_to_target(self, archive_path: str, target_dir: str) -> bool:
         try:
-            from utils.file_utils import extract_any_archive
+            from utils.archive_utils import extract_any_archive
             import tempfile
             archive_lower = os.path.basename(archive_path).lower()
             chapter_id = self._extract_chapter_id_from_path(target_dir)
@@ -1737,7 +1627,7 @@ class MultiModMerger(QObject):
         return mod_type
 
     def _detect_mod_asset_types(self, mod_dir: str) -> Dict[str, bool]:
-        asset_types = {'has_code': False, 'has_textures': False, 'has_new_objects': False}
+        asset_types = {'has_code': False, 'has_textures': False, 'has_rooms': False, 'has_shaders': False, 'has_tilesets': False, 'has_fonts': False, 'has_sounds': False}
         objects_dir = os.path.join(mod_dir, 'Objects')
         if os.path.exists(objects_dir):
             code_entries_dir = os.path.join(objects_dir, 'CodeEntries')
@@ -1750,13 +1640,41 @@ class MultiModMerger(QObject):
             sprites_dir = os.path.join(objects_dir, 'Sprites')
             backgrounds_dir = os.path.join(objects_dir, 'Backgrounds')
             fonts_dir = os.path.join(objects_dir, 'Fonts')
+            rooms_dir = os.path.join(objects_dir, 'Rooms')
+            shaders_dir = os.path.join(objects_dir, 'Shaders')
+            sounds_dir = os.path.join(objects_dir, 'Sounds')
             if os.path.exists(sprites_dir) or os.path.exists(backgrounds_dir) or os.path.exists(fonts_dir):
                 asset_types['has_textures'] = True
-            new_objects_dir = os.path.join(objects_dir, 'NewObjects')
-            if os.path.exists(new_objects_dir):
+            if os.path.exists(rooms_dir):
                 try:
-                    if os.listdir(new_objects_dir):
-                        asset_types['has_new_objects'] = True
+                    if os.listdir(rooms_dir):
+                        asset_types['has_rooms'] = True
+                except Exception:
+                    pass
+            if os.path.exists(shaders_dir):
+                try:
+                    if os.listdir(shaders_dir):
+                        asset_types['has_shaders'] = True
+                except Exception:
+                    pass
+            if os.path.exists(backgrounds_dir):
+                try:
+                    bg_files = [f for f in os.listdir(backgrounds_dir) if f.endswith('.png')]
+                    if bg_files:
+                        asset_types['has_tilesets'] = True
+                except Exception:
+                    pass
+            if os.path.exists(fonts_dir):
+                try:
+                    if os.listdir(fonts_dir):
+                        asset_types['has_fonts'] = True
+                except Exception:
+                    pass
+            if os.path.exists(sounds_dir):
+                try:
+                    sound_files = [f for f in os.listdir(sounds_dir) if f.endswith('.wav') or f.endswith('.ogg')]
+                    if sound_files:
+                        asset_types['has_sounds'] = True
                 except Exception:
                     pass
         else:
@@ -1764,7 +1682,12 @@ class MultiModMerger(QObject):
             if os.path.exists(data_win_path):
                 asset_types['has_code'] = True
                 asset_types['has_textures'] = True
-                self.patching_logger.debug(f'Objects directory not found for {mod_dir}, assuming mod has code and textures (will be verified by export scripts)')
+                asset_types['has_rooms'] = True
+                asset_types['has_shaders'] = True
+                asset_types['has_tilesets'] = True
+                asset_types['has_fonts'] = True
+                asset_types['has_sounds'] = True
+                self.patching_logger.debug(f'Objects directory not found for {mod_dir}, assuming mod has all asset types (will be verified by export scripts)')
         return asset_types
 
     def _select_export_strategy(self, mod_type: Dict[str, bool], mod_asset_types: Dict[str, bool], mod_number: int, has_previous_mod: bool) -> tuple[List[str], Optional[str]]:
@@ -1772,33 +1695,12 @@ class MultiModMerger(QObject):
         comparison_file = None
         if mod_type.get('has_ready_data_win') and (not mod_type.get('has_xdelta_patch')) and (not mod_type.get('has_csx_scripts')):
             return ([], None)
-        if mod_type.get('has_csx_scripts') and (not mod_type.get('has_xdelta_patch')):
-            scripts.append('ExportAllCode')
-            scripts.append('ExportAllTexturesGrouped')
-            scripts.append('ExportTilesets')
-            comparison_file = None
-            return (scripts, comparison_file)
-        if mod_type.get('has_xdelta_patch'):
-            has_code = mod_asset_types.get('has_code', False)
-            has_textures = mod_asset_types.get('has_textures', False)
-            if has_textures and (not has_code):
-                scripts.append('ExportAllTexturesGrouped')
-                comparison_file = None
-                return (scripts, comparison_file)
-            if has_code:
-                scripts.append('ExportAllCode')
-                scripts.append('ExportAllTexturesGrouped')
-                scripts.append('ExportTilesets')
-                comparison_file = None
-                return (scripts, comparison_file)
-            scripts.append('ExportAllCode')
-            scripts.append('ExportAllTexturesGrouped')
-            scripts.append('ExportTilesets')
-            comparison_file = None
-            return (scripts, comparison_file)
-        scripts.append('ExportAllCode')
-        scripts.append('ExportAllTexturesGrouped')
-        scripts.append('ExportTilesets')
+        has_any_assets = any([mod_asset_types.get('has_code', False), mod_asset_types.get('has_textures', False), mod_asset_types.get('has_rooms', False), mod_asset_types.get('has_shaders', False), mod_asset_types.get('has_tilesets', False), mod_asset_types.get('has_fonts', False), mod_asset_types.get('has_sounds', False)])
+        if has_any_assets or mod_type.get('has_xdelta_patch') or mod_type.get('has_csx_scripts'):
+            if not self.utmt_wrapper.get_script_path('ExportAllAssets'):
+                self.patching_logger.error('ExportAllAssets script not found! This is required for optimized export.')
+                return ([], None)
+            scripts.append('ExportAllAssets')
         comparison_file = None
         return (scripts, comparison_file)
 
@@ -1861,43 +1763,6 @@ class MultiModMerger(QObject):
                     self.patching_logger.info(f'[EXPORT] Verified: {code_count_exported} code files, {sprite_count_exported} sprites in Objects directory after export')
                     if code_count_exported == 0 and sprite_count_exported == 0:
                         self.patching_logger.warning(f'[EXPORT] WARNING: Export scripts exported 0 resources for mod {mod_number}! This may indicate a problem or mod has no changes.')
-                if self._cancelled:
-                    return False
-                export_rooms_script = self.utmt_wrapper.get_script_path('ExportRooms')
-                if export_rooms_script:
-                    returncode, stdout, stderr = self.utmt_wrapper.execute_scripts(mod_data_win, ['ExportRooms'], output_path=mod_data_win, cwd=merge_root)
-                    if returncode != 0:
-                        self.patching_logger.warning(f'ExportRooms failed for mod {mod_number}: {stderr[:500]}')
-                    else:
-                        self.patching_logger.info(f'Successfully exported rooms from mod {mod_number}')
-                if self._cancelled:
-                    return False
-                export_shaders_script = self.utmt_wrapper.get_script_path('ExportShaders')
-                if export_shaders_script:
-                    returncode, stdout, stderr = self.utmt_wrapper.execute_scripts(mod_data_win, ['ExportShaders'], output_path=mod_data_win, cwd=merge_root)
-                    if returncode != 0:
-                        self.patching_logger.warning(f'ExportShaders failed for mod {mod_number}: {stderr[:500]}')
-                export_tilesets_script = self.utmt_wrapper.get_script_path('ExportTilesets')
-                if export_tilesets_script:
-                    returncode, stdout, stderr = self.utmt_wrapper.execute_scripts(mod_data_win, ['ExportTilesets'], output_path=mod_data_win, cwd=merge_root)
-                    if returncode != 0:
-                        self.patching_logger.warning(f'ExportTilesets failed for mod {mod_number}: {stderr[:500]}')
-                    else:
-                        self.patching_logger.info(f'Successfully exported tilesets from mod {mod_number}')
-                export_fonts_script = self.utmt_wrapper.get_script_path('ExportFonts')
-                if export_fonts_script:
-                    returncode, stdout, stderr = self.utmt_wrapper.execute_scripts(mod_data_win, ['ExportFonts'], output_path=mod_data_win, cwd=merge_root)
-                    if returncode != 0:
-                        self.patching_logger.warning(f'ExportFonts failed for mod {mod_number}: {stderr[:500]}')
-                    else:
-                        self.patching_logger.info(f'Successfully exported fonts from mod {mod_number}')
-                export_sounds_script = self.utmt_wrapper.get_script_path('ExportSounds')
-                if export_sounds_script:
-                    returncode, stdout, stderr = self.utmt_wrapper.execute_scripts(mod_data_win, ['ExportSounds'], output_path=mod_data_win, cwd=merge_root)
-                    if returncode != 0:
-                        self.patching_logger.warning(f'ExportSounds failed for mod {mod_number}: {stderr[:500]}')
-                    else:
-                        self.patching_logger.info(f'Successfully exported sounds from mod {mod_number}')
                 return True
             else:
                 self.patching_logger.debug(f'Skipping export for mod {mod_number} (no scripts needed)')

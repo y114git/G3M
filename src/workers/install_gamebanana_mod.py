@@ -57,10 +57,37 @@ class InstallGameBananaModThread(BaseInstallWorker):
             if not download_url:
                 raise ValueError(tr('errors.no_download_url'))
             self.status.emit(tr('status.downloading_mod'), UI_COLORS['status_warning'])
+            from utils.file_utils import download_file_with_progress
+            from config.constants import NETWORK_TIMEOUT_HEAD
             file_name = file_choice.get('name') or file_choice.get('_sFile') or file_choice.get('_sName') or f'mod_{mod_id}.zip'
+            temp_dir = tempfile.mkdtemp(prefix='gb_download_')
+            archive_path = os.path.join(temp_dir, file_name)
+            archive_dir = temp_dir
             try:
-                archive_path = self._download_file(download_url, file_name)
-                archive_dir = os.path.dirname(archive_path) if archive_path else None
+                session = get_session()
+                self._session = session
+                downloaded_ref = [0]
+                total_size = 0
+                try:
+                    head_response = session.head(download_url, allow_redirects=True, timeout=NETWORK_TIMEOUT_HEAD)
+                    total_size = int(head_response.headers.get('content-length', 0))
+                except Exception:
+                    pass
+
+                def progress_callback(progress):
+                    if not self._cancelled:
+                        self.progress.emit(progress)
+                        if total_size > 0:
+                            from utils.ui_utils import format_size_mb
+                            downloaded_mb = format_size_mb(downloaded_ref[0])
+                            total_mb = format_size_mb(total_size)
+                            self.status.emit(f"{tr('status.downloading_mod')} ({downloaded_mb} / {total_mb})", UI_COLORS['status_warning'])
+
+                def on_response(r):
+                    self._active_response = r
+                success = download_file_with_progress(download_url, archive_path, progress_callback=progress_callback, session=session, cancel_check=lambda: self._cancelled, on_response=on_response, downloaded_ref=downloaded_ref)
+                if not success:
+                    raise RuntimeError('download_failed')
             except RuntimeError as e:
                 if str(e) == 'download_cancelled' or self._cancelled:
                     self._cleanup_temp_files(archive_path, archive_dir)
@@ -120,7 +147,7 @@ class InstallGameBananaModThread(BaseInstallWorker):
     def _install_deltahub_mod(self, archive_path: str, mod_id: int) -> Optional[str]:
         import tempfile
         import json
-        from utils.file_utils import extract_any_archive
+        from utils.archive_utils import extract_any_archive
         from utils.file_utils import sanitize_filename
         fname_lower = os.path.basename(archive_path).lower()
         with tempfile.TemporaryDirectory(prefix='gb_install_dh_') as temp_dir:
@@ -156,7 +183,16 @@ class InstallGameBananaModThread(BaseInstallWorker):
                     logger.info(f'DELTAHUB mod {mod_id} appears to be a redirect to {external_url}')
                     self.status.emit(tr('status.downloading_from_external'), UI_COLORS['status_info'])
                     try:
-                        redirect_archive_path = self._download_file(external_url, 'redirect_mod.zip')
+                        from utils.file_utils import download_file_with_progress
+                        from config.constants import NETWORK_TIMEOUT_HEAD
+                        temp_dir = tempfile.mkdtemp(prefix='gb_redirect_')
+                        redirect_archive_path = os.path.join(temp_dir, 'redirect_mod.zip')
+                        session = get_session()
+                        self._session = session
+                        downloaded_ref = [0]
+                        success = download_file_with_progress(external_url, redirect_archive_path, session=session, cancel_check=lambda: self._cancelled, downloaded_ref=downloaded_ref)
+                        if not success:
+                            raise RuntimeError('download_failed')
                         return self._install_deltahub_mod(redirect_archive_path, mod_id)
                     except Exception as e:
                         logger.error(f'Error downloading redirect mod: {e}')
@@ -254,9 +290,6 @@ class InstallGameBananaModThread(BaseInstallWorker):
         except Exception as e:
             logger.debug(f'Error checking file compatibility: {e}')
         return None
-
-    def _download_file(self, url: str, filename: str) -> str:
-        return super()._download_file(url, filename, temp_dir_prefix='gb_download_')
 
     def _resolve_selected_file(self, mod_id: int) -> Optional[Dict]:
         from managers.mod_manager import ModManager

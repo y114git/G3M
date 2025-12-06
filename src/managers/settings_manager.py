@@ -31,54 +31,18 @@ class SettingsManager(QObject):
         self.parent_widget = parent
 
     def read_json(self, path: str):
-        try:
-            if path.endswith('mod_config.json') and (not os.path.exists(path)):
-                legacy_path = path.replace('mod_config.json', 'config.json')
-                if os.path.exists(legacy_path):
-                    path = legacy_path
-            with open(path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-            if isinstance(data, dict) and (path.endswith('mod_config.json') or (path.endswith('config.json') and 'mod_key' in data)):
-                needs_migration = False
-                if 'chapters' in data and 'files' not in data:
-                    data['files'] = data['chapters']
-                    del data['chapters']
-                    needs_migration = True
-                if 'is_demo_mod' in data and 'modgame' not in data:
-                    if data.get('is_demo_mod', False):
-                        data['modgame'] = 'deltarunedemo'
-                    else:
-                        data['modgame'] = 'deltarune'
-                    del data['is_demo_mod']
-                    needs_migration = True
-                if 'tags' in data:
-                    tags = data['tags']
-                    if isinstance(tags, list):
-                        if 'translation' in tags:
-                            tags = ['textedit' if tag == 'translation' else tag for tag in tags]
-                            data['tags'] = tags
-                            needs_migration = True
-                    elif tags == 'translation':
-                        data['tags'] = 'textedit'
-                        needs_migration = True
-                if needs_migration:
-                    self.write_json(path, data)
-            return data
-        except FileNotFoundError:
-            return {}
-        except json.JSONDecodeError:
+        from utils.file_utils import load_json
+        data = load_json(path, migrate_config=True)
+        if not data and os.path.exists(path):
             backup_path = f'{path}.invalid.bak'
-            try:
-                os.replace(path, backup_path)
-            except OSError:
-                pass
-            self.feedback_manager.update_status(tr('dialogs.corrupted_files_found'), UI_COLORS['status_warning'])
-            return {}
+            if os.path.exists(backup_path):
+                self.feedback_manager.update_status(tr('dialogs.corrupted_files_found'), UI_COLORS['status_warning'])
+        return data
 
     def write_json(self, path: str, data):
         try:
-            from utils.file_utils import atomic_write_json
-            atomic_write_json(path, data, indent=2)
+            from utils.file_utils import save_json
+            save_json(path, data, indent=2)
         except (PermissionError, OSError):
             self._handle_permission_error(os.path.dirname(path))
         except Exception as e:
@@ -357,7 +321,7 @@ class SettingsManager(QObject):
             with zipfile.ZipFile(theme_file_path, 'r') as zipf:
                 if 'theme.json' not in zipf.namelist():
                     raise ValueError('Missing theme.json')
-            from utils.file_utils import extract_any_archive
+            from utils.archive_utils import extract_any_archive
             with tempfile.TemporaryDirectory() as temp_dir:
                 extract_any_archive(theme_file_path, temp_dir)
                 with open(os.path.join(temp_dir, 'theme.json'), 'r') as f:

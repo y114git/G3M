@@ -58,20 +58,6 @@ def get_theme_color(config, color_key, default_color):
     return default_color
 
 
-def create_file_group_universal(label_text, button_text, file_filter, line_edit, mode='open'):
-    group_box = QGroupBox(label_text)
-    layout = QVBoxLayout(group_box)
-    if mode == 'open':
-        line_edit.setReadOnly(True)
-        line_edit.setPlaceholderText(tr('ui.select_file'))
-    else:
-        line_edit.setPlaceholderText(tr('ui.file_path_placeholder'))
-    button = QPushButton(button_text)
-    layout.addWidget(line_edit)
-    layout.addWidget(button)
-    return (group_box, button)
-
-
 def clear_layout_widgets(layout, keep_last_n=1, hide_instead_of_delete=False):
     if not layout:
         return
