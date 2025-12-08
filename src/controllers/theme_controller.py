@@ -19,7 +19,6 @@ class ThemeController:
 
     def apply_theme(self):
         theme = THEMES['default']
-        background_path = None
         background_disabled = self.app_state.local_config.get('background_disabled', False)
         new_background_path = None
         if not background_disabled:

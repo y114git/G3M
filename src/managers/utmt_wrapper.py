@@ -1,5 +1,4 @@
-import logging
-from typing import Optional, Tuple, List, Dict, Any
+from typing import Optional, Tuple, List, Dict
 from managers.utmtcli_manager import UTMTCLIManager
 from utils.patching_logger import get_patching_logger
 
@@ -88,11 +87,5 @@ class UtmtWrapper:
             returncode, _, stderr = self.execute_script(data_win_path, 'ImportGML', cwd=mod_source_dir)
             if returncode != 0:
                 self.patching_logger.warning(f'[UTMT] ImportGML failed: {stderr[:200]}')
-                success = False
-        script_path = self.get_script_path('ImportAssetOrder')
-        if script_path:
-            returncode, _, stderr = self.execute_script(data_win_path, 'ImportAssetOrder', cwd=mod_source_dir)
-            if returncode != 0:
-                self.patching_logger.warning(f'[UTMT] ImportAssetOrder failed: {stderr[:200]}')
                 success = False
         return success

@@ -478,7 +478,7 @@ class ModManager(QObject):
                     config_data['mod_key'] = recovered_key
                     mod_key = recovered_key
                 elif not mod_key:
-                    logging.warning(f'load_local_mods: Found mod with empty mod_key, skipping')
+                    logging.warning('load_local_mods: Found mod with empty mod_key, skipping')
                     continue
                 installed_mods[mod_key] = config_data
             installed_gamebanana_by_id = {}
@@ -892,7 +892,7 @@ class ModManager(QObject):
                         logging.error(f'delete_mod_files: Failed to delete folder {folder_path}: {e}', exc_info=True)
                         raise
             if not mod_key:
-                logging.error(f'delete_mod_files: Cannot determine mod_key or folder_path for mod_data')
+                logging.error('delete_mod_files: Cannot determine mod_key or folder_path for mod_data')
                 return
             logging.info(f'delete_mod_files: Attempting to delete mod with key: {mod_key}')
             cache = self._get_mods_cache()

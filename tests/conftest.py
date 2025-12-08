@@ -45,7 +45,6 @@ def cleanup_threads(qapp):
     yield
     import time
     from PyQt6.QtCore import QThreadPool, QThread
-    from utils.ui_utils import safe_stop_thread
     for _ in range(3):
         qapp.processEvents()
         time.sleep(0.05)

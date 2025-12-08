@@ -7,7 +7,7 @@ import lzma
 import re
 import logging
 import platform
-from typing import Optional, Dict, List, Callable
+from typing import List, Callable
 from utils.file_utils import safe_move, safe_remove, safe_rmtree, _safe_join, _is_symlink
 
 

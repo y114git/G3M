@@ -653,7 +653,9 @@ await Task.Run(() =>
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"  ✗ Queue failed: {ex.Message}");
+            Console.Error.WriteLine($"[ImportGML] ERROR: QueueReplace failed for '{targetName}': {ex.Message}");
+            Console.Error.WriteLine($"[ImportGML] Stack trace: {ex.StackTrace}");
+            throw;
         }
     }
     
@@ -669,7 +671,9 @@ await Task.Run(() =>
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"  ✗ Queue failed for {kvp.Key}: {ex.Message}");
+                Console.Error.WriteLine($"[ImportGML] ERROR: QueueReplace failed for '{kvp.Key}': {ex.Message}");
+                Console.Error.WriteLine($"[ImportGML] Stack trace: {ex.StackTrace}");
+                throw;
             }
         }
     }

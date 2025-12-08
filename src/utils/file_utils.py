@@ -5,9 +5,6 @@ import shutil
 import stat
 import sys
 import tempfile
-import zipfile
-import tarfile
-import lzma
 import logging
 import json
 import threading
@@ -16,7 +13,6 @@ from pathlib import Path
 from typing import Dict, Optional
 from utils.network_utils import download_file, get_filename_from_url, get_session
 from config.constants import MOD_CONFIG_FILENAME, META_JSON_FILENAME, ICON_PNG_FILENAME, LEGACY_MOD_CONFIG_FILENAME, LEGACY_META_JSON_FILENAME
-import errno
 
 
 def download_file_with_progress(url: str, target_path: str, progress_callback=None, session=None, cancel_check=None, on_response=None, downloaded_ref=None) -> bool:
@@ -157,7 +153,7 @@ def save_json(path: str, data: Dict, indent: int = 2) -> None:
             f.flush()
             os.fsync(f.fileno())
         os.replace(tmp, path)
-    except (PermissionError, OSError) as e:
+    except (PermissionError, OSError):
         try:
             if os.path.exists(tmp):
                 os.remove(tmp)

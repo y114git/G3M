@@ -3,13 +3,13 @@ import tempfile
 import shutil
 import logging
 from typing import Optional, Dict
-from PyQt6.QtCore import QThread, pyqtSignal, QTimer
-from config.constants import UI_COLORS, NETWORK_TIMEOUT_HEAD, MOD_CONFIG_FILENAME
+from PyQt6.QtCore import pyqtSignal, QTimer
+from config.constants import UI_COLORS, MOD_CONFIG_FILENAME
 from managers.localization_manager import tr
 from utils.gamebanana_api import GameBananaAPI
 from utils.gamebanana_converter import GameBananaConverter
 from utils.file_utils import normalize_mod_package
-from utils.network_utils import get_session, download_file
+from utils.network_utils import get_session
 from workers.base_install_worker import BaseInstallWorker
 logger = logging.getLogger(__name__)
 
@@ -149,7 +149,6 @@ class InstallGameBananaModThread(BaseInstallWorker):
         import json
         from utils.archive_utils import extract_any_archive
         from utils.file_utils import sanitize_filename
-        fname_lower = os.path.basename(archive_path).lower()
         with tempfile.TemporaryDirectory(prefix='gb_install_dh_') as temp_dir:
             try:
                 extract_any_archive(archive_path, temp_dir)
@@ -184,7 +183,6 @@ class InstallGameBananaModThread(BaseInstallWorker):
                     self.status.emit(tr('status.downloading_from_external'), UI_COLORS['status_info'])
                     try:
                         from utils.file_utils import download_file_with_progress
-                        from config.constants import NETWORK_TIMEOUT_HEAD
                         temp_dir = tempfile.mkdtemp(prefix='gb_redirect_')
                         redirect_archive_path = os.path.join(temp_dir, 'redirect_mod.zip')
                         session = get_session()

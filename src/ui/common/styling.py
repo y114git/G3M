@@ -4,8 +4,7 @@ from PyQt6.QtCore import Qt, QThreadPool
 import weakref
 from PyQt6 import sip
 from PyQt6.QtGui import QColor, QPixmap
-from PyQt6.QtWidgets import QLabel, QVBoxLayout, QPushButton, QGroupBox
-from managers.localization_manager import tr
+from PyQt6.QtWidgets import QLabel
 _STYLE_TEMPLATE = 'QFrame#{frame_selector} {{\n    background-color: {bg_color};\n    border: {border_width} solid {border_color};\n}}\nQFrame#{frame_selector}:hover {{\n    border-color: {hover_border_color};\n}}\nQLabel#{icon_selector} {{\n    border: 2px solid {border_color};\n}}\nQLabel#versionLabel {{\n    color: {version_text_color};\n}}\nQLabel#secondaryText {{\n    color: {version_text_color};\n    font-size: 12px;\n}}\nQLabel#primaryText {{\n    color: {text_color};\n    font-size: 12px;\n}}\nQPushButton#plaqueButton, QPushButton#plaqueButtonInstall, QPushButton#plaqueButtonUninstall {{\n    min-width: 110px;\n    max-width: 110px;\n    min-height: 35px;\n    max-height: 35px;\n    font-size: 15px;\n    padding: 1px;\n}}\nQPushButton#plaqueButtonInstall {{\n    background-color: #4CAF50;\n    font-weight: bold;\n}}\nQPushButton#plaqueButtonInstall:hover {{\n    background-color: #5cb85c;\n}}'
 
 

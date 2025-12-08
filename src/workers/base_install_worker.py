@@ -1,13 +1,10 @@
 import os
 import shutil
-import tempfile
 import logging
 from typing import Optional
 from PyQt6.QtCore import QThread, pyqtSignal
 from config.constants import UI_COLORS
 from managers.localization_manager import tr
-from utils.network_utils import get_session, download_file
-from utils.ui_utils import format_size_mb
 logger = logging.getLogger(__name__)
 
 

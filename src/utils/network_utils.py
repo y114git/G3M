@@ -70,7 +70,6 @@ def get_session(app_state=None) -> requests.Session:
 
 def _build_session() -> requests.Session:
     from config.constants import LAUNCHER_VERSION, BROWSER_HEADERS
-    import urllib3
     urllib3_logger = logging.getLogger('urllib3.connectionpool')
     urllib3_logger.setLevel(logging.ERROR)
     session = requests.Session()

@@ -1,9 +1,4 @@
-from PyQt6.QtWidgets import QApplication, QDialog
-from PyQt6.QtTest import QTest
-from PyQt6.QtCore import Qt
-from unittest.mock import Mock
-from core.app_state import AppState
-from ui.common.feedback import FeedbackManager
+from PyQt6.QtWidgets import QDialog
 
 
 class TestModDetailsDialog:

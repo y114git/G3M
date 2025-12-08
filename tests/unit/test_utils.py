@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 from utils.mod_utils import get_mod_key, get_mod_name
 from utils.file_utils import sanitize_filename, has_deltamod_info_file
 
@@ -162,11 +162,11 @@ class TestNetworkUtils:
 class TestImageLoader:
 
     def test_image_loader_exists(self):
-        try:
-            from utils.image_loader import ImageLoader
-            assert True
-        except ImportError:
+        import importlib.util
+        spec = importlib.util.find_spec('utils.image_loader')
+        if spec is None:
             pytest.skip('ImageLoader not available')
+        assert spec is not None
 
 
 class TestCache:

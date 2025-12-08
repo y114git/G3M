@@ -40,17 +40,17 @@ using (var worker = new TextureWorker())
     {
         if (font?.Name?.Content == null) continue;
         string name = font.Name.Content;
-        
+
         string pngPath = Path.Combine(fontsIn, name + ".png");
         string csvPath = Path.Combine(fontsIn, $"glyphs_{name}.csv");
-        
+
         if (!File.Exists(pngPath) && !File.Exists(csvPath))
         {
             DebugLog($"[ImportFonts] Skipping {name}: no files found");
             skipped++;
             continue;
         }
-        
+
         try
         {
             if (File.Exists(pngPath))
@@ -64,7 +64,7 @@ using (var worker = new TextureWorker())
                     }
                 }
             }
-            
+
             if (File.Exists(csvPath))
             {
                 font.Glyphs.Clear();
@@ -75,10 +75,10 @@ using (var worker = new TextureWorker())
                     while ((line = reader.ReadLine()) != null)
                     {
                         if (string.IsNullOrWhiteSpace(line)) continue;
-                        
+
                         string[] parts = line.Split(';');
                         if (parts.Length < 8) continue;
-                        
+
                         if (head == 0)
                         {
                             string displayName = parts[0].Replace("\"", "");
@@ -116,7 +116,7 @@ using (var worker = new TextureWorker())
                 }
                 PrintLine($"[Font] {name}: glyphs imported ({font.Glyphs.Count} glyphs)");
             }
-            
+
             PrintLine($"[Font] {name}: IMPORTED");
             imported++;
         }

@@ -1,9 +1,8 @@
 import os
 import sys
 import platform
-import pytest
-from unittest.mock import patch, MagicMock
-from utils.path_utils import get_user_data_root, get_user_mods_dir, get_user_plugins_dir, get_launcher_dir, resource_path, resolve_game_executable, find_chapter_resource_dir
+from unittest.mock import patch
+from utils.path_utils import get_user_data_root, get_user_mods_dir, get_user_plugins_dir, resource_path, resolve_game_executable, find_chapter_resource_dir
 
 
 class TestPathUtils:

@@ -77,10 +77,10 @@ class ModImportExportController:
                     legacy_config_path = os.path.join(content_path, LEGACY_MOD_CONFIG_FILENAME)
                     if os.path.exists(legacy_config_path):
                         config_path_to_read = legacy_config_path
-                        logging.info(f'[IMPORT] Found legacy config.json, will migrate to mod_config.json')
+                        logging.info('[IMPORT] Found legacy config.json, will migrate to mod_config.json')
                 logging.info(f'[IMPORT] Looking for mod config at: {config_path_to_read}')
                 if os.path.exists(config_path_to_read):
-                    logging.info(f'[IMPORT] Found mod config, reading...')
+                    logging.info('[IMPORT] Found mod config, reading...')
                     with open(config_path_to_read, 'r', encoding='utf-8') as f:
                         config = json.load(f)
                     mod_key = config.get('mod_key')

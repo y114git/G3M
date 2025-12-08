@@ -4,13 +4,12 @@ import logging
 import tempfile
 import json
 from typing import Optional, Dict
-from PyQt6.QtCore import QThread, pyqtSignal
 from managers.localization_manager import tr
-from utils.network_utils import get_session, download_file
+from utils.network_utils import get_session
 from utils.archive_utils import extract_archive
 from utils.file_utils import sanitize_filename, has_deltamod_info_file
 from utils.deltamod_converter import DeltamodConverter
-from config.constants import NETWORK_TIMEOUT_HEAD, UI_COLORS, MOD_CONFIG_FILENAME, LEGACY_MOD_CONFIG_FILENAME
+from config.constants import UI_COLORS, MOD_CONFIG_FILENAME, LEGACY_MOD_CONFIG_FILENAME
 from workers.base_install_worker import BaseInstallWorker
 
 

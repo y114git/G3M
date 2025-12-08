@@ -5,7 +5,6 @@ import platform
 import re
 import shutil
 import tempfile
-import threading
 import zipfile
 from typing import Optional
 from PyQt6.QtCore import QObject, pyqtSignal, QTimer, QByteArray

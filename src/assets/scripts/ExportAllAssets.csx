@@ -97,88 +97,10 @@ Directory.CreateDirectory(roomsOut);
 Directory.CreateDirectory(shadersOut);
 Directory.CreateDirectory(soundsOut);
 
-UndertaleData vanillaData = LoadVanillaData();
-
-if (modNo == "0")
-{
-    vanillaData = null;
-}
-
-PrintLine($"[ExportAllAssets] Starting unified export for mod {modNo}...");
+PrintLine($"[ExportAllAssets] Starting full export for mod {modNo}...");
 
 GlobalDecompileContext globalDecompileContext = new(Data);
 Underanalyzer.Decompiler.IDecompileSettings decompilerSettings = Data.ToolInfo.DecompilerSettings;
-
-Dictionary<string, UndertaleCode> vanillaCodes = new Dictionary<string, UndertaleCode>();
-Dictionary<string, string> vanillaCodeHashes = new Dictionary<string, string>();
-Dictionary<string, UndertaleSprite> vanillaSprites = new Dictionary<string, UndertaleSprite>();
-Dictionary<string, UndertaleBackground> vanillaBackgrounds = new Dictionary<string, UndertaleBackground>();
-Dictionary<string, UndertaleFont> vanillaFonts = new Dictionary<string, UndertaleFont>();
-Dictionary<string, UndertaleRoom> vanillaRooms = new Dictionary<string, UndertaleRoom>();
-Dictionary<string, UndertaleShader> vanillaShaders = new Dictionary<string, UndertaleShader>();
-Dictionary<string, UndertaleSound> vanillaSounds = new Dictionary<string, UndertaleSound>();
-
-if (vanillaData != null)
-{
-    foreach (var c in vanillaData.Code)
-    {
-        if (c.Name?.Content != null)
-        {
-            vanillaCodes[c.Name.Content] = c;
-            vanillaCodeHashes[c.Name.Content] = GetCodeHash(c);
-        }
-    }
-    foreach (var s in vanillaData.Sprites)
-        if (s?.Name?.Content != null) vanillaSprites[s.Name.Content] = s;
-    foreach (var b in vanillaData.Backgrounds)
-        if (b?.Name?.Content != null) vanillaBackgrounds[b.Name.Content] = b;
-    foreach (var f in vanillaData.Fonts)
-        if (f?.Name?.Content != null) vanillaFonts[f.Name.Content] = f;
-    foreach (var r in vanillaData.Rooms)
-        if (r?.Name?.Content != null) vanillaRooms[r.Name.Content] = r;
-    foreach (var sh in vanillaData.Shaders)
-        if (sh?.Name?.Content != null) vanillaShaders[sh.Name.Content] = sh;
-    foreach (var so in vanillaData.Sounds)
-        if (so?.Name?.Content != null) vanillaSounds[so.Name.Content] = so;
-}
-else
-{
-    Console.WriteLine("[ExportAllAssets] WARNING: Vanilla data is null! All resources will be exported as NEW.");
-}
-
-string GetCodeHash(UndertaleCode code)
-{
-    if (code == null) return "null";
-    StringBuilder sb = new StringBuilder();
-
-    sb.Append(code.ArgumentsCount).Append('|');
-    sb.Append(code.LocalsCount).Append('|');
-
-    foreach (var instr in code.Instructions)
-    {
-        sb.Append(instr.ToString()).Append(';');
-    }
-
-    return ComputeSha256(sb.ToString());
-}
-
-bool IsTextureItemChanged(UndertaleTexturePageItem current, UndertaleTexturePageItem vanilla)
-{
-    if (current == null && vanilla == null) return false;
-    if (current == null || vanilla == null) return true;
-
-    if (current.SourceX != vanilla.SourceX || current.SourceY != vanilla.SourceY ||
-        current.SourceWidth != vanilla.SourceWidth || current.SourceHeight != vanilla.SourceHeight)
-        return true;
-
-    if (current.TargetWidth != vanilla.TargetWidth || current.TargetHeight != vanilla.TargetHeight)
-        return true;
-
-    if (current.TexturePage?.Name?.Content != vanilla.TexturePage?.Name?.Content)
-        return true;
-
-    return false;
-}
 
 void WriteJsonString(StringBuilder sb, string value)
 {
@@ -477,370 +399,23 @@ byte[] GetSoundData(UndertaleSound sound, UndertaleData data, string comparisonP
 }
 
 string comparisonPath = null;
-if (modNo != "0" && modNo != "1")
-{
-    int modNum = int.Parse(modNo);
-    string previousModPath = Path.Combine(deltahubRoot, "output", "xDeltaCombiner", chapterNo, (modNum - 1).ToString(), "data.win");
-    if (File.Exists(previousModPath))
-    {
-        comparisonPath = previousModPath;
-    }
-}
-if (comparisonPath == null)
+if (modNo != "0")
 {
     comparisonPath = Path.Combine(deltahubRoot, "output", "xDeltaCombiner", chapterNo, "0", "data.win");
 }
 
-List<UndertaleCode> reallyChanged = new List<UndertaleCode>();
-List<UndertaleSprite> changedSprites = new List<UndertaleSprite>();
-List<UndertaleBackground> changedBackgrounds = new List<UndertaleBackground>();
-List<UndertaleFont> changedFonts = new List<UndertaleFont>();
-List<UndertaleRoom> changedRooms = new List<UndertaleRoom>();
-List<UndertaleShader> changedShaders = new List<UndertaleShader>();
-List<UndertaleSound> changedSounds = new List<UndertaleSound>();
 
-int codeNew = 0, codeChanged = 0;
-int spritesNew = 0, spritesChanged = 0;
-int backgroundsNew = 0, backgroundsChanged = 0;
-int fontsNew = 0, fontsChanged = 0;
-int roomsNew = 0, roomsChanged = 0;
-int shadersNew = 0, shadersChanged = 0;
-int soundsNew = 0, soundsChanged = 0;
-int tilesetsExported = 0, tilesetsSkipped = 0;
+List<UndertaleCode> allCode = Data.Code.Where(c => c.ParentEntry is null).ToList();
+List<UndertaleSprite> allSprites = Data.Sprites.ToList();
+List<UndertaleBackground> allBackgrounds = Data.Backgrounds.ToList();
+List<UndertaleFont> allFonts = Data.Fonts.ToList();
+List<UndertaleRoom> allRooms = Data.Rooms.ToList();
+List<UndertaleShader> allShaders = Data.Shaders.ToList();
+List<UndertaleSound> allSounds = Data.Sounds.ToList();
 
-PrintLine("[ExportAllAssets] Analyzing changes...");
+int totalItems = allCode.Count + allSprites.Count + allBackgrounds.Count + allFonts.Count + allRooms.Count + allShaders.Count + allSounds.Count;
 
-List<UndertaleCode> toDump = Data.Code.Where(c => c.ParentEntry is null).ToList();
-
-foreach (var code in toDump)
-{
-    string name = code.Name.Content;
-    if (vanillaData == null || !vanillaCodes.ContainsKey(name))
-    {
-        reallyChanged.Add(code);
-        codeNew++;
-        LogDiff("Code", name, "New entry");
-        continue;
-    }
-
-    var vCode = vanillaCodes[name];
-
-    if (code.Instructions.Count != vCode.Instructions.Count)
-    {
-        reallyChanged.Add(code);
-        codeChanged++;
-        LogDiff("Code", name, $"Instruction count diff ({code.Instructions.Count} vs {vCode.Instructions.Count})");
-        continue;
-    }
-
-    string currentHash = GetCodeHash(code);
-    string vanillaHash = vanillaCodeHashes.ContainsKey(name) ? vanillaCodeHashes[name] : GetCodeHash(vCode);
-
-    if (currentHash != vanillaHash)
-    {
-        reallyChanged.Add(code);
-        codeChanged++;
-        LogDiff("Code", name, "Hash mismatch");
-    }
-    else LogSkip("Code", name);
-}
-
-foreach (var spr in Data.Sprites)
-{
-    string name = spr.Name.Content;
-    if (vanillaData == null || !vanillaSprites.ContainsKey(name))
-    {
-        changedSprites.Add(spr);
-        spritesNew++;
-        LogDiff("Sprite", name, "New");
-        continue;
-    }
-
-    var vSpr = vanillaSprites[name];
-    if (spr.Width != vSpr.Width || spr.Height != vSpr.Height ||
-        spr.MarginLeft != vSpr.MarginLeft || spr.MarginRight != vSpr.MarginRight ||
-        spr.MarginTop != vSpr.MarginTop || spr.MarginBottom != vSpr.MarginBottom ||
-        spr.OriginX != vSpr.OriginX || spr.OriginY != vSpr.OriginY ||
-        spr.Textures.Count != vSpr.Textures.Count ||
-        spr.SepMasks != vSpr.SepMasks)
-    {
-        changedSprites.Add(spr);
-        spritesChanged++;
-        LogDiff("Sprite", name, "Props mismatch");
-        continue;
-    }
-
-    bool texChanged = false;
-    for (int i = 0; i < spr.Textures.Count; i++)
-    {
-        if (IsTextureItemChanged(spr.Textures[i].Texture, vSpr.Textures[i].Texture))
-        {
-            texChanged = true;
-            break;
-        }
-    }
-    if (texChanged)
-    {
-        changedSprites.Add(spr);
-        spritesChanged++;
-        LogDiff("Sprite", name, "Texture changed");
-    }
-    else LogSkip("Sprite", name);
-}
-
-foreach (var bg in Data.Backgrounds)
-{
-    string name = bg.Name.Content;
-    if (vanillaData == null || !vanillaBackgrounds.ContainsKey(name))
-    {
-        changedBackgrounds.Add(bg);
-        backgroundsNew++;
-        LogDiff("BG", name, "New");
-        continue;
-    }
-
-    var vBg = vanillaBackgrounds[name];
-    if (bg.Transparent != vBg.Transparent || bg.Preload != vBg.Preload ||
-        IsTextureItemChanged(bg.Texture, vBg.Texture))
-    {
-        changedBackgrounds.Add(bg);
-        backgroundsChanged++;
-        LogDiff("BG", name, "Changed");
-    }
-    else LogSkip("BG", name);
-}
-
-foreach (var font in Data.Fonts)
-{
-    if (font?.Name?.Content == null) continue;
-    string name = SafeName(font.Name.Content);
-
-    bool shouldExport = false;
-    if (!vanillaFonts.ContainsKey(font.Name.Content))
-    {
-        shouldExport = true;
-        fontsNew++;
-    }
-    else
-    {
-        var compFont = vanillaFonts[font.Name.Content];
-        if (font.Texture?.TexturePage?.Name?.Content != compFont.Texture?.TexturePage?.Name?.Content ||
-            font.DisplayName?.Content != compFont.DisplayName?.Content ||
-            font.EmSize != compFont.EmSize ||
-            font.Bold != compFont.Bold ||
-            font.Italic != compFont.Italic ||
-            font.Charset != compFont.Charset ||
-            font.AntiAliasing != compFont.AntiAliasing ||
-            font.ScaleX != compFont.ScaleX ||
-            font.ScaleY != compFont.ScaleY ||
-            font.Glyphs.Count != compFont.Glyphs.Count)
-        {
-            shouldExport = true;
-            fontsChanged++;
-        }
-        else
-        {
-            bool glyphsDiffer = false;
-            for (int i = 0; i < font.Glyphs.Count && i < compFont.Glyphs.Count; i++)
-            {
-                var g = font.Glyphs[i];
-                var cg = compFont.Glyphs[i];
-                if (g.Character != cg.Character ||
-                    g.SourceX != cg.SourceX ||
-                    g.SourceY != cg.SourceY ||
-                    g.SourceWidth != cg.SourceWidth ||
-                    g.SourceHeight != cg.SourceHeight ||
-                    g.Shift != cg.Shift ||
-                    g.Offset != cg.Offset)
-                {
-                    glyphsDiffer = true;
-                    break;
-                }
-            }
-            if (glyphsDiffer)
-            {
-                shouldExport = true;
-                fontsChanged++;
-            }
-        }
-    }
-
-    if (shouldExport)
-    {
-        changedFonts.Add(font);
-    }
-}
-
-foreach (var room in Data.Rooms)
-{
-    if (room?.Name?.Content == null) continue;
-
-    string roomName = room.Name.Content;
-    bool isNew = !vanillaRooms.ContainsKey(roomName);
-    bool isChanged = false;
-
-    if (!isNew)
-    {
-        var compRoom = vanillaRooms[roomName];
-
-        if (room.Width != compRoom.Width || room.Height != compRoom.Height ||
-            room.Speed != compRoom.Speed || room.Persistent != compRoom.Persistent ||
-            room.Backgrounds.Count != compRoom.Backgrounds.Count ||
-            room.Views.Count != compRoom.Views.Count ||
-            room.GameObjects.Count != compRoom.GameObjects.Count ||
-            room.Tiles.Count != compRoom.Tiles.Count ||
-            room.Layers.Count != compRoom.Layers.Count)
-        {
-            isChanged = true;
-        }
-    }
-
-    if (isNew || isChanged)
-    {
-        changedRooms.Add(room);
-        if (isNew) roomsNew++; else roomsChanged++;
-    }
-}
-
-foreach (var shader in Data.Shaders)
-{
-    if (shader?.Name?.Content == null) continue;
-
-    string shaderName = shader.Name.Content;
-    bool isNew = !vanillaShaders.ContainsKey(shaderName);
-    bool isChanged = false;
-
-    if (!isNew)
-    {
-        var compShader = vanillaShaders[shaderName];
-
-        if (shader.Type != compShader.Type ||
-            (shader.GLSL_ES_Fragment?.Content ?? "") != (compShader.GLSL_ES_Fragment?.Content ?? "") ||
-            (shader.GLSL_ES_Vertex?.Content ?? "") != (compShader.GLSL_ES_Vertex?.Content ?? "") ||
-            (shader.GLSL_Fragment?.Content ?? "") != (compShader.GLSL_Fragment?.Content ?? "") ||
-            (shader.GLSL_Vertex?.Content ?? "") != (compShader.GLSL_Vertex?.Content ?? ""))
-        {
-            isChanged = true;
-        }
-    }
-
-    if (isNew || isChanged)
-    {
-        changedShaders.Add(shader);
-        if (isNew) shadersNew++; else shadersChanged++;
-    }
-}
-
-foreach (var sound in Data.Sounds)
-{
-    if (sound?.Name?.Content == null) continue;
-    string name = SafeName(sound.Name.Content);
-
-    bool shouldExport = false;
-    if (!vanillaSounds.ContainsKey(sound.Name.Content))
-    {
-        shouldExport = true;
-        soundsNew++;
-    }
-    else
-    {
-        var compSound = vanillaSounds[sound.Name.Content];
-        if (sound.Flags != compSound.Flags ||
-            sound.Volume != compSound.Volume ||
-            sound.Pitch != compSound.Pitch ||
-            sound.GroupID != compSound.GroupID ||
-            sound.AudioID != compSound.AudioID ||
-            sound.Name.Content != compSound.Name.Content)
-        {
-            shouldExport = true;
-            soundsChanged++;
-        }
-        else
-        {
-            byte[] currentData = GetSoundData(sound, Data, comparisonPath);
-            byte[] compData = GetSoundData(compSound, vanillaData, comparisonPath);
-            if (!currentData.SequenceEqual(compData))
-            {
-                shouldExport = true;
-                soundsChanged++;
-            }
-        }
-    }
-
-    if (shouldExport)
-    {
-        changedSounds.Add(sound);
-    }
-}
-
-foreach (var bg in Data.Backgrounds)
-{
-    if (bg?.Name?.Content == null) continue;
-
-    string name = SafeName(bg.Name.Content);
-
-    bool isChanged = true;
-    if (vanillaData != null && vanillaBackgrounds.ContainsKey(bg.Name.Content))
-    {
-        var vBg = vanillaBackgrounds[bg.Name.Content];
-
-        uint bgTileWidth = (uint)(GetProp(bg, "TileWidth") ?? 0);
-        uint vBgTileWidth = (uint)(GetProp(vBg, "TileWidth") ?? 0);
-
-        uint bgTileHeight = (uint)(GetProp(bg, "TileHeight") ?? 0);
-        uint vBgTileHeight = (uint)(GetProp(vBg, "TileHeight") ?? 0);
-
-        uint bgTileXOffset = (uint)(GetProp(bg, "TileXOffset") ?? 0);
-        uint vBgTileXOffset = (uint)(GetProp(vBg, "TileXOffset") ?? 0);
-
-        uint bgTileYOffset = (uint)(GetProp(bg, "TileYOffset") ?? 0);
-        uint vBgTileYOffset = (uint)(GetProp(vBg, "TileYOffset") ?? 0);
-
-        uint bgTileXSep = (uint)(GetProp(bg, "TileXSep") ?? 0);
-        uint vBgTileXSep = (uint)(GetProp(vBg, "TileXSep") ?? 0);
-
-        uint bgTileYSep = (uint)(GetProp(bg, "TileYSep") ?? 0);
-        uint vBgTileYSep = (uint)(GetProp(vBg, "TileYSep") ?? 0);
-
-        bool propsChanged = bgTileWidth != vBgTileWidth || bgTileHeight != vBgTileHeight ||
-                            bgTileXOffset != vBgTileXOffset || bgTileYOffset != vBgTileYOffset ||
-                            bgTileXSep != vBgTileXSep || bgTileYSep != vBgTileYSep;
-
-        bool texChanged = false;
-        if (bg.Texture != null && vBg.Texture != null)
-        {
-            if (bg.Texture.SourceX != vBg.Texture.SourceX || bg.Texture.SourceY != vBg.Texture.SourceY ||
-                bg.Texture.SourceWidth != vBg.Texture.SourceWidth || bg.Texture.SourceHeight != vBg.Texture.SourceHeight ||
-                bg.Texture.TexturePage?.Name?.Content != vBg.Texture.TexturePage?.Name?.Content)
-            {
-                texChanged = true;
-            }
-        }
-        else if (bg.Texture != vBg.Texture) texChanged = true;
-
-        if (!propsChanged && !texChanged) isChanged = false;
-    }
-
-    if (!isChanged)
-    {
-        LogSkip("Tileset", name);
-        tilesetsSkipped++;
-        continue;
-    }
-
-    if (bg?.Texture == null)
-    {
-        DebugLog($"[ExportAllAssets] Skipping tileset {name}: no texture");
-        tilesetsSkipped++;
-        continue;
-    }
-
-    tilesetsExported++;
-}
-
-int totalItems = reallyChanged.Count + changedSprites.Count + changedBackgrounds.Count + changedFonts.Count + changedRooms.Count + changedShaders.Count + changedSounds.Count + tilesetsExported;
-
-SetProgressBar(null, "Exporting Changed Assets", 0, totalItems);
+SetProgressBar(null, "Exporting All Assets", 0, totalItems);
 StartProgressBarUpdater();
 
 TextureWorker worker = null;
@@ -861,7 +436,7 @@ HideProgressBar();
 
 async Task DumpCode()
 {
-    await Task.Run(() => Parallel.ForEach(reallyChanged, DumpCodeItem));
+    await Task.Run(() => Parallel.ForEach(allCode, DumpCodeItem));
 }
 
 void DumpCodeItem(UndertaleCode code)
@@ -886,7 +461,7 @@ void DumpCodeItem(UndertaleCode code)
 
 async Task DumpSprites()
 {
-    await Task.Run(() => Parallel.ForEach(changedSprites, DumpSprite));
+    await Task.Run(() => Parallel.ForEach(allSprites, DumpSprite));
 }
 
 void DumpSprite(UndertaleSprite sprite)
@@ -912,7 +487,7 @@ void DumpSprite(UndertaleSprite sprite)
 
 async Task DumpBackgrounds()
 {
-    await Task.Run(() => Parallel.ForEach(changedBackgrounds, DumpBackground));
+    await Task.Run(() => Parallel.ForEach(allBackgrounds, DumpBackground));
 }
 
 void DumpBackground(UndertaleBackground background)
@@ -931,7 +506,7 @@ void DumpBackground(UndertaleBackground background)
 
 async Task DumpFonts()
 {
-    await Task.Run(() => Parallel.ForEach(changedFonts, DumpFont));
+    await Task.Run(() => Parallel.ForEach(allFonts, DumpFont));
 }
 
 void DumpFont(UndertaleFont font)
@@ -971,7 +546,7 @@ void DumpFont(UndertaleFont font)
 
 async Task DumpRooms()
 {
-    await Task.Run(() => Parallel.ForEach(changedRooms, DumpRoom));
+    await Task.Run(() => Parallel.ForEach(allRooms, DumpRoom));
 }
 
 void DumpRoom(UndertaleRoom room)
@@ -985,7 +560,7 @@ void DumpRoom(UndertaleRoom room)
 
 async Task DumpShaders()
 {
-    await Task.Run(() => Parallel.ForEach(changedShaders, DumpShader));
+    await Task.Run(() => Parallel.ForEach(allShaders, DumpShader));
 }
 
 void DumpShader(UndertaleShader shader)
@@ -999,7 +574,7 @@ void DumpShader(UndertaleShader shader)
 
 async Task DumpSounds()
 {
-    await Task.Run(() => Parallel.ForEach(changedSounds, DumpSound));
+    await Task.Run(() => Parallel.ForEach(allSounds, DumpSound));
 }
 
 void DumpSound(UndertaleSound sound)
@@ -1042,7 +617,7 @@ void DumpSound(UndertaleSound sound)
 
 async Task DumpTilesets()
 {
-    await Task.Run(() => Parallel.ForEach(Data.Backgrounds, DumpTileset));
+    await Task.Run(() => Parallel.ForEach(allBackgrounds, DumpTileset));
 }
 
 void DumpTileset(UndertaleBackground bg)
@@ -1050,53 +625,6 @@ void DumpTileset(UndertaleBackground bg)
     if (bg?.Name?.Content == null) return;
 
     string name = SafeName(bg.Name.Content);
-
-    bool isChanged = true;
-    if (vanillaData != null && vanillaBackgrounds.ContainsKey(bg.Name.Content))
-    {
-        var vBg = vanillaBackgrounds[bg.Name.Content];
-
-        uint bgTileWidth = (uint)(GetProp(bg, "TileWidth") ?? 0);
-        uint vBgTileWidth = (uint)(GetProp(vBg, "TileWidth") ?? 0);
-
-        uint bgTileHeight = (uint)(GetProp(bg, "TileHeight") ?? 0);
-        uint vBgTileHeight = (uint)(GetProp(vBg, "TileHeight") ?? 0);
-
-        uint bgTileXOffset = (uint)(GetProp(bg, "TileXOffset") ?? 0);
-        uint vBgTileXOffset = (uint)(GetProp(vBg, "TileXOffset") ?? 0);
-
-        uint bgTileYOffset = (uint)(GetProp(bg, "TileYOffset") ?? 0);
-        uint vBgTileYOffset = (uint)(GetProp(vBg, "TileYOffset") ?? 0);
-
-        uint bgTileXSep = (uint)(GetProp(bg, "TileXSep") ?? 0);
-        uint vBgTileXSep = (uint)(GetProp(vBg, "TileXSep") ?? 0);
-
-        uint bgTileYSep = (uint)(GetProp(bg, "TileYSep") ?? 0);
-        uint vBgTileYSep = (uint)(GetProp(vBg, "TileYSep") ?? 0);
-
-        bool propsChanged = bgTileWidth != vBgTileWidth || bgTileHeight != vBgTileHeight ||
-                            bgTileXOffset != vBgTileXOffset || bgTileYOffset != vBgTileYOffset ||
-                            bgTileXSep != vBgTileXSep || bgTileYSep != vBgTileYSep;
-
-        bool texChanged = false;
-        if (bg.Texture != null && vBg.Texture != null)
-        {
-            if (bg.Texture.SourceX != vBg.Texture.SourceX || bg.Texture.SourceY != vBg.Texture.SourceY ||
-                bg.Texture.SourceWidth != vBg.Texture.SourceWidth || bg.Texture.SourceHeight != vBg.Texture.SourceHeight ||
-                bg.Texture.TexturePage?.Name?.Content != vBg.Texture.TexturePage?.Name?.Content)
-            {
-                texChanged = true;
-            }
-        }
-        else if (bg.Texture != vBg.Texture) texChanged = true;
-
-        if (!propsChanged && !texChanged) isChanged = false;
-    }
-
-    if (!isChanged)
-    {
-        return;
-    }
 
     if (bg?.Texture == null)
     {
@@ -1117,13 +645,12 @@ void DumpTileset(UndertaleBackground bg)
 }
 
 PrintLine($"\n[ExportAllAssets] Summary for Mod {modNo}:");
-PrintLine($"  Code - New: {codeNew}, Changed: {codeChanged}");
-PrintLine($"  Sprites - New: {spritesNew}, Changed: {spritesChanged}");
-PrintLine($"  Backgrounds - New: {backgroundsNew}, Changed: {backgroundsChanged}");
-PrintLine($"  Fonts - New: {fontsNew}, Changed: {fontsChanged}");
-PrintLine($"  Rooms - New: {roomsNew}, Changed: {roomsChanged}");
-PrintLine($"  Shaders - New: {shadersNew}, Changed: {shadersChanged}");
-PrintLine($"  Sounds - New: {soundsNew}, Changed: {soundsChanged}");
-PrintLine($"  Tilesets - Exported: {tilesetsExported}, Skipped: {tilesetsSkipped}");
+PrintLine($"  Code - Exported: {allCode.Count}");
+PrintLine($"  Sprites - Exported: {allSprites.Count}");
+PrintLine($"  Backgrounds - Exported: {allBackgrounds.Count}");
+PrintLine($"  Fonts - Exported: {allFonts.Count}");
+PrintLine($"  Rooms - Exported: {allRooms.Count}");
+PrintLine($"  Shaders - Exported: {allShaders.Count}");
+PrintLine($"  Sounds - Exported: {allSounds.Count}");
 PrintLine("[ExportAllAssets] Done.");
 

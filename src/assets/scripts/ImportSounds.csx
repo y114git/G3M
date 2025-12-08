@@ -50,13 +50,13 @@ foreach (string soundFile in soundFiles)
     string soundName = Path.GetFileNameWithoutExtension(filename);
     bool isOGG = Path.GetExtension(filename).ToLower() == ".ogg";
     bool isWAV = Path.GetExtension(filename).ToLower() == ".wav";
-    
+
     if (!isOGG && !isWAV)
     {
         skipped++;
         continue;
     }
-    
+
     UndertaleSound existingSound = Data.Sounds.ByName(soundName);
     if (existingSound == null)
     {
@@ -64,7 +64,7 @@ foreach (string soundFile in soundFiles)
         skipped++;
         continue;
     }
-    
+
     try
     {
         byte[] audioData = ReadAllBytesSafe(soundFile);
@@ -74,20 +74,20 @@ foreach (string soundFile in soundFiles)
             skipped++;
             continue;
         }
-        
+
         bool embedSound = isWAV || (isOGG && true);
         bool decodeLoad = false;
-        
+
         if (embedSound)
         {
             if (existingSound.AudioFile == null)
             {
                 existingSound.AudioFile = new UndertaleEmbeddedAudio();
             }
-            
+
             existingSound.AudioFile.Data = audioData;
             existingSound.Flags |= AudioEntryFlags.IsEmbedded;
-            
+
             if (!isOGG)
             {
                 existingSound.Flags &= ~AudioEntryFlags.IsCompressed;
@@ -96,7 +96,7 @@ foreach (string soundFile in soundFiles)
             {
                 existingSound.Flags |= AudioEntryFlags.IsCompressed;
             }
-            
+
             if (decodeLoad)
             {
                 existingSound.Flags |= AudioEntryFlags.UncompressOnLoad;
@@ -106,7 +106,7 @@ foreach (string soundFile in soundFiles)
                 existingSound.Flags &= ~AudioEntryFlags.UncompressOnLoad;
             }
         }
-        
+
         PrintLine($"[Sound] {soundName}: IMPORTED ({Path.GetExtension(filename)}, embedded: {embedSound})");
         imported++;
     }

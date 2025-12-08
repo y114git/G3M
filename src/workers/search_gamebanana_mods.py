@@ -4,7 +4,7 @@ from PyQt6.QtCore import QThread, pyqtSignal
 from config.constants import GAMEBANANA_GAME_IDS, GAMEBANANA_PER_PAGE, UI_COLORS
 from managers.localization_manager import tr
 from utils.gamebanana_api import GameBananaAPI
-from typing import List, Optional
+from typing import List
 from models.mod_models import ModInfo
 logger = logging.getLogger(__name__)
 SEARCH_TIMEOUT_SECONDS = 10

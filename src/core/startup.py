@@ -6,7 +6,7 @@ import sys
 import subprocess
 import time
 import psutil
-from PyQt6.QtCore import QLibraryInfo, Qt, QTranslator, QTimer
+from PyQt6.QtCore import QLibraryInfo, QTranslator, QTimer
 from PyQt6.QtNetwork import QLocalServer, QLocalSocket
 from PyQt6.QtWidgets import QApplication, QMessageBox
 from managers.localization_manager import localization_manager, tr

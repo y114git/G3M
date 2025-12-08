@@ -8,7 +8,6 @@ import webbrowser
 import argparse
 from typing import Optional
 import logging
-import requests
 from PyQt6.QtCore import QTranslator, Qt, QEvent, QThread, QTimer, pyqtSignal, QUrl
 from PyQt6.QtGui import QColor, QIcon, QPainter, QPixmap, QDesktopServices
 from PyQt6.QtWidgets import QApplication, QCheckBox, QFrame, QLabel, QProgressBar, QPushButton, QTabWidget, QVBoxLayout, QWidget, QHBoxLayout, QSizePolicy, QColorDialog
@@ -1054,20 +1053,14 @@ class AppWindow(QWidget):
             self.mod_manager.load_local_mods()
             saved_chapter_mode = self.app_state.local_config.get('chapter_mode_enabled', False)
             self.setEnabled(False)
-            self._load_mods_and_build_list_synchronously()
-            self.setEnabled(True)
-            QTimer.singleShot(500, self.slot_manager.load_used_mods_state)
-            if not saved_chapter_mode:
-                self.library_display.update_display()
-                self.app_state.library_initialized = True
-            elif saved_chapter_mode and hasattr(self, '_show_chapter_mode_instruction'):
-                QTimer.singleShot(800, self._show_chapter_mode_instruction)
+            QTimer.singleShot(500, lambda: (self._load_mods_and_build_list_synchronously(saved_chapter_mode), self.setEnabled(True)))
+            QTimer.singleShot(1000, self.slot_manager.load_used_mods_state)
         except Exception as e:
             logging.error(f'AppWindow: Error in _on_mod_scan_finished: {e}', exc_info=True)
             self.feedback_manager.update_status(tr('status.mod_scan_error', details=str(e)), UI_COLORS['status_error'])
             self.setEnabled(True)
 
-    def _load_mods_and_build_list_synchronously(self):
+    def _load_mods_and_build_list_synchronously(self, saved_chapter_mode=False):
         try:
             logging.info('AppWindow: Starting mods loading in background before window show')
 
@@ -1079,6 +1072,8 @@ class AppWindow(QWidget):
                         self._show_chapter_mode_instruction()
                 else:
                     self.library_display.update_display()
+                    if not saved_chapter_mode:
+                        self.app_state.library_initialized = True
 
             def update_filtered_mods_callback():
                 try:

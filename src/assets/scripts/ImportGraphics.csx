@@ -27,7 +27,20 @@ bool noMasksForBasicRectangles = Data.IsVersionAtLeast(2022, 9);
 
 try
 {
-    string packDir = Path.Combine(ExePath, "Packager");
+    
+    
+    
+    string dataWinDir = Path.GetDirectoryName(FilePath);
+    string packDir = Path.Combine(dataWinDir, "Packager");
+    
+    
+    
+    if (!dataWinDir.Contains("xDeltaCombiner"))
+    {
+        
+        
+        throw new ScriptException($"Packager cannot be created in game directory. Expected temporary folder (xDeltaCombiner), but got: {dataWinDir}");
+    }
     Directory.CreateDirectory(packDir);
 
 

@@ -1,7 +1,7 @@
 import os
 import platform
 import pytest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import patch, MagicMock
 from utils.game_utils import is_game_running, get_game_type_string, get_game_name_string
 from utils.path_utils import find_chapter_resource_dir, resolve_game_executable
 

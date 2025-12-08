@@ -1,9 +1,6 @@
 import os
 import json
-import pytest
-from unittest.mock import Mock, patch, MagicMock
-from core.app_state import AppState
-from ui.common.feedback import FeedbackManager
+from unittest.mock import Mock, patch
 
 
 class TestModManager:

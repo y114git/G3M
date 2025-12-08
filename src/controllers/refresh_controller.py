@@ -62,7 +62,7 @@ class RefreshController:
                 self.feedback_manager.update_status(tr('status.cant_update_while_running'), UI_COLORS['status_warning'])
                 return
             self._stop_fetch_thread()
-            QTimer.singleShot(0, self.update_checker.check_for_updates)
+            QTimer.singleShot(3000, self.update_checker.check_for_updates)
 
             class FetchContext:
 

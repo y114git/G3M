@@ -1,7 +1,6 @@
 import os
 import shutil
 import json
-import logging
 from typing import Dict, Optional
 from utils.patching_logger import get_patching_logger
 from utils.file_utils import safe_move, safe_remove

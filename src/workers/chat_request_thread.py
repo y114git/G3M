@@ -1,8 +1,6 @@
 import logging
-from typing import List, Dict, Optional, Tuple
 from PyQt6.QtCore import QThread, pyqtSignal
 from managers.chat_manager import ChatManager
-from config.constants import NETWORK_TIMEOUT_MEDIUM
 
 
 class ChatRequestThread(QThread):

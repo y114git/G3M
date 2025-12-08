@@ -1,8 +1,5 @@
 import os
 import json
-from unittest.mock import patch
-from core.app_state import AppState
-from ui.common.feedback import FeedbackManager
 
 
 class TestPluginManager:

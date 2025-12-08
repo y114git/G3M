@@ -4,8 +4,6 @@ import tempfile
 import pytest
 from pathlib import Path
 from unittest.mock import Mock
-from core.app_state import AppState
-from ui.common.feedback import FeedbackManager
 from managers.multi_mod_merger import MultiModMerger
 
 

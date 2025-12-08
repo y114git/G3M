@@ -1,9 +1,5 @@
 import pytest
-from PyQt6.QtWidgets import QWidget
-from PyQt6.QtTest import QTest
-from PyQt6.QtCore import Qt
 from unittest.mock import Mock, patch
-from core.app_state import AppState
 
 
 class TestAppWindow:

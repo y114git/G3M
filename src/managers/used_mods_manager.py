@@ -12,6 +12,7 @@ from managers.localization_manager import tr
 from config.constants import SLOT_ID_UNIVERSAL, SLOT_ID_MENU, SLOT_ID_CHAPTER_1, SLOT_ID_CHAPTER_2, SLOT_ID_CHAPTER_3, SLOT_ID_CHAPTER_4
 from utils.mod_utils import get_mod_key, get_mod_name
 from utils.game_utils import get_chapter_id_for_game_mode
+from utils.file_utils import sanitize_filename
 
 
 class UsedModsManager(QObject):
@@ -162,11 +163,25 @@ class UsedModsManager(QObject):
         for chapter_id, mods_list in self.used_mods.items():
             mod_keys = []
             for mod_data in mods_list:
-                mod_key = get_mod_key(mod_data)
-                if mod_key:
-                    mod_keys.append(mod_key)
-                    mod_name = get_mod_name(mod_data, 'Unknown')
-                    logging.debug(f'save_used_mods_state: Saving mod {mod_name} with key {mod_key} for chapter {chapter_id}')
+                try:
+                    if isinstance(mod_data, dict):
+                        mod_key = mod_data.get('key') or mod_data.get('mod_key')
+                    else:
+                        mod_key = getattr(mod_data, 'key', None) or getattr(mod_data, 'mod_key', None)
+                    mod_name = get_mod_name(mod_data, '')
+                    if not mod_key or (mod_key == mod_name and mod_name):
+                        if mod_name and isinstance(mod_name, str):
+                            sanitized = sanitize_filename(mod_name)
+                            if sanitized:
+                                mod_key = f"local_{sanitized.lower().replace(' ', '_')}"
+                            else:
+                                mod_key = None
+                        else:
+                            mod_key = None
+                    if mod_key:
+                        mod_keys.append(mod_key)
+                except Exception:
+                    continue
             if mod_keys:
                 if len(mod_keys) == 1:
                     used_mods_data[str(chapter_id)] = mod_keys[0]

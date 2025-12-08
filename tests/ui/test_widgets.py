@@ -1,9 +1,5 @@
 import time
-from PyQt6.QtWidgets import QApplication, QWidget
-from PyQt6.QtTest import QTest
-from PyQt6.QtCore import Qt
-from core.app_state import AppState
-from ui.common.feedback import FeedbackManager
+from PyQt6.QtWidgets import QWidget
 
 
 class TestModWidgets:

@@ -1,4 +1,4 @@
-from PyQt6.QtCore import QThread, pyqtSignal, Qt, QThreadPool
+from PyQt6.QtCore import Qt, QThreadPool
 from PyQt6.QtGui import QImage, QPixmap, QColor, QPainter
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QSizePolicy
 from managers.localization_manager import tr

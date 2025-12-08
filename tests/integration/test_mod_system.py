@@ -2,8 +2,6 @@ import os
 import json
 import pytest
 from pathlib import Path
-from core.app_state import AppState
-from ui.common.feedback import FeedbackManager
 
 
 class TestModStructure:
@@ -180,7 +178,6 @@ class TestModMetadata:
 
     def test_metadata_read_write(self, app_state, feedback_manager):
         from managers.mod_manager import ModManager
-        import json
         import time
         mod_manager = ModManager(app_state, feedback_manager)
         metadata = mod_manager._read_metadata()

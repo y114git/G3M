@@ -8,7 +8,6 @@ from config.constants import GAMEBANANA_API_BASE, GAMEBANANA_GAME_IDS, GAMEBANAN
 from utils.network_utils import get_session
 from utils.file_utils import check_filename_is_deltamod_info
 from models.mod_models import ModInfo
-from managers.localization_manager import tr
 logger = logging.getLogger(__name__)
 
 

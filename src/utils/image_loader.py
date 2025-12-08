@@ -4,7 +4,7 @@ from PyQt6.QtCore import QRunnable
 from PyQt6.QtGui import QImage
 from workers import WorkerSignals
 from utils.cache import _NET_SEM, get_from_cache, add_to_cache
-from utils.network_utils import get_session, sanitize_log_message, mask_url, mask_api_key
+from utils.network_utils import get_session, sanitize_log_message, mask_url
 
 
 class ImageLoaderRunnable(QRunnable):

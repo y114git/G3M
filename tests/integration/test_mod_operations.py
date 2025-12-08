@@ -2,10 +2,7 @@ import os
 import json
 import tempfile
 import zipfile
-from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
-from core.app_state import AppState
-from ui.common.feedback import FeedbackManager
+from unittest.mock import Mock, patch
 
 
 class TestModInstallation:
