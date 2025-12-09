@@ -45,7 +45,7 @@ class GameLaunchController(QObject):
             self.app_state.action_button_text = tr('status.please_wait')
             self.app_state.action_button_enabled = False
             return
-        is_full_install_enabled = isinstance(self.app_state.game_mode, DemoGameMode) and self._full_install_checkbox_is_checked
+        is_full_install_enabled = isinstance(self.app_state.game_mode, (DemoGameMode, UndertaleYellowGameMode)) and self._full_install_checkbox_is_checked
         action_text = tr('buttons.install') if is_full_install_enabled else tr('ui.update_button') if self.slot_manager.check_used_mods_need_updates() else tr('ui.launch_button')
         self.app_state.action_button_text = action_text
         self.app_state.action_button_enabled = True
@@ -188,6 +188,8 @@ class GameLaunchController(QObject):
         self.app_state.clear_current_task()
         self._reset_progress_bar()
         self.app._set_checkbox_checked_silently(self.app.full_install_checkbox, False)
+        self._full_install_checkbox_is_checked = False
+        self.app_state.is_full_install = False
         if success:
             if isinstance(self.app_state.game_mode, DemoGameMode):
                 self.app_state.demo_game_path = self.app_state.local_config['demo_game_path'] = target_dir
