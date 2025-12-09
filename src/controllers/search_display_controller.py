@@ -354,45 +354,39 @@ class SearchDisplayController(QObject):
                 if self.app_state.search_text != search_text:
                     return
                 self.app_state.gamebanana_loading = False
-                if self.app_state.search_text == search_text and len(all_new_mods) == 0:
-
-                    def show_no_results_dialog():
-                        msg_box = QMessageBox(self.app)
-                        msg_box.setIcon(QMessageBox.Icon.Information)
-                        msg_box.setWindowTitle(tr('ui.search_tab'))
-                        msg_box.setText(tr('ui.no_search_results'))
-                        msg_box.exec()
-                        self.app_state.search_text = ''
-                        self.ui_button_text_update.emit('search_button', '🔍')
-                        self.ui_button_tooltip_update.emit('search_button', tr('ui.search_placeholder'))
-                        self.update_filtered_mods()
-                    QTimer.singleShot(100, show_no_results_dialog)
-                    self.update_pagination()
-                    return
                 if not hasattr(self.app_state, 'all_mods'):
                     self.update_filtered_mods(preserve_page=True)
                     self.update_pagination()
                     return
                 existing_ids = {str(m.gamebanana_mod_id) for m in self.app_state.all_mods if hasattr(m, 'gamebanana_mod_id') and m.gamebanana_mod_id}
                 new_mods_to_add = [m for m in all_new_mods if hasattr(m, 'gamebanana_mod_id') and m.gamebanana_mod_id and (str(m.gamebanana_mod_id) not in existing_ids)]
-                if self.app_state.search_text == search_text and len(new_mods_to_add) == 0:
+                if self.app_state.search_text == search_text and new_mods_to_add:
+                    self.app_state.extend_all_mods(new_mods_to_add)
+                    max_loaded_page = max(pages_needed) if pages_needed else last_page
+                    search_pages[game_id] = max(search_pages.get(game_id, 0), max_loaded_page)
+                if self.app_state.search_text == search_text:
+                    self.update_filtered_mods(preserve_page=True)
+                    filtered_count = len(self.app_state.filtered_mods) if self.app_state.filtered_mods else 0
+                    if filtered_count == 0:
 
-                    def show_no_results_dialog():
-                        if self.app_state.search_text == search_text:
-                            msg_box = QMessageBox(self.app)
-                            msg_box.setIcon(QMessageBox.Icon.Information)
-                            msg_box.setWindowTitle(tr('ui.search_tab'))
-                            msg_box.setText(tr('ui.no_search_results'))
-                            msg_box.exec()
+                        def show_no_results_dialog():
                             if self.app_state.search_text == search_text:
-                                self.app_state.search_text = ''
-                                self._current_search_text = ''
-                                self.ui_button_text_update.emit('search_button', '🔍')
-                                self.ui_button_tooltip_update.emit('search_button', tr('ui.search_placeholder'))
-                                self.update_filtered_mods()
-                    QTimer.singleShot(100, show_no_results_dialog)
-                    self.update_pagination()
-                    return
+                                msg_box = QMessageBox(self.app)
+                                msg_box.setIcon(QMessageBox.Icon.Information)
+                                msg_box.setWindowTitle(tr('ui.search_tab'))
+                                msg_box.setText(tr('ui.no_search_results'))
+                                msg_box.exec()
+                                if self.app_state.search_text == search_text:
+                                    self.app_state.search_text = ''
+                                    self._current_search_text = ''
+                                    self.ui_button_text_update.emit('search_button', '🔍')
+                                    self.ui_button_tooltip_update.emit('search_button', tr('ui.search_placeholder'))
+                                    self.update_filtered_mods()
+                        QTimer.singleShot(100, show_no_results_dialog)
+                    else:
+                        self.update_display()
+                self.update_pagination()
+                return
                 if self.app_state.search_text == search_text and new_mods_to_add:
                     self.app_state.extend_all_mods(new_mods_to_add)
                     max_loaded_page = max(pages_needed) if pages_needed else last_page
@@ -615,7 +609,7 @@ class SearchDisplayController(QObject):
                 if hasattr(mod, 'is_gamebanana_mod') and mod.is_gamebanana_mod:
                     if hasattr(mod, 'gamebanana_mod_id') and mod.gamebanana_mod_id:
                         return f'gb_{mod.gamebanana_mod_id}'
-                mod_key = getattr(mod, 'key', None)
+                mod_key = getattr(mod, 'mod_key', None)
                 if mod_key:
                     return f'local_{mod_key}'
                 mod_name = getattr(mod, 'name', 'unknown')

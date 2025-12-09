@@ -167,7 +167,7 @@ class UsedModsManager(QObject):
                     if isinstance(mod_data, dict):
                         mod_key = mod_data.get('key') or mod_data.get('mod_key')
                     else:
-                        mod_key = getattr(mod_data, 'key', None) or getattr(mod_data, 'mod_key', None)
+                        mod_key = getattr(mod_data, 'mod_key', None)
                     mod_name = get_mod_name(mod_data, '')
                     if not mod_key or (mod_key == mod_name and mod_name):
                         if mod_name and isinstance(mod_name, str):

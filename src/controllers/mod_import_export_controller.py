@@ -218,7 +218,7 @@ class ModImportExportController:
                 mod_data = None
                 if hasattr(self.app_state, 'all_mods'):
                     for mod in self.app_state.all_mods:
-                        if hasattr(mod, 'key') and mod.key == mod_key:
+                        if hasattr(mod, 'mod_key') and mod.mod_key == mod_key:
                             mod_data = mod
                             break
                 if not mod_data:
@@ -252,7 +252,7 @@ class ModImportExportController:
             return
         try:
             self.mod_manager.invalidate_mods_cache()
-            mod_dir = self.mod_manager.get_mod_folder_path(mod.key)
+            mod_dir = self.mod_manager.get_mod_folder_path(mod.mod_key)
             if not mod_dir or not os.path.exists(mod_dir):
                 mod_dir = None
                 if os.path.exists(self.app_state.mods_dir):
@@ -267,7 +267,7 @@ class ModImportExportController:
                                 config_mod_key = config.get('mod_key')
                                 config_mod_name = config.get('name', '')
                                 if config_mod_key:
-                                    if config_mod_key == mod.key:
+                                    if config_mod_key == mod.mod_key:
                                         mod_dir = entry.path
                                         break
                                     elif config_mod_name == mod.name:
@@ -288,7 +288,7 @@ class ModImportExportController:
                                     config_mod_key = config.get('mod_key')
                                     config_mod_name = config.get('name', '')
                                     if config_mod_key:
-                                        if config_mod_key == mod.key:
+                                        if config_mod_key == mod.mod_key:
                                             mod_dir = entry.path
                                             break
                                         elif config_mod_name == mod.name:
@@ -301,7 +301,7 @@ class ModImportExportController:
                     logging.error(f'Mods directory does not exist: {self.app_state.mods_dir}')
             if not mod_dir or not os.path.exists(mod_dir):
                 logging.error(f'Mod folder not found for mod: {mod.name}')
-                QMessageBox.critical(self.app_window, tr('errors.error'), tr('errors.mod_folder_not_found_simple', path=mod_dir or mod.key))
+                QMessageBox.critical(self.app_window, tr('errors.error'), tr('errors.mod_folder_not_found_simple', path=mod_dir or mod.mod_key))
                 return
             with zipfile.ZipFile(export_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
                 for root, dirs, files in os.walk(mod_dir):

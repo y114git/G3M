@@ -139,7 +139,7 @@ class RefreshController:
                 installed_gb_mods = []
                 for mod in self.app_state.all_mods:
                     if hasattr(mod, 'is_gamebanana_mod') and mod.is_gamebanana_mod and hasattr(mod, 'gamebanana_mod_id') and mod.gamebanana_mod_id:
-                        installed_gb_mods.append(f'{mod.name} (key={mod.key}, id={mod.gamebanana_mod_id})')
+                        installed_gb_mods.append(f'{mod.name} (key={mod.mod_key}, id={mod.gamebanana_mod_id})')
                 logging.info(f'RefreshController: Found {len(installed_gb_mods)} GameBanana mods in all_mods after load_local_mods')
                 for mod_info in installed_gb_mods[:10]:
                     logging.debug(f'RefreshController: GameBanana mod in all_mods: {mod_info}')

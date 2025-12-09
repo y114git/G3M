@@ -5,6 +5,7 @@ import tempfile
 import threading
 import time
 from typing import Optional
+from urllib.parse import urlparse
 from utils.network_utils import get_session
 from PyQt6.QtCore import QObject, QThread, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QImage
@@ -15,6 +16,16 @@ from utils.deltamod_converter import DeltamodConverter
 from utils.network_utils import download_file, sanitize_log_message
 from utils.ui_utils import format_size_mb
 import logging
+
+
+def is_valid_url(url: str) -> bool:
+    if not url or not isinstance(url, str):
+        return False
+    try:
+        parsed = urlparse(url)
+        return parsed.scheme in ('http', 'https')
+    except Exception:
+        return False
 
 
 class PresenceWorker(QObject):
@@ -250,13 +261,19 @@ class InstallModsThread(QThread):
             components_to_update: dict[str, dict] = {}
             chapter_data = mod.get_chapter_data(chapter_id) if chapter_id != -1 else None
             if chapter_data and chapter_data.data_file_url and remote_versions.get('data'):
-                local_data_v = local_versions.get('data')
-                remote_data_v = remote_versions.get('data')
-                from utils.file_utils import version_sort_key
-                if remote_data_v and version_sort_key(remote_data_v) > version_sort_key(local_data_v or '0.0.0'):
-                    components_to_update['data'] = {'url': chapter_data.data_file_url, 'local_version': local_data_v, 'remote_version': remote_data_v}
+                if not is_valid_url(chapter_data.data_file_url):
+                    logging.warning(f'_should_update_component: Invalid URL for data file: {chapter_data.data_file_url}')
+                else:
+                    local_data_v = local_versions.get('data')
+                    remote_data_v = remote_versions.get('data')
+                    from utils.file_utils import version_sort_key
+                    if remote_data_v and version_sort_key(remote_data_v) > version_sort_key(local_data_v or '0.0.0'):
+                        components_to_update['data'] = {'url': chapter_data.data_file_url, 'local_version': local_data_v, 'remote_version': remote_data_v}
             if chapter_data:
                 for extra_file in chapter_data.extra_files:
+                    if not is_valid_url(extra_file.url):
+                        logging.warning(f'_should_update_component: Invalid URL for extra file {extra_file.key}: {extra_file.url}')
+                        continue
                     rv = remote_versions.get(extra_file.key)
                     lv = local_versions.get(extra_file.key)
                     if rv and version_sort_key(rv) > version_sort_key(lv or '0.0.0'):
@@ -367,24 +384,30 @@ class InstallModsThread(QThread):
             total_bytes = 0
             mod_folders = {}
             for mod, chapter_id in self.install_tasks:
-                if mod.key not in mod_folders:
-                    mod_folder_path = self.main_window.mod_manager.get_mod_folder_path(mod.key)
+                if mod.mod_key not in mod_folders:
+                    mod_folder_path = self.main_window.mod_manager.get_mod_folder_path(mod.mod_key)
                     if mod_folder_path:
                         existing_folder = os.path.basename(mod_folder_path)
-                        mod_folders[mod.key] = existing_folder
+                        mod_folders[mod.mod_key] = existing_folder
                     else:
-                        mod_folders[mod.key] = get_unique_mod_dir(self.main_window.app_state.mods_dir, mod.name)
-                existing_folder = mod_folders.get(mod.key, '')
+                        mod_folders[mod.mod_key] = get_unique_mod_dir(self.main_window.app_state.mods_dir, mod.name)
+                existing_folder = mod_folders.get(mod.mod_key, '')
                 chapter_data = mod.get_chapter_data(chapter_id) if chapter_id != -1 else None
                 if chapter_id == -1 and mod.is_valid_for_demo():
-                    tasks.append({'mod': mod, 'url': mod.demo_url, 'chapter_id': -1, 'component': 'demo'})
+                    if is_valid_url(mod.demo_url):
+                        tasks.append({'mod': mod, 'url': mod.demo_url, 'chapter_id': -1, 'component': 'demo'})
+                    else:
+                        logging.warning(f'InstallModsThread: Invalid URL for demo: {mod.demo_url}')
                 elif chapter_data:
                     components_to_update = self._should_update_component(mod, chapter_id, existing_folder)
                     if not components_to_update:
-                        if chapter_data.data_file_url:
+                        if chapter_data.data_file_url and is_valid_url(chapter_data.data_file_url):
                             tasks.append({'mod': mod, 'url': chapter_data.data_file_url, 'chapter_id': chapter_id, 'component': 'data'})
                         for extra_file in chapter_data.extra_files:
-                            tasks.append({'mod': mod, 'url': extra_file.url, 'chapter_id': chapter_id, 'component': extra_file.key})
+                            if is_valid_url(extra_file.url):
+                                tasks.append({'mod': mod, 'url': extra_file.url, 'chapter_id': chapter_id, 'component': extra_file.key})
+                            else:
+                                logging.warning(f'InstallModsThread: Invalid URL for extra file {extra_file.key}: {extra_file.url}')
                     else:
                         for component, info in components_to_update.items():
                             if info.get('delete'):
@@ -397,7 +420,7 @@ class InstallModsThread(QThread):
                 return
             session = get_session()
             self._session = session
-            download_tasks = [t for t in tasks if t.get('url')]
+            download_tasks = [t for t in tasks if t.get('url') and is_valid_url(t.get('url'))]
             file_sizes_cache = {}
             for task in download_tasks:
                 u = task.get('url')
@@ -453,7 +476,7 @@ class InstallModsThread(QThread):
                     return
                 mod = task.get('mod')
                 chapter_id = task.get('chapter_id')
-                mod_folder_name = mod_folders[mod.key]
+                mod_folder_name = mod_folders[mod.mod_key]
                 mod_dir = os.path.join(self.temp_root, mod_folder_name)
                 if chapter_id == -1:
                     cache_dir = os.path.join(mod_dir, 'demo')
@@ -536,9 +559,9 @@ class InstallModsThread(QThread):
                     safe_msg = sanitize_log_message(f'InstallModsThread._download_mod_file: download failed: {e}')
                     logging.error(safe_msg, exc_info=True)
                     raise
-                if mod.key not in installed_mods:
-                    installed_mods[mod.key] = {'mod': mod, 'chapters': set()}
-                installed_mods[mod.key]['chapters'].add(chapter_id)
+                if mod.mod_key not in installed_mods:
+                    installed_mods[mod.mod_key] = {'mod': mod, 'chapters': set()}
+                installed_mods[mod.mod_key]['chapters'].add(chapter_id)
                 if url and total_bytes == 0:
                     done_files += 1
                     progress = int(done_files / max(1, len(download_tasks)) * 100)
@@ -549,7 +572,7 @@ class InstallModsThread(QThread):
                     return
             for mod_key, mod_data in installed_mods.items():
                 mod = mod_data['mod']
-                mod_folder_name = mod_folders[mod.key]
+                mod_folder_name = mod_folders[mod.mod_key]
                 mod_dir = os.path.join(self.main_window.app_state.mods_dir, mod_folder_name)
                 files_data = {}
                 for chapter_id in mod_data['chapters']:
@@ -583,8 +606,8 @@ class InstallModsThread(QThread):
                         else:
                             file_key = str(chapter_id)
                         files_data[file_key] = file_info
-                config_data = {'is_local_mod': False, 'mod_key': mod.key, 'name': mod.name, 'author': mod.author, 'version': mod.version, 'game_version': mod.game_version, 'modgame': mod.modgame, 'files': files_data, 'tags': mod.tags}
-                mod_configs[mod.key] = {'folder_name': mod_folder_name, 'config': config_data}
+                config_data = {'is_local_mod': False, 'mod_key': mod.mod_key, 'name': mod.name, 'author': mod.author, 'version': mod.version, 'game_version': mod.game_version, 'modgame': mod.modgame, 'files': files_data, 'tags': mod.tags}
+                mod_configs[mod.mod_key] = {'folder_name': mod_folder_name, 'config': config_data}
             try:
                 os.makedirs(self.main_window.app_state.mods_dir, exist_ok=True)
                 for entry in os.listdir(self.temp_root or ''):

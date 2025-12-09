@@ -93,11 +93,13 @@ class ModManager(QObject):
                         if mod_key is None or mod_key not in cache:
                             with open(config_path, 'r', encoding='utf-8') as f:
                                 config_data = json.load(f)
-                            mod_key = config_data.get('mod_key')
+                            mod_key = config_data.get('mod_key') or ''
                             if not mod_key:
-                                continue
+                                cache_key = f'__no_key_{folder_path}'
+                            else:
+                                cache_key = mod_key
                             mod_info = ModFolderInfo(mod_key=mod_key, folder_path=folder_path, folder_name=folder_name, config_data=config_data, config_mtime=config_mtime)
-                            cache[mod_key] = mod_info
+                            cache[cache_key] = mod_info
                             mod_name = config_data.get('name', '')
                             if mod_name:
                                 if not hasattr(self, '_temp_mods_by_name'):
@@ -158,13 +160,32 @@ class ModManager(QObject):
 
     def _fix_duplicate_mod_keys(self, cache: Dict[str, ModFolderInfo]) -> None:
         mods_by_key: Dict[str, List[ModFolderInfo]] = {}
-        for mod_info in cache.values():
+        mods_without_key: List[ModFolderInfo] = []
+        for cache_key, mod_info in cache.items():
             mod_key = mod_info.mod_key
-            if mod_key not in mods_by_key:
-                mods_by_key[mod_key] = []
-            mods_by_key[mod_key].append(mod_info)
+            if not mod_key or cache_key.startswith('__no_key_'):
+                mods_without_key.append(mod_info)
+            else:
+                if mod_key not in mods_by_key:
+                    mods_by_key[mod_key] = []
+                mods_by_key[mod_key].append(mod_info)
         duplicates_found = False
         key_replacements: Dict[str, str] = {}
+        for mod_info in mods_without_key:
+            if not mod_info.mod_key:
+                mod_name = mod_info.config_data.get('name', 'Unknown Mod')
+                from utils.file_utils import sanitize_filename
+                base_key = f"local_{sanitize_filename(mod_name).lower().replace(' ', '_')}"
+                new_key = self._generate_unique_mod_key(base_key, cache, key_replacements)
+                old_cache_key = next((k for k, v in cache.items() if v == mod_info), None)
+                if old_cache_key:
+                    if old_cache_key in cache:
+                        del cache[old_cache_key]
+                mod_info.mod_key = new_key
+                mod_info.config_data['mod_key'] = new_key
+                cache[new_key] = mod_info
+                logging.info(f'_fix_duplicate_mod_keys: Generated key "{new_key}" for mod without key in folder "{mod_info.folder_path}"')
+                self._update_mod_key_in_config(mod_info.folder_path, '', new_key)
         for mod_key, mods_list in mods_by_key.items():
             if len(mods_list) > 1:
                 duplicates_found = True
@@ -491,11 +512,11 @@ class ModManager(QObject):
                     logging.debug(f'load_local_mods: Registered installed GameBanana mod - key={mod_key}, id={gb_id}')
             updated_count = 0
             for mod in list(self.app_state.all_mods):
-                if mod.key in installed_mods:
-                    config_data = installed_mods[mod.key]
-                    mod_folder_path = self.get_mod_folder_path(mod.key)
+                if mod.mod_key in installed_mods:
+                    config_data = installed_mods[mod.mod_key]
+                    mod_folder_path = self.get_mod_folder_path(mod.mod_key)
                     if mod_folder_path:
-                        config_data = self.get_mod_config(mod.key)
+                        config_data = self.get_mod_config(mod.mod_key)
                         resolved_icon = resolve_mod_icon(config_data, mod_folder_path)
                         if resolved_icon:
                             mod.icon_url = resolved_icon
@@ -505,9 +526,9 @@ class ModManager(QObject):
                     gb_id = str(mod.gamebanana_mod_id)
                     if gb_id in installed_gamebanana_by_id:
                         mod_key, config_data = installed_gamebanana_by_id[gb_id]
-                        if mod.key != mod_key:
-                            logging.debug(f'load_local_mods: Updating mod.key from {mod.key} to {mod_key} for GameBanana mod {gb_id}')
-                            mod.key = mod_key
+                        if mod.mod_key != mod_key:
+                            logging.debug(f'load_local_mods: Updating mod.mod_key from {mod.mod_key} to {mod_key} for GameBanana mod {gb_id}')
+                            mod.mod_key = mod_key
                         mod_folder_path = self.get_mod_folder_path(mod_key)
                         if mod_folder_path:
                             resolved_icon = resolve_mod_icon(config_data, mod_folder_path)
@@ -515,12 +536,12 @@ class ModManager(QObject):
                                 mod.icon_url = resolved_icon
                         updated_count += 1
             logging.debug(f'load_local_mods: Updated {updated_count} existing GameBanana mods in all_mods')
-            existing_keys = {mod.key for mod in self.app_state.all_mods}
+            existing_keys = {mod.mod_key for mod in self.app_state.all_mods}
             existing_gamebanana_ids = {}
             for mod in self.app_state.all_mods:
                 if hasattr(mod, 'is_gamebanana_mod') and mod.is_gamebanana_mod and hasattr(mod, 'gamebanana_mod_id') and mod.gamebanana_mod_id:
                     gb_id = str(mod.gamebanana_mod_id)
-                    existing_gamebanana_ids[gb_id] = mod.key
+                    existing_gamebanana_ids[gb_id] = mod.mod_key
             for mod_key, config_data in list(installed_mods.items()):
                 if config_data.get('is_local_mod'):
                     continue
@@ -531,7 +552,7 @@ class ModManager(QObject):
                     if mod_key in existing_keys:
                         existing_mod = None
                         for mod in self.app_state.all_mods:
-                            if hasattr(mod, 'key') and mod.key == mod_key:
+                            if hasattr(mod, 'mod_key') and mod.mod_key == mod_key:
                                 existing_mod = mod
                                 break
                         if existing_mod:
@@ -539,7 +560,7 @@ class ModManager(QObject):
                                 try:
                                     new_mod = self.create_mod_object_from_info(config_data, self.app_state.all_mods)
                                     for i, mod in enumerate(self.app_state.all_mods):
-                                        if hasattr(mod, 'key') and mod.key == mod_key:
+                                        if hasattr(mod, 'mod_key') and mod.mod_key == mod_key:
                                             self.app_state.all_mods[i] = new_mod
                                             break
                                 except Exception as e:
@@ -550,11 +571,11 @@ class ModManager(QObject):
                         for mod in self.app_state.all_mods:
                             if hasattr(mod, 'gamebanana_mod_id') and str(mod.gamebanana_mod_id) == gb_id_str:
                                 if hasattr(mod, 'files') and mod.files:
-                                    mod.key = mod_key
+                                    mod.mod_key = mod_key
                                     existing_keys.discard(existing_mod_key)
                                     existing_keys.add(mod_key)
                                 else:
-                                    mod.key = mod_key
+                                    mod.mod_key = mod_key
                                     existing_keys.discard(existing_mod_key)
                                     existing_keys.add(mod_key)
                                 break
@@ -562,7 +583,7 @@ class ModManager(QObject):
                 elif mod_key in existing_keys:
                     existing_mod = None
                     for mod in self.app_state.all_mods:
-                        if hasattr(mod, 'key') and mod.key == mod_key:
+                        if hasattr(mod, 'mod_key') and mod.mod_key == mod_key:
                             existing_mod = mod
                             break
                     if existing_mod:
@@ -570,7 +591,7 @@ class ModManager(QObject):
                             try:
                                 new_mod = self.create_mod_object_from_info(config_data, self.app_state.all_mods)
                                 for i, mod in enumerate(self.app_state.all_mods):
-                                    if hasattr(mod, 'key') and mod.key == mod_key:
+                                    if hasattr(mod, 'mod_key') and mod.mod_key == mod_key:
                                         self.app_state.all_mods[i] = new_mod
                                         break
                             except Exception as e:
@@ -603,7 +624,7 @@ class ModManager(QObject):
                     tags = config_data.get('tags', [])
                     if not isinstance(tags, list):
                         tags = [tags] if tags else []
-                    safe_mod_info = {'key': mod_key, 'name': config_data.get('name', 'Installed Mod'), 'version': config_data.get('version', '1.0.0'), 'author': config_data.get('author', tr('defaults.unknown')), 'tagline': config_data.get('tagline', tr('defaults.no_description')), 'game_version': config_data.get('game_version', tr('defaults.not_specified')), 'description_url': '', 'downloads': 0, 'modgame': config_data.get('modgame', 'deltarune'), 'is_verified': False, 'icon_url': icon_url, 'tags': tags, 'hide_mod': False, 'is_local_mod': False, 'ban_status': False, 'demo_url': None, 'demo_version': '1.0.0', 'created_date': config_data.get('created_date', 'N/A'), 'last_updated': config_data.get('created_date', 'N/A'), 'external_url': config_data.get('external_url'), 'is_gamebanana_mod': config_data.get('is_gamebanana_mod', False), 'gamebanana_mod_id': config_data.get('gamebanana_mod_id'), 'gamebanana_mod_type': config_data.get('gamebanana_mod_type'), 'gamebanana_last_update_timestamp': config_data.get('gamebanana_last_update_timestamp')}
+                    safe_mod_info = {'mod_key': mod_key, 'name': config_data.get('name', 'Installed Mod'), 'version': config_data.get('version', '1.0.0'), 'author': config_data.get('author', tr('defaults.unknown')), 'tagline': config_data.get('tagline', tr('defaults.no_description')), 'game_version': config_data.get('game_version', tr('defaults.not_specified')), 'description_url': '', 'downloads': 0, 'modgame': config_data.get('modgame', 'deltarune'), 'is_verified': False, 'icon_url': icon_url, 'tags': tags, 'hide_mod': False, 'is_local_mod': False, 'ban_status': False, 'demo_url': None, 'demo_version': '1.0.0', 'created_date': config_data.get('created_date', 'N/A'), 'last_updated': config_data.get('created_date', 'N/A'), 'external_url': config_data.get('external_url'), 'is_gamebanana_mod': config_data.get('is_gamebanana_mod', False), 'gamebanana_mod_id': config_data.get('gamebanana_mod_id'), 'gamebanana_mod_type': config_data.get('gamebanana_mod_type'), 'gamebanana_last_update_timestamp': config_data.get('gamebanana_last_update_timestamp')}
                     mod = mod_models.ModInfo(**safe_mod_info)
                     files_data = config_data.get('files', {})
                     for file_key, ch_info in list(files_data.items()):
@@ -662,7 +683,7 @@ class ModManager(QObject):
                         resolved_icon = resolve_mod_icon(config_data, mod_folder_for_icon)
                         if resolved_icon:
                             icon_url = resolved_icon
-                    safe_mod_info = {'key': mod_key, 'name': config_data.get('name', tr('defaults.local_mod')), 'version': config_data.get('version', '1.0.0'), 'author': config_data.get('author', tr('defaults.unknown')), 'tagline': config_data.get('tagline', tr('defaults.no_description')), 'game_version': config_data.get('game_version', tr('defaults.not_specified')), 'description_url': '', 'downloads': 0, 'modgame': config_data.get('modgame', 'deltarune'), 'is_verified': False, 'icon_url': icon_url, 'tags': ['local'], 'hide_mod': False, 'is_local_mod': config_data.get('is_local_mod', True), 'ban_status': False, 'demo_url': None, 'demo_version': '1.0.0', 'created_date': config_data.get('created_date', 'N/A'), 'last_updated': config_data.get('created_date', 'N/A'), 'external_url': config_data.get('external_url'), 'is_gamebanana_mod': config_data.get('is_gamebanana_mod', False), 'gamebanana_mod_id': config_data.get('gamebanana_mod_id'), 'gamebanana_mod_type': config_data.get('gamebanana_mod_type'), 'gamebanana_last_update_timestamp': config_data.get('gamebanana_last_update_timestamp')}
+                    safe_mod_info = {'mod_key': mod_key, 'name': config_data.get('name', tr('defaults.local_mod')), 'version': config_data.get('version', '1.0.0'), 'author': config_data.get('author', tr('defaults.unknown')), 'tagline': config_data.get('tagline', tr('defaults.no_description')), 'game_version': config_data.get('game_version', tr('defaults.not_specified')), 'description_url': '', 'downloads': 0, 'modgame': config_data.get('modgame', 'deltarune'), 'is_verified': False, 'icon_url': icon_url, 'tags': ['local'], 'hide_mod': False, 'is_local_mod': config_data.get('is_local_mod', True), 'ban_status': False, 'demo_url': None, 'demo_version': '1.0.0', 'created_date': config_data.get('created_date', 'N/A'), 'last_updated': config_data.get('created_date', 'N/A'), 'external_url': config_data.get('external_url'), 'is_gamebanana_mod': config_data.get('is_gamebanana_mod', False), 'gamebanana_mod_id': config_data.get('gamebanana_mod_id'), 'gamebanana_mod_type': config_data.get('gamebanana_mod_type'), 'gamebanana_last_update_timestamp': config_data.get('gamebanana_last_update_timestamp')}
                     mod = mod_models.ModInfo(**safe_mod_info)
                     files_data = config_data.get('files', {})
                     for file_key, ch_info in list(files_data.items()):
@@ -724,7 +745,7 @@ class ModManager(QObject):
                                 elif downloaded_count is not None:
                                     mod.downloads = 0
                             except Exception as e:
-                                logging.debug(f'load_local_mods: Failed to load downloads from API for mod {mod.key}: {e}')
+                                logging.debug(f'load_local_mods: Failed to load downloads from API for mod {mod.mod_key}: {e}')
             metadata = self._read_metadata()
             cleanup_files = metadata.get('mod_files_to_cleanup', [])
             cleanup_dirs = metadata.get('mod_dirs_to_cleanup', [])
@@ -1020,7 +1041,7 @@ class ModManager(QObject):
         if not remote_versions:
             return 'n/a'
         cache = self._get_mods_cache()
-        mod_info = cache.get(mod.key)
+        mod_info = cache.get(mod.mod_key)
         if not mod_info:
             return 'install'
         config_data = mod_info.config_data
@@ -1181,7 +1202,7 @@ class ModManager(QObject):
         mod_key = mod_info.get('mod_key', '')
         if all_mods:
             for mod in all_mods:
-                if hasattr(mod, 'key') and mod.key == mod_key:
+                if hasattr(mod, 'mod_key') and mod.mod_key == mod_key:
                     if hasattr(mod, 'files') and mod.files:
                         return mod
         files_data = mod_info.get('files', {})
@@ -1282,8 +1303,12 @@ class ModManager(QObject):
             try:
                 with open(config_path, 'r', encoding='utf-8') as f:
                     config_data = json.load(f)
-                if config_data and config_data.get('is_local_mod'):
-                    local_mods.append({'key': config_data.get('mod_key'), 'name': config_data.get('name', 'Unknown mod'), 'data': config_data, 'folder_path': folder_path})
+                if config_data:
+                    mod_key = config_data.get('mod_key', '')
+                    is_local_mod = config_data.get('is_local_mod', False)
+                    is_local = is_local_mod or (mod_key and isinstance(mod_key, str) and mod_key.startswith('local_'))
+                    if is_local:
+                        local_mods.append({'mod_key': mod_key, 'name': config_data.get('name', 'Unknown mod'), 'data': config_data, 'folder_path': folder_path})
             except Exception as e:
                 logging.warning(f'list_local_mods: failed to read {config_path}: {e}', exc_info=True)
                 continue

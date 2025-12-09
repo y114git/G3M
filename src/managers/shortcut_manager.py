@@ -292,7 +292,7 @@ class ShortcutManager(QObject):
             mod_data = None
             if hasattr(self.app_state, 'all_mods') and self.app_state.all_mods:
                 for mod in self.app_state.all_mods:
-                    if getattr(mod, 'key', None) == mod_key:
+                    if getattr(mod, 'mod_key', None) == mod_key:
                         mod_data = mod
                         break
             if not mod_data:

@@ -188,7 +188,7 @@ class ModPlaqueWidget(BaseModWidget):
                 mod_id = getattr(self.mod_data, 'gamebanana_mod_id', None)
                 if mod_id:
                     return f'gb::{mod_id}'
-            mod_key = getattr(self.mod_data, 'key', None)
+            mod_key = getattr(self.mod_data, 'mod_key', None)
             if mod_key:
                 return f'key::{mod_key}'
         except Exception:
@@ -278,7 +278,7 @@ class ModPlaqueWidget(BaseModWidget):
     def _check_installation_status(self):
         if self.parent_app and hasattr(self.parent_app, 'mod_manager'):
             if hasattr(self.mod_data, 'is_gamebanana_mod') and self.mod_data.is_gamebanana_mod:
-                mod_key = getattr(self.mod_data, 'key', '')
+                mod_key = getattr(self.mod_data, 'mod_key', '')
                 mod_id = getattr(self.mod_data, 'gamebanana_mod_id', '')
                 try:
                     self.is_installed = self.parent_app.mod_manager.is_mod_installed(mod_key)
@@ -299,7 +299,7 @@ class ModPlaqueWidget(BaseModWidget):
                         import logging
                         logging.warning(f'ModPlaqueWidget: Error checking cache for mod_id {mod_id}: {e}', exc_info=True)
             else:
-                mod_key = getattr(self.mod_data, 'key', '')
+                mod_key = getattr(self.mod_data, 'mod_key', '')
                 try:
                     self.is_installed = self.parent_app.mod_manager.is_mod_installed(mod_key)
                 except Exception as e:

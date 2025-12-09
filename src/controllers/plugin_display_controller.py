@@ -80,13 +80,15 @@ class PluginDisplayController:
             if not plugin_info:
                 self.feedback_manager.show_message('error', 'errors.error', tr('plugins.plugin_not_found'))
                 return
+            name_key = plugin_info.get('name_key')
+            localized_name = tr(name_key) if name_key else plugin_name
             status = plugin_info.get('status', 'enabled')
             if status == 'enabled':
                 self.plugin_manager.disable_plugin(plugin_name)
-                self.feedback_manager.update_status(tr('plugins.plugin_disabled', name=plugin_name), UI_COLORS['status_info'])
+                self.feedback_manager.update_status(tr('plugins.plugin_disabled', name=localized_name), UI_COLORS['status_info'])
             else:
                 self.plugin_manager.enable_plugin(plugin_name)
-                self.feedback_manager.update_status(tr('plugins.plugin_enabled', name=plugin_name), UI_COLORS['status_success'])
+                self.feedback_manager.update_status(tr('plugins.plugin_enabled', name=localized_name), UI_COLORS['status_success'])
             self.plugin_manager.reload_plugin(plugin_name)
             if hasattr(self.app, '_update_plugin_tabs'):
                 self.app._update_plugin_tabs()
@@ -102,8 +104,11 @@ class PluginDisplayController:
             if not os.path.exists(plugin_path):
                 self.feedback_manager.show_message('error', 'errors.error', tr('plugins.plugin_not_found'))
                 return
+            plugin_info = next((p for p in self.plugin_manager.get_all_plugins_info() if p.get('name') == plugin_name), None)
+            name_key = plugin_info.get('name_key') if plugin_info else None
+            localized_name = tr(name_key) if name_key else plugin_name
             from PyQt6.QtWidgets import QMessageBox
-            reply = QMessageBox.question(self.app, tr('plugins.delete_plugin_title'), tr('plugins.delete_plugin_message', name=plugin_name), QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No)
+            reply = QMessageBox.question(self.app, tr('plugins.delete_plugin_title'), tr('plugins.delete_plugin_message', name=localized_name), QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No)
             if reply != QMessageBox.StandardButton.Yes:
                 return
             metadata = self.plugin_manager._read_plugins_metadata()
@@ -116,7 +121,7 @@ class PluginDisplayController:
             if hasattr(self.app, '_update_plugin_tabs'):
                 self.app._update_plugin_tabs()
             self.update_display()
-            self.feedback_manager.update_status(tr('plugins.plugin_deleted', name=plugin_name), UI_COLORS['status_success'])
+            self.feedback_manager.update_status(tr('plugins.plugin_deleted', name=localized_name), UI_COLORS['status_success'])
         except Exception as e:
             error_msg = str(e)
             logging.error(f'PluginDisplayController: Error deleting plugin {plugin_name}: {error_msg}', exc_info=True)

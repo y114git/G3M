@@ -74,12 +74,17 @@ class LibraryDisplayController:
                 reverse = not self.app.library_sort_ascending
                 filtered_mods.sort(key=lambda mod: mod.get('name', '').lower(), reverse=reverse)
         for mod_info in filtered_mods:
-            mod_data_check = self.mod_manager.create_mod_object_from_info(mod_info, getattr(self.app_state, 'all_mods', None))
-            if mod_data_check and (not self.mod_manager.mod_has_files_for_chapter(mod_data_check, selected_chapter_id)):
-                continue
-            is_local = mod_info.get('is_local_mod', False)
-            is_available = mod_info.get('is_available_on_server', True)
             mod_data = self.mod_manager.create_mod_object_from_info(mod_info, getattr(self.app_state, 'all_mods', None))
+            if not mod_data or not self.mod_manager.mod_has_files_for_chapter(mod_data, selected_chapter_id):
+                continue
+            is_local = mod_data.is_local
+            is_available = not mod_data.is_local
+            if not is_available and hasattr(self.app_state, 'all_mods') and self.app_state.all_mods:
+                gb_mod_id = mod_info.get('gamebanana_mod_id')
+                if gb_mod_id:
+                    is_available = any((mod for mod in self.app_state.all_mods if getattr(mod, 'gamebanana_mod_id', None) and str(getattr(mod, 'gamebanana_mod_id', None)) == str(gb_mod_id)))
+                if not is_available:
+                    is_available = mod_info.get('is_available_on_server', False)
             if mod_data:
                 mod_widget = InstalledModWidget(mod_data, is_local, is_available, parent=self.app)
                 mod_widget.clicked.connect(self.on_mod_clicked)
@@ -166,21 +171,28 @@ class LibraryDisplayController:
                     end = min(start + batch_size, len(mods))
                     for idx in range(start, end):
                         mod_info = mods[idx]
-                        is_local = mod_info.get('is_local_mod', False)
-                        is_available = mod_info.get('is_available_on_server', True)
+                        mod_data = self.mod_manager.create_mod_object_from_info(mod_info, getattr(self.app_state, 'all_mods', None))
+                        if not mod_data:
+                            continue
+                        is_local = mod_data.is_local
+                        is_available = not mod_data.is_local
+                        if not is_available and hasattr(self.app_state, 'all_mods') and self.app_state.all_mods:
+                            gb_mod_id = mod_info.get('gamebanana_mod_id')
+                            if gb_mod_id:
+                                is_available = any((mod for mod in self.app_state.all_mods if getattr(mod, 'gamebanana_mod_id', None) and str(getattr(mod, 'gamebanana_mod_id', None)) == str(gb_mod_id)))
+                            if not is_available:
+                                is_available = mod_info.get('is_available_on_server', False)
                         has_update = False
                         if not is_local and is_available and hasattr(self.app_state, 'all_mods') and self.app_state.all_mods:
-                            public_mod = next((mod for mod in self.app_state.all_mods if getattr(mod, 'key', None) == mod_info.get('key')), None)
+                            public_mod = next((mod for mod in self.app_state.all_mods if getattr(mod, 'mod_key', None) == mod_data.mod_key), None)
                             if public_mod:
                                 has_update = any((self.mod_manager.mod_has_files_for_chapter(public_mod, i) and self.mod_manager.get_mod_status(public_mod, i) == 'update' for i in range(5)))
-                        mod_data = self.mod_manager.create_mod_object_from_info(mod_info, getattr(self.app_state, 'all_mods', None))
-                        if mod_data:
-                            mod_widget = InstalledModWidget(mod_data, is_local, is_available, has_update, parent=self.app)
-                            mod_widget.clicked.connect(self.on_mod_clicked)
-                            mod_widget.remove_requested.connect(self.on_mod_remove)
-                            mod_widget.use_requested.connect(self.on_mod_use)
-                            self.app.installed_mods_layout.insertWidget(self.app.installed_mods_layout.count() - 1, mod_widget)
-                            mod_widget.show()
+                        mod_widget = InstalledModWidget(mod_data, is_local, is_available, has_update, parent=self.app)
+                        mod_widget.clicked.connect(self.on_mod_clicked)
+                        mod_widget.remove_requested.connect(self.on_mod_remove)
+                        mod_widget.use_requested.connect(self.on_mod_use)
+                        self.app.installed_mods_layout.insertWidget(self.app.installed_mods_layout.count() - 1, mod_widget)
+                        mod_widget.show()
                     batch_index = end
                     if end >= len(mods):
                         if self.app.installed_mods_layout.count() <= 1:

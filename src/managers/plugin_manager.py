@@ -289,7 +289,23 @@ class PluginManager(QObject):
                 error_msg = str(e)
                 logging.error(f"Failed to load plugin '{plugin_name}': {error_msg}", exc_info=True)
                 self._plugin_errors[plugin_name] = error_msg
-                self.plugin_error.emit(plugin_name, error_msg)
+                localized_name = plugin_name
+                try:
+                    plugin_info_from_file = {}
+                    self._extract_plugin_info_from_file(plugin_init_py_path, plugin_info_from_file)
+                    plugin_id = plugin_info_from_file.get('plugin_id', plugin_name)
+                    plugin_name_key = plugin_info_from_file.get('name_key')
+                    if plugin_name_key and (not plugin_name_key.startswith(f'{plugin_id}.')):
+                        prefixed_name_key = f'{plugin_id}.{plugin_name_key}'
+                    elif plugin_name_key:
+                        prefixed_name_key = plugin_name_key
+                    else:
+                        prefixed_name_key = None
+                    if prefixed_name_key:
+                        localized_name = tr(prefixed_name_key)
+                except Exception:
+                    pass
+                self.plugin_error.emit(localized_name, error_msg)
         self.plugins_loaded.emit()
 
     def update_plugin_tabs(self, main_tab_widget: QTabWidget, num_original_tabs: int = 4) -> Dict[int, Dict[str, Any]]:

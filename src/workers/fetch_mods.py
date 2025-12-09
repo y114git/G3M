@@ -182,14 +182,14 @@ class FetchModsThread(QThread):
             app_state = getattr(self.main_window, 'app_state', None)
             if app_state and hasattr(app_state, 'all_mods'):
                 for mod in app_state.all_mods:
-                    mod_key = getattr(mod, 'key', None)
+                    mod_key = getattr(mod, 'mod_key', None)
                     if mod_key and hasattr(mod, 'files') and mod.files:
                         existing_mods_with_files[mod_key] = mod
             all_mods_filtered = []
             for mod in all_mods:
                 if hasattr(mod, 'is_local_mod') and mod.is_local_mod:
                     continue
-                mod_key = getattr(mod, 'key', None)
+                mod_key = getattr(mod, 'mod_key', None)
                 if mod_key and mod_key in existing_mods_with_files:
                     existing_mod = existing_mods_with_files[mod_key]
                     for attr in ['name', 'author', 'tagline', 'game_version', 'description_url', 'downloads', 'icon_url', 'is_verified', 'gamebanana_mod_id', 'gamebanana_mod_type', 'gamebanana_last_update_timestamp']:
@@ -210,8 +210,8 @@ class FetchModsThread(QThread):
                 else:
                     all_mods_filtered.append(mod)
             for local_mod in local_mods:
-                mod_key = getattr(local_mod, 'key', None)
-                if mod_key and mod_key not in [getattr(m, 'key', None) for m in all_mods_filtered]:
+                mod_key = getattr(local_mod, 'mod_key', None)
+                if mod_key and mod_key not in [getattr(m, 'mod_key', None) for m in all_mods_filtered]:
                     all_mods_filtered.append(local_mod)
             app_state = getattr(self.main_window, 'app_state', None)
             if app_state:
@@ -397,7 +397,7 @@ class FetchModsThread(QThread):
         return True
 
     def _update_remote_exists_flags(self, all_mods: List[ModInfo]):
-        remote_mod_keys = {mod.key for mod in all_mods}
+        remote_mod_keys = {mod.mod_key for mod in all_mods}
         app_state = getattr(self.main_window, 'app_state', None)
         mod_manager = getattr(self.main_window, 'mod_manager', None)
         settings_manager = getattr(self.main_window, 'settings_manager', None)
