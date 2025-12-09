@@ -120,6 +120,7 @@ class ModOperationsController:
     def _start_install_thread(self, install_thread, op_id: int):
         try:
             self.app_state.is_installing = True
+            self.app_state._scan_blocked = True
             self.set_install_buttons_enabled(False)
             self.app.action_button.setText(tr('ui.cancel_button'))
             install_thread.progress.connect(lambda v, oid=op_id: self.on_install_progress_token(v, oid))
@@ -374,13 +375,16 @@ class ModOperationsController:
             except (AttributeError, OSError, shutil.Error) as e:
                 logging.debug(f'Failed to clean temp root: {e}', exc_info=True)
             self.app.game_launch.update_button_state()
+            self.app_state._scan_blocked = False
             return
         logging.info('ModOperationsController: Installation complete, invalidating mods cache and reloading local mods')
+        self.app_state._scan_blocked = False
         self._safe_execute(lambda: self.mod_manager.invalidate_mods_cache(), 'invalidate_mods_cache failed', default_return=None)
         try:
             self.mod_manager.load_local_mods()
             logging.info('ModOperationsController: Local mods reloaded after installation')
             self.mod_manager.mod_list_updated.emit()
+            QTimer.singleShot(100, lambda: self._safe_execute(lambda: self.app.search_display.update_search_plaques() if hasattr(self.app, 'search_display') else None, 'Failed to update search plaques'))
             self._safe_execute(lambda: self.app.search_display.update_search_plaques(), 'Failed to refresh plaques after cache reload')
             if installed_mod_info and hasattr(self.app_state, 'all_mods'):
                 if not self.app_state.all_mods:

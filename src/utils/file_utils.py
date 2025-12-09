@@ -146,7 +146,7 @@ def save_json(path: str, data: Dict, indent: int = 2) -> None:
     dir_path = os.path.dirname(path)
     if dir_path:
         os.makedirs(dir_path, exist_ok=True)
-    tmp = f'{path}.{os.getpid()}.{threading.get_ident()}.tmp'
+    tmp = os.path.join(dir_path, f'{os.path.basename(path)}.{os.getpid()}.{threading.get_ident()}.tmp') if dir_path else f'{path}.{os.getpid()}.{threading.get_ident()}.tmp'
     try:
         with open(tmp, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=indent, ensure_ascii=False)

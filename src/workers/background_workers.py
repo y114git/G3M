@@ -1296,6 +1296,15 @@ class ModScanThread(QThread):
             logging.debug(f'ModScanThread: Failed to save cache to {self.cache_file}: {e}')
 
     def run(self):
+        try:
+            if self.parent() and hasattr(self.parent(), 'app_state'):
+                app_state = self.parent().app_state
+                if hasattr(app_state, '_scan_blocked') and app_state._scan_blocked:
+                    logging.debug('ModScanThread: Scan blocked during installation, returning empty cache')
+                    self.scan_completed.emit({})
+                    return
+        except Exception as e:
+            logging.debug(f'ModScanThread: Could not check scan block status: {e}')
         disk_cache = {}
         cache = {}
         try:
@@ -1324,6 +1333,10 @@ class ModScanThread(QThread):
                     if not os.path.exists(config_path):
                         continue
                     try:
+                        config_size = os.path.getsize(config_path)
+                        if config_size == 0:
+                            logging.warning(f'ModScanThread: Corrupted config detected (0 bytes) in {config_path}, skipping mod')
+                            continue
                         config_mtime = os.path.getmtime(config_path)
                         mod_key = None
                         config_data = None
@@ -1352,12 +1365,12 @@ class ModScanThread(QThread):
                                 continue
                         mod_info = {'mod_key': mod_key, 'folder_path': folder_path, 'folder_name': folder_name, 'config_data': config_data, 'config_mtime': config_mtime}
                         cache[mod_key] = mod_info
-                    except OSError as e:
-                        safe_msg = sanitize_log_message(f'ModScanThread: failed to access config {config_path}: {e}')
+                    except (OSError, PermissionError) as e:
+                        safe_msg = sanitize_log_message(f'ModScanThread: Corrupted config detected (failed to access) in {config_path}: {e}')
                         logging.warning(safe_msg, exc_info=True)
                         continue
                     except json.JSONDecodeError as e:
-                        safe_msg = sanitize_log_message(f'ModScanThread: invalid JSON in {config_path}: {e}')
+                        safe_msg = sanitize_log_message(f'ModScanThread: Corrupted config detected (invalid JSON) in {config_path}: {e}')
                         logging.warning(safe_msg, exc_info=True)
                         continue
                     except KeyError as e:
@@ -1365,7 +1378,7 @@ class ModScanThread(QThread):
                         logging.debug(safe_msg)
                         continue
                     except Exception as e:
-                        safe_msg = sanitize_log_message(f'ModScanThread: unexpected error processing mod {folder_path}: {e}')
+                        safe_msg = sanitize_log_message(f'ModScanThread: Corrupted config detected (unexpected error) in {folder_path}: {e}')
                         logging.error(safe_msg, exc_info=True)
                         continue
         except OSError as e:

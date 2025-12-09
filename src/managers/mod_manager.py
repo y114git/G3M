@@ -77,6 +77,10 @@ class ModManager(QObject):
                     if not os.path.exists(config_path):
                         continue
                     try:
+                        config_size = os.path.getsize(config_path)
+                        if config_size == 0:
+                            logging.warning(f'_scan_mods_directory: Corrupted config detected (0 bytes) in {config_path}, skipping mod', extra={'mod_folder': folder_name, 'config_path': config_path})
+                            continue
                         config_mtime = os.path.getmtime(config_path)
                         mod_key = None
                         for old_key, old_info in old_cache.items():
@@ -105,11 +109,11 @@ class ModManager(QObject):
                                 if not hasattr(self, '_temp_mods_by_name'):
                                     self._temp_mods_by_name = {}
                                 self._temp_mods_by_name[mod_name.lower()] = mod_key
-                    except OSError as e:
-                        logging.warning(f'_scan_mods_directory: failed to access config {config_path}: {e}', exc_info=True, extra={'mod_folder': folder_name, 'config_path': config_path})
+                    except (OSError, PermissionError) as e:
+                        logging.warning(f'_scan_mods_directory: Corrupted config detected (failed to access) in {config_path}: {e}', exc_info=True, extra={'mod_folder': folder_name, 'config_path': config_path})
                         continue
                     except json.JSONDecodeError as e:
-                        logging.warning(f'_scan_mods_directory: invalid JSON in {config_path}: {e}', exc_info=True, extra={'mod_folder': folder_name, 'config_path': config_path, 'json_line': getattr(e, 'lineno', None), 'json_col': getattr(e, 'colno', None)})
+                        logging.warning(f'_scan_mods_directory: Corrupted config detected (invalid JSON) in {config_path}: {e}', exc_info=True, extra={'mod_folder': folder_name, 'config_path': config_path, 'json_line': getattr(e, 'lineno', None), 'json_col': getattr(e, 'colno', None)})
                         continue
                     except KeyError as e:
                         logging.debug(f'_scan_mods_directory: missing key in {config_path}: {e}', extra={'mod_folder': folder_name, 'config_path': config_path, 'missing_key': str(e)})
@@ -117,6 +121,56 @@ class ModManager(QObject):
         except OSError as e:
             logging.error(f'_scan_mods_directory: failed to list directory {self.app_state.mods_dir}: {e}', exc_info=True, extra={'mods_dir': self.app_state.mods_dir})
         return cache
+
+    def _cleanup_corrupted_mods(self) -> int:
+        if not os.path.exists(self.app_state.mods_dir):
+            return 0
+        removed_count = 0
+        try:
+            with os.scandir(self.app_state.mods_dir) as entries:
+                for entry in entries:
+                    if not entry.is_dir(follow_symlinks=False):
+                        continue
+                    folder_path = entry.path
+                    folder_name = entry.name
+                    config_path = os.path.join(folder_path, MOD_CONFIG_FILENAME)
+                    is_corrupted = False
+                    if not os.path.exists(config_path):
+                        legacy_config_path = os.path.join(folder_path, LEGACY_MOD_CONFIG_FILENAME)
+                        if not os.path.exists(legacy_config_path):
+                            is_corrupted = True
+                            logging.warning(f'_cleanup_corrupted_mods: Missing mod_config.json in {folder_name}, marking as corrupted')
+                    else:
+                        try:
+                            config_size = os.path.getsize(config_path)
+                            if config_size == 0:
+                                is_corrupted = True
+                                logging.warning(f'_cleanup_corrupted_mods: mod_config.json is 0 bytes in {folder_name}, marking as corrupted')
+                            else:
+                                try:
+                                    with open(config_path, 'r', encoding='utf-8') as f:
+                                        json.load(f)
+                                except (json.JSONDecodeError, OSError, PermissionError) as e:
+                                    is_corrupted = True
+                                    logging.warning(f'_cleanup_corrupted_mods: Invalid JSON in mod_config.json for {folder_name}: {e}, marking as corrupted')
+                        except (OSError, PermissionError) as e:
+                            is_corrupted = True
+                            logging.warning(f'_cleanup_corrupted_mods: Cannot access mod_config.json in {folder_name}: {e}, marking as corrupted')
+                    if is_corrupted:
+                        try:
+                            from utils.file_utils import safe_rmtree
+                            if safe_rmtree(folder_path):
+                                removed_count += 1
+                                logging.info(f'_cleanup_corrupted_mods: Removed corrupted mod folder: {folder_name}')
+                            else:
+                                logging.warning(f'_cleanup_corrupted_mods: Failed to remove corrupted mod folder: {folder_name}')
+                        except Exception as e:
+                            logging.error(f'_cleanup_corrupted_mods: Error removing corrupted mod folder {folder_name}: {e}', exc_info=True)
+        except OSError as e:
+            logging.error(f'_cleanup_corrupted_mods: Failed to scan mods directory: {e}', exc_info=True)
+        if removed_count > 0:
+            logging.info(f'_cleanup_corrupted_mods: Removed {removed_count} corrupted mod(s) during startup cleanup')
+        return removed_count
 
     def invalidate_mods_cache(self) -> None:
         with self._cache_lock:
@@ -481,6 +535,7 @@ class ModManager(QObject):
         if not os.path.exists(self.app_state.mods_dir):
             os.makedirs(self.app_state.mods_dir, exist_ok=True)
             return False
+        self._cleanup_corrupted_mods()
         if not _skip_conversion:
             conversion_happened = self.convert_legacy_mods()
             if conversion_happened:

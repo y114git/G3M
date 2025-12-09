@@ -24,6 +24,10 @@ class RefreshController:
 
     def refresh_mods_list(self, is_initial=False, language_combo=None, retranslate_callback=None, on_fetch_finished_kwargs=None):
         try:
+            if hasattr(self.app_state, '_scan_blocked') and self.app_state._scan_blocked:
+                if not is_initial:
+                    QTimer.singleShot(500, lambda: self.refresh_mods_list(is_initial=is_initial, language_combo=language_combo, retranslate_callback=retranslate_callback, on_fetch_finished_kwargs=on_fetch_finished_kwargs))
+                return
             if hasattr(self.app_state, 'cache_dir') and self.app_state.cache_dir:
                 try:
                     from utils.gamebanana_cache import GameBananaMetadataCache
