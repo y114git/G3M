@@ -514,7 +514,29 @@ class SearchDisplayController(QObject):
             self.update_display()
             return
         filters, sort_config = self._build_filters_and_sort()
-        self.app_state.filtered_mods = filter_and_sort_mods(self.app_state.all_mods, filters, sort_config)
+        if preserve_page and (not self.app_state.auto_sorting) and self.app_state.filtered_mods:
+            existing_filtered_keys = set()
+            for mod in self.app_state.filtered_mods:
+                mod_key = getattr(mod, 'mod_key', None)
+                if mod_key:
+                    existing_filtered_keys.add(mod_key)
+                elif hasattr(mod, 'gamebanana_mod_id') and mod.gamebanana_mod_id:
+                    existing_filtered_keys.add(f'gb_{mod.gamebanana_mod_id}')
+            new_mods_to_filter = []
+            for mod in self.app_state.all_mods:
+                mod_key = getattr(mod, 'mod_key', None)
+                if mod_key and mod_key in existing_filtered_keys:
+                    continue
+                if hasattr(mod, 'gamebanana_mod_id') and mod.gamebanana_mod_id:
+                    gb_key = f'gb_{mod.gamebanana_mod_id}'
+                    if gb_key in existing_filtered_keys:
+                        continue
+                new_mods_to_filter.append(mod)
+            if new_mods_to_filter:
+                new_filtered = filter_and_sort_mods(new_mods_to_filter, filters, sort_config=None)
+                self.app_state.filtered_mods = (self.app_state.filtered_mods or []) + new_filtered
+        else:
+            self.app_state.filtered_mods = filter_and_sort_mods(self.app_state.all_mods, filters, sort_config)
         if not preserve_page:
             self.app_state.current_page = 1
         else:

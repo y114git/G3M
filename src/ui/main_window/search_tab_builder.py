@@ -56,6 +56,7 @@ class SearchTabBuilder:
         filters_layout.setContentsMargins(0, 0, 0, 0)
         sort_combo = NoScrollComboBox()
         sort_combo.addItems([tr('ui.sort_by_downloads'), tr('ui.sort_by_update_date'), tr('ui.sort_by_creation_date')])
+        sort_combo.setCurrentIndex(1)
         filters_layout.addWidget(sort_combo)
         sort_order_btn = QPushButton('▼')
         sort_order_btn.setObjectName('sortOrderBtn')
@@ -162,6 +163,14 @@ class SearchTabBuilder:
         mods_per_page_spinbox.setStyleSheet('\n            QSpinBox {\n                font-size: 12px;\n                padding: 2px 5px;\n            }\n            QSpinBox::up-button, QSpinBox::down-button {\n                width: 0px;\n                border: none;\n            }\n        ')
         mods_per_page_spinbox.setToolTip(tr('ui.mods_per_page_tooltip'))
         mods_per_page_layout.addWidget(mods_per_page_spinbox)
+        auto_sorting_checkbox = QCheckBox(tr('ui.auto_sorting'))
+        auto_sorting_checkbox.setToolTip(tr('ui.auto_sorting_tooltip'))
+        auto_sorting_checkbox.setChecked(self.app_state.local_config.get('auto_sorting', False))
+        auto_sorting_checkbox.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
+        text_color = get_theme_color(self.app_state.local_config, 'text', 'white')
+        auto_sorting_style = f'\n            QCheckBox {{\n                color: {text_color};\n                font-size: 12px;\n                spacing: 5px;\n            }}\n            QCheckBox::indicator {{\n                width: 16px;\n                height: 16px;\n            }}\n        '
+        auto_sorting_checkbox.setStyleSheet(auto_sorting_style)
+        mods_per_page_layout.addWidget(auto_sorting_checkbox)
         pagination_layout.addLayout(mods_per_page_layout)
         self.widgets['prev_page_btn'] = prev_page_btn
         self.widgets['page_label'] = page_label
@@ -170,6 +179,7 @@ class SearchTabBuilder:
         self.widgets['mods_per_page_label'] = mods_per_page_label
         self.widgets['gb_sort_combo'] = gb_sort_combo
         self.widgets['gb_sort_label'] = gb_sort_label
+        self.widgets['auto_sorting_checkbox'] = auto_sorting_checkbox
         return pagination_widget
 
     def get_widgets(self) -> Dict[str, Any]:

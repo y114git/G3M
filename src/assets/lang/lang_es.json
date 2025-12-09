@@ -101,6 +101,8 @@
     "page_number": "Página {page}",
     "mods_per_page_label": "Mods por página:",
     "mods_per_page_tooltip": "Establece el número de mods a mostrar por página (5-1000)",
+    "auto_sorting": "Auto-ordenar",
+    "auto_sorting_tooltip": "Ordenar automáticamente los mods cuando se cargan nuevos. Cuando está desactivado, los nuevos mods se agregan al final sin reordenar.",
     "gamebanana_sort_label": "Ordenar GameBanana:",
     "gamebanana_sort_tooltip": "Selecciona cómo se debe ordenar el subfeed de GameBanana (afecta cómo se obtienen los mods de GameBanana)",
     "gamebanana_sort_default": "Predeterminado",

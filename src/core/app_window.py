@@ -480,8 +480,12 @@ class AppWindow(QWidget):
         self.mods_per_page_label = search_widgets['mods_per_page_label']
         self.gb_sort_combo = search_widgets['gb_sort_combo']
         self.gb_sort_label = search_widgets['gb_sort_label']
+        self.auto_sorting_checkbox = search_widgets['auto_sorting_checkbox']
         self.mods_per_page_spinbox.setValue(self.app_state.mods_per_page)
         self.mods_per_page_spinbox.valueChanged.connect(self._on_mods_per_page_changed)
+        self.auto_sorting_checkbox.stateChanged.connect(self._on_auto_sorting_changed)
+        self.app_state.auto_sorting = self.app_state.local_config.get('auto_sorting', False)
+        self.auto_sorting_checkbox.setChecked(self.app_state.auto_sorting)
         self.gb_sort_combo.setCurrentIndex(0)
         self.gb_sort_combo.currentIndexChanged.connect(self._on_gamebanana_sort_changed)
         self.sort_combo.currentIndexChanged.connect(self._on_search_sort_changed)
@@ -792,6 +796,19 @@ class AppWindow(QWidget):
             logging.info(f'Mods per page changed to {value}')
         except Exception as e:
             logging.error(f'Error in _on_mods_per_page_changed: {e}', exc_info=True)
+
+    def _on_auto_sorting_changed(self, state: int):
+        try:
+            from PyQt6.QtCore import Qt
+            is_checked = state == Qt.CheckState.Checked.value
+            self.app_state.auto_sorting = is_checked
+            self.app_state.local_config['auto_sorting'] = is_checked
+            self.settings_manager.write_local_config()
+            if is_checked:
+                self.search_display.update_filtered_mods(preserve_page=True)
+            logging.info(f'Auto-sorting changed to {is_checked}')
+        except Exception as e:
+            logging.error(f'Error in _on_auto_sorting_changed: {e}', exc_info=True)
 
     def _on_gamebanana_sort_changed(self, index: int):
         try:
@@ -1291,6 +1308,9 @@ class AppWindow(QWidget):
             self.gb_sort_combo.setItemText(1, tr('ui.gamebanana_sort_new'))
             self.gb_sort_combo.setItemText(2, tr('ui.gamebanana_sort_updated'))
             self.gb_sort_combo.setToolTip(tr('ui.gamebanana_sort_tooltip'))
+        if hasattr(self, 'auto_sorting_checkbox') and self.auto_sorting_checkbox:
+            self.auto_sorting_checkbox.setText(tr('ui.auto_sorting'))
+            self.auto_sorting_checkbox.setToolTip(tr('ui.auto_sorting_tooltip'))
         self.chapter_mode_checkbox.setText(tr('ui.chapter_mode'))
         self.full_install_checkbox.setText(tr('ui.full_install'))
         self.full_install_checkbox.setToolTip(self._full_install_tooltip())

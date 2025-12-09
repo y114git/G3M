@@ -101,6 +101,8 @@
     "page_number": "第 {page} 页",
     "mods_per_page_label": "每页模组数：",
     "mods_per_page_tooltip": "设置每页显示的模组数量（5-1000）",
+    "auto_sorting": "自动排序",
+    "auto_sorting_tooltip": "加载新模组时自动排序。禁用时，新模组将添加到末尾而不重新排序。",
     "gamebanana_sort_label": "GameBanana排序：",
     "gamebanana_sort_tooltip": "选择GameBanana订阅源的排序方式（影响从GameBanana如何获取模组）",
     "gamebanana_sort_default": "默认",

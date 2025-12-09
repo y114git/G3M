@@ -101,6 +101,8 @@
     "page_number": "Страница {page}",
     "mods_per_page_label": "Модов на странице:",
     "mods_per_page_tooltip": "Установите количество модов для отображения на странице (5-1000)",
+    "auto_sorting": "Автосортировка",
+    "auto_sorting_tooltip": "Автоматически сортировать моды при загрузке новых. При отключении новые моды добавляются в конец без пересортировки.",
     "gamebanana_sort_label": "Сорт. GameBanana:",
     "gamebanana_sort_tooltip": "Выберите, как должна сортироваться лента GameBanana (влияет на то, как моды загружаются с GameBanana)",
     "gamebanana_sort_default": "По умолчанию",

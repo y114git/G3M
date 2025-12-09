@@ -79,6 +79,7 @@ class AppState(QObject):
         self.gamebanana_loading: bool = False
         self.gamebanana_sort: str = 'default'
         self.gamebanana_mods_needing_metadata: List[str] = []
+        self.auto_sorting: bool = False
         self.has_internet: bool = True
         self.pending_announce_check: bool = False
         self.current_install_mod_identifier: Optional[str] = None
