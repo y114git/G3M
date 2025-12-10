@@ -45,7 +45,8 @@ def show_empty_message_in_layout(layout, text, local_config=None, font_size=16):
     empty_text_color = 'rgba(255, 255, 255, 178)'
     if local_config:
         empty_text_color = get_theme_color(local_config, 'version_text', empty_text_color)
-    empty_label = QLabel(text)
+    parent = layout.parentWidget() if hasattr(layout, 'parentWidget') else None
+    empty_label = QLabel(text, parent)
     empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
     empty_label.setStyleSheet(_EMPTY_MESSAGE_STYLE.format(color=empty_text_color, font_size=font_size))
     layout.insertWidget(layout.count() - 1, empty_label)

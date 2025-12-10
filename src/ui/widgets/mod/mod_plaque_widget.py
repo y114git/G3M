@@ -145,20 +145,20 @@ class ModPlaqueWidget(BaseModWidget):
             modgame_text = 'UNDERTALE Yellow'
             modgame_style = f'background-color: #FFD700; color: {text_color}; border: none;'
         if modgame_text:
-            modgame_label = QLabel(modgame_text)
+            modgame_label = QLabel(modgame_text, self)
             style_sheet = f'font-weight: bold; padding: 2px 5px; border-radius: 3px; {modgame_style}'
             modgame_label.setStyleSheet(style_sheet)
             tags_layout.addWidget(modgame_label)
         if self.mod_data.is_verified:
-            verified_label = QLabel(tr('ui.verified_label'))
+            verified_label = QLabel(tr('ui.verified_label'), self)
             verified_label.setStyleSheet('color: #4CAF50; font-size: 14px;')
             tags_layout.addWidget(verified_label)
         if hasattr(self.mod_data, 'is_gamebanana_mod') and self.mod_data.is_gamebanana_mod:
-            gb_label = QLabel('GameBanana 🍌')
+            gb_label = QLabel('GameBanana 🍌', self)
             gb_label.setStyleSheet('color: yellow; font-size: 14px;')
             gb_label.setToolTip(tr('ui.gamebanana_mod_tooltip'))
             tags_layout.addWidget(gb_label)
-            self.gb_status_label = QLabel()
+            self.gb_status_label = QLabel(self)
             self.gb_status_label.setObjectName('gbStatusLabel')
             tags_layout.addWidget(self.gb_status_label)
             self._update_gamebanana_status_label()
@@ -212,32 +212,32 @@ class ModPlaqueWidget(BaseModWidget):
         except Exception:
             downloads_value = getattr(self.mod_data, 'downloads', 0) or 0
             downloads_text = f'⤓ {downloads_value}'
-        self.downloads_label = QLabel(downloads_text)
+        self.downloads_label = QLabel(downloads_text, self)
         self.downloads_label.setObjectName('secondaryText')
         self.downloads_label.setToolTip(tr('ui.downloads_tooltip'))
         self.downloads_label.setAlignment(Qt.AlignmentFlag.AlignRight)
         self.title_layout.addWidget(self.downloads_label)
         created_date_text = self.mod_data.created_date or 'N/A'
-        created_container = QWidget()
+        created_container = QWidget(self)
         created_container_layout = QHBoxLayout(created_container)
         created_container_layout.setContentsMargins(0, 0, 0, 0)
         created_container_layout.setSpacing(0)
-        created_label_title = QLabel(tr('ui.created_label'))
+        created_label_title = QLabel(tr('ui.created_label'), created_container)
         created_label_title.setObjectName('primaryText')
-        created_label_value = QLabel(f' {created_date_text}')
+        created_label_value = QLabel(f' {created_date_text}', created_container)
         created_label_value.setObjectName('secondaryText')
         created_container_layout.addWidget(created_label_title)
         created_container_layout.addWidget(created_label_value)
         self.created_container = created_container
         self.created_label_title = created_label_title
         updated_date_text = self.mod_data.last_updated or 'N/A'
-        updated_container = QWidget()
+        updated_container = QWidget(self)
         updated_container_layout = QHBoxLayout(updated_container)
         updated_container_layout.setContentsMargins(0, 0, 0, 0)
         updated_container_layout.setSpacing(0)
-        updated_label_title = QLabel(tr('ui.updated_label'))
+        updated_label_title = QLabel(tr('ui.updated_label'), updated_container)
         updated_label_title.setObjectName('primaryText')
-        updated_label_value = QLabel(f' {updated_date_text}')
+        updated_label_value = QLabel(f' {updated_date_text}', updated_container)
         updated_label_value.setObjectName('secondaryText')
         updated_container_layout.addWidget(updated_label_title)
         updated_container_layout.addWidget(updated_label_value)
@@ -247,19 +247,19 @@ class ModPlaqueWidget(BaseModWidget):
         for i, container in enumerate(containers):
             self.metadata_layout.addWidget(container)
             if i < len(containers) - 1:
-                separator = QLabel('|')
+                separator = QLabel('|', self)
                 separator.setObjectName('secondaryText')
                 self.metadata_layout.addWidget(separator)
         self.metadata_layout.addStretch()
-        self.actions_widget = QWidget()
+        self.actions_widget = QWidget(self)
         actions_layout = QVBoxLayout(self.actions_widget)
         actions_layout.setContentsMargins(0, 0, 0, 0)
         actions_layout.setSpacing(5)
         actions_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.details_button = QPushButton(tr('ui.details_button'))
+        self.details_button = QPushButton(tr('ui.details_button'), self.actions_widget)
         self.details_button.setObjectName('plaqueButton')
         self.details_button.clicked.connect(lambda: self.details_requested.emit(self.mod_data))
-        self.install_button = QPushButton(tr('buttons.install'))
+        self.install_button = QPushButton(tr('buttons.install'), self.actions_widget)
         self.install_button.setObjectName('plaqueButtonInstall')
         self.install_button.clicked.connect(self._on_install_button_clicked)
         actions_layout.addWidget(self.details_button)

@@ -35,7 +35,7 @@ class ScreenshotsCarousel(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(8)
-        self.image_label = QLabel()
+        self.image_label = QLabel(self)
         fixed_w, fixed_h = (500, 280)
         self.setMaximumWidth(fixed_w)
         self.image_label.setFixedSize(fixed_w, fixed_h)
@@ -44,8 +44,8 @@ class ScreenshotsCarousel(QWidget):
         self.image_label.setStyleSheet('background-color: black; border: 1px solid #444;')
         self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         nav_layout = QHBoxLayout()
-        self.prev_btn = QPushButton('⮜')
-        self.next_btn = QPushButton('⮞')
+        self.prev_btn = QPushButton('⮜', self)
+        self.next_btn = QPushButton('⮞', self)
         self.prev_btn.setObjectName('carouselPrevButton')
         self.next_btn.setObjectName('carouselNextButton')
         self.setStyleSheet('\n            QPushButton#carouselPrevButton, QPushButton#carouselNextButton {\n                min-width: 34px; max-width: 34px;\n                min-height: 28px; max-height: 28px;\n                padding: 0px; margin: 0px;\n                font-size: 12px;\n            }\n            ')
@@ -82,7 +82,7 @@ class ScreenshotsCarousel(QWidget):
         if self.app_state and hasattr(self.app_state, 'local_config'):
             text_color = get_theme_color(self.app_state.local_config, 'text', 'white')
         for i in range(len(self.urls)):
-            lbl = QLabel('●' if i == self.index else '○')
+            lbl = QLabel('●' if i == self.index else '○', self)
             lbl.setStyleSheet(f'color: {text_color}; font-size: 14px;')
             self._dot_labels.append(lbl)
             self.dots_layout.addWidget(lbl)
