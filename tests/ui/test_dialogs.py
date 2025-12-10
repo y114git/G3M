@@ -55,7 +55,7 @@ class TestModPriorityDialog:
     def test_mod_priority_dialog_creation(self, qapp, app_state):
         from ui.dialogs.mod_priority_dialog import ModPriorityDialog
         from models.mod_models import ModInfo
-        mods_list = [ModInfo(key='test_mod_1', name='Test Mod 1', version='1.0.0', author='Author', tagline='', game_version='', description_url='', downloads=0, modgame='deltarune', is_verified=False)]
+        mods_list = [ModInfo(mod_key='test_mod_1', name='Test Mod 1', version='1.0.0', author='Author', tagline='', game_version='', description_url='', downloads=0, modgame='deltarune', is_verified=False)]
         dialog = ModPriorityDialog(mods_list, 1, app_state, None)
         assert dialog is not None
         assert isinstance(dialog, QDialog)

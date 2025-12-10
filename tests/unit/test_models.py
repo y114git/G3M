@@ -4,16 +4,16 @@ from models.mod_models import ModInfo, ModChapterData
 class TestModInfo:
 
     def test_mod_info_creation(self):
-        mod_info = ModInfo(key='test_mod', name='Test Mod', version='1.0.0', author='Test Author', tagline='Test tagline', game_version='1.0.0', description_url='', downloads=0, modgame='deltarune', is_verified=False)
-        assert mod_info.key == 'test_mod'
+        mod_info = ModInfo(mod_key='test_mod', name='Test Mod', version='1.0.0', author='Test Author', tagline='Test tagline', game_version='1.0.0', description_url='', downloads=0, modgame='deltarune', is_verified=False)
+        assert mod_info.mod_key == 'test_mod'
         assert mod_info.name == 'Test Mod'
         assert mod_info.version == '1.0.0'
         assert mod_info.author == 'Test Author'
 
     def test_mod_info_from_dict(self):
-        mod_data = {'key': 'test_mod_002', 'name': 'Test Mod 2', 'version': '2.0.0', 'author': 'Test Author', 'tagline': 'Test tagline', 'game_version': '1.0.0', 'description_url': '', 'downloads': 0, 'modgame': 'deltarune', 'is_verified': False}
+        mod_data = {'mod_key': 'test_mod_002', 'name': 'Test Mod 2', 'version': '2.0.0', 'author': 'Test Author', 'tagline': 'Test tagline', 'game_version': '1.0.0', 'description_url': '', 'downloads': 0, 'modgame': 'deltarune', 'is_verified': False}
         mod_info = ModInfo(**mod_data)
-        assert mod_info.key == 'test_mod_002'
+        assert mod_info.mod_key == 'test_mod_002'
         assert mod_info.name == 'Test Mod 2'
         assert mod_info.version == '2.0.0'
 

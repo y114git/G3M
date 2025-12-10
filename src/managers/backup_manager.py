@@ -34,7 +34,7 @@ class BackupManager:
                 name, ext = os.path.splitext(backup_filename)
                 backup_path = os.path.join(self.backup_dir, f'chapter_{chapter_id}_{name}_{counter}{ext}')
                 counter += 1
-            shutil.copy2(file_path, backup_path)
+            shutil.copyfile(file_path, backup_path)
             self.original_files[chapter_id][file_path] = backup_path
             self.patching_logger.info(f'[BACKUP] Backed up file: {file_path} -> {backup_path} (chapter {chapter_id})')
             return True
@@ -106,7 +106,7 @@ class BackupManager:
                 if target_dir and (not os.path.exists(target_dir)):
                     os.makedirs(target_dir, exist_ok=True)
                     self.patching_logger.debug(f'[RESTORE] Created target directory: {target_dir}')
-                shutil.copy2(backup_path, file_path)
+                shutil.copyfile(backup_path, file_path)
                 self.patching_logger.info(f'[RESTORE] Restored backup: {file_path} <- {backup_path} (chapter {chapter_id})')
             except Exception as e:
                 self.patching_logger.error(f'[RESTORE] Failed to restore backup {backup_path} to {file_path} (chapter {chapter_id}): {e}', exc_info=True)

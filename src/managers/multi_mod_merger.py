@@ -45,6 +45,8 @@ class MultiModMerger(QObject):
         self.backup_manager: Optional[BackupManager] = None
         self._cancelled = False
         self.resource_modification_history: Dict[str, List[Dict[str, Any]]] = {}
+        self._active_processes: List[subprocess.Popen] = []
+        self._temp_files_to_cleanup: List[str] = []
 
     def process_mod_merge(self, chapter_mods: Dict[int, List[Any]], is_modpack: bool, modpack_dir: Optional[str] = None) -> bool:
         clear_logs_enabled = self.app_state.local_config.get('clear_logs_on_startup', False)
@@ -270,7 +272,7 @@ class MultiModMerger(QObject):
         os.makedirs(vanilla_dir, exist_ok=True)
         original_filename = os.path.basename(original_data_win)
         vanilla_data_win = os.path.join(vanilla_dir, original_filename)
-        shutil.copy2(original_data_win, vanilla_data_win)
+        shutil.copyfile(original_data_win, vanilla_data_win)
         self.patching_logger.info(f'Created vanilla copy at {vanilla_data_win} (from {original_data_win})')
         if not is_modpack:
             self.patching_logger.info(f'Processing extra files for chapter {chapter_id} before patching and merging...')
@@ -308,7 +310,7 @@ class MultiModMerger(QObject):
                                 return False
                         else:
                             self.patching_logger.warning(f'[SINGLE_MOD] Could not extract chapter ID from path {target_dir}, backup may not work correctly')
-                        shutil.copy2(ready_file, output_data_win_path)
+                        shutil.copyfile(ready_file, output_data_win_path)
                         file_size = os.path.getsize(output_data_win_path) if os.path.exists(output_data_win_path) else 0
                         self.patching_logger.info(f'[SINGLE_MOD] Successfully copied ready data.win/game.ios from {mod_name} to {output_data_win_path} (size: {file_size} bytes, chapter {chapter_id})')
                         used_archive_names = set()
@@ -429,7 +431,7 @@ class MultiModMerger(QObject):
             os.makedirs(mod_dir, exist_ok=True)
             original_filename = os.path.basename(original_data_win)
             mod_data_win = os.path.join(mod_dir, original_filename)
-            shutil.copy2(original_data_win, mod_data_win)
+            shutil.copyfile(original_data_win, mod_data_win)
             ready_data_win_files = self._find_ready_data_win_files(mod_source_dir)
             data_patches = self._find_data_patches(mod_source_dir)
             csx_scripts = self._find_csx_scripts(mod_source_dir)
@@ -600,7 +602,7 @@ class MultiModMerger(QObject):
             original_filename = os.path.basename(original_data_win)
             base_data_win = os.path.join(base_mod_dir, original_filename)
             os.makedirs(base_mod_dir, exist_ok=True)
-            shutil.copy2(original_data_win, base_data_win)
+            shutil.copyfile(original_data_win, base_data_win)
             mod_patched_files[base_mod_number] = base_data_win
         self.patching_logger.info(f'Importing all assets into base file (mod {base_mod_number})')
         chapter_file = os.path.join(cache_running_dir, 'chapterNumber.txt')
@@ -732,7 +734,7 @@ class MultiModMerger(QObject):
         else:
             final_output_path = output_data_win_path
         try:
-            shutil.copy2(base_data_win, final_output_path)
+            shutil.copyfile(base_data_win, final_output_path)
             self.patching_logger.info(f'Copied merged data.win to {final_output_path}')
         except Exception as e:
             self.patching_logger.error(f'Failed to copy merged data.win: {e}')
@@ -831,8 +833,10 @@ class MultiModMerger(QObject):
                 self.patching_logger.error(f'Patch file does not exist: {patch_path}')
                 self.status_update.emit(tr('errors.xdelta_patch_failed', patch=os.path.basename(patch_path)), 'error')
                 return False
+            temp_output = None
             try:
                 temp_output = data_win_path + '.tmp'
+                self._temp_files_to_cleanup.append(temp_output)
                 temp_dir = os.path.dirname(temp_output)
                 if not os.access(temp_dir, os.W_OK):
                     self.patching_logger.error(f'Temp directory is not writable: {temp_dir}')
@@ -847,11 +851,18 @@ class MultiModMerger(QObject):
                     startupinfo.dwFlags |= sp.STARTF_USESHOWWINDOW
                     startupinfo.wShowWindow = sp.SW_HIDE
                     creationflags = sp.CREATE_NO_WINDOW
-                result = subprocess.run(cmd, capture_output=True, text=True, timeout=300, stdin=subprocess.DEVNULL, startupinfo=startupinfo, creationflags=creationflags)
+                process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, stdin=subprocess.DEVNULL, startupinfo=startupinfo, creationflags=creationflags)
+                self._active_processes.append(process)
+                try:
+                    stdout, stderr = process.communicate(timeout=300)
+                    returncode = process.returncode
+                finally:
+                    if process in self._active_processes:
+                        self._active_processes.remove(process)
                 if progress_callback:
                     progress_callback((idx + 1) / total_patches if total_patches > 0 else 1.0)
-                if result.returncode != 0:
-                    error_msg = result.stderr.strip() if result.stderr else 'Unknown error'
+                if returncode != 0:
+                    error_msg = stderr.strip() if stderr else 'Unknown error'
                     if 'checksum mismatch' in error_msg.lower() or 'XD3_INVALID_INPUT' in error_msg:
                         detailed_error = f'[XDELTA] Patch "{os.path.basename(patch_path)}" failed: checksum mismatch. This usually means the patch was created for the original data.win, but the file has already been modified by previous mods. The patch cannot be applied to a modified file.\nError details: {error_msg}'
                         self.patching_logger.error(detailed_error)
@@ -867,12 +878,24 @@ class MultiModMerger(QObject):
                     return False
                 if not safe_move(temp_output, data_win_path):
                     raise OSError(f'Failed to move patched file from {temp_output} to {data_win_path}')
+                if temp_output in self._temp_files_to_cleanup:
+                    self._temp_files_to_cleanup.remove(temp_output)
                 self.patching_logger.info(f'Patch {idx + 1}/{total_patches} applied successfully')
             except subprocess.TimeoutExpired:
                 self.patching_logger.error(f'xdelta patch timed out after 300 seconds: {patch_path}')
+                if temp_output and os.path.exists(temp_output):
+                    try:
+                        safe_remove(temp_output)
+                    except Exception:
+                        pass
                 return False
             except Exception as e:
                 self.patching_logger.error(f'xdelta patch error: {e}', exc_info=True)
+                if temp_output and os.path.exists(temp_output):
+                    try:
+                        safe_remove(temp_output)
+                    except Exception:
+                        pass
                 return False
         self.patching_logger.info('All patches applied successfully')
         return True
@@ -2091,7 +2114,34 @@ class MultiModMerger(QObject):
             return -1
         return None
 
+    def cleanup_processes_and_temp_files(self) -> None:
+        for process in list(self._active_processes):
+            try:
+                if process.poll() is None:
+                    self.patching_logger.warning(f'Terminating active xdelta process (PID: {process.pid})')
+                    process.terminate()
+                    try:
+                        process.wait(timeout=2)
+                    except subprocess.TimeoutExpired:
+                        self.patching_logger.warning(f'Force killing xdelta process (PID: {process.pid})')
+                        process.kill()
+                        process.wait()
+            except OSError as e:
+                self.patching_logger.debug(f'Error terminating process: {e}')
+            except Exception as e:
+                self.patching_logger.debug(f'Unexpected error during process cleanup: {e}')
+        self._active_processes.clear()
+        for temp_file in list(self._temp_files_to_cleanup):
+            try:
+                if os.path.exists(temp_file):
+                    safe_remove(temp_file)
+                    self.patching_logger.debug(f'Cleaned up temp file: {temp_file}')
+            except Exception as e:
+                self.patching_logger.debug(f'Error cleaning up temp file {temp_file}: {e}')
+        self._temp_files_to_cleanup.clear()
+
     def cleanup(self, force: bool = False) -> None:
+        self.cleanup_processes_and_temp_files()
         has_backups = False
         if self.backup_manager:
             has_backups = bool(self.backup_manager.original_files)

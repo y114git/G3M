@@ -20,7 +20,7 @@ class TestModWidgets:
         from ui.widgets.mod.installed_mod_widget import InstalledModWidget
         from models.mod_models import ModInfo
         from unittest.mock import patch
-        mod_data = ModInfo(key='test_mod', name='Test Mod', version='1.0.0', author='Test Author', tagline='Test tagline', game_version='', description_url='', downloads=0, modgame='deltarune', is_verified=False)
+        mod_data = ModInfo(mod_key='test_mod', name='Test Mod', version='1.0.0', author='Test Author', tagline='Test tagline', game_version='', description_url='', downloads=0, modgame='deltarune', is_verified=False)
         with patch('ui.widgets.mod.base_mod_widget.load_mod_icon_universal'):
             widget = InstalledModWidget(mod_data, parent=None)
             assert widget is not None
@@ -35,7 +35,7 @@ class TestModWidgets:
         from models.mod_models import ModInfo
         from unittest.mock import patch
         from utils.ui_utils import safe_stop_thread
-        mod_data = ModInfo(key='test_mod', name='Test Mod', version='1.0.0', author='Test Author', tagline='Test tagline', game_version='', description_url='', downloads=0, modgame='deltarune', is_verified=False)
+        mod_data = ModInfo(mod_key='test_mod', name='Test Mod', version='1.0.0', author='Test Author', tagline='Test tagline', game_version='', description_url='', downloads=0, modgame='deltarune', is_verified=False)
         mod_data.is_gamebanana_mod = False
         with patch('ui.widgets.mod.base_mod_widget.load_mod_icon_universal'):
             widget = ModPlaqueWidget(mod_data, parent=None)

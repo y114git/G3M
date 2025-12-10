@@ -97,6 +97,8 @@ class ModManager(QObject):
                         if mod_key is None or mod_key not in cache:
                             with open(config_path, 'r', encoding='utf-8') as f:
                                 config_data = json.load(f)
+                            if not self._validate_mod_config(config_data, config_path, folder_name):
+                                continue
                             mod_key = config_data.get('mod_key') or ''
                             if not mod_key:
                                 cache_key = f'__no_key_{folder_path}'
@@ -121,6 +123,17 @@ class ModManager(QObject):
         except OSError as e:
             logging.error(f'_scan_mods_directory: failed to list directory {self.app_state.mods_dir}: {e}', exc_info=True, extra={'mods_dir': self.app_state.mods_dir})
         return cache
+
+    def _validate_mod_config(self, config_data: dict, config_path: str, folder_name: str) -> bool:
+        if not isinstance(config_data, dict):
+            logging.warning(f'_validate_mod_config: Config is not a dictionary in {config_path}, skipping mod', extra={'mod_folder': folder_name, 'config_path': config_path})
+            return False
+        has_name = bool(config_data.get('name'))
+        has_mod_key = bool(config_data.get('mod_key'))
+        if not has_name and (not has_mod_key):
+            logging.warning(f'_validate_mod_config: Config missing both name and mod_key in {config_path}, skipping mod', extra={'mod_folder': folder_name, 'config_path': config_path})
+            return False
+        return True
 
     def _cleanup_corrupted_mods(self) -> int:
         if not os.path.exists(self.app_state.mods_dir):

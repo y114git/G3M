@@ -19,7 +19,7 @@ class TestModUtils:
         class ModObject:
 
             def __init__(self):
-                self.key = 'test_key_004'
+                self.mod_key = 'test_key_004'
         mod_obj = ModObject()
         assert get_mod_key(mod_obj) == 'test_key_004'
 

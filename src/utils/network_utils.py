@@ -21,12 +21,16 @@ def mask_url(url: str) -> str:
         return url
     try:
         parsed = urlparse(url)
+        has_query = bool(parsed.query)
+        has_fragment = bool(parsed.fragment)
+        query_suffix = '?[QUERY_PARAMS]' if has_query else ''
+        fragment_suffix = '#[FRAGMENT]' if has_fragment else ''
         if '/api/' in parsed.path.lower() or '/functions/' in parsed.path.lower() or 'cloudfunctions' in parsed.netloc.lower():
-            return f'{parsed.scheme}://[HIDDEN_DOMAIN]/[API_ENDPOINT]'
+            return f'{parsed.scheme}://[HIDDEN_DOMAIN]/[API_ENDPOINT]{query_suffix}{fragment_suffix}'
         elif parsed.path and parsed.path != '/':
-            return f'{parsed.scheme}://[HIDDEN_DOMAIN]/[PATH]'
+            return f'{parsed.scheme}://[HIDDEN_DOMAIN]/[PATH]{query_suffix}{fragment_suffix}'
         else:
-            return f'{parsed.scheme}://[HIDDEN_DOMAIN]/[ROOT]'
+            return f'{parsed.scheme}://[HIDDEN_DOMAIN]/[ROOT]{query_suffix}{fragment_suffix}'
     except Exception:
         return '[INVALID_URL]'
 
@@ -34,10 +38,10 @@ def mask_url(url: str) -> str:
 def mask_api_key(text: str) -> str:
     if not text or not isinstance(text, str):
         return str(text) if text else ''
-    patterns = [('key["\\\']?\\s*[:=]\\s*["\\\']?([a-zA-Z0-9_-]{10,})', 'key="[MASKED]"'), ('token["\\\']?\\s*[:=]\\s*["\\\']?([a-zA-Z0-9_-]{10,})', 'token="[MASKED]"'), ('secret["\\\']?\\s*[:=]\\s*["\\\']?([a-zA-Z0-9_-]{10,})', 'secret="[MASKED]"'), ('password["\\\']?\\s*[:=]\\s*["\\\']?([^\\s"\\\']+)', 'password="[MASKED]"'), ('api[_-]?key["\\\']?\\s*[:=]\\s*["\\\']?([a-zA-Z0-9_-]{10,})', 'api_key="[MASKED]"')]
+    patterns = [('(?:["\\\']?key["\\\']?\\s*[:=]\\s*["\\\']?)([a-zA-Z0-9_-]{10,})', 'key="[MASKED]"'), ('(?:["\\\']?token["\\\']?\\s*[:=]\\s*["\\\']?)([a-zA-Z0-9_-]{10,})', 'token="[MASKED]"'), ('(?:["\\\']?secret["\\\']?\\s*[:=]\\s*["\\\']?)([a-zA-Z0-9_-]{10,})', 'secret="[MASKED]"'), ('(?:["\\\']?password["\\\']?\\s*[:=]\\s*["\\\']?)([^\\s"\\\']+)', 'password="[MASKED]"'), ('(?:["\\\']?api[_-]?key["\\\']?\\s*[:=]\\s*["\\\']?)([a-zA-Z0-9_-]{10,})', 'api_key="[MASKED]"'), ('(?:["\\\']?auth[_-]?token["\\\']?\\s*[:=]\\s*["\\\']?)([a-zA-Z0-9_-]{10,})', 'auth_token="[MASKED]"'), ('(?:["\\\']?access[_-]?token["\\\']?\\s*[:=]\\s*["\\\']?)([a-zA-Z0-9_-]{10,})', 'access_token="[MASKED]"'), ('[?&](?:key|token|secret|password|api[_-]?key|auth[_-]?token|access[_-]?token)=([a-zA-Z0-9_-]{10,})', '?[PARAM]=[MASKED]'), ('(?:^|\\n)(?:key|token|secret|password|api[_-]?key|auth[_-]?token|access[_-]?token)\\s*:\\s*([a-zA-Z0-9_-]{10,})', '[HEADER]: [MASKED]')]
     masked = text
     for pattern, replacement in patterns:
-        masked = re.sub(pattern, replacement, masked, flags=re.IGNORECASE)
+        masked = re.sub(pattern, replacement, masked, flags=re.IGNORECASE | re.MULTILINE)
     return masked
 
 
@@ -72,6 +76,8 @@ def _build_session() -> requests.Session:
     from config.constants import LAUNCHER_VERSION, BROWSER_HEADERS
     urllib3_logger = logging.getLogger('urllib3.connectionpool')
     urllib3_logger.setLevel(logging.ERROR)
+    requests_logger = logging.getLogger('requests')
+    requests_logger.setLevel(logging.WARNING)
     session = requests.Session()
     headers = dict(BROWSER_HEADERS or {})
     headers.setdefault('User-Agent', f'DELTAHUB/{LAUNCHER_VERSION}')

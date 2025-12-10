@@ -15,7 +15,7 @@ from managers.localization_manager import localization_manager, tr
 from models.game_modes import FullGameMode, DemoGameMode, UndertaleGameMode, UndertaleYellowGameMode
 from config.constants import UI_COLORS, SOCIAL_LINKS, ONLINE_UPDATE_INTERVAL, INITIALIZATION_TIMEOUT, THREAD_WAIT_TIMEOUT, SLOT_ID_UNIVERSAL
 from utils.game_utils import is_game_running
-from utils.ui_utils import safe_stop_thread
+from utils.ui_utils import safe_stop_thread, DebounceTimer
 from utils.path_utils import get_user_data_root, resource_path, get_launcher_dir, get_user_plugins_dir
 from workers.background_workers import PresenceWorker, FetchChangelogWorker
 from controllers.mod_operations_controller import ModOperationsController
@@ -146,6 +146,7 @@ class AppWindow(QWidget):
         self.customization_manager = CustomizationManager(self.app_state, self)
         self.slot_manager = UsedModsManager(self.app_state, self.mod_manager, self.feedback_manager, self.settings_manager, self)
         self.slot_manager.used_mods_updated.connect(self._on_slot_manager_used_mods_updated)
+        self._load_used_mods_debounce = DebounceTimer(delay_ms=200)
         self.shortcut_manager = ShortcutManager(self.app_state, self.feedback_manager, self.mod_manager, self)
         self.shortcut_manager.shortcut_created.connect(lambda path: self.feedback_manager.update_status(tr('status.shortcut_created', path=path), UI_COLORS['status_success']))
         self.shortcut_manager.status_changed.connect(self.feedback_manager.update_status)
@@ -164,7 +165,7 @@ class AppWindow(QWidget):
         self.refresh_controller = RefreshController(self.app_state, self.feedback_manager, self.mod_manager, self.slot_manager, self.game_launch, self.update_checker, self.settings_manager, app_window=self)
         self.mod_manager.mod_list_updated.connect(self.library_display.update_display)
         self.mod_manager.mod_list_updated.connect(self.slot_manager._retry_load_missing_mods)
-        self.mod_manager.mod_list_updated.connect(lambda: QTimer.singleShot(200, self.slot_manager.load_used_mods_state))
+        self.mod_manager.mod_list_updated.connect(lambda: self._load_used_mods_debounce.call(self.slot_manager.load_used_mods_state))
         self.slot_manager.used_mod_changed.connect(lambda chapter_id: self.game_launch.update_button_state())
         self.slot_manager.used_mod_changed.connect(lambda chapter_id: self.library_display._update_priority_button_visibility(chapter_id) if hasattr(self.library_display, '_update_priority_button_visibility') else None)
         self.slot_manager.action_button_update_needed.connect(self.game_launch.update_button_state)
@@ -263,8 +264,7 @@ class AppWindow(QWidget):
                         self.plugin_display.update_display()
                     if self.mod_manager:
                         self.mod_manager.invalidate_mods_cache()
-                        self.mod_manager.load_local_mods(_skip_conversion=True)
-                        self.mod_manager.mod_list_updated.emit()
+                        QTimer.singleShot(0, lambda: (self.mod_manager.load_local_mods(_skip_conversion=True), self.mod_manager.mod_list_updated.emit()))
                     if hasattr(self, 'library_display'):
                         self.library_display.update_display()
                     if hasattr(self, 'search_display'):
@@ -316,7 +316,7 @@ class AppWindow(QWidget):
             logging.error(f'Shortcut settings read error: {e}')
             raise ShortcutLaunchError('Failed to read shortcut settings')
         self._load_local_data()
-        self.mod_manager.load_local_mods()
+        QTimer.singleShot(0, self.mod_manager.load_local_mods)
         try:
             if settings.get('is_undertaleyellow_mode', False):
                 self.app_state.game_mode = UndertaleYellowGameMode()
@@ -1067,11 +1067,11 @@ class AppWindow(QWidget):
                 with self.mod_manager._cache_lock:
                     self.mod_manager._mods_cache = scan_cache
                     self.mod_manager._mods_cache_valid = True
-            self.mod_manager.load_local_mods()
+            QTimer.singleShot(0, self.mod_manager.load_local_mods)
             saved_chapter_mode = self.app_state.local_config.get('chapter_mode_enabled', False)
             self.setEnabled(False)
             QTimer.singleShot(500, lambda: (self._load_mods_and_build_list_synchronously(saved_chapter_mode), self.setEnabled(True)))
-            QTimer.singleShot(1000, self.slot_manager.load_used_mods_state)
+            self._load_used_mods_debounce.call(self.slot_manager.load_used_mods_state)
         except Exception as e:
             logging.error(f'AppWindow: Error in _on_mod_scan_finished: {e}', exc_info=True)
             self.feedback_manager.update_status(tr('status.mod_scan_error', details=str(e)), UI_COLORS['status_error'])
@@ -1488,6 +1488,25 @@ class AppWindow(QWidget):
                 self._safe_set_parent_none(self.presence_thread)
                 safe_stop_thread(self.presence_thread, timeout=2000, blocking=False)
             self.game_launcher._cleanup_direct_launch_files()
+            if hasattr(self.game_launcher, 'multi_mod_merger'):
+                self.game_launcher.multi_mod_merger.cleanup_processes_and_temp_files()
+            try:
+                import psutil
+                current_process = psutil.Process(os.getpid())
+                children = current_process.children(recursive=True)
+                for child in children:
+                    try:
+                        child.terminate()
+                    except (psutil.NoSuchProcess, psutil.AccessDenied):
+                        pass
+                gone, alive = psutil.wait_procs(children, timeout=1)
+                for proc in alive:
+                    try:
+                        proc.kill()
+                    except (psutil.NoSuchProcess, psutil.AccessDenied):
+                        pass
+            except Exception as e:
+                logging.debug(f'Error cleaning up child processes: {e}')
             self.settings_manager.save_window_geometry(self)
             QApplication.processEvents()
             self.hide()

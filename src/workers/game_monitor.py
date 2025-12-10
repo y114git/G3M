@@ -12,6 +12,12 @@ class GameMonitorWorker(QObject):
         super().__init__(parent)
         self.process = process
         self.vanilla_mode = vanilla_mode
+        self.game_pid = None
+        if process and hasattr(process, 'pid'):
+            try:
+                self.game_pid = process.pid
+            except (AttributeError, ValueError):
+                pass
 
     @pyqtSlot()
     def run(self):
@@ -35,7 +41,7 @@ class GameMonitorWorker(QObject):
                 if current_thread and current_thread.isInterruptionRequested():
                     logging.debug('GameMonitorWorker.run: interruption requested, stopping')
                     return
-                if is_game_running():
+                if is_game_running(self.game_pid):
                     consecutive_checks += 1
                     if consecutive_checks >= 3:
                         game_appeared = True
@@ -47,14 +53,14 @@ class GameMonitorWorker(QObject):
                 self.finished.emit(self.vanilla_mode)
                 return
             time.sleep(3)
-            while is_game_running():
+            while is_game_running(self.game_pid):
                 current_thread = QThread.currentThread()
                 if current_thread and current_thread.isInterruptionRequested():
                     logging.debug('GameMonitorWorker.run: interruption requested during game monitoring')
                     return
                 time.sleep(1)
             time.sleep(2)
-            if not is_game_running():
+            if not is_game_running(self.game_pid):
                 logging.info('[GAME_MONITOR] Game is no longer running, emitting finished signal')
                 self.finished.emit(self.vanilla_mode)
         except Exception as e:

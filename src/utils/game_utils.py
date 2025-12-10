@@ -8,7 +8,12 @@ if TYPE_CHECKING:
     from models.game_modes import GameMode
 
 
-def is_game_running():
+def is_game_running(pid: Optional[int] = None):
+    if pid is not None:
+        try:
+            return psutil.pid_exists(pid)
+        except (psutil.NoSuchProcess, psutil.AccessDenied, ValueError):
+            return False
     return any((proc.info['name'] in GAME_PROCESS_NAMES for proc in psutil.process_iter(['name'])))
 
 

@@ -29,7 +29,10 @@ class ScreenshotsCarousel(QWidget):
             self._update_nav_state()
 
     def _cleanup(self):
-        pass
+        if hasattr(self, '_images'):
+            for i in range(len(self._images)):
+                self._images[i] = None
+            self._images.clear()
 
     def _init_ui(self):
         layout = QVBoxLayout(self)
@@ -92,12 +95,14 @@ class ScreenshotsCarousel(QWidget):
             return
         self.index = (self.index - 1) % len(self.urls)
         self._show_current()
+        self._unload_distant_images()
 
     def _next(self):
         if not self.urls:
             return
         self.index = (self.index + 1) % len(self.urls)
         self._show_current()
+        self._unload_distant_images()
 
     def _update_nav_state(self):
         count = len(self.urls)
@@ -169,6 +174,7 @@ class ScreenshotsCarousel(QWidget):
         self._set_pixmap(img)
         self._preload_neighbor(self.index - 1)
         self._preload_neighbor(self.index + 1)
+        self._unload_distant_images()
 
     def _preload_neighbor(self, idx: int):
         if not self.urls:
@@ -196,6 +202,15 @@ class ScreenshotsCarousel(QWidget):
         signals.error.connect(on_preload_error)
         loader = ImageLoaderRunnable(self.urls[idx], signals)
         self._thread_pool.start(loader)
+
+    def _unload_distant_images(self):
+        if not hasattr(self, '_images') or not self.urls:
+            return
+        for i in range(len(self._images)):
+            distance = abs(i - self.index)
+            wrap_distance = min(distance, abs(i - self.index + len(self.urls)), abs(i - self.index - len(self.urls)))
+            if wrap_distance > 1 and self._images[i] is not None:
+                self._images[i] = None
 
     def _set_pixmap(self, qimg: QImage):
         try:
