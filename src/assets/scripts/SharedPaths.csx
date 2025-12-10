@@ -107,7 +107,9 @@ ImportContext PrepareImportContext()
     if (inputRoot == null)
     {
         if (string.IsNullOrWhiteSpace(chapterNo) || string.IsNullOrWhiteSpace(modNo))
+        {
             throw new ScriptException("chapterNumber/modNumbersCache missing in /output/Cache/running/.");
+        }
 
         string modRoot = Path.Combine(deltahubRoot, "output", "xDeltaCombiner", chapterNo, modNo);
         inputRoot = Path.Combine(modRoot, "Objects");

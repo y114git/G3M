@@ -85,7 +85,6 @@ string codeFolder = Path.Combine(outputRoot, "CodeEntries");
 string sprFolder = Path.Combine(outputRoot, "Sprites");
 string fntFolder = Path.Combine(outputRoot, "Fonts");
 string bgrFolder = Path.Combine(outputRoot, "Backgrounds");
-string roomsOut = Path.Combine(outputRoot, "Rooms");
 string shadersOut = Path.Combine(outputRoot, "Shaders");
 string soundsOut = Path.Combine(outputRoot, "Sounds");
 
@@ -93,7 +92,6 @@ Directory.CreateDirectory(codeFolder);
 Directory.CreateDirectory(sprFolder);
 Directory.CreateDirectory(fntFolder);
 Directory.CreateDirectory(bgrFolder);
-Directory.CreateDirectory(roomsOut);
 Directory.CreateDirectory(shadersOut);
 Directory.CreateDirectory(soundsOut);
 
@@ -123,163 +121,6 @@ void WriteJsonNumber(StringBuilder sb, int value) => sb.Append(value);
 void WriteJsonNumber(StringBuilder sb, uint value) => sb.Append(value);
 void WriteJsonNumber(StringBuilder sb, float value) => sb.Append(value.ToString("G9"));
 void WriteJsonNumber(StringBuilder sb, double value) => sb.Append(value.ToString("G9"));
-
-void ExportRoom(UndertaleRoom room, string outputPath)
-{
-    var sb = new StringBuilder();
-    sb.AppendLine("{");
-
-    WriteJsonString(sb, "name"); sb.Append(": "); WriteJsonString(sb, room.Name?.Content ?? ""); sb.AppendLine(",");
-    WriteJsonString(sb, "width"); sb.Append(": "); WriteJsonNumber(sb, room.Width); sb.AppendLine(",");
-    WriteJsonString(sb, "height"); sb.Append(": "); WriteJsonNumber(sb, room.Height); sb.AppendLine(",");
-    WriteJsonString(sb, "speed"); sb.Append(": "); WriteJsonNumber(sb, room.Speed); sb.AppendLine(",");
-    WriteJsonString(sb, "persistent"); sb.Append(": "); WriteJsonBool(sb, room.Persistent); sb.AppendLine(",");
-    WriteJsonString(sb, "backgroundColor"); sb.Append(": "); WriteJsonNumber(sb, (int)(room.BackgroundColor & 0xFFFFFF)); sb.AppendLine(",");
-    WriteJsonString(sb, "drawBackgroundColor"); sb.Append(": "); WriteJsonBool(sb, room.DrawBackgroundColor); sb.AppendLine(",");
-    WriteJsonString(sb, "creationCodeId"); sb.Append(": "); WriteJsonString(sb, room.CreationCodeId?.Name?.Content); sb.AppendLine(",");
-    WriteJsonString(sb, "flags"); sb.Append(": "); WriteJsonNumber(sb, (int)room.Flags); sb.AppendLine(",");
-    WriteJsonString(sb, "world"); sb.Append(": "); WriteJsonBool(sb, room.World); sb.AppendLine(",");
-    WriteJsonString(sb, "top"); sb.Append(": "); WriteJsonNumber(sb, room.Top); sb.AppendLine(",");
-    WriteJsonString(sb, "left"); sb.Append(": "); WriteJsonNumber(sb, room.Left); sb.AppendLine(",");
-    WriteJsonString(sb, "right"); sb.Append(": "); WriteJsonNumber(sb, room.Right); sb.AppendLine(",");
-    WriteJsonString(sb, "bottom"); sb.Append(": "); WriteJsonNumber(sb, room.Bottom); sb.AppendLine(",");
-    WriteJsonString(sb, "gravityX"); sb.Append(": "); WriteJsonNumber(sb, room.GravityX); sb.AppendLine(",");
-    WriteJsonString(sb, "gravityY"); sb.Append(": "); WriteJsonNumber(sb, room.GravityY); sb.AppendLine(",");
-    WriteJsonString(sb, "metersPerPixel"); sb.Append(": "); WriteJsonNumber(sb, room.MetersPerPixel); sb.AppendLine(",");
-
-    WriteJsonString(sb, "backgrounds"); sb.Append(": [");
-    bool first = true;
-    foreach (var bg in room.Backgrounds)
-    {
-        if (!first) sb.Append(",");
-        first = false;
-        sb.AppendLine();
-        sb.Append("    {");
-        WriteJsonString(sb, "enabled"); sb.Append(": "); WriteJsonBool(sb, bg.Enabled); sb.Append(",");
-        WriteJsonString(sb, "foreground"); sb.Append(": "); WriteJsonBool(sb, bg.Foreground); sb.Append(",");
-        WriteJsonString(sb, "backgroundDefinition"); sb.Append(": "); WriteJsonString(sb, bg.BackgroundDefinition?.Name?.Content); sb.Append(",");
-        WriteJsonString(sb, "x"); sb.Append(": "); WriteJsonNumber(sb, bg.X); sb.Append(",");
-        WriteJsonString(sb, "y"); sb.Append(": "); WriteJsonNumber(sb, bg.Y); sb.Append(",");
-        WriteJsonString(sb, "tiledHorizontally"); sb.Append(": "); WriteJsonBool(sb, bg.TiledHorizontally); sb.Append(",");
-        WriteJsonString(sb, "tiledVertically"); sb.Append(": "); WriteJsonBool(sb, bg.TiledVertically); sb.Append(",");
-        WriteJsonString(sb, "speedX"); sb.Append(": "); WriteJsonNumber(sb, bg.SpeedX); sb.Append(",");
-        WriteJsonString(sb, "speedY"); sb.Append(": "); WriteJsonNumber(sb, bg.SpeedY); sb.Append(",");
-        WriteJsonString(sb, "stretch"); sb.Append(": "); WriteJsonBool(sb, bg.Stretch);
-        sb.Append("}");
-    }
-    sb.AppendLine();
-    sb.AppendLine("],");
-
-    WriteJsonString(sb, "views"); sb.Append(": [");
-    first = true;
-    foreach (var view in room.Views)
-    {
-        if (!first) sb.Append(",");
-        first = false;
-        sb.AppendLine();
-        sb.Append("    {");
-        WriteJsonString(sb, "enabled"); sb.Append(": "); WriteJsonBool(sb, view.Enabled); sb.Append(",");
-        WriteJsonString(sb, "viewX"); sb.Append(": "); WriteJsonNumber(sb, view.ViewX); sb.Append(",");
-        WriteJsonString(sb, "viewY"); sb.Append(": "); WriteJsonNumber(sb, view.ViewY); sb.Append(",");
-        WriteJsonString(sb, "viewWidth"); sb.Append(": "); WriteJsonNumber(sb, view.ViewWidth); sb.Append(",");
-        WriteJsonString(sb, "viewHeight"); sb.Append(": "); WriteJsonNumber(sb, view.ViewHeight); sb.Append(",");
-        WriteJsonString(sb, "portX"); sb.Append(": "); WriteJsonNumber(sb, view.PortX); sb.Append(",");
-        WriteJsonString(sb, "portY"); sb.Append(": "); WriteJsonNumber(sb, view.PortY); sb.Append(",");
-        WriteJsonString(sb, "portWidth"); sb.Append(": "); WriteJsonNumber(sb, view.PortWidth); sb.Append(",");
-        WriteJsonString(sb, "portHeight"); sb.Append(": "); WriteJsonNumber(sb, view.PortHeight); sb.Append(",");
-        WriteJsonString(sb, "borderX"); sb.Append(": "); WriteJsonNumber(sb, view.BorderX); sb.Append(",");
-        WriteJsonString(sb, "borderY"); sb.Append(": "); WriteJsonNumber(sb, view.BorderY); sb.Append(",");
-        WriteJsonString(sb, "speedX"); sb.Append(": "); WriteJsonNumber(sb, view.SpeedX); sb.Append(",");
-        WriteJsonString(sb, "speedY"); sb.Append(": "); WriteJsonNumber(sb, view.SpeedY); sb.Append(",");
-        WriteJsonString(sb, "objectId"); sb.Append(": "); WriteJsonString(sb, view.ObjectId?.Name?.Content);
-        sb.Append("}");
-    }
-    sb.AppendLine();
-    sb.AppendLine("],");
-
-    WriteJsonString(sb, "gameObjects"); sb.Append(": [");
-    first = true;
-    foreach (var obj in room.GameObjects)
-    {
-        if (!first) sb.Append(",");
-        first = false;
-        sb.AppendLine();
-        sb.Append("    {");
-        WriteJsonString(sb, "x"); sb.Append(": "); WriteJsonNumber(sb, obj.X); sb.Append(",");
-        WriteJsonString(sb, "y"); sb.Append(": "); WriteJsonNumber(sb, obj.Y); sb.Append(",");
-        WriteJsonString(sb, "objectDefinition"); sb.Append(": "); WriteJsonString(sb, obj.ObjectDefinition?.Name?.Content); sb.Append(",");
-        WriteJsonString(sb, "instanceID"); sb.Append(": "); WriteJsonNumber(sb, obj.InstanceID); sb.Append(",");
-        WriteJsonString(sb, "creationCode"); sb.Append(": "); WriteJsonString(sb, obj.CreationCode?.Name?.Content); sb.Append(",");
-        WriteJsonString(sb, "scaleX"); sb.Append(": "); WriteJsonNumber(sb, obj.ScaleX); sb.Append(",");
-        WriteJsonString(sb, "scaleY"); sb.Append(": "); WriteJsonNumber(sb, obj.ScaleY); sb.Append(",");
-        WriteJsonString(sb, "color"); sb.Append(": "); WriteJsonNumber(sb, (int)obj.Color); sb.Append(",");
-        WriteJsonString(sb, "rotation"); sb.Append(": "); WriteJsonNumber(sb, obj.Rotation); sb.Append(",");
-        WriteJsonString(sb, "preCreateCode"); sb.Append(": "); WriteJsonString(sb, obj.PreCreateCode?.Name?.Content); sb.Append(",");
-        WriteJsonString(sb, "imageSpeed"); sb.Append(": "); WriteJsonNumber(sb, obj.ImageSpeed); sb.Append(",");
-        WriteJsonString(sb, "imageIndex"); sb.Append(": "); WriteJsonNumber(sb, obj.ImageIndex);
-        sb.Append("}");
-    }
-    sb.AppendLine();
-    sb.AppendLine("],");
-
-    WriteJsonString(sb, "tiles"); sb.Append(": [");
-    first = true;
-    foreach (var tile in room.Tiles)
-    {
-        if (!first) sb.Append(",");
-        first = false;
-        sb.AppendLine();
-        sb.Append("    {");
-        WriteJsonString(sb, "spriteMode"); sb.Append(": "); WriteJsonBool(sb, tile.spriteMode); sb.Append(",");
-        WriteJsonString(sb, "x"); sb.Append(": "); WriteJsonNumber(sb, tile.X); sb.Append(",");
-        WriteJsonString(sb, "y"); sb.Append(": "); WriteJsonNumber(sb, tile.Y); sb.Append(",");
-        WriteJsonString(sb, "backgroundDefinition"); sb.Append(": "); WriteJsonString(sb, tile.BackgroundDefinition?.Name?.Content); sb.Append(",");
-        WriteJsonString(sb, "spriteDefinition"); sb.Append(": "); WriteJsonString(sb, tile.SpriteDefinition?.Name?.Content); sb.Append(",");
-        WriteJsonString(sb, "sourceX"); sb.Append(": "); WriteJsonNumber(sb, tile.SourceX); sb.Append(",");
-        WriteJsonString(sb, "sourceY"); sb.Append(": "); WriteJsonNumber(sb, tile.SourceY); sb.Append(",");
-        WriteJsonString(sb, "width"); sb.Append(": "); WriteJsonNumber(sb, tile.Width); sb.Append(",");
-        WriteJsonString(sb, "height"); sb.Append(": "); WriteJsonNumber(sb, tile.Height); sb.Append(",");
-        WriteJsonString(sb, "tileDepth"); sb.Append(": "); WriteJsonNumber(sb, tile.TileDepth); sb.Append(",");
-        WriteJsonString(sb, "instanceID"); sb.Append(": "); WriteJsonNumber(sb, tile.InstanceID); sb.Append(",");
-        WriteJsonString(sb, "scaleX"); sb.Append(": "); WriteJsonNumber(sb, tile.ScaleX); sb.Append(",");
-        WriteJsonString(sb, "scaleY"); sb.Append(": "); WriteJsonNumber(sb, tile.ScaleY); sb.Append(",");
-        WriteJsonString(sb, "color"); sb.Append(": "); WriteJsonNumber(sb, (int)tile.Color);
-        sb.Append("}");
-    }
-    sb.AppendLine();
-    sb.AppendLine("],");
-
-    WriteJsonString(sb, "layers"); sb.Append(": [");
-    first = true;
-    foreach (var layer in room.Layers)
-    {
-        if (!first) sb.Append(",");
-        first = false;
-        sb.AppendLine();
-        sb.Append("    {");
-        WriteJsonString(sb, "layerName"); sb.Append(": "); WriteJsonString(sb, layer.LayerName?.Content); sb.Append(",");
-        WriteJsonString(sb, "layerId"); sb.Append(": "); WriteJsonNumber(sb, layer.LayerId); sb.Append(",");
-        WriteJsonString(sb, "layerType"); sb.Append(": "); WriteJsonNumber(sb, (int)layer.LayerType); sb.Append(",");
-        WriteJsonString(sb, "layerDepth"); sb.Append(": "); WriteJsonNumber(sb, layer.LayerDepth); sb.Append(",");
-        WriteJsonString(sb, "xOffset"); sb.Append(": "); WriteJsonNumber(sb, layer.XOffset); sb.Append(",");
-        WriteJsonString(sb, "yOffset"); sb.Append(": "); WriteJsonNumber(sb, layer.YOffset); sb.Append(",");
-        WriteJsonString(sb, "hSpeed"); sb.Append(": "); WriteJsonNumber(sb, layer.HSpeed); sb.Append(",");
-        WriteJsonString(sb, "vSpeed"); sb.Append(": "); WriteJsonNumber(sb, layer.VSpeed); sb.Append(",");
-        WriteJsonString(sb, "isVisible"); sb.Append(": "); WriteJsonBool(sb, layer.IsVisible);
-
-        sb.AppendLine(",");
-        WriteJsonString(sb, "layerData"); sb.Append(": {}");
-
-        sb.Append("}");
-    }
-    sb.AppendLine();
-    sb.Append("]");
-
-    sb.AppendLine();
-    sb.Append("}");
-
-    File.WriteAllText(outputPath, sb.ToString(), Encoding.UTF8);
-}
 
 void ExportShader(UndertaleShader shader, string outputDir)
 {
@@ -409,11 +250,10 @@ List<UndertaleCode> allCode = Data.Code.Where(c => c.ParentEntry is null).ToList
 List<UndertaleSprite> allSprites = Data.Sprites.ToList();
 List<UndertaleBackground> allBackgrounds = Data.Backgrounds.ToList();
 List<UndertaleFont> allFonts = Data.Fonts.ToList();
-List<UndertaleRoom> allRooms = Data.Rooms.ToList();
 List<UndertaleShader> allShaders = Data.Shaders.ToList();
 List<UndertaleSound> allSounds = Data.Sounds.ToList();
 
-int totalItems = allCode.Count + allSprites.Count + allBackgrounds.Count + allFonts.Count + allRooms.Count + allShaders.Count + allSounds.Count;
+int totalItems = allCode.Count + allSprites.Count + allBackgrounds.Count + allFonts.Count + allShaders.Count + allSounds.Count;
 
 SetProgressBar(null, "Exporting All Assets", 0, totalItems);
 StartProgressBarUpdater();
@@ -425,7 +265,6 @@ using (worker = new TextureWorker())
     await DumpSprites();
     await DumpBackgrounds();
     await DumpFonts();
-    await DumpRooms();
     await DumpShaders();
     await DumpSounds();
     await DumpTilesets();
@@ -544,19 +383,6 @@ void DumpFont(UndertaleFont font)
     IncrementProgressParallel();
 }
 
-async Task DumpRooms()
-{
-    await Task.Run(() => Parallel.ForEach(allRooms, DumpRoom));
-}
-
-void DumpRoom(UndertaleRoom room)
-{
-    if (room?.Name?.Content == null) return;
-
-    string roomPath = Path.Combine(roomsOut, SafeName(room.Name.Content) + ".json");
-    ExportRoom(room, roomPath);
-    IncrementProgressParallel();
-}
 
 async Task DumpShaders()
 {
@@ -649,7 +475,6 @@ PrintLine($"  Code - Exported: {allCode.Count}");
 PrintLine($"  Sprites - Exported: {allSprites.Count}");
 PrintLine($"  Backgrounds - Exported: {allBackgrounds.Count}");
 PrintLine($"  Fonts - Exported: {allFonts.Count}");
-PrintLine($"  Rooms - Exported: {allRooms.Count}");
 PrintLine($"  Shaders - Exported: {allShaders.Count}");
 PrintLine($"  Sounds - Exported: {allSounds.Count}");
 PrintLine("[ExportAllAssets] Done.");

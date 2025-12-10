@@ -19,6 +19,7 @@ class UtmtWrapper:
         return self.utmtcli.get_script_path(script_name)
 
     def execute_script(self, data_win_path: str, script_name: str, output_path: Optional[str] = None, cwd: Optional[str] = None, env: Optional[Dict] = None) -> Tuple[int, str, str]:
+        import os
         if output_path is None:
             output_path = data_win_path
         if env is None:
@@ -28,7 +29,6 @@ class UtmtWrapper:
         if 'DELTAHUB_ROOT' not in env:
             from utils.path_utils import get_launcher_dir
             launcher_dir = get_launcher_dir()
-            import os
             if os.path.exists(os.path.join(launcher_dir, 'output')):
                 env['DELTAHUB_ROOT'] = launcher_dir
             else:
@@ -37,13 +37,11 @@ class UtmtWrapper:
                     env['DELTAHUB_ROOT'] = parent_dir
                 else:
                     env['DELTAHUB_ROOT'] = launcher_dir
-        self.patching_logger.info(f'[UTMT] Executing script: {script_name} on {data_win_path}')
+        self.patching_logger.info(f'[UTMT] Executing script: {script_name}')
         returncode, stdout, stderr = self.utmtcli.execute_with_scripts(data_win_path, [script_name], output_path=output_path, cwd=cwd, env=env)
         if returncode != 0:
             error_msg = stderr[:300] if len(stderr) > 300 else stderr
             self.patching_logger.warning(f'[UTMT] Script {script_name} failed: {error_msg}')
-        else:
-            self.patching_logger.debug(f'[UTMT] Script {script_name} completed successfully')
         return (returncode, stdout, stderr)
 
     def execute_scripts(self, data_win_path: str, script_names: List[str], output_path: Optional[str] = None, cwd: Optional[str] = None, env: Optional[Dict] = None) -> Tuple[int, str, str]:

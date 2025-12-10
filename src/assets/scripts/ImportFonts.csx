@@ -4,25 +4,24 @@ using System;
 using System.IO;
 using System.Text;
 using System.Linq;
-using System.Collections.Generic;
-using System.Reflection;
 using UndertaleModLib;
 using UndertaleModLib.Models;
 using UndertaleModLib.Util;
 
 void PrintLine(string s) => Console.WriteLine(s);
-bool DEBUG = Environment.GetEnvironmentVariable("DELTAHUB_DEBUG") == "1";
-void DebugLog(string s) { if (DEBUG) PrintLine($"[DEBUG] {s}"); }
 
-byte[] ReadAllBytesSafe(string path)
+
+
+string SafeName(string name)
 {
-    try { return File.ReadAllBytes(path); } catch { return null; }
+    var invalid = Path.GetInvalidFileNameChars();
+    var sb = new StringBuilder(name.Length);
+    foreach (var ch in name) sb.Append(invalid.Contains(ch) ? '_' : ch);
+    return sb.ToString();
 }
 
 var ctx = PrepareImportContext();
 string inputRoot = ctx.InputRoot;
-Console.WriteLine($"[ImportFonts] Using Objects directory: {inputRoot}");
-
 string fontsIn = Path.Combine(inputRoot, "Fonts");
 
 if (!Directory.Exists(fontsIn))
@@ -39,14 +38,14 @@ using (var worker = new TextureWorker())
     foreach (var font in Data.Fonts)
     {
         if (font?.Name?.Content == null) continue;
-        string name = font.Name.Content;
 
-        string pngPath = Path.Combine(fontsIn, name + ".png");
-        string csvPath = Path.Combine(fontsIn, $"glyphs_{name}.csv");
+        string name = font.Name.Content;
+        string safeName = SafeName(name);
+        string pngPath = Path.Combine(fontsIn, safeName + ".png");
+        string csvPath = Path.Combine(fontsIn, $"glyphs_{safeName}.csv");
 
         if (!File.Exists(pngPath) && !File.Exists(csvPath))
         {
-            DebugLog($"[ImportFonts] Skipping {name}: no files found");
             skipped++;
             continue;
         }
@@ -57,17 +56,45 @@ using (var worker = new TextureWorker())
             {
                 using (var img = TextureWorker.ReadBGRAImageFromFile(pngPath))
                 {
-                    if (font.Texture?.TexturePage?.Texture != null)
-                    {
-                        font.Texture.TexturePage.Texture.ReplaceTexture(img);
-                        PrintLine($"[Font] {name}: texture imported");
-                    }
+                    
+                    
+                    int lastTextPage = Data.EmbeddedTextures.Count - 1;
+                    int lastTextPageItem = Data.TexturePageItems.Count - 1;
+
+                    UndertaleEmbeddedTexture newEmbeddedTexture = new UndertaleEmbeddedTexture();
+                    newEmbeddedTexture.Name = new UndertaleString($"Texture {++lastTextPage}");
+                    newEmbeddedTexture.TextureData.Image = GMImage.FromMagickImage(img).ConvertToPng();
+                    Data.EmbeddedTextures.Add(newEmbeddedTexture);
+
+                    ushort originalTargetX = font.Texture?.TargetX ?? 0;
+                    ushort originalTargetY = font.Texture?.TargetY ?? 0;
+                    ushort originalBoundingWidth = font.Texture?.BoundingWidth ?? (ushort)img.Width;
+                    ushort originalBoundingHeight = font.Texture?.BoundingHeight ?? (ushort)img.Height;
+
+                    UndertaleTexturePageItem newTexturePageItem = new UndertaleTexturePageItem();
+                    newTexturePageItem.Name = new UndertaleString($"PageItem {++lastTextPageItem}");
+                    newTexturePageItem.SourceX = 0;
+                    newTexturePageItem.SourceY = 0;
+                    newTexturePageItem.SourceWidth = (ushort)img.Width;
+                    newTexturePageItem.SourceHeight = (ushort)img.Height;
+                    newTexturePageItem.TargetX = originalTargetX;
+                    newTexturePageItem.TargetY = originalTargetY;
+                    newTexturePageItem.TargetWidth = (ushort)img.Width;
+                    newTexturePageItem.TargetHeight = (ushort)img.Height;
+                    newTexturePageItem.BoundingWidth = originalBoundingWidth;
+                    newTexturePageItem.BoundingHeight = originalBoundingHeight;
+                    newTexturePageItem.TexturePage = newEmbeddedTexture;
+                    Data.TexturePageItems.Add(newTexturePageItem);
+
+                    font.Texture = newTexturePageItem;
+                    PrintLine($"[Font] {name}: texture imported");
                 }
             }
 
             if (File.Exists(csvPath))
             {
                 font.Glyphs.Clear();
+                bool hadError = false;
                 using (var reader = new StreamReader(csvPath, Encoding.UTF8))
                 {
                     string line;
@@ -75,44 +102,55 @@ using (var worker = new TextureWorker())
                     while ((line = reader.ReadLine()) != null)
                     {
                         if (string.IsNullOrWhiteSpace(line)) continue;
-
                         string[] parts = line.Split(';');
-                        if (parts.Length < 8) continue;
+                        if (parts.All(x => x.Length == 0)) continue;
 
-                        if (head == 0)
+                        try
                         {
-                            string displayName = parts[0].Replace("\"", "");
-                            font.DisplayName = Data.Strings.MakeString(displayName);
-                            font.EmSize = ushort.Parse(parts[1]);
-                            font.Bold = bool.Parse(parts[2]);
-                            font.Italic = bool.Parse(parts[3]);
-                            font.Charset = byte.Parse(parts[4]);
-                            font.AntiAliasing = byte.Parse(parts[5]);
-                            font.ScaleX = ushort.Parse(parts[6]);
-                            font.ScaleY = ushort.Parse(parts[7]);
-                            head++;
-                        }
-                        else if (head == 1)
-                        {
-                            font.RangeStart = ushort.Parse(parts[0]);
-                            head++;
-                        }
-                        else if (head > 1 && parts.Length >= 7)
-                        {
-                            var glyph = new UndertaleFont.Glyph
+                            if (head == 1)
                             {
-                                Character = ushort.Parse(parts[0]),
-                                SourceX = ushort.Parse(parts[1]),
-                                SourceY = ushort.Parse(parts[2]),
-                                SourceWidth = ushort.Parse(parts[3]),
-                                SourceHeight = ushort.Parse(parts[4]),
-                                Shift = short.Parse(parts[5]),
-                                Offset = short.Parse(parts[6])
-                            };
-                            font.Glyphs.Add(glyph);
-                            font.RangeEnd = uint.Parse(parts[0]);
+                                font.RangeStart = UInt16.Parse(parts[0]);
+                                head++;
+                            }
+
+                            if (head == 0)
+                            {
+                                String namae = parts[0].Replace("\"", "");
+                                font.DisplayName = Data.Strings.MakeString(namae);
+                                font.EmSize = UInt16.Parse(parts[1]);
+                                font.Bold = Boolean.Parse(parts[2]);
+                                font.Italic = Boolean.Parse(parts[3]);
+                                font.Charset = Byte.Parse(parts[4]);
+                                font.AntiAliasing = Byte.Parse(parts[5]);
+                                font.ScaleX = UInt16.Parse(parts[6]);
+                                font.ScaleY = UInt16.Parse(parts[7]);
+                                head++;
+                            }
+
+                            if (head > 1)
+                            {
+                                font.Glyphs.Add(new UndertaleFont.Glyph()
+                                {
+                                    Character = UInt16.Parse(parts[0]),
+                                    SourceX = UInt16.Parse(parts[1]),
+                                    SourceY = UInt16.Parse(parts[2]),
+                                    SourceWidth = UInt16.Parse(parts[3]),
+                                    SourceHeight = UInt16.Parse(parts[4]),
+                                    Shift = Int16.Parse(parts[5]),
+                                    Offset = Int16.Parse(parts[6]),
+                                });
+                                font.RangeEnd = UInt32.Parse(parts[0]);
+                            }
+                        }
+                        catch
+                        {
+                            hadError = true;
                         }
                     }
+                }
+                if (hadError)
+                {
+                    ScriptError($"File \"glyphs_{name}.csv\" contained some invalid data.", "Format error", false);
                 }
                 PrintLine($"[Font] {name}: glyphs imported ({font.Glyphs.Count} glyphs)");
             }
@@ -129,4 +167,3 @@ using (var worker = new TextureWorker())
 }
 
 PrintLine($"[ImportFonts] Summary: {imported} imported, {skipped} skipped");
-

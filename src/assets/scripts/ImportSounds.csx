@@ -2,28 +2,16 @@
 
 using System;
 using System.IO;
-using System.Text;
 using System.Linq;
-using System.Collections.Generic;
-using System.Reflection;
 using UndertaleModLib;
 using UndertaleModLib.Models;
 using static UndertaleModLib.Models.UndertaleSound;
 using static UndertaleModLib.UndertaleData;
 
 void PrintLine(string s) => Console.WriteLine(s);
-bool DEBUG = Environment.GetEnvironmentVariable("DELTAHUB_DEBUG") == "1";
-void DebugLog(string s) { if (DEBUG) PrintLine($"[DEBUG] {s}"); }
-
-byte[] ReadAllBytesSafe(string path)
-{
-    try { return File.ReadAllBytes(path); } catch { return null; }
-}
 
 var ctx = PrepareImportContext();
 string inputRoot = ctx.InputRoot;
-Console.WriteLine($"[ImportSounds] Using Objects directory: {inputRoot}");
-
 string soundsIn = Path.Combine(inputRoot, "Sounds");
 
 if (!Directory.Exists(soundsIn))
@@ -31,9 +19,6 @@ if (!Directory.Exists(soundsIn))
     PrintLine("[ImportSounds] No Sounds directory found, skipping.");
     return;
 }
-
-bool usesAGRP = (Data.AudioGroups?.Count ?? 0) > 0;
-string DEFAULT_AUDIOGROUP_NAME = "audiogroup_default";
 
 int imported = 0;
 int skipped = 0;
@@ -67,7 +52,7 @@ foreach (string soundFile in soundFiles)
 
     try
     {
-        byte[] audioData = ReadAllBytesSafe(soundFile);
+        byte[] audioData = File.ReadAllBytes(soundFile);
         if (audioData == null || audioData.Length == 0)
         {
             PrintLine($"[ImportSounds] Failed to read {soundName}: empty file");
@@ -75,8 +60,7 @@ foreach (string soundFile in soundFiles)
             continue;
         }
 
-        bool embedSound = isWAV || (isOGG && true);
-        bool decodeLoad = false;
+        bool embedSound = isWAV || isOGG;
 
         if (embedSound)
         {
@@ -96,15 +80,6 @@ foreach (string soundFile in soundFiles)
             {
                 existingSound.Flags |= AudioEntryFlags.IsCompressed;
             }
-
-            if (decodeLoad)
-            {
-                existingSound.Flags |= AudioEntryFlags.UncompressOnLoad;
-            }
-            else
-            {
-                existingSound.Flags &= ~AudioEntryFlags.UncompressOnLoad;
-            }
         }
 
         PrintLine($"[Sound] {soundName}: IMPORTED ({Path.GetExtension(filename)}, embedded: {embedSound})");
@@ -118,4 +93,3 @@ foreach (string soundFile in soundFiles)
 }
 
 PrintLine($"[ImportSounds] Summary: {imported} imported, {skipped} skipped");
-

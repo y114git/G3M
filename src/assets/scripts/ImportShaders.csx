@@ -2,26 +2,14 @@
 
 using System;
 using System.IO;
-using System.Text;
 using System.Linq;
-using System.Collections.Generic;
-using System.Reflection;
 using UndertaleModLib;
 using UndertaleModLib.Models;
 
 void PrintLine(string s) => Console.WriteLine(s);
-bool DEBUG = Environment.GetEnvironmentVariable("DELTAHUB_DEBUG") == "1";
-void DebugLog(string s) { if (DEBUG) PrintLine($"[DEBUG] {s}"); }
-
-byte[] ReadAllBytesSafe(string path)
-{
-    try { return File.ReadAllBytes(path); } catch { return null; }
-}
 
 var ctx = PrepareImportContext();
 string inputRoot = ctx.InputRoot;
-Console.WriteLine($"[ImportShaders] Using Objects directory: {inputRoot}");
-
 string shadersIn = Path.Combine(inputRoot, "Shaders");
 
 if (!Directory.Exists(shadersIn))
@@ -30,14 +18,12 @@ if (!Directory.Exists(shadersIn))
     return;
 }
 
-
 void ImportShader(string shaderDir)
 {
     string shaderName = Path.GetFileName(shaderDir);
     if (string.IsNullOrEmpty(shaderName))
         return;
-    
-    
+
     UndertaleShader shader = Data.Shaders.ByName(shaderName);
     if (shader == null)
     {
@@ -45,257 +31,211 @@ void ImportShader(string shaderDir)
         shader.Name = new UndertaleString(shaderName);
         Data.Strings.Add(shader.Name);
         Data.Shaders.Add(shader);
-        PrintLine($"[ImportShaders] Created new shader: {shaderName}");
     }
-    else
-    {
-        PrintLine($"[ImportShaders] Updating existing shader: {shaderName}");
-    }
-    
-    
+
     string typeFile = Path.Combine(shaderDir, "Type.txt");
     if (File.Exists(typeFile))
     {
-        string shaderTypeStr = ReadAllTextSafe(typeFile);
-        if (!string.IsNullOrEmpty(shaderTypeStr))
+        try
         {
-            if (Enum.TryParse<UndertaleShader.ShaderType>(shaderTypeStr, out var shaderType))
+            string shaderTypeStr = File.ReadAllText(typeFile);
+            if (!string.IsNullOrEmpty(shaderTypeStr) && Enum.TryParse<UndertaleShader.ShaderType>(shaderTypeStr, out var shaderType))
             {
                 shader.Type = shaderType;
             }
         }
+        catch { }
     }
-    
-    
-    string glslEsFrag = Path.Combine(shaderDir, "GLSL_ES_Fragment.txt");
-    if (File.Exists(glslEsFrag))
+
+    string[] shaderFiles = {
+        "GLSL_ES_Fragment.txt", "GLSL_ES_Vertex.txt",
+        "GLSL_Fragment.txt", "GLSL_Vertex.txt",
+        "HLSL9_Fragment.txt", "HLSL9_Vertex.txt"
+    };
+
+    foreach (string fileName in shaderFiles)
     {
-        string code = ReadAllTextSafe(glslEsFrag);
-        if (shader.GLSL_ES_Fragment == null)
-            shader.GLSL_ES_Fragment = new UndertaleString(code ?? "");
-        else
-            shader.GLSL_ES_Fragment.Content = code ?? "";
-        if (!Data.Strings.Any(s => s == shader.GLSL_ES_Fragment))
-            Data.Strings.Add(shader.GLSL_ES_Fragment);
-    }
-    
-    string glslEsVert = Path.Combine(shaderDir, "GLSL_ES_Vertex.txt");
-    if (File.Exists(glslEsVert))
-    {
-        string code = ReadAllTextSafe(glslEsVert);
-        if (shader.GLSL_ES_Vertex == null)
-            shader.GLSL_ES_Vertex = new UndertaleString(code ?? "");
-        else
-            shader.GLSL_ES_Vertex.Content = code ?? "";
-        if (!Data.Strings.Any(s => s == shader.GLSL_ES_Vertex))
-            Data.Strings.Add(shader.GLSL_ES_Vertex);
-    }
-    
-    
-    string glslFrag = Path.Combine(shaderDir, "GLSL_Fragment.txt");
-    if (File.Exists(glslFrag))
-    {
-        string code = ReadAllTextSafe(glslFrag);
-        if (shader.GLSL_Fragment == null)
-            shader.GLSL_Fragment = new UndertaleString(code ?? "");
-        else
-            shader.GLSL_Fragment.Content = code ?? "";
-        if (!Data.Strings.Any(s => s == shader.GLSL_Fragment))
-            Data.Strings.Add(shader.GLSL_Fragment);
-    }
-    
-    string glslVert = Path.Combine(shaderDir, "GLSL_Vertex.txt");
-    if (File.Exists(glslVert))
-    {
-        string code = ReadAllTextSafe(glslVert);
-        if (shader.GLSL_Vertex == null)
-            shader.GLSL_Vertex = new UndertaleString(code ?? "");
-        else
-            shader.GLSL_Vertex.Content = code ?? "";
-        if (!Data.Strings.Any(s => s == shader.GLSL_Vertex))
-            Data.Strings.Add(shader.GLSL_Vertex);
-    }
-    
-    
-    string hlsl9Frag = Path.Combine(shaderDir, "HLSL9_Fragment.txt");
-    if (File.Exists(hlsl9Frag))
-    {
-        string code = ReadAllTextSafe(hlsl9Frag);
-        if (shader.HLSL9_Fragment == null)
-            shader.HLSL9_Fragment = new UndertaleString(code ?? "");
-        else
-            shader.HLSL9_Fragment.Content = code ?? "";
-        if (!Data.Strings.Any(s => s == shader.HLSL9_Fragment))
-            Data.Strings.Add(shader.HLSL9_Fragment);
-    }
-    
-    string hlsl9Vert = Path.Combine(shaderDir, "HLSL9_Vertex.txt");
-    if (File.Exists(hlsl9Vert))
-    {
-        string code = ReadAllTextSafe(hlsl9Vert);
-        if (shader.HLSL9_Vertex == null)
-            shader.HLSL9_Vertex = new UndertaleString(code ?? "");
-        else
-            shader.HLSL9_Vertex.Content = code ?? "";
-        if (!Data.Strings.Any(s => s == shader.HLSL9_Vertex))
-            Data.Strings.Add(shader.HLSL9_Vertex);
-    }
-    
-    
-    string hlsl11Vert = Path.Combine(shaderDir, "HLSL11_VertexData.bin");
-    if (File.Exists(hlsl11Vert))
-    {
-        byte[] data = ReadAllBytesSafe(hlsl11Vert);
-        if (data != null && data.Length > 0)
+        string filePath = Path.Combine(shaderDir, fileName);
+        if (File.Exists(filePath))
         {
-            if (shader.HLSL11_VertexData == null)
-                shader.HLSL11_VertexData = new UndertaleShader.UndertaleRawShaderData();
-            shader.HLSL11_VertexData.Data = data;
-            shader.HLSL11_VertexData.IsNull = false;
+            try
+            {
+                string code = File.ReadAllText(filePath);
+                UndertaleString shaderString = null;
+                switch (fileName)
+                {
+                    case "GLSL_ES_Fragment.txt":
+                        if (shader.GLSL_ES_Fragment == null)
+                            shader.GLSL_ES_Fragment = new UndertaleString(code);
+                        else
+                            shader.GLSL_ES_Fragment.Content = code;
+                        shaderString = shader.GLSL_ES_Fragment;
+                        break;
+                    case "GLSL_ES_Vertex.txt":
+                        if (shader.GLSL_ES_Vertex == null)
+                            shader.GLSL_ES_Vertex = new UndertaleString(code);
+                        else
+                            shader.GLSL_ES_Vertex.Content = code;
+                        shaderString = shader.GLSL_ES_Vertex;
+                        break;
+                    case "GLSL_Fragment.txt":
+                        if (shader.GLSL_Fragment == null)
+                            shader.GLSL_Fragment = new UndertaleString(code);
+                        else
+                            shader.GLSL_Fragment.Content = code;
+                        shaderString = shader.GLSL_Fragment;
+                        break;
+                    case "GLSL_Vertex.txt":
+                        if (shader.GLSL_Vertex == null)
+                            shader.GLSL_Vertex = new UndertaleString(code);
+                        else
+                            shader.GLSL_Vertex.Content = code;
+                        shaderString = shader.GLSL_Vertex;
+                        break;
+                    case "HLSL9_Fragment.txt":
+                        if (shader.HLSL9_Fragment == null)
+                            shader.HLSL9_Fragment = new UndertaleString(code);
+                        else
+                            shader.HLSL9_Fragment.Content = code;
+                        shaderString = shader.HLSL9_Fragment;
+                        break;
+                    case "HLSL9_Vertex.txt":
+                        if (shader.HLSL9_Vertex == null)
+                            shader.HLSL9_Vertex = new UndertaleString(code);
+                        else
+                            shader.HLSL9_Vertex.Content = code;
+                        shaderString = shader.HLSL9_Vertex;
+                        break;
+                }
+                if (shaderString != null && !Data.Strings.Any(s => s == shaderString))
+                    Data.Strings.Add(shaderString);
+            }
+            catch { }
         }
     }
-    
-    string hlsl11Pix = Path.Combine(shaderDir, "HLSL11_PixelData.bin");
-    if (File.Exists(hlsl11Pix))
+
+    string[] binaryFiles = {
+        "HLSL11_VertexData.bin", "HLSL11_PixelData.bin",
+        "PSSL_VertexData.bin", "PSSL_PixelData.bin",
+        "Cg_PSVita_VertexData.bin", "Cg_PSVita_PixelData.bin",
+        "Cg_PS3_VertexData.bin", "Cg_PS3_PixelData.bin"
+    };
+
+    foreach (string fileName in binaryFiles)
     {
-        byte[] data = ReadAllBytesSafe(hlsl11Pix);
-        if (data != null && data.Length > 0)
+        string filePath = Path.Combine(shaderDir, fileName);
+        if (File.Exists(filePath))
         {
-            if (shader.HLSL11_PixelData == null)
-                shader.HLSL11_PixelData = new UndertaleShader.UndertaleRawShaderData();
-            shader.HLSL11_PixelData.Data = data;
-            shader.HLSL11_PixelData.IsNull = false;
+            try
+            {
+                byte[] data = File.ReadAllBytes(filePath);
+                if (data != null && data.Length > 0)
+                {
+                    switch (fileName)
+                    {
+                        case "HLSL11_VertexData.bin":
+                            if (shader.HLSL11_VertexData == null)
+                                shader.HLSL11_VertexData = new UndertaleShader.UndertaleRawShaderData();
+                            shader.HLSL11_VertexData.Data = data;
+                            shader.HLSL11_VertexData.IsNull = false;
+                            break;
+                        case "HLSL11_PixelData.bin":
+                            if (shader.HLSL11_PixelData == null)
+                                shader.HLSL11_PixelData = new UndertaleShader.UndertaleRawShaderData();
+                            shader.HLSL11_PixelData.Data = data;
+                            shader.HLSL11_PixelData.IsNull = false;
+                            break;
+                        case "PSSL_VertexData.bin":
+                            if (shader.PSSL_VertexData == null)
+                                shader.PSSL_VertexData = new UndertaleShader.UndertaleRawShaderData();
+                            shader.PSSL_VertexData.Data = data;
+                            shader.PSSL_VertexData.IsNull = false;
+                            break;
+                        case "PSSL_PixelData.bin":
+                            if (shader.PSSL_PixelData == null)
+                                shader.PSSL_PixelData = new UndertaleShader.UndertaleRawShaderData();
+                            shader.PSSL_PixelData.Data = data;
+                            shader.PSSL_PixelData.IsNull = false;
+                            break;
+                        case "Cg_PSVita_VertexData.bin":
+                            if (shader.Cg_PSVita_VertexData == null)
+                                shader.Cg_PSVita_VertexData = new UndertaleShader.UndertaleRawShaderData();
+                            shader.Cg_PSVita_VertexData.Data = data;
+                            shader.Cg_PSVita_VertexData.IsNull = false;
+                            break;
+                        case "Cg_PSVita_PixelData.bin":
+                            if (shader.Cg_PSVita_PixelData == null)
+                                shader.Cg_PSVita_PixelData = new UndertaleShader.UndertaleRawShaderData();
+                            shader.Cg_PSVita_PixelData.Data = data;
+                            shader.Cg_PSVita_PixelData.IsNull = false;
+                            break;
+                        case "Cg_PS3_VertexData.bin":
+                            if (shader.Cg_PS3_VertexData == null)
+                                shader.Cg_PS3_VertexData = new UndertaleShader.UndertaleRawShaderData();
+                            shader.Cg_PS3_VertexData.Data = data;
+                            shader.Cg_PS3_VertexData.IsNull = false;
+                            break;
+                        case "Cg_PS3_PixelData.bin":
+                            if (shader.Cg_PS3_PixelData == null)
+                                shader.Cg_PS3_PixelData = new UndertaleShader.UndertaleRawShaderData();
+                            shader.Cg_PS3_PixelData.Data = data;
+                            shader.Cg_PS3_PixelData.IsNull = false;
+                            break;
+                    }
+                }
+            }
+            catch { }
         }
     }
-    
-    string psslVert = Path.Combine(shaderDir, "PSSL_VertexData.bin");
-    if (File.Exists(psslVert))
-    {
-        byte[] data = ReadAllBytesSafe(psslVert);
-        if (data != null && data.Length > 0)
-        {
-            if (shader.PSSL_VertexData == null)
-                shader.PSSL_VertexData = new UndertaleShader.UndertaleRawShaderData();
-            shader.PSSL_VertexData.Data = data;
-            shader.PSSL_VertexData.IsNull = false;
-        }
-    }
-    
-    string psslPix = Path.Combine(shaderDir, "PSSL_PixelData.bin");
-    if (File.Exists(psslPix))
-    {
-        byte[] data = ReadAllBytesSafe(psslPix);
-        if (data != null && data.Length > 0)
-        {
-            if (shader.PSSL_PixelData == null)
-                shader.PSSL_PixelData = new UndertaleShader.UndertaleRawShaderData();
-            shader.PSSL_PixelData.Data = data;
-            shader.PSSL_PixelData.IsNull = false;
-        }
-    }
-    
-    string cgVitaVert = Path.Combine(shaderDir, "Cg_PSVita_VertexData.bin");
-    if (File.Exists(cgVitaVert))
-    {
-        byte[] data = ReadAllBytesSafe(cgVitaVert);
-        if (data != null && data.Length > 0)
-        {
-            if (shader.Cg_PSVita_VertexData == null)
-                shader.Cg_PSVita_VertexData = new UndertaleShader.UndertaleRawShaderData();
-            shader.Cg_PSVita_VertexData.Data = data;
-            shader.Cg_PSVita_VertexData.IsNull = false;
-        }
-    }
-    
-    string cgVitaPix = Path.Combine(shaderDir, "Cg_PSVita_PixelData.bin");
-    if (File.Exists(cgVitaPix))
-    {
-        byte[] data = ReadAllBytesSafe(cgVitaPix);
-        if (data != null && data.Length > 0)
-        {
-            if (shader.Cg_PSVita_PixelData == null)
-                shader.Cg_PSVita_PixelData = new UndertaleShader.UndertaleRawShaderData();
-            shader.Cg_PSVita_PixelData.Data = data;
-            shader.Cg_PSVita_PixelData.IsNull = false;
-        }
-    }
-    
-    string cgPs3Vert = Path.Combine(shaderDir, "Cg_PS3_VertexData.bin");
-    if (File.Exists(cgPs3Vert))
-    {
-        byte[] data = ReadAllBytesSafe(cgPs3Vert);
-        if (data != null && data.Length > 0)
-        {
-            if (shader.Cg_PS3_VertexData == null)
-                shader.Cg_PS3_VertexData = new UndertaleShader.UndertaleRawShaderData();
-            shader.Cg_PS3_VertexData.Data = data;
-            shader.Cg_PS3_VertexData.IsNull = false;
-        }
-    }
-    
-    string cgPs3Pix = Path.Combine(shaderDir, "Cg_PS3_PixelData.bin");
-    if (File.Exists(cgPs3Pix))
-    {
-        byte[] data = ReadAllBytesSafe(cgPs3Pix);
-        if (data != null && data.Length > 0)
-        {
-            if (shader.Cg_PS3_PixelData == null)
-                shader.Cg_PS3_PixelData = new UndertaleShader.UndertaleRawShaderData();
-            shader.Cg_PS3_PixelData.Data = data;
-            shader.Cg_PS3_PixelData.IsNull = false;
-        }
-    }
-    
+
     
     string attrsFile = Path.Combine(shaderDir, "VertexShaderAttributes.txt");
     if (File.Exists(attrsFile))
     {
-        string attrsText = ReadAllTextSafe(attrsFile);
-        if (!string.IsNullOrEmpty(attrsText))
+        try
         {
-            if (shader.VertexShaderAttributes == null)
-                shader.VertexShaderAttributes = new UndertalePointerList<UndertaleString>();
-            shader.VertexShaderAttributes.Clear();
-            foreach (var line in attrsText.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
+            string attrsText = File.ReadAllText(attrsFile);
+            if (!string.IsNullOrEmpty(attrsText))
             {
-                if (!string.IsNullOrWhiteSpace(line))
+                if (shader.VertexShaderAttributes == null)
+                    shader.VertexShaderAttributes = new UndertaleSimpleList<UndertaleShader.VertexShaderAttribute>();
+                shader.VertexShaderAttributes.Clear();
+                foreach (var line in attrsText.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
                 {
-                    var attr = new UndertaleString(line.Trim());
-                    Data.Strings.Add(attr);
-                    shader.VertexShaderAttributes.Add(attr);
+                    if (!string.IsNullOrWhiteSpace(line))
+                    {
+                        var attrName = new UndertaleString(line.Trim());
+                        Data.Strings.Add(attrName);
+                        var attr = new UndertaleShader.VertexShaderAttribute();
+                        attr.Name = attrName;
+                        shader.VertexShaderAttributes.Add(attr);
+                    }
                 }
             }
         }
+        catch { }
     }
 }
-
 
 int shadersImported = 0;
 int shadersUpdated = 0;
 
-if (Directory.Exists(shadersIn))
+var shaderDirs = Directory.GetDirectories(shadersIn);
+foreach (var shaderDir in shaderDirs)
 {
-    var shaderDirs = Directory.GetDirectories(shadersIn);
-    foreach (var shaderDir in shaderDirs)
+    try
     {
-        try
-        {
-            bool shaderExisted = Data.Shaders.ByName(Path.GetFileName(shaderDir)) != null;
-            ImportShader(shaderDir);
-            if (shaderExisted) shadersUpdated++; else shadersImported++;
-        }
-        catch (Exception e)
-        {
-            PrintLine($"[ImportShaders] ERROR: Failed to import {shaderDir}: {e.Message}");
-            PrintLine($"[ImportShaders] Stack trace: {e.StackTrace}");
-        }
+        string shaderName = Path.GetFileName(shaderDir);
+        bool shaderExisted = Data.Shaders.ByName(shaderName) != null;
+        ImportShader(shaderDir);
+        if (shaderExisted) shadersUpdated++; else shadersImported++;
+    }
+    catch (Exception e)
+    {
+        PrintLine($"[ImportShaders] ERROR: Failed to import {shaderDir}: {e.Message}");
     }
 }
 
-
-Data.SaveFile(Data.FilePath);
-
-PrintLine($"\n[ImportShaders] Summary for Mod {modNo}:");
+PrintLine($"\n[ImportShaders] Summary for Mod {ctx.ModNo ?? "N/A"}:");
 PrintLine($"  Shaders - Imported: {shadersImported}, Updated: {shadersUpdated}");
 PrintLine("[ImportShaders] Done.");
-
