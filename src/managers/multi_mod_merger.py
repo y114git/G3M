@@ -1050,7 +1050,9 @@ class MultiModMerger(QObject):
             has_fonts = bool(os.path.exists(fonts_dir) and os.listdir(fonts_dir))
             sounds_dir = os.path.join(objects_dir, 'Sounds')
             has_sounds = bool(os.path.exists(sounds_dir) and os.listdir(sounds_dir))
-            if not (has_graphics or has_gml or has_shaders or has_tilesets or has_fonts or has_sounds):
+            rooms_dir = os.path.join(objects_dir, 'Rooms')
+            has_rooms = bool(os.path.exists(rooms_dir) and os.listdir(rooms_dir))
+            if not (has_graphics or has_gml or has_shaders or has_tilesets or has_fonts or has_sounds or has_rooms):
                 self.patching_logger.debug(f'Objects directory has no assets to import: {objects_dir}')
                 return True
             mod_name_for_tracking = 'merged_mods'
@@ -1112,7 +1114,13 @@ class MultiModMerger(QObject):
                 if os.path.exists(sounds_path):
                     return [os.path.splitext(f)[0] for f in os.listdir(sounds_path) if f.endswith(('.ogg', '.wav'))]
                 return []
-            asset_configs = [{'script_name': 'ImportGraphics', 'has_assets': has_graphics, 'step_number': '1/12', 'resource_type': 'sprite', 'resource_action': 'imported', 'get_resources_func': get_sprite_resources}, {'script_name': 'ImportShaders', 'has_assets': has_shaders, 'step_number': '2/12', 'resource_type': 'shader', 'resource_action': 'imported', 'get_resources_func': get_shader_resources}, {'script_name': 'ImportGML', 'has_assets': has_gml, 'step_number': '5/12', 'resource_type': 'code', 'resource_action': 'modified', 'get_resources_func': get_gml_resources, 'analyze_errors': True}, {'script_name': 'ImportTilesets', 'has_assets': has_tilesets, 'step_number': '10/14', 'resource_type': 'tileset', 'resource_action': 'imported', 'get_resources_func': get_tileset_resources, 'extra_resources_func': get_tileset_config_resource}, {'script_name': 'ImportFonts', 'has_assets': has_fonts, 'step_number': '11/14', 'resource_type': 'font', 'resource_action': 'modified', 'get_resources_func': get_font_resources}, {'script_name': 'ImportSounds', 'has_assets': has_sounds, 'step_number': '12/14', 'resource_type': 'sound', 'resource_action': 'modified', 'get_resources_func': get_sound_resources}]
+
+            def get_room_resources(obj_dir):
+                rooms_path = os.path.join(obj_dir, 'Rooms')
+                if os.path.exists(rooms_path):
+                    return [os.path.splitext(f)[0] for f in os.listdir(rooms_path) if f.endswith('.json')]
+                return []
+            asset_configs = [{'script_name': 'ImportGraphics', 'has_assets': has_graphics, 'step_number': '1/13', 'resource_type': 'sprite', 'resource_action': 'imported', 'get_resources_func': get_sprite_resources}, {'script_name': 'ImportShaders', 'has_assets': has_shaders, 'step_number': '2/13', 'resource_type': 'shader', 'resource_action': 'imported', 'get_resources_func': get_shader_resources}, {'script_name': 'ImportGML', 'has_assets': has_gml, 'step_number': '5/13', 'resource_type': 'code', 'resource_action': 'modified', 'get_resources_func': get_gml_resources, 'analyze_errors': True}, {'script_name': 'ImportTilesets', 'has_assets': has_tilesets, 'step_number': '10/13', 'resource_type': 'tileset', 'resource_action': 'imported', 'get_resources_func': get_tileset_resources, 'extra_resources_func': get_tileset_config_resource}, {'script_name': 'ImportFonts', 'has_assets': has_fonts, 'step_number': '11/13', 'resource_type': 'font', 'resource_action': 'modified', 'get_resources_func': get_font_resources}, {'script_name': 'ImportSounds', 'has_assets': has_sounds, 'step_number': '12/13', 'resource_type': 'sound', 'resource_action': 'modified', 'get_resources_func': get_sound_resources}, {'script_name': 'ImportRooms', 'has_assets': has_rooms, 'step_number': '13/13', 'resource_type': 'room', 'resource_action': 'modified', 'get_resources_func': get_room_resources, 'check_dir_func': lambda obj_dir: os.path.exists(os.path.join(obj_dir, 'Rooms'))}]
             for asset_config in asset_configs:
                 self._import_asset_type(asset_config, data_win_path, data_win_dir, objects_dir, mod_name_for_tracking)
             if 'xDeltaCombiner' in data_win_dir:
@@ -1285,7 +1293,7 @@ class MultiModMerger(QObject):
             shutil.copytree(source_dir, target_dir, dirs_exist_ok=True)
 
     def _compute_resource_hashes(self, objects_dir: str) -> Dict[str, Dict[str, str]]:
-        hashes = {'code': {}, 'sprites': {}, 'backgrounds': {}, 'fonts': {}, 'shaders': {}, 'sounds': {}}
+        hashes = {'code': {}, 'sprites': {}, 'backgrounds': {}, 'fonts': {}, 'shaders': {}, 'sounds': {}, 'rooms': {}}
         code_dir = os.path.join(objects_dir, 'CodeEntries')
         if os.path.exists(code_dir):
             for file in os.listdir(code_dir):
@@ -1389,6 +1397,18 @@ class MultiModMerger(QObject):
                             hashes['sounds'][sound_name] = hash_value
                     except Exception as e:
                         self.patching_logger.warning(f'Failed to compute hash for sound {sound_name}: {e}')
+        rooms_dir = os.path.join(objects_dir, 'Rooms')
+        if os.path.exists(rooms_dir):
+            for file in os.listdir(rooms_dir):
+                if file.endswith('.json'):
+                    room_name = os.path.splitext(file)[0]
+                    file_path = os.path.join(rooms_dir, file)
+                    try:
+                        with open(file_path, 'rb') as f:
+                            hash_value = hashlib.sha256(f.read()).hexdigest()
+                            hashes['rooms'][room_name] = hash_value
+                    except Exception as e:
+                        self.patching_logger.warning(f'Failed to compute hash for room {room_name}: {e}')
         return hashes
 
     def _filter_vanilla_identical_resources(self, vanilla_hashes: Dict[str, Dict[str, str]], mod_objects_dir: str, mod_number: int, mod_name: str) -> Optional[str]:
@@ -1399,8 +1419,8 @@ class MultiModMerger(QObject):
         if os.path.exists(filtered_dir):
             safe_rmtree(filtered_dir)
         os.makedirs(filtered_dir, exist_ok=True)
-        removed_counts = {'code': 0, 'sprites': 0, 'backgrounds': 0, 'fonts': 0, 'shaders': 0, 'sounds': 0}
-        for resource_type in ['code', 'sprites', 'backgrounds', 'fonts', 'shaders', 'sounds']:
+        removed_counts = {'code': 0, 'sprites': 0, 'backgrounds': 0, 'fonts': 0, 'shaders': 0, 'sounds': 0, 'rooms': 0}
+        for resource_type in ['code', 'sprites', 'backgrounds', 'fonts', 'shaders', 'sounds', 'rooms']:
             vanilla_type_hashes = vanilla_hashes.get(resource_type, {})
             mod_type_hashes = mod_hashes.get(resource_type, {})
             for resource_name, mod_hash in mod_type_hashes.items():
@@ -1476,6 +1496,12 @@ class MultiModMerger(QObject):
                 if os.path.exists(source_file):
                     safe_copy(source_file, os.path.join(target_dir, f'{resource_name}{ext}'))
                     break
+        elif resource_type == 'rooms':
+            target_dir = os.path.join(target_objects_dir, 'Rooms')
+            os.makedirs(target_dir, exist_ok=True)
+            source_file = os.path.join(source_objects_dir, 'Rooms', f'{resource_name}.json')
+            if os.path.exists(source_file):
+                safe_copy(source_file, os.path.join(target_dir, f'{resource_name}.json'))
 
     def _merge_objects_directories(self, target_objects_dir: str, source_objects_dir: str, source_mod_name: str = 'unknown') -> None:
         if not os.path.exists(source_objects_dir):
@@ -1487,7 +1513,7 @@ class MultiModMerger(QObject):
         except Exception:
             pass
         os.makedirs(target_objects_dir, exist_ok=True)
-        subdirs_to_merge = [('Sprites', 'sprite', True), ('Backgrounds', 'background', False), ('Tilesets', 'tileset', False), ('Shaders', 'shader', False), ('Fonts', 'font', False), ('Sounds', 'sound', False)]
+        subdirs_to_merge = [('Sprites', 'sprite', True), ('Backgrounds', 'background', False), ('Tilesets', 'tileset', False), ('Shaders', 'shader', False), ('Fonts', 'font', False), ('Sounds', 'sound', False), ('Rooms', 'room', True)]
         for folder_name, resource_type, track_history in subdirs_to_merge:
             self._merge_subdirectory(target_objects_dir, source_objects_dir, folder_name, resource_type, source_mod_name, track_history)
         source_code = os.path.join(source_objects_dir, 'CodeEntries')
@@ -1840,7 +1866,7 @@ class MultiModMerger(QObject):
         return mod_type
 
     def _detect_mod_asset_types(self, mod_dir: str) -> Dict[str, bool]:
-        asset_types = {'has_code': False, 'has_textures': False, 'has_shaders': False, 'has_tilesets': False, 'has_fonts': False, 'has_sounds': False}
+        asset_types = {'has_code': False, 'has_textures': False, 'has_shaders': False, 'has_tilesets': False, 'has_fonts': False, 'has_sounds': False, 'has_rooms': False}
         objects_dir = os.path.join(mod_dir, 'Objects')
         if os.path.exists(objects_dir):
             code_entries_dir = os.path.join(objects_dir, 'CodeEntries')
@@ -1881,6 +1907,13 @@ class MultiModMerger(QObject):
                     sound_files = [f for f in os.listdir(sounds_dir) if f.endswith('.wav') or f.endswith('.ogg')]
                     if sound_files:
                         asset_types['has_sounds'] = True
+                except Exception:
+                    pass
+            if os.path.exists(rooms_dir):
+                try:
+                    room_files = [f for f in os.listdir(rooms_dir) if f.endswith('.json')]
+                    if room_files:
+                        asset_types['has_rooms'] = True
                 except Exception:
                     pass
         else:
