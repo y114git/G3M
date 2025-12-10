@@ -1632,7 +1632,7 @@ class AppWindow(QWidget):
                     self._show_chapter_mode_instruction()
             else:
                 self.library_display.update_display()
-        self.refresh_controller.refresh_mods_list(is_initial=is_initial, language_combo=self.language_combo, retranslate_callback=self._retranslate_ui, on_fetch_finished_kwargs={'update_filtered_mods_callback': lambda: self.search_display.update_filtered_mods(preserve_page=True), 'update_installed_mods_callback': update_installed_mods_callback, 'update_action_button_callback': lambda: self.game_launch.update_button_state(), 'update_plugin_tabs_callback': self._update_plugin_tabs, 'mods_loaded_signal': self.mods_loaded_signal})
+        self.refresh_controller.refresh_mods_list(is_initial=is_initial, language_combo=self.language_combo, retranslate_callback=self._retranslate_ui, on_fetch_finished_kwargs={'update_filtered_mods_callback': lambda: self.search_display.update_filtered_mods(preserve_page=False), 'update_installed_mods_callback': update_installed_mods_callback, 'update_action_button_callback': lambda: self.game_launch.update_button_state(), 'update_plugin_tabs_callback': self._update_plugin_tabs, 'mods_loaded_signal': self.mods_loaded_signal})
 
     def _update_plugin_tabs(self):
         if not hasattr(self, 'plugin_manager') or not hasattr(self, 'main_tab_widget'):
