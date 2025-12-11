@@ -276,98 +276,97 @@ class MultiModMerger(QObject):
         vanilla_data_win = os.path.join(vanilla_dir, original_filename)
         shutil.copyfile(original_data_win, vanilla_data_win)
         self.patching_logger.info(f'Created vanilla copy at {vanilla_data_win} (from {original_data_win})')
-        if not is_modpack:
-            self.patching_logger.info(f'Processing extra files for chapter {chapter_id} before patching and merging...')
-            for mod_data in mods_list:
-                mod_source_dir = self._get_mod_source_dir(mod_data, chapter_id)
-                if mod_source_dir and os.path.isdir(mod_source_dir):
-                    used_archive_names = set()
-                    if self._apply_file_overrides(mod_source_dir, target_dir, used_archive_names, False):
-                        mod_name = getattr(mod_data, 'name', 'Unknown')
-                        self.patching_logger.debug(f'Processed extra files from {mod_name} for chapter {chapter_id}')
-                    else:
-                        mod_name = getattr(mod_data, 'name', 'Unknown')
-                        self.patching_logger.warning(f'Failed to process extra files from {mod_name} for chapter {chapter_id}')
-        mods_count = len(mods_list)
-        if not is_modpack and mods_count == 1:
-            mod_data = mods_list[0]
-            mod_name = getattr(mod_data, 'name', 'Unknown')
+        data_modifying_mods = []
+        for mod_data in mods_list:
             mod_source_dir = self._get_mod_source_dir(mod_data, chapter_id)
             if mod_source_dir:
-                ready_data_win_files = self._find_ready_data_win_files(mod_source_dir)
-                data_patches = self._find_data_patches(mod_source_dir)
-                csx_scripts = self._find_csx_scripts(mod_source_dir)
-                if ready_data_win_files and (not data_patches) and (not csx_scripts):
-                    self.patching_logger.info(f'[SINGLE_MOD] Single mod {mod_name} with only ready data.win/game.ios - copying directly')
-                    ready_file = ready_data_win_files[0]
-                    self.patching_logger.info(f'[SINGLE_MOD] Copying ready file: {ready_file} -> {output_data_win_path} (chapter {chapter_id})')
-                    try:
-                        extracted_chapter_id = self._extract_chapter_id_from_path(target_dir)
-                        if extracted_chapter_id is not None:
-                            self.patching_logger.info(f'[SINGLE_MOD] Creating backup before replacing data.win (chapter {extracted_chapter_id})')
-                            if not self.backup_manager.backup_file(extracted_chapter_id, output_data_win_path):
-                                self.patching_logger.error(f'[SINGLE_MOD] Failed to create backup of {output_data_win_path} before replacement')
+                mod_type = self._detect_mod_type(mod_source_dir)
+                if mod_type.get('has_xdelta_patch') or mod_type.get('has_ready_data_win') or mod_type.get('has_csx_scripts'):
+                    data_modifying_mods.append(mod_data)
+        self.patching_logger.info(f'[OPTIMIZATION] Found {len(data_modifying_mods)} mod(s) that modify data.win out of {len(mods_list)} total mod(s)')
+        mods_count = len(mods_list)
+        if not is_modpack and len(data_modifying_mods) <= 1:
+            primary_data_mod = data_modifying_mods[0] if data_modifying_mods else None
+            if primary_data_mod:
+                mod_name = getattr(primary_data_mod, 'name', 'Unknown')
+                mod_source_dir = self._get_mod_source_dir(primary_data_mod, chapter_id)
+                if mod_source_dir:
+                    ready_data_win_files = self._find_ready_data_win_files(mod_source_dir)
+                    data_patches = self._find_data_patches(mod_source_dir)
+                    csx_scripts = self._find_csx_scripts(mod_source_dir)
+                    if ready_data_win_files and (not data_patches) and (not csx_scripts):
+                        self.patching_logger.info(f'[FAST_PATH] Mod {mod_name} with only ready data.win/game.ios - copying directly')
+                        ready_file = ready_data_win_files[0]
+                        self.patching_logger.info(f'[FAST_PATH] Copying ready file: {ready_file} -> {output_data_win_path} (chapter {chapter_id})')
+                        try:
+                            extracted_chapter_id = self._extract_chapter_id_from_path(target_dir)
+                            if extracted_chapter_id is not None:
+                                self.patching_logger.info(f'[FAST_PATH] Creating backup before replacing data.win (chapter {extracted_chapter_id})')
+                                if not self.backup_manager.backup_file(extracted_chapter_id, output_data_win_path):
+                                    self.patching_logger.error(f'[FAST_PATH] Failed to create backup of {output_data_win_path} before replacement')
+                                    if not is_modpack:
+                                        self.backup_manager.restore_backups(chapter_id)
+                                    return False
+                            else:
+                                self.patching_logger.warning(f'[FAST_PATH] Could not extract chapter ID from path {target_dir}, backup may not work correctly')
+                            shutil.copyfile(ready_file, output_data_win_path)
+                            file_size = os.path.getsize(output_data_win_path) if os.path.exists(output_data_win_path) else 0
+                            self.patching_logger.info(f'[FAST_PATH] Successfully copied ready data.win/game.ios from {mod_name} to {output_data_win_path} (size: {file_size} bytes, chapter {chapter_id})')
+                        except Exception as e:
+                            self.patching_logger.error(f'[FAST_PATH] Failed to copy ready data.win file from {mod_name}: {e}', exc_info=True)
+                            if not is_modpack:
+                                self.backup_manager.restore_backups(chapter_id)
+                            return False
+                    elif data_patches and (not ready_data_win_files) and (not csx_scripts):
+                        self.patching_logger.info(f'[FAST_PATH] Mod {mod_name} with only xdelta patch(es) - applying directly')
+                        try:
+                            if os.path.exists(output_data_win_path):
+                                extracted_chapter_id = self._extract_chapter_id_from_path(target_dir)
+                                if extracted_chapter_id is not None:
+                                    self.backup_manager.backup_file(extracted_chapter_id, output_data_win_path)
+                            if not self._apply_xdelta_patches(output_data_win_path, data_patches, progress_callback=lambda p: self.progress_update.emit(min(int(p * 50), 95), f'Applying patch from {mod_name}...')):
+                                self.patching_logger.error(f'[FAST_PATH] Failed to apply xdelta patches from {mod_name}')
                                 if not is_modpack:
                                     self.backup_manager.restore_backups(chapter_id)
                                 return False
-                        else:
-                            self.patching_logger.warning(f'[SINGLE_MOD] Could not extract chapter ID from path {target_dir}, backup may not work correctly')
-                        shutil.copyfile(ready_file, output_data_win_path)
-                        file_size = os.path.getsize(output_data_win_path) if os.path.exists(output_data_win_path) else 0
-                        self.patching_logger.info(f'[SINGLE_MOD] Successfully copied ready data.win/game.ios from {mod_name} to {output_data_win_path} (size: {file_size} bytes, chapter {chapter_id})')
-                        used_archive_names = set()
-                        if not self._apply_file_overrides(mod_source_dir, target_dir, used_archive_names, False):
-                            self.patching_logger.warning(f'[SINGLE_MOD] Failed to apply file overrides from {mod_name}')
-                        return True
-                    except Exception as e:
-                        self.patching_logger.error(f'[SINGLE_MOD] Failed to copy ready data.win file from {mod_name}: {e}', exc_info=True)
-                        if not is_modpack:
-                            self.backup_manager.restore_backups(chapter_id)
-                        return False
-                if data_patches and (not ready_data_win_files) and (not csx_scripts):
-                    self.patching_logger.info(f'[SINGLE_MOD] Single mod {mod_name} with only xdelta patch(es) - applying directly')
-                    try:
-                        if os.path.exists(output_data_win_path):
-                            extracted_chapter_id = self._extract_chapter_id_from_path(target_dir)
-                            if extracted_chapter_id is not None:
-                                self.backup_manager.backup_file(extracted_chapter_id, output_data_win_path)
-                        if not self._apply_xdelta_patches(output_data_win_path, data_patches, progress_callback=lambda p: self.progress_update.emit(min(int(p * 50), 95), f'Applying patch from {mod_name}...')):
-                            self.patching_logger.error(f'Failed to apply xdelta patches from {mod_name}')
+                            self.patching_logger.info(f'[FAST_PATH] Successfully applied xdelta patches from {mod_name} to {output_data_win_path}')
+                        except Exception as e:
+                            self.patching_logger.error(f'[FAST_PATH] Failed to apply xdelta patches: {e}', exc_info=True)
                             if not is_modpack:
                                 self.backup_manager.restore_backups(chapter_id)
                             return False
-                        self.patching_logger.info(f'Successfully applied xdelta patches from {mod_name} to {output_data_win_path}')
-                        used_archive_names = set()
-                        if not self._apply_file_overrides(mod_source_dir, target_dir, used_archive_names, False):
-                            self.patching_logger.warning(f'Failed to apply file overrides from {mod_name}')
-                        return True
-                    except Exception as e:
-                        self.patching_logger.error(f'Failed to apply xdelta patches: {e}', exc_info=True)
-                        if not is_modpack:
-                            self.backup_manager.restore_backups(chapter_id)
-                        return False
-                if csx_scripts and (not ready_data_win_files) and (not data_patches):
-                    self.patching_logger.info(f'[SINGLE_MOD] Single mod {mod_name} with only CSX script(s) - executing directly without vanilla export')
-                    try:
-                        if os.path.exists(output_data_win_path):
-                            extracted_chapter_id = self._extract_chapter_id_from_path(target_dir)
-                            if extracted_chapter_id is not None:
-                                self.backup_manager.backup_file(extracted_chapter_id, output_data_win_path)
-                        if not self._apply_csx_scripts(output_data_win_path, csx_scripts):
-                            self.patching_logger.error(f'Failed to execute CSX scripts from {mod_name}')
+                    elif csx_scripts and (not ready_data_win_files) and (not data_patches):
+                        self.patching_logger.info(f'[FAST_PATH] Mod {mod_name} with only CSX script(s) - executing directly without vanilla export')
+                        try:
+                            if os.path.exists(output_data_win_path):
+                                extracted_chapter_id = self._extract_chapter_id_from_path(target_dir)
+                                if extracted_chapter_id is not None:
+                                    self.backup_manager.backup_file(extracted_chapter_id, output_data_win_path)
+                            if not self._apply_csx_scripts(output_data_win_path, csx_scripts):
+                                self.patching_logger.error(f'[FAST_PATH] Failed to execute CSX scripts from {mod_name}')
+                                if not is_modpack:
+                                    self.backup_manager.restore_backups(chapter_id)
+                                return False
+                            self.patching_logger.info(f'[FAST_PATH] Successfully executed CSX scripts from {mod_name} on {output_data_win_path}')
+                        except Exception as e:
+                            self.patching_logger.error(f'[FAST_PATH] Failed to execute CSX scripts: {e}', exc_info=True)
                             if not is_modpack:
                                 self.backup_manager.restore_backups(chapter_id)
                             return False
-                        self.patching_logger.info(f'Successfully executed CSX scripts from {mod_name} on {output_data_win_path}')
-                        used_archive_names = set()
-                        if not self._apply_file_overrides(mod_source_dir, target_dir, used_archive_names, False):
-                            self.patching_logger.warning(f'Failed to apply file overrides from {mod_name}')
-                        return True
-                    except Exception as e:
-                        self.patching_logger.error(f'Failed to execute CSX scripts: {e}', exc_info=True)
-                        if not is_modpack:
-                            self.backup_manager.restore_backups(chapter_id)
-                        return False
+            else:
+                self.patching_logger.info(f'[FAST_PATH] No mods modify data.win, skipping data.win changes')
+            self.patching_logger.info(f'[FAST_PATH] Applying file overrides from all {len(mods_list)} mod(s)')
+            for mod_data in mods_list:
+                mod_source_dir = self._get_mod_source_dir(mod_data, chapter_id)
+                if mod_source_dir:
+                    mod_name = getattr(mod_data, 'name', 'Unknown')
+                    used_archive_names = set()
+                    if self._apply_file_overrides(mod_source_dir, target_dir, used_archive_names, False):
+                        self.patching_logger.debug(f'[FAST_PATH] Applied file overrides from {mod_name}')
+                    else:
+                        self.patching_logger.warning(f'[FAST_PATH] Failed to apply file overrides from {mod_name}')
+            self.patching_logger.info(f'[FAST_PATH] Fast path completed successfully, skipping full export/import cycle')
+            return True
         vanilla_objects_dir = os.path.join(vanilla_dir, 'Objects')
         vanilla_already_exported = os.path.exists(vanilla_objects_dir) and os.listdir(vanilla_objects_dir) if os.path.exists(vanilla_objects_dir) else False
         if not vanilla_already_exported:
