@@ -1904,6 +1904,7 @@ class MultiModMerger(QObject):
             fonts_dir = os.path.join(objects_dir, 'Fonts')
             shaders_dir = os.path.join(objects_dir, 'Shaders')
             sounds_dir = os.path.join(objects_dir, 'Sounds')
+            rooms_dir = os.path.join(objects_dir, 'Rooms')
             if os.path.exists(sprites_dir) or os.path.exists(backgrounds_dir) or os.path.exists(fonts_dir):
                 asset_types['has_textures'] = True
             if os.path.exists(shaders_dir):
