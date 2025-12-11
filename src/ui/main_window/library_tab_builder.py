@@ -27,6 +27,10 @@ class LibraryTabBuilder:
         import_export_button.setObjectName('import_export_button')
         controls_layout.addWidget(import_export_button)
         controls_layout.addSpacing(20)
+        change_path_button = QPushButton()
+        change_path_button.setObjectName('change_path_button')
+        controls_layout.addWidget(change_path_button)
+        controls_layout.addSpacing(20)
         game_type_combo = QComboBox()
         game_type_combo.addItem('DELTARUNE', 'deltarune')
         game_type_combo.addItem('DELTARUNE DEMO', 'deltarunedemo')
@@ -151,6 +155,7 @@ class LibraryTabBuilder:
             pass
         self.widgets['library_filters_widget'] = library_filters_widget
         self.widgets['import_export_button'] = import_export_button
+        self.widgets['change_path_button'] = change_path_button
         self.widgets['game_type_combo'] = game_type_combo
         self.widgets['chapter_mode_checkbox'] = chapter_mode_checkbox
         self.widgets['full_install_checkbox'] = full_install_checkbox

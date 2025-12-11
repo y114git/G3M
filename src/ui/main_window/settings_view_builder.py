@@ -145,9 +145,6 @@ class SettingsViewBuilder:
         custom_exe_layout.addWidget(custom_executable_path_label, alignment=Qt.AlignmentFlag.AlignHCenter)
         settings_center_container.addWidget(custom_exe_frame, alignment=Qt.AlignmentFlag.AlignHCenter)
         custom_exe_frame.setVisible(False)
-        change_path_button = QPushButton()
-        change_path_button.setFixedWidth(300)
-        settings_center_container.addWidget(change_path_button, alignment=Qt.AlignmentFlag.AlignHCenter)
         open_deltahub_folder_button = QPushButton(tr('buttons.open_deltahub_folder'))
         open_deltahub_folder_button.setFixedWidth(300)
         settings_center_container.addWidget(open_deltahub_folder_button, alignment=Qt.AlignmentFlag.AlignHCenter)
@@ -179,7 +176,6 @@ class SettingsViewBuilder:
         self.widgets['select_custom_executable_button'] = select_custom_executable_button
         self.widgets['custom_executable_path_label'] = custom_executable_path_label
         self.widgets['custom_exe_frame'] = custom_exe_frame
-        self.widgets['change_path_button'] = change_path_button
         self.widgets['open_deltahub_folder_button'] = open_deltahub_folder_button
         self.widgets['customization_button'] = customization_button
         self.widgets['settings_customization_button'] = customization_button

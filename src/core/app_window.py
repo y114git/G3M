@@ -517,6 +517,7 @@ class AppWindow(QWidget):
         library_widgets = library_builder.get_widgets()
         self.library_filters_widget = library_widgets['library_filters_widget']
         self.import_export_button = library_widgets.get('import_export_button')
+        self.change_path_button = library_widgets.get('change_path_button')
         self.game_type_combo = library_widgets['game_type_combo']
         self.chapter_mode_checkbox = library_widgets['chapter_mode_checkbox']
         self.full_install_checkbox = library_widgets['full_install_checkbox']
@@ -664,7 +665,6 @@ class AppWindow(QWidget):
         self.select_custom_executable_button = settings_widgets['select_custom_executable_button']
         self.custom_executable_path_label = settings_widgets['custom_executable_path_label']
         self.custom_exe_frame = settings_widgets['custom_exe_frame']
-        self.change_path_button = settings_widgets['change_path_button']
         self.open_deltahub_folder_button = settings_widgets['open_deltahub_folder_button']
         self.customization_button = settings_widgets['customization_button']
         self.settings_customization_button = settings_widgets['settings_customization_button']
@@ -697,7 +697,8 @@ class AppWindow(QWidget):
             self.select_portproton_path_button.clicked.connect(self._select_portproton_path)
         self.use_custom_executable_checkbox.stateChanged.connect(self.settings_ui.on_toggle_custom_executable)
         self.select_custom_executable_button.clicked.connect(self._select_custom_executable_file)
-        self.change_path_button.clicked.connect(self._prompt_for_game_path)
+        if self.change_path_button:
+            self.change_path_button.clicked.connect(self._prompt_for_game_path)
         self.open_deltahub_folder_button.clicked.connect(self._open_deltahub_folder)
         self.customization_button.clicked.connect(lambda: self._switch_settings_page(self.settings_customization_page))
         self.reset_button.clicked.connect(self.settings_ui.reset_settings)
@@ -925,7 +926,8 @@ class AppWindow(QWidget):
         self.search_display.update_pagination()
 
     def _update_change_path_button_text(self):
-        self.change_path_button.setText(self.app_state.game_mode.path_change_button_text)
+        if self.change_path_button:
+            self.change_path_button.setText(self.app_state.game_mode.path_change_button_text)
 
     def _full_install_tooltip(self) -> str:
         if platform.system() == 'Darwin':
@@ -1145,8 +1147,12 @@ class AppWindow(QWidget):
             self.show_update_prompt.emit(update_info)
 
     def _perform_update_ui_prep(self):
-        for widget in [self.action_button, self.chat_button, self.shortcut_button, self.change_path_button, self.open_deltahub_folder_button, self.change_background_button]:
-            widget.setEnabled(False)
+        widgets = [self.action_button, self.chat_button, self.shortcut_button, self.open_deltahub_folder_button, self.change_background_button]
+        if self.change_path_button:
+            widgets.append(self.change_path_button)
+        for widget in widgets:
+            if widget:
+                widget.setEnabled(False)
         try:
             if hasattr(self, 'top_refresh_button') and self.top_refresh_button:
                 self.top_refresh_button.setEnabled(False)
@@ -1167,8 +1173,12 @@ class AppWindow(QWidget):
         try:
             if not self.app_state.is_settings_view:
                 self.tab_widget.setEnabled(True)
-            for w in [self.action_button, self.chat_button, self.shortcut_button, self.change_path_button, self.open_deltahub_folder_button, self.change_background_button]:
-                w.setEnabled(True)
+            widgets = [self.action_button, self.chat_button, self.shortcut_button, self.open_deltahub_folder_button, self.change_background_button]
+            if self.change_path_button:
+                widgets.append(self.change_path_button)
+            for w in widgets:
+                if w:
+                    w.setEnabled(True)
             try:
                 if hasattr(self, 'top_refresh_button') and self.top_refresh_button:
                     self.top_refresh_button.setEnabled(True)
