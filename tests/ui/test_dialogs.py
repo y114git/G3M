@@ -59,3 +59,19 @@ class TestModPriorityDialog:
         dialog = ModPriorityDialog(mods_list, 1, app_state, None)
         assert dialog is not None
         assert isinstance(dialog, QDialog)
+
+
+class TestReportBugDialog:
+
+    def test_report_bug_dialog_creation(self, qapp, app_state):
+        from ui.dialogs.report_bug_dialog import ReportBugDialog
+        dialog = ReportBugDialog(None, app_state)
+        assert dialog is not None
+        assert isinstance(dialog, QDialog)
+        assert hasattr(dialog, 'text_edit')
+        assert hasattr(dialog, 'file_list')
+        assert hasattr(dialog, 'attach_logs_checkbox')
+        assert hasattr(dialog, 'send_button')
+        assert dialog.max_text_length == 5000
+        assert dialog.max_total_size == 10 * 1024 * 1024
+        dialog.close()

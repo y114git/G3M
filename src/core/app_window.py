@@ -648,7 +648,6 @@ class AppWindow(QWidget):
         self.settings_menu_page = settings_widgets['settings_menu_page']
         self.settings_customization_page = settings_widgets['settings_customization_page']
         self.changelog_widget = settings_widgets['changelog_widget']
-        self.help_widget = settings_widgets['help_widget']
         self.settings_title_label = settings_widgets['settings_title_label']
         self.language_label = settings_widgets['language_label']
         self.language_combo = settings_widgets['language_combo']
@@ -682,8 +681,7 @@ class AppWindow(QWidget):
         self.theme_button = settings_widgets['theme_button']
         self.changelog_text_edit = settings_widgets['changelog_text_edit']
         self.changelog_button = settings_widgets['changelog_button']
-        self.help_text_edit = settings_widgets['help_text_edit']
-        self.help_button = settings_widgets['help_button']
+        self.report_bug_button = settings_widgets['report_bug_button']
         self.language_combo.currentTextChanged.connect(lambda: self.settings_ui.on_language_changed(self.language_combo.currentData()))
         self.beta_updates_checkbox.stateChanged.connect(self.settings_ui.on_toggle_beta_updates)
         self.clear_logs_checkbox.stateChanged.connect(self.settings_ui.on_toggle_clear_logs)
@@ -724,7 +722,7 @@ class AppWindow(QWidget):
             btn.clicked.connect(lambda _, le=line_edit: pick_color_for_edit(le))
             reset_btn.clicked.connect(lambda _, le=line_edit: (le.clear(), self.theme.on_custom_style_edited()))
         self.changelog_button.clicked.connect(lambda: self.settings_ui.toggle_settings_view(show_changelog=True))
-        self.help_button.clicked.connect(self.settings_ui.toggle_help_view)
+        self.report_bug_button.clicked.connect(self.settings_ui.show_report_bug_dialog)
         self.search_display.update_filtered_mods()
         self.main_layout.addWidget(self.settings_widget)
         self.app_state.current_settings_page = self.settings_menu_page
@@ -1402,7 +1400,8 @@ class AppWindow(QWidget):
             if key in self.color_labels:
                 self.color_labels[key].setText(self.color_config[key])
         self.changelog_button.setText(tr('buttons.close') if self.app_state.is_changelog_view else tr('buttons.changelog'))
-        self.help_button.setText(tr('buttons.close') if self.app_state.is_help_view else tr('buttons.help'))
+        if hasattr(self, 'report_bug_button') and self.report_bug_button:
+            self.report_bug_button.setText(tr('buttons.report_bug'))
 
     def _retranslate_ui(self):
         self._suppress_tab_handlers = True
@@ -1515,7 +1514,7 @@ class AppWindow(QWidget):
             threads_to_stop = []
             if self.game_launcher.monitor_thread:
                 threads_to_stop.append(self.game_launcher.monitor_thread)
-            for attr in ('install_thread', 'full_install_thread', 'current_install_thread', 'help_thread', 'changelog_thread'):
+            for attr in ('install_thread', 'full_install_thread', 'current_install_thread', 'changelog_thread'):
                 thread = getattr(self, attr, None)
                 if thread:
                     threads_to_stop.append(thread)

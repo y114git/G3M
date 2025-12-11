@@ -1227,30 +1227,6 @@ class UrlInstallThread(QThread):
             self.finished.emit(False, str(e))
 
 
-class FetchHelpContentWorker(QObject):
-    finished = pyqtSignal(str)
-
-    def __init__(self, url: str, parent=None):
-        super().__init__(parent)
-        self.url = url
-
-    @pyqtSlot()
-    def run(self):
-        try:
-            from utils.network_utils import get_session
-            response = get_session().get(self.url, timeout=NETWORK_TIMEOUT_MEDIUM)
-            if response.ok:
-                content = response.text
-                self.finished.emit(content)
-            else:
-                error_msg = tr('errors.load_error_http', code=response.status_code)
-                self.finished.emit(f'<i>{error_msg}</i>')
-        except Exception as e:
-            safe_msg = sanitize_log_message(f'FetchHelpContentWorker: failed to load help content: {e}')
-            logging.warning(safe_msg, exc_info=True)
-            self.finished.emit(f"<i>{tr('dialogs.help_content_load_failed')}</i>")
-
-
 class ModScanThread(QThread):
     scan_completed = pyqtSignal(dict)
 

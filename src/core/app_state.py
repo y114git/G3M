@@ -45,7 +45,6 @@ class AppState(QObject):
         self.library_initialized: bool = False
         self.is_settings_view: bool = False
         self.is_changelog_view: bool = False
-        self.is_help_view: bool = False
         self.current_settings_page: Optional[Any] = None
         self.settings_nav_stack: List[Any] = []
         self._current_mode: str = 'normal'

@@ -27,17 +27,14 @@ class SettingsViewBuilder:
         pages_layout.addWidget(settings_customization_page)
         settings_customization_page.setVisible(False)
         changelog_widget = self._build_changelog_widget()
-        help_widget = self._build_help_widget()
         settings_layout.addWidget(settings_pages_container)
         changelog_widget.setVisible(False)
         settings_layout.addWidget(changelog_widget, stretch=1)
-        help_widget.setVisible(False)
-        settings_layout.addWidget(help_widget, stretch=1)
         button_bar_layout = QHBoxLayout()
         button_bar_layout.setSpacing(10)
         button_bar_layout.addStretch(1)
         button_bar_layout.addWidget(self.widgets['changelog_button'])
-        button_bar_layout.addWidget(self.widgets['help_button'])
+        button_bar_layout.addWidget(self.widgets['report_bug_button'])
         button_bar_layout.addStretch(1)
         settings_layout.addLayout(button_bar_layout)
         settings_widget.setVisible(False)
@@ -46,7 +43,6 @@ class SettingsViewBuilder:
         self.widgets['settings_menu_page'] = settings_menu_page
         self.widgets['settings_customization_page'] = settings_customization_page
         self.widgets['changelog_widget'] = changelog_widget
-        self.widgets['help_widget'] = help_widget
         return settings_widget
 
     def _build_settings_menu_page(self) -> QWidget:
@@ -284,34 +280,13 @@ class SettingsViewBuilder:
         changelog_button = QPushButton(tr('buttons.changelog'))
         changelog_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         changelog_button.setStyleSheet('min-width: 220px; max-width: 220px;')
+        report_bug_button = QPushButton(tr('buttons.report_bug'))
+        report_bug_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        report_bug_button.setStyleSheet('min-width: 220px; max-width: 220px;')
         self.widgets['changelog_text_edit'] = changelog_text_edit
         self.widgets['changelog_button'] = changelog_button
+        self.widgets['report_bug_button'] = report_bug_button
         return changelog_widget
-
-    def _build_help_widget(self) -> QFrame:
-        help_widget = QFrame()
-        help_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        help_layout = QVBoxLayout(help_widget)
-        help_text_edit = QTextBrowser()
-        help_text_edit.setOpenExternalLinks(True)
-        help_text_edit.setMinimumHeight(0)
-        help_text_edit.setMaximumHeight(500)
-        if self.parent:
-            help_font = self.parent.font()
-            help_text_edit.setFont(help_font)
-            help_doc = help_text_edit.document()
-            if help_doc is not None:
-                help_doc.setDefaultFont(help_font)
-                help_doc.setDefaultStyleSheet('p { margin-bottom: 0.75em; } ul, ol { margin-left: 1em; } li { margin-bottom: 0.25em; }')
-        help_text_edit.setOpenExternalLinks(True)
-        help_text_edit.setMarkdown(f"<i>{tr('status.loading')}</i>")
-        help_layout.addWidget(help_text_edit)
-        help_button = QPushButton(tr('buttons.help'))
-        help_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        help_button.setStyleSheet('min-width: 220px; max-width: 220px;')
-        self.widgets['help_text_edit'] = help_text_edit
-        self.widgets['help_button'] = help_button
-        return help_widget
 
     def get_widgets(self) -> Dict[str, Any]:
         return self.widgets

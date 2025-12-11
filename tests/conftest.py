@@ -50,7 +50,7 @@ def cleanup_threads(qapp):
         time.sleep(0.05)
     try:
         for widget in qapp.allWidgets():
-            for attr_name in ['_compatibility_thread', '_icon_loader_runnable', 'thread', '_thread', 'worker_thread', '_worker_thread', 'monitor_thread', 'fetch_thread', 'details_thread', 'metadata_thread', 'install_thread', 'full_install_thread', 'current_install_thread', 'help_thread', 'changelog_thread', 'presence_thread']:
+            for attr_name in ['_compatibility_thread', '_icon_loader_runnable', 'thread', '_thread', 'worker_thread', '_worker_thread', 'monitor_thread', 'fetch_thread', 'details_thread', 'metadata_thread', 'install_thread', 'full_install_thread', 'current_install_thread', 'changelog_thread', 'presence_thread']:
                 thread = getattr(widget, attr_name, None)
                 if thread and isinstance(thread, QThread):
                     if thread.isRunning():

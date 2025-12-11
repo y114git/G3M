@@ -48,41 +48,16 @@ class SettingsUiController:
                 self.app.game_launch.update_button_state()
             QTimer.singleShot(0, apply_theme_and_enable_updates)
 
-    def toggle_help_view(self):
-        self.app_state.is_help_view = not self.app_state.is_help_view
-        if self.app_state.is_help_view and self.app_state.is_changelog_view:
-            self.app_state.is_changelog_view = False
-        if self.app_state.is_help_view:
-            self.load_help_content()
-        self.update_settings_page_visibility()
-
-    def load_help_content(self):
-        from managers.localization_manager import localization_manager
-        from workers.background_workers import FetchHelpContentWorker
-        from PyQt6.QtCore import QThread
-        if localization_manager.get_current_language() == 'ru':
-            help_url = self.app_state.global_settings.get('help_ru_url', self.app_state.global_settings.get('help_url', ''))
-        else:
-            help_url = self.app_state.global_settings.get('help_en_url', self.app_state.global_settings.get('help_url', ''))
-        if not help_url:
-            self.app.help_text_edit.setMarkdown(f"<i>{tr('dialogs.help_not_available')}</i>")
-            return
-        self.app.help_text_edit.setMarkdown(f"<i>{tr('status.loading')}</i>")
-        self.app.help_thread = QThread(self.app)
-        self.app.help_worker = FetchHelpContentWorker(help_url.strip())
-        self.app.help_worker.moveToThread(self.app.help_thread)
-        self.app.help_worker.finished.connect(self.app.help_text_edit.setMarkdown)
-        self.app.help_thread.started.connect(self.app.help_worker.run)
-        self.app.help_thread.start()
+    def show_report_bug_dialog(self):
+        from ui.dialogs.report_bug_dialog import ReportBugDialog
+        dialog = ReportBugDialog(self.app, self.app_state)
+        dialog.exec()
 
     def update_settings_page_visibility(self):
         is_changelog = self.app_state.is_changelog_view
-        is_help = self.app_state.is_help_view
-        self.app.settings_pages_container.setVisible(not is_changelog and (not is_help))
+        self.app.settings_pages_container.setVisible(not is_changelog)
         self.app.changelog_widget.setVisible(is_changelog)
-        self.app.help_widget.setVisible(is_help)
         self.app.changelog_button.setText(tr('buttons.close') if is_changelog else tr('buttons.changelog'))
-        self.app.help_button.setText(tr('buttons.close') if is_help else tr('buttons.help'))
 
     def reset_settings(self):
         self.customization_manager.stop_background_music()
