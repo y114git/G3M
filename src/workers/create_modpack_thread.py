@@ -16,13 +16,14 @@ class CreateModpackThread(QThread):
     status_update = pyqtSignal(str, str)
     finished = pyqtSignal(bool)
 
-    def __init__(self, chapter_mods: Dict[int, List[Any]], modpack_name: str, modpack_dir: str, app_state, mod_manager, parent=None):
+    def __init__(self, chapter_mods: Dict[int, List[Any]], modpack_name: str, modpack_dir: str, app_state, mod_manager, parent=None, fast_merge: bool = False):
         super().__init__(parent)
         self.chapter_mods = chapter_mods
         self.modpack_name = modpack_name
         self.modpack_dir = modpack_dir
         self.app_state = app_state
         self.mod_manager = mod_manager
+        self.fast_merge = fast_merge
         self.merger = None
         self._cancelled = False
 
@@ -45,7 +46,7 @@ class CreateModpackThread(QThread):
             if self.isInterruptionRequested() or self._cancelled:
                 self.finished.emit(False)
                 return
-            success = self.merger.process_mod_merge(self.chapter_mods, is_modpack=True, modpack_dir=self.modpack_dir)
+            success = self.merger.process_mod_merge(self.chapter_mods, is_modpack=True, modpack_dir=self.modpack_dir, fast_merge=self.fast_merge)
             if self.isInterruptionRequested() or self._cancelled:
                 self.merger._cancelled = True
                 success = False

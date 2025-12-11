@@ -43,11 +43,11 @@ class InstalledModWidget(BaseModWidget):
         installed_container_layout = QHBoxLayout(installed_container)
         installed_container_layout.setContentsMargins(0, 0, 0, 0)
         installed_container_layout.setSpacing(0)
-        installed_label_title = QLabel(date_label_text, installed_container)
-        installed_label_title.setObjectName('primaryText')
+        self.installed_label_title = QLabel(date_label_text, installed_container)
+        self.installed_label_title.setObjectName('primaryText')
         installed_label_value = QLabel(f' {installed_date_text}', installed_container)
         installed_label_value.setObjectName('secondaryText')
-        installed_container_layout.addWidget(installed_label_title)
+        installed_container_layout.addWidget(self.installed_label_title)
         installed_container_layout.addWidget(installed_label_value)
         containers = [self.author_container, self.game_version_container, installed_container]
         for i, container in enumerate(containers):
@@ -87,6 +87,19 @@ class InstalledModWidget(BaseModWidget):
         self.actions_widget.setVisible(False)
         self.main_layout.addWidget(self.actions_widget)
         self._update_style()
+
+    def _update_style(self):
+        super()._update_style()
+        config = None
+        if self.parent_app:
+            if hasattr(self.parent_app, 'local_config'):
+                config = self.parent_app.local_config
+            elif hasattr(self.parent_app, 'app_state') and hasattr(self.parent_app.app_state, 'local_config'):
+                config = self.parent_app.app_state.local_config
+        if config:
+            text_color = get_theme_color(config, 'text', 'white')
+            if hasattr(self, 'installed_label_title') and self.installed_label_title:
+                self.installed_label_title.setStyleSheet(f'color: {text_color};')
 
     def _update_indicator(self):
         style = 'font-size: 14px; font-weight: bold; margin-left: 5px;'

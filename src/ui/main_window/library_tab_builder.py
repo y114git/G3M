@@ -84,12 +84,24 @@ class LibraryTabBuilder:
         priority_button_layout.addStretch()
         priority_button_layout.addWidget(priority_button)
         priority_button_layout.addWidget(create_modpack_button)
+        fast_merging_label = QLabel(tr('ui.fast_merging'))
+        fast_merging_label.setToolTip(tr('ui.fast_merging_tooltip'))
+        fast_merging_checkbox = QCheckBox()
+        fast_merging_checkbox.setObjectName('fast_merging_checkbox')
+        fast_merging_checkbox.setToolTip(tr('ui.fast_merging_tooltip'))
+        text_color = get_theme_color(self.app_state.local_config, 'text', 'white')
+        fast_merging_label.setStyleSheet(f'color: {text_color};')
+        fast_merging_checkbox.setStyleSheet(f'\n            QCheckBox {{\n                spacing: 0px;\n            }}\n            QCheckBox::indicator {{\n                width: 16px;\n                height: 16px;\n            }}\n        ')
+        priority_button_layout.addWidget(fast_merging_label)
+        priority_button_layout.addWidget(fast_merging_checkbox)
         priority_button_layout.addStretch()
         priority_button_container.setFixedHeight(0)
         layout.addWidget(priority_button_container)
         self.widgets['priority_button_layout'] = priority_button_layout
         self.widgets['priority_button_container'] = priority_button_container
         self.widgets['create_modpack_button'] = create_modpack_button
+        self.widgets['fast_merging_checkbox'] = fast_merging_checkbox
+        self.widgets['fast_merging_label'] = fast_merging_label
         installed_mods_container = QWidget()
         installed_mods_container.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
         installed_mods_container.setObjectName('mods_background')
@@ -210,12 +222,19 @@ class LibraryTabBuilder:
         border_color = get_theme_color(self.app_state.local_config, 'border', 'white')
         button_color = get_theme_color(self.app_state.local_config, 'button', 'black')
         hover_color = get_theme_color(self.app_state.local_config, 'button_hover', '#333')
+        text_color = get_theme_color(self.app_state.local_config, 'text', 'white')
         if 'priority_button' in self.widgets:
             button = self.widgets['priority_button']
             self._update_priority_button_style(button, button_color, border_color, hover_color)
         if 'create_modpack_button' in self.widgets:
             button = self.widgets['create_modpack_button']
             self._update_priority_button_style(button, button_color, border_color, hover_color)
+        if 'fast_merging_label' in self.widgets:
+            fast_merging_label = self.widgets['fast_merging_label']
+            fast_merging_label.setStyleSheet(f'color: {text_color};')
+        if 'library_tags_label' in self.widgets:
+            library_tags_label = self.widgets['library_tags_label']
+            library_tags_label.setStyleSheet(f'color: {text_color};')
 
     def get_widgets(self) -> Dict[str, Any]:
         return self.widgets

@@ -144,6 +144,8 @@
     "tags_label": "標籤：",
     "update_button": "更新",
     "update_mod_list": "更新模組列表中...",
+    "fast_merging": "快速合併",
+    "fast_merging_tooltip": "啟用並行資源匯出。加速合併但會嚴重佔用CPU。如果不穩定請停用。",
     "updated_label": "更新時間：",
     "use_button": "使用",
     "value_label": "值",

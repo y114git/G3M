@@ -1,6 +1,6 @@
 from PyQt6.QtCore import pyqtSignal, Qt
 from PyQt6.QtWidgets import QFrame, QHBoxLayout, QVBoxLayout, QLabel, QWidget
-from ui.common.styling import load_mod_icon_universal, update_mod_widget_style
+from ui.common.styling import load_mod_icon_universal, update_mod_widget_style, get_theme_color
 from managers.localization_manager import tr
 
 
@@ -27,10 +27,10 @@ class BaseModWidget(QFrame):
         info_layout = QVBoxLayout()
         info_layout.setSpacing(2)
         title_layout = QHBoxLayout()
-        name_label = QLabel(self.mod_data.name, self)
-        name_label.setObjectName('primaryText')
-        name_label.setStyleSheet('font-size: 16px; font-weight: bold;')
-        title_layout.addWidget(name_label)
+        self.name_label = QLabel(self.mod_data.name, self)
+        self.name_label.setObjectName('primaryText')
+        self.name_label.setStyleSheet('font-size: 16px; font-weight: bold;')
+        title_layout.addWidget(self.name_label)
         if self.mod_data.version and '|' in self.mod_data.version:
             mod_version = self.mod_data.version.split('|')[0]
         else:
@@ -50,22 +50,22 @@ class BaseModWidget(QFrame):
         author_container_layout = QHBoxLayout(author_container)
         author_container_layout.setContentsMargins(0, 0, 0, 0)
         author_container_layout.setSpacing(0)
-        author_label_title = QLabel(tr('ui.author_label'), author_container)
-        author_label_title.setObjectName('primaryText')
+        self.author_label_title = QLabel(tr('ui.author_label'), author_container)
+        self.author_label_title.setObjectName('primaryText')
         author_label_value = QLabel(f' {author_text}', author_container)
         author_label_value.setObjectName('secondaryText')
-        author_container_layout.addWidget(author_label_title)
+        author_container_layout.addWidget(self.author_label_title)
         author_container_layout.addWidget(author_label_value)
         game_version_text = self.mod_data.game_version or 'N/A'
         game_version_container = QWidget(self)
         game_version_container_layout = QHBoxLayout(game_version_container)
         game_version_container_layout.setContentsMargins(0, 0, 0, 0)
         game_version_container_layout.setSpacing(0)
-        game_version_label_title = QLabel(tr('ui.game_version_label'), game_version_container)
-        game_version_label_title.setObjectName('primaryText')
+        self.game_version_label_title = QLabel(tr('ui.game_version_label'), game_version_container)
+        self.game_version_label_title.setObjectName('primaryText')
         game_version_label_value = QLabel(f' {game_version_text}', game_version_container)
         game_version_label_value.setObjectName('secondaryText')
-        game_version_container_layout.addWidget(game_version_label_title)
+        game_version_container_layout.addWidget(self.game_version_label_title)
         game_version_container_layout.addWidget(game_version_label_value)
         self.author_container = author_container
         self.game_version_container = game_version_container
@@ -100,24 +100,26 @@ class BaseModWidget(QFrame):
     def _update_style(self):
         if self.frame_selector:
             update_mod_widget_style(self, self.frame_selector, self.parent_app)
+        config = None
+        if self.parent_app:
+            if hasattr(self.parent_app, 'local_config'):
+                config = self.parent_app.local_config
+            elif hasattr(self.parent_app, 'app_state') and hasattr(self.parent_app.app_state, 'local_config'):
+                config = self.parent_app.app_state.local_config
+        if config:
+            text_color = get_theme_color(config, 'text', 'white')
+            if hasattr(self, 'name_label') and self.name_label:
+                self.name_label.setStyleSheet(f'font-size: 16px; font-weight: bold; color: {text_color};')
+            if hasattr(self, 'author_label_title') and self.author_label_title:
+                self.author_label_title.setStyleSheet(f'color: {text_color};')
+            if hasattr(self, 'game_version_label_title') and self.game_version_label_title:
+                self.game_version_label_title.setStyleSheet(f'color: {text_color};')
 
     def update_labels_text(self):
-        if hasattr(self, 'author_container') and self.author_container:
-            author_container_layout = self.author_container.layout()
-            if author_container_layout and author_container_layout.count() >= 1:
-                item = author_container_layout.itemAt(0)
-                if item:
-                    author_label_title = item.widget()
-                    if isinstance(author_label_title, QLabel):
-                        author_label_title.setText(tr('ui.author_label'))
-        if hasattr(self, 'game_version_container') and self.game_version_container:
-            game_version_container_layout = self.game_version_container.layout()
-            if game_version_container_layout and game_version_container_layout.count() >= 1:
-                item = game_version_container_layout.itemAt(0)
-                if item:
-                    game_version_label_title = item.widget()
-                    if isinstance(game_version_label_title, QLabel):
-                        game_version_label_title.setText(tr('ui.game_version_label'))
+        if hasattr(self, 'author_label_title') and self.author_label_title:
+            self.author_label_title.setText(tr('ui.author_label'))
+        if hasattr(self, 'game_version_label_title') and self.game_version_label_title:
+            self.game_version_label_title.setText(tr('ui.game_version_label'))
 
     def set_selected(self, selected):
         self.is_selected = selected

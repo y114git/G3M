@@ -9,12 +9,13 @@ class ModMergeThread(QThread):
     status_update = pyqtSignal(str, str)
     finished = pyqtSignal(bool)
 
-    def __init__(self, app_state, mod_manager, chapter_mods: Dict[int, List[Any]], session_manifest_path: str, parent=None):
+    def __init__(self, app_state, mod_manager, chapter_mods: Dict[int, List[Any]], session_manifest_path: str, parent=None, fast_merge: bool = False):
         super().__init__(parent)
         self.app_state = app_state
         self.mod_manager = mod_manager
         self.chapter_mods = chapter_mods
         self.session_manifest_path = session_manifest_path
+        self.fast_merge = fast_merge
         self.merger = None
         self._cancelled = False
 
@@ -44,7 +45,7 @@ class ModMergeThread(QThread):
             if self.isInterruptionRequested() or self._cancelled:
                 self.finished.emit(False)
                 return
-            success = self.merger.process_mod_merge(self.chapter_mods, is_modpack=False)
+            success = self.merger.process_mod_merge(self.chapter_mods, is_modpack=False, fast_merge=self.fast_merge)
             if self.isInterruptionRequested() or self._cancelled:
                 self.merger._cancelled = True
                 if self.merger:

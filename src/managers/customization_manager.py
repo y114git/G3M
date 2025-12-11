@@ -197,10 +197,13 @@ class CustomizationManager(QObject):
                     if not item:
                         continue
                     widget = item.widget()
-                    if not widget or not widget.isVisible():
+                    if not widget:
                         continue
                     if isinstance(widget, ModPlaqueWidget):
-                        widget._update_style()
+                        try:
+                            widget._update_style()
+                        except Exception:
+                            pass
         if installed_mods_widget:
             layout = installed_mods_widget.layout()
             if layout:
@@ -209,10 +212,13 @@ class CustomizationManager(QObject):
                     if not item:
                         continue
                     widget = item.widget()
-                    if not widget or not widget.isVisible():
+                    if not widget:
                         continue
                     if isinstance(widget, InstalledModWidget):
-                        widget._update_style()
+                        try:
+                            widget._update_style()
+                        except Exception:
+                            pass
 
     def load_launcher_icon(self, icon_label: QLabel):
         try:

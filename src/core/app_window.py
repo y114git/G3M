@@ -396,7 +396,6 @@ class AppWindow(QWidget):
         self.top_refresh_button.setMinimumSize(40, 40)
         self.top_refresh_button.setMaximumSize(40, 40)
         self.top_refresh_button.setStyleSheet('min-width:40px; max-width:40px; min-height:40px; max-height:40px; padding:0; margin:0;')
-        self.top_refresh_button.setToolTip(tr('ui.update_mod_list'))
         self.top_refresh_button.clicked.connect(self._on_refresh_clicked)
         self.top_frame.addWidget(self.top_refresh_button)
         self.top_frame.addWidget(self.online_label)
@@ -535,6 +534,12 @@ class AppWindow(QWidget):
         self.create_modpack_button = library_widgets.get('create_modpack_button')
         if self.create_modpack_button:
             self.create_modpack_button.clicked.connect(self.library_display.on_create_modpack_button_click)
+        self.fast_merging_checkbox = library_widgets.get('fast_merging_checkbox')
+        self.fast_merging_label = library_widgets.get('fast_merging_label')
+        if self.fast_merging_checkbox:
+            fast_merging_enabled = self.app_state.local_config.get('fast_merging_enabled', False)
+            self.fast_merging_checkbox.setChecked(fast_merging_enabled)
+            self.fast_merging_checkbox.stateChanged.connect(self._on_fast_merging_changed)
         plugin_builder = PluginTabBuilder(self.app_state, self)
         self.plugin_tab_builder = plugin_builder
         self.plugins_tab = plugin_builder.build()
@@ -746,6 +751,11 @@ class AppWindow(QWidget):
     def _try_start_background_music(self):
         if getattr(self, 'is_shown_to_user', False) and self.isVisible():
             self.customization_manager.maybe_start_background_music(force=True)
+
+    def _on_fast_merging_changed(self, state):
+        fast_merging_enabled = state == Qt.CheckState.Checked
+        self.app_state.local_config['fast_merging_enabled'] = fast_merging_enabled
+        self.settings_manager.write_local_config()
 
     def _on_library_filter_changed(self):
         self.library_display.update_display()
@@ -1274,7 +1284,6 @@ class AppWindow(QWidget):
         self.color_config = {'background': tr('ui.background_color'), 'button': tr('ui.elements_color'), 'border': tr('ui.border_color'), 'button_hover': tr('ui.hover_color'), 'text': tr('ui.main_text_color'), 'version_text': tr('ui.secondary_text_color')}
         self.settings_button.setText(tr('ui.back_button') if self.app_state.is_settings_view else tr('ui.settings_title'))
         self.online_label.setToolTip(tr('tooltips.online_counter'))
-        self.top_refresh_button.setToolTip(tr('ui.update_mod_list'))
         self.telegram_button.setText(tr('buttons.telegram'))
         self.beta_updates_checkbox.setToolTip(tr('tooltips.beta_updates'))
         self.discord_button.setText(tr('buttons.discord'))
@@ -1297,6 +1306,11 @@ class AppWindow(QWidget):
         self.tag_gameplay.setText(tr('tags.gameplay'))
         self.tag_other.setText(tr('tags.other'))
         self.search_button.setToolTip(tr('ui.search_placeholder'))
+        if hasattr(self, 'fast_merging_label') and self.fast_merging_label:
+            self.fast_merging_label.setText(tr('ui.fast_merging'))
+            self.fast_merging_label.setToolTip(tr('ui.fast_merging_tooltip'))
+        if hasattr(self, 'fast_merging_checkbox') and self.fast_merging_checkbox:
+            self.fast_merging_checkbox.setToolTip(tr('ui.fast_merging_tooltip'))
         self.prev_page_btn.setText(tr('ui.prev_page'))
         self.next_page_btn.setText(tr('ui.next_page'))
         if hasattr(self, 'mods_per_page_label'):
@@ -1439,6 +1453,29 @@ class AppWindow(QWidget):
                     self._update_online_label(getattr(self, '_last_online_count', 0))
             except Exception:
                 pass
+            from ui.common.styling import get_theme_color
+            text_color = get_theme_color(self.app_state.local_config, 'text', 'white')
+            if hasattr(self, 'plugin_tab_builder'):
+                plugin_lbl = self.plugin_tab_builder.widgets.get('installed_plugins_label')
+                if plugin_lbl:
+                    plugin_lbl.setStyleSheet(f'font-weight: bold; font-size: 16px; color: {text_color};')
+            if hasattr(self, 'installed_mods_label') and self.installed_mods_label:
+                self.installed_mods_label.setStyleSheet(f'font-weight: bold; font-size: 16px; color: {text_color};')
+            checkbox_style = f'\n            QCheckBox {{\n                color: {text_color};\n                font-size: 12px;\n                spacing: 5px;\n            }}\n            QCheckBox::indicator {{\n                width: 16px;\n                height: 16px;\n            }}\n        '
+            if hasattr(self, 'library_tag_widgets'):
+                for cb in self.library_tag_widgets:
+                    cb.setStyleSheet(checkbox_style)
+            if hasattr(self, 'chapter_mode_checkbox'):
+                self.chapter_mode_checkbox.setStyleSheet(f'color: {text_color};')
+            if hasattr(self, 'full_install_checkbox'):
+                self.full_install_checkbox.setStyleSheet(f'color: {text_color};')
+            if hasattr(self, 'tag_textedit'):
+                search_checkboxes = [self.tag_textedit, self.tag_customization, self.tag_gameplay, self.tag_other]
+                if hasattr(self, 'auto_sorting_checkbox'):
+                    search_checkboxes.append(self.auto_sorting_checkbox)
+                for cb in search_checkboxes:
+                    if cb:
+                        cb.setStyleSheet(checkbox_style)
             self.search_display.update_filtered_mods()
             self.search_display.update_all_plaques_labels()
             self.library_display.update_display()

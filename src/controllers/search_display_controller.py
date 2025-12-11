@@ -1067,6 +1067,8 @@ class SearchDisplayController(QObject):
                 try:
                     if hasattr(plaque, 'update_labels_text'):
                         plaque.update_labels_text()
+                    if hasattr(plaque, '_update_style'):
+                        plaque._update_style()
                 except Exception as e:
                     logger.warning(f'SearchDisplayController: Error updating labels for plaque {cache_key}: {e}')
             if hasattr(self.app, 'mod_list_layout'):
@@ -1078,6 +1080,8 @@ class SearchDisplayController(QObject):
                             try:
                                 if hasattr(widget, 'update_labels_text'):
                                     widget.update_labels_text()
+                                if hasattr(widget, '_update_style'):
+                                    widget._update_style()
                             except Exception as e:
                                 logger.warning(f'SearchDisplayController: Error updating labels for widget in layout: {e}')
         except Exception as e:

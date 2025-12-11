@@ -145,6 +145,8 @@
     "tags_label": "Tags:",
     "update_button": "Update",
     "update_mod_list": "Updating mod list...",
+    "fast_merging": "Fast merging",
+    "fast_merging_tooltip": "Enables parallel resource export. Speeds up merging but heavily loads the CPU. Disable if unstable.",
     "updated_label": "Updated:",
     "use_button": "Use",
     "value_label": "Value",

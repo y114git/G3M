@@ -69,8 +69,8 @@ catch
         throw new ScriptException("DELTAHUB root not found (no /output ancestor).");
 }
 
-string chapterNo = File.ReadAllText(Path.Combine(deltahubRoot, "output", "Cache", "running", "chapterNumber.txt"));
-string modNo = File.ReadAllText(Path.Combine(deltahubRoot, "output", "Cache", "running", "modNumbersCache.txt"));
+string chapterNo = GetChapterNumber(deltahubRoot);
+string modNo = GetModNumbersCache(deltahubRoot);
 
 string modRoot = Path.Combine(deltahubRoot, "output", "xDeltaCombiner", chapterNo, modNo);
 string outputRoot = Path.Combine(modRoot, "Objects");

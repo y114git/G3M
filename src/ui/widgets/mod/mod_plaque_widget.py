@@ -145,10 +145,10 @@ class ModPlaqueWidget(BaseModWidget):
             modgame_text = 'UNDERTALE Yellow'
             modgame_style = f'background-color: #FFD700; color: {text_color}; border: none;'
         if modgame_text:
-            modgame_label = QLabel(modgame_text, self)
+            self.modgame_tag_label = QLabel(modgame_text, self)
             style_sheet = f'font-weight: bold; padding: 2px 5px; border-radius: 3px; {modgame_style}'
-            modgame_label.setStyleSheet(style_sheet)
-            tags_layout.addWidget(modgame_label)
+            self.modgame_tag_label.setStyleSheet(style_sheet)
+            tags_layout.addWidget(self.modgame_tag_label)
         if self.mod_data.is_verified:
             verified_label = QLabel(tr('ui.verified_label'), self)
             verified_label.setStyleSheet('color: #4CAF50; font-size: 14px;')
@@ -172,6 +172,26 @@ class ModPlaqueWidget(BaseModWidget):
             if hasattr(self.parent_app, 'app_state') and hasattr(self.parent_app.app_state, 'local_config'):
                 return self.parent_app.app_state.local_config
         return None
+
+    def _update_style(self):
+        super()._update_style()
+        config = self._resolve_theme_config()
+        text_color = get_theme_color(config, 'text', 'white') if config else 'white'
+        if hasattr(self, 'modgame_tag_label') and self.modgame_tag_label:
+            modgame = getattr(self.mod_data, 'modgame', 'deltarune')
+            if modgame == 'deltarunedemo':
+                base_style = f'background-color: black; color: {text_color}; border: 1px solid lightgreen;'
+            elif modgame == 'undertale':
+                base_style = f'background-color: red; color: {text_color}; border: 1px solid red;'
+            elif modgame == 'undertaleyellow':
+                base_style = f'background-color: #FFD700; color: {text_color}; border: none;'
+            else:
+                base_style = f'background-color: black; color: {text_color}; border: 1px solid white;'
+            self.modgame_tag_label.setStyleSheet(f'font-weight: bold; padding: 2px 5px; border-radius: 3px; {base_style}')
+        if hasattr(self, 'created_label_title') and self.created_label_title:
+            self.created_label_title.setStyleSheet(f'color: {text_color};')
+        if hasattr(self, 'updated_label_title') and self.updated_label_title:
+            self.updated_label_title.setStyleSheet(f'color: {text_color};')
 
     def _get_theme_text_color(self, fallback='white'):
         config = self._resolve_theme_config()

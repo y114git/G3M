@@ -5,6 +5,8 @@ import subprocess
 import time
 import re
 import hashlib
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, List, Optional, Any
 from PyQt6.QtCore import QObject, pyqtSignal
 from managers.backup_manager import BackupManager
@@ -48,7 +50,7 @@ class MultiModMerger(QObject):
         self._active_processes: List[subprocess.Popen] = []
         self._temp_files_to_cleanup: List[str] = []
 
-    def process_mod_merge(self, chapter_mods: Dict[int, List[Any]], is_modpack: bool, modpack_dir: Optional[str] = None) -> bool:
+    def process_mod_merge(self, chapter_mods: Dict[int, List[Any]], is_modpack: bool, modpack_dir: Optional[str] = None, fast_merge: bool = False) -> bool:
         clear_logs_enabled = self.app_state.local_config.get('clear_logs_on_startup', False)
         if clear_logs_enabled:
             clear_patching_logs()
@@ -140,7 +142,7 @@ class MultiModMerger(QObject):
                     if not target_dir:
                         self.patching_logger.warning(f'Target directory not found for chapter {chapter_id}, skipping mods for this chapter in modpack')
                         continue
-                    if not self._merge_mods_for_chapter_to_dir(chapter_id, mods_list, chapter_modpack_dir, chapter_progress_base, total_chapters):
+                    if not self._merge_mods_for_chapter_to_dir(chapter_id, mods_list, chapter_modpack_dir, chapter_progress_base, total_chapters, fast_merge=fast_merge):
                         self.patching_logger.error(f'Failed to merge mods for chapter {chapter_id} in modpack')
                         try:
                             failed_msg = tr('status.merge_failed')
@@ -148,7 +150,7 @@ class MultiModMerger(QObject):
                             failed_msg = 'Modpack creation failed'
                         self.progress_update.emit(0, failed_msg)
                         return False
-                elif not self._merge_mods_for_chapter(chapter_id, mods_list, chapter_progress_base, total_chapters):
+                elif not self._merge_mods_for_chapter(chapter_id, mods_list, chapter_progress_base, total_chapters, fast_merge=fast_merge):
                     target_dir = self._get_target_dir(chapter_id)
                     if not target_dir:
                         self.patching_logger.warning(f'Target directory not found for chapter {chapter_id}, skipping mods for this chapter. The game may not have this chapter installed.')
@@ -229,7 +231,7 @@ class MultiModMerger(QObject):
                         self.patching_logger.warning(f'Failed to cleanup temp merge dir in finally block: {self.temp_merge_dir}')
                     self.temp_merge_dir = None
 
-    def _merge_mods_for_chapter(self, chapter_id: int, mods_list: List[Any], progress_base: int = 0, total_chapters: int = 1) -> bool:
+    def _merge_mods_for_chapter(self, chapter_id: int, mods_list: List[Any], progress_base: int = 0, total_chapters: int = 1, fast_merge: bool = False) -> bool:
         self.patching_logger.debug(f'_merge_mods_for_chapter: chapter_id={chapter_id}, mods_count={len(mods_list)}')
         target_dir = self._get_target_dir(chapter_id)
         if not target_dir:
@@ -246,9 +248,9 @@ class MultiModMerger(QObject):
             return self._apply_file_overrides_only(chapter_id, mods_list, target_dir)
         if not self.backup_manager.backup_file(chapter_id, data_win_path):
             return False
-        return self._perform_chapter_merge(chapter_id, mods_list, data_win_path, target_dir, None, progress_base, total_chapters, is_modpack=False)
+        return self._perform_chapter_merge(chapter_id, mods_list, data_win_path, target_dir, None, progress_base, total_chapters, is_modpack=False, fast_merge=fast_merge)
 
-    def _perform_chapter_merge(self, chapter_id: int, mods_list: List[Any], output_data_win_path: str, target_dir: str, modpack_dir: Optional[str], progress_base: int, total_chapters: int, is_modpack: bool) -> bool:
+    def _perform_chapter_merge(self, chapter_id: int, mods_list: List[Any], output_data_win_path: str, target_dir: str, modpack_dir: Optional[str], progress_base: int, total_chapters: int, is_modpack: bool, fast_merge: bool = False) -> bool:
         import platform
         original_data_win = output_data_win_path
         if not mods_list or len(mods_list) == 0:
@@ -487,43 +489,25 @@ class MultiModMerger(QObject):
             self.progress_update.emit(min(mod_progress_end, 95), f'Completed {mod_name}')
         mods_to_export = [m for i, m in enumerate(mods_to_apply) if i + 1 not in mods_already_exported]
         highest_priority_mod_exported_files = set()
-        for idx, mod_data in enumerate(mods_to_export):
-            if self._cancelled:
+        if fast_merge and mods_to_export:
+
+            def export_progress_callback(p, msg):
+                return self.progress_update.emit(p, msg)
+            if not self._perform_parallel_export(mods_to_export, mod_patched_files, mod_types, vanilla_data_win, merge_root, cache_running_dir, chapter_str, chapter_id, progress_base + int(xdelta_progress), export_progress, export_progress_callback):
+                if not is_modpack and self.backup_manager:
+                    self.backup_manager.restore_backups(chapter_id)
                 return False
-            mod_name = getattr(mod_data, 'name', 'Unknown')
-            original_idx = mods_to_apply.index(mod_data)
-            mod_number = original_idx + 1
-            export_step = idx / len(mods_to_export) * export_progress if mods_to_export else 0
-            current_progress = progress_base + int(xdelta_progress + export_step)
-            try:
-                export_msg = tr('status.exporting_assets', mod=mod_name, current=idx + 1, total=len(mods_to_export))
-            except BaseException:
-                export_msg = f'Exporting assets from {mod_name} ({idx + 1}/{len(mods_to_export)})...'
-            self.progress_update.emit(min(current_progress, 95), export_msg)
-            mod_data_win = mod_patched_files.get(mod_number)
-            if not mod_data_win or not os.path.exists(mod_data_win):
-                continue
-            mod_dir = os.path.dirname(mod_data_win)
-            mod_asset_types = self._detect_mod_asset_types(mod_dir)
-            mod_type = mod_types.get(mod_number, {})
-            has_previous_mod = mod_number > 1 and mod_number - 1 in mod_patched_files
-            scripts, comparison_file = self._select_export_strategy(mod_type, mod_asset_types, mod_number, has_previous_mod)
-            if not scripts and comparison_file is None:
-                self.patching_logger.info(f'Skipping export for mod {mod_number} ({mod_name}) - already exported')
-                continue
-            self.patching_logger.info(f'Exporting assets from mod {mod_number} ({mod_name}) using strategy: {scripts}, comparison: {comparison_file}')
-            if not self._export_mod_assets_optimized(mod_data_win, mod_number, scripts, comparison_file, vanilla_data_win, merge_root, cache_running_dir, chapter_str):
-                self.patching_logger.warning(f'Failed to export assets from mod {mod_number} ({mod_name})')
-            else:
+            for mod_data in mods_to_export:
+                mod_name = getattr(mod_data, 'name', 'Unknown')
+                original_idx = mods_to_apply.index(mod_data)
+                mod_number = original_idx + 1
+                mod_data_win = mod_patched_files.get(mod_number)
+                if not mod_data_win or not os.path.exists(mod_data_win):
+                    continue
+                mod_dir = os.path.dirname(mod_data_win)
                 objects_dir = os.path.join(mod_dir, 'Objects')
                 if os.path.exists(objects_dir):
                     code_entries_dir = os.path.join(objects_dir, 'CodeEntries')
-                    sprites_dir = os.path.join(objects_dir, 'Sprites')
-                    shaders_dir = os.path.join(objects_dir, 'Shaders')
-                    code_count = len([f for f in os.listdir(code_entries_dir) if f.endswith('.gml')]) if os.path.exists(code_entries_dir) else 0
-                    sprite_count = len([d for d in os.listdir(sprites_dir) if os.path.isdir(os.path.join(sprites_dir, d))]) if os.path.exists(sprites_dir) else 0
-                    shader_count = len([d for d in os.listdir(shaders_dir) if os.path.isdir(os.path.join(shaders_dir, d))]) if os.path.exists(shaders_dir) else 0
-                    self.patching_logger.info(f'[EXPORT] Mod {mod_number} ({mod_name}) exported: {code_count} code, {sprite_count} sprites, {shader_count} shaders')
                     if os.path.exists(code_entries_dir):
                         mod_exported_code = set()
                         for code_file in os.listdir(code_entries_dir):
@@ -531,15 +515,6 @@ class MultiModMerger(QObject):
                                 code_name = os.path.splitext(code_file)[0]
                                 mod_exported_code.add(code_name)
                         self._mod_exported_code_files[mod_number] = mod_exported_code
-                        self.patching_logger.debug(f'[EXPORT] Tracked {len(mod_exported_code)} code files exported by mod {mod_number} ({mod_name})')
-                    if os.path.exists(sprites_dir):
-                        ramb_sprites = [d for d in os.listdir(sprites_dir) if 'ramb' in d.lower()]
-                        if ramb_sprites:
-                            self.patching_logger.debug(f'[EXPORT] Found ramb sprites: {ramb_sprites}')
-                    if os.path.exists(code_entries_dir):
-                        ramb_code = [f for f in os.listdir(code_entries_dir) if 'ramb' in f.lower()]
-                        if ramb_code:
-                            self.patching_logger.debug(f'[EXPORT] Found ramb code: {ramb_code}')
                 mod_source_dir = self._get_mod_source_dir(mod_data, chapter_id)
                 if mod_source_dir:
                     objects_dir = os.path.join(mod_dir, 'Objects')
@@ -576,6 +551,96 @@ class MultiModMerger(QObject):
                             if os.path.isdir(os.path.join(shaders_dir, shader_name)):
                                 if shader_name not in existing_assets['shaders']:
                                     existing_assets['shaders'][shader_name] = mod_name
+        else:
+            for idx, mod_data in enumerate(mods_to_export):
+                if self._cancelled:
+                    return False
+                mod_name = getattr(mod_data, 'name', 'Unknown')
+                original_idx = mods_to_apply.index(mod_data)
+                mod_number = original_idx + 1
+                export_step = idx / len(mods_to_export) * export_progress if mods_to_export else 0
+                current_progress = progress_base + int(xdelta_progress + export_step)
+                try:
+                    export_msg = tr('status.exporting_assets', mod=mod_name, current=idx + 1, total=len(mods_to_export))
+                except BaseException:
+                    export_msg = f'Exporting assets from {mod_name} ({idx + 1}/{len(mods_to_export)})...'
+                self.progress_update.emit(min(current_progress, 95), export_msg)
+                mod_data_win = mod_patched_files.get(mod_number)
+                if not mod_data_win or not os.path.exists(mod_data_win):
+                    continue
+                mod_dir = os.path.dirname(mod_data_win)
+                mod_asset_types = self._detect_mod_asset_types(mod_dir)
+                mod_type = mod_types.get(mod_number, {})
+                has_previous_mod = mod_number > 1 and mod_number - 1 in mod_patched_files
+                scripts, comparison_file = self._select_export_strategy(mod_type, mod_asset_types, mod_number, has_previous_mod)
+                if not scripts and comparison_file is None:
+                    self.patching_logger.info(f'Skipping export for mod {mod_number} ({mod_name}) - already exported')
+                    continue
+                self.patching_logger.info(f'Exporting assets from mod {mod_number} ({mod_name}) using strategy: {scripts}, comparison: {comparison_file}')
+                if not self._export_mod_assets_optimized(mod_data_win, mod_number, scripts, comparison_file, vanilla_data_win, merge_root, cache_running_dir, chapter_str):
+                    self.patching_logger.warning(f'Failed to export assets from mod {mod_number} ({mod_name})')
+                else:
+                    objects_dir = os.path.join(mod_dir, 'Objects')
+                    if os.path.exists(objects_dir):
+                        code_entries_dir = os.path.join(objects_dir, 'CodeEntries')
+                        sprites_dir = os.path.join(objects_dir, 'Sprites')
+                        shaders_dir = os.path.join(objects_dir, 'Shaders')
+                        code_count = len([f for f in os.listdir(code_entries_dir) if f.endswith('.gml')]) if os.path.exists(code_entries_dir) else 0
+                        sprite_count = len([d for d in os.listdir(sprites_dir) if os.path.isdir(os.path.join(sprites_dir, d))]) if os.path.exists(sprites_dir) else 0
+                        shader_count = len([d for d in os.listdir(shaders_dir) if os.path.isdir(os.path.join(shaders_dir, d))]) if os.path.exists(shaders_dir) else 0
+                        self.patching_logger.info(f'[EXPORT] Mod {mod_number} ({mod_name}) exported: {code_count} code, {sprite_count} sprites, {shader_count} shaders')
+                        if os.path.exists(code_entries_dir):
+                            mod_exported_code = set()
+                            for code_file in os.listdir(code_entries_dir):
+                                if code_file.endswith('.gml'):
+                                    code_name = os.path.splitext(code_file)[0]
+                                    mod_exported_code.add(code_name)
+                            self._mod_exported_code_files[mod_number] = mod_exported_code
+                            self.patching_logger.debug(f'[EXPORT] Tracked {len(mod_exported_code)} code files exported by mod {mod_number} ({mod_name})')
+                        if os.path.exists(sprites_dir):
+                            ramb_sprites = [d for d in os.listdir(sprites_dir) if 'ramb' in d.lower()]
+                            if ramb_sprites:
+                                self.patching_logger.debug(f'[EXPORT] Found ramb sprites: {ramb_sprites}')
+                        if os.path.exists(code_entries_dir):
+                            ramb_code = [f for f in os.listdir(code_entries_dir) if 'ramb' in f.lower()]
+                            if ramb_code:
+                                self.patching_logger.debug(f'[EXPORT] Found ramb code: {ramb_code}')
+                    mod_source_dir = self._get_mod_source_dir(mod_data, chapter_id)
+                    if mod_source_dir:
+                        objects_dir = os.path.join(mod_dir, 'Objects')
+                        code_entries_dir = os.path.join(objects_dir, 'CodeEntries')
+                        if os.path.exists(code_entries_dir):
+                            for code_file in os.listdir(code_entries_dir):
+                                if code_file.endswith('.gml'):
+                                    code_name = os.path.splitext(code_file)[0]
+                                    if code_name not in existing_code_files:
+                                        existing_code_files[code_name] = mod_name
+                        sprites_dir = os.path.join(objects_dir, 'Sprites')
+                        if os.path.exists(sprites_dir):
+                            for sprite_name in os.listdir(sprites_dir):
+                                if os.path.isdir(os.path.join(sprites_dir, sprite_name)):
+                                    if sprite_name not in existing_assets['sprites']:
+                                        existing_assets['sprites'][sprite_name] = mod_name
+                        backgrounds_dir = os.path.join(objects_dir, 'Backgrounds')
+                        if os.path.exists(backgrounds_dir):
+                            for bg_file in os.listdir(backgrounds_dir):
+                                if bg_file.endswith('.png'):
+                                    bg_name = os.path.splitext(bg_file)[0]
+                                    if bg_name not in existing_assets['backgrounds']:
+                                        existing_assets['backgrounds'][bg_name] = mod_name
+                        tilesets_dir = os.path.join(objects_dir, 'Tilesets')
+                        if os.path.exists(tilesets_dir):
+                            for tileset_file in os.listdir(tilesets_dir):
+                                if tileset_file.endswith('.json'):
+                                    tileset_name = os.path.splitext(tileset_file)[0]
+                                    if tileset_name not in existing_assets['tilesets']:
+                                        existing_assets['tilesets'][tileset_name] = mod_name
+                        shaders_dir = os.path.join(objects_dir, 'Shaders')
+                        if os.path.exists(shaders_dir):
+                            for shader_name in os.listdir(shaders_dir):
+                                if os.path.isdir(os.path.join(shaders_dir, shader_name)):
+                                    if shader_name not in existing_assets['shaders']:
+                                        existing_assets['shaders'][shader_name] = mod_name
         highest_priority_mod = None
         highest_priority_value = -1
         highest_priority_mod_number = None
@@ -641,13 +706,34 @@ class MultiModMerger(QObject):
             vanilla_hashes = self._compute_resource_hashes(vanilla_objects_dir)
             self.patching_logger.info(f'[FILTER] Computed hashes for {sum((len(v) for v in vanilla_hashes.values()))} vanilla resources')
         filtered_objects_dirs = []
-        for mod_number, mod_priority, mod_name, objects_dir in objects_dirs_to_import:
-            if mod_number == 0:
-                continue
-            if os.path.exists(objects_dir):
-                filtered_dir = self._filter_vanilla_identical_resources(vanilla_hashes, objects_dir, mod_number, mod_name)
-                if filtered_dir and os.path.exists(filtered_dir):
-                    filtered_objects_dirs.append((mod_number, mod_priority, mod_name, filtered_dir))
+        if fast_merge and objects_dirs_to_import:
+            filter_progress = chapter_progress_range * 0.2
+            filter_base = progress_base + int(xdelta_progress + export_progress)
+
+            def filter_progress_callback(p, msg):
+                return self.progress_update.emit(p, msg)
+            mods_dirs_info = []
+            for mod_number, mod_priority, mod_name, objects_dir in objects_dirs_to_import:
+                if mod_number == 0:
+                    continue
+                if os.path.exists(objects_dir):
+                    mods_dirs_info.append((mod_number, objects_dir, mod_name))
+            if mods_dirs_info:
+                filtered_results = self._perform_parallel_filtering(vanilla_hashes, mods_dirs_info, filter_base, filter_progress, filter_progress_callback)
+                for mod_number, mod_priority, mod_name, objects_dir in objects_dirs_to_import:
+                    if mod_number == 0:
+                        continue
+                    filtered_dir = filtered_results.get(mod_number)
+                    if filtered_dir and os.path.exists(filtered_dir):
+                        filtered_objects_dirs.append((mod_number, mod_priority, mod_name, filtered_dir))
+        else:
+            for mod_number, mod_priority, mod_name, objects_dir in objects_dirs_to_import:
+                if mod_number == 0:
+                    continue
+                if os.path.exists(objects_dir):
+                    filtered_dir = self._filter_vanilla_identical_resources(vanilla_hashes, objects_dir, mod_number, mod_name)
+                    if filtered_dir and os.path.exists(filtered_dir):
+                        filtered_objects_dirs.append((mod_number, mod_priority, mod_name, filtered_dir))
         self.patching_logger.info('[MERGE] Merging filtered mods into clean directory (vanilla-identical resources already filtered out)')
         for idx, (mod_number, mod_priority, mod_name, objects_dir) in enumerate(filtered_objects_dirs):
             if self._cancelled:
@@ -767,7 +853,7 @@ class MultiModMerger(QObject):
         self.patching_logger.info('Multi-mod merge completed successfully')
         return True
 
-    def _merge_mods_for_chapter_to_dir(self, chapter_id: int, mods_list: List[Any], modpack_dir: str, progress_base: int = 0, total_chapters: int = 1) -> bool:
+    def _merge_mods_for_chapter_to_dir(self, chapter_id: int, mods_list: List[Any], modpack_dir: str, progress_base: int = 0, total_chapters: int = 1, fast_merge: bool = False) -> bool:
         self.patching_logger.debug(f'_merge_mods_for_chapter_to_dir: chapter_id={chapter_id}, mods_count={len(mods_list)}, modpack_dir={modpack_dir}')
         os.makedirs(modpack_dir, exist_ok=True)
         target_dir = self._get_target_dir(chapter_id)
@@ -778,7 +864,7 @@ class MultiModMerger(QObject):
         data_win_path = self._find_data_win(target_dir)
         if not data_win_path:
             return self._apply_file_overrides_only_to_dir(chapter_id, mods_list, modpack_dir)
-        return self._perform_chapter_merge(chapter_id, mods_list, data_win_path, target_dir, modpack_dir, progress_base, total_chapters, is_modpack=True)
+        return self._perform_chapter_merge(chapter_id, mods_list, data_win_path, target_dir, modpack_dir, progress_base, total_chapters, is_modpack=True, fast_merge=fast_merge)
 
     def _apply_file_overrides_only_to_dir(self, chapter_id: int, mods_list: List[Any], modpack_dir: str) -> bool:
         mods_to_apply = list(reversed(mods_list))
@@ -2006,7 +2092,8 @@ class MultiModMerger(QObject):
             if scripts:
                 if self._cancelled:
                     return False
-                returncode, stdout, stderr = self.utmt_wrapper.execute_scripts(mod_data_win, scripts, output_path=mod_data_win, cwd=merge_root)
+                env_vars = {'DELTAHUB_MOD_NUMBER': str(mod_number), 'DELTAHUB_CHAPTER_NUMBER': chapter_str}
+                returncode, stdout, stderr = self.utmt_wrapper.execute_scripts(mod_data_win, scripts, output_path=mod_data_win, cwd=merge_root, env=env_vars)
                 for script in scripts:
                     try:
                         self._check_critical_script_errors(stderr, script, f'mod {mod_number}')
@@ -2042,6 +2129,146 @@ class MultiModMerger(QObject):
                     self.patching_logger.debug(f'Restored vanilla file after incremental comparison for mod {mod_number}')
                 except Exception as restore_error:
                     self.patching_logger.error(f'Failed to restore vanilla file: {restore_error}', exc_info=True)
+
+    def _perform_parallel_export(self, mods_to_export: List[Any], mod_patched_files: Dict[int, str], mod_types: Dict[int, Dict], vanilla_data_win: str, merge_root: str, cache_running_dir: str, chapter_str: str, chapter_id: int, progress_base: int, export_progress: int, progress_callback) -> bool:
+        if not mods_to_export:
+            return True
+        log_lock = threading.Lock()
+        completed_count = [0]
+        total_mods = len(mods_to_export)
+        max_workers = min(os.cpu_count() - 1, total_mods, 8)
+        max_workers = max(1, max_workers)
+        self.patching_logger.info(f'[PARALLEL_EXPORT] Starting parallel export for {total_mods} mod(s) using {max_workers} worker(s)')
+
+        def export_single_mod(mod_info):
+            mod_data, idx, original_idx, mod_number = mod_info
+            mod_name = getattr(mod_data, 'name', 'Unknown')
+            thread_id = threading.current_thread().ident
+            try:
+                with log_lock:
+                    self.patching_logger.info(f'[Mod-{mod_number}] [{thread_id}] Starting export for {mod_name}')
+                mod_data_win = mod_patched_files.get(mod_number)
+                if not mod_data_win or not os.path.exists(mod_data_win):
+                    with log_lock:
+                        self.patching_logger.warning(f'[Mod-{mod_number}] [{thread_id}] data.win not found, skipping export')
+                    return (mod_number, False, mod_name, 'data.win not found')
+                mod_dir = os.path.dirname(mod_data_win)
+                mod_asset_types = self._detect_mod_asset_types(mod_dir)
+                mod_type = mod_types.get(mod_number, {})
+                has_previous_mod = mod_number > 1 and mod_number - 1 in mod_patched_files
+                scripts, comparison_file = self._select_export_strategy(mod_type, mod_asset_types, mod_number, has_previous_mod)
+                if not scripts and comparison_file is None:
+                    with log_lock:
+                        self.patching_logger.info(f'[Mod-{mod_number}] [{thread_id}] Skipping export - already exported')
+                    return (mod_number, True, mod_name, 'already exported')
+                with log_lock:
+                    self.patching_logger.info(f'[Mod-{mod_number}] [{thread_id}] Exporting using strategy: {scripts}, comparison: {comparison_file}')
+                success = self._export_mod_assets_optimized(mod_data_win, mod_number, scripts, comparison_file, vanilla_data_win, merge_root, cache_running_dir, chapter_str)
+                if success:
+                    objects_dir = os.path.join(mod_dir, 'Objects')
+                    if os.path.exists(objects_dir):
+                        code_entries_dir = os.path.join(objects_dir, 'CodeEntries')
+                        sprites_dir = os.path.join(objects_dir, 'Sprites')
+                        shaders_dir = os.path.join(objects_dir, 'Shaders')
+                        code_count = len([f for f in os.listdir(code_entries_dir) if f.endswith('.gml')]) if os.path.exists(code_entries_dir) else 0
+                        sprite_count = len([d for d in os.listdir(sprites_dir) if os.path.isdir(os.path.join(sprites_dir, d))]) if os.path.exists(sprites_dir) else 0
+                        shader_count = len([d for d in os.listdir(shaders_dir) if os.path.isdir(os.path.join(shaders_dir, d))]) if os.path.exists(shaders_dir) else 0
+                        with log_lock:
+                            self.patching_logger.info(f'[Mod-{mod_number}] [{thread_id}] Export completed: {code_count} code, {sprite_count} sprites, {shader_count} shaders')
+                    return (mod_number, True, mod_name, None)
+                else:
+                    with log_lock:
+                        self.patching_logger.warning(f'[Mod-{mod_number}] [{thread_id}] Export failed for {mod_name}')
+                    return (mod_number, False, mod_name, 'export failed')
+            except Exception as e:
+                with log_lock:
+                    self.patching_logger.error(f'[Mod-{mod_number}] [{thread_id}] Exception during export: {e}', exc_info=True)
+                return (mod_number, False, mod_name, str(e))
+        export_tasks = []
+        for idx, mod_data in enumerate(mods_to_export):
+            original_idx = mods_to_export.index(mod_data) if mod_data in mods_to_export else idx
+            mod_number = original_idx + 1
+            export_tasks.append((mod_data, idx, original_idx, mod_number))
+        results = {}
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            future_to_mod = {executor.submit(export_single_mod, task): task for task in export_tasks}
+            for future in as_completed(future_to_mod):
+                if self._cancelled:
+                    executor.shutdown(wait=False, cancel_futures=True)
+                    return False
+                try:
+                    mod_number, success, mod_name, error = future.result()
+                    results[mod_number] = (success, mod_name, error)
+                    completed_count[0] += 1
+                    progress = progress_base + int(completed_count[0] / total_mods * export_progress)
+                    try:
+                        export_msg = tr('status.exporting_assets', mod=mod_name, current=completed_count[0], total=total_mods)
+                    except BaseException:
+                        export_msg = f'Exporting assets from {mod_name} ({completed_count[0]}/{total_mods})...'
+                    progress_callback(min(progress, 95), export_msg)
+                    if not success:
+                        self.patching_logger.error(f'[PARALLEL_EXPORT] Export failed for mod {mod_number} ({mod_name}): {error}')
+                        executor.shutdown(wait=True, cancel_futures=False)
+                        return False
+                except Exception as e:
+                    self.patching_logger.error(f'[PARALLEL_EXPORT] Exception in export task: {e}', exc_info=True)
+                    executor.shutdown(wait=True, cancel_futures=False)
+                    return False
+        self.patching_logger.info(f'[PARALLEL_EXPORT] All {total_mods} mod(s) exported successfully')
+        return True
+
+    def _perform_parallel_filtering(self, vanilla_hashes: Dict[str, Dict[str, str]], mods_dirs_info: List[tuple], progress_base: int, filter_progress: int, progress_callback) -> Dict[int, Optional[str]]:
+        if not mods_dirs_info:
+            return {}
+        log_lock = threading.Lock()
+        completed_count = [0]
+        total_mods = len(mods_dirs_info)
+        max_workers = min(os.cpu_count() - 1, total_mods, 8)
+        max_workers = max(1, max_workers)
+        self.patching_logger.info(f'[PARALLEL_FILTER] Starting parallel filtering for {total_mods} mod(s) using {max_workers} worker(s)')
+
+        def filter_single_mod(mod_info):
+            mod_number, mod_objects_dir, mod_name = mod_info
+            thread_id = threading.current_thread().ident
+            try:
+                with log_lock:
+                    self.patching_logger.info(f'[Mod-{mod_number}] [{thread_id}] Starting filtering for {mod_name}')
+                filtered_dir = self._filter_vanilla_identical_resources(vanilla_hashes, mod_objects_dir, mod_number, mod_name)
+                with log_lock:
+                    if filtered_dir:
+                        self.patching_logger.info(f'[Mod-{mod_number}] [{thread_id}] Filtering completed, unique resources in {filtered_dir}')
+                    else:
+                        self.patching_logger.info(f'[Mod-{mod_number}] [{thread_id}] Filtering completed, no unique resources')
+                return (mod_number, filtered_dir, mod_name, None)
+            except Exception as e:
+                with log_lock:
+                    self.patching_logger.error(f'[Mod-{mod_number}] [{thread_id}] Exception during filtering: {e}', exc_info=True)
+                return (mod_number, None, mod_name, str(e))
+        results = {}
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            future_to_mod = {executor.submit(filter_single_mod, mod_info): mod_info for mod_info in mods_dirs_info}
+            for future in as_completed(future_to_mod):
+                if self._cancelled:
+                    executor.shutdown(wait=False, cancel_futures=True)
+                    return {}
+                try:
+                    mod_number, filtered_dir, mod_name, error = future.result()
+                    results[mod_number] = filtered_dir
+                    completed_count[0] += 1
+                    progress = progress_base + int(completed_count[0] / total_mods * filter_progress)
+                    try:
+                        filter_msg = tr('status.filtering_resources', mod=mod_name, current=completed_count[0], total=total_mods)
+                    except BaseException:
+                        filter_msg = f'Filtering resources from {mod_name} ({completed_count[0]}/{total_mods})...'
+                    progress_callback(min(progress, 95), filter_msg)
+                    if error:
+                        self.patching_logger.warning(f'[PARALLEL_FILTER] Filtering warning for mod {mod_number} ({mod_name}): {error}')
+                except Exception as e:
+                    self.patching_logger.error(f'[PARALLEL_FILTER] Exception in filtering task: {e}', exc_info=True)
+                    executor.shutdown(wait=True, cancel_futures=False)
+                    return {}
+        self.patching_logger.info(f'[PARALLEL_FILTER] All {total_mods} mod(s) filtered successfully')
+        return results
 
     def _get_mod_source_dir(self, mod_data: Any, chapter_id: int) -> Optional[str]:
         mod_key = get_mod_key(mod_data)

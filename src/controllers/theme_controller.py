@@ -55,6 +55,13 @@ class ThemeController:
         from PyQt6.QtGui import QFont
         status_font = QFont(font_family_main, font_size_small)
         self.app.status_label.setFont(status_font)
+        from PyQt6.QtGui import QColor, QPalette
+        palette = self.app.palette()
+        txt_col = QColor(main_text_color)
+        palette.setColor(QPalette.ColorRole.WindowText, txt_col)
+        palette.setColor(QPalette.ColorRole.Text, txt_col)
+        palette.setColor(QPalette.ColorRole.ButtonText, txt_col)
+        (QApplication.instance() or self.app).setPalette(palette)
         explicit_color_widgets = [getattr(self.app, 'telegram_button', None), getattr(self.app, 'discord_button', None)]
         explicit_colors = [UI_COLORS['link'], UI_COLORS['social_discord']]
         for widget, color in zip(explicit_color_widgets, explicit_colors):
@@ -68,10 +75,35 @@ class ThemeController:
         mod_list = getattr(self.app, 'mod_list_widget', None)
         installed_mods = getattr(self.app, 'installed_mods_widget', None)
         self.customization_manager.update_mod_plaques_styles(mod_list, installed_mods)
+        if hasattr(self.app, 'search_display') and hasattr(self.app.search_display, 'update_all_plaques_labels'):
+            self.app.search_display.update_all_plaques_labels()
         if hasattr(self.app, 'plugin_display') and hasattr(self.app.plugin_display, '_plugin_widgets'):
             for widget in self.app.plugin_display._plugin_widgets.values():
                 if hasattr(widget, '_update_style'):
                     widget._update_style()
+        from ui.common.styling import get_theme_color
+        text_color = get_theme_color(self.app_state.local_config, 'text', 'white')
+        if hasattr(self.app, 'plugin_tab_builder'):
+            plugin_lbl = self.app.plugin_tab_builder.widgets.get('installed_plugins_label')
+            if plugin_lbl:
+                plugin_lbl.setStyleSheet(f'font-weight: bold; font-size: 16px; color: {text_color};')
+        if hasattr(self.app, 'installed_mods_label') and self.app.installed_mods_label:
+            self.app.installed_mods_label.setStyleSheet(f'font-weight: bold; font-size: 16px; color: {text_color};')
+        checkbox_style = f'\n            QCheckBox {{\n                color: {text_color};\n                font-size: 12px;\n                spacing: 5px;\n            }}\n            QCheckBox::indicator {{\n                width: 16px;\n                height: 16px;\n            }}\n        '
+        if hasattr(self.app, 'library_tag_widgets'):
+            for cb in self.app.library_tag_widgets:
+                cb.setStyleSheet(checkbox_style)
+        if hasattr(self.app, 'chapter_mode_checkbox'):
+            self.app.chapter_mode_checkbox.setStyleSheet(f'color: {text_color};')
+        if hasattr(self.app, 'full_install_checkbox'):
+            self.app.full_install_checkbox.setStyleSheet(f'color: {text_color};')
+        if hasattr(self.app, 'tag_textedit'):
+            search_checkboxes = [self.app.tag_textedit, self.app.tag_customization, self.app.tag_gameplay, self.app.tag_other]
+            if hasattr(self.app, 'auto_sorting_checkbox'):
+                search_checkboxes.append(self.app.auto_sorting_checkbox)
+            for cb in search_checkboxes:
+                if cb:
+                    cb.setStyleSheet(checkbox_style)
         search_container = getattr(self.app, 'search_container', None)
         library_container = getattr(self.app, 'installed_mods_container', None)
         self.customization_manager.update_translucent_backgrounds(search_container, library_container)

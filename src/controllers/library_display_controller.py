@@ -501,8 +501,9 @@ class LibraryDisplayController:
                 return
             unique_mod_folder = get_unique_mod_dir(self.app_state.mods_dir, modpack_name)
             modpack_dir = os.path.join(self.app_state.mods_dir, unique_mod_folder)
+            fast_merge = getattr(self.app, 'fast_merging_checkbox', None) and self.app.fast_merging_checkbox.isChecked()
             from workers.create_modpack_thread import CreateModpackThread
-            thread = CreateModpackThread(chapter_mods, modpack_name, modpack_dir, self.app_state, self.mod_manager, self.app)
+            thread = CreateModpackThread(chapter_mods, modpack_name, modpack_dir, self.app_state, self.mod_manager, self.app, fast_merge=fast_merge)
             thread.progress_update.connect(self._on_modpack_progress)
             thread.status_update.connect(self._on_modpack_status)
             thread.finished.connect(lambda success: self._on_modpack_finished(success, modpack_dir))

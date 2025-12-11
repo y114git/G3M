@@ -294,7 +294,8 @@ class GameLauncher(QObject):
         self.app_state.progress_bar_visible = True
         self.app_state.progress_bar_value = 0
         session_manifest_path = os.path.join(self.app_state.config_dir, 'session.lock')
-        self._merge_thread = ModMergeThread(self.app_state, self.mod_manager, chapter_mods, session_manifest_path, self)
+        fast_merge = self.app_state.local_config.get('fast_merging_enabled', False)
+        self._merge_thread = ModMergeThread(self.app_state, self.mod_manager, chapter_mods, session_manifest_path, self, fast_merge=fast_merge)
         self._merge_thread.progress_update.connect(self._on_merge_progress)
         self._merge_thread.status_update.connect(self._on_merge_status)
         self._merge_thread.finished.connect(lambda success: self._on_merge_finished(selections, success))

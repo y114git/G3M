@@ -36,6 +36,11 @@ string FindDeltahubRoot()
 
 string GetChapterNumber(string deltahubRoot)
 {
+    
+    string envVal = Environment.GetEnvironmentVariable("DELTAHUB_CHAPTER_NUMBER");
+    if (!string.IsNullOrEmpty(envVal)) return envVal;
+
+    
     string chapterPath = Path.Combine(deltahubRoot, "output", "Cache", "running", "chapterNumber.txt");
     try
     {
@@ -50,6 +55,11 @@ string GetChapterNumber(string deltahubRoot)
 
 string GetModNumbersCache(string deltahubRoot)
 {
+    
+    string envVal = Environment.GetEnvironmentVariable("DELTAHUB_MOD_NUMBER");
+    if (!string.IsNullOrEmpty(envVal)) return envVal;
+
+    
     string modNoPath = Path.Combine(deltahubRoot, "output", "Cache", "running", "modNumbersCache.txt");
     try
     {

@@ -145,6 +145,8 @@
     "tags_label": "Etiquetas:",
     "update_button": "Actualizar",
     "update_mod_list": "Actualizando lista de mods...",
+    "fast_merging": "Fusión rápida",
+    "fast_merging_tooltip": "Habilita la exportación paralela de recursos. Acelera la fusión pero carga mucho la CPU. Desactívelo si es inestable.",
     "updated_label": "Actualizado:",
     "use_button": "Usar",
     "value_label": "Valor",
