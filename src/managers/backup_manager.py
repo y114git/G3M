@@ -3,7 +3,7 @@ import shutil
 import json
 from typing import Dict, Optional
 from utils.patching_logger import get_patching_logger
-from utils.file_utils import safe_move, safe_remove
+from utils.file_utils import safe_move, safe_remove, safe_rmtree
 
 
 class BackupManager:
@@ -85,42 +85,81 @@ class BackupManager:
             self.patching_logger.warning(f'[BACKUP] Failed to save backup manifest: {e}')
 
     def restore_backups(self, chapter_id: int) -> None:
-        if chapter_id not in self.original_files:
-            return
-        self.patching_logger.info(f'[RESTORE] Restoring backups for chapter {chapter_id}')
-        for file_path, backup_path in self.original_files[chapter_id].items():
-            if backup_path is None:
-                if os.path.exists(file_path):
-                    if safe_remove(file_path):
-                        self.patching_logger.info(f'[RESTORE] Removed file created by mod: {file_path} (chapter {chapter_id})')
+        if chapter_id in self.original_files:
+            self.patching_logger.info(f'[RESTORE] Restoring backups for chapter {chapter_id}')
+            for file_path, backup_path in self.original_files[chapter_id].items():
+                if backup_path is None:
+                    if os.path.exists(file_path):
+                        if safe_remove(file_path):
+                            self.patching_logger.info(f'[RESTORE] Removed file created by mod: {file_path} (chapter {chapter_id})')
+                        else:
+                            self.patching_logger.error(f'[RESTORE] Failed to remove file created by mod {file_path} (chapter {chapter_id})')
                     else:
-                        self.patching_logger.error(f'[RESTORE] Failed to remove file created by mod {file_path} (chapter {chapter_id})')
-                else:
-                    self.patching_logger.debug(f'[RESTORE] File created by mod already removed: {file_path} (chapter {chapter_id})')
-                continue
-            if not os.path.exists(backup_path):
-                self.patching_logger.warning(f'[RESTORE] Backup file not found: {backup_path} (original: {file_path}, chapter {chapter_id})')
-                continue
-            try:
-                target_dir = os.path.dirname(file_path)
-                if target_dir and (not os.path.exists(target_dir)):
-                    os.makedirs(target_dir, exist_ok=True)
-                    self.patching_logger.debug(f'[RESTORE] Created target directory: {target_dir}')
-                shutil.copyfile(backup_path, file_path)
-                self.patching_logger.info(f'[RESTORE] Restored backup: {file_path} <- {backup_path} (chapter {chapter_id})')
-            except Exception as e:
-                self.patching_logger.error(f'[RESTORE] Failed to restore backup {backup_path} to {file_path} (chapter {chapter_id}): {e}', exc_info=True)
+                        self.patching_logger.debug(f'[RESTORE] File created by mod already removed: {file_path} (chapter {chapter_id})')
+                    continue
+                if not os.path.exists(backup_path):
+                    self.patching_logger.warning(f'[RESTORE] Backup file not found: {backup_path} (original: {file_path}, chapter {chapter_id})')
+                    continue
+                try:
+                    target_dir = os.path.dirname(file_path)
+                    if target_dir and (not os.path.exists(target_dir)):
+                        os.makedirs(target_dir, exist_ok=True)
+                        self.patching_logger.debug(f'[RESTORE] Created target directory: {target_dir}')
+                    shutil.copyfile(backup_path, file_path)
+                    self.patching_logger.info(f'[RESTORE] Restored backup: {file_path} <- {backup_path} (chapter {chapter_id})')
+                except Exception as e:
+                    self.patching_logger.error(f'[RESTORE] Failed to restore backup {backup_path} to {file_path} (chapter {chapter_id}): {e}', exc_info=True)
+        if chapter_id in self.added_files:
+            self.patching_logger.info(f'[RESTORE] Removing added files for chapter {chapter_id}')
+            added_paths = sorted(self.added_files[chapter_id].keys(), key=lambda p: p.count(os.sep), reverse=True)
+            removed_dirs = set()
+            for file_path in added_paths:
+                if not os.path.exists(file_path):
+                    self.patching_logger.debug(f'[RESTORE] Added file/directory already removed: {file_path} (chapter {chapter_id})')
+                    continue
+                try:
+                    if os.path.isdir(file_path):
+                        if safe_rmtree(file_path):
+                            self.patching_logger.info(f'[RESTORE] Removed directory added by mod: {file_path} (chapter {chapter_id})')
+                            removed_dirs.add(file_path)
+                        else:
+                            self.patching_logger.error(f'[RESTORE] Failed to remove directory added by mod: {file_path} (chapter {chapter_id})')
+                    elif safe_remove(file_path):
+                        self.patching_logger.info(f'[RESTORE] Removed file added by mod: {file_path} (chapter {chapter_id})')
+                        self._remove_empty_parent_dirs(file_path, chapter_id, removed_dirs)
+                    else:
+                        self.patching_logger.error(f'[RESTORE] Failed to remove file added by mod: {file_path} (chapter {chapter_id})')
+                except Exception as e:
+                    self.patching_logger.error(f'[RESTORE] Failed to remove added file/directory {file_path} (chapter {chapter_id}): {e}', exc_info=True)
 
     def restore_all_backups(self) -> bool:
-        if not self.original_files:
+        if not self.original_files and (not self.added_files):
             return True
         try:
-            for chapter_id in list(self.original_files.keys()):
+            all_chapter_ids = set(self.original_files.keys()) | set(self.added_files.keys())
+            for chapter_id in all_chapter_ids:
                 self.restore_backups(chapter_id)
             return True
         except Exception as e:
             self.patching_logger.error(f'[RESTORE] Critical error during restore_all_backups: {e}', exc_info=True)
             return False
+
+    def _remove_empty_parent_dirs(self, file_path: str, chapter_id: int, removed_dirs: set):
+        try:
+            parent_dir = os.path.dirname(file_path)
+            if not parent_dir or parent_dir == file_path or parent_dir in removed_dirs:
+                return
+            if os.path.exists(parent_dir) and os.path.isdir(parent_dir):
+                try:
+                    if not os.listdir(parent_dir):
+                        if safe_rmtree(parent_dir):
+                            self.patching_logger.debug(f'[RESTORE] Removed empty parent directory: {parent_dir} (chapter {chapter_id})')
+                            removed_dirs.add(parent_dir)
+                            self._remove_empty_parent_dirs(parent_dir, chapter_id, removed_dirs)
+                except OSError:
+                    pass
+        except Exception as e:
+            self.patching_logger.debug(f'[RESTORE] Could not remove parent directory for {file_path}: {e}')
 
     def clear_backups(self):
         self.original_files.clear()

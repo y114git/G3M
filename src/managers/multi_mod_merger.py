@@ -1791,10 +1791,66 @@ class MultiModMerger(QObject):
             for file in files:
                 if file.lower() in ('config.json', '_icon.png'):
                     continue
-                if file.lower().endswith(xdelta_extensions):
-                    continue
                 source_path = os.path.join(root, file)
                 file_lower = file.lower()
+                if file_lower.endswith(('.xdelta', '.vcdiff')):
+                    if not is_modpack:
+                        chapter_id = self._extract_chapter_id_from_path(target_dir)
+                        target_files = self._find_target_files_for_xdelta(target_dir, file)
+                        if target_files:
+                            patch_applied = False
+                            for target_file in target_files:
+                                if chapter_id is not None and self.backup_manager:
+                                    if os.path.exists(target_file):
+                                        self.backup_manager.backup_file(chapter_id, target_file)
+                                if self._apply_xdelta_to_file(target_file, source_path):
+                                    self.patching_logger.info(f'Applied xdelta patch {file} to {os.path.relpath(target_file, target_dir)}')
+                                    patch_applied = True
+                                else:
+                                    self.patching_logger.debug(f'Failed to apply xdelta patch {file} to {os.path.relpath(target_file, target_dir)}, will copy instead')
+                            if not patch_applied:
+                                rel_path = os.path.relpath(source_path, mod_source_dir)
+                                target_path = os.path.join(target_dir, rel_path)
+                                if chapter_id is not None and self.backup_manager:
+                                    if os.path.exists(target_path):
+                                        self.backup_manager.backup_file(chapter_id, target_path)
+                                    else:
+                                        self.backup_manager.mark_file_added(chapter_id, target_path)
+                                        if self._session_manifest_path:
+                                            self.backup_manager.save_backups_to_manifest(self._session_manifest_path)
+                                os.makedirs(os.path.dirname(target_path), exist_ok=True)
+                                try:
+                                    shutil.copy2(source_path, target_path)
+                                    self.patching_logger.info(f'Copied xdelta file {file} to {os.path.relpath(target_path, target_dir)} (patch application failed)')
+                                except Exception as e:
+                                    self.patching_logger.warning(f'Failed to copy xdelta file {source_path}: {e}')
+                        else:
+                            rel_path = os.path.relpath(source_path, mod_source_dir)
+                            target_path = os.path.join(target_dir, rel_path)
+                            if chapter_id is not None and self.backup_manager:
+                                if os.path.exists(target_path):
+                                    self.backup_manager.backup_file(chapter_id, target_path)
+                                else:
+                                    self.backup_manager.mark_file_added(chapter_id, target_path)
+                                    if self._session_manifest_path:
+                                        self.backup_manager.save_backups_to_manifest(self._session_manifest_path)
+                            os.makedirs(os.path.dirname(target_path), exist_ok=True)
+                            try:
+                                shutil.copy2(source_path, target_path)
+                                self.patching_logger.debug(f'Copied xdelta file {file} (no target files found)')
+                            except Exception as e:
+                                self.patching_logger.warning(f'Failed to copy xdelta file {source_path}: {e}')
+                    else:
+                        rel_path = os.path.relpath(source_path, mod_source_dir)
+                        target_path = os.path.join(target_dir, rel_path)
+                        os.makedirs(os.path.dirname(target_path), exist_ok=True)
+                        try:
+                            shutil.copy2(source_path, target_path)
+                        except Exception as e:
+                            self.patching_logger.warning(f'Failed to copy xdelta file {source_path}: {e}')
+                    continue
+                if file_lower.endswith(xdelta_extensions):
+                    continue
                 if file_lower.endswith(archive_extensions):
                     normalized_path = os.path.normpath(source_path)
                     if normalized_path in processed_archives:
@@ -2340,6 +2396,110 @@ class MultiModMerger(QObject):
         if 'demo' in path.lower():
             return -1
         return None
+
+    def _find_target_files_for_xdelta(self, target_dir: str, patch_filename: str) -> List[str]:
+        target_files = []
+        if not os.path.isdir(target_dir):
+            return target_files
+        excluded_files = {DATA_WIN_FILENAME.lower(), 'game.ios'}
+        target_extensions = ('.win', '.ios', '.bank')
+        patch_base = os.path.splitext(patch_filename)[0].lower()
+        potential_target_name = None
+        for ext in target_extensions:
+            if patch_base.endswith(ext):
+                potential_target_name = patch_base
+                break
+        for root, dirs, files in os.walk(target_dir):
+            for file in files:
+                file_lower = file.lower()
+                if file_lower.endswith(target_extensions):
+                    if file_lower in excluded_files:
+                        continue
+                    file_path = os.path.join(root, file)
+                    if potential_target_name:
+                        if file_lower == potential_target_name:
+                            target_files.append(file_path)
+                    else:
+                        target_files.append(file_path)
+        return target_files
+
+    def _apply_xdelta_to_file(self, target_file: str, patch_path: str) -> bool:
+        if not self.xdelta_path:
+            self.patching_logger.warning(f'xdelta executable not found, cannot apply patch to {os.path.basename(target_file)}')
+            return False
+        if not os.path.exists(self.xdelta_path):
+            self.patching_logger.warning(f'xdelta path does not exist: {self.xdelta_path}')
+            return False
+        if not os.path.exists(target_file):
+            self.patching_logger.warning(f'Target file does not exist: {target_file}')
+            return False
+        if not os.path.exists(patch_path):
+            self.patching_logger.warning(f'Patch file does not exist: {patch_path}')
+            return False
+        import platform
+        import stat
+        if platform.system() != 'Windows':
+            try:
+                file_stat = os.stat(self.xdelta_path)
+                is_executable = bool(file_stat.st_mode & stat.S_IEXEC)
+                if not is_executable:
+                    os.chmod(self.xdelta_path, 493)
+            except Exception as e:
+                self.patching_logger.warning(f'Failed to check/set xdelta permissions: {e}')
+        temp_output = None
+        try:
+            temp_output = target_file + '.tmp'
+            self._temp_files_to_cleanup.append(temp_output)
+            temp_dir = os.path.dirname(temp_output)
+            if not os.access(temp_dir, os.W_OK):
+                self.patching_logger.warning(f'Temp directory is not writable: {temp_dir}')
+                return False
+            cmd = [self.xdelta_path, '-d', '-s', target_file, patch_path, temp_output]
+            startupinfo = None
+            creationflags = 0
+            if platform.system() == 'Windows':
+                import subprocess as sp
+                startupinfo = sp.STARTUPINFO()
+                startupinfo.dwFlags |= sp.STARTF_USESHOWWINDOW
+                startupinfo.wShowWindow = sp.SW_HIDE
+                creationflags = sp.CREATE_NO_WINDOW
+            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, stdin=subprocess.DEVNULL, startupinfo=startupinfo, creationflags=creationflags)
+            self._active_processes.append(process)
+            try:
+                stdout, stderr = process.communicate(timeout=300)
+                returncode = process.returncode
+            finally:
+                if process in self._active_processes:
+                    self._active_processes.remove(process)
+            if returncode != 0:
+                error_msg = stderr.strip() if stderr else 'Unknown error'
+                self.patching_logger.debug(f'Failed to apply xdelta patch to {os.path.basename(target_file)}: {error_msg}')
+                return False
+            if not os.path.exists(temp_output):
+                self.patching_logger.warning(f'Temp output file was not created: {temp_output}')
+                return False
+            if not safe_move(temp_output, target_file):
+                raise OSError(f'Failed to move patched file from {temp_output} to {target_file}')
+            if temp_output in self._temp_files_to_cleanup:
+                self._temp_files_to_cleanup.remove(temp_output)
+            self.patching_logger.info(f'Successfully applied xdelta patch to {os.path.basename(target_file)}')
+            return True
+        except subprocess.TimeoutExpired:
+            self.patching_logger.warning(f'xdelta patch timed out after 300 seconds for {target_file}')
+            if temp_output and os.path.exists(temp_output):
+                try:
+                    safe_remove(temp_output)
+                except Exception:
+                    pass
+            return False
+        except Exception as e:
+            self.patching_logger.warning(f'xdelta patch error for {target_file}: {e}')
+            if temp_output and os.path.exists(temp_output):
+                try:
+                    safe_remove(temp_output)
+                except Exception:
+                    pass
+            return False
 
     def cleanup_processes_and_temp_files(self) -> None:
         for process in list(self._active_processes):
