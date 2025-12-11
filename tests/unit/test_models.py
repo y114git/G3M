@@ -55,3 +55,12 @@ class TestGameModes:
         from models.game_modes import UndertaleYellowGameMode
         mode = UndertaleYellowGameMode()
         assert mode is not None
+
+    def test_pizza_tower_game_mode(self):
+        from models.game_modes import PizzaTowerGameMode
+        mode = PizzaTowerGameMode()
+        assert mode is not None
+        assert hasattr(mode, 'get_chapter_id')
+        assert hasattr(mode, 'filter_mods_for_ui')
+        assert mode.steam_id is not None
+        assert mode.direct_launch_allowed is True

@@ -36,6 +36,7 @@ class LibraryTabBuilder:
         game_type_combo.addItem('DELTARUNE DEMO', 'deltarunedemo')
         game_type_combo.addItem('UNDERTALE', 'undertale')
         game_type_combo.addItem('UNDERTALE Yellow', 'undertaleyellow')
+        game_type_combo.addItem('Pizza Tower', 'pizzatower')
         controls_layout.addWidget(game_type_combo)
         controls_layout.addSpacing(20)
         chapter_mode_checkbox = QCheckBox(tr('ui.chapter_mode'))

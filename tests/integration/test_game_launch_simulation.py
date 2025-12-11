@@ -14,7 +14,7 @@ class TestGameLaunchSimulation:
         os.makedirs(game_dir, exist_ok=True)
         system = platform.system()
         if system == 'Darwin':
-            app_bundles = {'DELTARUNE.app': 'deltarune', 'UNDERTALE.app': 'undertale'}
+            app_bundles = {'DELTARUNE.app': 'deltarune', 'UNDERTALE.app': 'undertale', 'PizzaTower.app': 'pizzatower'}
             for app_name, game_type in app_bundles.items():
                 app_path = os.path.join(game_dir, app_name)
                 os.makedirs(app_path, exist_ok=True)
@@ -22,7 +22,7 @@ class TestGameLaunchSimulation:
                 resources_path = os.path.join(contents_path, 'Resources')
                 os.makedirs(resources_path, exist_ok=True)
         else:
-            executables = {'DELTARUNE.exe': 'deltarune', 'UNDERTALE.exe': 'undertale', 'Undertale Yellow.exe': 'undertale_yellow'}
+            executables = {'DELTARUNE.exe': 'deltarune', 'UNDERTALE.exe': 'undertale', 'Undertale Yellow.exe': 'undertale_yellow', 'PizzaTower.exe': 'pizzatower'}
             for exe_name, game_type in executables.items():
                 exe_path = os.path.join(game_dir, exe_name)
                 with open(exe_path, 'w') as f:
@@ -40,6 +40,11 @@ class TestGameLaunchSimulation:
         exe_path = resolve_game_executable(mock_game_executable, is_undertale=True)
         assert exe_path is not None
         assert 'UNDERTALE' in exe_path.upper() or os.path.exists(exe_path)
+
+    def test_resolve_game_executable_pizzatower(self, mock_game_executable):
+        exe_path = resolve_game_executable(mock_game_executable, is_undertale=False, game_type='pizzatower')
+        assert exe_path is not None
+        assert 'PIZZATOWER' in exe_path.upper() or os.path.exists(exe_path)
 
     def test_find_chapter_resource_dir(self, temp_dir):
         game_dir = os.path.join(temp_dir, 'game')
@@ -67,16 +72,19 @@ class TestGameLaunchSimulation:
         mock_process_iter.return_value = [mock_process]
 
     def test_get_game_type_string(self):
-        from models.game_modes import UndertaleGameMode, UndertaleYellowGameMode
+        from models.game_modes import UndertaleGameMode, UndertaleYellowGameMode, PizzaTowerGameMode
         game_mode = UndertaleGameMode()
         game_type = get_game_type_string(game_mode)
         assert game_type in ['undertale', 'deltarune', 'undertaleyellow']
         game_mode = UndertaleYellowGameMode()
         game_type = get_game_type_string(game_mode)
         assert game_type == 'undertaleyellow'
+        game_mode = PizzaTowerGameMode()
+        game_type = get_game_type_string(game_mode)
+        assert game_type == 'pizzatower'
 
     def test_get_game_name_string(self):
-        from models.game_modes import UndertaleGameMode, UndertaleYellowGameMode
+        from models.game_modes import UndertaleGameMode, UndertaleYellowGameMode, PizzaTowerGameMode
         game_mode = UndertaleGameMode()
         game_name = get_game_name_string(game_mode)
         assert isinstance(game_name, str)
@@ -85,6 +93,11 @@ class TestGameLaunchSimulation:
         game_name = get_game_name_string(game_mode)
         assert isinstance(game_name, str)
         assert len(game_name) > 0
+        game_mode = PizzaTowerGameMode()
+        game_name = get_game_name_string(game_mode)
+        assert isinstance(game_name, str)
+        assert len(game_name) > 0
+        assert 'Pizza Tower' in game_name or 'PIZZA TOWER' in game_name.upper()
 
 
 class TestPathResolution:

@@ -151,6 +151,14 @@ class TestThemeApplication:
         app_window.tab_widget.count.return_value = 0
         app_window.tab_widget.tabText = Mock(return_value='')
         app_window.tab_widget.widget = Mock(return_value=None)
+        app_window.library_tag_widgets = []
+        app_window.chapter_mode_checkbox = Mock()
+        app_window.full_install_checkbox = Mock()
+        app_window.installed_mods_label = None
+        app_window.plugin_tab_builder = None
+        app_window.mod_list_widget = None
+        app_window.installed_mods_widget = None
+        app_window.search_display = None
         app_state.local_config = {'custom_color_text': '#FF0000', 'custom_color_background': '#00FF00', 'custom_color_button': '#0000FF', 'custom_color_border': '#FFFF00'}
         with patch('controllers.theme_controller.THEMES', {'default': {'colors': {'text': '#FFFFFF', 'background': '#000000', 'button': '#333333', 'border': '#444444', 'button_hover': '#555555'}, 'font_family': 'Arial', 'font_size_main': 12, 'font_size_small': 10}}), patch('controllers.theme_controller.BgLoader'):
             theme_controller = ThemeController(app_state, feedback_manager, settings_manager, customization_manager, app_window)

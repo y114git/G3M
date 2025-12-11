@@ -1,7 +1,7 @@
 from PyQt6.QtWidgets import QWidget
 from managers.localization_manager import tr
 from config.constants import UI_COLORS, SLOT_ID_UNIVERSAL
-from models.game_modes import DemoGameMode, UndertaleGameMode, UndertaleYellowGameMode, FullGameMode
+from models.game_modes import DemoGameMode, UndertaleGameMode, UndertaleYellowGameMode, FullGameMode, PizzaTowerGameMode
 
 
 class SettingsUiController:
@@ -101,6 +101,8 @@ class SettingsUiController:
             self.app_state.game_mode = UndertaleGameMode()
         elif game_type == 'undertaleyellow':
             self.app_state.game_mode = UndertaleYellowGameMode()
+        elif game_type == 'pizzatower':
+            self.app_state.game_mode = PizzaTowerGameMode()
         else:
             self.app_state.game_mode = FullGameMode()
         self.app_state.local_config['selected_game_type'] = game_type

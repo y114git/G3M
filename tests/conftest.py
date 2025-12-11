@@ -219,7 +219,7 @@ def deltarune_chapter_dirs(game_data_dir):
 @pytest.fixture
 def game_dirs(game_data_dir):
     base = Path(game_data_dir)
-    return {'deltarune': str(base / 'deltarune'), 'deltarune_demo': str(base / 'deltarune_demo'), 'undertale': str(base / 'undertale'), 'undertale_yellow': str(base / 'undertale_yellow')}
+    return {'deltarune': str(base / 'deltarune'), 'deltarune_demo': str(base / 'deltarune_demo'), 'undertale': str(base / 'undertale'), 'undertale_yellow': str(base / 'undertale_yellow'), 'pizzatower': str(base / 'pizzatower')}
 
 
 @pytest.fixture
@@ -248,7 +248,7 @@ def patches_game_dirs(patches_dir):
     deltarune_path = patches_path / 'deltarune'
     if deltarune_path.exists():
         result['deltarune'] = {'menu': str(deltarune_path / 'chapter0_menu'), 'chapter1': str(deltarune_path / 'chapter1_'), 'chapter2': str(deltarune_path / 'chapter2_'), 'chapter3': str(deltarune_path / 'chapter3_'), 'chapter4': str(deltarune_path / 'chapter4_')}
-    for game_name in ['deltarune_demo', 'undertale', 'undertale_yellow']:
+    for game_name in ['deltarune_demo', 'undertale', 'undertale_yellow', 'pizzatower']:
         game_path = patches_path / game_name
         if game_path.exists():
             result[game_name] = str(game_path)

@@ -69,6 +69,7 @@ class SearchTabBuilder:
         modgame_combo.addItem(tr('ui.deltarunedemo'), 'deltarunedemo')
         modgame_combo.addItem(tr('ui.undertale'), 'undertale')
         modgame_combo.addItem(tr('ui.undertaleyellow'), 'undertaleyellow')
+        modgame_combo.addItem(tr('ui.pizzatower'), 'pizzatower')
         saved_game = self.app_state.local_config.get('selected_search_game', 'deltarune')
         game_index = modgame_combo.findData(saved_game)
         if game_index >= 0:

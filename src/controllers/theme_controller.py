@@ -83,7 +83,7 @@ class ThemeController:
                     widget._update_style()
         from ui.common.styling import get_theme_color
         text_color = get_theme_color(self.app_state.local_config, 'text', 'white')
-        if hasattr(self.app, 'plugin_tab_builder'):
+        if hasattr(self.app, 'plugin_tab_builder') and self.app.plugin_tab_builder is not None:
             plugin_lbl = self.app.plugin_tab_builder.widgets.get('installed_plugins_label')
             if plugin_lbl:
                 plugin_lbl.setStyleSheet(f'font-weight: bold; font-size: 16px; color: {text_color};')

@@ -1,5 +1,5 @@
 from typing import TYPE_CHECKING
-from config.constants import STEAM_APP_ID_FULL, STEAM_APP_ID_DEMO, STEAM_APP_ID_UNDERTALE
+from config.constants import STEAM_APP_ID_FULL, STEAM_APP_ID_DEMO, STEAM_APP_ID_UNDERTALE, STEAM_APP_ID_PIZZA_TOWER
 if TYPE_CHECKING:
     from models.mod_models import ModInfo
 
@@ -107,3 +107,20 @@ class UndertaleYellowGameMode(GameMode):
 
     def filter_mods_for_ui(self, all_mods: list['ModInfo']) -> dict[int, list['ModInfo']]:
         return {0: [mod for mod in all_mods if mod.modgame == 'undertaleyellow' and (not mod.hide_mod) and (not mod.ban_status) and mod.files.get('undertale')]}
+
+
+class PizzaTowerGameMode(GameMode):
+
+    def __init__(self):
+        self._path_key = 'pizzatower_game_path'
+        self._custom_exec_key = 'pizzatower_custom_executable_path'
+        self.steam_id = STEAM_APP_ID_PIZZA_TOWER
+        self._path_change_button_key = 'buttons.change_pizzatower_path'
+        self._tab_name_keys = ['tabs.pizzatower']
+        self.direct_launch_allowed = True
+
+    def get_chapter_id(self, ui_index: int) -> int:
+        return 0
+
+    def filter_mods_for_ui(self, all_mods: list['ModInfo']) -> dict[int, list['ModInfo']]:
+        return {0: [mod for mod in all_mods if mod.modgame == 'pizzatower' and (not mod.hide_mod) and (not mod.ban_status) and (mod.files.get('0') or mod.files.get('pizzatower'))]}

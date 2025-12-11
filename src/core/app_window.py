@@ -12,7 +12,7 @@ from PyQt6.QtCore import QTranslator, Qt, QEvent, QThread, QTimer, pyqtSignal, Q
 from PyQt6.QtGui import QColor, QIcon, QPainter, QPixmap, QDesktopServices
 from PyQt6.QtWidgets import QApplication, QCheckBox, QFrame, QLabel, QProgressBar, QPushButton, QTabWidget, QVBoxLayout, QWidget, QHBoxLayout, QSizePolicy, QColorDialog
 from managers.localization_manager import localization_manager, tr
-from models.game_modes import FullGameMode, DemoGameMode, UndertaleGameMode, UndertaleYellowGameMode
+from models.game_modes import FullGameMode, DemoGameMode, UndertaleGameMode, UndertaleYellowGameMode, PizzaTowerGameMode
 from config.constants import UI_COLORS, SOCIAL_LINKS, ONLINE_UPDATE_INTERVAL, INITIALIZATION_TIMEOUT, THREAD_WAIT_TIMEOUT, SLOT_ID_UNIVERSAL
 from utils.game_utils import is_game_running
 from utils.ui_utils import safe_stop_thread, DebounceTimer
@@ -322,12 +322,15 @@ class AppWindow(QWidget):
                 self.app_state.game_mode = UndertaleYellowGameMode()
             elif settings.get('is_undertale_mode', False):
                 self.app_state.game_mode = UndertaleGameMode()
+            elif settings.get('is_pizzatower_mode', False):
+                self.app_state.game_mode = PizzaTowerGameMode()
             else:
                 self.app_state.game_mode = DemoGameMode() if settings.get('is_demo_mode', False) else FullGameMode()
             game_path = settings.get('game_path', '')
             demo_game_path = settings.get('demo_game_path', '')
             undertale_game_path = settings.get('undertale_game_path', '')
             undertaleyellow_game_path = settings.get('undertaleyellow_game_path', '')
+            pizzatower_game_path = settings.get('pizzatower_game_path', '')
             self.app_state.game_path = game_path
             self.app_state.demo_game_path = demo_game_path
             self.app_state.undertale_game_path = undertale_game_path
@@ -339,12 +342,15 @@ class AppWindow(QWidget):
                 self.app_state.local_config['undertale_game_path'] = undertale_game_path
             if undertaleyellow_game_path:
                 self.app_state.local_config['undertaleyellow_game_path'] = undertaleyellow_game_path
+            if pizzatower_game_path:
+                self.app_state.local_config['pizzatower_game_path'] = pizzatower_game_path
             launch_via_steam = settings.get('launch_via_steam', False)
             use_custom_executable = settings.get('use_custom_executable', False)
             custom_exec_path = settings.get('custom_executable_path', '')
             demo_custom_exec_path = settings.get('demo_custom_executable_path', '')
             undertale_custom_exec_path = settings.get('undertale_custom_executable_path', '')
             undertaleyellow_custom_exec_path = settings.get('undertaleyellow_custom_executable_path', '')
+            pizzatower_custom_exec_path = settings.get('pizzatower_custom_executable_path', '')
             direct_launch_slot_id = settings.get('direct_launch_slot_id', SLOT_ID_UNIVERSAL)
             is_chapter_mode = settings.get('is_chapter_mode', False)
             if is_chapter_mode:
@@ -359,7 +365,7 @@ class AppWindow(QWidget):
             if not mods_settings:
                 mods_settings = settings.get('selections', {})
             self.shortcut_manager.apply_shortcut_mods(mods_settings, is_chapter_mode=is_chapter_mode)
-            self.shortcut_manager.launch_game_from_shortcut(launch_via_steam=launch_via_steam, use_custom_executable=use_custom_executable, custom_exec_path=custom_exec_path, demo_custom_exec_path=demo_custom_exec_path, undertale_custom_exec_path=undertale_custom_exec_path, undertaleyellow_custom_exec_path=undertaleyellow_custom_exec_path, direct_launch_slot_id=direct_launch_slot_id)
+            self.shortcut_manager.launch_game_from_shortcut(launch_via_steam=launch_via_steam, use_custom_executable=use_custom_executable, custom_exec_path=custom_exec_path, demo_custom_exec_path=demo_custom_exec_path, undertale_custom_exec_path=undertale_custom_exec_path, undertaleyellow_custom_exec_path=undertaleyellow_custom_exec_path, pizzatower_custom_exec_path=pizzatower_custom_exec_path, direct_launch_slot_id=direct_launch_slot_id)
         except (OSError, FileNotFoundError) as e:
             logging.error(f'Launch error (file system): {e}')
             raise ShortcutLaunchError(f'File system error: {e}')
@@ -606,6 +612,9 @@ class AppWindow(QWidget):
         elif saved_game_type == 'undertaleyellow':
             from models.game_modes import UndertaleYellowGameMode
             self.app_state.game_mode = UndertaleYellowGameMode()
+        elif saved_game_type == 'pizzatower':
+            from models.game_modes import PizzaTowerGameMode
+            self.app_state.game_mode = PizzaTowerGameMode()
         else:
             self.app_state.game_mode = FullGameMode()
         self.app_state.game_mode_changed.connect(self._on_game_mode_updated_by_state)

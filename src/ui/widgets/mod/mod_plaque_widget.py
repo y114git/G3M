@@ -144,6 +144,9 @@ class ModPlaqueWidget(BaseModWidget):
         elif modgame == 'undertaleyellow':
             modgame_text = 'UNDERTALE Yellow'
             modgame_style = f'background-color: #FFD700; color: {text_color}; border: none;'
+        elif modgame == 'pizzatower':
+            modgame_text = 'PIZZA TOWER'
+            modgame_style = f'background-color: #D65A18; color: {text_color}; border: 1px solid #8B0000;'
         if modgame_text:
             self.modgame_tag_label = QLabel(modgame_text, self)
             style_sheet = f'font-weight: bold; padding: 2px 5px; border-radius: 3px; {modgame_style}'
@@ -185,6 +188,8 @@ class ModPlaqueWidget(BaseModWidget):
                 base_style = f'background-color: red; color: {text_color}; border: 1px solid red;'
             elif modgame == 'undertaleyellow':
                 base_style = f'background-color: #FFD700; color: {text_color}; border: none;'
+            elif modgame == 'pizzatower':
+                base_style = f'background-color: #D65A18; color: {text_color}; border: 1px solid #8B0000;'
             else:
                 base_style = f'background-color: black; color: {text_color}; border: 1px solid white;'
             self.modgame_tag_label.setStyleSheet(f'font-weight: bold; padding: 2px 5px; border-radius: 3px; {base_style}')

@@ -58,7 +58,7 @@ class SettingsManager(QObject):
 
     def migrate_config_if_needed(self):
         self.app_state.local_config['cache_format_version'] = LAUNCHER_VERSION
-        defaults = {'game_path': '', 'last_selected': {}, 'use_custom_executable': False, 'demo_game_path': '', 'launch_via_steam': False, 'use_portproton': False, 'portproton_path': '', 'direct_launch_slot_id': SLOT_ID_UNIVERSAL, 'demo_mode_enabled': False, 'chapter_mode_enabled': False, 'custom_background_path': '', 'custom_executable_path': '', 'background_disabled': False, 'custom_color_background': '', 'custom_color_button': '', 'custom_color_border': '', 'custom_color_button_hover': '', 'custom_color_text': '', 'custom_color_version_text': '', 'beta_updates_enabled': False, 'clear_logs_on_startup': False}
+        defaults = {'game_path': '', 'last_selected': {}, 'use_custom_executable': False, 'demo_game_path': '', 'launch_via_steam': False, 'use_portproton': False, 'portproton_path': '', 'direct_launch_slot_id': SLOT_ID_UNIVERSAL, 'demo_mode_enabled': False, 'chapter_mode_enabled': False, 'custom_background_path': '', 'custom_executable_path': '', 'background_disabled': False, 'custom_color_background': '', 'custom_color_button': '', 'custom_color_border': '', 'custom_color_button_hover': '', 'custom_color_text': '', 'custom_color_version_text': '', 'beta_updates_enabled': False, 'clear_logs_on_startup': False, 'pizzatower_game_path': '', 'pizzatower_custom_executable_path': ''}
         for key, value in defaults.items():
             self.app_state.local_config.setdefault(key, value)
         if 'disable_splash' not in self.app_state.local_config:
@@ -142,7 +142,7 @@ class SettingsManager(QObject):
         self.write_local_config()
 
     def prompt_for_game_path(self, is_initial=False) -> bool:
-        from models.game_modes import UndertaleYellowGameMode
+        from models.game_modes import UndertaleYellowGameMode, PizzaTowerGameMode
         if isinstance(self.app_state.game_mode, DemoGameMode):
             title = tr('dialogs.select_demo_folder')
             message = tr('dialogs.demo_not_found')
@@ -152,6 +152,9 @@ class SettingsManager(QObject):
         elif isinstance(self.app_state.game_mode, UndertaleYellowGameMode):
             title = tr('dialogs.select_undertaleyellow_folder')
             message = tr('dialogs.undertaleyellow_not_found')
+        elif isinstance(self.app_state.game_mode, PizzaTowerGameMode):
+            title = tr('dialogs.select_pizzatower_folder')
+            message = tr('dialogs.pizzatower_not_found')
         else:
             title = tr('dialogs.select_deltarune_folder')
             message = tr('dialogs.deltarune_not_found')
@@ -168,6 +171,8 @@ class SettingsManager(QObject):
             if platform.system() == 'Darwin' and (not path.endswith('.app')):
                 if isinstance(self.app_state.game_mode, UndertaleGameMode) or isinstance(self.app_state.game_mode, UndertaleYellowGameMode):
                     app_names = ('UNDERTALE.app',)
+                elif isinstance(self.app_state.game_mode, PizzaTowerGameMode):
+                    app_names = ('PizzaTower.app',)
                 else:
                     app_names = ('DELTARUNE.app', 'DELTARUNEdemo.app')
                 for app_name in app_names:

@@ -63,12 +63,14 @@ def get_xdelta_path():
     return None
 
 
-def resolve_game_executable(base_dir: str, is_undertale: bool) -> str | None:
+def resolve_game_executable(base_dir: str, is_undertale: bool = False, game_type: str = None) -> str | None:
     try:
         if not base_dir or not os.path.isdir(base_dir):
             return None
         system = platform.system()
-        if is_undertale:
+        if game_type:
+            game_types_to_check = [game_type]
+        elif is_undertale:
             game_types_to_check = ['undertaleyellow', 'undertale']
         else:
             game_types_to_check = ['deltarune']

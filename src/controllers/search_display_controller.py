@@ -870,7 +870,7 @@ class SearchDisplayController(QObject):
             logger.error(f'SearchDisplayController: Error in _cleanup_details_threads: {e}', exc_info=True)
 
     def _map_modgame_to_gamebanana(self, modgame: str) -> str:
-        mapping = {'deltarune': 'deltarune', 'deltarunedemo': 'deltarune', 'undertale': 'undertale', 'undertaleyellow': 'undertaleyellow'}
+        mapping = {'deltarune': 'deltarune', 'deltarunedemo': 'deltarune', 'undertale': 'undertale', 'undertaleyellow': 'undertaleyellow', 'pizzatower': 'pizzatower'}
         return mapping.get((modgame or '').lower(), '')
 
     def load_mods_for_selected_game(self):

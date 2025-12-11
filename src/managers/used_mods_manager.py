@@ -7,7 +7,7 @@ from core.app_state import AppState
 from ui.common.feedback import FeedbackManager
 from managers.mod_manager import ModManager
 from managers.settings_manager import SettingsManager
-from models.game_modes import DemoGameMode, UndertaleGameMode, UndertaleYellowGameMode
+from models.game_modes import DemoGameMode, UndertaleGameMode, UndertaleYellowGameMode, PizzaTowerGameMode
 from managers.localization_manager import tr
 from config.constants import SLOT_ID_UNIVERSAL, SLOT_ID_MENU, SLOT_ID_CHAPTER_1, SLOT_ID_CHAPTER_2, SLOT_ID_CHAPTER_3, SLOT_ID_CHAPTER_4
 from utils.mod_utils import get_mod_key, get_mod_name
@@ -153,6 +153,8 @@ class UsedModsManager(QObject):
             return 'used_mods_undertale'
         elif isinstance(game_mode_instance, UndertaleYellowGameMode):
             return 'used_mods_undertaleyellow'
+        elif isinstance(game_mode_instance, PizzaTowerGameMode):
+            return 'used_mods_pizzatower'
         else:
             return 'used_mods_deltarune_chapter' if is_chapter_mode else 'used_mods_deltarune'
 
