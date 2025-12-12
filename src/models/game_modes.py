@@ -123,4 +123,14 @@ class PizzaTowerGameMode(GameMode):
         return 0
 
     def filter_mods_for_ui(self, all_mods: list['ModInfo']) -> dict[int, list['ModInfo']]:
-        return {0: [mod for mod in all_mods if mod.modgame == 'pizzatower' and (not mod.hide_mod) and (not mod.ban_status) and (mod.files.get('0') or mod.files.get('pizzatower'))]}
+        filtered = []
+        for mod in all_mods:
+            if mod.modgame not in ('pizzatower', 'pizzaoven'):
+                continue
+            if mod.hide_mod or mod.ban_status:
+                continue
+            if mod.modgame == 'pizzaoven':
+                filtered.append(mod)
+            elif mod.files.get('0') or mod.files.get('pizzatower'):
+                filtered.append(mod)
+        return {0: filtered}

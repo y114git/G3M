@@ -9,6 +9,8 @@ from utils.network_utils import get_session
 from utils.archive_utils import extract_archive
 from utils.file_utils import sanitize_filename, has_deltamod_info_file
 from utils.deltamod_converter import DeltamodConverter
+from utils.pizzaoven_converter import PizzaOvenConverter
+from utils.pizzaoven_utils import find_pizzaoven_folder
 from config.constants import UI_COLORS, MOD_CONFIG_FILENAME, LEGACY_MOD_CONFIG_FILENAME
 from workers.base_install_worker import BaseInstallWorker
 
@@ -83,6 +85,16 @@ class ModInstallWorker(BaseInstallWorker):
     def _install_mod_from_path(self, content_path: str) -> bool:
         try:
             files_in_root = os.listdir(content_path)
+            pizzaoven_path = find_pizzaoven_folder(content_path)
+            if pizzaoven_path:
+                self.status.emit(tr('status.pizzaoven_archive_detected_url', default='PizzaOven mod detected'), UI_COLORS['status_warning'])
+                converter = PizzaOvenConverter(content_path, self.mods_dir)
+                new_mod_path = converter.convert()
+                if new_mod_path:
+                    return True
+                else:
+                    logging.error('ModInstallWorker: PizzaOven conversion failed')
+                    return False
             if has_deltamod_info_file(files_in_root):
                 self.status.emit(tr('status.deltamod_archive_detected_url'), UI_COLORS['status_warning'])
                 converter = DeltamodConverter(content_path, self.mods_dir)
@@ -173,6 +185,7 @@ class ModInstallWorker(BaseInstallWorker):
                 if 'is_gamebanana_mod' not in config_data:
                     config_data['is_gamebanana_mod'] = False
             config_updated = False
+            modgame = config_data.get('modgame', 'deltarune')
             if 'files' in config_data:
                 for chapter_key, chapter_data in config_data['files'].items():
                     if chapter_key == 'demo':
@@ -180,10 +193,10 @@ class ModInstallWorker(BaseInstallWorker):
                     elif chapter_key == 'undertale':
                         chapter_folder = os.path.join(target_mod_dir, 'undertale')
                     elif chapter_key in ['0', '1', '2', '3', '4']:
-                        if chapter_key == '0':
-                            chapter_folder = os.path.join(target_mod_dir, 'chapter_0')
-                        else:
-                            chapter_folder = os.path.join(target_mod_dir, f'chapter_{chapter_key}')
+                        chapter_id = int(chapter_key)
+                        from utils.file_utils import get_chapter_folder_name
+                        folder_name = get_chapter_folder_name(chapter_id, modgame)
+                        chapter_folder = os.path.join(target_mod_dir, folder_name)
                     else:
                         continue
                     if os.path.exists(chapter_folder):

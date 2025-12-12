@@ -67,7 +67,8 @@ def filter_and_sort_mods(mods_list: List[Any], filters: Dict[str, Any], sort_con
                 continue
         if selected_modgame:
             mod_modgame = _get_mod_attr(mod, 'modgame', 'deltarune')
-            if mod_modgame != selected_modgame:
+            is_pizza_match = selected_modgame == 'pizzatower' and mod_modgame == 'pizzaoven'
+            if mod_modgame != selected_modgame and (not is_pizza_match):
                 continue
         if search_text:
             search_text_lower = search_text.lower()

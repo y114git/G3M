@@ -478,12 +478,10 @@ class InstallModsThread(QThread):
                 chapter_id = task.get('chapter_id')
                 mod_folder_name = mod_folders[mod.mod_key]
                 mod_dir = os.path.join(self.temp_root, mod_folder_name)
-                if chapter_id == -1:
-                    cache_dir = os.path.join(mod_dir, 'demo')
-                elif chapter_id == 0:
-                    cache_dir = os.path.join(mod_dir, 'chapter_0')
-                else:
-                    cache_dir = os.path.join(mod_dir, f'chapter_{chapter_id}')
+                modgame = getattr(mod, 'modgame', None)
+                from utils.file_utils import get_chapter_folder_name
+                folder_name = get_chapter_folder_name(chapter_id, modgame)
+                cache_dir = os.path.join(mod_dir, folder_name)
                 if task.get('delete'):
                     try:
                         if os.path.exists(cache_dir):

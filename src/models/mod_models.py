@@ -57,6 +57,7 @@ class ModInfo:
     gamebanana_preferred_format: Optional[str] = None
     gamebanana_has_deltahub_file: bool = False
     gamebanana_has_deltamod_file: bool = False
+    gamebanana_has_pizzaoven_file: bool = False
     gamebanana_compatibility_checked: bool = False
     has_full_metadata: bool = False
 

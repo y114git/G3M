@@ -719,8 +719,13 @@ class ModManager(QObject):
                             data_file_version = '1.0.0'
                         valid_chapter_fields = {'description': ch_info.get('description'), 'data_file_url': ch_info.get('data_file_url'), 'data_file_version': data_file_version, 'extra_files': extra_files_list}
                         mod.files[file_key] = ModChapterData(**valid_chapter_fields)
-                    if mod.files:
+                    modgame = config_data.get('modgame', '')
+                    if mod.files or modgame == 'pizzaoven':
+                        if modgame == 'pizzaoven' and (not mod.files):
+                            logging.debug(f'Adding PizzaOven mod {mod_key} ({mod.name}) with empty files, modgame={mod.modgame}')
                         self.app_state.append_mod(mod)
+                    else:
+                        logging.debug(f'Skipping mod {mod_key} ({mod.name}): modgame={mod.modgame}, has_files={bool(mod.files)}')
                 except Exception as e:
                     logging.warning(f'Failed to create ModInfo for installed mod {mod_key}: {e}', exc_info=True)
             all_mods_filtered = []
@@ -762,19 +767,16 @@ class ModManager(QObject):
                             elif file_key == 'undertale':
                                 chapter_folder = os.path.join(mod_folder_path, 'undertale')
                             elif file_key in ['0', '1', '2', '3', '4']:
-                                if file_key == '0':
-                                    chapter_folder = os.path.join(mod_folder_path, 'chapter_0')
-                                else:
-                                    chapter_folder = os.path.join(mod_folder_path, f'chapter_{file_key}')
+                                chapter_id = int(file_key)
+                                from utils.file_utils import get_chapter_folder_name
+                                folder_name = get_chapter_folder_name(chapter_id, config_data.get('modgame'))
+                                chapter_folder = os.path.join(mod_folder_path, folder_name)
                             else:
                                 try:
                                     ch_id = int(file_key)
-                                    if ch_id == -1:
-                                        chapter_folder = os.path.join(mod_folder_path, 'demo')
-                                    elif ch_id == 0:
-                                        chapter_folder = os.path.join(mod_folder_path, 'chapter_0')
-                                    else:
-                                        chapter_folder = os.path.join(mod_folder_path, f'chapter_{ch_id}')
+                                    from utils.file_utils import get_chapter_folder_name
+                                    folder_name = get_chapter_folder_name(ch_id, config_data.get('modgame'))
+                                    chapter_folder = os.path.join(mod_folder_path, folder_name)
                                 except ValueError:
                                     continue
                         data_file_url = ''
@@ -789,8 +791,13 @@ class ModManager(QObject):
                                     extra_files.append(ModExtraFile(key=group_key, url=file_path, version='1.0.0'))
                         mod_chapter = ModChapterData(description=config_data.get('tagline', ''), data_file_url=data_file_url, data_file_version=chapter_files.get('data_file_version', (ch_info.get('versions', {}) or {}).get('data', '1.0.0')), extra_files=extra_files)
                         mod.files[file_key] = mod_chapter
-                    if mod.files:
+                    modgame = mod.modgame or config_data.get('modgame', '')
+                    if mod.files or modgame == 'pizzaoven':
+                        if modgame == 'pizzaoven' and (not mod.files):
+                            logging.info(f'Adding PizzaOven mod {mod_key} ({mod.name}) with empty files, modgame={mod.modgame}')
                         self.app_state.append_mod(mod)
+                    else:
+                        logging.debug(f'Skipping mod {mod_key} ({mod.name}): modgame={mod.modgame}, has_files={bool(mod.files)}')
                 except Exception as e:
                     logging.warning(f'Failed to build local ModInfo: {e}')
                     continue

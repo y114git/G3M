@@ -233,6 +233,20 @@ def remove_archive_extension(filename: str) -> str:
         return os.path.splitext(filename)[0]
 
 
+def get_chapter_folder_name(chapter_id: int, modgame: Optional[str] = None) -> str:
+    if chapter_id == -1:
+        return 'demo'
+    elif chapter_id == 0:
+        if modgame == 'pizzaoven':
+            return 'pizzaoven'
+        elif modgame == 'pizzatower':
+            return 'pizzatower'
+        else:
+            return 'chapter_0'
+    else:
+        return f'chapter_{chapter_id}'
+
+
 def get_unique_mod_dir(mods_dir, mod_name):
     sanitized_name = sanitize_filename(mod_name)
     base_dir = os.path.join(mods_dir, sanitized_name)

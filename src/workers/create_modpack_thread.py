@@ -77,7 +77,16 @@ class CreateModpackThread(QThread):
                     chapter_key = '0'
                 else:
                     chapter_key = str(chapter_id)
-                chapter_folder_name = {-1: 'demo', 0: 'chapter_0'}.get(chapter_id, f'chapter_{chapter_id}')
+                modgame = None
+                if mods_list:
+                    first_mod = mods_list[0]
+                    modgame = getattr(first_mod, 'modgame', None)
+                    if not modgame and hasattr(first_mod, 'config_data'):
+                        config = getattr(first_mod, 'config_data')
+                        if isinstance(config, dict):
+                            modgame = config.get('modgame')
+                from utils.file_utils import get_chapter_folder_name
+                chapter_folder_name = get_chapter_folder_name(chapter_id, modgame)
                 chapter_modpack_dir = os.path.join(self.modpack_dir, chapter_folder_name)
                 if not os.path.exists(chapter_modpack_dir):
                     continue

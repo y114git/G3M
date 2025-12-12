@@ -107,6 +107,8 @@ class GameBananaFilePickerDialog(QDialog):
             return tr('ui.gamebanana_format_deltahub')
         if format_key == 'deltamod':
             return tr('ui.gamebanana_format_deltamod')
+        if format_key == 'pizzaoven':
+            return tr('ui.gamebanana_format_pizzaoven')
         return tr('defaults.not_specified')
 
     def _open_external_page(self):
