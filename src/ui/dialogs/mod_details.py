@@ -20,7 +20,7 @@ class LoadModDetailsThread(QThread):
         try:
             if self.isInterruptionRequested():
                 return
-            mod_key = getattr(self.mod_data, 'key', None) or getattr(self.mod_data, 'mod_key', None)
+            key = getattr(self.mod_data, 'key', None) or getattr(self.mod_data, 'mod_key', None)
             if not key or not key.startswith('gb_'):
                 return
             mod_id_str = key.replace('gb_', '', 1)
@@ -376,7 +376,7 @@ def open_mod_details_dialog(parent, mod_data):
         except Exception as e:
             logging.error(f'Error in update_ui_with_details: {e}', exc_info=True)
             dialog_closed = True
-    needs_load = hasattr(mod_data, 'is_gamebanana_mod') and mod_data.is_gamebanana_mod and hasattr(mod_data, 'gamebanana_mod_id') and mod_data.gamebanana_mod_id and (not hasattr(mod_data, 'full_description') or not mod_data.full_description)
+    needs_load = mod_data.is_gamebanana_mod() and mod_data.get_gamebanana_mod_id() and (not hasattr(mod_data, 'full_description') or not mod_data.full_description)
     load_thread = None
     if needs_load:
         desc_text.setPlainText(tr('status.loading_description'))
@@ -433,7 +433,7 @@ def open_mod_details_dialog(parent, mod_data):
         event.accept()
     dialog.closeEvent = on_dialog_close
     if not needs_load:
-        key = getattr(mod_data, 'mod_key', None)
+        key = getattr(mod_data, 'key', None)
         if key and key.startswith('gb_') and hasattr(mod_data, 'full_description') and mod_data.full_description:
             try:
                 desc_text.setHtml(mod_data.full_description)

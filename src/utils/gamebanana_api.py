@@ -2,9 +2,10 @@ import requests
 import logging
 import json
 import re
+import time
 from typing import Dict, List, Optional, Any, Tuple
 from datetime import datetime
-from config.constants import GAMEBANANA_API_BASE, GAMEBANANA_GAME_IDS, GAMEBANANA_TOOL_ID_DELTAHUB, GAMEBANANA_TOOL_ID_DELTAMOD, GAMEBANANA_TOOL_ID_PIZZAOVEN, NETWORK_TIMEOUT_MEDIUM
+from config.constants import GAMEBANANA_API_BASE, GAMEBANANA_GAME_IDS, GAMEBANANA_TOOL_ID_DELTAHUB, GAMEBANANA_TOOL_ID_DELTAMOD, GAMEBANANA_TOOL_ID_PIZZAOVEN, NETWORK_TIMEOUT_MEDIUM, NETWORK_TIMEOUT_SHORT
 from utils.network_utils import get_session
 from utils.file_utils import check_filename_is_deltamod_info
 from models.mod_models import ModInfo
@@ -123,44 +124,52 @@ class GameBananaAPI:
             logger.error(f'Unexpected error fetching mods for game {game_id}: {e}')
             return (None, [])
 
-    def _get_item_field(self, mod_id: int, field_name: str, extractor_func=None) -> Optional[Any]:
+    def _get_item_field(self, mod_id: int, field_name: str, extractor_func=None, max_retries: int = 2) -> Optional[Any]:
         url = f'{self.core_api_base}/Core/Item/Data'
         params = {'itemtype': 'Mod', 'itemid': mod_id, 'fields': field_name}
-        try:
-            logger.debug(f'_get_item_field: Fetching {field_name} for mod {mod_id}')
-            response = self.session.get(url, params=params, timeout=NETWORK_TIMEOUT_MEDIUM)
-            response.raise_for_status()
-            data = response.json()
-            logger.debug(f'_get_item_field: Got response for mod {mod_id}, field {field_name}, data type: {type(data)}')
-            field_value = None
-            if isinstance(data, list) and len(data) > 0:
-                field_value = data[0]
-            elif isinstance(data, dict):
-                field_value = data.get(field_name) or data.get('name') or data.get('Category().name') or data.get('Category') or data.get('_sName')
-            else:
-                field_value = data
-            if isinstance(field_value, list):
-                if len(field_value) > 0:
-                    first_item = field_value[0]
-                    if isinstance(first_item, list) and len(first_item) > 0:
-                        field_value = first_item[0]
-                    else:
-                        field_value = first_item
+        for attempt in range(max_retries + 1):
+            try:
+                logger.debug(f'_get_item_field: Fetching {field_name} for mod {mod_id}')
+                response = self.session.get(url, params=params, timeout=NETWORK_TIMEOUT_MEDIUM)
+                response.raise_for_status()
+                data = response.json()
+                logger.debug(f'_get_item_field: Got response for mod {mod_id}, field {field_name}, data type: {type(data)}')
+                field_value = None
+                if isinstance(data, list) and len(data) > 0:
+                    field_value = data[0]
+                elif isinstance(data, dict):
+                    field_value = data.get(field_name) or data.get('name') or data.get('Category().name') or data.get('Category') or data.get('_sName')
                 else:
-                    field_value = None
-            if extractor_func and field_value is not None:
-                try:
-                    return extractor_func(field_value)
-                except Exception as e:
-                    logger.warning(f'_get_item_field: Extractor function failed for {field_name}: {e}')
-                    return None
-            return field_value
-        except requests.RequestException as e:
-            self._handle_request_exception(e, mod_id, f'Error fetching {field_name}')
-            return None
-        except Exception as e:
-            logger.error(f'Unexpected error fetching {field_name} for mod {mod_id}: {e}', exc_info=True)
-            return None
+                    field_value = data
+                if isinstance(field_value, list):
+                    if len(field_value) > 0:
+                        first_item = field_value[0]
+                        if isinstance(first_item, list) and len(first_item) > 0:
+                            field_value = first_item[0]
+                        else:
+                            field_value = first_item
+                    else:
+                        field_value = None
+                if extractor_func and field_value is not None:
+                    try:
+                        return extractor_func(field_value)
+                    except Exception as e:
+                        logger.warning(f'_get_item_field: Extractor function failed for {field_name}: {e}')
+                        return None
+                return field_value
+            except requests.RequestException as e:
+                status_code = getattr(e.response, 'status_code', None) if hasattr(e, 'response') and e.response else None
+                if status_code == 429 and attempt < max_retries:
+                    wait_time = (attempt + 1) * 2
+                    logger.warning(f'_get_item_field: Rate limit (429) for mod {mod_id}, waiting {wait_time} seconds before retry')
+                    time.sleep(wait_time)
+                    continue
+                self._handle_request_exception(e, mod_id, f'Error fetching {field_name}')
+                return None
+            except Exception as e:
+                logger.error(f'Unexpected error fetching {field_name} for mod {mod_id}: {e}', exc_info=True)
+                return None
+        return None
 
     def get_mod_downloads_only(self, mod_id: int) -> Optional[int]:
 
@@ -209,83 +218,102 @@ class GameBananaAPI:
             return None
         return self._get_item_field(mod_id, 'Category().name', extract_category)
 
-    def get_mod_text_and_screenshots(self, mod_id: int) -> Optional[Dict]:
+    def get_mod_text_and_screenshots(self, mod_id: int, max_retries: int = 2) -> Optional[Dict]:
         url = f'{self.core_api_base}/Core/Item/Data'
         params = {'itemtype': 'Mod', 'itemid': mod_id, 'fields': 'text,screenshots'}
-        try:
-            logger.debug(f'get_mod_text_and_screenshots: Fetching text and screenshots for mod {mod_id}')
-            response = self.session.get(url, params=params, timeout=NETWORK_TIMEOUT_MEDIUM)
-            response.raise_for_status()
-            data = response.json()
-            logger.debug(f"get_mod_text_and_screenshots: Got response for mod {mod_id}, data type: {type(data)}, length: {(len(data) if isinstance(data, (list, dict)) else 'N/A')}")
-            result = {'text': None, 'screenshots': None}
-            if isinstance(data, list) and len(data) >= 2:
-                result['text'] = data[0] if len(data) > 0 else None
-                result['screenshots'] = data[1] if len(data) > 1 else None
-            elif isinstance(data, list) and len(data) > 0:
-                if isinstance(data[0], dict):
-                    logger.debug('get_mod_text_and_screenshots: Response is list with dict at index 0')
-                    result = data[0]
+        for attempt in range(max_retries + 1):
+            try:
+                logger.debug(f'get_mod_text_and_screenshots: Fetching text and screenshots for mod {mod_id}')
+                response = self.session.get(url, params=params, timeout=NETWORK_TIMEOUT_SHORT)
+                response.raise_for_status()
+                data = response.json()
+                if not data:
+                    logger.debug(f'get_mod_text_and_screenshots: Empty response for mod {mod_id}')
+                    return None
+                logger.debug(f"get_mod_text_and_screenshots: Got response for mod {mod_id}, data type: {type(data)}, length: {(len(data) if isinstance(data, (list, dict)) else 'N/A')}")
+                result = {'text': None, 'screenshots': None}
+                if isinstance(data, list) and len(data) >= 2:
+                    result['text'] = data[0] if len(data) > 0 else None
+                    result['screenshots'] = data[1] if len(data) > 1 else None
+                elif isinstance(data, list) and len(data) > 0:
+                    if isinstance(data[0], dict):
+                        logger.debug('get_mod_text_and_screenshots: Response is list with dict at index 0')
+                        result = data[0]
+                    else:
+                        if len(data) > 0:
+                            result['text'] = data[0]
+                        if len(data) > 1:
+                            result['screenshots'] = data[1]
+                elif isinstance(data, dict):
+                    logger.debug(f'get_mod_text_and_screenshots: Response is dict, keys: {list(data.keys())}')
+                    result['text'] = data.get('text')
+                    result['screenshots'] = data.get('screenshots')
                 else:
-                    if len(data) > 0:
-                        result['text'] = data[0]
-                    if len(data) > 1:
-                        result['screenshots'] = data[1]
-            elif isinstance(data, dict):
-                logger.debug(f'get_mod_text_and_screenshots: Response is dict, keys: {list(data.keys())}')
-                result['text'] = data.get('text')
-                result['screenshots'] = data.get('screenshots')
-            else:
-                logger.warning(f'get_mod_text_and_screenshots: Unexpected response format for mod {mod_id}: {type(data)}, value: {str(data)[:200]}')
+                    logger.warning(f'get_mod_text_and_screenshots: Unexpected response format for mod {mod_id}: {type(data)}, value: {str(data)[:200]}')
+                    return None
+                logger.debug(f"get_mod_text_and_screenshots: Successfully parsed details for mod {mod_id}, has text: {bool(result.get('text'))}, has screenshots: {result.get('screenshots') is not None}")
+                return result if result.get('text') or result.get('screenshots') else None
+            except requests.RequestException as e:
+                status_code = getattr(e.response, 'status_code', None) if hasattr(e, 'response') and e.response else None
+                if status_code == 429 and attempt < max_retries:
+                    wait_time = (attempt + 1) * 2
+                    logger.warning(f'get_mod_text_and_screenshots: Rate limit (429) for mod {mod_id}, waiting {wait_time} seconds before retry')
+                    time.sleep(wait_time)
+                    continue
+                self._handle_request_exception(e, mod_id, 'Error fetching text and screenshots')
                 return None
-            logger.debug(f"get_mod_text_and_screenshots: Successfully parsed details for mod {mod_id}, has text: {bool(result.get('text'))}, has screenshots: {result.get('screenshots') is not None}")
-            return result if result.get('text') or result.get('screenshots') else None
-        except requests.RequestException as e:
-            self._handle_request_exception(e, mod_id, 'Error fetching text and screenshots')
-            return None
-        except Exception as e:
-            logger.error(f'Unexpected error fetching text and screenshots for mod {mod_id}: {e}', exc_info=True)
-            return None
+            except Exception as e:
+                logger.error(f'Unexpected error fetching text and screenshots for mod {mod_id}: {e}', exc_info=True)
+                return None
+        return None
 
-    def get_mod_full_details_for_display(self, mod_id: int) -> Optional[Dict]:
+    def get_mod_full_details_for_display(self, mod_id: int, max_retries: int = 2) -> Optional[Dict]:
         url = f'{self.core_api_base}/Core/Item/Data'
         params = {'itemtype': 'Mod', 'itemid': mod_id, 'fields': 'text,description,screenshots'}
-        try:
-            logger.debug(f'get_mod_full_details_for_display: Fetching details for mod {mod_id}')
-            response = self.session.get(url, params=params, timeout=NETWORK_TIMEOUT_MEDIUM)
-            response.raise_for_status()
-            data = response.json()
-            logger.debug(f"get_mod_full_details_for_display: Got response for mod {mod_id}, data type: {type(data)}, length: {(len(data) if isinstance(data, (list, dict)) else 'N/A')}")
-            if isinstance(data, list) and len(data) >= 3:
-                result = {'text': data[0] if len(data) > 0 else None, 'description': data[1] if len(data) > 1 else None, 'screenshots': data[2] if len(data) > 2 else None}
-                logger.debug(f"get_mod_full_details_for_display: Successfully parsed details for mod {mod_id}, has text: {bool(result['text'])}, has description: {bool(result['description'])}, has screenshots: {bool(result['screenshots'])}")
-                return result
-            elif isinstance(data, list) and len(data) > 0:
-                if isinstance(data[0], dict):
-                    logger.debug('get_mod_full_details_for_display: Response is list with dict at index 0')
-                    return data[0]
+        for attempt in range(max_retries + 1):
+            try:
+                logger.debug(f'get_mod_full_details_for_display: Fetching details for mod {mod_id}')
+                response = self.session.get(url, params=params, timeout=NETWORK_TIMEOUT_MEDIUM)
+                response.raise_for_status()
+                data = response.json()
+                logger.debug(f"get_mod_full_details_for_display: Got response for mod {mod_id}, data type: {type(data)}, length: {(len(data) if isinstance(data, (list, dict)) else 'N/A')}")
+                if isinstance(data, list) and len(data) >= 3:
+                    result = {'text': data[0] if len(data) > 0 else None, 'description': data[1] if len(data) > 1 else None, 'screenshots': data[2] if len(data) > 2 else None}
+                    logger.debug(f"get_mod_full_details_for_display: Successfully parsed details for mod {mod_id}, has text: {bool(result['text'])}, has description: {bool(result['description'])}, has screenshots: {bool(result['screenshots'])}")
+                    return result
+                elif isinstance(data, list) and len(data) > 0:
+                    if isinstance(data[0], dict):
+                        logger.debug('get_mod_full_details_for_display: Response is list with dict at index 0')
+                        return data[0]
+                    else:
+                        logger.warning(f"get_mod_full_details_for_display: Response is list but has {len(data)} elements (expected 3), first element type: {(type(data[0]) if len(data) > 0 else 'N/A')}")
+                        result = {}
+                        if len(data) > 0:
+                            result['text'] = data[0]
+                        if len(data) > 1:
+                            result['description'] = data[1]
+                        if len(data) > 2:
+                            result['screenshots'] = data[2]
+                        return result if result else None
+                elif isinstance(data, dict):
+                    logger.debug(f'get_mod_full_details_for_display: Response is dict, keys: {list(data.keys())}')
+                    return data
                 else:
-                    logger.warning(f"get_mod_full_details_for_display: Response is list but has {len(data)} elements (expected 3), first element type: {(type(data[0]) if len(data) > 0 else 'N/A')}")
-                    result = {}
-                    if len(data) > 0:
-                        result['text'] = data[0]
-                    if len(data) > 1:
-                        result['description'] = data[1]
-                    if len(data) > 2:
-                        result['screenshots'] = data[2]
-                    return result if result else None
-            elif isinstance(data, dict):
-                logger.debug(f'get_mod_full_details_for_display: Response is dict, keys: {list(data.keys())}')
-                return data
-            else:
-                logger.warning(f'get_mod_full_details_for_display: Unexpected response format for mod {mod_id}: {type(data)}, value: {str(data)[:200]}')
+                    logger.warning(f'get_mod_full_details_for_display: Unexpected response format for mod {mod_id}: {type(data)}, value: {str(data)[:200]}')
+                    return None
+            except requests.RequestException as e:
+                status_code = getattr(e.response, 'status_code', None) if hasattr(e, 'response') and e.response else None
+                if status_code == 429 and attempt < max_retries:
+                    wait_time = (attempt + 1) * 2
+                    logger.warning(f'get_mod_full_details_for_display: Rate limit (429) for mod {mod_id}, waiting {wait_time} seconds before retry')
+                    time.sleep(wait_time)
+                    continue
+                self._handle_request_exception(e, mod_id, 'Error fetching full details')
                 return None
-        except requests.RequestException as e:
-            self._handle_request_exception(e, mod_id, 'Error fetching full details')
-            return None
-        except Exception as e:
-            logger.error(f'Unexpected error fetching full details for mod {mod_id}: {e}', exc_info=True)
-            return None
+            except Exception as e:
+                logger.error(f'Unexpected error fetching full details for mod {mod_id}: {e}', exc_info=True)
+                return None
+        return None
 
     def _get_mod_full_details(self, mod_id: int) -> Optional[Dict]:
         return self.get_mod_full_details_for_display(mod_id)
@@ -695,8 +723,8 @@ class GameBananaAPI:
             return 'other'
         category_lower = category.lower().strip()
         textedit_categories = ['translation', 'text', 'text changes', 'translations', 'text edits']
-        gameplay_categories = ['gameplay adjustments', 'fight', 'gameplay', 'difficulty changes', 'multiplayer']
-        customization_categories = ['spamton', 'kris', 'jevil', 'ralsei', 'music replacement', 'skins', 'music', 'settings', 'resprites', 'effects', 'custom sprites']
+        gameplay_categories = ['gameplay adjustments', 'fight', 'gameplay', 'difficulty changes', 'multiplayer', 'cyop', 'afom', 'towers', 'levels', 'extension', 'full game edit', 'laps', 'level edits', 'rework', 'ranks']
+        customization_categories = ['spamton', 'kris', 'jevil', 'ralsei', 'music replacement', 'skins', 'music', 'settings', 'resprites', 'effects', 'custom sprites', 'tilesets', 'characters', 're-sprites', 'ui', 'taunts', 'titlecard']
         category_normalized = re.sub('[\\\\/]+', ' ', category_lower)
         categories = category_normalized.split()
         for cat_part in categories:

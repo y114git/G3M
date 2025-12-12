@@ -910,8 +910,8 @@ class SearchDisplayController(QObject):
             try:
                 self.app_state.gamebanana_loading = False
                 if mods_list:
-                    existing_ids = {str(m.gamebanana_mod_id) for m in self.app_state.all_mods if hasattr(m, 'gamebanana_mod_id') and m.gamebanana_mod_id}
-                    new_mods_to_add = [m for m in mods_list if hasattr(m, 'gamebanana_mod_id') and m.gamebanana_mod_id and (str(m.gamebanana_mod_id) not in existing_ids)]
+                    existing_ids = {m.get_gamebanana_mod_id() for m in self.app_state.all_mods if m.is_gamebanana_mod() and m.get_gamebanana_mod_id()}
+                    new_mods_to_add = [m for m in mods_list if m.is_gamebanana_mod() and m.get_gamebanana_mod_id() and (m.get_gamebanana_mod_id() not in existing_ids)]
                     if new_mods_to_add:
                         self.app_state.extend_all_mods(new_mods_to_add)
                         pages_loaded = 3
@@ -1054,8 +1054,8 @@ class SearchDisplayController(QObject):
                     widget = item.widget()
                     if isinstance(widget, ModPlaqueWidget):
                         mod = widget.mod_data
-                        if hasattr(mod, 'is_gamebanana_mod') and mod.is_gamebanana_mod:
-                            mod_id = str(mod.gamebanana_mod_id) if mod.gamebanana_mod_id else None
+                        if mod.is_gamebanana_mod():
+                            mod_id = mod.get_gamebanana_mod_id()
                             if mod_id and mod_id in mod_ids:
                                 try:
                                     widget.update_installation_status()

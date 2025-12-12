@@ -26,7 +26,7 @@ class LoadGameBananaDetailsThread(QThread):
             if self._cancelled:
                 self.finished.emit()
                 return
-            gb_mods = [m for m in self.mods if (getattr(m, 'key', None) or getattr(m, 'mod_key', None)) and (getattr(m, 'key', None) or getattr(m, 'mod_key', None)).startswith('gb_')]
+            gb_mods = [m for m in self.mods if getattr(m, 'key', None) and getattr(m, 'key', None).startswith('gb_')]
             total = len(gb_mods)
             if total == 0:
                 self.finished.emit()
@@ -38,7 +38,7 @@ class LoadGameBananaDetailsThread(QThread):
                 if self._cancelled:
                     break
                 try:
-                    mod_key = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
+                    key = getattr(mod, 'key', None)
                     mod_id_str = key.replace('gb_', '', 1) if key else None
                     if not mod_id_str:
                         continue
@@ -51,7 +51,7 @@ class LoadGameBananaDetailsThread(QThread):
                     original_downloads = getattr(mod, 'downloads', 0)
                     if idx > 0:
                         import time
-                        time.sleep(0.03)
+                        time.sleep(0.1)
                         if self._cancelled:
                             break
                     full_details = self.api.get_mod_full_details_for_display(mod_id)
@@ -67,7 +67,7 @@ class LoadGameBananaDetailsThread(QThread):
                             except Exception as e:
                                 logger.error(f'LoadGameBananaDetailsThread: Error emitting mod_updated signal for mod {mod_id}: {e}', exc_info=True)
                 except Exception as e:
-                    mod_key = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
+                    key = getattr(mod, 'key', None)
                     mod_id_str = key.replace('gb_', '', 1) if key else 'unknown'
                     logger.error(f'LoadGameBananaDetailsThread: Error loading details for mod {mod_id_str}: {e}', exc_info=True)
                     continue
@@ -127,10 +127,10 @@ class LoadGameBananaDetailsThread(QThread):
                 if downloads_value is not None:
                     try:
                         mod.downloads = int(float(downloads_value))
-                        logger.debug(f'LoadGameBananaDetailsThread: Set downloads for mod {mod.gamebanana_mod_id} to {mod.downloads}')
+                        logger.debug(f'LoadGameBananaDetailsThread: Set downloads for mod {mod.get_gamebanana_mod_id()} to {mod.downloads}')
                     except (ValueError, TypeError):
-                        mod_key = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
-                    mod_id_str = key.replace('gb_', '', 1) if key else 'unknown'
+                        key = getattr(mod, 'key', None)
+                        mod_id_str = key.replace('gb_', '', 1) if key else 'unknown'
                         logger.warning(f'LoadGameBananaDetailsThread: Could not convert downloads value {downloads_value} to int for mod {mod_id_str}')
                         if fallback_downloads > 0:
                             mod.downloads = fallback_downloads
@@ -141,11 +141,11 @@ class LoadGameBananaDetailsThread(QThread):
                         mod.downloads = fallback_downloads
                     else:
                         mod.downloads = 0
-                    mod_key = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
+                    key = getattr(mod, 'key', None)
                     mod_id_str = key.replace('gb_', '', 1) if key else 'unknown'
                     logger.debug(f'LoadGameBananaDetailsThread: No valid downloads value for mod {mod_id_str}, using fallback: {mod.downloads}')
             except Exception as e:
-                mod_key = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
+                key = getattr(mod, 'key', None)
                 mod_id_str = key.replace('gb_', '', 1) if key else 'unknown'
                 logger.error(f'LoadGameBananaDetailsThread: Error processing downloads for mod {mod_id_str}: {e}', exc_info=True)
                 if fallback_downloads > 0:
@@ -157,7 +157,7 @@ class LoadGameBananaDetailsThread(QThread):
                 mod.downloads = fallback_downloads
             else:
                 mod.downloads = 0
-            key = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
+            key = getattr(mod, 'key', None)
             mod_id_str = key.replace('gb_', '', 1) if key else 'unknown'
             logger.debug(f'LoadGameBananaDetailsThread: No downloads field for mod {mod_id_str}, using fallback: {mod.downloads}')
         screenshots_field = full_details.get('screenshots')
