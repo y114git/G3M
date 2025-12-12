@@ -841,7 +841,7 @@ class AppWindow(QWidget):
             self.app_state.gamebanana_sort = new_sort
             self.app_state.gamebanana_loaded_pages.clear()
             if hasattr(self.app_state, 'all_mods') and self.app_state.all_mods:
-                self.app_state.all_mods = [mod for mod in self.app_state.all_mods if not (hasattr(mod, 'is_gamebanana_mod') and mod.is_gamebanana_mod)]
+                self.app_state.all_mods = [mod for mod in self.app_state.all_mods if not ((getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)) and (getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)).startswith('gb_'))]
             self.app_state.current_page = 1
             if hasattr(self.app_state, 'filtered_mods'):
                 self.app_state.filtered_mods = []

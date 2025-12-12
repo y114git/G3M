@@ -94,9 +94,9 @@ class TestModManagerIntegration:
                 if os.path.exists(config_path):
                     with open(config_path, 'r', encoding='utf-8') as f:
                         config = json.load(f)
-                    mod_key = config.get('mod_key')
-                    if mod_key:
-                        assert mod_key in cache or any((info.mod_key == mod_key for info in cache.values()))
+                    key = config.get('key') or config.get('mod_key')
+                    if key:
+                        assert key in cache or any((info.key == key for info in cache.values()))
         finally:
             shutil.rmtree(temp_mods_dir, ignore_errors=True)
 
@@ -235,8 +235,8 @@ class TestModMetadata:
                 if os.path.exists(config_path):
                     with open(config_path, 'r', encoding='utf-8') as f:
                         config = json.load(f)
-                    mod_key = config.get('mod_key')
-                    if mod_key:
+                    key = config.get('key') or config.get('mod_key')
+                    if key:
                         metadata = mod_manager._read_metadata()
                         assert isinstance(metadata, dict)
         finally:

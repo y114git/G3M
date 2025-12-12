@@ -288,15 +288,15 @@ class InstallModsThread(QThread):
 
     def _increment_downloads_for_installed_mods(self, installed_mods):
         try:
-            for mod_key in [key for key in installed_mods if not key.startswith('local_')]:
-                self._increment_mod_downloads_on_server(mod_key)
+            for key in [k for k in installed_mods if not k.startswith('local_')]:
+                self._increment_mod_downloads_on_server(key)
         except Exception as e:
             logging.debug(f'_increment_downloads_for_installed_mods: failed: {e}')
 
-    def _increment_mod_downloads_on_server(self, mod_key):
+    def _increment_mod_downloads_on_server(self, key):
         try:
             url = f'{CLOUD_FUNCTIONS_BASE_URL}/incrementDownloads'
-            data = {'modId': mod_key}
+            data = {'modId': key}
             session = get_session()
             response = session.post(url, json=data, timeout=NETWORK_TIMEOUT_MEDIUM)
             return response.status_code == 200
@@ -384,14 +384,17 @@ class InstallModsThread(QThread):
             total_bytes = 0
             mod_folders = {}
             for mod, chapter_id in self.install_tasks:
-                if mod.mod_key not in mod_folders:
-                    mod_folder_path = self.main_window.mod_manager.get_mod_folder_path(mod.mod_key)
+                key = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
+                if key not in mod_folders:
+                    mod_folder_path = self.main_window.mod_manager.get_mod_folder_path(key)
                     if mod_folder_path:
                         existing_folder = os.path.basename(mod_folder_path)
-                        mod_folders[mod.mod_key] = existing_folder
+                        mod_folders[key] = existing_folder
                     else:
-                        mod_folders[mod.mod_key] = get_unique_mod_dir(self.main_window.app_state.mods_dir, mod.name)
-                existing_folder = mod_folders.get(mod.mod_key, '')
+                        mod_key = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
+                        mod_folders[key] = get_unique_mod_dir(self.main_window.app_state.mods_dir, mod.name)
+                mod_key = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
+                existing_folder = mod_folders.get(mod_key, '')
                 chapter_data = mod.get_chapter_data(chapter_id) if chapter_id != -1 else None
                 if chapter_id == -1 and mod.is_valid_for_demo():
                     if is_valid_url(mod.demo_url):
@@ -476,11 +479,11 @@ class InstallModsThread(QThread):
                     return
                 mod = task.get('mod')
                 chapter_id = task.get('chapter_id')
-                mod_folder_name = mod_folders[mod.mod_key]
+                mod_folder_name = mod_folders[mod.key]
                 mod_dir = os.path.join(self.temp_root, mod_folder_name)
-                modgame = getattr(mod, 'modgame', None)
+                game_value = getattr(mod, 'game', None) or getattr(mod, 'modgame', None)
                 from utils.file_utils import get_chapter_folder_name
-                folder_name = get_chapter_folder_name(chapter_id, modgame)
+                folder_name = get_chapter_folder_name(chapter_id, game=game_value)
                 cache_dir = os.path.join(mod_dir, folder_name)
                 if task.get('delete'):
                     try:
@@ -557,9 +560,10 @@ class InstallModsThread(QThread):
                     safe_msg = sanitize_log_message(f'InstallModsThread._download_mod_file: download failed: {e}')
                     logging.error(safe_msg, exc_info=True)
                     raise
-                if mod.mod_key not in installed_mods:
-                    installed_mods[mod.mod_key] = {'mod': mod, 'chapters': set()}
-                installed_mods[mod.mod_key]['chapters'].add(chapter_id)
+                mod_key = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
+                if key not in installed_mods:
+                    installed_mods[key] = {'mod': mod, 'chapters': set()}
+                installed_mods[key]['chapters'].add(chapter_id)
                 if url and total_bytes == 0:
                     done_files += 1
                     progress = int(done_files / max(1, len(download_tasks)) * 100)
@@ -568,9 +572,10 @@ class InstallModsThread(QThread):
                     self.status.emit(tr('status.operation_cancelled'), UI_COLORS['status_error'])
                     self.finished.emit(False)
                     return
-            for mod_key, mod_data in installed_mods.items():
+            for key, mod_data in installed_mods.items():
                 mod = mod_data['mod']
-                mod_folder_name = mod_folders[mod.mod_key]
+                mod_key = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
+                mod_folder_name = mod_folders[key]
                 mod_dir = os.path.join(self.main_window.app_state.mods_dir, mod_folder_name)
                 files_data = {}
                 for chapter_id in mod_data['chapters']:
@@ -604,8 +609,8 @@ class InstallModsThread(QThread):
                         else:
                             file_key = str(chapter_id)
                         files_data[file_key] = file_info
-                config_data = {'is_local_mod': False, 'mod_key': mod.mod_key, 'name': mod.name, 'author': mod.author, 'version': mod.version, 'game_version': mod.game_version, 'modgame': mod.modgame, 'files': files_data, 'tags': mod.tags}
-                mod_configs[mod.mod_key] = {'folder_name': mod_folder_name, 'config': config_data}
+                config_data = {'is_local_mod': False, 'key': mod.key, 'name': mod.name, 'author': mod.author, 'version': mod.version, 'game_version': mod.game_version, 'game': mod.game, 'files': files_data, 'tags': mod.tags}
+                mod_configs[mod.key] = {'folder_name': mod_folder_name, 'config': config_data}
             try:
                 os.makedirs(self.main_window.app_state.mods_dir, exist_ok=True)
                 for entry in os.listdir(self.temp_root or ''):
@@ -634,7 +639,7 @@ class InstallModsThread(QThread):
                 self.status.emit(tr('status.operation_cancelled'), UI_COLORS['status_error'])
                 self.finished.emit(False)
                 return
-            for mod_key, info in mod_configs.items():
+            for key, info in mod_configs.items():
                 folder_name = info['folder_name']
                 config_data = info['config']
                 mod_dir = os.path.join(self.main_window.app_state.mods_dir, folder_name)
@@ -642,8 +647,8 @@ class InstallModsThread(QThread):
                 config_path = os.path.join(mod_dir, MOD_CONFIG_FILENAME)
                 self.main_window.settings_manager.write_json(config_path, config_data)
             metadata = self.main_window.mod_manager._read_metadata()
-            for mod_key in installed_mods.keys():
-                metadata[mod_key] = {'installed_date': time.strftime('%Y-%m-%d %H:%M:%S'), 'is_available_on_server': True}
+            for key in installed_mods.keys():
+                metadata[key] = {'installed_date': time.strftime('%Y-%m-%d %H:%M:%S'), 'is_available_on_server': True}
             self.main_window.mod_manager._write_metadata(metadata)
             self._increment_downloads_for_installed_mods(installed_mods.keys())
             if self._cancelled:
@@ -822,11 +827,13 @@ class UrlInstallThread(QThread):
         except Exception as e:
             logging.error(f'Error reading mod_config.json: {e}')
             return None
-        mod_key = config_data.get('mod_key')
-        if not mod_key:
+        key = config_data.get('key') or config_data.get('mod_key')
+        if not key:
             mod_name = config_data.get('name', 'imported_mod')
-            mod_key = f"local_{sanitize_filename(mod_name).lower().replace(' ', '_')}"
-            config_data['mod_key'] = mod_key
+            key = f"local_{sanitize_filename(mod_name).lower().replace(' ', '_')}"
+            config_data['key'] = key
+            if 'mod_key' in config_data:
+                del config_data['mod_key']
         mod_name = config_data.get('name', 'imported_mod')
         folder_name = sanitize_filename(mod_name)
         target_mod_dir = os.path.join(self.main_window.app_state.mods_dir, folder_name)
@@ -846,13 +853,11 @@ class UrlInstallThread(QThread):
             else:
                 shutil.copy2(src_path, dst_path)
         config_data['is_local_mod'] = True
-        if 'is_gamebanana_mod' not in config_data:
-            config_data['is_gamebanana_mod'] = False
         target_config_path = os.path.join(target_mod_dir, MOD_CONFIG_FILENAME)
         try:
             with open(target_config_path, 'w', encoding='utf-8') as f:
                 json.dump(config_data, f, indent=4, ensure_ascii=False)
-            logging.info(f'Installed DELTAHUB mod from URL: {target_mod_dir}, mod_key={mod_key}')
+            logging.info(f'Installed DELTAHUB mod from URL: {target_mod_dir}, key={key}')
         except Exception as e:
             logging.error(f'Error writing mod_config.json: {e}')
             return None
@@ -1113,9 +1118,9 @@ class UrlInstallThread(QThread):
                     try:
                         with open(redirect_config_path, 'r', encoding='utf-8') as f:
                             redirect_config = json.load(f)
-                        mod_key = redirect_config.get('mod_key')
-                        if mod_key and len(redirect_config) == 1:
-                            self._install_mod_from_key(mod_key)
+                        key = redirect_config.get('key') or redirect_config.get('mod_key')
+                        if key and len(redirect_config) == 1:
+                            self._install_mod_from_key(key)
                             return True
                         redirect_url = redirect_config.get('dm_url') or redirect_config.get('external_url') or redirect_config.get('download_url')
                         if redirect_url:
@@ -1139,7 +1144,7 @@ class UrlInstallThread(QThread):
             logging.error(f'UrlInstallThread: Error installing mod from hash: {e}', exc_info=True)
             self.finished.emit(False, tr('errors.mod_installation_failed'))
 
-    def _install_mod_from_key(self, mod_key: str):
+    def _install_mod_from_key(self, key: str):
         try:
             from utils.network_utils import get_session
             from workers.fetch_mods import FetchModsThread
@@ -1151,9 +1156,9 @@ class UrlInstallThread(QThread):
                 if resp.status_code != 200 or not resp.json():
                     raise ValueError(tr('errors.mod_not_found'))
             mod_data = resp.json()
-            mod_data['key'] = mod_key
+            mod_data['key'] = key
             fetch_thread = FetchModsThread(self.main_window, force_update=False)
-            mod_info = fetch_thread._parse_single_mod(mod_key, mod_data)
+            mod_info = fetch_thread._parse_single_mod(key, mod_data)
             if not mod_info:
                 raise ValueError(tr('errors.mod_not_found'))
             install_tasks = []
@@ -1248,9 +1253,9 @@ class ModScanThread(QThread):
             with open(self.cache_file, 'r', encoding='utf-8') as f:
                 cache_data = json.load(f)
             cache = {}
-            for mod_key, info in cache_data.items():
+            for cache_key, info in cache_data.items():
                 if isinstance(info, dict) and 'config_mtime' in info and ('config_data' in info):
-                    cache[mod_key] = info
+                    cache[cache_key] = info
             return cache
         except (json.JSONDecodeError, OSError, PermissionError, KeyError) as e:
             logging.debug(f'ModScanThread: Failed to load cache from {self.cache_file}: {e}')
@@ -1261,9 +1266,9 @@ class ModScanThread(QThread):
             return
         try:
             cache_to_save = {}
-            for mod_key, info in cache.items():
+            for cache_key, info in cache.items():
                 if isinstance(info, dict):
-                    cache_to_save[mod_key] = {'mod_key': info.get('mod_key', mod_key), 'config_mtime': info.get('config_mtime', 0), 'config_data': info.get('config_data', {}), 'folder_path': info.get('folder_path', ''), 'folder_name': info.get('folder_name', '')}
+                    cache_to_save[cache_key] = {'key': info.get('key') or info.get('mod_key', cache_key), 'config_mtime': info.get('config_mtime', 0), 'config_data': info.get('config_data', {}), 'folder_path': info.get('folder_path', ''), 'folder_name': info.get('folder_name', '')}
             with open(self.cache_file, 'w', encoding='utf-8') as f:
                 json.dump(cache_to_save, f, indent=2, ensure_ascii=False)
         except (OSError, PermissionError, TypeError) as e:
@@ -1312,33 +1317,35 @@ class ModScanThread(QThread):
                             logging.warning(f'ModScanThread: Corrupted config detected (0 bytes) in {config_path}, skipping mod')
                             continue
                         config_mtime = os.path.getmtime(config_path)
-                        mod_key = None
+                        key = None
                         config_data = None
                         if folder_path in [info.get('folder_path') for info in disk_cache.values()]:
                             cached_entry = next((info for info in disk_cache.values() if info.get('folder_path') == folder_path), None)
                             if cached_entry and cached_entry.get('config_mtime', 0) >= config_mtime:
-                                mod_key = cached_entry.get('mod_key') or cached_entry.get('config_data', {}).get('mod_key')
-                                if not mod_key:
+                                key = cached_entry.get('key') or cached_entry.get('mod_key') or cached_entry.get('config_data', {}).get('key') or cached_entry.get('config_data', {}).get('mod_key')
+                                if not key:
                                     for cache_key, cache_info in disk_cache.items():
                                         if cache_info.get('folder_path') == folder_path:
-                                            mod_key = cache_key
+                                            key = cache_key
                                             break
-                                if mod_key:
-                                    if 'mod_key' not in cached_entry:
-                                        cached_entry['mod_key'] = mod_key
-                                    cache[mod_key] = cached_entry
+                                if key:
+                                    if 'key' not in cached_entry:
+                                        cached_entry['key'] = key
+                                    if 'mod_key' in cached_entry:
+                                        del cached_entry['mod_key']
+                                    cache[key] = cached_entry
                                     continue
                         with open(config_path, 'r', encoding='utf-8') as f:
                             config_data = json.load(f)
-                        mod_key = config_data.get('mod_key')
-                        if not mod_key:
+                        key = config_data.get('key') or config_data.get('mod_key')
+                        if not key:
                             continue
-                        if mod_key in cache:
-                            existing_info = cache[mod_key]
+                        if key in cache:
+                            existing_info = cache[key]
                             if config_mtime <= existing_info.get('config_mtime', 0):
                                 continue
-                        mod_info = {'mod_key': mod_key, 'folder_path': folder_path, 'folder_name': folder_name, 'config_data': config_data, 'config_mtime': config_mtime}
-                        cache[mod_key] = mod_info
+                        mod_info = {'key': key, 'folder_path': folder_path, 'folder_name': folder_name, 'config_data': config_data, 'config_mtime': config_mtime}
+                        cache[key] = mod_info
                     except (OSError, PermissionError) as e:
                         safe_msg = sanitize_log_message(f'ModScanThread: Corrupted config detected (failed to access) in {config_path}: {e}')
                         logging.warning(safe_msg, exc_info=True)

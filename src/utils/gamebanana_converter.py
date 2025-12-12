@@ -96,7 +96,7 @@ class GameBananaConverter:
         except Exception as e:
             logger.warning(f'Failed to update packageID in deltamod info file: {e}')
 
-    def _remove_existing_mod_folder(self, mod_key: str) -> None:
+    def _remove_existing_mod_folder(self, key: str) -> None:
         if not os.path.exists(self.mods_dir):
             return
         try:
@@ -112,8 +112,8 @@ class GameBananaConverter:
                 try:
                     with open(config_path, 'r', encoding='utf-8') as f:
                         config_data = json.load(f)
-                    if config_data.get('mod_key') == mod_key:
-                        logger.info(f'GameBananaConverter: Removing existing mod folder {folder_path} with mod_key {mod_key}')
+                    if (config_data.get('key') or config_data.get('mod_key')) == mod_key:
+                        logger.info(f'GameBananaConverter: Removing existing mod folder {folder_path} with key {key}')
                         shutil.rmtree(folder_path)
                         break
                 except Exception as e:
@@ -133,18 +133,14 @@ class GameBananaConverter:
             if not isinstance(config_data, dict):
                 logger.warning(f'GameBananaConverter: Config data is not a dict at {config_path}')
                 return mod_dir
-            config_data['is_gamebanana_mod'] = True
             config_data['is_local_mod'] = False
             if self.gamebanana_metadata.get('mod_id'):
                 mod_id = str(self.gamebanana_metadata['mod_id'])
-                config_data['gamebanana_mod_id'] = mod_id
                 expected_mod_key = f'gb_{mod_id}'
-                config_data['mod_key'] = expected_mod_key
-                logger.info(f'GameBananaConverter: Updated config - mod_key={expected_mod_key}, mod_dir={mod_dir} (folder name based on mod name)')
-            if self.gamebanana_metadata.get('mod_type'):
-                config_data['gamebanana_mod_type'] = self.gamebanana_metadata['mod_type']
-            if self.gamebanana_metadata.get('last_update_timestamp'):
-                config_data['gamebanana_last_update_timestamp'] = self.gamebanana_metadata['last_update_timestamp']
+                config_data['key'] = expected_mod_key
+                if 'mod_key' in config_data:
+                    del config_data['mod_key']
+                logger.info(f'GameBananaConverter: Updated config - key={expected_mod_key}, mod_dir={mod_dir} (folder name based on mod name)')
             if not config_data.get('external_url') and self.gamebanana_metadata.get('profile_url'):
                 config_data['external_url'] = self.gamebanana_metadata['profile_url']
             if self.gamebanana_metadata.get('icon_url'):
@@ -169,7 +165,7 @@ class GameBananaConverter:
                 config_data['tags'] = existing_tags
             from utils.file_utils import atomic_write_json
             atomic_write_json(config_path, config_data, indent=4)
-            logger.info(f"GameBananaConverter: Updated config for GameBanana mod: mod_key={config_data.get('mod_key')}, mod_id={config_data.get('gamebanana_mod_id')}, mod_dir={mod_dir}")
+            logger.info(f"GameBananaConverter: Updated config for GameBanana mod: key={config_data.get('key') or config_data.get('mod_key')}, mod_dir={mod_dir}")
             return mod_dir
         except (IOError, json.JSONDecodeError, TypeError, KeyError) as e:
             logger.error(f'GameBananaConverter: Failed to update config with GameBanana metadata: {e}', exc_info=True)

@@ -55,7 +55,7 @@ class FullGameMode(GameMode):
         return ui_index
 
     def filter_mods_for_ui(self, all_mods: list['ModInfo']) -> dict[int, list['ModInfo']]:
-        return {i: [mod for mod in all_mods if mod.modgame == 'deltarune' and (not mod.hide_mod) and (not mod.ban_status) and mod.get_chapter_data(i)] for i in range(5)}
+        return {i: [mod for mod in all_mods if mod.game == 'deltarune' and (not mod.hide_mod) and (not mod.ban_status) and mod.get_chapter_data(i)] for i in range(5)}
 
 
 class DemoGameMode(GameMode):
@@ -89,7 +89,7 @@ class UndertaleGameMode(GameMode):
         return 0
 
     def filter_mods_for_ui(self, all_mods: list['ModInfo']) -> dict[int, list['ModInfo']]:
-        return {0: [mod for mod in all_mods if mod.modgame == 'undertale' and (not mod.hide_mod) and (not mod.ban_status) and mod.files.get('undertale')]}
+        return {0: [mod for mod in all_mods if mod.game == 'undertale' and (not mod.hide_mod) and (not mod.ban_status) and mod.files.get('undertale')]}
 
 
 class UndertaleYellowGameMode(GameMode):
@@ -106,7 +106,7 @@ class UndertaleYellowGameMode(GameMode):
         return 0
 
     def filter_mods_for_ui(self, all_mods: list['ModInfo']) -> dict[int, list['ModInfo']]:
-        return {0: [mod for mod in all_mods if mod.modgame == 'undertaleyellow' and (not mod.hide_mod) and (not mod.ban_status) and mod.files.get('undertale')]}
+        return {0: [mod for mod in all_mods if mod.game == 'undertaleyellow' and (not mod.hide_mod) and (not mod.ban_status) and mod.files.get('undertale')]}
 
 
 class PizzaTowerGameMode(GameMode):
@@ -125,11 +125,11 @@ class PizzaTowerGameMode(GameMode):
     def filter_mods_for_ui(self, all_mods: list['ModInfo']) -> dict[int, list['ModInfo']]:
         filtered = []
         for mod in all_mods:
-            if mod.modgame not in ('pizzatower', 'pizzaoven'):
+            if mod.game not in ('pizzatower', 'pizzaoven'):
                 continue
             if mod.hide_mod or mod.ban_status:
                 continue
-            if mod.modgame == 'pizzaoven':
+            if mod.game == 'pizzaoven':
                 filtered.append(mod)
             elif mod.files.get('0') or mod.files.get('pizzatower'):
                 filtered.append(mod)

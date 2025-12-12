@@ -73,7 +73,8 @@ class BaseModWidget(QFrame):
         info_layout.addLayout(metadata_layout)
         tagline_text = self.mod_data.tagline or tr('ui.no_description')
         try:
-            if getattr(self.mod_data, 'is_gamebanana_mod', False):
+            mod_key = getattr(self.mod_data, 'key', None) or getattr(self.mod_data, 'mod_key', None)
+            if key and key.startswith('gb_'):
                 has_full = getattr(self.mod_data, 'has_full_metadata', True)
                 if not has_full:
                     placeholder = tr('ui.loading_placeholder')

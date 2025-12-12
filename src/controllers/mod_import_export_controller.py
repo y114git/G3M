@@ -109,18 +109,20 @@ class ModImportExportController:
                     logging.info('[IMPORT] Found mod config, reading...')
                     with open(config_path_to_read, 'r', encoding='utf-8') as f:
                         config = json.load(f)
-                    mod_key = config.get('mod_key')
+                    key = config.get('key') or config.get('mod_key')
                     mod_name = config.get('name', 'Unknown')
-                    logging.info(f'[IMPORT] Mod name: {mod_name}, mod_key: {mod_key}')
-                    mod_key_generated = False
-                    if not mod_key:
+                    logging.info(f'[IMPORT] Mod name: {mod_name}, key: {key}')
+                    key_generated = False
+                    if not key:
                         from utils.file_utils import sanitize_filename, save_json
-                        mod_key = f"local_{sanitize_filename(mod_name).lower().replace(' ', '_')}"
-                        config['mod_key'] = mod_key
+                        key = f"local_{sanitize_filename(mod_name).lower().replace(' ', '_')}"
+                        config['key'] = key
+                        if 'mod_key' in config:
+                            del config['mod_key']
                         config['is_local_mod'] = True
                         save_json(config_path_to_read, config, indent=2)
                         mod_key_generated = True
-                        logging.info(f'[IMPORT] Generated mod_key: {mod_key}')
+                        logging.info(f'[IMPORT] Generated key: {key}')
                     from utils.file_utils import remove_archive_extension
                     archive_name = remove_archive_extension(os.path.basename(file_path))
                     folder_name = sanitize_filename(archive_name)
@@ -150,7 +152,7 @@ class ModImportExportController:
                             elif chapter_key in ['0', '1', '2', '3', '4']:
                                 chapter_id = int(chapter_key)
                                 from utils.file_utils import get_chapter_folder_name
-                                folder_name = get_chapter_folder_name(chapter_id, config.get('modgame'))
+                                folder_name = get_chapter_folder_name(chapter_id, game=config.get('game') or config.get('modgame'))
                                 chapter_folder = os.path.join(target_mod_dir, folder_name)
                             else:
                                 continue
@@ -231,25 +233,26 @@ class ModImportExportController:
             mod_list.clear()
             installed_mods = self.mod_manager.get_installed_mods_list()
             for mod_info in installed_mods:
-                mod_modgame = mod_info.get('modgame', 'deltarune')
+                game = mod_info.get('game') or mod_info.get('modgame', 'deltarune')
                 if filter_checkbox.isChecked() and current_game:
-                    if mod_modgame != current_game:
+                    if game != current_game:
                         continue
-                mod_key = mod_info.get('mod_key')
-                if not mod_key:
+                key = mod_info.get('key') or mod_info.get('mod_key')
+                if not key:
                     continue
-                mod_folder_path = self.mod_manager.get_mod_folder_path(mod_key)
+                mod_folder_path = self.mod_manager.get_mod_folder_path(key)
                 if not mod_folder_path or not os.path.exists(mod_folder_path):
                     continue
                 mod_data = None
                 if hasattr(self.app_state, 'all_mods'):
                     for mod in self.app_state.all_mods:
-                        if hasattr(mod, 'mod_key') and mod.mod_key == mod_key:
+                        mod_key_attr = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
+                        if mod_key_attr == key:
                             mod_data = mod
                             break
                 if not mod_data:
                     mod_data = self.mod_manager.create_mod_object_from_info(mod_info, self.app_state.all_mods if hasattr(self.app_state, 'all_mods') else None)
-                mod_name = mod_info.get('name', mod_key)
+                mod_name = mod_info.get('name', key)
                 item = QListWidgetItem(mod_name)
                 item.setData(Qt.ItemDataRole.UserRole, mod_data)
                 mod_list.addItem(item)
@@ -278,7 +281,8 @@ class ModImportExportController:
             return
         try:
             self.mod_manager.invalidate_mods_cache()
-            mod_dir = self.mod_manager.get_mod_folder_path(mod.mod_key)
+            key = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
+            mod_dir = self.mod_manager.get_mod_folder_path(key)
             if not mod_dir or not os.path.exists(mod_dir):
                 mod_dir = None
                 if os.path.exists(self.app_state.mods_dir):
@@ -290,15 +294,16 @@ class ModImportExportController:
                             try:
                                 with open(config_path, 'r', encoding='utf-8') as f:
                                     config = json.load(f)
-                                config_mod_key = config.get('mod_key')
+                                config_key = config.get('key') or config.get('mod_key')
                                 config_mod_name = config.get('name', '')
-                                if config_mod_key:
-                                    if config_mod_key == mod.mod_key:
+                                if config_key:
+                                    mod_key_attr = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
+                                    if config_key == mod_key_attr:
                                         mod_dir = entry.path
                                         break
-                                    elif config_mod_name == mod.name:
-                                        mod_dir = entry.path
-                                        break
+                                elif config_mod_name == mod.name:
+                                    mod_dir = entry.path
+                                    break
                             except Exception as e:
                                 logging.warning(f'Error reading config {config_path}: {e}')
                                 continue
@@ -311,15 +316,16 @@ class ModImportExportController:
                                     logging.info(f'Migrated mod config.json to mod_config.json during export in {entry.name}')
                                     with open(config_path, 'r', encoding='utf-8') as f:
                                         config = json.load(f)
-                                    config_mod_key = config.get('mod_key')
+                                    config_key = config.get('key') or config.get('mod_key')
                                     config_mod_name = config.get('name', '')
-                                    if config_mod_key:
-                                        if config_mod_key == mod.mod_key:
+                                    if config_key:
+                                        mod_key_attr = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
+                                        if config_key == mod_key_attr:
                                             mod_dir = entry.path
                                             break
-                                        elif config_mod_name == mod.name:
-                                            mod_dir = entry.path
-                                            break
+                                    elif config_mod_name == mod.name:
+                                        mod_dir = entry.path
+                                        break
                                 except Exception as e:
                                     logging.warning(f'Error migrating or reading config in {entry.path}: {e}')
                                     continue
@@ -327,20 +333,21 @@ class ModImportExportController:
                     logging.error(f'Mods directory does not exist: {self.app_state.mods_dir}')
             if not mod_dir or not os.path.exists(mod_dir):
                 logging.error(f'Mod folder not found for mod: {mod.name}')
-                QMessageBox.critical(self.app_window, tr('errors.error'), tr('errors.mod_folder_not_found_simple', path=mod_dir or mod.mod_key))
+                mod_key_attr = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
+                QMessageBox.critical(self.app_window, tr('errors.error'), tr('errors.mod_folder_not_found_simple', path=mod_dir or mod_key_attr))
                 return
-            modgame = getattr(mod, 'modgame', None)
-            if not modgame:
+            game = getattr(mod, 'game', None) or getattr(mod, 'modgame', None)
+            if not game:
                 config_path = os.path.join(mod_dir, MOD_CONFIG_FILENAME)
                 if os.path.exists(config_path):
                     try:
                         with open(config_path, 'r', encoding='utf-8') as f:
                             config = json.load(f)
-                            modgame = config.get('modgame')
+                            game = config.get('game') or config.get('modgame')
                     except Exception:
                         pass
             with zipfile.ZipFile(export_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-                if modgame == 'pizzaoven' or is_pizzaoven_mod(mod):
+                if game == 'pizzaoven' or is_pizzaoven_mod(mod):
                     config_path = os.path.join(mod_dir, MOD_CONFIG_FILENAME)
                     if os.path.exists(config_path):
                         zipf.write(config_path, MOD_CONFIG_FILENAME)

@@ -152,19 +152,14 @@ class FetchModsThread(QThread):
             local_mods = self._get_local_mods()
             logger.info(f'FetchModsThread: Found {len(local_mods)} local mods to preserve')
             installed_gamebanana_mod_keys = set()
-            installed_gamebanana_mod_ids = {}
             mod_manager = getattr(self.main_window, 'mod_manager', None)
             if mod_manager:
                 try:
                     installed_mods = mod_manager.get_installed_mods_list()
                     for installed_mod in installed_mods:
-                        if installed_mod.get('is_gamebanana_mod') and installed_mod.get('gamebanana_mod_id'):
-                            mod_key = installed_mod.get('mod_key')
-                            mod_id = installed_mod.get('gamebanana_mod_id')
-                            if mod_key:
-                                installed_gamebanana_mod_keys.add(mod_key)
-                            if mod_id:
-                                installed_gamebanana_mod_ids[str(mod_id)] = mod_key
+                        key = installed_mod.get('key') or installed_mod.get('mod_key')
+                        if key and key.startswith('gb_'):
+                            installed_gamebanana_mod_keys.add(key)
                     logger.info(f'FetchModsThread: Found {len(installed_gamebanana_mod_keys)} installed GameBanana mods')
                 except Exception as e:
                     logger.warning(f'FetchModsThread: Error getting installed GameBanana mods: {e}')
@@ -173,35 +168,35 @@ class FetchModsThread(QThread):
                 try:
                     installed_mods_list = mod_manager.get_installed_mods_list()
                     for installed_mod in installed_mods_list:
-                        mod_key = installed_mod.get('mod_key')
-                        if mod_key and installed_mod.get('files'):
-                            installed_mods_with_files[mod_key] = installed_mod
+                        key = installed_mod.get('key') or installed_mod.get('mod_key')
+                        if key and installed_mod.get('files'):
+                            installed_mods_with_files[key] = installed_mod
                 except Exception as e:
                     logger.warning(f'FetchModsThread: Error getting installed mods with files: {e}')
             existing_mods_with_files = {}
             app_state = getattr(self.main_window, 'app_state', None)
             if app_state and hasattr(app_state, 'all_mods'):
                 for mod in app_state.all_mods:
-                    mod_key = getattr(mod, 'mod_key', None)
-                    if mod_key and hasattr(mod, 'files') and mod.files:
-                        existing_mods_with_files[mod_key] = mod
+                    key = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
+                    if key and hasattr(mod, 'files') and mod.files:
+                        existing_mods_with_files[key] = mod
             all_mods_filtered = []
             for mod in all_mods:
                 if hasattr(mod, 'is_local_mod') and mod.is_local_mod:
                     continue
-                mod_key = getattr(mod, 'mod_key', None)
-                if mod_key and mod_key in existing_mods_with_files:
-                    existing_mod = existing_mods_with_files[mod_key]
-                    for attr in ['name', 'author', 'tagline', 'game_version', 'description_url', 'downloads', 'icon_url', 'is_verified', 'gamebanana_mod_id', 'gamebanana_mod_type', 'gamebanana_last_update_timestamp']:
+                key = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
+                if key and key in existing_mods_with_files:
+                    existing_mod = existing_mods_with_files[key]
+                    for attr in ['name', 'author', 'tagline', 'game_version', 'description_url', 'downloads', 'icon_url', 'is_verified']:
                         if hasattr(mod, attr):
                             setattr(existing_mod, attr, getattr(mod, attr))
                     all_mods_filtered.append(existing_mod)
-                elif mod_key and mod_key in installed_mods_with_files:
-                    installed_mod_config = installed_mods_with_files[mod_key]
+                elif key and key in installed_mods_with_files:
+                    installed_mod_config = installed_mods_with_files[key]
                     mod_manager = getattr(self.main_window, 'mod_manager', None)
                     if mod_manager:
                         mod_with_files = mod_manager.create_mod_object_from_info(installed_mod_config, all_mods_filtered)
-                        for attr in ['name', 'author', 'tagline', 'game_version', 'description_url', 'downloads', 'icon_url', 'is_verified', 'gamebanana_mod_id', 'gamebanana_mod_type', 'gamebanana_last_update_timestamp']:
+                        for attr in ['name', 'author', 'tagline', 'game_version', 'description_url', 'downloads', 'icon_url', 'is_verified']:
                             if hasattr(mod, attr):
                                 setattr(mod_with_files, attr, getattr(mod, attr))
                         all_mods_filtered.append(mod_with_files)
@@ -210,8 +205,8 @@ class FetchModsThread(QThread):
                 else:
                     all_mods_filtered.append(mod)
             for local_mod in local_mods:
-                mod_key = getattr(local_mod, 'mod_key', None)
-                if mod_key and mod_key not in [getattr(m, 'mod_key', None) for m in all_mods_filtered]:
+                key = getattr(local_mod, 'key', None) or getattr(local_mod, 'mod_key', None)
+                if key and key not in [getattr(m, 'key', None) or getattr(m, 'mod_key', None) for m in all_mods_filtered]:
                     all_mods_filtered.append(local_mod)
             app_state = getattr(self.main_window, 'app_state', None)
             if app_state:
@@ -252,9 +247,9 @@ class FetchModsThread(QThread):
             files_data = self._extract_files_data(data)
             composite_version = self._aggregate_versions(files_data)
             base_version = data.get('version')
-            modgame = data.get('modgame', 'deltarune')
-            if modgame == 'deltarune' and data.get('is_demo_mod', False):
-                modgame = 'deltarunedemo'
+            game = data.get('game') or data.get('modgame', 'deltarune')
+            if game == 'deltarune' and data.get('is_demo_mod', False):
+                game = 'deltarunedemo'
             screens_list = data.get('screenshots_url', [])
             if isinstance(screens_list, str):
                 screens_list = [s.strip() for s in screens_list.split(',') if s.strip()]
@@ -270,15 +265,11 @@ class FetchModsThread(QThread):
             data_dict = data.copy()
             data_dict['key'] = key
             data_dict['version'] = f'{base_version}|{composite_version}' if base_version else composite_version
-            data_dict['modgame'] = modgame
+            data_dict['game'] = game
             data_dict['tags'] = tags
             data_dict['screenshots_url'] = screens_list
             data_dict['demo_url'] = files_data.get('demo', {}).get('url') if files_data else None
             data_dict['demo_version'] = files_data.get('demo', {}).get('version', '1.0.0') if files_data else '1.0.0'
-            data_dict['is_gamebanana_mod'] = False
-            data_dict['gamebanana_mod_id'] = None
-            data_dict['gamebanana_mod_type'] = None
-            data_dict['gamebanana_last_update_timestamp'] = None
             mod = ModInfo.from_dict(data_dict)
             if self._process_mod_chapters(mod, files_data):
                 return mod
@@ -397,7 +388,7 @@ class FetchModsThread(QThread):
         return True
 
     def _update_remote_exists_flags(self, all_mods: List[ModInfo]):
-        remote_mod_keys = {mod.mod_key for mod in all_mods}
+        remote_mod_keys = {mod.key for mod in all_mods}
         app_state = getattr(self.main_window, 'app_state', None)
         mod_manager = getattr(self.main_window, 'mod_manager', None)
         settings_manager = getattr(self.main_window, 'settings_manager', None)
@@ -423,14 +414,14 @@ class FetchModsThread(QThread):
                             config_data = json.load(f)
                     if not config_data:
                         continue
-                    mod_key = config_data.get('mod_key')
-                    if not mod_key or config_data.get('is_local_mod', False):
+                    key = config_data.get('key') or config_data.get('mod_key')
+                    if not key or config_data.get('is_local_mod', False):
                         continue
-                    is_available_now = mod_key in remote_mod_keys
-                    mod_meta = mods_metadata.get(mod_key, {})
+                    is_available_now = key in remote_mod_keys
+                    mod_meta = mods_metadata.get(key, {})
                     if mod_meta.get('is_available_on_server') != is_available_now:
                         mod_meta['is_available_on_server'] = is_available_now
-                        mods_metadata[mod_key] = mod_meta
+                        mods_metadata[key] = mod_meta
                         metadata_updated = True
                 except (IOError, json.JSONDecodeError):
                     continue

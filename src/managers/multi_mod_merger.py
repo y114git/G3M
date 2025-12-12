@@ -137,15 +137,15 @@ class MultiModMerger(QObject):
                         chapter_msg = f'Merging chapter {chapter_id} ({chapter_index}/{total_chapters})...'
                 self.progress_update.emit(min(chapter_progress_base + 5, 95), chapter_msg)
                 if is_modpack and modpack_dir:
-                    modgame = None
+                    game = None
                     if mods_list:
                         first_mod = mods_list[0]
-                        modgame = getattr(first_mod, 'modgame', None)
-                        if not modgame and hasattr(first_mod, 'config_data'):
+                        game = getattr(first_mod, 'modgame', None)
+                        if not game and hasattr(first_mod, 'config_data'):
                             config = getattr(first_mod, 'config_data')
                             if isinstance(config, dict):
-                                modgame = config.get('modgame')
-                    chapter_folder_name = get_chapter_folder_name(chapter_id, modgame)
+                                game = config.get('game') or config.get('modgame')
+                    chapter_folder_name = get_chapter_folder_name(chapter_id, game=game)
                     chapter_modpack_dir = os.path.join(modpack_dir, chapter_folder_name)
                     target_dir = self._get_target_dir(chapter_id)
                     if not target_dir:
@@ -2604,15 +2604,15 @@ class MultiModMerger(QObject):
         return results
 
     def _get_mod_source_dir(self, mod_data: Any, chapter_id: int) -> Optional[str]:
-        mod_key = get_mod_key(mod_data)
-        if not mod_key:
-            self.patching_logger.warning('_get_mod_source_dir: mod_data has no mod_key')
+        key = get_mod_key(mod_data)
+        if not key:
+            self.patching_logger.warning('_get_mod_source_dir: mod_data has no key')
             return None
-        mod_folder_path = self.mod_manager.get_mod_folder_path(mod_key)
+        mod_folder_path = self.mod_manager.get_mod_folder_path(key)
         if mod_folder_path and os.path.isdir(mod_folder_path):
             source_dir = mod_folder_path
         else:
-            mod_name = get_mod_name(mod_data, mod_key)
+            mod_name = get_mod_name(mod_data, key)
             folder_name = sanitize_filename(mod_name)
             source_dir = os.path.join(self.app_state.mods_dir, folder_name)
             if not os.path.isdir(source_dir):
@@ -2625,12 +2625,11 @@ class MultiModMerger(QObject):
                         config_path = os.path.join(folder_path, 'mod_config.json')
                         if os.path.exists(config_path):
                             try:
-                                with open(config_path, 'r', encoding='utf-8') as f:
-                                    import json
-                                    config_data = json.load(f)
-                                    if config_data.get('mod_key') == mod_key:
-                                        source_dir = folder_path
-                                        break
+                                from utils.file_utils import load_json
+                                config_data = load_json(config_path, migrate_config=True)
+                                if (config_data.get('key') or config_data.get('mod_key')) == key:
+                                    source_dir = folder_path
+                                    break
                             except Exception:
                                 pass
                 if not source_dir:
@@ -2640,27 +2639,26 @@ class MultiModMerger(QObject):
             if pizzaoven_path and os.path.isdir(pizzaoven_path):
                 return pizzaoven_path
             return None
-        modgame = getattr(mod_data, 'modgame', None)
-        if not modgame:
+        game = getattr(mod_data, 'game', None) or getattr(mod_data, 'modgame', None)
+        if not game:
             if hasattr(mod_data, 'config_data'):
                 config = getattr(mod_data, 'config_data')
                 if isinstance(config, dict):
-                    modgame = config.get('modgame')
-            if not modgame and source_dir:
+                    game = config.get('game') or config.get('modgame')
+            if not game and source_dir:
                 config_path = os.path.join(source_dir, 'mod_config.json')
                 if os.path.exists(config_path):
                     try:
-                        import json
-                        with open(config_path, 'r', encoding='utf-8') as f:
-                            config_data = json.load(f)
-                            modgame = config_data.get('modgame')
+                        from utils.file_utils import load_json
+                        config_data = load_json(config_path, migrate_config=True)
+                        game = config_data.get('game') or config_data.get('modgame')
                     except Exception:
                         pass
-        chapter_folder_name = get_chapter_folder_name(chapter_id, modgame)
+        chapter_folder_name = get_chapter_folder_name(chapter_id, game=game)
         chapter_dir = os.path.join(source_dir, chapter_folder_name)
         if not os.path.isdir(chapter_dir):
             if chapter_id == 0:
-                if modgame == 'pizzatower' or modgame == 'pizzaoven':
+                if game == 'pizzatower' or game == 'pizzaoven':
                     pizzatower_dir = os.path.join(source_dir, 'pizzatower')
                     if os.path.isdir(pizzatower_dir):
                         return pizzatower_dir

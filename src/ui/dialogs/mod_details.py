@@ -20,11 +20,13 @@ class LoadModDetailsThread(QThread):
         try:
             if self.isInterruptionRequested():
                 return
-            if not (hasattr(self.mod_data, 'is_gamebanana_mod') and self.mod_data.is_gamebanana_mod):
+            mod_key = getattr(self.mod_data, 'key', None) or getattr(self.mod_data, 'mod_key', None)
+            if not key or not key.startswith('gb_'):
                 return
-            if not hasattr(self.mod_data, 'gamebanana_mod_id') or not self.mod_data.gamebanana_mod_id:
+            mod_id_str = key.replace('gb_', '', 1)
+            if not mod_id_str:
                 return
-            mod_id = int(self.mod_data.gamebanana_mod_id)
+            mod_id = int(mod_id_str)
             mod_id_str = str(mod_id)
             metadata_cache = None
             cached_text = None
@@ -203,16 +205,17 @@ def open_mod_details_dialog(parent, mod_data):
     status_layout.setSpacing(15)
     modgame_container = QVBoxLayout()
     modgame_container.setSpacing(4)
-    modgame_label = OutlinedTextLabel(tr(f'ui.{mod_data.modgame}_label'))
+    game_value = getattr(mod_data, 'game', None) or getattr(mod_data, 'modgame', 'deltarune')
+    modgame_label = OutlinedTextLabel(tr(f'ui.{game_value}_label'))
     fill_color = text_color
     outline_color = '#222222'
-    if mod_data.modgame == 'deltarune':
+    if game_value == 'deltarune':
         outline_color = '#222222'
-    elif mod_data.modgame == 'deltarunedemo':
+    elif game_value == 'deltarunedemo':
         outline_color = 'lightgreen'
-    elif mod_data.modgame == 'undertale':
+    elif game_value == 'undertale':
         outline_color = '#750B0B'
-    elif mod_data.modgame == 'undertaleyellow':
+    elif game_value == 'undertaleyellow':
         outline_color = '#FFD700'
     f = modgame_label.font()
     f.setBold(True)
@@ -223,7 +226,7 @@ def open_mod_details_dialog(parent, mod_data):
     modgame_label.setMinimumHeight(26)
     modgame_label.setLeftMargin(0)
     modgame_container.addWidget(modgame_label)
-    modgame_desc = OutlinedTextLabel(tr(f'ui.{mod_data.modgame}_desc'))
+    modgame_desc = OutlinedTextLabel(tr(f'ui.{game_value}_desc'))
     df = modgame_desc.font()
     df.setPointSize(11)
     modgame_desc.setFont(df)
@@ -430,7 +433,8 @@ def open_mod_details_dialog(parent, mod_data):
         event.accept()
     dialog.closeEvent = on_dialog_close
     if not needs_load:
-        if hasattr(mod_data, 'is_gamebanana_mod') and mod_data.is_gamebanana_mod and hasattr(mod_data, 'full_description') and mod_data.full_description:
+        key = getattr(mod_data, 'mod_key', None)
+        if key and key.startswith('gb_') and hasattr(mod_data, 'full_description') and mod_data.full_description:
             try:
                 desc_text.setHtml(mod_data.full_description)
             except Exception as e:

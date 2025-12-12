@@ -44,7 +44,7 @@ class LibraryDisplayController:
         current_game_type = 'deltarune'
         if hasattr(self.app, 'game_type_combo'):
             current_game_type = self.app.game_type_combo.currentData() or 'deltarune'
-        filters = {'tags': selected_tags, 'modgame': current_game_type, 'search_text': search_text, 'hide_banned': False, 'hide_local': False, 'show_only_local': False, 'status_filter': ['approved', 'pending', 'unknown']}
+        filters = {'tags': selected_tags, 'game': current_game_type, 'search_text': search_text, 'hide_banned': False, 'hide_local': False, 'show_only_local': False, 'status_filter': ['approved', 'pending', 'unknown']}
         sort_config = None
         if hasattr(self.app, 'library_sort_combo'):
             sort_type = self.app.library_sort_combo.currentIndex()
@@ -80,9 +80,9 @@ class LibraryDisplayController:
             is_local = mod_data.is_local
             is_available = not mod_data.is_local
             if not is_available and hasattr(self.app_state, 'all_mods') and self.app_state.all_mods:
-                gb_mod_id = mod_info.get('gamebanana_mod_id')
-                if gb_mod_id:
-                    is_available = any((mod for mod in self.app_state.all_mods if getattr(mod, 'gamebanana_mod_id', None) and str(getattr(mod, 'gamebanana_mod_id', None)) == str(gb_mod_id)))
+                key = mod_info.get('key') or mod_info.get('mod_key', '')
+                if key and key.startswith('gb_'):
+                    is_available = any((mod for mod in self.app_state.all_mods if (getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)) == key))
                 if not is_available:
                     is_available = mod_info.get('is_available_on_server', False)
             if mod_data:
@@ -177,14 +177,15 @@ class LibraryDisplayController:
                         is_local = mod_data.is_local
                         is_available = not mod_data.is_local
                         if not is_available and hasattr(self.app_state, 'all_mods') and self.app_state.all_mods:
-                            gb_mod_id = mod_info.get('gamebanana_mod_id')
-                            if gb_mod_id:
-                                is_available = any((mod for mod in self.app_state.all_mods if getattr(mod, 'gamebanana_mod_id', None) and str(getattr(mod, 'gamebanana_mod_id', None)) == str(gb_mod_id)))
+                            key = mod_info.get('key') or mod_info.get('mod_key', '')
+                            if key and key.startswith('gb_'):
+                                is_available = any((mod for mod in self.app_state.all_mods if (getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)) == key))
                             if not is_available:
                                 is_available = mod_info.get('is_available_on_server', False)
                         has_update = False
                         if not is_local and is_available and hasattr(self.app_state, 'all_mods') and self.app_state.all_mods:
-                            public_mod = next((mod for mod in self.app_state.all_mods if getattr(mod, 'mod_key', None) == mod_data.mod_key), None)
+                            mod_key_attr = getattr(mod_data, 'key', None) or getattr(mod_data, 'mod_key', None)
+                            public_mod = next((mod for mod in self.app_state.all_mods if (getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)) == mod_key_attr), None)
                             if public_mod:
                                 has_update = any((self.mod_manager.mod_has_files_for_chapter(public_mod, i) and self.mod_manager.get_mod_status(public_mod, i) == 'update' for i in range(5)))
                         mod_widget = InstalledModWidget(mod_data, is_local, is_available, has_update, parent=self.app)
@@ -214,7 +215,7 @@ class LibraryDisplayController:
             pass
 
     def cleanup_missing_mods(self, installed_mods):
-        installed_mod_keys = {mod.get('mod_key') for mod in installed_mods if mod.get('mod_key')}
+        installed_mod_keys = {mod.get('key') or mod.get('mod_key') for mod in installed_mods if mod.get('key') or mod.get('mod_key')}
         mods_metadata = self.mod_manager._read_metadata()
         metadata_updated = False
         orphaned_keys = set(mods_metadata.keys()) - installed_mod_keys
@@ -225,7 +226,7 @@ class LibraryDisplayController:
         if metadata_updated:
             self.mod_manager._write_metadata(mods_metadata)
         for orphaned_key in orphaned_keys:
-            dummy_mod_data = self.mod_manager.create_mod_object_from_info({'mod_key': orphaned_key, 'name': 'Orphaned Mod'}, getattr(self.app_state, 'all_mods', None))
+            dummy_mod_data = self.mod_manager.create_mod_object_from_info({'key': orphaned_key, 'name': 'Orphaned Mod'}, getattr(self.app_state, 'all_mods', None))
             if not dummy_mod_data:
                 continue
             self.slot_manager.remove_mod_from_all_chapters(dummy_mod_data)
@@ -233,8 +234,8 @@ class LibraryDisplayController:
             for config_key in config_keys:
                 used_mods_data = self.app_state.local_config.get(config_key, {})
                 chapters_to_clear = []
-                for chapter_id_str, mod_key in list(used_mods_data.items()):
-                    if mod_key == orphaned_key:
+                for chapter_id_str, key in list(used_mods_data.items()):
+                    if key == orphaned_key:
                         chapters_to_clear.append(chapter_id_str)
                 for chapter_id_str in chapters_to_clear:
                     del used_mods_data[chapter_id_str]
@@ -278,12 +279,12 @@ class LibraryDisplayController:
     def on_mod_remove(self, mod_data):
         try:
             from utils.mod_utils import get_mod_key, get_mod_name
-            mod_key = get_mod_key(mod_data)
+            key = get_mod_key(mod_data)
             mod_name = get_mod_name(mod_data)
             if self.feedback_manager.ask_question('dialogs.delete_confirmation', 'dialogs.delete_mod_confirmation', '', False, mod_name=mod_name):
                 self.mod_manager.delete_mod_files(mod_data)
-                if mod_key:
-                    minimal_mod_data = {'key': mod_key}
+                if key:
+                    minimal_mod_data = {'key': key}
                     if mod_name:
                         minimal_mod_data['name'] = mod_name
                     self.slot_manager.remove_mod_from_all_chapters(minimal_mod_data)
@@ -310,7 +311,8 @@ class LibraryDisplayController:
 
     def on_mod_use(self, mod_data):
         target_chapter_id = get_chapter_id_for_game_mode(self.app_state.game_mode)
-        if target_chapter_id == SLOT_ID_UNIVERSAL and hasattr(mod_data, 'modgame') and (mod_data.modgame == 'undertale'):
+        game_value = getattr(mod_data, 'game', None) or getattr(mod_data, 'modgame', None)
+        if target_chapter_id == SLOT_ID_UNIVERSAL and game_value == 'undertale':
             target_chapter_id = SLOT_ID_UNDERTALE
         self._handle_mod_use(mod_data, target_chapter_id)
 

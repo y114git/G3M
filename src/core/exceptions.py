@@ -7,44 +7,44 @@ class DELTAHUBError(Exception):
 
 class ModError(DELTAHUBError):
 
-    def __init__(self, message: str, mod_key: Optional[str] = None, mod_name: Optional[str] = None):
+    def __init__(self, message: str, key: Optional[str] = None, mod_name: Optional[str] = None):
         super().__init__(message)
-        self.mod_key = mod_key
+        self.key = key
         self.mod_name = mod_name
 
 
 class ModInstallationError(ModError):
 
-    def __init__(self, message: str, mod_key: Optional[str] = None, mod_name: Optional[str] = None, reason: Optional[str] = None):
-        super().__init__(message, mod_key, mod_name)
+    def __init__(self, message: str, key: Optional[str] = None, mod_name: Optional[str] = None, reason: Optional[str] = None):
+        super().__init__(message, key, mod_name)
         self.reason = reason
 
 
 class ModUninstallationError(ModError):
 
-    def __init__(self, message: str, mod_key: Optional[str] = None, mod_name: Optional[str] = None, reason: Optional[str] = None):
-        super().__init__(message, mod_key, mod_name)
+    def __init__(self, message: str, key: Optional[str] = None, mod_name: Optional[str] = None, reason: Optional[str] = None):
+        super().__init__(message, key, mod_name)
         self.reason = reason
 
 
 class ModValidationError(ModError):
 
-    def __init__(self, message: str, mod_key: Optional[str] = None, mod_name: Optional[str] = None, validation_errors: Optional[List[str]] = None):
-        super().__init__(message, mod_key, mod_name)
+    def __init__(self, message: str, key: Optional[str] = None, mod_name: Optional[str] = None, validation_errors: Optional[List[str]] = None):
+        super().__init__(message, key, mod_name)
         self.validation_errors = validation_errors or []
 
 
 class ModConfigError(ModError):
 
-    def __init__(self, message: str, config_path: Optional[str] = None, mod_key: Optional[str] = None, mod_name: Optional[str] = None):
-        super().__init__(message, mod_key, mod_name)
+    def __init__(self, message: str, config_path: Optional[str] = None, key: Optional[str] = None, mod_name: Optional[str] = None):
+        super().__init__(message, key, mod_name)
         self.config_path = config_path
 
 
 class ModUpdateError(ModError):
 
-    def __init__(self, message: str, mod_key: Optional[str] = None, mod_name: Optional[str] = None, reason: Optional[str] = None):
-        super().__init__(message, mod_key, mod_name)
+    def __init__(self, message: str, key: Optional[str] = None, mod_name: Optional[str] = None, reason: Optional[str] = None):
+        super().__init__(message, key, mod_name)
         self.reason = reason
 
 

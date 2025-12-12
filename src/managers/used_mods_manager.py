@@ -38,19 +38,19 @@ class UsedModsManager(QObject):
         return self.used_mods.get(chapter_id, [])
 
     def set_used_mod(self, chapter_id: int, mod_data: Optional[Any], save_state: bool = True) -> None:
-        mod_key = get_mod_key(mod_data) if mod_data else None
+        key = get_mod_key(mod_data) if mod_data else None
         mod_name = get_mod_name(mod_data, 'None') if mod_data else 'None'
-        logging.debug(f'set_used_mod: chapter_id={chapter_id}, mod={mod_name} (key={mod_key})')
+        logging.debug(f'set_used_mod: chapter_id={chapter_id}, mod={mod_name} (key={key})')
         current_mods = self.used_mods.get(chapter_id, [])
         if mod_data is None:
             logging.info(f'Removing all mods from chapter {chapter_id}')
             if chapter_id in self.used_mods:
                 del self.used_mods[chapter_id]
-        elif mod_key:
+        elif key:
             found_index = None
             for i, existing_mod in enumerate(current_mods):
                 existing_key = get_mod_key(existing_mod)
-                if existing_key == mod_key:
+                if existing_key == key:
                     found_index = i
                     break
             if found_index is not None:
@@ -95,41 +95,41 @@ class UsedModsManager(QObject):
     def is_mod_used_for_chapter(self, mod_data, chapter_id: int) -> bool:
         if not mod_data:
             return False
-        mod_key = get_mod_key(mod_data)
-        if not mod_key:
+        key = get_mod_key(mod_data)
+        if not key:
             return False
         used_mods_list = self.used_mods.get(chapter_id, [])
         if not used_mods_list:
             return False
         for used_mod in used_mods_list:
             used_mod_key = get_mod_key(used_mod)
-            if used_mod_key == mod_key:
+            if used_mod_key == key:
                 return True
         return False
 
     def is_mod_used_anywhere(self, mod_data) -> bool:
         if not mod_data:
             return False
-        mod_key = get_mod_key(mod_data)
-        if not mod_key:
+        key = get_mod_key(mod_data)
+        if not key:
             return False
         for used_mods_list in self.used_mods.values():
             for used_mod in used_mods_list:
                 used_mod_key = get_mod_key(used_mod)
-                if used_mod_key == mod_key:
+                if used_mod_key == key:
                     return True
         return False
 
     def remove_mod_from_all_chapters(self, mod_data):
-        mod_key = get_mod_key(mod_data)
-        if not mod_key:
+        key = get_mod_key(mod_data)
+        if not key:
             return
         chapters_changed = []
         for chapter_id, used_mods_list in list(self.used_mods.items()):
             updated_list = []
             for used_mod in used_mods_list:
                 used_mod_key = get_mod_key(used_mod)
-                if used_mod_key != mod_key:
+                if used_mod_key != key:
                     updated_list.append(used_mod)
             if len(updated_list) != len(used_mods_list):
                 chapters_changed.append(chapter_id)
@@ -167,21 +167,21 @@ class UsedModsManager(QObject):
             for mod_data in mods_list:
                 try:
                     if isinstance(mod_data, dict):
-                        mod_key = mod_data.get('key') or mod_data.get('mod_key')
+                        key = mod_data.get('key') or mod_data.get('mod_key')
                     else:
-                        mod_key = getattr(mod_data, 'mod_key', None)
+                        key = getattr(mod_data, 'key', None) or getattr(mod_data, 'mod_key', None)
                     mod_name = get_mod_name(mod_data, '')
-                    if not mod_key or (mod_key == mod_name and mod_name):
+                    if not key or (key == mod_name and mod_name):
                         if mod_name and isinstance(mod_name, str):
                             sanitized = sanitize_filename(mod_name)
                             if sanitized:
-                                mod_key = f"local_{sanitized.lower().replace(' ', '_')}"
+                                key = f"local_{sanitized.lower().replace(' ', '_')}"
                             else:
-                                mod_key = None
+                                key = None
                         else:
-                            mod_key = None
-                    if mod_key:
-                        mod_keys.append(mod_key)
+                            key = None
+                    if key:
+                        mod_keys.append(key)
                 except Exception:
                     continue
             if mod_keys:
@@ -240,24 +240,24 @@ class UsedModsManager(QObject):
                 continue
             mods_list = []
             missing_mod_keys = []
-            for mod_key in mod_keys:
-                if not mod_key:
+            for key in mod_keys:
+                if not key:
                     continue
                 mod_data = None
                 if hasattr(self.app_state, 'all_mods') and self.app_state.all_mods:
                     for mod in self.app_state.all_mods:
                         mod_mod_key = get_mod_key(mod)
-                        if mod_mod_key == mod_key:
+                        if mod_mod_key == key:
                             mod_data = mod
-                            logging.debug(f"load_used_mods_state: Found mod {get_mod_name(mod, 'Unknown')} with key {mod_key} in all_mods")
+                            logging.debug(f"load_used_mods_state: Found mod {get_mod_name(mod, 'Unknown')} with key {key} in all_mods")
                             break
                 if not mod_data and hasattr(self.app_state, 'all_mods') and self.app_state.all_mods:
-                    if mod_key.startswith('gb_'):
+                    if key.startswith('gb_'):
                         try:
-                            mod_id_from_key = mod_key.replace('gb_', '')
+                            mod_id_from_key = key.replace('gb_', '')
                             for mod in self.app_state.all_mods:
-                                mod_gb_id = getattr(mod, 'gamebanana_mod_id', None)
-                                if mod_gb_id and str(mod_gb_id) == mod_id_from_key:
+                                mod_key_attr = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
+                                if mod_key_attr == key:
                                     mod_data = mod
                                     break
                         except Exception as e:
@@ -266,29 +266,28 @@ class UsedModsManager(QObject):
                     installed_mods = self.mod_manager.get_installed_mods_list()
                     for installed_mod in installed_mods:
                         installed_mod_key = installed_mod.get('mod_key') or installed_mod.get('key') or installed_mod.get('name')
-                        if installed_mod_key == mod_key:
+                        if installed_mod_key == key:
                             mod_data = self.mod_manager.create_mod_object_from_info(installed_mod, getattr(self.app_state, 'all_mods', None))
                             break
-                        if not mod_data and mod_key.startswith('gb_'):
+                        if not mod_data and key.startswith('gb_'):
                             try:
-                                mod_id_from_key = mod_key.replace('gb_', '')
-                                installed_gb_id = installed_mod.get('gamebanana_mod_id')
-                                if installed_gb_id and str(installed_gb_id) == mod_id_from_key:
+                                installed_mod_key = installed_mod.get('key') or installed_mod.get('mod_key')
+                                if installed_mod_key == key:
                                     mod_data = self.mod_manager.create_mod_object_from_info(installed_mod, getattr(self.app_state, 'all_mods', None))
                                     break
                             except Exception as e:
                                 logging.debug(f'Error matching GameBanana mod by ID in installed_mods: {e}')
                 if not mod_data and self.parent_widget:
-                    mod_config = self.mod_manager.get_mod_config(mod_key)
+                    mod_config = self.mod_manager.get_mod_config(key)
                     if mod_config:
                         mod_data = self.mod_manager.create_mod_object_from_info(mod_config, getattr(self.app_state, 'all_mods', None))
                         if mod_data:
-                            logging.debug(f'load_used_mods_state: Created mod object from config for key {mod_key}')
+                            logging.debug(f'load_used_mods_state: Created mod object from config for key {key}')
                 if mod_data:
                     mods_list.append(mod_data)
                 else:
-                    missing_mod_keys.append(mod_key)
-                    logging.debug(f'Mod with key {mod_key} not found during initial load, will retry after mods are fully loaded')
+                    missing_mod_keys.append(key)
+                    logging.debug(f'Mod with key {key} not found during initial load, will retry after mods are fully loaded')
             if mods_list:
                 self.used_mods[chapter_id] = mods_list
                 logging.info(f"Loaded {len(mods_list)} mod(s) for chapter {chapter_id}: {[get_mod_name(m, 'Unknown') for m in mods_list]}")
@@ -320,17 +319,17 @@ class UsedModsManager(QObject):
         needs_save = False
         for chapter_id, missing_keys in list(self._pending_mod_keys.items()):
             found_mods = []
-            for mod_key in missing_keys:
+            for key in missing_keys:
                 mod_data = None
                 if hasattr(self.app_state, 'all_mods') and self.app_state.all_mods:
                     for mod in self.app_state.all_mods:
                         mod_mod_key = get_mod_key(mod)
-                        if mod_mod_key == mod_key:
+                        if mod_mod_key == key:
                             mod_data = mod
                             break
-                        if not mod_data and mod_key.startswith('gb_'):
+                        if not mod_data and key.startswith('gb_'):
                             try:
-                                mod_id_from_key = mod_key.replace('gb_', '')
+                                mod_id_from_key = key.replace('gb_', '')
                                 mod_gb_id = getattr(mod, 'gamebanana_mod_id', None)
                                 if mod_gb_id and str(mod_gb_id) == mod_id_from_key:
                                     mod_data = mod
@@ -341,25 +340,24 @@ class UsedModsManager(QObject):
                     installed_mods = self.mod_manager.get_installed_mods_list()
                     for installed_mod in installed_mods:
                         installed_mod_key = installed_mod.get('mod_key') or installed_mod.get('key') or installed_mod.get('name')
-                        if installed_mod_key == mod_key:
+                        if installed_mod_key == key:
                             mod_data = self.mod_manager.create_mod_object_from_info(installed_mod, getattr(self.app_state, 'all_mods', None))
                             break
-                        if not mod_data and mod_key.startswith('gb_'):
+                        if not mod_data and key.startswith('gb_'):
                             try:
-                                mod_id_from_key = mod_key.replace('gb_', '')
-                                installed_gb_id = installed_mod.get('gamebanana_mod_id')
-                                if installed_gb_id and str(installed_gb_id) == mod_id_from_key:
+                                installed_mod_key = installed_mod.get('key') or installed_mod.get('mod_key')
+                                if installed_mod_key == key:
                                     mod_data = self.mod_manager.create_mod_object_from_info(installed_mod, getattr(self.app_state, 'all_mods', None))
                                     break
                             except Exception:
                                 pass
                 if not mod_data and self.parent_widget:
-                    mod_config = self.mod_manager.get_mod_config(mod_key)
+                    mod_config = self.mod_manager.get_mod_config(key)
                     if mod_config:
                         mod_data = self.mod_manager.create_mod_object_from_info(mod_config, getattr(self.app_state, 'all_mods', None))
                 if mod_data:
                     found_mods.append(mod_data)
-                    logging.info(f"Found missing mod {get_mod_name(mod_data, 'Unknown')} (key: {mod_key}) for chapter {chapter_id}")
+                    logging.info(f"Found missing mod {get_mod_name(mod_data, 'Unknown')} (key: {key}) for chapter {chapter_id}")
             if found_mods:
                 existing_mods = self.used_mods.get(chapter_id, [])
                 for found_mod in found_mods:

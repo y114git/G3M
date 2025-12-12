@@ -22,7 +22,7 @@ class ModChapterData:
 
 @dataclass
 class ModInfo:
-    mod_key: str
+    key: str
     name: str
     version: str
     author: str
@@ -30,7 +30,7 @@ class ModInfo:
     game_version: str
     description_url: str
     downloads: int
-    modgame: str
+    game: str
     is_verified: bool
     icon_url: Optional[str] = None
     tags: List[str] = field(default_factory=list)
@@ -45,10 +45,6 @@ class ModInfo:
     external_url: Optional[str] = None
     screenshots_url: List[str] = field(default_factory=list)
     full_description: Optional[str] = None
-    is_gamebanana_mod: bool = False
-    gamebanana_mod_id: Optional[str] = None
-    gamebanana_mod_type: Optional[str] = None
-    gamebanana_last_update_timestamp: Optional[int] = None
     gamebanana_has_compatible_file: Optional[bool] = None
     gamebanana_category: Optional[str] = None
     gamebanana_is_tool_compatible: bool = False
@@ -63,13 +59,13 @@ class ModInfo:
 
     def get_chapter_data(self, chapter_id: int) -> Optional[ModChapterData]:
         chapter_map = {0: '0', 1: '1', 2: '2', 3: '3', 4: '4', -1: 'demo'}
-        if self.modgame == 'undertale' and chapter_id == 0:
+        if self.game == 'undertale' and chapter_id == 0:
             return self.files.get('undertale')
         file_key = chapter_map.get(chapter_id)
         return self.files.get(file_key) if file_key else None
 
     def is_valid_for_demo(self) -> bool:
-        if self.modgame != 'deltarunedemo':
+        if self.game != 'deltarunedemo':
             return False
         if self.is_local_mod:
             return bool(self.files and self.files.get('demo'))
@@ -77,7 +73,15 @@ class ModInfo:
 
     @property
     def is_local(self) -> bool:
-        return not self.mod_key or (isinstance(self.mod_key, str) and self.mod_key.startswith('local_'))
+        return not self.key or (isinstance(self.key, str) and self.key.startswith('local_'))
+
+    def is_gamebanana_mod(self) -> bool:
+        return bool(self.key and isinstance(self.key, str) and self.key.startswith('gb_'))
+
+    def get_gamebanana_mod_id(self) -> Optional[str]:
+        if not self.is_gamebanana_mod():
+            return None
+        return self.key.replace('gb_', '', 1) if self.key else None
 
     @classmethod
     def from_dict(cls, data_dict: Dict[str, Any]) -> 'ModInfo':
@@ -93,6 +97,7 @@ class ModInfo:
                     files_dict[key] = ModChapterData(**value)
                 elif isinstance(value, ModChapterData):
                     files_dict[key] = value
-        mod_key = data_dict.get('mod_key') or data_dict.get('key', '')
-        kwargs = {'mod_key': mod_key, 'name': data_dict.get('name', 'Unknown Mod'), 'version': data_dict.get('version', '1.0.0'), 'author': data_dict.get('author', tr('defaults.unknown')), 'tagline': data_dict.get('tagline', tr('status.no_description_status')), 'game_version': data_dict.get('game_version', tr('defaults.not_specified')), 'description_url': data_dict.get('description_url', ''), 'downloads': data_dict.get('downloads', 0), 'modgame': data_dict.get('modgame', 'deltarune'), 'is_verified': data_dict.get('is_verified', False), 'icon_url': data_dict.get('icon_url'), 'tags': data_dict.get('tags', []), 'hide_mod': data_dict.get('hide_mod', False), 'is_local_mod': data_dict.get('is_local_mod', False), 'ban_status': data_dict.get('ban_status', False), 'files': files_dict, 'demo_url': data_dict.get('demo_url'), 'demo_version': data_dict.get('demo_version'), 'created_date': data_dict.get('created_date'), 'last_updated': data_dict.get('last_updated'), 'external_url': data_dict.get('external_url'), 'screenshots_url': data_dict.get('screenshots_url', []), 'full_description': data_dict.get('full_description'), 'is_gamebanana_mod': data_dict.get('is_gamebanana_mod', False), 'gamebanana_mod_id': data_dict.get('gamebanana_mod_id'), 'gamebanana_mod_type': data_dict.get('gamebanana_mod_type'), 'gamebanana_last_update_timestamp': data_dict.get('gamebanana_last_update_timestamp'), 'gamebanana_has_compatible_file': data_dict.get('gamebanana_has_compatible_file'), 'gamebanana_category': data_dict.get('gamebanana_category'), 'gamebanana_is_tool_compatible': data_dict.get('gamebanana_is_tool_compatible', False), 'gamebanana_supported_files': data_dict.get('gamebanana_supported_files', []), 'gamebanana_supported_tool_ids': data_dict.get('gamebanana_supported_tool_ids', []), 'gamebanana_preferred_format': data_dict.get('gamebanana_preferred_format'), 'gamebanana_has_deltahub_file': data_dict.get('gamebanana_has_deltahub_file', False), 'gamebanana_has_deltamod_file': data_dict.get('gamebanana_has_deltamod_file', False), 'gamebanana_compatibility_checked': data_dict.get('gamebanana_compatibility_checked', False), 'has_full_metadata': data_dict.get('has_full_metadata', True)}
+        key = data_dict.get('key') or data_dict.get('mod_key', '')
+        game = data_dict.get('game') or data_dict.get('modgame', 'deltarune')
+        kwargs = {'key': key, 'name': data_dict.get('name', 'Unknown Mod'), 'version': data_dict.get('version', '1.0.0'), 'author': data_dict.get('author', tr('defaults.unknown')), 'tagline': data_dict.get('tagline', tr('status.no_description_status')), 'game_version': data_dict.get('game_version', tr('defaults.not_specified')), 'description_url': data_dict.get('description_url', ''), 'downloads': data_dict.get('downloads', 0), 'game': game, 'is_verified': data_dict.get('is_verified', False), 'icon_url': data_dict.get('icon_url'), 'tags': data_dict.get('tags', []), 'hide_mod': data_dict.get('hide_mod', False), 'is_local_mod': data_dict.get('is_local_mod', False), 'ban_status': data_dict.get('ban_status', False), 'files': files_dict, 'demo_url': data_dict.get('demo_url'), 'demo_version': data_dict.get('demo_version'), 'created_date': data_dict.get('created_date'), 'last_updated': data_dict.get('last_updated'), 'external_url': data_dict.get('external_url'), 'screenshots_url': data_dict.get('screenshots_url', []), 'full_description': data_dict.get('full_description'), 'gamebanana_has_compatible_file': data_dict.get('gamebanana_has_compatible_file'), 'gamebanana_category': data_dict.get('gamebanana_category'), 'gamebanana_is_tool_compatible': data_dict.get('gamebanana_is_tool_compatible', False), 'gamebanana_supported_files': data_dict.get('gamebanana_supported_files', []), 'gamebanana_supported_tool_ids': data_dict.get('gamebanana_supported_tool_ids', []), 'gamebanana_preferred_format': data_dict.get('gamebanana_preferred_format'), 'gamebanana_has_deltahub_file': data_dict.get('gamebanana_has_deltahub_file', False), 'gamebanana_has_deltamod_file': data_dict.get('gamebanana_has_deltamod_file', False), 'gamebanana_compatibility_checked': data_dict.get('gamebanana_compatibility_checked', False), 'has_full_metadata': data_dict.get('has_full_metadata', True)}
         return cls(**kwargs)

@@ -172,9 +172,11 @@ class ModOperationsController:
         if not url_to_open and mod:
             url_to_open = getattr(mod, 'external_url', None)
             if not url_to_open:
-                mod_id = getattr(mod, 'gamebanana_mod_id', None)
-                if mod_id:
-                    url_to_open = f'https://gamebanana.com/mods/{mod_id}'
+                key = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
+                if key and key.startswith('gb_'):
+                    mod_id = key.replace('gb_', '', 1)
+                    if mod_id:
+                        url_to_open = f'https://gamebanana.com/mods/{mod_id}'
         msg_box = QMessageBox(self.app)
         msg_box.setIcon(QMessageBox.Icon.Information)
         msg_box.setWindowTitle(tr('errors.mod_not_compatible_title'))
@@ -191,9 +193,13 @@ class ModOperationsController:
         if files:
             self._notify_gamebanana_status_refresh()
             return files
-        mod_id = getattr(mod, 'gamebanana_mod_id', None)
-        if not mod_id:
+        key = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
+        if not key or not key.startswith('gb_'):
             return []
+        mod_id_str = key.replace('gb_', '', 1)
+        if not mod_id_str:
+            return []
+        mod_id = int(mod_id_str)
         try:
             from utils.gamebanana_api import GameBananaAPI
             api = GameBananaAPI()
@@ -211,13 +217,13 @@ class ModOperationsController:
 
     def _get_mod_identifier(self, mod) -> Optional[str]:
         try:
-            if hasattr(mod, 'is_gamebanana_mod') and mod.is_gamebanana_mod:
-                mod_id = getattr(mod, 'gamebanana_mod_id', None)
-                if mod_id:
-                    return f'gb::{mod_id}'
-            mod_key = getattr(mod, 'mod_key', None)
-            if mod_key:
-                return f'key::{mod_key}'
+            key = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
+            if key:
+                if key.startswith('gb_'):
+                    mod_id = key.replace('gb_', '', 1)
+                    if mod_id:
+                        return f'gb::{mod_id}'
+                return f'key::{key}'
         except Exception as e:
             logging.debug(f'ModOperationsController: Failed to get identifier for mod: {e}')
         return None
@@ -273,10 +279,10 @@ class ModOperationsController:
                 self._install_gamebanana_mod(mod, force, is_update, selected_file)
                 return
             available_chapters = []
-            if mod.modgame == 'undertale':
+            if mod.game == 'undertale':
                 if mod.files.get('undertale'):
                     available_chapters.append(0)
-            elif mod.modgame == 'deltarunedemo':
+            elif mod.game == 'deltarunedemo':
                 if mod.files.get('demo'):
                     available_chapters.append(-1)
             else:
@@ -287,7 +293,7 @@ class ModOperationsController:
             if not available_chapters:
                 self.feedback_manager.show_message('warning', 'errors.mod_no_files', mod_name=mod.name)
                 return
-            was_installed_before = self.mod_manager.is_mod_installed(mod.mod_key) or is_update
+            was_installed_before = self.mod_manager.is_mod_installed(mod.key) or is_update
             install_tasks = [(mod, chapter_id) for chapter_id in available_chapters]
             self._safe_execute(lambda: setattr(self.app_state, 'operation_cancelled', False), 'Failed to set operation_cancelled')
             if self.app_state.current_task:
@@ -306,19 +312,19 @@ class ModOperationsController:
             self._start_install_thread(install_thread, op_id)
         except (IOError, OSError) as e:
             from core.exceptions import ModInstallationError
-            mod_key = get_mod_key(mod)
+            key = get_mod_key(mod)
             mod_name = get_mod_name(mod, 'Unknown Mod')
-            raise ModInstallationError(f'File operation failed during installation: {e}', mod_key=mod_key, mod_name=mod_name, reason='io_error') from e
+            raise ModInstallationError(f'File operation failed during installation: {e}', key=key, mod_name=mod_name, reason='io_error') from e
         except KeyError as e:
             from core.exceptions import ModInstallationError
-            mod_key = get_mod_key(mod)
+            key = get_mod_key(mod)
             mod_name = get_mod_name(mod, 'Unknown Mod')
-            raise ModInstallationError(f'Missing required data: {e}', mod_key=mod_key, mod_name=mod_name, reason='missing_data') from e
+            raise ModInstallationError(f'Missing required data: {e}', key=key, mod_name=mod_name, reason='missing_data') from e
         except Exception as e:
             from core.exceptions import ModInstallationError
-            mod_key = get_mod_key(mod)
+            key = get_mod_key(mod)
             mod_name = get_mod_name(mod, 'Unknown Mod')
-            raise ModInstallationError(f'Unexpected error during installation: {e}', mod_key=mod_key, mod_name=mod_name, reason='unknown') from e
+            raise ModInstallationError(f'Unexpected error during installation: {e}', key=key, mod_name=mod_name, reason='unknown') from e
 
     def on_install_progress_token(self, value: int, op_id: int):
         current_op_id = getattr(self.app, '_install_op_id', 0)
@@ -389,32 +395,21 @@ class ModOperationsController:
             if installed_mod_info and hasattr(self.app_state, 'all_mods'):
                 if not self.app_state.all_mods:
                     self.app_state.all_mods = []
-                installed_mod_key = getattr(installed_mod_info, 'mod_key', None)
-                installed_mod_id = None
-                if hasattr(installed_mod_info, 'is_gamebanana_mod') and installed_mod_info.is_gamebanana_mod:
-                    installed_mod_id = str(getattr(installed_mod_info, 'gamebanana_mod_id', None)) if getattr(installed_mod_info, 'gamebanana_mod_id', None) else None
+                key = getattr(installed_mod_info, 'key', None) or getattr(installed_mod_info, 'mod_key', None)
                 mod_already_in_all_mods = False
-                if installed_mod_key:
-                    mod_already_in_all_mods = any((getattr(m, 'mod_key', None) == installed_mod_key for m in self.app_state.all_mods))
-                elif installed_mod_id:
-                    mod_already_in_all_mods = any((hasattr(m, 'gamebanana_mod_id') and m.gamebanana_mod_id and (str(m.gamebanana_mod_id) == installed_mod_id) for m in self.app_state.all_mods))
+                if key:
+                    mod_already_in_all_mods = any(((getattr(m, 'key', None) or getattr(m, 'mod_key', None)) == key for m in self.app_state.all_mods))
                 if not mod_already_in_all_mods:
                     try:
                         cache = self.mod_manager._get_mods_cache()
                         mod_to_add = None
-                        if installed_mod_key and installed_mod_key in cache:
-                            mod_to_add = self.mod_manager.create_mod_object_from_info(cache[installed_mod_key].config_data, self.app_state.all_mods)
-                        elif installed_mod_id:
-                            for mod_key, mod_info in cache.items():
-                                config = mod_info.config_data
-                                if config.get('is_gamebanana_mod') and str(config.get('gamebanana_mod_id', '')) == installed_mod_id:
-                                    mod_to_add = self.mod_manager.create_mod_object_from_info(config, self.app_state.all_mods)
-                                    break
+                        if key and key in cache:
+                            mod_to_add = self.mod_manager.create_mod_object_from_info(cache[key].config_data, self.app_state.all_mods)
                         if mod_to_add:
                             self.app_state.append_mod(mod_to_add)
-                            logging.info(f'''ModOperationsController: Added installed mod "{mod_to_add.name}" (key: {getattr(mod_to_add, 'mod_key', 'N/A')}, id: {getattr(mod_to_add, 'gamebanana_mod_id', 'N/A')}) to all_mods''')
+                            logging.info(f'''ModOperationsController: Added installed mod "{mod_to_add.name}" (key: {getattr(mod_to_add, 'key', None) or getattr(mod_to_add, 'mod_key', 'N/A')}) to all_mods''')
                         else:
-                            logging.warning(f'ModOperationsController: Could not create mod object for installed mod (key: {installed_mod_key}, id: {installed_mod_id})')
+                            logging.warning(f'ModOperationsController: Could not create mod object for installed mod (key: {key})')
                     except Exception as e:
                         logging.warning(f'ModOperationsController: Failed to add installed mod to all_mods: {e}', exc_info=True)
         except Exception as e:
@@ -430,35 +425,36 @@ class ModOperationsController:
                         try:
                             installed_mod_found = False
                             installed_mod_page = None
-                            if hasattr(installed_mod_info, 'is_gamebanana_mod') and installed_mod_info.is_gamebanana_mod:
-                                installed_mod_id = str(installed_mod_info.gamebanana_mod_id) if installed_mod_info.gamebanana_mod_id else None
-                                logging.info(f'ModOperationsController: Searching for installed GameBanana mod with ID {installed_mod_id} in {len(self.app_state.filtered_mods)} filtered mods')
+                            key = getattr(installed_mod_info, 'key', None) or getattr(installed_mod_info, 'mod_key', None)
+                            if key and key.startswith('gb_'):
+                                logging.info(f'ModOperationsController: Searching for installed GameBanana mod with key {key} in {len(self.app_state.filtered_mods)} filtered mods')
                                 for idx, mod in enumerate(self.app_state.filtered_mods):
-                                    if hasattr(mod, 'gamebanana_mod_id') and mod.gamebanana_mod_id:
-                                        if str(mod.gamebanana_mod_id) == installed_mod_id:
-                                            installed_mod_found = True
-                                            installed_mod_page = idx // self.app_state.mods_per_page + 1
-                                            logging.info(f'''ModOperationsController: Found installed mod "{mod.name}" (ID: {mod.gamebanana_mod_id}) at index {idx}, page {installed_mod_page}, is_local={getattr(mod, 'is_local_mod', False)}''')
-                                            break
-                                if not installed_mod_found:
-                                    logging.warning(f'ModOperationsController: Installed mod with ID {installed_mod_id} NOT FOUND in filtered_mods! Checking all_mods...')
-                                    if hasattr(self.app_state, 'all_mods') and self.app_state.all_mods:
-                                        for mod in self.app_state.all_mods:
-                                            if hasattr(mod, 'gamebanana_mod_id') and mod.gamebanana_mod_id:
-                                                if str(mod.gamebanana_mod_id) == installed_mod_id:
-                                                    logging.warning(f'''ModOperationsController: Mod "{mod.name}" (ID: {installed_mod_id}) found in all_mods but NOT in filtered_mods! Key: {getattr(mod, 'mod_key', '')}, is_local: {getattr(mod, 'is_local_mod', False)}, status: {getattr(mod, 'status', 'N/A')}''')
-                                                    break
-                                    for idx, mod in enumerate(self.app_state.filtered_mods[:10]):
-                                        if hasattr(mod, 'is_gamebanana_mod') and mod.is_gamebanana_mod:
-                                            logging.info(f'''ModOperationsController: Filtered mod {idx}: "{mod.name}" (ID: {mod.gamebanana_mod_id}, key: {getattr(mod, 'mod_key', '')}, is_local: {getattr(mod, 'is_local_mod', False)})''')
-                            else:
-                                installed_mod_key = installed_mod_info.mod_key if hasattr(installed_mod_info, 'mod_key') else None
-                                logging.info(f'ModOperationsController: Searching for installed mod with key {installed_mod_key} in {len(self.app_state.filtered_mods)} filtered mods')
-                                for idx, mod in enumerate(self.app_state.filtered_mods):
-                                    if hasattr(mod, 'mod_key') and mod.mod_key == installed_mod_key:
+                                    if (getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)) == key:
                                         installed_mod_found = True
                                         installed_mod_page = idx // self.app_state.mods_per_page + 1
-                                        logging.info(f'ModOperationsController: Found installed mod "{mod.name}" (key: {mod.mod_key}) at index {idx}, page {installed_mod_page}')
+                                        logging.info(f'''ModOperationsController: Found installed mod "{mod.name}" (key: {key}) at index {idx}, page {installed_mod_page}, is_local={getattr(mod, 'is_local_mod', False)}''')
+                                        break
+                                if not installed_mod_found:
+                                    logging.warning(f'ModOperationsController: Installed mod with key {key} NOT FOUND in filtered_mods! Checking all_mods...')
+                                    if hasattr(self.app_state, 'all_mods') and self.app_state.all_mods:
+                                        for mod in self.app_state.all_mods:
+                                            if (getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)) == key:
+                                                mod_key_attr = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
+                                                logging.warning(f'''ModOperationsController: Mod "{mod.name}" (key: {key}) found in all_mods but NOT in filtered_mods! Key: {mod_key_attr}, is_local: {getattr(mod, 'is_local_mod', False)}, status: {getattr(mod, 'status', 'N/A')}''')
+                                                break
+                                    for idx, mod in enumerate(self.app_state.filtered_mods[:10]):
+                                        mod_key_attr = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
+                                        if mod_key_attr and mod_key_attr.startswith('gb_'):
+                                            logging.info(f'''ModOperationsController: Filtered mod {idx}: "{mod.name}" (key: {mod_key_attr}, is_local: {getattr(mod, 'is_local_mod', False)})''')
+                            else:
+                                key = getattr(installed_mod_info, 'key', None) or getattr(installed_mod_info, 'mod_key', None)
+                                logging.info(f'ModOperationsController: Searching for installed mod with key {key} in {len(self.app_state.filtered_mods)} filtered mods')
+                                for idx, mod in enumerate(self.app_state.filtered_mods):
+                                    mod_key_attr = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
+                                    if mod_key_attr == key:
+                                        installed_mod_found = True
+                                        installed_mod_page = idx // self.app_state.mods_per_page + 1
+                                        logging.info(f'ModOperationsController: Found installed mod "{mod.name}" (key: {key}) at index {idx}, page {installed_mod_page}')
                                         break
                             if installed_mod_found and installed_mod_page:
                                 if installed_mod_page != self.app_state.current_page:
@@ -476,10 +472,10 @@ class ModOperationsController:
             try:
                 cache = self.mod_manager._get_mods_cache()
                 logging.info(f'ModOperationsController: Cache after reload has {len(cache)} mods')
-                for mod_key, mod_info in list(cache.items())[:5]:
+                for key, mod_info in list(cache.items())[:5]:
                     config = mod_info.config_data
-                    if config.get('is_gamebanana_mod'):
-                        logging.info(f"ModOperationsController: Found installed GameBanana mod - key={mod_key}, mod_id={config.get('gamebanana_mod_id')}")
+                    if key and key.startswith('gb_'):
+                        logging.info(f'ModOperationsController: Found installed GameBanana mod - key={key}')
             except Exception as e:
                 logging.warning(f'ModOperationsController: Failed to check cache: {e}')
 
@@ -490,10 +486,10 @@ class ModOperationsController:
                 logging.info('ModOperationsController: Mods cache invalidated before updating plaques')
                 cache = self.mod_manager._get_mods_cache()
                 logging.info(f'ModOperationsController: Reloaded mods cache, found {len(cache)} installed mods')
-                for mod_key, mod_info in cache.items():
+                for key, mod_info in cache.items():
                     config_data = mod_info.config_data
-                    if config_data.get('is_gamebanana_mod'):
-                        logging.info(f"ModOperationsController: Installed GameBanana mod in cache - key={mod_key}, id={config_data.get('gamebanana_mod_id', 'N/A')}")
+                    if key and key.startswith('gb_'):
+                        logging.info(f'ModOperationsController: Installed GameBanana mod in cache - key={key}')
                 self.app.search_display.update_search_plaques()
                 logging.info('ModOperationsController: Search plaques updated')
             except Exception as e:
@@ -541,8 +537,8 @@ class ModOperationsController:
                 return
             mod_data_tuple = install_tasks[0]
             mod_to_update = mod_data_tuple[0]
-        mod_key_to_find = get_mod_key(mod_to_update)
-        if not mod_key_to_find:
+        key_to_find = get_mod_key(mod_to_update)
+        if not key_to_find:
             return
         if hasattr(self.app, 'installed_mods_layout'):
             for i in range(self.app.installed_mods_layout.count()):
@@ -550,8 +546,8 @@ class ModOperationsController:
                 if item and item.widget():
                     widget = item.widget()
                     if isinstance(widget, InstalledModWidget):
-                        widget_mod_key = get_mod_key(widget.mod_data)
-                        if widget_mod_key == mod_key_to_find:
+                        widget_key = get_mod_key(widget.mod_data)
+                        if widget_key == key_to_find:
                             widget.update_status()
                             break
 

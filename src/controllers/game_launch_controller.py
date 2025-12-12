@@ -218,12 +218,12 @@ class GameLaunchController(QObject):
         for chapter_id, mod_data in list(self.slot_manager.used_mods.items()):
             if not mod_data:
                 continue
-            mod_key = getattr(mod_data, 'mod_key', None)
-            if not mod_key:
+            key = getattr(mod_data, 'key', None) or getattr(mod_data, 'mod_key', None)
+            if not key:
                 continue
-            updated_mod = next((mod for mod in self.app_state.all_mods if getattr(mod, 'mod_key', None) == mod_key), None)
+            updated_mod = next((mod for mod in self.app_state.all_mods if (getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)) == key), None)
             if not updated_mod:
-                mod_config = self.mod_manager.get_mod_config(mod_key)
+                mod_config = self.mod_manager.get_mod_config(key)
                 if mod_config:
                     updated_mod = self.mod_manager.create_mod_object_from_info(mod_config, self.app_state.all_mods)
             if updated_mod:

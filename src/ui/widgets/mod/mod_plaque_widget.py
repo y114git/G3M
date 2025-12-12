@@ -18,9 +18,10 @@ class CompatibilityCheckThread(QThread):
         try:
             if self.isInterruptionRequested():
                 return
-            if not hasattr(self.mod_data, 'is_gamebanana_mod') or not self.mod_data.is_gamebanana_mod:
+            key = getattr(self.mod_data, 'key', None) or getattr(self.mod_data, 'mod_key', None)
+            if not key or not key.startswith('gb_'):
                 return
-            mod_id = getattr(self.mod_data, 'gamebanana_mod_id', None)
+            mod_id = key.replace('gb_', '', 1)
             if not mod_id:
                 return
             from utils.gamebanana_api import GameBananaAPI
@@ -65,7 +66,8 @@ class ModPlaqueWidget(BaseModWidget):
         self._update_style()
         if self.is_installed and hasattr(self, 'install_button'):
             self._apply_uninstall_button_style()
-        if hasattr(self.mod_data, 'is_gamebanana_mod') and self.mod_data.is_gamebanana_mod:
+        key = getattr(self.mod_data, 'key', None) or getattr(self.mod_data, 'mod_key', None)
+        if key and key.startswith('gb_'):
             self._start_compatibility_check()
         try:
             self.destroyed.connect(self._cleanup_compatibility_thread)
@@ -127,24 +129,24 @@ class ModPlaqueWidget(BaseModWidget):
         tags_layout = QHBoxLayout()
         tags_layout.setContentsMargins(0, 5, 0, 0)
         tags_layout.setSpacing(10)
-        modgame = getattr(self.mod_data, 'modgame', 'deltarune')
+        game = getattr(self.mod_data, 'game', None) or getattr(self.mod_data, 'modgame', 'deltarune')
         modgame_text = ''
         modgame_style = ''
         config = self._resolve_theme_config()
         text_color = get_theme_color(config, 'text', 'white') if config else 'white'
-        if modgame == 'deltarune':
+        if game == 'deltarune':
             modgame_text = 'DELTARUNE'
             modgame_style = f'background-color: black; color: {text_color}; border: 1px solid white;'
-        elif modgame == 'deltarunedemo':
+        elif game == 'deltarunedemo':
             modgame_text = 'DELTARUNE DEMO'
             modgame_style = f'background-color: black; color: {text_color}; border: 1px solid lightgreen;'
-        elif modgame == 'undertale':
+        elif game == 'undertale':
             modgame_text = 'UNDERTALE'
             modgame_style = f'background-color: red; color: {text_color}; border: 1px solid red;'
-        elif modgame == 'undertaleyellow':
+        elif game == 'undertaleyellow':
             modgame_text = 'UNDERTALE Yellow'
             modgame_style = f'background-color: #FFD700; color: {text_color}; border: none;'
-        elif modgame == 'pizzatower':
+        elif game == 'pizzatower':
             modgame_text = 'PIZZA TOWER'
             modgame_style = f'background-color: #D65A18; color: {text_color}; border: 1px solid #8B0000;'
         if modgame_text:
@@ -156,7 +158,8 @@ class ModPlaqueWidget(BaseModWidget):
             verified_label = QLabel(tr('ui.verified_label'), self)
             verified_label.setStyleSheet('color: #4CAF50; font-size: 14px;')
             tags_layout.addWidget(verified_label)
-        if hasattr(self.mod_data, 'is_gamebanana_mod') and self.mod_data.is_gamebanana_mod:
+        key = getattr(self.mod_data, 'key', None) or getattr(self.mod_data, 'mod_key', None)
+        if key and key.startswith('gb_'):
             gb_label = QLabel('GameBanana 🍌', self)
             gb_label.setStyleSheet('color: yellow; font-size: 14px;')
             gb_label.setToolTip(tr('ui.gamebanana_mod_tooltip'))
@@ -181,14 +184,14 @@ class ModPlaqueWidget(BaseModWidget):
         config = self._resolve_theme_config()
         text_color = get_theme_color(config, 'text', 'white') if config else 'white'
         if hasattr(self, 'modgame_tag_label') and self.modgame_tag_label:
-            modgame = getattr(self.mod_data, 'modgame', 'deltarune')
-            if modgame == 'deltarunedemo':
+            game = getattr(self.mod_data, 'game', None) or getattr(self.mod_data, 'modgame', 'deltarune')
+            if game == 'deltarunedemo':
                 base_style = f'background-color: black; color: {text_color}; border: 1px solid lightgreen;'
-            elif modgame == 'undertale':
+            elif game == 'undertale':
                 base_style = f'background-color: red; color: {text_color}; border: 1px solid red;'
-            elif modgame == 'undertaleyellow':
+            elif game == 'undertaleyellow':
                 base_style = f'background-color: #FFD700; color: {text_color}; border: none;'
-            elif modgame == 'pizzatower':
+            elif game == 'pizzatower':
                 base_style = f'background-color: #D65A18; color: {text_color}; border: 1px solid #8B0000;'
             else:
                 base_style = f'background-color: black; color: {text_color}; border: 1px solid white;'
@@ -209,13 +212,13 @@ class ModPlaqueWidget(BaseModWidget):
 
     def _get_mod_identifier(self):
         try:
-            if hasattr(self.mod_data, 'is_gamebanana_mod') and self.mod_data.is_gamebanana_mod:
-                mod_id = getattr(self.mod_data, 'gamebanana_mod_id', None)
-                if mod_id:
-                    return f'gb::{mod_id}'
-            mod_key = getattr(self.mod_data, 'mod_key', None)
-            if mod_key:
-                return f'key::{mod_key}'
+            key = getattr(self.mod_data, 'key', None) or getattr(self.mod_data, 'mod_key', None)
+            if key:
+                if key.startswith('gb_'):
+                    mod_id = key.replace('gb_', '', 1)
+                    if mod_id:
+                        return f'gb::{mod_id}'
+                return f'key::{key}'
         except Exception:
             pass
         return None
@@ -224,7 +227,8 @@ class ModPlaqueWidget(BaseModWidget):
         super()._init_ui()
         downloads_text = ''
         try:
-            if hasattr(self.mod_data, 'is_gamebanana_mod') and self.mod_data.is_gamebanana_mod:
+            key = getattr(self.mod_data, 'key', None) or getattr(self.mod_data, 'mod_key', None)
+            if key and key.startswith('gb_'):
                 has_full = getattr(self.mod_data, 'has_full_metadata', True)
                 if not has_full:
                     downloads_text = tr('ui.loading_placeholder')
@@ -302,34 +306,30 @@ class ModPlaqueWidget(BaseModWidget):
 
     def _check_installation_status(self):
         if self.parent_app and hasattr(self.parent_app, 'mod_manager'):
-            if hasattr(self.mod_data, 'is_gamebanana_mod') and self.mod_data.is_gamebanana_mod:
-                mod_key = getattr(self.mod_data, 'mod_key', '')
-                mod_id = getattr(self.mod_data, 'gamebanana_mod_id', '')
+            key = getattr(self.mod_data, 'key', None) or getattr(self.mod_data, 'mod_key', '')
+            try:
+                self.is_installed = self.parent_app.mod_manager.is_mod_installed(key)
+            except Exception as e:
+                import logging
+                logging.error(f'ModPlaqueWidget: Error checking installation by key {key}: {e}', exc_info=True)
+                self.is_installed = False
+            if not self.is_installed and key and key.startswith('gb_'):
                 try:
-                    self.is_installed = self.parent_app.mod_manager.is_mod_installed(mod_key)
+                    cache = self.parent_app.mod_manager._get_mods_cache()
+                    for cached_key, mod_info in cache.items():
+                        if cached_key == key:
+                            self.is_installed = True
+                            break
                 except Exception as e:
                     import logging
-                    logging.error(f'ModPlaqueWidget: Error checking installation by key {mod_key}: {e}', exc_info=True)
-                    self.is_installed = False
-                if not self.is_installed and mod_id:
-                    try:
-                        cache = self.parent_app.mod_manager._get_mods_cache()
-                        for cached_mod_key, mod_info in cache.items():
-                            config_data = mod_info.config_data
-                            cached_mod_id = str(config_data.get('gamebanana_mod_id', ''))
-                            if config_data.get('is_gamebanana_mod') and cached_mod_id == str(mod_id):
-                                self.is_installed = True
-                                break
-                    except Exception as e:
-                        import logging
-                        logging.warning(f'ModPlaqueWidget: Error checking cache for mod_id {mod_id}: {e}', exc_info=True)
-            else:
-                mod_key = getattr(self.mod_data, 'mod_key', '')
+                    logging.warning(f'ModPlaqueWidget: Error checking cache for key {key}: {e}', exc_info=True)
+            if not self.is_installed:
+                key = getattr(self.mod_data, 'key', None) or getattr(self.mod_data, 'mod_key', '')
                 try:
-                    self.is_installed = self.parent_app.mod_manager.is_mod_installed(mod_key)
+                    self.is_installed = self.parent_app.mod_manager.is_mod_installed(key)
                 except Exception as e:
                     import logging
-                    logging.error(f'ModPlaqueWidget: Error checking installation for mod (key={mod_key}): {e}', exc_info=True)
+                    logging.error(f'ModPlaqueWidget: Error checking installation for mod (key={key}): {e}', exc_info=True)
                     self.is_installed = False
         else:
             self.is_installed = False
@@ -416,7 +416,8 @@ class ModPlaqueWidget(BaseModWidget):
             self.install_button.setEnabled(not is_installing)
 
     def _apply_gamebanana_install_styles(self):
-        if not hasattr(self.mod_data, 'is_gamebanana_mod') or not self.mod_data.is_gamebanana_mod:
+        key = getattr(self.mod_data, 'key', None) or getattr(self.mod_data, 'mod_key', None)
+        if not key or not key.startswith('gb_'):
             self.install_button.setStyleSheet('')
             self.install_button.setToolTip('')
             return
@@ -441,7 +442,8 @@ class ModPlaqueWidget(BaseModWidget):
     def _update_gamebanana_status_label(self):
         if not self.gb_status_label:
             return
-        is_gb = bool(getattr(self.mod_data, 'is_gamebanana_mod', False))
+        key = getattr(self.mod_data, 'key', None) or getattr(self.mod_data, 'mod_key', None)
+        is_gb = bool(key and key.startswith('gb_'))
         if not is_gb:
             self.gb_status_label.setVisible(False)
             return
@@ -484,7 +486,8 @@ class ModPlaqueWidget(BaseModWidget):
         was_installed = self.is_installed
         self._check_installation_status()
         if was_installed and (not self.is_installed):
-            if hasattr(self.mod_data, 'is_gamebanana_mod') and self.mod_data.is_gamebanana_mod:
+            key = getattr(self.mod_data, 'key', None) or getattr(self.mod_data, 'mod_key', None)
+            if key and key.startswith('gb_'):
                 setattr(self.mod_data, 'gamebanana_compatibility_checked', False)
                 setattr(self.mod_data, 'gamebanana_is_tool_compatible', False)
                 setattr(self.mod_data, 'gamebanana_supported_files', [])
@@ -499,7 +502,8 @@ class ModPlaqueWidget(BaseModWidget):
                 load_mod_icon_universal(self.icon_label, self.mod_data, size=80)
             if hasattr(self, 'downloads_label'):
                 try:
-                    if hasattr(self.mod_data, 'is_gamebanana_mod') and self.mod_data.is_gamebanana_mod:
+                    key = getattr(self.mod_data, 'key', None) or getattr(self.mod_data, 'mod_key', None)
+                    if key and key.startswith('gb_'):
                         has_full = getattr(self.mod_data, 'has_full_metadata', True)
                         if not has_full:
                             self.downloads_label.setText(tr('ui.loading_placeholder'))
@@ -515,7 +519,8 @@ class ModPlaqueWidget(BaseModWidget):
             if hasattr(self, 'tagline_label'):
                 try:
                     tagline = getattr(self.mod_data, 'tagline', '') or tr('ui.no_description')
-                    if hasattr(self.mod_data, 'is_gamebanana_mod') and self.mod_data.is_gamebanana_mod:
+                    key = getattr(self.mod_data, 'key', None) or getattr(self.mod_data, 'mod_key', None)
+                    if key and key.startswith('gb_'):
                         has_full = getattr(self.mod_data, 'has_full_metadata', True)
                         if not has_full:
                             tagline = tr('ui.loading_placeholder')
@@ -527,7 +532,8 @@ class ModPlaqueWidget(BaseModWidget):
                     if len(tagline) > 200:
                         tagline = tagline[:197] + '...'
                     self.tagline_label.setText(tagline)
-            if hasattr(self.mod_data, 'is_gamebanana_mod') and self.mod_data.is_gamebanana_mod:
+            key = getattr(self.mod_data, 'key', None) or getattr(self.mod_data, 'mod_key', None)
+            if key and key.startswith('gb_'):
                 checked = bool(getattr(self.mod_data, 'gamebanana_compatibility_checked', False))
                 if not checked:
                     if self._compatibility_thread and self._compatibility_thread.isRunning():

@@ -77,16 +77,16 @@ class CreateModpackThread(QThread):
                     chapter_key = '0'
                 else:
                     chapter_key = str(chapter_id)
-                modgame = None
+                game = None
                 if mods_list:
                     first_mod = mods_list[0]
-                    modgame = getattr(first_mod, 'modgame', None)
-                    if not modgame and hasattr(first_mod, 'config_data'):
+                    game = getattr(first_mod, 'game', None) or getattr(first_mod, 'modgame', None)
+                    if not game and hasattr(first_mod, 'config_data'):
                         config = getattr(first_mod, 'config_data')
                         if isinstance(config, dict):
-                            modgame = config.get('modgame')
+                            game = config.get('game') or config.get('modgame')
                 from utils.file_utils import get_chapter_folder_name
-                chapter_folder_name = get_chapter_folder_name(chapter_id, modgame)
+                chapter_folder_name = get_chapter_folder_name(chapter_id, game=game)
                 chapter_modpack_dir = os.path.join(self.modpack_dir, chapter_folder_name)
                 if not os.path.exists(chapter_modpack_dir):
                     continue
@@ -103,8 +103,8 @@ class CreateModpackThread(QThread):
                 if file_info:
                     file_info['data_file_version'] = '1.0.0'
                     files_data[chapter_key] = file_info
-            mod_key = f'local_{uuid.uuid4().hex[:12]}'
-            config_data = {'is_local_mod': True, 'mod_key': mod_key, 'name': self.modpack_name, 'author': tr('defaults.multiple_authors'), 'version': '1.0.0', 'tagline': tr('defaults.no_short_description'), 'game_version': tr('defaults.not_specified'), 'modgame': 'deltarune', 'files': files_data, 'tags': [], 'created_date': time.strftime('%d.%m.%y %H:%M'), 'is_available_on_server': False}
+            key = f'local_{uuid.uuid4().hex[:12]}'
+            config_data = {'is_local_mod': True, 'key': key, 'name': self.modpack_name, 'author': tr('defaults.multiple_authors'), 'version': '1.0.0', 'tagline': tr('defaults.no_short_description'), 'game_version': tr('defaults.not_specified'), 'game': 'deltarune', 'files': files_data, 'tags': [], 'created_date': time.strftime('%d.%m.%y %H:%M'), 'is_available_on_server': False}
             config_path = os.path.join(self.modpack_dir, 'mod_config.json')
             with open(config_path, 'w', encoding='utf-8') as f:
                 json.dump(config_data, f, indent=4, ensure_ascii=False)

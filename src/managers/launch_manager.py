@@ -512,11 +512,11 @@ class GameLauncher(QObject):
         return False
 
     def _mod_has_data_files_for_chapter(self, mod, chapter_id: int) -> bool:
-        mod_key = get_mod_key(mod)
-        if not mod_key:
+        key = get_mod_key(mod)
+        if not key:
             return False
-        if mod_key.startswith('local_'):
-            mod_config = self.mod_manager.get_mod_config(mod_key)
+        if key.startswith('local_'):
+            mod_config = self.mod_manager.get_mod_config(key)
             if mod_config:
                 chapter_files = mod_config.get('files', {}).get(str(chapter_id), {})
                 if chapter_files.get('data_file_url'):

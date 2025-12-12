@@ -146,10 +146,16 @@ def save_json(path: str, data: Dict, indent: int = 2) -> None:
     dir_path = os.path.dirname(path)
     if dir_path:
         os.makedirs(dir_path, exist_ok=True)
+    data_to_save = data.copy() if isinstance(data, dict) else data
+    if isinstance(data_to_save, dict) and (path.endswith('mod_config.json') or (path.endswith('config.json') and ('mod_key' in data_to_save or 'key' in data_to_save))):
+        if 'mod_key' in data_to_save and 'key' in data_to_save:
+            del data_to_save['mod_key']
+        if 'modgame' in data_to_save and 'game' in data_to_save:
+            del data_to_save['modgame']
     tmp = os.path.join(dir_path, f'{os.path.basename(path)}.{os.getpid()}.{threading.get_ident()}.tmp') if dir_path else f'{path}.{os.getpid()}.{threading.get_ident()}.tmp'
     try:
         with open(tmp, 'w', encoding='utf-8') as f:
-            json.dump(data, f, indent=indent, ensure_ascii=False)
+            json.dump(data_to_save, f, indent=indent, ensure_ascii=False)
             f.flush()
             os.fsync(f.fileno())
         os.replace(tmp, path)
@@ -181,16 +187,30 @@ def load_json(path: str, migrate_config: bool = True) -> Dict:
             data = json.load(f)
         if migrate_config and isinstance(data, dict):
             needs_migration = False
-            if path.endswith('mod_config.json') or (path.endswith('config.json') and 'mod_key' in data):
+            if path.endswith('mod_config.json') or (path.endswith('config.json') and ('mod_key' in data or 'key' in data)):
+                if 'mod_key' in data:
+                    if 'key' not in data:
+                        data['key'] = data.pop('mod_key')
+                        needs_migration = True
+                    else:
+                        del data['mod_key']
+                        needs_migration = True
+                if 'modgame' in data:
+                    if 'game' not in data:
+                        data['game'] = data.pop('modgame')
+                        needs_migration = True
+                    else:
+                        del data['modgame']
+                        needs_migration = True
                 if 'chapters' in data and 'files' not in data:
                     data['files'] = data['chapters']
                     del data['chapters']
                     needs_migration = True
-                if 'is_demo_mod' in data and 'modgame' not in data:
+                if 'is_demo_mod' in data and 'game' not in data:
                     if data.get('is_demo_mod', False):
-                        data['modgame'] = 'deltarunedemo'
+                        data['game'] = 'deltarunedemo'
                     else:
-                        data['modgame'] = 'deltarune'
+                        data['game'] = 'deltarune'
                     del data['is_demo_mod']
                     needs_migration = True
                 if 'tags' in data:
@@ -233,13 +253,14 @@ def remove_archive_extension(filename: str) -> str:
         return os.path.splitext(filename)[0]
 
 
-def get_chapter_folder_name(chapter_id: int, modgame: Optional[str] = None) -> str:
+def get_chapter_folder_name(chapter_id: int, game: Optional[str] = None, modgame: Optional[str] = None) -> str:
+    game_value = game or modgame
     if chapter_id == -1:
         return 'demo'
     elif chapter_id == 0:
-        if modgame == 'pizzaoven':
+        if game_value == 'pizzaoven':
             return 'pizzaoven'
-        elif modgame == 'pizzatower':
+        elif game_value == 'pizzatower':
             return 'pizzatower'
         else:
             return 'chapter_0'

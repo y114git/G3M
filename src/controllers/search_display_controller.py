@@ -79,7 +79,7 @@ class SearchDisplayController(QObject):
         except Exception as e:
             logger.error(f'SearchDisplayController: Error in next_page: {e}', exc_info=True)
 
-    def _load_more_gamebanana_mods_if_needed(self, items_needed: int, preferred_modgame: str | None = None):
+    def _load_more_gamebanana_mods_if_needed(self, items_needed: int, preferred_game: str | None = None):
         if not self.app_state.mods_loaded:
             return
         if self.app_state.gamebanana_loading:
@@ -89,12 +89,12 @@ class SearchDisplayController(QObject):
             return
         search_text = self.app_state.search_text
         if search_text and len(search_text.strip()) >= 2:
-            self._load_search_results_if_needed(items_needed, preferred_modgame)
+            self._load_search_results_if_needed(items_needed, preferred_game)
             return
-        selected_modgame = 'deltarune'
+        selected_game = 'deltarune'
         if hasattr(self.app, 'modgame_combo'):
-            selected_modgame = self.app.modgame_combo.currentData() or 'deltarune'
-        gamebanana_game = self._map_modgame_to_gamebanana(selected_modgame)
+            selected_game = self.app.modgame_combo.currentData() or 'deltarune'
+        gamebanana_game = self._map_modgame_to_gamebanana(selected_game)
         if not gamebanana_game:
             gamebanana_game = 'deltarune'
         if gamebanana_game not in GAMEBANANA_GAME_IDS:
@@ -109,8 +109,8 @@ class SearchDisplayController(QObject):
             return
         games_to_load = games_to_load_filtered
         preferred_game_key = ''
-        if preferred_modgame:
-            preferred_game_key = self._map_modgame_to_gamebanana(preferred_modgame)
+        if preferred_game:
+            preferred_game_key = self._map_modgame_to_gamebanana(preferred_game)
         if preferred_game_key and preferred_game_key in games_to_load:
             games_to_load = {preferred_game_key: games_to_load[preferred_game_key]}
         elif games_to_load:
@@ -151,8 +151,8 @@ class SearchDisplayController(QObject):
                 if not hasattr(self.app_state, 'all_mods'):
                     logger.error('SearchDisplayController: app_state.all_mods not available')
                     return
-                existing_ids = {str(m.gamebanana_mod_id) for m in self.app_state.all_mods if hasattr(m, 'gamebanana_mod_id') and m.gamebanana_mod_id}
-                new_mods_to_add = [m for m in all_new_mods if hasattr(m, 'gamebanana_mod_id') and m.gamebanana_mod_id and (str(m.gamebanana_mod_id) not in existing_ids)]
+                existing_keys = {getattr(m, 'key', None) or getattr(m, 'mod_key', None) for m in self.app_state.all_mods if (getattr(m, 'key', None) or getattr(m, 'mod_key', None)) and (getattr(m, 'key', None) or getattr(m, 'mod_key', None)).startswith('gb_')}
+                new_mods_to_add = [m for m in all_new_mods if (getattr(m, 'key', None) or getattr(m, 'mod_key', None)) and (getattr(m, 'key', None) or getattr(m, 'mod_key', None)).startswith('gb_') and ((getattr(m, 'key', None) or getattr(m, 'mod_key', None)) not in existing_keys)]
                 if new_mods_to_add:
                     self.app_state.extend_all_mods(new_mods_to_add)
                     if hasattr(self, '_last_load_attempt'):
@@ -239,7 +239,7 @@ class SearchDisplayController(QObject):
             self._load_more_threads.append(load_thread)
             load_thread.start()
 
-    def _load_search_results_if_needed(self, items_needed: int, preferred_modgame: str | None = None):
+    def _load_search_results_if_needed(self, items_needed: int, preferred_game: str | None = None):
         if not self.app_state.mods_loaded:
             return
         if self.app_state.gamebanana_loading:
@@ -250,10 +250,10 @@ class SearchDisplayController(QObject):
         search_text = self.app_state.search_text
         if not search_text or len(search_text.strip()) < 2:
             return
-        selected_modgame = 'deltarune'
+        selected_game = 'deltarune'
         if hasattr(self.app, 'modgame_combo'):
-            selected_modgame = self.app.modgame_combo.currentData() or 'deltarune'
-        gamebanana_game = self._map_modgame_to_gamebanana(selected_modgame)
+            selected_game = self.app.modgame_combo.currentData() or 'deltarune'
+        gamebanana_game = self._map_modgame_to_gamebanana(selected_game)
         if not gamebanana_game:
             gamebanana_game = 'deltarune'
         if gamebanana_game not in GAMEBANANA_GAME_IDS:
@@ -358,8 +358,8 @@ class SearchDisplayController(QObject):
                     self.update_filtered_mods(preserve_page=True)
                     self.update_pagination()
                     return
-                existing_ids = {str(m.gamebanana_mod_id) for m in self.app_state.all_mods if hasattr(m, 'gamebanana_mod_id') and m.gamebanana_mod_id}
-                new_mods_to_add = [m for m in all_new_mods if hasattr(m, 'gamebanana_mod_id') and m.gamebanana_mod_id and (str(m.gamebanana_mod_id) not in existing_ids)]
+                existing_keys = {getattr(m, 'key', None) or getattr(m, 'mod_key', None) for m in self.app_state.all_mods if (getattr(m, 'key', None) or getattr(m, 'mod_key', None)) and (getattr(m, 'key', None) or getattr(m, 'mod_key', None)).startswith('gb_')}
+                new_mods_to_add = [m for m in all_new_mods if (getattr(m, 'key', None) or getattr(m, 'mod_key', None)) and (getattr(m, 'key', None) or getattr(m, 'mod_key', None)).startswith('gb_') and ((getattr(m, 'key', None) or getattr(m, 'mod_key', None)) not in existing_keys)]
                 if self.app_state.search_text == search_text and new_mods_to_add:
                     self.app_state.extend_all_mods(new_mods_to_add)
                     max_loaded_page = max(pages_needed) if pages_needed else last_page
@@ -495,10 +495,10 @@ class SearchDisplayController(QObject):
         for attr_name, tag_value in tag_checkboxes.items():
             if hasattr(self.app, attr_name) and getattr(self.app, attr_name).isChecked():
                 selected_tags.append(tag_value)
-        selected_modgame = 'deltarune'
+        selected_game = 'deltarune'
         if hasattr(self.app, 'modgame_combo'):
-            selected_modgame = self.app.modgame_combo.currentData() or 'deltarune'
-        filters = {'tags': selected_tags, 'modgame': selected_modgame, 'search_text': self.app_state.search_text, 'hide_banned': True, 'hide_local': True, 'status_filter': ['approved', 'pending']}
+            selected_game = self.app.modgame_combo.currentData() or 'deltarune'
+        filters = {'tags': selected_tags, 'game': selected_game, 'search_text': self.app_state.search_text, 'hide_banned': True, 'hide_local': True, 'status_filter': ['approved', 'pending']}
         sort_config = None
         if hasattr(self.app, 'sort_combo'):
             sort_type = self.app.sort_combo.currentIndex()
@@ -517,18 +517,21 @@ class SearchDisplayController(QObject):
         if preserve_page and (not self.app_state.auto_sorting) and self.app_state.filtered_mods:
             existing_filtered_keys = set()
             for mod in self.app_state.filtered_mods:
-                mod_key = getattr(mod, 'mod_key', None)
-                if mod_key:
-                    existing_filtered_keys.add(mod_key)
-                elif hasattr(mod, 'gamebanana_mod_id') and mod.gamebanana_mod_id:
-                    existing_filtered_keys.add(f'gb_{mod.gamebanana_mod_id}')
+                key = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
+                if key:
+                    existing_filtered_keys.add(key)
+                else:
+                    mod_key_attr = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
+                    if mod_key_attr and mod_key_attr.startswith('gb_'):
+                        existing_filtered_keys.add(mod_key_attr)
             new_mods_to_filter = []
             for mod in self.app_state.all_mods:
-                mod_key = getattr(mod, 'mod_key', None)
-                if mod_key and mod_key in existing_filtered_keys:
+                key = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
+                if key and key in existing_filtered_keys:
                     continue
-                if hasattr(mod, 'gamebanana_mod_id') and mod.gamebanana_mod_id:
-                    gb_key = f'gb_{mod.gamebanana_mod_id}'
+                mod_key_attr = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
+                if mod_key_attr and mod_key_attr.startswith('gb_'):
+                    gb_key = mod_key_attr
                     if gb_key in existing_filtered_keys:
                         continue
                 new_mods_to_filter.append(mod)
@@ -628,12 +631,11 @@ class SearchDisplayController(QObject):
                         widget.deleteLater()
 
             def get_mod_cache_key(mod):
-                if hasattr(mod, 'is_gamebanana_mod') and mod.is_gamebanana_mod:
-                    if hasattr(mod, 'gamebanana_mod_id') and mod.gamebanana_mod_id:
-                        return f'gb_{mod.gamebanana_mod_id}'
-                mod_key = getattr(mod, 'mod_key', None)
-                if mod_key:
-                    return f'local_{mod_key}'
+                key = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
+                if key and key.startswith('gb_'):
+                    return key
+                if key:
+                    return f'local_{key}'
                 mod_name = getattr(mod, 'name', 'unknown')
                 return f'name_{mod_name}'
             existing_widgets_in_layout = {}
@@ -869,15 +871,16 @@ class SearchDisplayController(QObject):
         except Exception as e:
             logger.error(f'SearchDisplayController: Error in _cleanup_details_threads: {e}', exc_info=True)
 
-    def _map_modgame_to_gamebanana(self, modgame: str) -> str:
+    def _map_modgame_to_gamebanana(self, game: str) -> str:
+        game_value = game
         mapping = {'deltarune': 'deltarune', 'deltarunedemo': 'deltarune', 'undertale': 'undertale', 'undertaleyellow': 'undertaleyellow', 'pizzatower': 'pizzatower'}
-        return mapping.get((modgame or '').lower(), '')
+        return mapping.get((game_value or '').lower(), '')
 
     def load_mods_for_selected_game(self):
         if not hasattr(self.app, 'modgame_combo'):
             return
-        selected_modgame = self.app.modgame_combo.currentData() or 'deltarune'
-        gamebanana_game = self._map_modgame_to_gamebanana(selected_modgame)
+        selected_game = self.app.modgame_combo.currentData() or 'deltarune'
+        gamebanana_game = self._map_modgame_to_gamebanana(selected_game)
         if not gamebanana_game:
             gamebanana_game = 'deltarune'
         game_id = GAMEBANANA_GAME_IDS.get(gamebanana_game)
@@ -915,14 +918,15 @@ class SearchDisplayController(QObject):
                         self.app_state.gamebanana_loaded_pages[game_id] = pages_loaded
                         mods_needing_metadata = []
                         for mod in new_mods_to_add:
-                            if hasattr(mod, 'is_gamebanana_mod') and mod.is_gamebanana_mod and mod.gamebanana_mod_id:
-                                mod_id_str = str(mod.gamebanana_mod_id)
+                            key = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
+                            if key and key.startswith('gb_'):
+                                mod_id_str = key.replace('gb_', '', 1) if key else None
                                 needs_metadata = False
                                 if not hasattr(mod, 'tagline') or not mod.tagline or mod.tagline.strip() == '':
                                     needs_metadata = True
                                 if not hasattr(mod, 'downloads') or mod.downloads is None or mod.downloads == 0:
                                     needs_metadata = True
-                                if needs_metadata:
+                                if needs_metadata and mod_id_str:
                                     mods_needing_metadata.append(mod_id_str)
                         if mods_needing_metadata:
                             if not hasattr(self.app_state, 'gamebanana_mods_needing_metadata'):
@@ -955,7 +959,7 @@ class SearchDisplayController(QObject):
                 candidate = filtered[start_idx]
             else:
                 candidate = filtered[-1]
-            return getattr(candidate, 'modgame', '') or ''
+            return getattr(candidate, 'game', None) or getattr(candidate, 'modgame', '') or ''
         except Exception:
             return ''
 
@@ -981,8 +985,9 @@ class SearchDisplayController(QObject):
             downloads_changed = False
             if hasattr(self.app_state, 'all_mods') and self.app_state.all_mods:
                 for mod in self.app_state.all_mods:
-                    if hasattr(mod, 'is_gamebanana_mod') and mod.is_gamebanana_mod:
-                        mod_id = str(mod.gamebanana_mod_id) if mod.gamebanana_mod_id else None
+                    key = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
+                    if key and key.startswith('gb_'):
+                        mod_id = key.replace('gb_', '', 1) if key else None
                         if mod_id and mod_id in self._pending_metadata_updates:
                             update_data = self._pending_metadata_updates[mod_id]
                             if len(update_data) >= 3:

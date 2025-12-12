@@ -7,7 +7,7 @@ def get_mod_key(mod_data: Any) -> Optional[str]:
         return None
     if isinstance(mod_data, dict):
         return mod_data.get('key') or mod_data.get('mod_key') or mod_data.get('name')
-    return getattr(mod_data, 'mod_key', None) or getattr(mod_data, 'name', None)
+    return getattr(mod_data, 'key', None) or getattr(mod_data, 'mod_key', None) or getattr(mod_data, 'name', None)
 
 
 def get_mod_name(mod_data: Any, default: str = 'Unknown') -> str:

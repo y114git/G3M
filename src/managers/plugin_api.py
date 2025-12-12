@@ -43,10 +43,11 @@ class PluginAPI(QObject):
             return list(self.app_state.all_mods) if self.app_state.all_mods else []
         return []
 
-    def get_mod_by_key(self, mod_key: str) -> Optional[Any]:
+    def get_mod_by_key(self, key: str) -> Optional[Any]:
         mods = self.get_mods()
         for mod in mods:
-            if hasattr(mod, 'mod_key') and mod.mod_key == mod_key:
+            mod_key_attr = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
+            if mod_key_attr == key:
                 return mod
         return None
 

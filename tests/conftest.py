@@ -172,13 +172,13 @@ def mock_file_operations(temp_dir):
 
 @pytest.fixture
 def sample_mod_config():
-    return {'mod_key': 'test_mod_001', 'name': 'Test Mod', 'version': '1.0.0', 'author': 'Test Author', 'description': 'A test mod', 'game': 'deltarune', 'chapters': [1, 2], 'files': []}
+    return {'key': 'test_mod_001', 'name': 'Test Mod', 'version': '1.0.0', 'author': 'Test Author', 'description': 'A test mod', 'game': 'deltarune', 'chapters': [1, 2], 'files': []}
 
 
 @pytest.fixture
 def sample_mod_folder(temp_mods_dir, sample_mod_config):
-    mod_key = sample_mod_config['mod_key']
-    mod_folder = os.path.join(temp_mods_dir, mod_key)
+    key = sample_mod_config.get('key') or sample_mod_config.get('mod_key', 'test_mod_001')
+    mod_folder = os.path.join(temp_mods_dir, key)
     os.makedirs(mod_folder, exist_ok=True)
     import json
     config_path = os.path.join(mod_folder, 'mod_config.json')

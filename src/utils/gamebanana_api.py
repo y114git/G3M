@@ -767,26 +767,26 @@ class GameBananaAPI:
                     category = category.get('_sName') or category.get('name')
                 elif not isinstance(category, str):
                     category = str(category) if category else None
-        return ModInfo(mod_key=f'gb_{mod_id}', name=name, version=version, author=author, tagline=tagline, game_version=game_version, downloads=downloads, created_date=created_date, last_updated=last_updated, modgame=game_name, is_verified=gb_data.get('_bIsVerified', False), icon_url=icon_url, tags=tags, external_url=gb_data.get('_sProfileUrl'), screenshots_url=screenshots, description_url=gb_data.get('_sTextUrl', ''), full_description=None, is_gamebanana_mod=True, gamebanana_mod_id=str(mod_id), gamebanana_mod_type=gb_data.get('_sModelName', 'Mod'), gamebanana_last_update_timestamp=updated_timestamp, gamebanana_has_compatible_file=False, gamebanana_category=category, gamebanana_is_tool_compatible=False, gamebanana_supported_files=[], gamebanana_supported_tool_ids=[], gamebanana_preferred_format=None, gamebanana_has_deltahub_file=False, gamebanana_has_deltamod_file=False, gamebanana_compatibility_checked=False)
+        return ModInfo(key=f'gb_{mod_id}', name=name, version=version, author=author, tagline=tagline, game_version=game_version, downloads=downloads, created_date=created_date, last_updated=last_updated, game=game_name, is_verified=gb_data.get('_bIsVerified', False), icon_url=icon_url, tags=tags, external_url=gb_data.get('_sProfileUrl'), screenshots_url=screenshots, description_url=gb_data.get('_sTextUrl', ''), full_description=None, gamebanana_has_compatible_file=False, gamebanana_category=category, gamebanana_is_tool_compatible=False, gamebanana_supported_files=[], gamebanana_supported_tool_ids=[], gamebanana_preferred_format=None, gamebanana_has_deltahub_file=False, gamebanana_has_deltamod_file=False, gamebanana_compatibility_checked=False)
 
     @staticmethod
     def mod_data_dict_to_mod_info(mod_data: Dict[str, Any], game_name: str = 'deltarune') -> Optional[ModInfo]:
         try:
-            mod_id = mod_data.get('gamebanana_mod_id')
+            key = mod_data.get('key') or mod_data.get('mod_key')
+            if not key or not key.startswith('gb_'):
+                return None
+            mod_id = key.replace('gb_', '', 1)
             if not mod_id:
                 return None
             data_dict = mod_data.copy()
-            if 'mod_key' not in data_dict:
-                data_dict['mod_key'] = f'gb_{mod_id}'
-            if 'modgame' not in data_dict:
-                data_dict['modgame'] = game_name
+            if 'key' not in data_dict and 'mod_key' not in data_dict:
+                data_dict['key'] = key
+            if 'game' not in data_dict and 'modgame' not in data_dict:
+                data_dict['game'] = game_name
             data_dict['hide_mod'] = False
             data_dict['is_local_mod'] = False
             data_dict['ban_status'] = False
             data_dict['files'] = {}
-            data_dict['is_gamebanana_mod'] = True
-            if 'gamebanana_mod_id' not in data_dict:
-                data_dict['gamebanana_mod_id'] = str(mod_id)
             if 'has_full_metadata' not in data_dict:
                 data_dict['has_full_metadata'] = True
             return ModInfo.from_dict(data_dict)

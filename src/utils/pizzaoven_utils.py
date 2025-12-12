@@ -6,14 +6,15 @@ from utils.mod_utils import get_mod_key
 
 def is_pizzaoven_mod(mod_data: any) -> bool:
     try:
-        if hasattr(mod_data, 'modgame'):
-            return getattr(mod_data, 'modgame') == 'pizzaoven'
+        if hasattr(mod_data, 'game') or hasattr(mod_data, 'modgame'):
+            game_value = getattr(mod_data, 'game', None) or getattr(mod_data, 'modgame', None)
+            return game_value == 'pizzaoven'
         if hasattr(mod_data, 'config_data'):
             config = getattr(mod_data, 'config_data')
             if isinstance(config, dict):
-                return config.get('modgame') == 'pizzaoven'
+                return (config.get('game') or config.get('modgame')) == 'pizzaoven'
         if isinstance(mod_data, dict):
-            return mod_data.get('modgame') == 'pizzaoven'
+            return (mod_data.get('game') or mod_data.get('modgame')) == 'pizzaoven'
     except Exception as e:
         logging.debug(f'is_pizzaoven_mod: Error checking mod type: {e}')
     return False

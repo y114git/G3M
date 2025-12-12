@@ -105,13 +105,13 @@ class PizzaOvenConverter:
                 config_data['name'] = base_name.replace('_', ' ').replace('-', ' ').title()
             else:
                 config_data['name'] = 'PizzaOven Mod'
-        mod_key = config_data.get('mod_key')
-        if not mod_key:
+        key = config_data.get('key') or config_data.get('mod_key')
+        if not key:
             mod_name = config_data.get('name', 'pizzaoven_mod')
             mod_name_clean = ''.join((c if c.isalnum() or c in ('_', '-') else '_' for c in mod_name.lower()))
-            mod_key = f'local_{mod_name_clean}_{uuid.uuid4().hex[:8]}'
+            key = f'local_{mod_name_clean}_{uuid.uuid4().hex[:8]}'
         created_date = datetime.now().strftime('%d.%m.%y %H:%M')
-        config = {'is_local_mod': True, 'mod_key': mod_key, 'created_date': created_date, 'is_available_on_server': False, 'name': config_data.get('name', tr('defaults.local_mod')), 'version': config_data.get('version', '1.0.0'), 'author': config_data.get('author', tr('defaults.unknown')), 'tagline': config_data.get('tagline', config_data.get('description', tr('defaults.no_description'))), 'external_url': config_data.get('external_url', ''), 'game_version': config_data.get('game_version', tr('defaults.not_specified')), 'modgame': 'pizzaoven', 'files': {}, 'tags': config_data.get('tags', [])}
+        config = {'is_local_mod': True, 'key': key, 'created_date': created_date, 'is_available_on_server': False, 'name': config_data.get('name', tr('defaults.local_mod')), 'version': config_data.get('version', '1.0.0'), 'author': config_data.get('author', tr('defaults.unknown')), 'tagline': config_data.get('tagline', config_data.get('description', tr('defaults.no_description'))), 'external_url': config_data.get('external_url', ''), 'game_version': config_data.get('game_version', tr('defaults.not_specified')), 'game': 'pizzaoven', 'files': {}, 'tags': config_data.get('tags', [])}
         return config
 
     def _process_files(self, target_mod_dir: str) -> None:

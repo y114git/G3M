@@ -34,8 +34,9 @@ class RefreshController:
                     metadata_cache = GameBananaMetadataCache(self.app_state.cache_dir)
                     if hasattr(self.app_state, 'all_mods') and self.app_state.all_mods:
                         for mod in self.app_state.all_mods:
-                            if hasattr(mod, 'is_gamebanana_mod') and mod.is_gamebanana_mod and mod.gamebanana_mod_id:
-                                mod_id = str(mod.gamebanana_mod_id)
+                            key = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
+                            if key and key.startswith('gb_'):
+                                mod_id = key.replace('gb_', '', 1)
                                 if not metadata_cache.is_valid(mod_id):
                                     downloads = getattr(mod, 'downloads', None)
                                     tagline = getattr(mod, 'tagline', None)
@@ -142,8 +143,10 @@ class RefreshController:
             if hasattr(self.app_state, 'all_mods') and self.app_state.all_mods:
                 installed_gb_mods = []
                 for mod in self.app_state.all_mods:
-                    if hasattr(mod, 'is_gamebanana_mod') and mod.is_gamebanana_mod and hasattr(mod, 'gamebanana_mod_id') and mod.gamebanana_mod_id:
-                        installed_gb_mods.append(f'{mod.name} (key={mod.mod_key}, id={mod.gamebanana_mod_id})')
+                    key = mod.key
+                    if key and key.startswith('gb_'):
+                        mod_id = key.replace('gb_', '', 1)
+                        installed_gb_mods.append(f'{mod.name} (key={key}, id={mod_id})')
                 logging.info(f'RefreshController: Found {len(installed_gb_mods)} GameBanana mods in all_mods after load_local_mods')
                 for mod_info in installed_gb_mods[:10]:
                     logging.debug(f'RefreshController: GameBanana mod in all_mods: {mod_info}')
@@ -155,8 +158,9 @@ class RefreshController:
                     downloads_restored = False
                     if hasattr(self.app_state, 'all_mods') and self.app_state.all_mods:
                         for mod in self.app_state.all_mods:
-                            if hasattr(mod, 'is_gamebanana_mod') and mod.is_gamebanana_mod and mod.gamebanana_mod_id:
-                                mod_id = str(mod.gamebanana_mod_id)
+                            key = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
+                            if key and key.startswith('gb_'):
+                                mod_id = key.replace('gb_', '', 1)
                                 if metadata_cache.is_valid(mod_id):
                                     downloads = metadata_cache.get_downloads(mod_id)
                                     tagline = metadata_cache.get_tagline(mod_id)
@@ -179,7 +183,8 @@ class RefreshController:
                                             mod.gamebanana_category = category
                                             logging.info(f'RefreshController: Restored category for mod {mod_id}: {category}')
                                     try:
-                                        if hasattr(mod, 'is_gamebanana_mod') and mod.is_gamebanana_mod:
+                                        key = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
+                                        if key and key.startswith('gb_'):
                                             mod.has_full_metadata = True
                                     except Exception:
                                         pass

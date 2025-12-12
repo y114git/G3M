@@ -123,12 +123,12 @@ class AppState(QObject):
 
     def extend_all_mods(self, mods: List[ModInfo]) -> None:
         with self._mods_metadata_lock:
-            existing_keys = {getattr(m, 'mod_key', None) for m in self._all_mods}
+            existing_keys = {getattr(m, 'key', None) or getattr(m, 'mod_key', None) for m in self._all_mods}
             for mod in mods:
-                mod_key = getattr(mod, 'mod_key', None)
-                if mod_key and mod_key not in existing_keys:
+                key = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
+                if key and key not in existing_keys:
                     self._all_mods.append(mod)
-                    existing_keys.add(mod_key)
+                    existing_keys.add(key)
 
     @property
     def all_mods(self) -> List[ModInfo]:

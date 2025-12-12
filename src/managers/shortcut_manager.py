@@ -44,9 +44,9 @@ class ShortcutManager(QObject):
             if mod_data:
                 mod_keys = mod_data if isinstance(mod_data, list) else [mod_data]
                 mod_names = []
-                for mod_key in mod_keys:
-                    mod_config = self.mod_manager.get_mod_config(mod_key)
-                    mod_name = mod_config.get('name', tr('errors.mod_not_found', mod_key=mod_key)) if mod_config else tr('errors.mod_not_found', mod_key=mod_key)
+                for key in mod_keys:
+                    mod_config = self.mod_manager.get_mod_config(key)
+                    mod_name = mod_config.get('name', tr('errors.mod_not_found', key=key)) if mod_config else tr('errors.mod_not_found', key=key)
                     mod_names.append(mod_name)
                 if len(mod_names) == 1:
                     description_lines.append(f"<b>{tr('status.mod_label')}</b> {mod_names[0]}")
@@ -59,9 +59,9 @@ class ShortcutManager(QObject):
             if mod_data:
                 mod_keys = mod_data if isinstance(mod_data, list) else [mod_data]
                 mod_names = []
-                for mod_key in mod_keys:
-                    mod_config = self.mod_manager.get_mod_config(mod_key)
-                    mod_name = mod_config.get('name', tr('errors.mod_not_found', mod_key=mod_key)) if mod_config else tr('errors.mod_not_found', mod_key=mod_key)
+                for key in mod_keys:
+                    mod_config = self.mod_manager.get_mod_config(key)
+                    mod_name = mod_config.get('name', tr('errors.mod_not_found', key=key)) if mod_config else tr('errors.mod_not_found', key=key)
                     mod_names.append(mod_name)
                 if len(mod_names) == 1:
                     description_lines.append(f"<b>{tr('status.mod_label')}</b> {mod_names[0]}")
@@ -74,9 +74,9 @@ class ShortcutManager(QObject):
             if mod_data:
                 mod_keys = mod_data if isinstance(mod_data, list) else [mod_data]
                 mod_names = []
-                for mod_key in mod_keys:
-                    mod_config = self.mod_manager.get_mod_config(mod_key)
-                    mod_name = mod_config.get('name', tr('errors.mod_not_found', mod_key=mod_key)) if mod_config else tr('errors.mod_not_found', mod_key=mod_key)
+                for key in mod_keys:
+                    mod_config = self.mod_manager.get_mod_config(key)
+                    mod_name = mod_config.get('name', tr('errors.mod_not_found', key=key)) if mod_config else tr('errors.mod_not_found', key=key)
                     mod_names.append(mod_name)
                 if len(mod_names) == 1:
                     description_lines.append(f"<b>{tr('status.mod_label')}</b> {mod_names[0]}")
@@ -89,9 +89,9 @@ class ShortcutManager(QObject):
             if mod_data:
                 mod_keys = mod_data if isinstance(mod_data, list) else [mod_data]
                 mod_names = []
-                for mod_key in mod_keys:
-                    mod_config = self.mod_manager.get_mod_config(mod_key)
-                    mod_name = mod_config.get('name', tr('errors.mod_not_found', mod_key=mod_key)) if mod_config else tr('errors.mod_not_found', mod_key=mod_key)
+                for key in mod_keys:
+                    mod_config = self.mod_manager.get_mod_config(key)
+                    mod_name = mod_config.get('name', tr('errors.mod_not_found', key=key)) if mod_config else tr('errors.mod_not_found', key=key)
                     mod_names.append(mod_name)
                 if len(mod_names) == 1:
                     description_lines.append(f"<b>{tr('status.mod_label')}</b> {mod_names[0]}")
@@ -114,9 +114,9 @@ class ShortcutManager(QObject):
                     if mod_data:
                         mod_keys = mod_data if isinstance(mod_data, list) else [mod_data]
                         mod_names = []
-                        for mod_key in mod_keys:
-                            mod_config = self.mod_manager.get_mod_config(mod_key)
-                            mod_name = mod_config.get('name', tr('errors.mod_not_found', mod_key=mod_key)) if mod_config else tr('errors.mod_not_found', mod_key=mod_key)
+                        for key in mod_keys:
+                            mod_config = self.mod_manager.get_mod_config(key)
+                            mod_name = mod_config.get('name', tr('errors.mod_not_found', key=key)) if mod_config else tr('errors.mod_not_found', key=key)
                             mod_names.append(mod_name)
                         chapter_names = {0: tr('chapters.menu'), 1: tr('tabs.chapter_1'), 2: tr('tabs.chapter_2'), 3: tr('tabs.chapter_3'), 4: tr('tabs.chapter_4')}
                         chapter_name = chapter_names.get(chapter_id, tr('ui.chapter_tab_title', chapter_num=chapter_id))
@@ -129,9 +129,9 @@ class ShortcutManager(QObject):
                 if uni_data:
                     mod_keys = uni_data if isinstance(uni_data, list) else [uni_data]
                     mod_names = []
-                    for mod_key in mod_keys:
-                        mod_config = self.mod_manager.get_mod_config(mod_key)
-                        mod_name = mod_config.get('name', tr('errors.mod_not_found', mod_key=mod_key)) if mod_config else tr('errors.mod_not_found', mod_key=mod_key)
+                    for key in mod_keys:
+                        mod_config = self.mod_manager.get_mod_config(key)
+                        mod_name = mod_config.get('name', tr('errors.mod_not_found', key=key)) if mod_config else tr('errors.mod_not_found', key=key)
                         mod_names.append(mod_name)
                     if len(mod_names) == 1:
                         description_lines.append(f"<b>{tr('status.mod_label')}</b> {mod_names[0]}")
@@ -316,24 +316,25 @@ class ShortcutManager(QObject):
 
     def _get_mods_from_keys(self, mod_keys: list) -> list:
         mods_list = []
-        for mod_key in mod_keys:
-            if not mod_key:
+        for key in mod_keys:
+            if not key:
                 continue
             mod_data = None
             if hasattr(self.app_state, 'all_mods') and self.app_state.all_mods:
                 for mod in self.app_state.all_mods:
-                    if getattr(mod, 'mod_key', None) == mod_key:
+                    mod_key_attr = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
+                    if mod_key_attr == key:
                         mod_data = mod
                         break
             if not mod_data:
                 installed_mods = self.mod_manager.get_installed_mods_list()
                 for installed_mod in installed_mods:
-                    installed_mod_key = installed_mod.get('mod_key') or installed_mod.get('key') or installed_mod.get('name')
-                    if installed_mod_key == mod_key:
+                    installed_mod_key = installed_mod.get('key') or installed_mod.get('mod_key') or installed_mod.get('name')
+                    if installed_mod_key == key:
                         mod_data = self.mod_manager.create_mod_object_from_info(installed_mod, getattr(self.app_state, 'all_mods', None))
                         break
             if not mod_data:
-                mod_config = self.mod_manager.get_mod_config(mod_key)
+                mod_config = self.mod_manager.get_mod_config(key)
                 if mod_config:
                     mod_data = self.mod_manager.create_mod_object_from_info(mod_config, getattr(self.app_state, 'all_mods', None))
             if mod_data:

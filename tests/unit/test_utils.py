@@ -9,7 +9,7 @@ class TestModUtils:
     def test_get_mod_key_from_dict(self):
         mod_data = {'key': 'test_key_001'}
         assert get_mod_key(mod_data) == 'test_key_001'
-        mod_data = {'mod_key': 'test_mod_002'}
+        mod_data = {'key': 'test_mod_002'}
         assert get_mod_key(mod_data) == 'test_mod_002'
         mod_data = {'name': 'test_mod_003'}
         assert get_mod_key(mod_data) == 'test_mod_003'
@@ -19,14 +19,14 @@ class TestModUtils:
         class ModObject:
 
             def __init__(self):
-                self.mod_key = 'test_key_004'
+                self.key = 'test_key_004'
         mod_obj = ModObject()
         assert get_mod_key(mod_obj) == 'test_key_004'
 
         class ModObject2:
 
             def __init__(self):
-                self.mod_key = 'test_key_005'
+                self.key = 'test_key_005'
         mod_obj2 = ModObject2()
         assert get_mod_key(mod_obj2) == 'test_key_005'
 

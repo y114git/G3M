@@ -123,11 +123,13 @@ class ModInstallWorker(BaseInstallWorker):
             except Exception as e:
                 logging.error(f'ModInstallWorker: Error reading mod config: {e}')
                 return False
-            mod_key = config_data.get('mod_key')
-            if not mod_key:
+            key = config_data.get('key') or config_data.get('mod_key')
+            if not key:
                 mod_name = config_data.get('name', 'imported_mod')
-                mod_key = f"local_{sanitize_filename(mod_name).lower().replace(' ', '_')}"
-                config_data['mod_key'] = mod_key
+                key = f"local_{sanitize_filename(mod_name).lower().replace(' ', '_')}"
+                config_data['key'] = key
+                if 'mod_key' in config_data:
+                    del config_data['mod_key']
             mod_name = config_data.get('name', 'imported_mod')
             folder_name = sanitize_filename(mod_name)
             target_mod_dir = os.path.join(self.mods_dir, folder_name)
@@ -150,14 +152,7 @@ class ModInstallWorker(BaseInstallWorker):
             from utils.file_utils import migrate_mod_config
             migrate_mod_config(target_mod_dir)
             if self.gamebanana_metadata:
-                config_data['is_gamebanana_mod'] = True
                 config_data['is_local_mod'] = False
-                if 'mod_id' in self.gamebanana_metadata:
-                    config_data['gamebanana_mod_id'] = str(self.gamebanana_metadata['mod_id'])
-                if 'mod_type' in self.gamebanana_metadata:
-                    config_data['gamebanana_mod_type'] = self.gamebanana_metadata['mod_type']
-                if 'last_update_timestamp' in self.gamebanana_metadata:
-                    config_data['gamebanana_last_update_timestamp'] = self.gamebanana_metadata['last_update_timestamp']
                 if 'profile_url' in self.gamebanana_metadata and (not config_data.get('external_url')):
                     config_data['external_url'] = self.gamebanana_metadata['profile_url']
                 if 'icon_url' in self.gamebanana_metadata:
@@ -182,10 +177,8 @@ class ModInstallWorker(BaseInstallWorker):
                     config_data['tags'] = existing_tags
             else:
                 config_data['is_local_mod'] = True
-                if 'is_gamebanana_mod' not in config_data:
-                    config_data['is_gamebanana_mod'] = False
             config_updated = False
-            modgame = config_data.get('modgame', 'deltarune')
+            game = config_data.get('game') or config_data.get('modgame', 'deltarune')
             if 'files' in config_data:
                 for chapter_key, chapter_data in config_data['files'].items():
                     if chapter_key == 'demo':
@@ -195,7 +188,7 @@ class ModInstallWorker(BaseInstallWorker):
                     elif chapter_key in ['0', '1', '2', '3', '4']:
                         chapter_id = int(chapter_key)
                         from utils.file_utils import get_chapter_folder_name
-                        folder_name = get_chapter_folder_name(chapter_id, modgame)
+                        folder_name = get_chapter_folder_name(chapter_id, game=game)
                         chapter_folder = os.path.join(target_mod_dir, folder_name)
                     else:
                         continue

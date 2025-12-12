@@ -35,9 +35,11 @@ class InstallGameBananaModThread(BaseInstallWorker):
         archive_path = None
         archive_dir = None
         try:
-            mod_id = self.mod_info.gamebanana_mod_id
-            if not mod_id:
+            mod_key = getattr(self.mod_info, 'key', None) or getattr(self.mod_info, 'mod_key', None)
+            mod_id_str = self.mod_info.get_gamebanana_mod_id() if hasattr(self.mod_info, 'get_gamebanana_mod_id') else mod_key.replace('gb_', '', 1) if mod_key and mod_key.startswith('gb_') else None
+            if not mod_id_str:
                 raise ValueError(tr('errors.invalid_gamebanana_mod_id'))
+            mod_id = int(mod_id_str)
             if self._cancelled:
                 self.finished.emit(False, tr('status.operation_cancelled'))
                 return
@@ -108,7 +110,7 @@ class InstallGameBananaModThread(BaseInstallWorker):
                 self.status.emit(tr('status.installing_mod'), UI_COLORS['status_info'])
                 try:
                     from workers.mod_install_worker import ModInstallWorker
-                    gb_metadata = {'mod_id': mod_id, 'mod_type': self.mod_info.gamebanana_mod_type or 'Mod', 'last_update_timestamp': self.mod_info.gamebanana_last_update_timestamp, 'profile_url': self.mod_info.external_url, 'icon_url': self.mod_info.icon_url, 'tags': self.mod_info.tags if hasattr(self.mod_info, 'tags') and self.mod_info.tags else [], 'category': self.mod_info.gamebanana_category if hasattr(self.mod_info, 'gamebanana_category') else None}
+                    gb_metadata = {'mod_id': mod_id, 'profile_url': self.mod_info.external_url, 'icon_url': self.mod_info.icon_url, 'tags': self.mod_info.tags if hasattr(self.mod_info, 'tags') and self.mod_info.tags else [], 'category': self.mod_info.gamebanana_category if hasattr(self.mod_info, 'gamebanana_category') else None}
                     installer = ModInstallWorker(archive_path=archive_path, mods_dir=self.main_window.app_state.mods_dir, mod_manager=None, gamebanana_metadata=gb_metadata, parent=self.parent())
                     installer.run()
                     self._cleanup_temp_files(archive_path, archive_dir)
@@ -124,7 +126,7 @@ class InstallGameBananaModThread(BaseInstallWorker):
                 return
             elif file_format == 'pizzaoven':
                 self.status.emit(tr('status.converting_mod'), UI_COLORS['status_info'])
-                gb_metadata = {'mod_id': mod_id, 'mod_name': self.mod_info.name, 'author': self.mod_info.author, 'tagline': self.mod_info.tagline, 'version': self.mod_info.version, 'mod_type': self.mod_info.gamebanana_mod_type or 'Mod', 'last_update_timestamp': self.mod_info.gamebanana_last_update_timestamp, 'profile_url': self.mod_info.external_url, 'icon_url': self.mod_info.icon_url, 'tags': self.mod_info.tags if hasattr(self.mod_info, 'tags') and self.mod_info.tags else [], 'category': self.mod_info.gamebanana_category if hasattr(self.mod_info, 'gamebanana_category') else None}
+                gb_metadata = {'mod_id': mod_id, 'mod_name': self.mod_info.name, 'author': self.mod_info.author, 'tagline': self.mod_info.tagline, 'version': self.mod_info.version, 'profile_url': self.mod_info.external_url, 'icon_url': self.mod_info.icon_url, 'tags': self.mod_info.tags if hasattr(self.mod_info, 'tags') and self.mod_info.tags else [], 'category': self.mod_info.gamebanana_category if hasattr(self.mod_info, 'gamebanana_category') else None}
                 from utils.gamebanana_pizzaoven_converter import GameBananaPizzaOvenConverter
                 converter = GameBananaPizzaOvenConverter(archive_path, self.main_window.app_state.mods_dir, gb_metadata)
                 mod_dir = converter.convert()
@@ -135,7 +137,7 @@ class InstallGameBananaModThread(BaseInstallWorker):
                 self.finished.emit(True, tr('status.install_complete_success', mod_name=mod_name))
                 return
             self.status.emit(tr('status.converting_mod'), UI_COLORS['status_info'])
-            gb_metadata = {'mod_id': mod_id, 'mod_type': self.mod_info.gamebanana_mod_type or 'Mod', 'last_update_timestamp': self.mod_info.gamebanana_last_update_timestamp, 'profile_url': self.mod_info.external_url, 'icon_url': self.mod_info.icon_url, 'tags': self.mod_info.tags if hasattr(self.mod_info, 'tags') and self.mod_info.tags else [], 'category': self.mod_info.gamebanana_category if hasattr(self.mod_info, 'gamebanana_category') else None}
+            gb_metadata = {'mod_id': mod_id, 'profile_url': self.mod_info.external_url, 'icon_url': self.mod_info.icon_url, 'tags': self.mod_info.tags if hasattr(self.mod_info, 'tags') and self.mod_info.tags else [], 'category': self.mod_info.gamebanana_category if hasattr(self.mod_info, 'gamebanana_category') else None}
             converter = GameBananaConverter(archive_path, self.main_window.app_state.mods_dir, gb_metadata)
             mod_dir = converter.convert()
             self._cleanup_temp_files(archive_path, archive_dir)
@@ -207,10 +209,12 @@ class InstallGameBananaModThread(BaseInstallWorker):
                     except Exception as e:
                         logger.error(f'Error downloading redirect mod: {e}')
                         raise ValueError(f'Failed to download redirect mod: {e}')
-            mod_key = config_data.get('mod_key')
-            if not mod_key:
-                mod_key = f'gb_{mod_id}'
-                config_data['mod_key'] = mod_key
+            key = config_data.get('key') or config_data.get('mod_key')
+            if not key:
+                key = f'gb_{mod_id}'
+                config_data['key'] = key
+                if 'mod_key' in config_data:
+                    del config_data['mod_key']
             mod_name = config_data.get('name', f'mod_{mod_id}')
             folder_name = sanitize_filename(mod_name)
             target_mod_dir = os.path.join(self.main_window.app_state.mods_dir, folder_name)
@@ -227,13 +231,7 @@ class InstallGameBananaModThread(BaseInstallWorker):
                     shutil.copytree(src_path, dst_path)
                 else:
                     shutil.copy2(src_path, dst_path)
-            config_data['is_gamebanana_mod'] = True
             config_data['is_local_mod'] = False
-            config_data['gamebanana_mod_id'] = str(mod_id)
-            if self.mod_info.gamebanana_mod_type:
-                config_data['gamebanana_mod_type'] = self.mod_info.gamebanana_mod_type
-            if self.mod_info.gamebanana_last_update_timestamp:
-                config_data['gamebanana_last_update_timestamp'] = self.mod_info.gamebanana_last_update_timestamp
             if not config_data.get('external_url') and self.mod_info.external_url:
                 config_data['external_url'] = self.mod_info.external_url
             if self.mod_info.icon_url:
@@ -255,12 +253,14 @@ class InstallGameBananaModThread(BaseInstallWorker):
                         existing_tags.append(tag)
                 config_data['tags'] = existing_tags
             expected_mod_key = f'gb_{mod_id}'
-            config_data['mod_key'] = expected_mod_key
+            config_data['key'] = expected_mod_key
+            if 'mod_key' in config_data:
+                del config_data['mod_key']
             target_config_path = os.path.join(target_mod_dir, MOD_CONFIG_FILENAME)
             try:
                 from utils.file_utils import atomic_write_json
                 atomic_write_json(target_config_path, config_data, indent=4)
-                logger.info(f'Installed DELTAHUB mod: {target_mod_dir}, mod_key={expected_mod_key}')
+                logger.info(f'Installed DELTAHUB mod: {target_mod_dir}, key = {expected_mod_key}')
             except Exception as e:
                 logger.error(f'Error writing mod_config.json: {e}')
                 raise
@@ -272,7 +272,7 @@ class InstallGameBananaModThread(BaseInstallWorker):
             mods_dir = self.main_window.app_state.mods_dir
             if not os.path.exists(mods_dir):
                 return None
-            mod_id_str = str(mod_id)
+            expected_mod_key = f'gb_{mod_id}'
             for item_name in os.listdir(mods_dir):
                 item_path = os.path.join(mods_dir, item_name)
                 if not os.path.isdir(item_path):
@@ -283,7 +283,7 @@ class InstallGameBananaModThread(BaseInstallWorker):
                 try:
                     with open(config_path, 'r', encoding='utf-8') as f:
                         config_data = json.load(f)
-                    if config_data.get('gamebanana_mod_id') == mod_id_str:
+                    if (config_data.get('key') or config_data.get('mod_key')) == expected_mod_key:
                         return item_path
                 except Exception:
                     continue

@@ -18,7 +18,7 @@ def filter_and_sort_mods(mods_list: List[Any], filters: Dict[str, Any], sort_con
     if not mods_list:
         return []
     selected_tags = filters.get('tags', [])
-    selected_modgame = filters.get('modgame', '')
+    selected_game = filters.get('game') or filters.get('modgame', '')
     search_text = filters.get('search_text', '')
     hide_banned = filters.get('hide_banned', True)
     hide_local = filters.get('hide_local', False)
@@ -51,7 +51,8 @@ def filter_and_sort_mods(mods_list: List[Any], filters: Dict[str, Any], sort_con
             if isinstance(mod, dict) and _get_mod_attr(mod, 'is_local_mod') and ('local' not in mod_tags):
                 mod_tags = mod_tags.copy() if isinstance(mod_tags, list) else []
                 mod_tags.append('local')
-            is_gamebanana_mod = _get_mod_attr(mod, 'is_gamebanana_mod', False)
+            key = _get_mod_attr(mod, 'key', None) or _get_mod_attr(mod, 'mod_key', None)
+            is_gamebanana_mod = bool(key and isinstance(key, str) and key.startswith('gb_'))
             if is_gamebanana_mod:
                 gamebanana_category = _get_mod_attr(mod, 'gamebanana_category')
                 if gamebanana_category:
@@ -65,10 +66,10 @@ def filter_and_sort_mods(mods_list: List[Any], filters: Dict[str, Any], sort_con
                 mod_tags = []
             if not all((tag in mod_tags for tag in selected_tags)):
                 continue
-        if selected_modgame:
-            mod_modgame = _get_mod_attr(mod, 'modgame', 'deltarune')
-            is_pizza_match = selected_modgame == 'pizzatower' and mod_modgame == 'pizzaoven'
-            if mod_modgame != selected_modgame and (not is_pizza_match):
+        if selected_game:
+            mod_game = _get_mod_attr(mod, 'game', None) or _get_mod_attr(mod, 'modgame', 'deltarune')
+            is_pizza_match = selected_game == 'pizzatower' and mod_game == 'pizzaoven'
+            if mod_game != selected_game and (not is_pizza_match):
                 continue
         if search_text:
             search_text_lower = search_text.lower()
