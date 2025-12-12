@@ -850,7 +850,7 @@
     "mod_scan_init_error": "Failed to initialize mod scanner: {details}",
     "no_description_status": "No description available.",
     "no_files_to_copy": "No files found to copy.",
-    "no_game_path": "Please set them manually.",
+    "no_game_path": "Game paths autodetection failed. Please set them manually.",
     "no_mod": "No mod",
     "normal_launch": "Vanilla launch",
     "online_count": "Online: {count}",

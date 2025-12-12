@@ -268,11 +268,12 @@ def autodetect_path(game_name: str) -> str | None:
     if system == 'Windows':
         program_files = [os.getenv('ProgramFiles(x86)'), os.getenv('ProgramFiles')]
         steam_paths = [os.path.join(p, 'Steam', 'steamapps', 'common', game_name) for p in program_files if p]
+        paths.extend(steam_paths)
         drive_letters = 'CDEFGHIJKLMNOPQRSTUVWXYZ'
         for drive in drive_letters:
-            for steam_subpath in ['Steam/steamapps/common', 'SteamLibrary/steamapps/common', 'Program Files/Steam/steamapps/common', 'Program Files (x86)/Steam/steamapps/common']:
-                paths.append(f'{drive}:/{steam_subpath}/{game_name}')
-        paths.extend(steam_paths)
+            for steam_subpath_parts in [['Steam', 'steamapps', 'common'], ['SteamLibrary', 'steamapps', 'common'], ['Program Files', 'Steam', 'steamapps', 'common'], ['Program Files (x86)', 'Steam', 'steamapps', 'common']]:
+                path = os.path.join(f'{drive}:', *steam_subpath_parts, game_name)
+                paths.append(path)
     elif system == 'Linux':
         home = os.path.expanduser('~')
         base_steam_paths = [f'{home}/.steam/steam/steamapps/common/{game_name}', f'{home}/.local/share/Steam/steamapps/common/{game_name}', f'{home}/.var/app/com.valvesoftware.Steam/data/Steam/steamapps/common/{game_name}']

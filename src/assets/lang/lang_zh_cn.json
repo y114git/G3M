@@ -849,7 +849,7 @@
     "mod_scan_init_error": "初始化模组扫描器失败：{details}",
     "no_description_status": "无描述可用。",
     "no_files_to_copy": "未找到要复制的文件。",
-    "no_game_path": "请手动设置。",
+    "no_game_path": "游戏路径自动检测失败。请手动设置。",
     "no_mod": "无模组",
     "normal_launch": "原版启动",
     "online_count": "在线：{count}",

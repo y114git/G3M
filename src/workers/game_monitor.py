@@ -28,12 +28,42 @@ class GameMonitorWorker(QObject):
                 try:
                     logging.info(f"[GAME_MONITOR] Monitoring process: {(self.process.pid if hasattr(self.process, 'pid') else 'unknown')}")
                     self.process.wait()
-                    logging.info('[GAME_MONITOR] Game process finished')
+                    logging.info('[GAME_MONITOR] Launched process finished')
                 except Exception as e:
                     logging.warning(f'[GAME_MONITOR] process.wait() failed: {e}', exc_info=True)
-                logging.info('[GAME_MONITOR] Emitting finished signal')
-                self.finished.emit(self.vanilla_mode)
-                return
+                logging.info('[GAME_MONITOR] Checking if game is still running after process exit')
+                game_appeared = False
+                consecutive_checks = 0
+                for _ in range(10):
+                    current_thread = QThread.currentThread()
+                    if current_thread and current_thread.isInterruptionRequested():
+                        logging.debug('GameMonitorWorker.run: interruption requested, stopping')
+                        return
+                    if is_game_running():
+                        consecutive_checks += 1
+                        if consecutive_checks >= 2:
+                            game_appeared = True
+                            logging.info('[GAME_MONITOR] Game process detected, continuing to monitor')
+                            break
+                    else:
+                        consecutive_checks = 0
+                    time.sleep(0.5)
+                if game_appeared:
+                    while is_game_running():
+                        current_thread = QThread.currentThread()
+                        if current_thread and current_thread.isInterruptionRequested():
+                            logging.debug('GameMonitorWorker.run: interruption requested during game monitoring')
+                            return
+                        time.sleep(1)
+                    time.sleep(2)
+                    if not is_game_running():
+                        logging.info('[GAME_MONITOR] Game is no longer running, emitting finished signal')
+                        self.finished.emit(self.vanilla_mode)
+                        return
+                else:
+                    logging.info('[GAME_MONITOR] Game process not found after launch, emitting finished signal')
+                    self.finished.emit(self.vanilla_mode)
+                    return
             game_appeared = False
             consecutive_checks = 0
             for _ in range(45):

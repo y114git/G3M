@@ -850,7 +850,7 @@
     "mod_scan_init_error": "Error al inicializar el escáner de mods: {details}",
     "no_description_status": "No hay descripción disponible.",
     "no_files_to_copy": "No se encontraron archivos para copiar.",
-    "no_game_path": "Por favor, establécelas manualmente.",
+    "no_game_path": "La detección automática de rutas del juego falló. Por favor, establécelas manualmente.",
     "no_mod": "Sin mod",
     "normal_launch": "Inicio vanilla",
     "online_count": "🟢 En línea: {count}",
