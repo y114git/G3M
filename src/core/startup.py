@@ -302,7 +302,6 @@ def run_app():
         launcher_app = {}
         splash = create_png_splash()
         if show_animation:
-            from config.constants import SPLASH_SOUND_DELAY
             _splash_start_time = time.time()
             from core.splash import CustomSplashScreen
             gif_path = resource_path('assets/images/splash.gif')
@@ -310,12 +309,9 @@ def run_app():
                 gif_splash = CustomSplashScreen(gif_path=gif_path)
                 if hasattr(gif_splash, 'movie') and gif_splash.movie.isValid():
                     splash = gif_splash
-
-            def start_splash_and_sound():
-                if hasattr(splash, 'movie'):
-                    splash.start_gif_animation()
+                    splash.start_gif_animation(sound_start_callback=_audio_manager.play_deltahub_sound)
+            else:
                 _audio_manager.play_deltahub_sound()
-            QTimer.singleShot(SPLASH_SOUND_DELAY, start_splash_and_sound)
         splash.show()
         app.processEvents()
 
