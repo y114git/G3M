@@ -172,7 +172,7 @@ def mock_file_operations(temp_dir):
 
 @pytest.fixture
 def sample_mod_config():
-    return {'key': 'test_mod_001', 'name': 'Test Mod', 'version': '1.0.0', 'author': 'Test Author', 'description': 'A test mod', 'game': 'deltarune', 'chapters': [1, 2], 'files': []}
+    return {'key': 'test_mod_001', 'name': 'Test Mod', 'version': '1.0.0', 'author': 'Test Author', 'description': 'A test mod', 'game': 'deltarune', 'chapters': [1, 2], 'files': {}}
 
 
 @pytest.fixture

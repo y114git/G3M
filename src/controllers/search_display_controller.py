@@ -651,145 +651,177 @@ class SearchDisplayController(QObject):
             self.ui_widget_updates_enabled.emit('mod_list_widget', False)
             widgets_shown = 0
             widgets_created = 0
+            BATCH_SIZE = 15
+            BATCH_DELAY_MS = 10
+            target_position = 0
+            mods_to_process = [(idx, mod) for idx, mod in enumerate(current_page_mods) if mod is not None]
             try:
-                target_position = 0
-                for idx, mod in enumerate(current_page_mods):
-                    if mod is None:
-                        logger.warning(f'SearchDisplayController: Mod at index {start_index + idx} is None, skipping')
-                        continue
-                    try:
-                        cache_key = get_mod_cache_key(mod)
-                        if cache_key in self.plaque_widget_cache:
-                            plaque = self.plaque_widget_cache[cache_key]
-                            if hasattr(plaque, 'mod_data'):
-                                plaque.mod_data = mod
-                                if hasattr(plaque, 'update_mod_data'):
-                                    plaque.update_mod_data()
-                                if hasattr(plaque, 'update_installation_status'):
-                                    plaque.update_installation_status()
-                            current_position = None
-                            for i in range(self.app.mod_list_layout.count() - 1):
-                                item = self.app.mod_list_layout.itemAt(i)
-                                if item and item.widget() == plaque:
-                                    current_position = i
-                                    break
-                            if current_position is not None:
-                                if current_position != target_position:
-                                    self.app.mod_list_layout.removeWidget(plaque)
-                                    self.app.mod_list_layout.insertWidget(target_position, plaque)
-                            else:
-                                self.app.mod_list_layout.insertWidget(target_position, plaque)
-                            if hasattr(plaque, 'update_install_button_state'):
-                                plaque.update_install_button_state()
-                            widgets_shown += 1
-                            target_position += 1
-                        else:
-                            parent_widget = self.app.mod_list_widget if hasattr(self.app, 'mod_list_widget') else self.app
-                            plaque = ModPlaqueWidget(mod, parent=parent_widget, parent_app=self.app)
-                            plaque.install_requested.connect(self.mod_ops.on_mod_install_requested)
-                            plaque.uninstall_requested.connect(self.mod_ops.on_mod_uninstall_requested)
-                            plaque.clicked.connect(self.on_mod_clicked)
-                            plaque.details_requested.connect(self.show_details)
-                            if hasattr(plaque, 'update_install_button_state'):
-                                plaque.update_install_button_state()
-                            self.app.mod_list_layout.insertWidget(target_position, plaque)
-                            self.plaque_widget_cache[cache_key] = plaque
-                            widgets_created += 1
-                            widgets_shown += 1
-                            target_position += 1
-                    except Exception as e:
-                        logger.error(f"Error processing plaque for mod {(mod.name if mod else 'unknown')} at index {start_index + idx}: {e}", exc_info=True)
-                        continue
-                current_page_cache_keys = {get_mod_cache_key(mod) for mod in current_page_mods if mod is not None}
-                widgets_to_hide = []
-                for i in range(self.app.mod_list_layout.count() - 1):
-                    item = self.app.mod_list_layout.itemAt(i)
-                    if item and item.widget():
-                        widget = item.widget()
-                        if isinstance(widget, ModPlaqueWidget):
-                            widget_cache_key = get_mod_cache_key(widget.mod_data) if hasattr(widget, 'mod_data') and widget.mod_data else None
-                            if widget_cache_key and widget_cache_key not in current_page_cache_keys:
-                                widgets_to_hide.append(widget)
-                for widget in widgets_to_hide:
-                    try:
-                        self.app.mod_list_layout.removeWidget(widget)
-                        widget.hide()
-                    except Exception as e:
-                        logger.debug(f'Error removing widget from layout: {e}')
-                for i in range(self.app.mod_list_layout.count() - 1):
-                    item = self.app.mod_list_layout.itemAt(i)
-                    if item and item.widget():
-                        widget = item.widget()
-                        if isinstance(widget, ModPlaqueWidget):
-                            widget.show()
-            finally:
-                self.ui_widget_updates_enabled.emit('mod_list_widget', True)
-            self.update_pagination()
-            if not self._initial_mods_display_done and self.app_state.current_page == 1:
-                has_mods_to_display = len(current_page_mods) > 0 if current_page_mods else False
-                expected_widget_count = len(current_page_mods) if current_page_mods else 0
 
-                def check_and_emit_ready():
-                    try:
-                        from PyQt6.QtWidgets import QApplication
-                        app = QApplication.instance()
-                        if app:
-                            for _ in range(5):
-                                app.processEvents()
-                        widgets_ready = True
-                        widget_count = 0
-                        visible_widget_count = 0
+                def process_batch(batch_start: int):
+                    nonlocal target_position, widgets_shown, widgets_created
+                    batch_end = min(batch_start + BATCH_SIZE, len(mods_to_process))
+                    from PyQt6.QtWidgets import QApplication
+                    app = QApplication.instance()
+                    for batch_idx in range(batch_start, batch_end):
+                        idx, mod = mods_to_process[batch_idx]
+                        if mod is None:
+                            continue
                         try:
-                            for i in range(self.app.mod_list_layout.count() - 1):
-                                item = self.app.mod_list_layout.itemAt(i)
-                                if item and item.widget():
-                                    widget = item.widget()
-                                    if isinstance(widget, ModPlaqueWidget):
-                                        widget_count += 1
-                                        if not widget.isVisible():
-                                            widgets_ready = False
-                                            break
-                                        visible_widget_count += 1
-                                        if not hasattr(widget, 'mod_data') or widget.mod_data is None:
-                                            widgets_ready = False
-                                            break
-                                        if not widget.parent():
-                                            widgets_ready = False
-                                            break
-                                        if widget.width() <= 0 or widget.height() <= 0:
-                                            widgets_ready = False
-                                            break
-                        except Exception as e:
-                            logger.warning(f'Error checking widget readiness: {e}')
-                            widgets_ready = False
-                        should_emit = False
-                        if has_mods_to_display and expected_widget_count > 0:
-                            if widgets_ready and widget_count >= expected_widget_count and (visible_widget_count >= expected_widget_count):
-                                should_emit = True
-                                logger.info(f'SearchDisplayController: First page plaques ready ({visible_widget_count}/{expected_widget_count} visible widgets)')
+                            cache_key = get_mod_cache_key(mod)
+                            if cache_key in self.plaque_widget_cache:
+                                plaque = self.plaque_widget_cache[cache_key]
+                                if hasattr(plaque, 'mod_data'):
+                                    plaque.mod_data = mod
+                                    if hasattr(plaque, 'update_mod_data'):
+                                        plaque.update_mod_data()
+                                    if hasattr(plaque, 'update_installation_status'):
+                                        plaque.update_installation_status()
+                                current_position = None
+                                for i in range(self.app.mod_list_layout.count() - 1):
+                                    item = self.app.mod_list_layout.itemAt(i)
+                                    if item and item.widget() == plaque:
+                                        current_position = i
+                                        break
+                                if current_position is not None:
+                                    if current_position != target_position:
+                                        self.app.mod_list_layout.removeWidget(plaque)
+                                        self.app.mod_list_layout.insertWidget(target_position, plaque)
+                                else:
+                                    self.app.mod_list_layout.insertWidget(target_position, plaque)
+                                if hasattr(plaque, 'update_install_button_state'):
+                                    plaque.update_install_button_state()
+                                widgets_shown += 1
+                                target_position += 1
                             else:
-                                logger.debug(f'SearchDisplayController: First page not ready yet - widgets: {widget_count}/{expected_widget_count}, visible: {visible_widget_count}/{expected_widget_count}')
-                        elif expected_widget_count == 0 and (not has_mods_to_display):
-                            should_emit = True
-                            logger.info('SearchDisplayController: First page ready (empty), mods may still be loading')
-                        if should_emit:
-                            self._initial_mods_display_done = True
-                            if hasattr(self.app, 'mods_display_ready'):
-                                logger.info(f'SearchDisplayController: First page plaques ready ({visible_widget_count} widgets visible), emitting mods_display_ready signal')
-                                self.app._mods_display_ready_emitted = True
+                                parent_widget = self.app.mod_list_widget if hasattr(self.app, 'mod_list_widget') else self.app
+                                plaque = ModPlaqueWidget(mod, parent=parent_widget, parent_app=self.app)
+                                plaque.install_requested.connect(self.mod_ops.on_mod_install_requested)
+                                plaque.uninstall_requested.connect(self.mod_ops.on_mod_uninstall_requested)
+                                plaque.clicked.connect(self.on_mod_clicked)
+                                plaque.details_requested.connect(self.show_details)
+                                if hasattr(plaque, 'update_install_button_state'):
+                                    plaque.update_install_button_state()
+                                self.app.mod_list_layout.insertWidget(target_position, plaque)
+                                self.plaque_widget_cache[cache_key] = plaque
+                                widgets_created += 1
+                                widgets_shown += 1
+                                target_position += 1
+                            if (batch_idx - batch_start + 1) % 5 == 0 and app:
+                                app.processEvents()
+                        except Exception as e:
+                            logger.error(f"Error processing plaque for mod {(mod.name if mod else 'unknown')} at index {start_index + idx}: {e}", exc_info=True)
+                            continue
+                    if app:
+                        app.processEvents()
+                    if batch_end < len(mods_to_process):
+                        QTimer.singleShot(BATCH_DELAY_MS, lambda: process_batch(batch_end))
+                    else:
+                        finish_widget_processing()
+
+                def finish_widget_processing():
+                    current_page_cache_keys = {get_mod_cache_key(mod) for mod in current_page_mods if mod is not None}
+                    widgets_to_hide = []
+                    for i in range(self.app.mod_list_layout.count() - 1):
+                        item = self.app.mod_list_layout.itemAt(i)
+                        if item and item.widget():
+                            widget = item.widget()
+                            if isinstance(widget, ModPlaqueWidget):
+                                widget_cache_key = get_mod_cache_key(widget.mod_data) if hasattr(widget, 'mod_data') and widget.mod_data else None
+                                if widget_cache_key and widget_cache_key not in current_page_cache_keys:
+                                    widgets_to_hide.append(widget)
+                    for widget in widgets_to_hide:
+                        try:
+                            self.app.mod_list_layout.removeWidget(widget)
+                            widget.hide()
+                        except Exception as e:
+                            logger.debug(f'Error removing widget from layout: {e}')
+                    for i in range(self.app.mod_list_layout.count() - 1):
+                        item = self.app.mod_list_layout.itemAt(i)
+                        if item and item.widget():
+                            widget = item.widget()
+                            if isinstance(widget, ModPlaqueWidget):
+                                widget.show()
+                    self.ui_widget_updates_enabled.emit('mod_list_widget', True)
+                    self.update_pagination()
+                    self._update_display_in_progress = False
+                    self._check_and_emit_ready_if_needed()
+
+                def self_check_and_emit_ready_if_needed():
+                    if not self._initial_mods_display_done and self.app_state.current_page == 1:
+                        has_mods_to_display = len(current_page_mods) > 0 if current_page_mods else False
+                        expected_widget_count = len(current_page_mods) if current_page_mods else 0
+
+                        def check_and_emit_ready():
+                            try:
+                                from PyQt6.QtWidgets import QApplication
+                                app = QApplication.instance()
                                 if app:
-                                    app.processEvents()
-                                QTimer.singleShot(100, lambda: self.app.mods_display_ready.emit())
-                        else:
-                            logger.debug('SearchDisplayController: First page not ready, will check again')
-                            QTimer.singleShot(200, check_and_emit_ready)
-                    except Exception as e:
-                        logger.error(f'Error in check_and_emit_ready: {e}', exc_info=True)
-                QTimer.singleShot(300, check_and_emit_ready)
+                                    for _ in range(5):
+                                        app.processEvents()
+                                widgets_ready = True
+                                widget_count = 0
+                                visible_widget_count = 0
+                                try:
+                                    for i in range(self.app.mod_list_layout.count() - 1):
+                                        item = self.app.mod_list_layout.itemAt(i)
+                                        if item and item.widget():
+                                            widget = item.widget()
+                                            if isinstance(widget, ModPlaqueWidget):
+                                                widget_count += 1
+                                                if not widget.isVisible():
+                                                    widgets_ready = False
+                                                    break
+                                                visible_widget_count += 1
+                                                if not hasattr(widget, 'mod_data') or widget.mod_data is None:
+                                                    widgets_ready = False
+                                                    break
+                                                if not widget.parent():
+                                                    widgets_ready = False
+                                                    break
+                                                if widget.width() <= 0 or widget.height() <= 0:
+                                                    widgets_ready = False
+                                                    break
+                                except Exception as e:
+                                    logger.warning(f'Error checking widget readiness: {e}')
+                                    widgets_ready = False
+                                should_emit = False
+                                if has_mods_to_display and expected_widget_count > 0:
+                                    if widgets_ready and widget_count >= expected_widget_count and (visible_widget_count >= expected_widget_count):
+                                        should_emit = True
+                                        logger.info(f'SearchDisplayController: First page plaques ready ({visible_widget_count}/{expected_widget_count} visible widgets)')
+                                    else:
+                                        logger.debug(f'SearchDisplayController: First page not ready yet - widgets: {widget_count}/{expected_widget_count}, visible: {visible_widget_count}/{expected_widget_count}')
+                                elif expected_widget_count == 0 and (not has_mods_to_display):
+                                    should_emit = True
+                                    logger.info('SearchDisplayController: First page ready (empty), mods may still be loading')
+                                if should_emit:
+                                    self._initial_mods_display_done = True
+                                    if hasattr(self.app, 'mods_display_ready'):
+                                        logger.info(f'SearchDisplayController: First page plaques ready ({visible_widget_count} widgets visible), emitting mods_display_ready signal')
+                                        self.app._mods_display_ready_emitted = True
+                                        if app:
+                                            app.processEvents()
+                                        QTimer.singleShot(100, lambda: self.app.mods_display_ready.emit())
+                                else:
+                                    logger.debug('SearchDisplayController: First page not ready, will check again')
+                                    QTimer.singleShot(200, check_and_emit_ready)
+                            except Exception as e:
+                                logger.error(f'Error in check_and_emit_ready: {e}', exc_info=True)
+                        QTimer.singleShot(300, check_and_emit_ready)
+                self._check_and_emit_ready_if_needed = self_check_and_emit_ready_if_needed
+                if mods_to_process:
+                    process_batch(0)
+                else:
+                    finish_widget_processing()
+            except Exception as e:
+                logger.error(f'SearchDisplayController: Error in batch processing: {e}', exc_info=True)
+                self.ui_widget_updates_enabled.emit('mod_list_widget', True)
+                self._update_display_in_progress = False
         except Exception as e:
             logger.error(f'SearchDisplayController: Error in update_display: {e}', exc_info=True)
         finally:
-            self._update_display_in_progress = False
+            if self._update_display_in_progress:
+                self._update_display_in_progress = False
 
     def update_pagination(self):
         if not hasattr(self.app, 'page_label') or not hasattr(self.app, 'prev_page_btn') or (not hasattr(self.app, 'next_page_btn')):

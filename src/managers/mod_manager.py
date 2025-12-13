@@ -96,8 +96,16 @@ class ModManager(QObject):
                                 break
                         if key is None or key not in cache:
                             from utils.file_utils import load_json
-                            config_data = load_json(config_path, migrate_config=True)
-                            if not self._validate_mod_config(config_data, config_path, folder_name):
+                            try:
+                                config_data = load_json(config_path, migrate_config=True)
+                                if not config_data:
+                                    logging.warning(f'_scan_mods_directory: Empty config data in {config_path}, skipping mod', extra={'mod_folder': folder_name, 'config_path': config_path})
+                                    continue
+                                if not self._validate_mod_config(config_data, config_path, folder_name):
+                                    logging.warning(f'_scan_mods_directory: Config validation failed for {folder_name}, marking as corrupted', extra={'mod_folder': folder_name, 'config_path': config_path})
+                                    continue
+                            except (TypeError, ValueError, AttributeError) as e:
+                                logging.warning(f'_scan_mods_directory: Config structure error in {config_path}: {e}, skipping mod', exc_info=True, extra={'mod_folder': folder_name, 'config_path': config_path, 'error_type': type(e).__name__})
                                 continue
                             key = config_data.get('key') or config_data.get('mod_key') or ''
                             if not key:
@@ -126,12 +134,25 @@ class ModManager(QObject):
 
     def _validate_mod_config(self, config_data: dict, config_path: str, folder_name: str) -> bool:
         if not isinstance(config_data, dict):
-            logging.warning(f'_validate_mod_config: Config is not a dictionary in {config_path}, skipping mod', extra={'mod_folder': folder_name, 'config_path': config_path})
+            logging.warning(f'_validate_mod_config: Config is not a dictionary in {config_path}, skipping mod', extra={'mod_folder': folder_name, 'config_path': config_path, 'config_type': type(config_data).__name__})
             return False
         has_name = bool(config_data.get('name'))
         has_key = bool(config_data.get('key') or config_data.get('mod_key'))
         if not has_name and (not has_key):
             logging.warning(f'_validate_mod_config: Config missing both name and key in {config_path}, skipping mod', extra={'mod_folder': folder_name, 'config_path': config_path})
+            return False
+        if 'name' in config_data and (not isinstance(config_data['name'], str)):
+            logging.warning(f'_validate_mod_config: Config field "name" has invalid type in {config_path}, expected string', extra={'mod_folder': folder_name, 'config_path': config_path, 'name_type': type(config_data['name']).__name__})
+            return False
+        key_value = config_data.get('key') or config_data.get('mod_key')
+        if key_value and (not isinstance(key_value, str)):
+            logging.warning(f'_validate_mod_config: Config field "key" has invalid type in {config_path}, expected string', extra={'mod_folder': folder_name, 'config_path': config_path, 'key_type': type(key_value).__name__})
+            return False
+        if 'files' in config_data and (not isinstance(config_data['files'], dict)):
+            logging.warning(f'_validate_mod_config: Config field "files" has invalid type in {config_path}, expected dict', extra={'mod_folder': folder_name, 'config_path': config_path, 'files_type': type(config_data['files']).__name__})
+            return False
+        if 'tags' in config_data and (not isinstance(config_data['tags'], (list, type(None)))):
+            logging.warning(f'_validate_mod_config: Config field "tags" has invalid type in {config_path}, expected list or None', extra={'mod_folder': folder_name, 'config_path': config_path, 'tags_type': type(config_data['tags']).__name__})
             return False
         return True
 

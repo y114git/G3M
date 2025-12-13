@@ -8,7 +8,7 @@ import hashlib
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, List, Optional, Any
-from PyQt6.QtCore import QObject, pyqtSignal
+from PyQt6.QtCore import QObject, pyqtSignal, QTimer
 from managers.backup_manager import BackupManager
 from managers.utmt_wrapper import UtmtWrapper
 from utils.path_utils import get_xdelta_path, find_chapter_resource_dir
@@ -18,6 +18,38 @@ from managers.localization_manager import tr
 from utils.mod_utils import get_mod_key, get_mod_name
 from utils.pizzaoven_utils import is_pizzaoven_mod, find_pizzaoven_folder
 from utils.patching_logger import get_patching_logger, get_conflicts_logger, clear_patching_logs
+
+
+class ProgressThrottler(QObject):
+
+    def __init__(self, callback, throttle_ms: int = 150, parent=None):
+        super().__init__(parent)
+        self.callback = callback
+        self.throttle_ms = throttle_ms
+        self._pending_progress = None
+        self._pending_message = None
+        self._timer = QTimer(self)
+        self._timer.setSingleShot(True)
+        self._timer.timeout.connect(self._emit_pending_update)
+        self._lock = threading.Lock()
+
+    def update_progress(self, progress: int, message: str):
+        with self._lock:
+            self._pending_progress = progress
+            self._pending_message = message
+            if not self._timer.isActive():
+                self._timer.start(self.throttle_ms)
+
+    def _emit_pending_update(self):
+        with self._lock:
+            if self._pending_progress is not None and self._pending_message is not None:
+                self.callback(self._pending_progress, self._pending_message)
+                self._pending_progress = None
+                self._pending_message = None
+
+    def flush(self):
+        self._timer.stop()
+        self._emit_pending_update()
 
 
 class MultiModMerger(QObject):
@@ -2472,6 +2504,7 @@ class MultiModMerger(QObject):
         max_workers = min(os.cpu_count() - 1, total_mods, 8)
         max_workers = max(1, max_workers)
         self.patching_logger.info(f'[PARALLEL_EXPORT] Starting parallel export for {total_mods} mod(s) using {max_workers} worker(s)')
+        throttler = ProgressThrottler(progress_callback, throttle_ms=150, parent=self)
 
         def export_single_mod(mod_info):
             mod_data, idx, original_idx, mod_number = mod_info
@@ -2538,7 +2571,7 @@ class MultiModMerger(QObject):
                         export_msg = tr('status.exporting_assets', mod=mod_name, current=completed_count[0], total=total_mods)
                     except BaseException:
                         export_msg = f'Exporting assets from {mod_name} ({completed_count[0]}/{total_mods})...'
-                    progress_callback(min(progress, 95), export_msg)
+                    throttler.update_progress(min(progress, 95), export_msg)
                     if not success:
                         self.patching_logger.error(f'[PARALLEL_EXPORT] Export failed for mod {mod_number} ({mod_name}): {error}')
                         executor.shutdown(wait=True, cancel_futures=False)
@@ -2547,6 +2580,7 @@ class MultiModMerger(QObject):
                     self.patching_logger.error(f'[PARALLEL_EXPORT] Exception in export task: {e}', exc_info=True)
                     executor.shutdown(wait=True, cancel_futures=False)
                     return False
+        throttler.flush()
         self.patching_logger.info(f'[PARALLEL_EXPORT] All {total_mods} mod(s) exported successfully')
         return True
 
@@ -2559,6 +2593,7 @@ class MultiModMerger(QObject):
         max_workers = min(os.cpu_count() - 1, total_mods, 8)
         max_workers = max(1, max_workers)
         self.patching_logger.info(f'[PARALLEL_FILTER] Starting parallel filtering for {total_mods} mod(s) using {max_workers} worker(s)')
+        throttler = ProgressThrottler(progress_callback, throttle_ms=150, parent=self)
 
         def filter_single_mod(mod_info):
             mod_number, mod_objects_dir, mod_name = mod_info
@@ -2593,13 +2628,14 @@ class MultiModMerger(QObject):
                         filter_msg = tr('status.filtering_resources', mod=mod_name, current=completed_count[0], total=total_mods)
                     except BaseException:
                         filter_msg = f'Filtering resources from {mod_name} ({completed_count[0]}/{total_mods})...'
-                    progress_callback(min(progress, 95), filter_msg)
+                    throttler.update_progress(min(progress, 95), filter_msg)
                     if error:
                         self.patching_logger.warning(f'[PARALLEL_FILTER] Filtering warning for mod {mod_number} ({mod_name}): {error}')
                 except Exception as e:
                     self.patching_logger.error(f'[PARALLEL_FILTER] Exception in filtering task: {e}', exc_info=True)
                     executor.shutdown(wait=True, cancel_futures=False)
                     return {}
+        throttler.flush()
         self.patching_logger.info(f'[PARALLEL_FILTER] All {total_mods} mod(s) filtered successfully')
         return results
 

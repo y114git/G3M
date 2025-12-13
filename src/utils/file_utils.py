@@ -531,7 +531,7 @@ def safe_move(src: str, dst: str, max_retries: int = 5, delay: float = 0.1) -> b
     return False
 
 
-def safe_rmtree(path: str, max_retries: int = 5, delay: float = 0.1) -> bool:
+def safe_rmtree(path: str, max_retries: int = 3, delay: float = 0.5) -> bool:
     if not os.path.exists(path):
         return True
     if not os.path.isdir(path):
@@ -554,7 +554,7 @@ def safe_rmtree(path: str, max_retries: int = 5, delay: float = 0.1) -> bool:
         except (OSError, PermissionError, shutil.Error) as e:
             if attempt < max_retries - 1:
                 logging.debug(f'safe_rmtree: Attempt {attempt + 1}/{max_retries} failed for {path}: {e}, retrying...')
-                time.sleep(delay * (attempt + 1))
+                time.sleep(delay)
             else:
                 logging.warning(f'safe_rmtree: Failed to remove {path} after {max_retries} attempts: {e}')
                 if platform.system() != 'Windows':
