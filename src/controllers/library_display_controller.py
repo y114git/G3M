@@ -77,8 +77,8 @@ class LibraryDisplayController:
             mod_data = self.mod_manager.create_mod_object_from_info(mod_info, getattr(self.app_state, 'all_mods', None))
             if not mod_data or not self.mod_manager.mod_has_files_for_chapter(mod_data, selected_chapter_id):
                 continue
-            is_local = mod_data.is_local
-            is_available = not mod_data.is_local
+            is_local = getattr(mod_data, 'is_local_mod', False) or mod_data.is_local
+            is_available = not is_local
             if not is_available and hasattr(self.app_state, 'all_mods') and self.app_state.all_mods:
                 key = mod_info.get('key') or mod_info.get('mod_key', '')
                 if key and key.startswith('gb_'):
@@ -174,8 +174,8 @@ class LibraryDisplayController:
                         mod_data = self.mod_manager.create_mod_object_from_info(mod_info, getattr(self.app_state, 'all_mods', None))
                         if not mod_data:
                             continue
-                        is_local = mod_data.is_local
-                        is_available = not mod_data.is_local
+                        is_local = getattr(mod_data, 'is_local_mod', False) or mod_data.is_local
+                        is_available = not is_local
                         if not is_available and hasattr(self.app_state, 'all_mods') and self.app_state.all_mods:
                             key = mod_info.get('key') or mod_info.get('mod_key', '')
                             if key and key.startswith('gb_'):

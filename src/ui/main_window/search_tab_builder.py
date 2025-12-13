@@ -56,7 +56,11 @@ class SearchTabBuilder:
         filters_layout.setContentsMargins(0, 0, 0, 0)
         sort_combo = NoScrollComboBox()
         sort_combo.addItems([tr('ui.sort_by_downloads'), tr('ui.sort_by_update_date'), tr('ui.sort_by_creation_date')])
-        sort_combo.setCurrentIndex(1)
+        saved_sort_index = self.app_state.local_config.get('search_sort_index', 1)
+        if 0 <= saved_sort_index < sort_combo.count():
+            sort_combo.setCurrentIndex(saved_sort_index)
+        else:
+            sort_combo.setCurrentIndex(1)
         filters_layout.addWidget(sort_combo)
         sort_order_btn = QPushButton('▼')
         sort_order_btn.setObjectName('sortOrderBtn')

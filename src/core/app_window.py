@@ -772,6 +772,10 @@ class AppWindow(QWidget):
     def _on_search_sort_changed(self):
         if not hasattr(self, 'search_display'):
             return
+        if hasattr(self, 'sort_combo'):
+            sort_index = self.sort_combo.currentIndex()
+            self.app_state.local_config['search_sort_index'] = sort_index
+            self.settings_manager.write_local_config()
         self.search_display.update_filtered_mods()
 
     def _on_sort_refresh_complete(self):

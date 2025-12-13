@@ -1119,6 +1119,8 @@ class ModManager(QObject):
     def get_mod_status(self, mod: mod_models.ModInfo, chapter_id: int) -> str:
         if mod.is_local_mod:
             return 'ready'
+        if mod.is_gamebanana_mod():
+            return 'ready'
 
         def _collect_remote_versions(m: mod_models.ModInfo, ch_id: int) -> dict:
             if ch_id == -1:

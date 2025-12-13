@@ -256,7 +256,7 @@ class ModOperationsController:
         try:
             if self.app_state.is_installing and (not force):
                 return
-            if hasattr(mod, 'is_gamebanana_mod') and mod.is_gamebanana_mod:
+            if hasattr(mod, 'is_gamebanana_mod') and callable(mod.is_gamebanana_mod) and mod.is_gamebanana_mod():
                 available_files = self._get_available_gamebanana_files(mod)
                 is_checked = bool(getattr(mod, 'gamebanana_compatibility_checked', False))
                 is_compatible = bool(getattr(mod, 'gamebanana_is_tool_compatible', False))
