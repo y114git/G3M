@@ -180,7 +180,6 @@ class GameLaunchController(QObject):
         self.app_state.progress_bar_visible = True
         self.app_state.progress_bar_value = 0
         full_install_thread = FullInstallThread(cast(Any, self.app), target_dir, False)
-        full_install_thread.progress.connect(self.app.set_progress_signal)
         full_install_thread.progress.connect(lambda v: setattr(self.app_state, 'progress_bar_value', v))
         full_install_thread.status.connect(self.app.update_status_signal)
         full_install_thread.finished.connect(self.on_full_install_finished)

@@ -118,7 +118,7 @@ class GameLauncher(QObject):
                 return
             return
         else:
-            self._continue_after_merge(selections, True)
+            self._continue_after_merge(selections, True, needs_multi_mod)
 
     def _handle_launch_failure(self):
         if hasattr(self, 'restore_window_callback') and self.restore_window_callback:
@@ -295,7 +295,7 @@ class GameLauncher(QObject):
         logging.info('Starting multi-mod merge in background thread')
         chapter_mods = {chapter_id: mods_list for chapter_id, mods_list in selections.items() if isinstance(mods_list, list) and mods_list}
         if not chapter_mods:
-            self._continue_after_merge(selections, True)
+            self._continue_after_merge(selections, True, False)
             return True
         self.app_state.progress_bar_visible = True
         self.app_state.progress_bar_value = 0
@@ -341,7 +341,7 @@ class GameLauncher(QObject):
                 self._handle_launch_failure()
             return
         logging.info('Multi-mod merge completed successfully')
-        self._continue_after_merge(selections, True)
+        self._continue_after_merge(selections, True, True)
 
     def _cancel_launch_after_merge(self):
         logging.info('Cancelling launch after merge: restoring backups and resetting state')
@@ -374,11 +374,9 @@ class GameLauncher(QObject):
                 except Exception as e:
                     logging.error(f'Failed to restore window: {e}', exc_info=True)
 
-    def _continue_after_merge(self, selections: Dict[int, Any], merge_success: bool):
+    def _continue_after_merge(self, selections: Dict[int, Any], merge_success: bool, needs_multi_mod: bool = False):
         if not merge_success:
             return
-        has_list_format = any((isinstance(mods_list, list) for mods_list in selections.values()))
-        needs_multi_mod = has_list_format and any((len(mods_list) > 0 for mods_list in selections.values() if isinstance(mods_list, list)))
         if needs_multi_mod and hasattr(self, 'multi_mod_merger') and self.multi_mod_merger:
             conflicts_summary = self.multi_mod_merger.get_conflicts_summary()
             if conflicts_summary.get('has_conflicts', False):

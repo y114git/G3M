@@ -653,16 +653,6 @@ class ModManager(QObject):
                                 except Exception as e:
                                     logging.warning(f'load_local_mods: Failed to reload mod {key} from config: {e}', exc_info=True)
                             continue
-                    if key in existing_keys:
-                        for mod in self.app_state.all_mods:
-                            mod_key_attr = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
-                            if mod_key_attr == key:
-                                if hasattr(mod, 'files') and mod.files:
-                                    existing_keys.add(key)
-                                else:
-                                    existing_keys.add(key)
-                                break
-                        continue
                 elif key in existing_keys:
                     existing_mod = None
                     for mod in self.app_state.all_mods:

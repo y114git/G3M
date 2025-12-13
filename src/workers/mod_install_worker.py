@@ -149,8 +149,6 @@ class ModInstallWorker(BaseInstallWorker):
                 else:
                     shutil.copy2(src_path, dst_path)
             target_config_path = os.path.join(target_mod_dir, MOD_CONFIG_FILENAME)
-            from utils.file_utils import migrate_mod_config
-            migrate_mod_config(target_mod_dir)
             if self.gamebanana_metadata:
                 config_data['is_local_mod'] = False
                 if 'profile_url' in self.gamebanana_metadata and (not config_data.get('external_url')):

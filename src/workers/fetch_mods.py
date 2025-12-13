@@ -270,6 +270,10 @@ class FetchModsThread(QThread):
             data_dict['screenshots_url'] = screens_list
             data_dict['demo_url'] = files_data.get('demo', {}).get('url') if files_data else None
             data_dict['demo_version'] = files_data.get('demo', {}).get('version', '1.0.0') if files_data else '1.0.0'
+            if 'files' in data_dict:
+                del data_dict['files']
+            if 'chapters' in data_dict:
+                del data_dict['chapters']
             mod = ModInfo.from_dict(data_dict)
             if self._process_mod_chapters(mod, files_data):
                 return mod
