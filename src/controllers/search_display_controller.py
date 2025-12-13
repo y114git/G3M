@@ -638,16 +638,20 @@ class SearchDisplayController(QObject):
                     return f'local_{key}'
                 mod_name = getattr(mod, 'name', 'unknown')
                 return f'name_{mod_name}'
+            current_page_cache_keys = {get_mod_cache_key(mod) for mod in current_page_mods if mod is not None}
             existing_widgets_in_layout = {}
             for i in range(self.app.mod_list_layout.count() - 1):
                 item = self.app.mod_list_layout.itemAt(i)
                 if item and item.widget():
                     widget = item.widget()
                     if isinstance(widget, ModPlaqueWidget):
-                        widget.hide()
                         if hasattr(widget, 'mod_data') and widget.mod_data:
                             cache_key = get_mod_cache_key(widget.mod_data)
                             existing_widgets_in_layout[cache_key] = (widget, i)
+                            if cache_key not in current_page_cache_keys:
+                                widget.hide()
+                        else:
+                            widget.hide()
             self.ui_widget_updates_enabled.emit('mod_list_widget', False)
             widgets_shown = 0
             widgets_created = 0
@@ -719,7 +723,6 @@ class SearchDisplayController(QObject):
                         finish_widget_processing()
 
                 def finish_widget_processing():
-                    current_page_cache_keys = {get_mod_cache_key(mod) for mod in current_page_mods if mod is not None}
                     widgets_to_hide = []
                     for i in range(self.app.mod_list_layout.count() - 1):
                         item = self.app.mod_list_layout.itemAt(i)
@@ -740,7 +743,11 @@ class SearchDisplayController(QObject):
                         if item and item.widget():
                             widget = item.widget()
                             if isinstance(widget, ModPlaqueWidget):
-                                widget.show()
+                                widget_cache_key = get_mod_cache_key(widget.mod_data) if hasattr(widget, 'mod_data') and widget.mod_data else None
+                                if widget_cache_key and widget_cache_key in current_page_cache_keys:
+                                    widget.show()
+                                elif not widget_cache_key:
+                                    widget.show()
                     self.ui_widget_updates_enabled.emit('mod_list_widget', True)
                     self.update_pagination()
                     self._update_display_in_progress = False
@@ -1060,16 +1067,16 @@ class SearchDisplayController(QObject):
                                 pass
                             updated_mods.append(mod_id)
             self._pending_metadata_updates.clear()
-            if downloads_changed or needs_resort or needs_refilter:
-                sort_needs_resort = False
-                if hasattr(self.app, 'sort_combo'):
-                    sort_type = self.app.sort_combo.currentIndex()
-                    if sort_type == 0:
-                        sort_needs_resort = True
-                if sort_needs_resort or needs_refilter or downloads_changed:
-                    logger.debug(f"SearchDisplayController: Re-sorting mods after metadata update (downloads_changed={downloads_changed}, needs_resort={needs_resort}, needs_refilter={needs_refilter}, sort_type={(sort_type if hasattr(self.app, 'sort_combo') else 'N/A')})")
-                    self.update_filtered_mods(preserve_page=True)
-            if updated_mods:
+            sort_needs_resort = False
+            sort_type = None
+            if hasattr(self.app, 'sort_combo'):
+                sort_type = self.app.sort_combo.currentIndex()
+                if sort_type == 0 and downloads_changed:
+                    sort_needs_resort = True
+            if sort_needs_resort or needs_refilter:
+                logger.debug(f"SearchDisplayController: Re-sorting mods after metadata update (downloads_changed={downloads_changed}, needs_resort={needs_resort}, needs_refilter={needs_refilter}, sort_type={(sort_type if sort_type is not None else 'N/A')})")
+                self.update_filtered_mods(preserve_page=True)
+            elif updated_mods:
                 self._update_plaques_for_mods(updated_mods)
         except Exception as e:
             logger.error(f'SearchDisplayController: Error in _apply_pending_metadata_updates: {e}', exc_info=True)
