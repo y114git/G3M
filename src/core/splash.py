@@ -23,7 +23,7 @@ class CustomSplashScreen(QSplashScreen):
             self.movie = QMovie(gif_path)
             if not self.movie.isValid():
                 return False
-            self.movie.setCacheMode(QMovie.CacheMode.CacheNone)
+            self.movie.setCacheMode(QMovie.CacheMode.CacheAll)
             self.movie.setSpeed(100)
             self.movie.jumpToFrame(0)
             gif_size = self.movie.currentPixmap().size()
@@ -52,15 +52,26 @@ class CustomSplashScreen(QSplashScreen):
             else:
                 self.move(100, 100)
             self.movie.finished.connect(self.on_gif_finished)
+            self._first_frame_rendered = False
+            self._sound_start_callback = None
+            self.movie.frameChanged.connect(self._on_frame_changed)
             return True
         except Exception:
             return False
 
-    def start_gif_animation(self):
+    def start_gif_animation(self, sound_start_callback=None):
         if hasattr(self, 'movie') and self.movie.isValid():
             if hasattr(self, 'gif_label'):
                 self.gif_label.show()
+            self._sound_start_callback = sound_start_callback
+            self._first_frame_rendered = False
             self.movie.start()
+
+    def _on_frame_changed(self, frame_number):
+        if not self._first_frame_rendered:
+            self._first_frame_rendered = True
+            if self._sound_start_callback:
+                self._sound_start_callback()
 
     def stop_gif_animation(self):
         if hasattr(self, 'movie'):
