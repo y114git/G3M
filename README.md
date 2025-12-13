@@ -4,7 +4,7 @@
 
 ---
 
-**DELTAHUB (DH)** is a cross-platform, universal, and extremely convenient Mod Manager, Saves Manager, and multi-functional manager for games such as **DELTARUNE**, **DELTARUNEdemo**, **UNDERTALE**, and **UNDERTALE Yellow**. In the future, it will support other games made with GameMaker.
+**DELTAHUB (DH)** is a cross-platform, universal, and extremely convenient Mod Manager, Saves Manager, and multi-functional manager for games such as **DELTARUNE**, **DELTARUNEdemo**, **UNDERTALE**, **UNDERTALE Yellow**, and **Pizza Tower**. In the future, it will support other games made with GameMaker.
 
 ---
 
@@ -22,19 +22,21 @@
 
 - **Direct Launch:** Double-click on the desired chapter slot and enable direct launch. This will allow you to launch the desired chapter directly when starting the game, bypassing the chapter selection menu.
 
-- **Mod Import/Export:** Import mods from files or URLs, and export them in both DELTAHUB format. Share your mods easily with others!
+- **Mod Import/Export:** Import mods from files or URLs, and export them in DELTAHUB format. Share your mods easily with others! DELTAHUB automatically detects and converts mods from Deltamod and PizzaOven formats.
 
-- **Deltamod compatibility:** DH features built-in compatibility with the Deltamod format. More about this you can read from [Wiki](https://github.com/y114git/DELTAHUB/wiki/Deltamod-compatibility).
+- **Deltamod compatibility:** DH features built-in compatibility with the Deltamod format. More about this you can read from [Wiki](https://github.com/y114git/DELTAHUB/wiki/Deltamod-Compatibility).
+
+- **PizzaOven compatibility:** DH also supports automatic conversion of PizzaOven mods for Pizza Tower. PizzaOven mods are automatically detected and converted when imported.
 
 ### Game and Save Management
 
-- **Support for Multiple Games:** DH allows you to install mods for **DELTARUNE**, **DELTARUNEdemo**, **UNDERTALE**, and **UNDERTALE Yellow**! For free games like DELTARUNEdemo and UNDERTALE Yellow, DH has the ability to directly download the game itself with up-to-date files, eliminating the need to visit separate websites.
+- **Support for Multiple Games:** DH allows you to install mods for **DELTARUNE**, **DELTARUNEdemo**, **UNDERTALE**, **UNDERTALE Yellow**, and **Pizza Tower**! For free games like DELTARUNEdemo and UNDERTALE Yellow, DH has the ability to directly download the game itself with up-to-date files, eliminating the need to visit separate websites.
 
 - **Save Manager (Plugin):** Solve the problem of not having enough save slots! The Save Manager plugin lets you create an endless number of additional save collections. Copy and export them wherever you want, even to an external source. Double-clicking on a save slot allows you to edit it. The Save Manager is now a plugin, so you can install it if you need it!
 
 ### Creation & Customization
 
-- **Localization:** DH supports any language! If you want to translate DH into your language (or just edit langs for fun), all the necessary files and instructions are in `src/localization` and the [project Wiki](https://github.com/y114git/DELTAHUB/wiki/Localization-and-Lang-system-Guide).
+- **Localization:** DH supports multiple languages (English, Russian, Chinese Simplified, Chinese Traditional, Spanish, and more). If you want to translate DH into your language (or just edit langs for fun), all the necessary files and instructions are in `src/assets/lang` and the [project Wiki](https://github.com/y114git/DELTAHUB/wiki/Localization-and-Lang-system-Guide).
 
 - **Create Mods:** You can create and modify your own mods. DH has its own very simple structure for mods. The Mod Editor is now a plugin - install it if you need to create or edit mods!
   - **Public Mods:** After verification, a public mod will appear on the mods page for anyone to download.

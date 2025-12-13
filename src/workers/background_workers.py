@@ -13,6 +13,8 @@ from config.constants import CLOUD_FUNCTIONS_BASE_URL, UI_COLORS, NETWORK_TIMEOU
 from managers.localization_manager import tr
 from utils.file_utils import get_unique_mod_dir, has_deltamod_info_file, check_filename_is_deltamod_info
 from utils.deltamod_converter import DeltamodConverter
+from utils.pizzaoven_utils import find_pizzaoven_folder
+from utils.pizzaoven_converter import PizzaOvenConverter
 from utils.network_utils import download_file, sanitize_log_message
 from utils.ui_utils import format_size_mb
 import logging
@@ -1196,6 +1198,30 @@ class UrlInstallThread(QThread):
                 if len(unpacked_items) == 1 and os.path.isdir(os.path.join(unpack_dir, unpacked_items[0])):
                     content_path = os.path.join(unpack_dir, unpacked_items[0])
                 files_in_root = os.listdir(content_path)
+                pizzaoven_path = find_pizzaoven_folder(content_path)
+                if pizzaoven_path:
+                    self.status.emit(tr('status.pizzaoven_archive_detected_url', default='PizzaOven mod detected'), UI_COLORS['status_warning'])
+                    from utils.file_utils import remove_archive_extension
+                    archive_name = remove_archive_extension(os.path.basename(archive_path)) if archive_path else None
+                    try:
+                        if os.path.commonpath([content_path, pizzaoven_path]) == content_path:
+                            converter = PizzaOvenConverter(content_path, self.main_window.app_state.mods_dir, archive_name=archive_name)
+                        else:
+                            converter = PizzaOvenConverter(pizzaoven_path, self.main_window.app_state.mods_dir, archive_name=archive_name)
+                    except ValueError:
+                        converter = PizzaOvenConverter(pizzaoven_path, self.main_window.app_state.mods_dir, archive_name=archive_name)
+                    new_mod_path = converter.convert()
+                    if new_mod_path:
+                        mod_name = os.path.basename(new_mod_path)
+                        try:
+                            if os.path.exists(archive_path):
+                                os.remove(archive_path)
+                        except Exception as e:
+                            logging.warning(f'UrlInstallThread: Failed to remove mod archive: {e}')
+                        self.finished.emit(True, tr('status.install_complete_success', mod_name=mod_name))
+                    else:
+                        raise ValueError(tr('errors.gamebanana_conversion_failed'))
+                    return
                 if MOD_CONFIG_FILENAME in files_in_root:
                     self.status.emit(tr('status.installing_mod'), UI_COLORS['status_info'])
                     mod_dir = self._install_deltahub_mod_from_path(content_path)
