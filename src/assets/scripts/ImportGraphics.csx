@@ -35,11 +35,11 @@ try
     
     
     
-    if (!dataWinDir.Contains("xDeltaCombiner"))
+    if (!dataWinDir.Contains("DeltahubMergeWorkspace"))
     {
         
         
-        throw new ScriptException($"Packager cannot be created in game directory. Expected temporary folder (xDeltaCombiner), but got: {dataWinDir}");
+        throw new ScriptException($"Packager cannot be created in game directory. Expected temporary folder (DeltahubMergeWorkspace), but got: {dataWinDir}");
     }
     Directory.CreateDirectory(packDir);
 
@@ -690,7 +690,7 @@ string CheckValidity()
     string dataWinDir = Path.GetDirectoryName(FilePath);
 
 
-    if (dataWinDir.Contains("xDeltaCombiner"))
+    if (dataWinDir.Contains("DeltahubMergeWorkspace"))
     {
 
         string objectsPath = Path.Combine(dataWinDir, "Objects");

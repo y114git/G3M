@@ -473,7 +473,6 @@ class ModOperationsController:
                 cache = self.mod_manager._get_mods_cache()
                 logging.info(f'ModOperationsController: Cache after reload has {len(cache)} mods')
                 for key, mod_info in list(cache.items())[:5]:
-                    config = mod_info.config_data
                     if key and key.startswith('gb_'):
                         logging.info(f'ModOperationsController: Found installed GameBanana mod - key={key}')
             except Exception as e:
@@ -487,7 +486,6 @@ class ModOperationsController:
                 cache = self.mod_manager._get_mods_cache()
                 logging.info(f'ModOperationsController: Reloaded mods cache, found {len(cache)} installed mods')
                 for key, mod_info in cache.items():
-                    config_data = mod_info.config_data
                     if key and key.startswith('gb_'):
                         logging.info(f'ModOperationsController: Installed GameBanana mod in cache - key={key}')
                 self.app.search_display.update_search_plaques()

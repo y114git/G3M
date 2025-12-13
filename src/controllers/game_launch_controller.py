@@ -66,6 +66,9 @@ class GameLaunchController(QObject):
             merge_thread.cancel()
             try:
                 if merge_thread.merger:
+                    if merge_thread.merger.backup_manager and merge_thread.chapter_mods:
+                        for chapter_id in merge_thread.chapter_mods.keys():
+                            merge_thread.merger.backup_manager.restore_backups(chapter_id)
                     merge_thread.merger.cleanup(force=True)
                 if not merge_thread.isRunning():
                     merge_thread.deleteLater()

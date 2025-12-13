@@ -3,7 +3,6 @@ import json
 import shutil
 import uuid
 import logging
-import zipfile
 import tempfile
 from datetime import datetime
 from typing import Optional, Dict, Any

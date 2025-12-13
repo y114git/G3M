@@ -1,7 +1,6 @@
 import os
 import logging
 from typing import Optional
-from utils.mod_utils import get_mod_key
 
 
 def is_pizzaoven_mod(mod_data: any) -> bool:

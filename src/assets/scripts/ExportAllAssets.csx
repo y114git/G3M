@@ -72,7 +72,7 @@ catch
 string chapterNo = GetChapterNumber(deltahubRoot);
 string modNo = GetModNumbersCache(deltahubRoot);
 
-string modRoot = Path.Combine(deltahubRoot, "output", "xDeltaCombiner", chapterNo, modNo);
+string modRoot = Path.Combine(deltahubRoot, "output", "DeltahubMergeWorkspace", chapterNo, modNo);
 string outputRoot = Path.Combine(modRoot, "Objects");
 Directory.CreateDirectory(outputRoot);
 
@@ -239,7 +239,7 @@ byte[] GetSoundData(UndertaleSound sound, UndertaleData data, string comparisonP
 string comparisonPath = null;
 if (modNo != "0")
 {
-    comparisonPath = Path.Combine(deltahubRoot, "output", "xDeltaCombiner", chapterNo, "0", "data.win");
+    comparisonPath = Path.Combine(deltahubRoot, "output", "DeltahubMergeWorkspace", chapterNo, "0", "data.win");
 }
 
 List<UndertaleCode> allCode = Data.Code.Where(c => c.ParentEntry is null).ToList();

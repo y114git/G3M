@@ -66,6 +66,11 @@ class ModMergeThread(QThread):
                 pass
         finally:
             if self.merger:
+                if (self.isInterruptionRequested() or self._cancelled) and self.merger.backup_manager:
+                    if self.merger.backup_manager.original_files:
+                        for chapter_id in self.chapter_mods.keys():
+                            if chapter_id in self.merger.backup_manager.original_files:
+                                self.merger.backup_manager.restore_backups(chapter_id)
                 if self.isInterruptionRequested() or self._cancelled:
                     self.merger.cleanup(force=True)
                 else:

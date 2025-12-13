@@ -254,7 +254,6 @@ class UsedModsManager(QObject):
                 if not mod_data and hasattr(self.app_state, 'all_mods') and self.app_state.all_mods:
                     if key.startswith('gb_'):
                         try:
-                            mod_id_from_key = key.replace('gb_', '')
                             for mod in self.app_state.all_mods:
                                 mod_key_attr = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
                                 if mod_key_attr == key:

@@ -12,6 +12,7 @@ class UTMTCLIManager:
         self.platform = self._detect_platform()
         self.utmtcli_path = None
         self.utmtcli_exe = None
+        self._active_processes_ref = None
         self._initialize_paths()
 
     def _detect_platform(self) -> str:
@@ -51,6 +52,9 @@ class UTMTCLIManager:
     def is_available(self) -> bool:
         return self.utmtcli_path is not None and self.utmtcli_exe is not None
 
+    def set_active_processes_list(self, proc_list):
+        self._active_processes_ref = proc_list
+
     def get_script_path(self, script_name: str) -> Optional[str]:
         scripts_path = resource_path('assets/scripts')
         if not script_name.endswith('.csx'):
@@ -87,21 +91,47 @@ class UTMTCLIManager:
             exec_env['DOTNET_CLI_TELEMETRY_OPTOUT'] = '1'
             exec_env['DOTNET_SKIP_FIRST_TIME_EXPERIENCE'] = '1'
             exec_env['DOTNET_NOLOGO'] = '1'
-            result = subprocess.run(command, cwd=cwd, env=exec_env, capture_output=True, text=True, timeout=timeout, encoding='utf-8', errors='replace', stdin=subprocess.DEVNULL, startupinfo=startupinfo, creationflags=creationflags)
-            logging.info(f'UTMTCLI command completed with return code {result.returncode}')
-            if result.returncode != 0:
-                stderr_preview = result.stderr[:500] if result.stderr else ''
-                if 'CompilationErrorException' in stderr_preview or 'CS8098' in stderr_preview or '#load' in stderr_preview:
-                    logging.debug(f'UTMTCLI script compilation issue (may be non-critical): {stderr_preview}')
-                else:
-                    logging.warning(f'UTMTCLI command failed: {stderr_preview}')
-            return (result.returncode, result.stdout, result.stderr)
-        except subprocess.TimeoutExpired:
-            logging.error(f'UTMTCLI command timed out after {timeout}s: {command}')
-            raise
+            process = None
+            stdout = ''
+            stderr = ''
+            returncode = -1
+            try:
+                process = subprocess.Popen(command, cwd=cwd, env=exec_env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8', errors='replace', stdin=subprocess.DEVNULL, startupinfo=startupinfo, creationflags=creationflags)
+                if self._active_processes_ref is not None:
+                    self._active_processes_ref.append(process)
+                try:
+                    stdout, stderr = process.communicate(timeout=timeout)
+                    returncode = process.returncode
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    stdout, stderr = process.communicate()
+                    returncode = -1
+                    logging.warning(f"UTMTCLI command timed out: {' '.join(command)}")
+                finally:
+                    if process and self._active_processes_ref is not None and (process in self._active_processes_ref):
+                        self._active_processes_ref.remove(process)
+                logging.info(f'UTMTCLI command completed with return code {returncode}')
+                if returncode != 0:
+                    stderr_preview = stderr[:500] if stderr else ''
+                    if 'CompilationErrorException' in stderr_preview or 'CS8098' in stderr_preview or '#load' in stderr_preview:
+                        logging.debug(f'UTMTCLI script compilation issue (may be non-critical): {stderr_preview}')
+                    else:
+                        logging.warning(f'UTMTCLI command failed: {stderr_preview}')
+                return (returncode, stdout, stderr)
+            except Exception as e:
+                if process and self._active_processes_ref is not None and (process in self._active_processes_ref):
+                    self._active_processes_ref.remove(process)
+                if process:
+                    try:
+                        if process.poll() is None:
+                            process.kill()
+                            process.wait()
+                    except Exception:
+                        pass
+                raise
         except Exception as e:
-            logging.error(f'UTMTCLI command failed: {command}, error: {e}')
-            raise
+            logging.error(f'Error executing UTMTCLI command: {e}', exc_info=True)
+            return (-1, '', str(e))
 
     def execute_with_scripts(self, data_win_path: str, scripts: list[str], output_path: Optional[str] = None, additional_args: Optional[list[str]] = None, cwd: Optional[str] = None, env: Optional[dict] = None) -> tuple[int, str, str]:
         args = ['load', data_win_path]

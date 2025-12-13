@@ -41,7 +41,7 @@ string GetChapterNumber(string deltahubRoot)
     if (!string.IsNullOrEmpty(envVal)) return envVal;
 
     
-    string chapterPath = Path.Combine(deltahubRoot, "output", "Cache", "running", "chapterNumber.txt");
+    string chapterPath = Path.Combine(deltahubRoot, "output", "DeltahubCache", "running", "chapterNumber.txt");
     try
     {
         return File.ReadAllText(chapterPath, Encoding.UTF8);
@@ -60,7 +60,7 @@ string GetModNumbersCache(string deltahubRoot)
     if (!string.IsNullOrEmpty(envVal)) return envVal;
 
     
-    string modNoPath = Path.Combine(deltahubRoot, "output", "Cache", "running", "modNumbersCache.txt");
+    string modNoPath = Path.Combine(deltahubRoot, "output", "DeltahubCache", "running", "modNumbersCache.txt");
     try
     {
         return File.ReadAllText(modNoPath, Encoding.UTF8);
@@ -118,10 +118,10 @@ ImportContext PrepareImportContext()
     {
         if (string.IsNullOrWhiteSpace(chapterNo) || string.IsNullOrWhiteSpace(modNo))
         {
-            throw new ScriptException("chapterNumber/modNumbersCache missing in /output/Cache/running/.");
+            throw new ScriptException("chapterNumber/modNumbersCache missing in /output/DeltahubCache/running/.");
         }
 
-        string modRoot = Path.Combine(deltahubRoot, "output", "xDeltaCombiner", chapterNo, modNo);
+        string modRoot = Path.Combine(deltahubRoot, "output", "DeltahubMergeWorkspace", chapterNo, modNo);
         inputRoot = Path.Combine(modRoot, "Objects");
     }
 

@@ -72,6 +72,9 @@ class UtmtWrapper:
             self.patching_logger.debug(f"[UTMT] Scripts {', '.join(script_names)} completed successfully")
         return (returncode, stdout, stderr)
 
+    def set_active_processes_list(self, proc_list):
+        self.utmtcli.set_active_processes_list(proc_list)
+
     def merge_assets(self, data_win_path: str, mod_source_dir: str) -> bool:
         success = True
         script_path = self.get_script_path('ImportGraphics')

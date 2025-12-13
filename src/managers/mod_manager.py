@@ -234,11 +234,11 @@ class ModManager(QObject):
                     elif not effective_key:
                         logging.warning(f'_on_scan_completed: Found mod with empty key in {folder_path}, skipping')
                         continue
-                    mod_info = ModFolderInfo(key=effective_mod_key, folder_path=folder_path, folder_name=folder_name, config_data=config_data, config_mtime=config_mtime)
-                    cache[effective_mod_key] = mod_info
+                    mod_info = ModFolderInfo(key=effective_key, folder_path=folder_path, folder_name=folder_name, config_data=config_data, config_mtime=config_mtime)
+                    cache[effective_key] = mod_info
                     mod_name = config_data.get('name', '')
                     if mod_name:
-                        mods_by_name[mod_name.lower()] = effective_mod_key
+                        mods_by_name[mod_name.lower()] = effective_key
                 except (KeyError, TypeError) as e:
                     logging.warning(f'_on_scan_completed: Error processing mod {key}: {e}', exc_info=True)
                     continue

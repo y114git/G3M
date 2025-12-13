@@ -96,7 +96,7 @@ class LibraryTabBuilder:
         fast_merging_checkbox.setToolTip(tr('ui.fast_merging_tooltip'))
         text_color = get_theme_color(self.app_state.local_config, 'text', 'white')
         fast_merging_label.setStyleSheet(f'color: {text_color};')
-        fast_merging_checkbox.setStyleSheet(f'\n            QCheckBox {{\n                spacing: 0px;\n            }}\n            QCheckBox::indicator {{\n                width: 16px;\n                height: 16px;\n            }}\n        ')
+        fast_merging_checkbox.setStyleSheet('\n            QCheckBox {\n                spacing: 0px;\n            }\n            QCheckBox::indicator {\n                width: 16px;\n                height: 16px;\n            }\n        ')
         priority_button_layout.addWidget(fast_merging_label)
         priority_button_layout.addWidget(fast_merging_checkbox)
         priority_button_layout.addStretch()

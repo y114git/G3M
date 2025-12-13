@@ -1150,9 +1150,9 @@ class UrlInstallThread(QThread):
             from workers.fetch_mods import FetchModsThread
             self.status.emit(tr('status.downloading_mod'), UI_COLORS['status_info'])
             session = get_session()
-            resp = session.get(f'{CLOUD_FUNCTIONS_BASE_URL}/getModData?modId={mod_key}', timeout=10)
+            resp = session.get(f'{CLOUD_FUNCTIONS_BASE_URL}/getModData?modId={key}', timeout=10)
             if resp.status_code != 200 or not resp.json():
-                resp = session.get(f'{CLOUD_FUNCTIONS_BASE_URL}/getPendingModData?modId={mod_key}', timeout=10)
+                resp = session.get(f'{CLOUD_FUNCTIONS_BASE_URL}/getPendingModData?modId={key}', timeout=10)
                 if resp.status_code != 200 or not resp.json():
                     raise ValueError(tr('errors.mod_not_found'))
             mod_data = resp.json()

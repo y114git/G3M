@@ -112,7 +112,7 @@ class GameBananaConverter:
                 try:
                     with open(config_path, 'r', encoding='utf-8') as f:
                         config_data = json.load(f)
-                    if (config_data.get('key') or config_data.get('mod_key')) == mod_key:
+                    if (config_data.get('key') or config_data.get('mod_key')) == key:
                         logger.info(f'GameBananaConverter: Removing existing mod folder {folder_path} with key {key}')
                         shutil.rmtree(folder_path)
                         break

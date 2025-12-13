@@ -74,7 +74,7 @@ class BaseModWidget(QFrame):
         tagline_text = self.mod_data.tagline or tr('ui.no_description')
         try:
             mod_key = getattr(self.mod_data, 'key', None) or getattr(self.mod_data, 'mod_key', None)
-            if key and key.startswith('gb_'):
+            if mod_key and mod_key.startswith('gb_'):
                 has_full = getattr(self.mod_data, 'has_full_metadata', True)
                 if not has_full:
                     placeholder = tr('ui.loading_placeholder')

@@ -761,9 +761,10 @@ class AppWindow(QWidget):
             self.customization_manager.maybe_start_background_music(force=True)
 
     def _on_fast_merging_changed(self, state):
-        fast_merging_enabled = state == Qt.CheckState.Checked
+        fast_merging_enabled = state == Qt.CheckState.Checked or state == 2
         self.app_state.local_config['fast_merging_enabled'] = fast_merging_enabled
         self.settings_manager.write_local_config()
+        logging.debug(f'Fast merging setting changed: {fast_merging_enabled}')
 
     def _on_library_filter_changed(self):
         self.library_display.update_display()

@@ -1,9 +1,8 @@
-from typing import List, Optional, Tuple
+from typing import List, Tuple
 import os
-from PyQt6.QtCore import Qt, pyqtSignal, QObject
+from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QTextEdit, QListWidget, QListWidgetItem, QCheckBox, QProgressBar, QMessageBox, QFileDialog
 from managers.localization_manager import tr
-from utils.path_utils import get_user_data_root
 
 
 class ReportBugDialog(QDialog):

@@ -82,6 +82,8 @@ class MultiModMerger(QObject):
         self.resource_modification_history: Dict[str, List[Dict[str, Any]]] = {}
         self._active_processes: List[subprocess.Popen] = []
         self._temp_files_to_cleanup: List[str] = []
+        if hasattr(self.utmt_wrapper, 'set_active_processes_list'):
+            self.utmt_wrapper.set_active_processes_list(self._active_processes)
 
     def process_mod_merge(self, chapter_mods: Dict[int, List[Any]], is_modpack: bool, modpack_dir: Optional[str] = None, fast_merge: bool = False) -> bool:
         clear_logs_enabled = self.app_state.local_config.get('clear_logs_on_startup', False)
@@ -307,10 +309,10 @@ class MultiModMerger(QObject):
             return False
         output_dir = os.path.join(merge_root, 'output')
         os.makedirs(output_dir, exist_ok=True)
-        cache_running_dir = os.path.join(output_dir, 'Cache', 'running')
+        cache_running_dir = os.path.join(output_dir, 'DeltahubCache', 'running')
         os.makedirs(cache_running_dir, exist_ok=True)
         chapter_str = str(chapter_id)
-        xdelta_combiner_dir = os.path.join(output_dir, 'xDeltaCombiner', chapter_str)
+        xdelta_combiner_dir = os.path.join(output_dir, 'DeltahubMergeWorkspace', chapter_str)
         vanilla_dir = os.path.join(xdelta_combiner_dir, '0')
         os.makedirs(vanilla_dir, exist_ok=True)
         original_filename = os.path.basename(original_data_win)
@@ -387,7 +389,7 @@ class MultiModMerger(QObject):
                                         self.patching_logger.info(f'[FAST_PATH] PizzaOven patch {patch_name} will be applied to .bank files')
                                 if pizzaoven_file_overrides:
                                     if not self._apply_pizzaoven_file_overrides(pizzaoven_file_overrides, target_dir, chapter_id):
-                                        self.patching_logger.warning(f'[FAST_PATH] Some PizzaOven file overrides failed to apply')
+                                        self.patching_logger.warning('[FAST_PATH] Some PizzaOven file overrides failed to apply')
                                 self.patching_logger.info(f'[FAST_PATH] Successfully applied PizzaOven mod {mod_name}')
                             except Exception as e:
                                 self.patching_logger.error(f'[FAST_PATH] Failed to apply PizzaOven mod: {e}', exc_info=True)
@@ -431,7 +433,7 @@ class MultiModMerger(QObject):
                                 self.backup_manager.restore_backups(chapter_id)
                             return False
             else:
-                self.patching_logger.info(f'[FAST_PATH] No mods modify data.win, skipping data.win changes')
+                self.patching_logger.info('[FAST_PATH] No mods modify data.win, skipping data.win changes')
             self.patching_logger.info(f'[FAST_PATH] Applying file overrides from all {len(mods_list)} mod(s)')
             pizzaoven_file_overrides = []
             for mod_data in mods_list:
@@ -477,8 +479,8 @@ class MultiModMerger(QObject):
             if pizzaoven_file_overrides:
                 self.patching_logger.info(f'[FAST_PATH] Applying {len(pizzaoven_file_overrides)} PizzaOven file override(s)')
                 if not self._apply_pizzaoven_file_overrides(pizzaoven_file_overrides, target_dir, chapter_id):
-                    self.patching_logger.warning(f'[FAST_PATH] Some PizzaOven file overrides failed to apply')
-            self.patching_logger.info(f'[FAST_PATH] Fast path completed successfully, skipping full export/import cycle')
+                    self.patching_logger.warning('[FAST_PATH] Some PizzaOven file overrides failed to apply')
+            self.patching_logger.info('[FAST_PATH] Fast path completed successfully, skipping full export/import cycle')
             return True
         vanilla_objects_dir = os.path.join(vanilla_dir, 'Objects')
         vanilla_already_exported = os.path.exists(vanilla_objects_dir) and os.listdir(vanilla_objects_dir) if os.path.exists(vanilla_objects_dir) else False
@@ -494,6 +496,8 @@ class MultiModMerger(QObject):
             if self.utmt_wrapper.get_script_path('ExportAllAssets'):
                 vanilla_scripts.append('ExportAllAssets')
                 returncode, stdout, stderr = self.utmt_wrapper.execute_scripts(vanilla_data_win, vanilla_scripts, output_path=vanilla_data_win, cwd=merge_root)
+                if self._cancelled:
+                    return False
                 if returncode != 0:
                     self.patching_logger.warning(f'Vanilla ExportAllAssets failed: {stderr[:500]}')
                 else:
@@ -822,7 +826,7 @@ class MultiModMerger(QObject):
         base_objects_dir = os.path.join(base_mod_dir, 'Objects')
         objects_dirs_to_import.sort(key=lambda x: x[1])
         self.patching_logger.info(f'Merge order (by priority): {[(m[1], m[2]) for m in objects_dirs_to_import]}')
-        merged_objects_dir = os.path.join(xdelta_combiner_dir, 'merged')
+        merged_objects_dir = os.path.join(xdelta_combiner_dir, 'DeltahubMerged')
         target_objects_dir = os.path.join(merged_objects_dir, 'Objects')
         if os.path.exists(merged_objects_dir):
             self.patching_logger.debug(f'Cleaning up previous merge directory: {merged_objects_dir}')
@@ -922,8 +926,16 @@ class MultiModMerger(QObject):
             import_progress_step = progress_base + int(xdelta_progress + export_progress + import_progress * 0.5)
             self.progress_update.emit(min(import_progress_step, 95), 'Importing merged assets into data.win...')
             self.patching_logger.info('Importing merged Objects directory (contains all exported mods, sorted by priority) into data.win')
+            if self._cancelled:
+                if not is_modpack and self.backup_manager:
+                    self.backup_manager.restore_backups(chapter_id)
+                return False
             if not self._import_assets_from_objects_dir(base_data_win, target_objects_dir, mods_to_apply, mods_count):
                 self.patching_logger.warning('Failed to import merged assets into data.win')
+                if not is_modpack and self.backup_manager:
+                    self.backup_manager.restore_backups(chapter_id)
+                return False
+            if self._cancelled:
                 if not is_modpack and self.backup_manager:
                     self.backup_manager.restore_backups(chapter_id)
                 return False
@@ -950,6 +962,10 @@ class MultiModMerger(QObject):
                 final_output_path = os.path.join(modpack_dir, 'data.win')
         else:
             final_output_path = output_data_win_path
+        if self._cancelled:
+            if not is_modpack and self.backup_manager:
+                self.backup_manager.restore_backups(chapter_id)
+            return False
         try:
             shutil.copyfile(base_data_win, final_output_path)
             self.patching_logger.info(f'Copied merged data.win to {final_output_path}')
@@ -1139,6 +1155,8 @@ class MultiModMerger(QObject):
             try:
                 self.patching_logger.info(f'Executing CSX script: {os.path.basename(script_path)}')
                 returncode, stdout, stderr = self.utmt_wrapper.execute_script(data_win_path, script_path, output_path=data_win_path, cwd=self.temp_merge_dir if self.temp_merge_dir else None, env=env)
+                if self._cancelled:
+                    return False
                 if returncode != 0:
                     self.patching_logger.error(f'CSX script execution failed: {stderr[:500]}')
                     self.status_update.emit(tr('errors.csx_script_failed', script=os.path.basename(script_path)), 'error')
@@ -1217,6 +1235,9 @@ class MultiModMerger(QObject):
                 if mod_name_for_tracking not in existing_mods:
                     self.resource_modification_history[resource_name].append({'type': resource_type, 'mod': mod_name_for_tracking, 'action': resource_action, 'timestamp': time.time()})
         returncode, stdout, stderr = self.utmt_wrapper.execute_script(data_win_path, script_name, output_path=data_win_path, cwd=data_win_dir)
+        if self._cancelled:
+            self.patching_logger.info(f'{script_name} was cancelled by user, file may be partially modified')
+            return False
         if analyze_errors:
             self._analyze_compilation_errors(stdout, stderr, script_name, mod_name_for_tracking)
         if returncode != 0:
@@ -1264,7 +1285,7 @@ class MultiModMerger(QObject):
             data_win_dir = os.path.dirname(data_win_path)
             expected_objects_dir = os.path.join(data_win_dir, 'Objects')
             if objects_dir != expected_objects_dir:
-                if 'xDeltaCombiner' in data_win_dir:
+                if 'DeltahubMergeWorkspace' in data_win_dir:
                     self.patching_logger.debug(f'Creating Objects directory link/copy in temporary folder: {expected_objects_dir}')
                     if os.path.exists(expected_objects_dir):
                         if os.path.islink(expected_objects_dir):
@@ -1369,7 +1390,7 @@ class MultiModMerger(QObject):
             asset_configs = [{'script_name': 'ImportGraphics', 'has_assets': has_graphics, 'step_number': '1/13', 'resource_type': 'sprite', 'resource_action': 'imported', 'get_resources_func': get_sprite_resources}, {'script_name': 'ImportShaders', 'has_assets': has_shaders, 'step_number': '2/13', 'resource_type': 'shader', 'resource_action': 'imported', 'get_resources_func': get_shader_resources}, {'script_name': 'ImportGML', 'has_assets': has_gml, 'step_number': '5/13', 'resource_type': 'code', 'resource_action': 'modified', 'get_resources_func': get_gml_resources, 'analyze_errors': True}, {'script_name': 'ImportTilesets', 'has_assets': has_tilesets, 'step_number': '10/13', 'resource_type': 'tileset', 'resource_action': 'imported', 'get_resources_func': get_tileset_resources, 'extra_resources_func': get_tileset_config_resource}, {'script_name': 'ImportFonts', 'has_assets': has_fonts, 'step_number': '11/13', 'resource_type': 'font', 'resource_action': 'modified', 'get_resources_func': get_font_resources}, {'script_name': 'ImportSounds', 'has_assets': has_sounds, 'step_number': '12/13', 'resource_type': 'sound', 'resource_action': 'modified', 'get_resources_func': get_sound_resources}, {'script_name': 'ImportRooms', 'has_assets': has_rooms, 'step_number': '13/13', 'resource_type': 'room', 'resource_action': 'modified', 'get_resources_func': get_room_resources, 'check_dir_func': lambda obj_dir: os.path.exists(os.path.join(obj_dir, 'Rooms'))}]
             for asset_config in asset_configs:
                 self._import_asset_type(asset_config, data_win_path, data_win_dir, objects_dir, mod_name_for_tracking)
-            if 'xDeltaCombiner' in data_win_dir:
+            if 'DeltahubMergeWorkspace' in data_win_dir:
                 packager_dir = os.path.join(data_win_dir, 'Packager')
                 if os.path.exists(packager_dir):
                     try:
@@ -1827,8 +1848,8 @@ class MultiModMerger(QObject):
             chapter_str = None
             if mod_dir:
                 parts = mod_dir.replace('\\', '/').split('/')
-                if 'xDeltaCombiner' in parts:
-                    idx = parts.index('xDeltaCombiner')
+                if 'DeltahubMergeWorkspace' in parts:
+                    idx = parts.index('DeltahubMergeWorkspace')
                     if idx + 1 < len(parts):
                         chapter_str = parts[idx + 1]
                     if idx + 2 < len(parts):
@@ -1839,7 +1860,7 @@ class MultiModMerger(QObject):
                             pass
             if mod_number is not None and chapter_str is not None:
                 output_dir = os.path.join(self.temp_merge_dir, 'output')
-                cache_running_dir = os.path.join(output_dir, 'Cache', 'running')
+                cache_running_dir = os.path.join(output_dir, 'DeltahubCache', 'running')
                 os.makedirs(cache_running_dir, exist_ok=True)
                 chapter_file = os.path.join(cache_running_dir, 'chapterNumber.txt')
                 mod_file = os.path.join(cache_running_dir, 'modNumbersCache.txt')
@@ -1858,6 +1879,8 @@ class MultiModMerger(QObject):
                 export_temp = os.path.join(merge_temp_dir, 'other_export')
                 os.makedirs(export_temp, exist_ok=True)
                 returncode, stdout, stderr = self.utmt_wrapper.execute_scripts(other_file, export_scripts, cwd=self.temp_merge_dir)
+                if self._cancelled:
+                    return False
                 try:
                     for script in export_scripts:
                         self._check_critical_script_errors(stderr, script, 'other files export')
@@ -2263,7 +2286,6 @@ class MultiModMerger(QObject):
                 if self._cancelled:
                     return (False, file_overrides)
                 file_path = os.path.join(root, file)
-                file_lower = file.lower()
                 extension = os.path.splitext(file)[1].lower()
                 try:
                     if extension == '.xdelta':
@@ -2359,7 +2381,7 @@ class MultiModMerger(QObject):
                         successes += 1
                         success = True
                         break
-                except Exception as e:
+                except Exception:
                     self.patching_logger.debug(f'PizzaOven patch {patch_name} does not match {os.path.basename(bank_file)} (trying next file)')
                     continue
             if not success:
@@ -2459,6 +2481,8 @@ class MultiModMerger(QObject):
                     return False
                 env_vars = {'DELTAHUB_MOD_NUMBER': str(mod_number), 'DELTAHUB_CHAPTER_NUMBER': chapter_str}
                 returncode, stdout, stderr = self.utmt_wrapper.execute_scripts(mod_data_win, scripts, output_path=mod_data_win, cwd=merge_root, env=env_vars)
+                if self._cancelled:
+                    return False
                 for script in scripts:
                     try:
                         self._check_critical_script_errors(stderr, script, f'mod {mod_number}')
@@ -2839,21 +2863,22 @@ class MultiModMerger(QObject):
             return False
 
     def cleanup_processes_and_temp_files(self) -> None:
-        for process in list(self._active_processes):
+        processes_to_cleanup = list(self._active_processes)
+        for process in processes_to_cleanup:
             try:
                 if process.poll() is None:
-                    self.patching_logger.warning(f'Terminating active xdelta process (PID: {process.pid})')
+                    process_type = 'UTMTCLI' if 'UndertaleModCli' in str(process.args) or 'dotnet' in str(process.args) else 'xdelta'
+                    self.patching_logger.warning(f'Terminating active {process_type} process (PID: {process.pid})')
                     process.terminate()
                     try:
                         process.wait(timeout=2)
                     except subprocess.TimeoutExpired:
-                        self.patching_logger.warning(f'Force killing xdelta process (PID: {process.pid})')
+                        process_type = 'UTMTCLI' if 'UndertaleModCli' in str(process.args) or 'dotnet' in str(process.args) else 'xdelta'
+                        self.patching_logger.warning(f'Force killing {process_type} process (PID: {process.pid})')
                         process.kill()
                         process.wait()
-            except OSError as e:
+            except (OSError, Exception) as e:
                 self.patching_logger.debug(f'Error terminating process: {e}')
-            except Exception as e:
-                self.patching_logger.debug(f'Unexpected error during process cleanup: {e}')
         self._active_processes.clear()
         for temp_file in list(self._temp_files_to_cleanup):
             try:
@@ -2869,7 +2894,14 @@ class MultiModMerger(QObject):
         has_backups = False
         if self.backup_manager:
             has_backups = bool(self.backup_manager.original_files)
-        if force or not has_backups:
+        if force and (not has_backups):
+            if self.temp_merge_dir and os.path.exists(self.temp_merge_dir):
+                if safe_rmtree(self.temp_merge_dir):
+                    self.patching_logger.info(f'Cleaned up temp merge directory: {self.temp_merge_dir}')
+                else:
+                    self.patching_logger.warning(f'Failed to cleanup temp merge dir {self.temp_merge_dir}')
+            self.temp_merge_dir = None
+        elif not has_backups:
             if self.temp_merge_dir and os.path.exists(self.temp_merge_dir):
                 if safe_rmtree(self.temp_merge_dir):
                     self.patching_logger.info(f'Cleaned up temp merge directory: {self.temp_merge_dir}')
