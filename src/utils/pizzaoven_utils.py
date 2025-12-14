@@ -69,6 +69,19 @@ def find_pizzaoven_folder(mod_dir: str) -> Optional[str]:
     return None
 
 
+def is_explicit_pizzaoven_path(pizzaoven_path: str, content_path: str) -> bool:
+    if not pizzaoven_path:
+        return False
+    pizzaoven_path_lower = pizzaoven_path.lower()
+    if 'pizzaoven' in os.path.basename(pizzaoven_path_lower):
+        return True
+    if os.path.normpath(pizzaoven_path) == os.path.normpath(content_path):
+        return False
+    if 'pizzaoven' in pizzaoven_path_lower:
+        return True
+    return False
+
+
 def normalize_pizzaoven_structure(source_path: str) -> Optional[str]:
     if not source_path or not os.path.exists(source_path):
         return None

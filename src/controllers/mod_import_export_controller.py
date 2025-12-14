@@ -11,7 +11,7 @@ from utils.archive_utils import extract_archive
 from utils.file_utils import find_deltamod_info_file
 from utils.deltamod_converter import DeltamodConverter
 from utils.pizzaoven_converter import PizzaOvenConverter
-from utils.pizzaoven_utils import find_pizzaoven_folder, is_pizzaoven_mod
+from utils.pizzaoven_utils import find_pizzaoven_folder, is_pizzaoven_mod, is_explicit_pizzaoven_path
 from config.constants import MOD_CONFIG_FILENAME, LEGACY_MOD_CONFIG_FILENAME
 
 
@@ -60,30 +60,6 @@ class ModImportExportController:
                 if len(contents) == 1 and os.path.isdir(os.path.join(temp_dir, contents[0])):
                     content_path = os.path.join(temp_dir, contents[0])
                     logging.info(f'[IMPORT] Archive contains single directory, using: {content_path}')
-                pizzaoven_path = find_pizzaoven_folder(content_path)
-                if pizzaoven_path:
-                    logging.info(f'[IMPORT] PizzaOven format detected at: {pizzaoven_path}, converting...')
-                    try:
-                        from utils.file_utils import remove_archive_extension
-                        archive_name = remove_archive_extension(os.path.basename(file_path))
-                        if os.path.commonpath([content_path, pizzaoven_path]) == content_path:
-                            converter = PizzaOvenConverter(content_path, self.app_state.mods_dir, archive_name=archive_name)
-                        else:
-                            converter = PizzaOvenConverter(pizzaoven_path, self.app_state.mods_dir, archive_name=archive_name)
-                        new_mod_path = converter.convert()
-                        if new_mod_path:
-                            logging.info(f'[IMPORT] PizzaOven mod converted successfully to: {new_mod_path}')
-                            self.mod_manager.invalidate_mods_cache()
-                            self.mod_manager.load_local_mods(_skip_conversion=True)
-                            self.mod_manager.mod_list_updated.emit()
-                            QMessageBox.information(self.app_window, tr('dialogs.success'), tr('status.mod_imported_success'))
-                        else:
-                            logging.error('[IMPORT] PizzaOven conversion failed')
-                            QMessageBox.critical(self.app_window, tr('errors.error'), tr('errors.mod_import_failed', error='Conversion failed'))
-                    except Exception as e:
-                        logging.error(f'[IMPORT] PizzaOven conversion error: {e}', exc_info=True)
-                        QMessageBox.critical(self.app_window, tr('errors.error'), tr('errors.mod_import_failed', error=str(e)))
-                    return
                 if find_deltamod_info_file(content_path):
                     logging.info('[IMPORT] DELTAMOD format detected, converting...')
                     converter = DeltamodConverter(content_path, self.app_state.mods_dir)
@@ -98,6 +74,34 @@ class ModImportExportController:
                         logging.error('[IMPORT] DELTAMOD conversion failed')
                         QMessageBox.critical(self.app_window, tr('errors.error'), tr('errors.mod_import_failed', error='Conversion failed'))
                     return
+                from models.game_modes import PizzaTowerGameMode
+                is_pizza_tower = isinstance(self.app_state.game_mode, PizzaTowerGameMode)
+                pizzaoven_path = find_pizzaoven_folder(content_path)
+                if pizzaoven_path:
+                    is_explicit_pizzaoven = is_explicit_pizzaoven_path(pizzaoven_path, content_path)
+                    if is_explicit_pizzaoven or is_pizza_tower:
+                        logging.info(f'[IMPORT] PizzaOven format detected at: {pizzaoven_path}, converting...')
+                        try:
+                            from utils.file_utils import remove_archive_extension
+                            archive_name = remove_archive_extension(os.path.basename(file_path))
+                            if os.path.commonpath([content_path, pizzaoven_path]) == content_path:
+                                converter = PizzaOvenConverter(content_path, self.app_state.mods_dir, archive_name=archive_name)
+                            else:
+                                converter = PizzaOvenConverter(pizzaoven_path, self.app_state.mods_dir, archive_name=archive_name)
+                            new_mod_path = converter.convert()
+                            if new_mod_path:
+                                logging.info(f'[IMPORT] PizzaOven mod converted successfully to: {new_mod_path}')
+                                self.mod_manager.invalidate_mods_cache()
+                                self.mod_manager.load_local_mods(_skip_conversion=True)
+                                self.mod_manager.mod_list_updated.emit()
+                                QMessageBox.information(self.app_window, tr('dialogs.success'), tr('status.mod_imported_success'))
+                            else:
+                                logging.error('[IMPORT] PizzaOven conversion failed')
+                                QMessageBox.critical(self.app_window, tr('errors.error'), tr('errors.mod_import_failed', error='Conversion failed'))
+                        except Exception as e:
+                            logging.error(f'[IMPORT] PizzaOven conversion error: {e}', exc_info=True)
+                            QMessageBox.critical(self.app_window, tr('errors.error'), tr('errors.mod_import_failed', error=str(e)))
+                        return
                 config_path_to_read = os.path.join(content_path, MOD_CONFIG_FILENAME)
                 if not os.path.exists(config_path_to_read):
                     legacy_config_path = os.path.join(content_path, LEGACY_MOD_CONFIG_FILENAME)
@@ -182,7 +186,9 @@ class ModImportExportController:
     def _install_mod_from_url(self, url: str):
         try:
             from workers.mod_install_worker import ModInstallWorker
-            worker = ModInstallWorker(url, self.app_state.mods_dir, self.mod_manager, self.app_window)
+            from models.game_modes import PizzaTowerGameMode
+            is_pizza_tower = isinstance(self.app_state.game_mode, PizzaTowerGameMode)
+            worker = ModInstallWorker(url, self.app_state.mods_dir, self.mod_manager, gamebanana_metadata=None, parent=self.app_window, is_pizza_tower_selected=is_pizza_tower)
             worker.status.connect(lambda msg, color: self.app_window.feedback_manager.update_status(msg, color))
             worker.progress.connect(lambda p: setattr(self.app_state, 'progress_bar_value', p))
             worker.finished.connect(self._on_mod_install_finished)
