@@ -1,11 +1,14 @@
 import os
+import sys
 import shutil
 import tempfile
 import zipfile
 import logging
+import platform
 from typing import List
-from PyQt6.QtCore import QObject, pyqtSignal
-from config.constants import CLOUD_FUNCTIONS_BASE_URL, NETWORK_TIMEOUT_LONG
+from datetime import datetime
+from PyQt6.QtCore import QObject, pyqtSignal, PYQT_VERSION_STR
+from config.constants import CLOUD_FUNCTIONS_BASE_URL, NETWORK_TIMEOUT_LONG, LAUNCHER_VERSION
 from utils.network_utils import get_session
 from utils.path_utils import get_user_data_root
 from managers.localization_manager import tr
@@ -25,6 +28,32 @@ class ReportBugWorker(QObject):
         self.temp_dir = None
         self.zip_path = None
 
+    def _get_system_info(self) -> str:
+        try:
+            info_lines = []
+            info_lines.append('=' * 60)
+            info_lines.append('SYSTEM INFORMATION')
+            info_lines.append('=' * 60)
+            info_lines.append(f"Report Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+            info_lines.append('')
+            info_lines.append(f'Operating System: {platform.system()}')
+            info_lines.append(f'OS Version: {platform.platform()}')
+            info_lines.append(f'Architecture: {platform.architecture()[0]}')
+            info_lines.append(f'Processor: {platform.machine()}')
+            info_lines.append('')
+            info_lines.append(f'Python Version: {sys.version.split()[0]}')
+            info_lines.append(f'PyQt6 Version: {PYQT_VERSION_STR}')
+            info_lines.append(f'DELTAHUB Version: {LAUNCHER_VERSION}')
+            info_lines.append('')
+            info_lines.append('=' * 60)
+            info_lines.append('USER REPORT')
+            info_lines.append('=' * 60)
+            info_lines.append('')
+            return '\n'.join(info_lines)
+        except Exception as e:
+            logging.warning(f'ReportBugWorker: Failed to collect system info: {e}')
+            return f"System Information: Error collecting info ({e})\n\n{'=' * 60}\nUSER REPORT\n{'=' * 60}\n\n"
+
     def run(self):
         try:
             self.progress.emit(-1)
@@ -32,8 +61,10 @@ class ReportBugWorker(QObject):
             logging.info(f'ReportBugWorker: Created temp directory: {self.temp_dir}')
             report_file_path = os.path.join(self.temp_dir, 'REPORT.txt')
             with open(report_file_path, 'w', encoding='utf-8') as f:
+                system_info = self._get_system_info()
+                f.write(system_info)
                 f.write(self.report_text)
-            logging.info('ReportBugWorker: Created REPORT.txt')
+            logging.info('ReportBugWorker: Created REPORT.txt with system information')
             self.progress.emit(20)
             for i, file_path in enumerate(self.attached_files):
                 if not os.path.exists(file_path):
