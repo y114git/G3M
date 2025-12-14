@@ -843,25 +843,37 @@ class AppWindow(QWidget):
             old_sort = getattr(self.app_state, 'gamebanana_sort', 'default')
             if old_sort == new_sort:
                 return
+            if hasattr(self, '_gamebanana_sort_timer') and self._gamebanana_sort_timer:
+                try:
+                    self._gamebanana_sort_timer.stop()
+                    self._gamebanana_sort_timer.deleteLater()
+                except (RuntimeError, ValueError):
+                    pass
+                self._gamebanana_sort_timer = None
+            self._gamebanana_sort_change_in_progress = True
             self.app_state.gamebanana_sort = new_sort
             self.app_state.gamebanana_loaded_pages.clear()
+            if hasattr(self, 'search_display'):
+                if hasattr(self.search_display, '_update_display_in_progress'):
+                    self.search_display._update_display_in_progress = False
+                if hasattr(self.search_display, '_update_display_debounce'):
+                    try:
+                        self.search_display._update_display_debounce.cancel()
+                    except Exception:
+                        pass
+                if hasattr(self.search_display, '_cleanup_details_threads'):
+                    self.search_display._cleanup_details_threads()
+                if hasattr(self.search_display, '_load_more_threads'):
+                    for thread in list(self.search_display._load_more_threads):
+                        if thread and thread.isRunning():
+                            if hasattr(thread, 'cancel'):
+                                thread.cancel()
+                    self.search_display._load_more_threads.clear()
             if hasattr(self.app_state, 'all_mods') and self.app_state.all_mods:
                 self.app_state.all_mods = [mod for mod in self.app_state.all_mods if not ((getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)) and (getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)).startswith('gb_'))]
             self.app_state.current_page = 1
             if hasattr(self.app_state, 'filtered_mods'):
                 self.app_state.filtered_mods = []
-            try:
-                if hasattr(self, 'search_display'):
-                    if hasattr(self.search_display, '_cleanup_details_threads'):
-                        self.search_display._cleanup_details_threads()
-                    if hasattr(self.search_display, '_load_more_threads'):
-                        for thread in list(self.search_display._load_more_threads):
-                            if thread and thread.isRunning():
-                                if hasattr(thread, 'cancel'):
-                                    thread.cancel()
-                        self.search_display._load_more_threads.clear()
-            except Exception:
-                pass
             try:
                 if hasattr(self, 'refresh_controller'):
                     if hasattr(self.refresh_controller, 'fetch_thread') and self.refresh_controller.fetch_thread and self.refresh_controller.fetch_thread.isRunning():
@@ -888,24 +900,58 @@ class AppWindow(QWidget):
 
             def trigger_refresh():
                 try:
+                    if not hasattr(self, '_gamebanana_sort_change_in_progress') or not self._gamebanana_sort_change_in_progress:
+                        return
                     self.app_state.gamebanana_loading = False
                     if not hasattr(self.app_state, 'mods_loaded') or not self.app_state.mods_loaded:
                         self.app_state.mods_loaded = True
                     if hasattr(self, 'refresh_controller'):
 
                         def update_callback():
-                            if hasattr(self, 'search_display'):
-                                self.search_display.update_filtered_mods()
-                                self.app_state.current_page = 1
-                                self.search_display.update_display()
+                            try:
+                                if hasattr(self, '_gamebanana_sort_change_in_progress'):
+                                    self._gamebanana_sort_change_in_progress = False
+                                if hasattr(self, 'search_display'):
+
+                                    def async_update():
+                                        try:
+                                            self.search_display.update_filtered_mods()
+                                            self.app_state.current_page = 1
+                                            QTimer.singleShot(50, lambda: self.search_display.update_display())
+                                        except Exception as e:
+                                            logging.error(f'AppWindow: Error in async_update after sort change: {e}', exc_info=True)
+                                            if hasattr(self, '_gamebanana_sort_change_in_progress'):
+                                                self._gamebanana_sort_change_in_progress = False
+                                    QTimer.singleShot(0, async_update)
+                            except Exception as e:
+                                logging.error(f'AppWindow: Error in update_callback after sort change: {e}', exc_info=True)
+                                if hasattr(self, '_gamebanana_sort_change_in_progress'):
+                                    self._gamebanana_sort_change_in_progress = False
                         self.refresh_controller.refresh_mods_list(is_initial=False, on_fetch_finished_kwargs={'update_filtered_mods_callback': update_callback})
                     elif hasattr(self, 'search_display'):
-                        self.search_display.update_filtered_mods()
-                except Exception:
-                    pass
-            QTimer.singleShot(300, trigger_refresh)
-        except Exception:
-            pass
+
+                        def async_update():
+                            try:
+                                self.search_display.update_filtered_mods()
+                                if hasattr(self, '_gamebanana_sort_change_in_progress'):
+                                    self._gamebanana_sort_change_in_progress = False
+                            except Exception as e:
+                                logging.error(f'AppWindow: Error in async_update after sort change: {e}', exc_info=True)
+                                if hasattr(self, '_gamebanana_sort_change_in_progress'):
+                                    self._gamebanana_sort_change_in_progress = False
+                        QTimer.singleShot(0, async_update)
+                except Exception as e:
+                    logging.error(f'AppWindow: Error in trigger_refresh after sort change: {e}', exc_info=True)
+                    if hasattr(self, '_gamebanana_sort_change_in_progress'):
+                        self._gamebanana_sort_change_in_progress = False
+            self._gamebanana_sort_timer = QTimer()
+            self._gamebanana_sort_timer.setSingleShot(True)
+            self._gamebanana_sort_timer.timeout.connect(trigger_refresh)
+            self._gamebanana_sort_timer.start(300)
+        except Exception as e:
+            logging.error(f'AppWindow: Error in _on_gamebanana_sort_changed: {e}', exc_info=True)
+            if hasattr(self, '_gamebanana_sort_change_in_progress'):
+                self._gamebanana_sort_change_in_progress = False
 
     def _update_checkbox_visibility(self):
         game_type = self.game_type_combo.currentData()
