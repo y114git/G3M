@@ -33,6 +33,11 @@ class DeltamodConverter:
                 shutil.rmtree(target_mod_dir)
             os.makedirs(target_mod_dir)
             self._process_files(target_mod_dir)
+            icon_path = os.path.join(target_mod_dir, '_icon.png')
+            if not os.path.exists(icon_path):
+                icon_path = os.path.join(target_mod_dir, 'icon.png')
+            if os.path.exists(icon_path):
+                config_data['icon_url'] = '_icon.png' if os.path.basename(icon_path) == '_icon.png' else 'icon.png'
             config_path = os.path.join(target_mod_dir, 'mod_config.json')
             with open(config_path, 'w', encoding='utf-8') as f:
                 json.dump(config_data, f, indent=4, ensure_ascii=False)
@@ -135,8 +140,11 @@ class DeltamodConverter:
         else:
             patches.extend(self.modding_xml.findall('patch'))
         icon_path = os.path.join(self.source_path, '_icon.png')
+        if not os.path.exists(icon_path):
+            icon_path = os.path.join(self.source_path, 'icon.png')
         if os.path.exists(icon_path):
-            shutil.copy2(icon_path, os.path.join(target_mod_dir, '_icon.png'))
+            target_icon_path = os.path.join(target_mod_dir, '_icon.png' if os.path.basename(icon_path) == '_icon.png' else 'icon.png')
+            shutil.copy2(icon_path, target_icon_path)
         for patch in patches:
             to_path = patch.get('to', '')
             patch_file_rel = patch.get('patch', '').lstrip('./')

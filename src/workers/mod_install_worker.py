@@ -201,6 +201,12 @@ class ModInstallWorker(BaseInstallWorker):
                                     chapter_data['data_file_url'] = file
                                     config_updated = True
                                     break
+            icon_path = os.path.join(target_mod_dir, '_icon.png')
+            if not os.path.exists(icon_path):
+                icon_path = os.path.join(target_mod_dir, 'icon.png')
+            if os.path.exists(icon_path) and (not config_data.get('icon_url')):
+                config_data['icon_url'] = '_icon.png' if os.path.basename(icon_path) == '_icon.png' else 'icon.png'
+                config_updated = True
             final_config_path = target_config_path if os.path.exists(target_config_path) else os.path.join(target_mod_dir, MOD_CONFIG_FILENAME)
             if config_updated or not os.path.exists(final_config_path):
                 from utils.file_utils import atomic_write_json

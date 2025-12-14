@@ -167,6 +167,12 @@ class ModImportExportController:
                                             chapter_data['data_file_url'] = file
                                             config_updated = True
                                             break
+                    icon_path = os.path.join(target_mod_dir, '_icon.png')
+                    if not os.path.exists(icon_path):
+                        icon_path = os.path.join(target_mod_dir, 'icon.png')
+                    if os.path.exists(icon_path) and (not config.get('icon_url')):
+                        config['icon_url'] = '_icon.png' if os.path.basename(icon_path) == '_icon.png' else 'icon.png'
+                        config_updated = True
                     if config_updated or mod_key_generated:
                         from utils.file_utils import save_json
                         save_json(config_path, config, indent=2)

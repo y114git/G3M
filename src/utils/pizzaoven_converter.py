@@ -35,6 +35,11 @@ class PizzaOvenConverter:
                 shutil.rmtree(target_mod_dir)
             os.makedirs(target_mod_dir)
             self._process_files(target_mod_dir)
+            icon_path = os.path.join(target_mod_dir, '_icon.png')
+            if not os.path.exists(icon_path):
+                icon_path = os.path.join(target_mod_dir, 'icon.png')
+            if os.path.exists(icon_path):
+                config_data['icon_url'] = '_icon.png' if os.path.basename(icon_path) == '_icon.png' else 'icon.png'
             config_path = os.path.join(target_mod_dir, 'mod_config.json')
             with open(config_path, 'w', encoding='utf-8') as f:
                 json.dump(config_data, f, indent=4, ensure_ascii=False)
@@ -150,12 +155,18 @@ class PizzaOvenConverter:
                     shutil.copytree(normalized_path, pizzaoven_target)
         icon_path = os.path.join(self.source_path, '_icon.png')
         if not os.path.exists(icon_path):
+            icon_path = os.path.join(self.source_path, 'icon.png')
+        if not os.path.exists(icon_path):
             for root, dirs, files in os.walk(self.source_path):
                 if '_icon.png' in files:
                     icon_path = os.path.join(root, '_icon.png')
                     break
+                elif 'icon.png' in files:
+                    icon_path = os.path.join(root, 'icon.png')
+                    break
         if os.path.exists(icon_path):
-            shutil.copy2(icon_path, os.path.join(target_mod_dir, '_icon.png'))
+            target_icon_path = os.path.join(target_mod_dir, '_icon.png' if os.path.basename(icon_path) == '_icon.png' else 'icon.png')
+            shutil.copy2(icon_path, target_icon_path)
 
     def _cleanup(self) -> None:
         if self.temp_extract_dir and os.path.exists(self.temp_extract_dir):
