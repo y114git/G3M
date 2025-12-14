@@ -40,7 +40,6 @@ class TestSearchDisplayController:
         mod_manager = ModManager(app_state, feedback_manager)
         mod_ops = ModOperationsController(app_state=app_state, feedback_manager=feedback_manager, mod_manager=mod_manager, app_window=Mock())
         app_window = Mock()
-        # Mock required attributes for app_window
         app_window.mod_list_layout = Mock()
         app_window.mod_list_widget = Mock()
         app_window.modgame_combo = Mock()
@@ -51,7 +50,7 @@ class TestSearchDisplayController:
         app_window.page_label = Mock()
         app_window.prev_page_btn = Mock()
         app_window.next_page_btn = Mock()
-        
+
         controller = SearchDisplayController(app_state=app_state, feedback_manager=feedback_manager, mod_manager=mod_manager, mod_ops=mod_ops, app_window=app_window)
         assert controller is not None
         assert controller.app_state == app_state

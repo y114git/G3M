@@ -59,7 +59,6 @@ class TestGameBananaConverter:
         with tempfile.NamedTemporaryFile(suffix='.zip', delete=False) as tmp_archive:
             archive_path = tmp_archive.name
             with zipfile.ZipFile(archive_path, 'w') as zf:
-                # Используем правильное имя файла meta.json вместо deltamod.info
                 zf.writestr('meta.json', '{"metadata": {"name": "Test Mod"}}')
                 zf.writestr('file1.txt', 'test')
         try:
@@ -72,7 +71,6 @@ class TestGameBananaConverter:
 class TestGameBananaUpdateManager:
 
     def test_update_manager_initialization(self, app_state, feedback_manager):
-        # GameBananaUpdateManager may not exist in all versions
         try:
             from managers.gamebanana_update_manager import GameBananaUpdateManager
             update_manager = GameBananaUpdateManager(mods_dir=app_state.mods_dir)

@@ -34,6 +34,10 @@ class ShortcutManager(QObject):
         if not settings:
             self.feedback_manager.show_message('warning', 'dialogs.cannot_create_shortcut_title', tr('dialogs.path_not_specified'))
             return
+        mod_count = self._count_selected_mods(settings)
+        if mod_count > 1:
+            self.feedback_manager.show_message('warning', 'dialogs.cannot_create_shortcut_title', tr('dialogs.shortcut_multiple_mods_warning'))
+            return
         description_lines = [tr('dialogs.shortcut_description'), '', tr('dialogs.current_shortcut_settings'), '']
         is_undertaleyellow = settings.get('is_undertaleyellow_mode', False)
         is_pizzatower = settings.get('is_pizzatower_mode', False)
@@ -46,7 +50,7 @@ class ShortcutManager(QObject):
                 mod_names = []
                 for key in mod_keys:
                     mod_config = self.mod_manager.get_mod_config(key)
-                    mod_name = mod_config.get('name', tr('errors.mod_not_found', key=key)) if mod_config else tr('errors.mod_not_found', key=key)
+                    mod_name = mod_config.get('name', tr('errors.mod_not_found_by_key', mod_key=key)) if mod_config else tr('errors.mod_not_found_by_key', mod_key=key)
                     mod_names.append(mod_name)
                 if len(mod_names) == 1:
                     description_lines.append(f"<b>{tr('status.mod_label')}</b> {mod_names[0]}")
@@ -61,7 +65,7 @@ class ShortcutManager(QObject):
                 mod_names = []
                 for key in mod_keys:
                     mod_config = self.mod_manager.get_mod_config(key)
-                    mod_name = mod_config.get('name', tr('errors.mod_not_found', key=key)) if mod_config else tr('errors.mod_not_found', key=key)
+                    mod_name = mod_config.get('name', tr('errors.mod_not_found_by_key', mod_key=key)) if mod_config else tr('errors.mod_not_found_by_key', mod_key=key)
                     mod_names.append(mod_name)
                 if len(mod_names) == 1:
                     description_lines.append(f"<b>{tr('status.mod_label')}</b> {mod_names[0]}")
@@ -76,7 +80,7 @@ class ShortcutManager(QObject):
                 mod_names = []
                 for key in mod_keys:
                     mod_config = self.mod_manager.get_mod_config(key)
-                    mod_name = mod_config.get('name', tr('errors.mod_not_found', key=key)) if mod_config else tr('errors.mod_not_found', key=key)
+                    mod_name = mod_config.get('name', tr('errors.mod_not_found_by_key', mod_key=key)) if mod_config else tr('errors.mod_not_found_by_key', mod_key=key)
                     mod_names.append(mod_name)
                 if len(mod_names) == 1:
                     description_lines.append(f"<b>{tr('status.mod_label')}</b> {mod_names[0]}")
@@ -91,7 +95,7 @@ class ShortcutManager(QObject):
                 mod_names = []
                 for key in mod_keys:
                     mod_config = self.mod_manager.get_mod_config(key)
-                    mod_name = mod_config.get('name', tr('errors.mod_not_found', key=key)) if mod_config else tr('errors.mod_not_found', key=key)
+                    mod_name = mod_config.get('name', tr('errors.mod_not_found_by_key', mod_key=key)) if mod_config else tr('errors.mod_not_found_by_key', mod_key=key)
                     mod_names.append(mod_name)
                 if len(mod_names) == 1:
                     description_lines.append(f"<b>{tr('status.mod_label')}</b> {mod_names[0]}")
@@ -116,7 +120,7 @@ class ShortcutManager(QObject):
                         mod_names = []
                         for key in mod_keys:
                             mod_config = self.mod_manager.get_mod_config(key)
-                            mod_name = mod_config.get('name', tr('errors.mod_not_found', key=key)) if mod_config else tr('errors.mod_not_found', key=key)
+                            mod_name = mod_config.get('name', tr('errors.mod_not_found_by_key', mod_key=key)) if mod_config else tr('errors.mod_not_found_by_key', mod_key=key)
                             mod_names.append(mod_name)
                         chapter_names = {0: tr('chapters.menu'), 1: tr('tabs.chapter_1'), 2: tr('tabs.chapter_2'), 3: tr('tabs.chapter_3'), 4: tr('tabs.chapter_4')}
                         chapter_name = chapter_names.get(chapter_id, tr('ui.chapter_tab_title', chapter_num=chapter_id))
@@ -131,7 +135,7 @@ class ShortcutManager(QObject):
                     mod_names = []
                     for key in mod_keys:
                         mod_config = self.mod_manager.get_mod_config(key)
-                        mod_name = mod_config.get('name', tr('errors.mod_not_found', key=key)) if mod_config else tr('errors.mod_not_found', key=key)
+                        mod_name = mod_config.get('name', tr('errors.mod_not_found_by_key', mod_key=key)) if mod_config else tr('errors.mod_not_found_by_key', mod_key=key)
                         mod_names.append(mod_name)
                     if len(mod_names) == 1:
                         description_lines.append(f"<b>{tr('status.mod_label')}</b> {mod_names[0]}")
@@ -151,6 +155,46 @@ class ShortcutManager(QObject):
         description_text = '<br>'.join(description_lines) + f"<br><br><p>{tr('dialogs.shortcut_create_description')}</p>"
         if self.feedback_manager.ask_question('dialogs.create_shortcut_question', 'dialogs.shortcut_create_description', description_text):
             self._save_shortcut(settings)
+
+    def _count_selected_mods(self, settings: Dict[str, Any]) -> int:
+        is_demo = settings.get('is_demo_mode', False)
+        is_undertale = settings.get('is_undertale_mode', False)
+        is_undertaleyellow = settings.get('is_undertaleyellow_mode', False)
+        is_pizzatower = settings.get('is_pizzatower_mode', False)
+        is_chapter_mode = settings.get('is_chapter_mode', False)
+        if is_demo:
+            mod_data = settings['mods'].get('demo')
+            if mod_data:
+                return len(mod_data) if isinstance(mod_data, list) else 1
+        elif is_undertale:
+            mod_data = settings['mods'].get('undertale')
+            if mod_data:
+                return len(mod_data) if isinstance(mod_data, list) else 1
+        elif is_undertaleyellow:
+            mod_data = settings['mods'].get('undertaleyellow')
+            if mod_data:
+                return len(mod_data) if isinstance(mod_data, list) else 1
+        elif is_pizzatower:
+            mod_data = settings['mods'].get('pizzatower')
+            if mod_data:
+                return len(mod_data) if isinstance(mod_data, list) else 1
+        elif is_chapter_mode:
+            direct_launch_slot_id = settings.get('direct_launch_slot_id', SLOT_ID_UNIVERSAL)
+            if direct_launch_slot_id >= 0:
+                mod_data = settings['mods'].get(str(direct_launch_slot_id))
+                if mod_data:
+                    return len(mod_data) if isinstance(mod_data, list) else 1
+            total_mods = 0
+            for chapter_id in [0, 1, 2, 3, 4]:
+                mod_data = settings['mods'].get(str(chapter_id))
+                if mod_data:
+                    total_mods += len(mod_data) if isinstance(mod_data, list) else 1
+            return total_mods
+        else:
+            mod_data = settings['mods'].get('universal')
+            if mod_data:
+                return len(mod_data) if isinstance(mod_data, list) else 1
+        return 0
 
     def _gather_shortcut_settings(self) -> Optional[Dict[str, Any]]:
         if not self.parent_widget:

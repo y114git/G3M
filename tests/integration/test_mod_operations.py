@@ -15,7 +15,6 @@ class TestModInstallation:
             with zipfile.ZipFile(archive_path, 'w') as zf:
                 mod_config = {'key': 'test_install_mod', 'name': 'Test Install Mod', 'version': '1.0.0'}
                 zf.writestr('mod_config.json', json.dumps(mod_config))
-                # Используем правильное имя файла meta.json вместо deltamod.info
                 zf.writestr('meta.json', '{"metadata": {"name": "Test Mod"}}')
                 zf.writestr('file1.txt', 'test file content')
         try:

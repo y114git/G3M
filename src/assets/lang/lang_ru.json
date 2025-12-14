@@ -306,7 +306,7 @@
   "checkboxes": {
     "disable_background": "Отключить задний фон",
     "disable_splash": "Отключить заставку",
-    "xdelta_protection": "XDELTA вместо data.win/.ios"
+    "xdelta_modpack": "XDELTA вместо data.win/.ios"
   },
   "tags": {
     "gameplay": "Геймплей",
@@ -491,6 +491,7 @@
     "shortcut_create_description": "Нажмите 'Да' чтобы выбрать место сохранения ярлыка.",
     "shortcut_created_successfully": "Ярлык был успешно создан по пути:\n{path}",
     "shortcut_description": "Ярлык позволяет запускать игру с выбранными модами и настройками\nбез необходимости открывать лаунчер каждый раз.",
+    "shortcut_multiple_mods_warning": "Невозможно создать ярлык с 2 или более выбранными модами. Пожалуйста, сначала создайте модпак, затем создайте ярлык с модпаком.",
     "steam_deck_compatibility_configured": "Лаунчер автоматически настроил совместимость сохранений для Steam Deck (Proton). Ваши сохранения должны быть доступны.",
     "tab_extra_file_not_found": "В вкладке '{tab_name}' доп. файл не найден: {path}",
     "tab_file_not_found": "В вкладке '{tab_name}' файл не найден: {path}",
@@ -742,6 +743,9 @@
     "permission_error_install": "Ошибка прав доступа при установке: {error}",
     "xdelta_not_found": "Исполняемый файл xdelta не найден по пути: {path}",
     "xdelta_patch_failed": "Не удалось применить патч xdelta: {patch}",
+    "xdelta_patch_creation_failed": "Не удалось создать xdelta патч для главы {chapter}",
+    "xdelta_patch_timeout": "Превышено время ожидания создания xdelta патча для главы {chapter}",
+    "xdelta_patch_creation_failed_general": "Не удалось создать xdelta патчи",
     "xdelta_patch_checksum_mismatch": "Не удалось применить xdelta патч '{patch}': несовпадение контрольной суммы. Патч был создан для оригинального data.win, но файл уже был изменен предыдущими модами. Попробуйте изменить порядок модов или свяжитесь с автором мода.\nОшибка: {error}",
     "merge_failed": "Слияние модов не удалось: {error}",
     "csx_script_failed": "Не удалось выполнить CSX скрипт: {script}",
@@ -802,6 +806,7 @@
     "recovering_previous_session": "Восстановление предыдущей сессии...",
     "applying_mod": "Применение мода: {mod_name} ({mod_type})...",
     "autodetecting_path": "Путь к игре не найден или устарел. Идет автоопределение...",
+    "creating_xdelta_patch": "Создание xdelta патча для главы {chapter}...",
     "cant_update_while_running": "Нельзя обновлять, пока игра запущена.",
     "changelog_load_failed": "<i>Не удалось загрузить список изменений...</i>",
     "completed_save": "ЗАВЕРШЁННОЕ СОХРАНЕНИЕ",

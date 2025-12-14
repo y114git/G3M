@@ -153,38 +153,33 @@ class TestMerging:
         assert merger is not None
         assert hasattr(merger, 'utmt_wrapper')
         assert hasattr(merger, 'xdelta_path')
-        
+
     def test_progress_throttler_initialization(self, app_state, feedback_manager, qapp):
-        """Test that ProgressThrottler can be created and used."""
         from managers.multi_mod_merger import ProgressThrottler
         from PyQt6.QtCore import QTimer
-        
+
         callback_calls = []
+
         def test_callback(progress, message):
             callback_calls.append((progress, message))
-        
+
         throttler = ProgressThrottler(test_callback, throttle_ms=50, parent=qapp)
         assert throttler is not None
         assert throttler.callback == test_callback
         assert throttler.throttle_ms == 50
-        
-        # Test update_progress
+
         throttler.update_progress(10, 'Test message 1')
         throttler.update_progress(20, 'Test message 2')
         throttler.update_progress(30, 'Test message 3')
-        
-        # Wait a bit for timer to fire
+
         import time
         time.sleep(0.1)
         qapp.processEvents()
-        
-        # Flush to ensure all updates are emitted
+
         throttler.flush()
         qapp.processEvents()
-        
-        # Should have at least one callback call (the last one)
+
         assert len(callback_calls) > 0
-        # Last call should be the latest update
         assert callback_calls[-1] == (30, 'Test message 3')
 
     def test_merge_with_priority(self, patches_game_dirs):

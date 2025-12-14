@@ -306,7 +306,7 @@
   "checkboxes": {
     "disable_background": "Disable background",
     "disable_splash": "Disable splash",
-    "xdelta_protection": "XDELTA instead of data.win/.ios"
+    "xdelta_modpack": "XDELTA instead of data.win/.ios"
   },
   "tags": {
     "gameplay": "Gameplay",
@@ -494,6 +494,7 @@
     "shortcut_create_description": "Press 'Yes' to choose where to save the shortcut.",
     "shortcut_created_successfully": "Shortcut was successfully created at:\n{path}",
     "shortcut_description": "A shortcut allows you to launch the game with selected mods and settings\\nwithout having to open the launcher every time.",
+    "shortcut_multiple_mods_warning": "Cannot create shortcut with 2 or more mods selected. Please create a modpack first, then create a shortcut with the modpack.",
     "steam_deck_compatibility_configured": "The launcher has auto-configured save compatibility for Steam Deck (Proton). Your saves should be available.",
     "tab_extra_file_not_found": "Extra file not found in '{tab_name}' tab: {path}",
     "tab_file_not_found": "File not found in '{tab_name}' tab: {path}",
@@ -742,6 +743,9 @@
     "permission_error_install": "Permission error during installation: {error}",
     "xdelta_not_found": "xdelta executable not found at: {path}",
     "xdelta_patch_failed": "Failed to apply xdelta patch: {patch}",
+    "xdelta_patch_creation_failed": "Failed to create xdelta patch for chapter {chapter}",
+    "xdelta_patch_timeout": "xdelta patch creation timed out for chapter {chapter}",
+    "xdelta_patch_creation_failed_general": "Failed to create xdelta patches",
     "xdelta_patch_checksum_mismatch": "Cannot apply xdelta patch '{patch}': checksum mismatch. The patch was created for the original data.win, but the file has already been modified by previous mods. Try changing the mod order or contact the mod author.\nError: {error}",
     "merge_failed": "Mod merge failed: {error}",
     "csx_script_failed": "Failed to execute CSX script: {script}",
@@ -800,6 +804,7 @@
     "recovering_previous_session": "Recovering previous session...",
     "applying_mod": "Applying mod: {mod_name} ({mod_type})...",
     "autodetecting_path": "Game path not found or outdated. Auto-detecting...",
+    "creating_xdelta_patch": "Creating xdelta patch for chapter {chapter}...",
     "cant_update_while_running": "Cannot update while game is running.",
     "changelog_load_failed": "<i>Could not load changelog...</i>",
     "completed_save": "COMPLETED SAVE",

@@ -72,23 +72,19 @@ class TestFileUtils:
         assert sanitize_filename('AUX.txt') == 'AUX.txt'
 
     def test_safe_rmtree_default_params(self, temp_dir, qapp):
-        """Test that safe_rmtree uses new default parameters (max_retries=3, delay=0.5)."""
         from utils.file_utils import safe_rmtree
         import time
-        
-        # Create a test directory
+
         test_dir = os.path.join(temp_dir, 'test_rmtree')
         os.makedirs(test_dir, exist_ok=True)
         test_file = os.path.join(test_dir, 'test.txt')
         with open(test_file, 'w') as f:
             f.write('test')
-        
-        # Test that it works with default params
+
         result = safe_rmtree(test_dir)
         assert result is True
         assert not os.path.exists(test_dir)
-        
-        # Test with custom params
+
         test_dir2 = os.path.join(temp_dir, 'test_rmtree2')
         os.makedirs(test_dir2, exist_ok=True)
         result2 = safe_rmtree(test_dir2, max_retries=2, delay=0.1)

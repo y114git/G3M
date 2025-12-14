@@ -1,5 +1,5 @@
 from typing import Optional
-from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QLineEdit
+from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QLineEdit, QCheckBox
 from managers.localization_manager import tr
 from ui.common.styling import get_theme_color
 
@@ -10,8 +10,9 @@ class CreateModpackDialog(QDialog):
         super().__init__(parent)
         self.app_state = app_state
         self.modpack_name = None
+        self.xdelta_modpack = False
         self.setWindowTitle(tr('dialogs.create_modpack_title'))
-        self.setMinimumSize(450, 200)
+        self.setMinimumSize(450, 250)
         self.setup_ui()
         self._apply_theme()
 
@@ -31,6 +32,9 @@ class CreateModpackDialog(QDialog):
         self.name_input.selectAll()
         name_layout.addWidget(self.name_input)
         layout.addLayout(name_layout)
+        self.xdelta_checkbox = QCheckBox(tr('checkboxes.xdelta_modpack'))
+        self.xdelta_checkbox.setChecked(False)
+        layout.addWidget(self.xdelta_checkbox)
         layout.addStretch()
         buttons_layout = QHBoxLayout()
         buttons_layout.addStretch()
@@ -48,10 +52,14 @@ class CreateModpackDialog(QDialog):
         if not name:
             return
         self.modpack_name = name
+        self.xdelta_modpack = self.xdelta_checkbox.isChecked()
         self.accept()
 
     def get_modpack_name(self) -> Optional[str]:
         return self.modpack_name
+
+    def get_xdelta_modpack(self) -> bool:
+        return self.xdelta_modpack
 
     def _apply_theme(self):
         bg_color = get_theme_color(self.app_state.local_config, 'background', '#000000')
@@ -59,4 +67,4 @@ class CreateModpackDialog(QDialog):
         button_color = get_theme_color(self.app_state.local_config, 'button', 'black')
         hover_color = get_theme_color(self.app_state.local_config, 'button_hover', '#333')
         text_color = get_theme_color(self.app_state.local_config, 'text', 'white')
-        self.setStyleSheet(f'\n            QDialog {{\n                background-color: {bg_color};\n                color: {text_color};\n            }}\n            QLineEdit {{\n                background-color: {bg_color};\n                border: 2px solid {border_color};\n                color: {text_color};\n                padding: 8px;\n                font-size: 13px;\n            }}\n            QLineEdit:focus {{\n                border: 2px solid {hover_color};\n            }}\n            QPushButton {{\n                background-color: {button_color};\n                border: 2px solid {border_color};\n                color: {text_color};\n                padding: 8px 15px;\n                font-weight: bold;\n            }}\n            QPushButton:hover {{\n                background-color: {hover_color};\n            }}\n            QPushButton:pressed {{\n                background-color: {hover_color};\n            }}\n            QLabel {{\n                color: {text_color};\n            }}\n        ')
+        self.setStyleSheet(f'\n            QDialog {{\n                background-color: {bg_color};\n                color: {text_color};\n            }}\n            QLineEdit {{\n                background-color: {bg_color};\n                border: 2px solid {border_color};\n                color: {text_color};\n                padding: 8px;\n                font-size: 13px;\n            }}\n            QLineEdit:focus {{\n                border: 2px solid {hover_color};\n            }}\n            QPushButton {{\n                background-color: {button_color};\n                border: 2px solid {border_color};\n                color: {text_color};\n                padding: 8px 15px;\n                font-weight: bold;\n            }}\n            QPushButton:hover {{\n                background-color: {hover_color};\n            }}\n            QPushButton:pressed {{\n                background-color: {hover_color};\n            }}\n            QLabel {{\n                color: {text_color};\n            }}\n            QCheckBox {{\n                color: {text_color};\n                font-size: 13px;\n            }}\n        ')

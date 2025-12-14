@@ -1,3 +1,0 @@
-"""
-DELTAHUB Test Suite
-"""

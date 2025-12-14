@@ -12,7 +12,6 @@ class TestModStructure:
             pytest.skip('mod_config.json not found. Please create test mod structure.')
         with open(config_path, 'r', encoding='utf-8') as f:
             config = json.load(f)
-        # Config should have either 'key' or 'mod_key'
         assert 'key' in config or 'mod_key' in config
         assert 'name' in config
         assert 'version' in config

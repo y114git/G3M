@@ -305,7 +305,7 @@
   "checkboxes": {
     "disable_background": "禁用背景",
     "disable_splash": "禁用啟動畫面",
-    "xdelta_protection": "使用XDELTA代替data.win/.ios"
+    "xdelta_modpack": "使用XDELTA代替data.win/.ios"
   },
   "tags": {
     "gameplay": "遊戲玩法",
@@ -493,6 +493,7 @@
     "shortcut_create_description": "按「是」選擇儲存捷徑的位置。",
     "shortcut_created_successfully": "捷徑已成功創建於：\\n{path}",
     "shortcut_description": "捷徑允許您使用選定的模組和設置啟動遊戲，\\n而無需每次都打開啟動器。",
+    "shortcut_multiple_mods_warning": "無法創建包含2個或更多選定模組的捷徑。請先創建模組包，然後使用模組包創建捷徑。",
     "steam_deck_compatibility_configured": "啟動器已自動配置Steam Deck（Proton）的存檔相容性。您的存檔應該可用。",
     "tab_extra_file_not_found": "在「{tab_name}」標籤中未找到額外檔案：{path}",
     "tab_file_not_found": "在「{tab_name}」標籤中未找到檔案：{path}",
@@ -744,6 +745,9 @@
     "permission_error_install": "安裝時權限錯誤：{error}",
     "xdelta_not_found": "在 {path} 未找到xdelta可執行檔案",
     "xdelta_patch_failed": "應用xdelta補丁失敗: {patch}",
+    "xdelta_patch_creation_failed": "為章節 {chapter} 創建xdelta補丁失敗",
+    "xdelta_patch_timeout": "為章節 {chapter} 創建xdelta補丁超時",
+    "xdelta_patch_creation_failed_general": "創建xdelta補丁失敗",
     "merge_failed": "模組合併失敗: {error}",
     "csx_script_failed": "執行CSX腳本失敗: {script}",
     "unsupported_archive_format": "不支持的壓縮格式。",
@@ -802,6 +806,7 @@
     "recovering_previous_session": "恢復上一會話...",
     "applying_mod": "正在套用模組：{mod_name} ({mod_type})...",
     "autodetecting_path": "未找到遊戲路徑或路徑已過期。自動檢測中...",
+    "creating_xdelta_patch": "正在為章節 {chapter} 創建xdelta補丁...",
     "cant_update_while_running": "遊戲執行時無法更新。",
     "changelog_load_failed": "<i>無法加載更新日誌...</i>",
     "completed_save": "已完成存檔",

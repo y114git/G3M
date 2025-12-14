@@ -33,7 +33,6 @@ class TestModManager:
         assert 'test_mod_001' in cache
 
     def test_mod_manager_validate_config_valid(self, app_state, feedback_manager):
-        """Test _validate_mod_config with valid config."""
         from managers.mod_manager import ModManager
         mod_manager = ModManager(app_state=app_state, feedback_manager=feedback_manager)
         valid_config = {
@@ -47,37 +46,30 @@ class TestModManager:
         assert result is True
 
     def test_mod_manager_validate_config_invalid_dict(self, app_state, feedback_manager):
-        """Test _validate_mod_config with invalid config (not a dict)."""
         from managers.mod_manager import ModManager
         mod_manager = ModManager(app_state=app_state, feedback_manager=feedback_manager)
-        # Config is a list instead of dict
         invalid_config = ['key', 'name']
         result = mod_manager._validate_mod_config(invalid_config, '/fake/path', 'test_mod')
         assert result is False
 
     def test_mod_manager_validate_config_missing_fields(self, app_state, feedback_manager):
-        """Test _validate_mod_config with missing required fields."""
         from managers.mod_manager import ModManager
         mod_manager = ModManager(app_state=app_state, feedback_manager=feedback_manager)
-        invalid_config = {'version': '1.0.0'}  # Missing both name and key
+        invalid_config = {'version': '1.0.0'}
         result = mod_manager._validate_mod_config(invalid_config, '/fake/path', 'test_mod')
         assert result is False
 
     def test_mod_manager_validate_config_invalid_types(self, app_state, feedback_manager):
-        """Test _validate_mod_config with invalid field types."""
         from managers.mod_manager import ModManager
         mod_manager = ModManager(app_state=app_state, feedback_manager=feedback_manager)
-        # name is not a string
         invalid_config = {'key': 'test', 'name': 123}
         result = mod_manager._validate_mod_config(invalid_config, '/fake/path', 'test_mod')
         assert result is False
-        
-        # files is not a dict
+
         invalid_config2 = {'key': 'test', 'name': 'Test', 'files': []}
         result2 = mod_manager._validate_mod_config(invalid_config2, '/fake/path', 'test_mod')
         assert result2 is False
-        
-        # tags is not a list
+
         invalid_config3 = {'key': 'test', 'name': 'Test', 'tags': {}}
         result3 = mod_manager._validate_mod_config(invalid_config3, '/fake/path', 'test_mod')
         assert result3 is False

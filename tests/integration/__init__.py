@@ -1,3 +1,0 @@
-"""
-Integration tests for DELTAHUB
-"""
