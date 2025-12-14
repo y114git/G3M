@@ -513,6 +513,9 @@ class SearchDisplayController(QObject):
                 self.app_state.current_page = 1
             self.update_display()
             return
+        if not hasattr(self, '_checked_installed_mods_metadata') or not self._checked_installed_mods_metadata:
+            self._check_installed_mods_for_metadata()
+            self._checked_installed_mods_metadata = True
         filters, sort_config = self._build_filters_and_sort()
         if preserve_page and (not self.app_state.auto_sorting) and self.app_state.filtered_mods:
             existing_filtered_keys = set()
@@ -1078,9 +1081,45 @@ class SearchDisplayController(QObject):
                 self.update_filtered_mods(preserve_page=True)
             elif updated_mods:
                 self._update_plaques_for_mods(updated_mods)
+            QTimer.singleShot(100, self.update_search_plaques)
         except Exception as e:
             logger.error(f'SearchDisplayController: Error in _apply_pending_metadata_updates: {e}', exc_info=True)
             self._pending_metadata_updates.clear()
+
+    def _check_installed_mods_for_metadata(self):
+        try:
+            if not hasattr(self.app_state, 'all_mods') or not self.app_state.all_mods:
+                return
+            mods_needing_metadata = []
+            for mod in self.app_state.all_mods:
+                if not hasattr(mod, 'is_gamebanana_mod') or not mod.is_gamebanana_mod():
+                    continue
+                key = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
+                if not key or not key.startswith('gb_'):
+                    continue
+                mod_id_str = key.replace('gb_', '', 1) if key else None
+                if not mod_id_str:
+                    continue
+                needs_metadata = False
+                if not hasattr(mod, 'tagline') or not mod.tagline or mod.tagline.strip() == '':
+                    needs_metadata = True
+                if not hasattr(mod, 'downloads') or mod.downloads is None or mod.downloads == 0:
+                    needs_metadata = True
+                if hasattr(mod, 'has_full_metadata') and (not mod.has_full_metadata):
+                    needs_metadata = True
+                if needs_metadata:
+                    mods_needing_metadata.append(mod_id_str)
+            if mods_needing_metadata:
+                if not hasattr(self.app_state, 'gamebanana_mods_needing_metadata'):
+                    self.app_state.gamebanana_mods_needing_metadata = []
+                existing = set(self.app_state.gamebanana_mods_needing_metadata)
+                new_ids = set(mods_needing_metadata)
+                self.app_state.gamebanana_mods_needing_metadata = list(existing | new_ids)
+                logger.info(f'SearchDisplayController: Added {len(new_ids)} installed mod IDs to metadata loading queue')
+                if hasattr(self.app, 'refresh_controller') and self.app.refresh_controller:
+                    QTimer.singleShot(500, lambda: self.app.refresh_controller._start_metadata_loading())
+        except Exception as e:
+            logger.error(f'SearchDisplayController: Error in _check_installed_mods_for_metadata: {e}', exc_info=True)
 
     def _update_plaques_for_mods(self, mod_ids: list):
         try:
