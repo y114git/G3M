@@ -42,6 +42,8 @@ class SearchDisplayController(QObject):
         self._initial_mods_display_done = False
         self._active_search_timers = []
         self._current_search_text = ''
+        self._update_filtered_mods_in_progress = False
+        self._pending_filter_update = False
 
     def prev_page(self):
         try:
@@ -507,50 +509,86 @@ class SearchDisplayController(QObject):
         return (filters, sort_config)
 
     def update_filtered_mods(self, preserve_page=False):
-        if not hasattr(self.app_state, 'all_mods') or not self.app_state.all_mods:
-            self.app_state.filtered_mods = []
-            if not preserve_page:
-                self.app_state.current_page = 1
-            self.update_display()
+        if self._update_filtered_mods_in_progress:
+            self._pending_filter_update = True
             return
-        if not hasattr(self, '_checked_installed_mods_metadata') or not self._checked_installed_mods_metadata:
-            self._check_installed_mods_for_metadata()
-            self._checked_installed_mods_metadata = True
-        filters, sort_config = self._build_filters_and_sort()
-        if preserve_page and (not self.app_state.auto_sorting) and self.app_state.filtered_mods:
-            existing_filtered_keys = set()
-            for mod in self.app_state.filtered_mods:
-                key = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
-                if key:
-                    existing_filtered_keys.add(key)
-                else:
+        self._update_filtered_mods_in_progress = True
+        self._pending_filter_update = False
+        try:
+            if not hasattr(self.app_state, 'all_mods') or not self.app_state.all_mods:
+                self.app_state.filtered_mods = []
+                if not preserve_page:
+                    self.app_state.current_page = 1
+                self.update_display()
+                return
+            if not hasattr(self, '_checked_installed_mods_metadata') or not self._checked_installed_mods_metadata:
+                self._check_installed_mods_for_metadata()
+                self._checked_installed_mods_metadata = True
+            filters, sort_config = self._build_filters_and_sort()
+            total_mods_count = len(self.app_state.all_mods) if self.app_state.all_mods else 0
+            use_async = total_mods_count > 1000
+            if use_async:
+
+                def async_filter():
+                    try:
+                        filtered_result = filter_and_sort_mods(self.app_state.all_mods, filters, sort_config)
+                        self.app_state.filtered_mods = filtered_result
+                        if not preserve_page:
+                            self.app_state.current_page = 1
+                        else:
+                            total_mods = len(self.app_state.filtered_mods)
+                            max_page = max(1, (total_mods - 1) // self.app_state.mods_per_page + 1) if total_mods > 0 else 1
+                            if self.app_state.current_page > max_page:
+                                self.app_state.current_page = max_page
+                        self.update_display()
+                    except Exception as e:
+                        logger.error(f'SearchDisplayController: Error in async_filter: {e}', exc_info=True)
+                    finally:
+                        self._update_filtered_mods_in_progress = False
+                        if self._pending_filter_update:
+                            QTimer.singleShot(100, lambda: self.update_filtered_mods(preserve_page=preserve_page))
+                QTimer.singleShot(0, async_filter)
+                return
+            if preserve_page and (not self.app_state.auto_sorting) and self.app_state.filtered_mods:
+                existing_filtered_keys = set()
+                for mod in self.app_state.filtered_mods:
+                    key = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
+                    if key:
+                        existing_filtered_keys.add(key)
+                    else:
+                        mod_key_attr = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
+                        if mod_key_attr and mod_key_attr.startswith('gb_'):
+                            existing_filtered_keys.add(mod_key_attr)
+                new_mods_to_filter = []
+                for mod in self.app_state.all_mods:
+                    key = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
+                    if key and key in existing_filtered_keys:
+                        continue
                     mod_key_attr = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
                     if mod_key_attr and mod_key_attr.startswith('gb_'):
-                        existing_filtered_keys.add(mod_key_attr)
-            new_mods_to_filter = []
-            for mod in self.app_state.all_mods:
-                key = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
-                if key and key in existing_filtered_keys:
-                    continue
-                mod_key_attr = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
-                if mod_key_attr and mod_key_attr.startswith('gb_'):
-                    gb_key = mod_key_attr
-                    if gb_key in existing_filtered_keys:
-                        continue
-                new_mods_to_filter.append(mod)
-            if new_mods_to_filter:
-                new_filtered = filter_and_sort_mods(new_mods_to_filter, filters, sort_config=None)
-                self.app_state.filtered_mods = (self.app_state.filtered_mods or []) + new_filtered
-        else:
-            self.app_state.filtered_mods = filter_and_sort_mods(self.app_state.all_mods, filters, sort_config)
-        if not preserve_page:
-            self.app_state.current_page = 1
-        else:
-            total_mods = len(self.app_state.filtered_mods)
-            max_page = max(1, (total_mods - 1) // self.app_state.mods_per_page + 1) if total_mods > 0 else 1
-            if self.app_state.current_page > max_page:
-                self.app_state.current_page = max_page
-        self.update_display()
+                        gb_key = mod_key_attr
+                        if gb_key in existing_filtered_keys:
+                            continue
+                    new_mods_to_filter.append(mod)
+                if new_mods_to_filter:
+                    new_filtered = filter_and_sort_mods(new_mods_to_filter, filters, sort_config=None)
+                    self.app_state.filtered_mods = (self.app_state.filtered_mods or []) + new_filtered
+            else:
+                self.app_state.filtered_mods = filter_and_sort_mods(self.app_state.all_mods, filters, sort_config)
+            if not preserve_page:
+                self.app_state.current_page = 1
+            else:
+                total_mods = len(self.app_state.filtered_mods)
+                max_page = max(1, (total_mods - 1) // self.app_state.mods_per_page + 1) if total_mods > 0 else 1
+                if self.app_state.current_page > max_page:
+                    self.app_state.current_page = max_page
+            self.update_display()
+        except Exception as e:
+            logger.error(f'SearchDisplayController: Error in update_filtered_mods: {e}', exc_info=True)
+        finally:
+            self._update_filtered_mods_in_progress = False
+            if self._pending_filter_update:
+                QTimer.singleShot(100, lambda: self.update_filtered_mods(preserve_page=preserve_page))
 
     def update_display(self):
         self._update_display_debounce.call(self._do_update_display)
