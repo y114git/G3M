@@ -859,6 +859,7 @@
     "no_description_status": "無描述可用。",
     "no_files_to_copy": "未找到要拷貝的檔案。",
     "no_game_path": "遊戲路徑自動檢測失敗。請手動設置。",
+    "game_path_required_for_mods": "選擇模組時需要遊戲資料夾路徑。請在庫中設置遊戲路徑。",
     "no_mod": "無模組",
     "normal_launch": "原版啟動",
     "online_count": "在線：{count}",

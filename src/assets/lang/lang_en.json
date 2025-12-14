@@ -857,6 +857,7 @@
     "no_description_status": "No description available.",
     "no_files_to_copy": "No files found to copy.",
     "no_game_path": "Game paths autodetection failed. Please set them manually.",
+    "game_path_required_for_mods": "Game folder path is required when mods are selected. Please set the game path in the Library.",
     "no_mod": "No mod",
     "normal_launch": "Vanilla launch",
     "online_count": "Online: {count}",

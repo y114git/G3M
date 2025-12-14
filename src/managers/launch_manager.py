@@ -92,9 +92,20 @@ class GameLauncher(QObject):
                 return
             self._hook_result = hook_result
         self.status_changed.emit(tr('status.launching_game'), UI_COLORS['status_success'])
+        has_selected_mods = self._has_selected_mods(selections)
+        use_steam = self.app_state.local_config.get('launch_via_steam', False)
         current_path = self._get_current_game_path()
         if not current_path or not os.path.exists(current_path):
-            self.status_changed.emit(tr('status.no_game_path'), UI_COLORS['status_error'])
+            if not self._find_and_validate_game_path(selections, is_initial=False):
+                if has_selected_mods:
+                    self.status_changed.emit(tr('status.game_path_required_for_mods'), UI_COLORS['status_error'])
+                else:
+                    self.status_changed.emit(tr('status.no_game_path'), UI_COLORS['status_error'])
+                self._handle_launch_failure()
+                return
+            current_path = self._get_current_game_path()
+        if has_selected_mods and (not current_path or not os.path.exists(current_path)):
+            self.status_changed.emit(tr('status.game_path_required_for_mods'), UI_COLORS['status_error'])
             self._handle_launch_failure()
             return
         has_list_format = any((isinstance(mods_list, list) for mods_list in selections.values()))
@@ -507,6 +518,15 @@ class GameLauncher(QObject):
             return True
         if is_initial:
             self.status_changed.emit(tr('status.no_game_path'), UI_COLORS['status_error'])
+        return False
+
+    def _has_selected_mods(self, selections: Dict[int, Any]) -> bool:
+        for chapter_id, mod_data in selections.items():
+            if isinstance(mod_data, list):
+                if mod_data:
+                    return True
+            elif mod_data and mod_data != 'no_change':
+                return True
         return False
 
     def _mod_has_data_files_for_chapter(self, mod, chapter_id: int) -> bool:

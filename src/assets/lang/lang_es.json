@@ -857,6 +857,7 @@
     "no_description_status": "No hay descripción disponible.",
     "no_files_to_copy": "No se encontraron archivos para copiar.",
     "no_game_path": "La detección automática de rutas del juego falló. Por favor, establécelas manualmente.",
+    "game_path_required_for_mods": "La ruta de la carpeta del juego es obligatoria cuando se seleccionan mods. Por favor, establece la ruta del juego en la biblioteca.",
     "no_mod": "Sin mod",
     "normal_launch": "Inicio vanilla",
     "online_count": "🟢 En línea: {count}",
