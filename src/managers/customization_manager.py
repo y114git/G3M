@@ -12,7 +12,6 @@ from managers.localization_manager import tr
 
 
 class CustomizationManager(QObject):
-    background_changed = pyqtSignal()
     music_started = pyqtSignal()
     music_stopped = pyqtSignal()
 
