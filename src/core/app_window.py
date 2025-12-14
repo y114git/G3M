@@ -1034,11 +1034,13 @@ class AppWindow(QWidget):
         super().paintEvent(event)
 
     def _initialize_mutual_exclusions(self):
-        is_direct_launch = self.app_state.local_config.get('direct_launch_slot_id', SLOT_ID_UNIVERSAL) >= 0 and self.app_state.game_mode.direct_launch_allowed and (platform.system() != 'Darwin')
+        direct_launch_slot_id = self.app_state.local_config.get('direct_launch_slot_id', SLOT_ID_UNIVERSAL)
+        is_chapter_mode = self.app_state.current_mode == 'chapter'
+        is_deltarune = isinstance(self.app_state.game_mode, FullGameMode)
+        should_block = is_deltarune and is_chapter_mode and (direct_launch_slot_id >= 0)
         if not hasattr(self, 'launch_via_steam_checkbox'):
             return
-        if is_direct_launch:
-            self.launch_via_steam_checkbox.setEnabled(False)
+        self.launch_via_steam_checkbox.setEnabled(not should_block)
         self.theme.apply_theme()
 
     def _post_show_initialization(self):

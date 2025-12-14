@@ -208,6 +208,8 @@
     "select": "Seleccionar",
     "steam_launch": "Iniciar vía Steam",
     "steam_launch_direct_conflict": "'Iniciar vía Steam' es incompatible con el inicio directo. Por favor, desactiva el inicio directo primero (doble clic en el capítulo).",
+    "steam_launch_mods_warning_title": "Advertencia: Iniciar vía Steam con Mods",
+    "steam_launch_mods_warning_body": "Has seleccionado mods para aplicar, pero estás iniciando el juego a través de Steam.\n\nLos mods se aplican a archivos en tu ruta de juego configurada:\n{game_path}\n\nSin embargo, Steam puede iniciar el juego desde un directorio diferente (carpeta de biblioteca de Steam), lo que significa que tus mods pueden no funcionar.\n\nEsto es especialmente común en Steam Deck. Para asegurar que los mods funcionen correctamente, por favor:\n1. Asegúrate de que tu ruta de juego configurada coincida con el directorio de instalación de Steam, O\n2. Desactiva 'Iniciar vía Steam' en Configuración para iniciar directamente desde la ruta configurada.\n\n¿Quieres continuar de todos modos?",
     "priority": "Prioridad",
     "create_modpack_button": "Crear Modpack",
     "mod_priority_title": "Prioridad de mods",

@@ -208,6 +208,8 @@
     "select": "Select",
     "steam_launch": "Launch via Steam",
     "steam_launch_direct_conflict": "'Launch via Steam' is incompatible with direct launch. Please disable direct launch first (double-click on the chapter).",
+    "steam_launch_mods_warning_title": "Warning: Launch via Steam with Mods",
+    "steam_launch_mods_warning_body": "You have selected mods to apply, but you are launching the game through Steam.\n\nMods are applied to files in your configured game path:\n{game_path}\n\nHowever, Steam may launch the game from a different directory (Steam's library folder), which means your mods may not work.\n\nThis is especially common on Steam Deck. To ensure mods work correctly, please:\n1. Make sure your configured game path matches Steam's installation directory, OR\n2. Disable 'Launch via Steam' in Settings to launch directly from the configured path.\n\nDo you want to continue anyway?",
     "priority": "Priority",
     "create_modpack_button": "Create Modpack",
     "mod_priority_title": "Mod Priority",

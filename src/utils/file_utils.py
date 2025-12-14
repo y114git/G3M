@@ -295,6 +295,58 @@ def ensure_writable(path: str) -> bool:
         return False
 
 
+def is_path_in_steam_common(game_path: str, game_name: str) -> bool:
+    if not game_path or not os.path.isdir(game_path):
+        return False
+    try:
+        game_path_abs = os.path.abspath(game_path)
+        game_path_normalized = os.path.normpath(game_path_abs).lower()
+        game_name_lower = game_name.lower()
+    except (OSError, ValueError):
+        return False
+    path_parts = game_path_normalized.replace('\\', '/').split('/')
+    try:
+        for i, part in enumerate(path_parts):
+            if part == 'steamapps' and i + 1 < len(path_parts) and (path_parts[i + 1] == 'common'):
+                if i + 2 < len(path_parts) and path_parts[i + 2] == game_name_lower:
+                    return True
+                if i + 2 < len(path_parts):
+                    return True
+    except (IndexError, AttributeError):
+        pass
+    system = platform.system()
+    if system == 'Windows':
+        program_files = [os.getenv('ProgramFiles(x86)'), os.getenv('ProgramFiles')]
+        for pf in program_files:
+            if pf:
+                steam_common = os.path.normpath(os.path.join(pf, 'Steam', 'steamapps', 'common', game_name)).lower()
+                if game_path_normalized == steam_common or game_path_normalized.startswith(steam_common.replace('\\', '/') + '/'):
+                    return True
+    elif system == 'Linux':
+        home = os.path.expanduser('~')
+        base_steam_paths = [os.path.join(home, '.steam', 'steam', 'steamapps', 'common', game_name), os.path.join(home, '.local', 'share', 'Steam', 'steamapps', 'common', game_name), os.path.join(home, '.var', 'app', 'com.valvesoftware.Steam', 'data', 'Steam', 'steamapps', 'common', game_name)]
+        for steam_path in base_steam_paths:
+            try:
+                if os.path.exists(steam_path):
+                    steam_path_normalized = os.path.normpath(os.path.abspath(steam_path)).lower().replace('\\', '/')
+                    if game_path_normalized == steam_path_normalized or game_path_normalized.startswith(steam_path_normalized + '/'):
+                        return True
+            except (OSError, ValueError):
+                continue
+    elif system == 'Darwin':
+        home = os.path.expanduser('~')
+        base_paths = [os.path.join(home, 'Library', 'Application Support', 'Steam', 'steamapps', 'common', game_name), os.path.join(home, 'Steam', 'steamapps', 'common', game_name)]
+        for steam_path in base_paths:
+            try:
+                if os.path.exists(steam_path):
+                    steam_path_normalized = os.path.normpath(os.path.abspath(steam_path)).lower().replace('\\', '/')
+                    if game_path_normalized == steam_path_normalized or game_path_normalized.startswith(steam_path_normalized + '/'):
+                        return True
+            except (OSError, ValueError):
+                continue
+    return False
+
+
 def autodetect_path(game_name: str) -> str | None:
     if game_name == 'UNDERTALE YELLOW' or game_name == 'UndertaleYellow' or game_name == 'undertaleyellow':
         return None

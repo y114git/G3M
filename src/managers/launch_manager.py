@@ -9,9 +9,9 @@ from typing import Dict, Optional, Any, List
 from PyQt6.QtCore import QObject, QThread, QTimer, pyqtSignal
 from PyQt6.QtWidgets import QDialog
 from managers.localization_manager import tr
-from utils.file_utils import ensure_writable
+from utils.file_utils import ensure_writable, is_path_in_steam_common
 from utils.game_utils import is_game_running, get_game_name_string
-from models.game_modes import UndertaleGameMode, UndertaleYellowGameMode, PizzaTowerGameMode
+from models.game_modes import UndertaleGameMode, UndertaleYellowGameMode, PizzaTowerGameMode, FullGameMode
 from utils.path_utils import find_chapter_resource_dir, resolve_game_executable
 from utils.mod_utils import get_mod_key
 from utils.patching_logger import clear_patching_logs, clear_conflicts_log
@@ -233,8 +233,10 @@ class GameLauncher(QObject):
         use_steam = self.app_state.local_config.get('launch_via_steam', False)
         direct_launch_slot_id = self.app_state.local_config.get('direct_launch_slot_id', SLOT_ID_UNIVERSAL)
         is_chapter_mode = self.app_state.current_mode == 'chapter'
+        is_deltarune = isinstance(self.app_state.game_mode, FullGameMode)
         direct_launch = direct_launch_slot_id >= 0 and direct_launch_slot_id != 0 and is_chapter_mode and self.app_state.game_mode.direct_launch_allowed and (platform.system() != 'Darwin')
-        if use_steam and self.app_state.game_mode.steam_id:
+        should_block_steam = is_deltarune and is_chapter_mode and (direct_launch_slot_id >= 0)
+        if use_steam and self.app_state.game_mode.steam_id and (not should_block_steam):
             return {'target': f'steam://rungameid/{self.app_state.game_mode.steam_id}', 'cwd': None, 'type': 'webbrowser'}
         if direct_launch:
             return self._handle_direct_launch(direct_launch_slot_id)
@@ -402,6 +404,19 @@ class GameLauncher(QObject):
             pass
         elif hasattr(self, 'restore_window_callback') and self.restore_window_callback:
             self.game_launch_started.emit()
+        has_selected_mods = self._has_selected_mods(selections)
+        use_steam = self.app_state.local_config.get('launch_via_steam', False)
+        if has_selected_mods and use_steam and self.app_state.game_mode.steam_id:
+            current_path = self._get_current_game_path()
+            if current_path:
+                game_name = get_game_name_string(self.app_state.game_mode)
+                is_steam_path = is_path_in_steam_common(current_path, game_name)
+                if not is_steam_path:
+                    should_continue = self.feedback_manager.ask_question('ui.steam_launch_mods_warning_title', 'ui.steam_launch_mods_warning_body', game_path=current_path)
+                    if not should_continue:
+                        logging.info('Game launch cancelled: user declined Steam launch with mods warning')
+                        self._handle_launch_failure()
+                        return
         launch_config = self._determine_launch_config(selections)
         if not launch_config:
             self._handle_launch_failure()

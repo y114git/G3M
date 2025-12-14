@@ -111,6 +111,8 @@ class SettingsUiController:
             self.app._update_saves_button_state()
         if hasattr(self.app, '_update_checkbox_visibility'):
             self.app._update_checkbox_visibility()
+        if hasattr(self.slot_manager, '_update_steam_checkbox_state'):
+            self.slot_manager._update_steam_checkbox_state()
 
     def on_chapter_mode_changed(self, state):
         game_type = self.app.game_type_combo.currentData()
@@ -143,6 +145,8 @@ class SettingsUiController:
         self.app._update_change_path_button_text()
         self.app_state.local_config['chapter_mode_enabled'] = is_chapter
         self.settings_manager.write_local_config()
+        if hasattr(self.slot_manager, '_update_steam_checkbox_state'):
+            self.slot_manager._update_steam_checkbox_state()
 
     def on_toggle_beta_updates(self):
         beta_enabled = self.app.beta_updates_checkbox.isChecked()
@@ -163,7 +167,8 @@ class SettingsUiController:
         if is_steam_launch:
             direct_launch_slot_id = self.app_state.local_config.get('direct_launch_slot_id', SLOT_ID_UNIVERSAL)
             is_chapter_mode = self.app_state.current_mode == 'chapter'
-            if direct_launch_slot_id >= 0 and is_chapter_mode:
+            is_deltarune = isinstance(self.app_state.game_mode, FullGameMode)
+            if is_deltarune and is_chapter_mode and (direct_launch_slot_id >= 0):
                 self.feedback_manager.show_message('warning', 'ui.steam_launch', tr('ui.steam_launch_direct_conflict'))
                 self.app.launch_via_steam_checkbox.setChecked(False)
                 return

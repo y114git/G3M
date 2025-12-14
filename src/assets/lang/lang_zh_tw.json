@@ -207,6 +207,8 @@
     "select": "選擇",
     "steam_launch": "透過Steam啟動",
     "steam_launch_direct_conflict": "「透過Steam啟動」與直接啟動不相容。請先禁用直接啟動（雙擊章節）。",
+    "steam_launch_mods_warning_title": "警告：透過Steam啟動時使用模組",
+    "steam_launch_mods_warning_body": "您已選擇要應用的模組，但正在透過Steam啟動遊戲。\n\n模組將應用於您設定的遊戲路徑中的檔案：\n{game_path}\n\n但是，Steam可能從不同的目錄（Steam的庫資料夾）啟動遊戲，這意味著您的模組可能無法正常運作。\n\n這在Steam Deck上尤其常見。為了確保模組正常運作，請：\n1. 確保您設定的遊戲路徑與Steam的安裝目錄匹配，或\n2. 在設定中停用「透過Steam啟動」以直接從設定的路徑啟動。\n\n您仍要继续嗎？",
     "priority": "優先級",
     "create_modpack_button": "建立模組包",
     "mod_priority_title": "模組優先級",

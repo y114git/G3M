@@ -7,7 +7,7 @@ from core.app_state import AppState
 from ui.common.feedback import FeedbackManager
 from managers.mod_manager import ModManager
 from managers.settings_manager import SettingsManager
-from models.game_modes import DemoGameMode, UndertaleGameMode, UndertaleYellowGameMode, PizzaTowerGameMode
+from models.game_modes import DemoGameMode, UndertaleGameMode, UndertaleYellowGameMode, PizzaTowerGameMode, FullGameMode
 from managers.localization_manager import tr
 from config.constants import SLOT_ID_UNIVERSAL, SLOT_ID_MENU, SLOT_ID_CHAPTER_1, SLOT_ID_CHAPTER_2, SLOT_ID_CHAPTER_3, SLOT_ID_CHAPTER_4
 from utils.mod_utils import get_mod_key, get_mod_name
@@ -501,7 +501,15 @@ class UsedModsManager(QObject):
         self.settings_manager.write_local_config()
         self.action_button_update_needed.emit()
         if self.parent_widget and hasattr(self.parent_widget, 'launch_via_steam_checkbox'):
-            direct_launch_enabled = self.app_state.local_config.get('direct_launch_slot_id', -1) >= 0
-            self.parent_widget.launch_via_steam_checkbox.setEnabled(not direct_launch_enabled)
+            self._update_steam_checkbox_state()
         if self.parent_widget and hasattr(self.parent_widget, '_update_chapter_tabs_style'):
             self.parent_widget._update_chapter_tabs_style()
+
+    def _update_steam_checkbox_state(self):
+        if not self.parent_widget or not hasattr(self.parent_widget, 'launch_via_steam_checkbox'):
+            return
+        direct_launch_slot_id = self.app_state.local_config.get('direct_launch_slot_id', SLOT_ID_UNIVERSAL)
+        is_chapter_mode = self.app_state.current_mode == 'chapter'
+        is_deltarune = isinstance(self.app_state.game_mode, FullGameMode)
+        should_block = is_deltarune and is_chapter_mode and (direct_launch_slot_id >= 0)
+        self.parent_widget.launch_via_steam_checkbox.setEnabled(not should_block)
