@@ -141,6 +141,42 @@ class UsedModsManager(QObject):
             self.save_used_mods_state()
             for chapter_id in chapters_changed:
                 self.used_mod_changed.emit(chapter_id)
+        self._cleanup_mod_from_all_config_keys(key)
+
+    def _cleanup_mod_from_all_config_keys(self, mod_key: str):
+        if not mod_key:
+            return
+        config_keys = ['used_mods_deltarune', 'used_mods_deltarune_chapter', 'used_mods_deltarunedemo', 'used_mods_undertale', 'used_mods_undertaleyellow', 'used_mods_pizzatower']
+        for config_key in list(self.app_state.local_config.keys()):
+            if config_key.startswith('used_mods_') and config_key not in config_keys:
+                config_keys.append(config_key)
+        config_updated = False
+        for config_key in config_keys:
+            used_mods_data = self.app_state.local_config.get(config_key, {})
+            if not used_mods_data:
+                continue
+            chapters_to_clear = []
+            for chapter_id_str, mod_data_raw in list(used_mods_data.items()):
+                if isinstance(mod_data_raw, str):
+                    if mod_data_raw == mod_key:
+                        chapters_to_clear.append(chapter_id_str)
+                elif isinstance(mod_data_raw, list):
+                    if mod_key in mod_data_raw:
+                        updated_list = [k for k in mod_data_raw if k != mod_key]
+                        if updated_list:
+                            used_mods_data[chapter_id_str] = updated_list
+                            config_updated = True
+                        else:
+                            chapters_to_clear.append(chapter_id_str)
+                            config_updated = True
+            for chapter_id_str in chapters_to_clear:
+                del used_mods_data[chapter_id_str]
+                config_updated = True
+            if config_updated:
+                self.app_state.local_config[config_key] = used_mods_data
+        if config_updated:
+            self.settings_manager.write_local_config()
+            logging.info(f'_cleanup_mod_from_all_config_keys: Removed mod {mod_key} from all config keys')
 
     def get_used_mods_config_key(self, game_mode_instance=None, is_chapter_mode: Optional[bool] = None):
         if game_mode_instance is None:
