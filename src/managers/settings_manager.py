@@ -328,7 +328,15 @@ class SettingsManager(QObject):
             from utils.archive_utils import extract_any_archive
             with tempfile.TemporaryDirectory() as temp_dir:
                 extract_any_archive(theme_file_path, temp_dir)
-                with open(os.path.join(temp_dir, 'theme.json'), 'r') as f:
+                theme_json_path = os.path.join(temp_dir, 'theme.json')
+                if not os.path.exists(theme_json_path):
+                    for root, dirs, files in os.walk(temp_dir):
+                        if 'theme.json' in files:
+                            theme_json_path = os.path.join(root, 'theme.json')
+                            break
+                    else:
+                        raise FileNotFoundError(f'theme.json not found in extracted archive')
+                with open(theme_json_path, 'r', encoding='utf-8') as f:
                     theme_settings = json.load(f)
                 for key, value in theme_settings.items():
                     self.app_state.local_config[key] = value

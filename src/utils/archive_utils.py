@@ -30,7 +30,7 @@ def _extract_archive_raw(src_path: str, fname_lower: str, out_dir: str) -> None:
         py7zr = None
     out_dir_abs = os.path.abspath(out_dir)
     os.makedirs(out_dir_abs, exist_ok=True)
-    if fname_lower.endswith('.zip'):
+    if fname_lower.endswith('.zip') or fname_lower.endswith('.dhtheme'):
         with zipfile.ZipFile(src_path, 'r') as zf:
             for member in zf.namelist():
                 if not _is_safe_path(member):
@@ -285,7 +285,7 @@ class ArchiveExtractor:
     def check_archive_has_file(archive_path: str, target_filename: str) -> bool:
         archive_lower = archive_path.lower()
         try:
-            if archive_lower.endswith('.zip'):
+            if archive_lower.endswith('.zip') or archive_lower.endswith('.dhtheme'):
                 with zipfile.ZipFile(archive_path, 'r') as zf:
                     for name in zf.namelist():
                         normalized = name.replace('\\', '/').strip('/')

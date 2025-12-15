@@ -908,8 +908,10 @@ class UrlInstallThread(QThread):
         import zipfile
         import tarfile
         archive_lower = archive_path.lower()
+        if archive_lower.endswith('.dhtheme'):
+            return 'theme'
         try:
-            if archive_lower.endswith('.zip'):
+            if archive_lower.endswith('.zip') or archive_lower.endswith('.dhtheme'):
                 with zipfile.ZipFile(archive_path, 'r') as zf:
                     for name in zf.namelist():
                         normalized = name.replace('\\', '/').strip('/')
