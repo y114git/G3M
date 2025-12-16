@@ -862,7 +862,7 @@
     "game_path_required_for_mods": "La ruta de la carpeta del juego es obligatoria cuando se seleccionan mods. Por favor, establece la ruta del juego en la biblioteca.",
     "no_mod": "Sin mod",
     "normal_launch": "Inicio vanilla",
-    "online_count": "🟢 En línea: {count}",
+    "online_count": "En línea: {count}",
     "operation_cancelled": "Operación cancelada",
     "permission_change_failed": "Error al cambiar permisos.",
     "please_wait": "Por favor espera...",
