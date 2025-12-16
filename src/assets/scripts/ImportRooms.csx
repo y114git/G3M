@@ -415,9 +415,254 @@ void UpdateRoomFromJson(UndertaleRoom room, JsonElement data)
     
     if (Data.IsGameMaker2() && data.TryGetProperty("layers", out JsonElement layersElm) && layersElm.ValueKind == JsonValueKind.Array)
     {
+        room.Layers.Clear();
+        foreach (JsonElement layerElm in layersElm.EnumerateArray())
+        {
+            if (!layerElm.TryGetProperty("layerType", out JsonElement layerTypeElm) || layerTypeElm.ValueKind != JsonValueKind.Number)
+                continue;
+            
+            var layer = new UndertaleRoom.Layer();
+            int layerType = layerTypeElm.GetInt32();
+            layer.LayerType = (UndertaleRoom.LayerType)layerType;
+            
+            
+            if (layerElm.TryGetProperty("layerName", out JsonElement nameElm) && nameElm.ValueKind == JsonValueKind.String)
+                layer.LayerName = Data.Strings.MakeString(nameElm.GetString());
+            if (layerElm.TryGetProperty("layerId", out JsonElement idElm) && idElm.ValueKind == JsonValueKind.Number)
+                layer.LayerId = (uint)Math.Max(0, idElm.GetInt32());
+            if (layerElm.TryGetProperty("layerDepth", out JsonElement depthElm) && depthElm.ValueKind == JsonValueKind.Number)
+                layer.LayerDepth = depthElm.GetInt32();
+            if (layerElm.TryGetProperty("xOffset", out JsonElement xOffElm) && xOffElm.ValueKind == JsonValueKind.Number)
+                layer.XOffset = (float)xOffElm.GetDouble();
+            if (layerElm.TryGetProperty("yOffset", out JsonElement yOffElm) && yOffElm.ValueKind == JsonValueKind.Number)
+                layer.YOffset = (float)yOffElm.GetDouble();
+            if (layerElm.TryGetProperty("hSpeed", out JsonElement hSpeedElm) && hSpeedElm.ValueKind == JsonValueKind.Number)
+                layer.HSpeed = (float)hSpeedElm.GetDouble();
+            if (layerElm.TryGetProperty("vSpeed", out JsonElement vSpeedElm) && vSpeedElm.ValueKind == JsonValueKind.Number)
+                layer.VSpeed = (float)vSpeedElm.GetDouble();
+            if (layerElm.TryGetProperty("isVisible", out JsonElement visibleElm) && (visibleElm.ValueKind == JsonValueKind.True || visibleElm.ValueKind == JsonValueKind.False))
+                layer.IsVisible = visibleElm.GetBoolean();
+            if (Data.IsVersionAtLeast(2022, 1))
+            {
+                if (layerElm.TryGetProperty("effectEnabled", out JsonElement effectEnabledElm) && (effectEnabledElm.ValueKind == JsonValueKind.True || effectEnabledElm.ValueKind == JsonValueKind.False))
+                    layer.EffectEnabled = effectEnabledElm.GetBoolean();
+                if (layerElm.TryGetProperty("effectType", out JsonElement effectTypeElm) && effectTypeElm.ValueKind == JsonValueKind.String)
+                    layer.EffectType = Data.Strings.MakeString(effectTypeElm.GetString());
+            }
+            
+            
+            if (layerType == (int)UndertaleRoom.LayerType.Instances)
+            {
+                var instancesData = new UndertaleRoom.Layer.LayerInstancesData();
+                
+                
+                if (layerElm.TryGetProperty("instanceIds", out JsonElement instanceIdsElm) && instanceIdsElm.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (JsonElement instIdElm in instanceIdsElm.EnumerateArray())
+                    {
+                        if (instIdElm.ValueKind == JsonValueKind.Number)
+                        {
+                            uint instanceId = (uint)Math.Max(0, instIdElm.GetInt32());
+                            
+                            var gameObj = room.GameObjects.FirstOrDefault(g => g.InstanceID == instanceId);
+                            if (gameObj != null)
+                            {
+                                instancesData.Instances.Add(gameObj);
+                            }
+                        }
+                    }
+                }
+                layer.Data = instancesData;
+            }
+            else if (layerType == (int)UndertaleRoom.LayerType.Tiles)
+            {
+                var tilesData = new UndertaleRoom.Layer.LayerTilesData();
+                tilesData.ParentLayer = layer;
+                
+                if (layerElm.TryGetProperty("tilesBackground", out JsonElement tilesBgElm) && tilesBgElm.ValueKind == JsonValueKind.String)
+                {
+                    string bgName = tilesBgElm.GetString();
+                    if (!string.IsNullOrEmpty(bgName))
+                    {
+                        var bg = Data.Backgrounds.ByName(bgName);
+                        if (bg != null)
+                            tilesData.Background = bg;
+                    }
+                }
+                if (layerElm.TryGetProperty("tilesX", out JsonElement tilesXElm) && tilesXElm.ValueKind == JsonValueKind.Number)
+                    tilesData.TilesX = (uint)Math.Max(0, tilesXElm.GetInt32());
+                if (layerElm.TryGetProperty("tilesY", out JsonElement tilesYElm) && tilesYElm.ValueKind == JsonValueKind.Number)
+                    tilesData.TilesY = (uint)Math.Max(0, tilesYElm.GetInt32());
+                
+                if (layerElm.TryGetProperty("tileData", out JsonElement tileDataElm) && tileDataElm.ValueKind == JsonValueKind.Array)
+                {
+                    var rows = new List<uint[]>();
+                    foreach (JsonElement rowElm in tileDataElm.EnumerateArray())
+                    {
+                        if (rowElm.ValueKind == JsonValueKind.Array)
+                        {
+                            var row = new List<uint>();
+                            foreach (JsonElement cellElm in rowElm.EnumerateArray())
+                            {
+                                if (cellElm.ValueKind == JsonValueKind.Number)
+                                    row.Add((uint)cellElm.GetInt32());
+                            }
+                            rows.Add(row.ToArray());
+                        }
+                    }
+                    tilesData.TileData = rows.ToArray();
+                }
+                
+                layer.Data = tilesData;
+            }
+            else if (layerType == (int)UndertaleRoom.LayerType.Background)
+            {
+                var bgData = new UndertaleRoom.Layer.LayerBackgroundData();
+                bgData.ParentLayer = layer;
+                
+                if (layerElm.TryGetProperty("backgroundData", out JsonElement bgDataElm) && bgDataElm.ValueKind == JsonValueKind.Object)
+                {
+                    if (bgDataElm.TryGetProperty("visible", out JsonElement visElm) && (visElm.ValueKind == JsonValueKind.True || visElm.ValueKind == JsonValueKind.False))
+                        bgData.Visible = visElm.GetBoolean();
+                    if (bgDataElm.TryGetProperty("foreground", out JsonElement fgElm) && (fgElm.ValueKind == JsonValueKind.True || fgElm.ValueKind == JsonValueKind.False))
+                        bgData.Foreground = fgElm.GetBoolean();
+                    if (bgDataElm.TryGetProperty("sprite", out JsonElement sprElm) && sprElm.ValueKind == JsonValueKind.String)
+                    {
+                        string sprName = sprElm.GetString();
+                        if (!string.IsNullOrEmpty(sprName))
+                        {
+                            var spr = Data.Sprites.ByName(sprName);
+                            if (spr != null)
+                                bgData.Sprite = spr;
+                        }
+                    }
+                    if (bgDataElm.TryGetProperty("tiledHorizontally", out JsonElement tiledHElm) && (tiledHElm.ValueKind == JsonValueKind.True || tiledHElm.ValueKind == JsonValueKind.False))
+                        bgData.TiledHorizontally = tiledHElm.GetBoolean();
+                    if (bgDataElm.TryGetProperty("tiledVertically", out JsonElement tiledVElm) && (tiledVElm.ValueKind == JsonValueKind.True || tiledVElm.ValueKind == JsonValueKind.False))
+                        bgData.TiledVertically = tiledVElm.GetBoolean();
+                    if (bgDataElm.TryGetProperty("stretch", out JsonElement stretchElm) && (stretchElm.ValueKind == JsonValueKind.True || stretchElm.ValueKind == JsonValueKind.False))
+                        bgData.Stretch = stretchElm.GetBoolean();
+                    if (bgDataElm.TryGetProperty("color", out JsonElement colorElm) && colorElm.ValueKind == JsonValueKind.Number)
+                        bgData.Color = (uint)colorElm.GetInt32();
+                    if (bgDataElm.TryGetProperty("firstFrame", out JsonElement ffElm) && ffElm.ValueKind == JsonValueKind.Number)
+                        bgData.FirstFrame = (float)ffElm.GetDouble();
+                    if (bgDataElm.TryGetProperty("animationSpeed", out JsonElement asElm) && asElm.ValueKind == JsonValueKind.Number)
+                        bgData.AnimationSpeed = (float)asElm.GetDouble();
+                    if (bgDataElm.TryGetProperty("animationSpeedType", out JsonElement astElm) && astElm.ValueKind == JsonValueKind.Number)
+                        bgData.AnimationSpeedType = (AnimationSpeedType)astElm.GetInt32();
+                }
+                
+                layer.Data = bgData;
+            }
+            else if (layerType == (int)UndertaleRoom.LayerType.Assets)
+            {
+                var assetsData = new UndertaleRoom.Layer.LayerAssetsData();
+                assetsData.LegacyTiles = new UndertalePointerList<UndertaleRoom.Tile>();
+                assetsData.Sprites = new UndertalePointerList<UndertaleRoom.SpriteInstance>();
+                if (Data.IsVersionAtLeast(2, 3))
+                {
+                    assetsData.Sequences = new UndertalePointerList<UndertaleRoom.SequenceInstance>();
+                }
+                
+                if (layerElm.TryGetProperty("assetsData", out JsonElement assetsDataElm) && assetsDataElm.ValueKind == JsonValueKind.Object)
+                {
+                    
+                    if (assetsDataElm.TryGetProperty("legacyTiles", out JsonElement legacyTilesElm) && legacyTilesElm.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (JsonElement tileElm in legacyTilesElm.EnumerateArray())
+                        {
+                            var tile = new UndertaleRoom.Tile();
+                            if (tileElm.TryGetProperty("x", out JsonElement xElm) && xElm.ValueKind == JsonValueKind.Number)
+                                tile.X = xElm.GetInt32();
+                            if (tileElm.TryGetProperty("y", out JsonElement yElm) && yElm.ValueKind == JsonValueKind.Number)
+                                tile.Y = yElm.GetInt32();
+                            if (tileElm.TryGetProperty("sourceX", out JsonElement sxElm) && sxElm.ValueKind == JsonValueKind.Number)
+                                tile.SourceX = (uint)sxElm.GetInt32();
+                            if (tileElm.TryGetProperty("sourceY", out JsonElement syElm) && syElm.ValueKind == JsonValueKind.Number)
+                                tile.SourceY = (uint)syElm.GetInt32();
+                            if (tileElm.TryGetProperty("width", out JsonElement wElm) && wElm.ValueKind == JsonValueKind.Number)
+                                tile.Width = (uint)wElm.GetInt32();
+                            if (tileElm.TryGetProperty("height", out JsonElement hElm) && hElm.ValueKind == JsonValueKind.Number)
+                                tile.Height = (uint)hElm.GetInt32();
+                            if (tileElm.TryGetProperty("tileDepth", out JsonElement dElm) && dElm.ValueKind == JsonValueKind.Number)
+                                tile.TileDepth = dElm.GetInt32();
+                            if (tileElm.TryGetProperty("instanceID", out JsonElement instIdElm) && instIdElm.ValueKind == JsonValueKind.Number)
+                                tile.InstanceID = (uint)instIdElm.GetInt32();
+                            if (tileElm.TryGetProperty("scaleX", out JsonElement scxElm) && scxElm.ValueKind == JsonValueKind.Number)
+                                tile.ScaleX = (float)scxElm.GetDouble();
+                            if (tileElm.TryGetProperty("scaleY", out JsonElement scyElm) && scyElm.ValueKind == JsonValueKind.Number)
+                                tile.ScaleY = (float)scyElm.GetDouble();
+                            if (tileElm.TryGetProperty("color", out JsonElement colorElm) && colorElm.ValueKind == JsonValueKind.Number)
+                                tile.Color = (uint)colorElm.GetInt32();
+                            if (tileElm.TryGetProperty("background", out JsonElement bgElm) && bgElm.ValueKind == JsonValueKind.String)
+                            {
+                                string bgName = bgElm.GetString();
+                                if (!string.IsNullOrEmpty(bgName))
+                                {
+                                    var bg = Data.Backgrounds.ByName(bgName);
+                                    if (bg != null)
+                                        tile.BackgroundDefinition = bg;
+                                }
+                            }
+                            assetsData.LegacyTiles.Add(tile);
+                        }
+                    }
+                    
+                    
+                    if (assetsDataElm.TryGetProperty("sprites", out JsonElement spritesElm) && spritesElm.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (JsonElement sprElm in spritesElm.EnumerateArray())
+                        {
+                            var sprInst = new UndertaleRoom.SpriteInstance();
+                            if (sprElm.TryGetProperty("name", out JsonElement nameElm2) && nameElm2.ValueKind == JsonValueKind.String)
+                                sprInst.Name = Data.Strings.MakeString(nameElm2.GetString());
+                            if (sprElm.TryGetProperty("sprite", out JsonElement sprRefElm) && sprRefElm.ValueKind == JsonValueKind.String)
+                            {
+                                string sprName = sprRefElm.GetString();
+                                if (!string.IsNullOrEmpty(sprName))
+                                {
+                                    var spr = Data.Sprites.ByName(sprName);
+                                    if (spr != null)
+                                        sprInst.Sprite = spr;
+                                }
+                            }
+                            if (sprElm.TryGetProperty("x", out JsonElement xElm) && xElm.ValueKind == JsonValueKind.Number)
+                                sprInst.X = (float)xElm.GetDouble();
+                            if (sprElm.TryGetProperty("y", out JsonElement yElm) && yElm.ValueKind == JsonValueKind.Number)
+                                sprInst.Y = (float)yElm.GetDouble();
+                            if (sprElm.TryGetProperty("scaleX", out JsonElement sxElm) && sxElm.ValueKind == JsonValueKind.Number)
+                                sprInst.ScaleX = (float)sxElm.GetDouble();
+                            if (sprElm.TryGetProperty("scaleY", out JsonElement syElm) && syElm.ValueKind == JsonValueKind.Number)
+                                sprInst.ScaleY = (float)syElm.GetDouble();
+                            if (sprElm.TryGetProperty("color", out JsonElement colorElm) && colorElm.ValueKind == JsonValueKind.Number)
+                                sprInst.Color = (uint)colorElm.GetInt32();
+                            if (sprElm.TryGetProperty("animationSpeed", out JsonElement asElm) && asElm.ValueKind == JsonValueKind.Number)
+                                sprInst.AnimationSpeed = (float)asElm.GetDouble();
+                            if (sprElm.TryGetProperty("animationSpeedType", out JsonElement astElm) && astElm.ValueKind == JsonValueKind.Number)
+                                sprInst.AnimationSpeedType = (AnimationSpeedType)astElm.GetInt32();
+                            if (sprElm.TryGetProperty("frameIndex", out JsonElement fiElm) && fiElm.ValueKind == JsonValueKind.Number)
+                                sprInst.FrameIndex = (float)fiElm.GetDouble();
+                            if (sprElm.TryGetProperty("rotation", out JsonElement rotElm) && rotElm.ValueKind == JsonValueKind.Number)
+                                sprInst.Rotation = (float)rotElm.GetDouble();
+                            assetsData.Sprites.Add(sprInst);
+                        }
+                    }
+                }
+                
+                layer.Data = assetsData;
+            }
+            
+            else if (layerType == (int)UndertaleRoom.LayerType.Effect)
+            {
+                var effectData = new UndertaleRoom.Layer.LayerEffectData();
+                layer.Data = effectData;
+            }
+            
+            layer.ParentRoom = room;
+            room.Layers.Add(layer);
+        }
         
-        
-        PrintLine("[ImportRooms] Layer import is not fully implemented - preserving existing layers.");
+        PrintLine($"[ImportRooms] Imported {room.Layers.Count} layer(s) for room {room.Name?.Content}.");
     }
     
     

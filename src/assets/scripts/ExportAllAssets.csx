@@ -636,6 +636,130 @@ void DumpRoom(UndertaleRoom room)
                     WriteJsonString(json, "effectEnabled"); json.Append(": "); WriteJsonBool(json, layer.EffectEnabled); json.Append(",\n");
                     WriteJsonString(json, "effectType"); json.Append(": "); WriteJsonString(json, layer.EffectType?.Content ?? "");
                 }
+
+
+                if (layer.LayerType == UndertaleRoom.LayerType.Instances && layer.InstancesData != null)
+                {
+                    json.Append(",\n");
+                    json.Append("      \"instanceIds\": [\n");
+                    if (layer.InstancesData.Instances != null)
+                    {
+                        for (int j = 0; j < layer.InstancesData.Instances.Count; j++)
+                        {
+                            var inst = layer.InstancesData.Instances[j];
+                            json.Append("        ");
+                            WriteJsonNumber(json, (int)inst.InstanceID);
+                            if (j < layer.InstancesData.Instances.Count - 1) json.Append(",");
+                            json.Append("\n");
+                        }
+                    }
+                    json.Append("      ]");
+                }
+                else if (layer.LayerType == UndertaleRoom.LayerType.Tiles && layer.TilesData != null)
+                {
+                    var tilesData = layer.TilesData;
+                    json.Append(",\n");
+                    WriteJsonString(json, "tilesBackground"); json.Append(": "); WriteJsonString(json, tilesData.Background?.Name?.Content ?? ""); json.Append(",\n");
+                    WriteJsonString(json, "tilesX"); json.Append(": "); WriteJsonNumber(json, (int)tilesData.TilesX); json.Append(",\n");
+                    WriteJsonString(json, "tilesY"); json.Append(": "); WriteJsonNumber(json, (int)tilesData.TilesY); json.Append(",\n");
+                    json.Append("      \"tileData\": [\n");
+                    if (tilesData.TileData != null)
+                    {
+                        for (int y = 0; y < tilesData.TileData.Length; y++)
+                        {
+                            json.Append("        [");
+                            var row = tilesData.TileData[y];
+                            if (row != null)
+                            {
+                                for (int x = 0; x < row.Length; x++)
+                                {
+                                    json.Append(row[x]);
+                                    if (x < row.Length - 1) json.Append(", ");
+                                }
+                            }
+                            json.Append("]");
+                            if (y < tilesData.TileData.Length - 1) json.Append(",");
+                            json.Append("\n");
+                        }
+                    }
+                    json.Append("      ]");
+                }
+                else if (layer.LayerType == UndertaleRoom.LayerType.Background && layer.BackgroundData != null)
+                {
+                    var bgData = layer.BackgroundData;
+                    json.Append(",\n");
+                    json.Append("      \"backgroundData\": {\n");
+                    WriteJsonString(json, "visible"); json.Append(": "); WriteJsonBool(json, bgData.Visible); json.Append(",\n");
+                    WriteJsonString(json, "foreground"); json.Append(": "); WriteJsonBool(json, bgData.Foreground); json.Append(",\n");
+                    WriteJsonString(json, "sprite"); json.Append(": "); WriteJsonString(json, bgData.Sprite?.Name?.Content ?? ""); json.Append(",\n");
+                    WriteJsonString(json, "tiledHorizontally"); json.Append(": "); WriteJsonBool(json, bgData.TiledHorizontally); json.Append(",\n");
+                    WriteJsonString(json, "tiledVertically"); json.Append(": "); WriteJsonBool(json, bgData.TiledVertically); json.Append(",\n");
+                    WriteJsonString(json, "stretch"); json.Append(": "); WriteJsonBool(json, bgData.Stretch); json.Append(",\n");
+                    WriteJsonString(json, "color"); json.Append(": "); WriteJsonNumber(json, (int)bgData.Color); json.Append(",\n");
+                    WriteJsonString(json, "firstFrame"); json.Append(": "); WriteJsonNumber(json, bgData.FirstFrame); json.Append(",\n");
+                    WriteJsonString(json, "animationSpeed"); json.Append(": "); WriteJsonNumber(json, bgData.AnimationSpeed); json.Append(",\n");
+                    WriteJsonString(json, "animationSpeedType"); json.Append(": "); WriteJsonNumber(json, (int)bgData.AnimationSpeedType);
+                    json.Append("\n      }");
+                }
+                else if (layer.LayerType == UndertaleRoom.LayerType.Assets && layer.AssetsData != null)
+                {
+                    var assetsData = layer.AssetsData;
+                    json.Append(",\n");
+                    json.Append("      \"assetsData\": {\n");
+
+                    json.Append("        \"legacyTiles\": [\n");
+                    if (assetsData.LegacyTiles != null)
+                    {
+                        for (int j = 0; j < assetsData.LegacyTiles.Count; j++)
+                        {
+                            var tile = assetsData.LegacyTiles[j];
+                            json.Append("          {\n");
+                            WriteJsonString(json, "x"); json.Append(": "); WriteJsonNumber(json, tile.X); json.Append(",\n");
+                            WriteJsonString(json, "y"); json.Append(": "); WriteJsonNumber(json, tile.Y); json.Append(",\n");
+                            WriteJsonString(json, "sourceX"); json.Append(": "); WriteJsonNumber(json, (int)tile.SourceX); json.Append(",\n");
+                            WriteJsonString(json, "sourceY"); json.Append(": "); WriteJsonNumber(json, (int)tile.SourceY); json.Append(",\n");
+                            WriteJsonString(json, "width"); json.Append(": "); WriteJsonNumber(json, (int)tile.Width); json.Append(",\n");
+                            WriteJsonString(json, "height"); json.Append(": "); WriteJsonNumber(json, (int)tile.Height); json.Append(",\n");
+                            WriteJsonString(json, "tileDepth"); json.Append(": "); WriteJsonNumber(json, tile.TileDepth); json.Append(",\n");
+                            WriteJsonString(json, "instanceID"); json.Append(": "); WriteJsonNumber(json, (int)tile.InstanceID); json.Append(",\n");
+                            WriteJsonString(json, "scaleX"); json.Append(": "); WriteJsonNumber(json, tile.ScaleX); json.Append(",\n");
+                            WriteJsonString(json, "scaleY"); json.Append(": "); WriteJsonNumber(json, tile.ScaleY); json.Append(",\n");
+                            WriteJsonString(json, "color"); json.Append(": "); WriteJsonNumber(json, (int)tile.Color); json.Append(",\n");
+                            WriteJsonString(json, "background"); json.Append(": "); WriteJsonString(json, tile.BackgroundDefinition?.Name?.Content ?? "");
+                            json.Append("\n          }");
+                            if (j < assetsData.LegacyTiles.Count - 1) json.Append(",");
+                            json.Append("\n");
+                        }
+                    }
+                    json.Append("        ],\n");
+
+                    json.Append("        \"sprites\": [\n");
+                    if (assetsData.Sprites != null)
+                    {
+                        for (int j = 0; j < assetsData.Sprites.Count; j++)
+                        {
+                            var spr = assetsData.Sprites[j];
+                            json.Append("          {\n");
+                            WriteJsonString(json, "name"); json.Append(": "); WriteJsonString(json, spr.Name?.Content ?? ""); json.Append(",\n");
+                            WriteJsonString(json, "sprite"); json.Append(": "); WriteJsonString(json, spr.Sprite?.Name?.Content ?? ""); json.Append(",\n");
+                            WriteJsonString(json, "x"); json.Append(": "); WriteJsonNumber(json, spr.X); json.Append(",\n");
+                            WriteJsonString(json, "y"); json.Append(": "); WriteJsonNumber(json, spr.Y); json.Append(",\n");
+                            WriteJsonString(json, "scaleX"); json.Append(": "); WriteJsonNumber(json, spr.ScaleX); json.Append(",\n");
+                            WriteJsonString(json, "scaleY"); json.Append(": "); WriteJsonNumber(json, spr.ScaleY); json.Append(",\n");
+                            WriteJsonString(json, "color"); json.Append(": "); WriteJsonNumber(json, (int)spr.Color); json.Append(",\n");
+                            WriteJsonString(json, "animationSpeed"); json.Append(": "); WriteJsonNumber(json, spr.AnimationSpeed); json.Append(",\n");
+                            WriteJsonString(json, "animationSpeedType"); json.Append(": "); WriteJsonNumber(json, (int)spr.AnimationSpeedType); json.Append(",\n");
+                            WriteJsonString(json, "frameIndex"); json.Append(": "); WriteJsonNumber(json, spr.FrameIndex); json.Append(",\n");
+                            WriteJsonString(json, "rotation"); json.Append(": "); WriteJsonNumber(json, spr.Rotation);
+                            json.Append("\n          }");
+                            if (j < assetsData.Sprites.Count - 1) json.Append(",");
+                            json.Append("\n");
+                        }
+                    }
+                    json.Append("        ]\n");
+                    json.Append("      }");
+                }
+
                 json.Append("\n    }");
                 if (i < room.Layers.Count - 1) json.Append(",");
                 json.Append("\n");
