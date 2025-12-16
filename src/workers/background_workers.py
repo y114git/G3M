@@ -39,6 +39,24 @@ class PresenceWorker(QObject):
         self.app_state = app_state
         self._busy = False
 
+    def _safe_emit_online_count(self, value: int):
+        try:
+            self.update_online_count.emit(value)
+        except RuntimeError as e:
+            if 'deleted' in str(e):
+                logging.debug('PresenceWorker: object deleted, skipping signal emit')
+            else:
+                raise
+
+    def _safe_emit_finished(self):
+        try:
+            self.finished.emit()
+        except RuntimeError as e:
+            if 'deleted' in str(e):
+                logging.debug('PresenceWorker: object deleted, skipping signal emit')
+            else:
+                raise
+
     @pyqtSlot()
     def run(self):
         import requests
@@ -46,7 +64,7 @@ class PresenceWorker(QObject):
             if self._busy:
                 return
             if not self.app_state or not getattr(self.app_state, 'has_internet', True):
-                self.update_online_count.emit(-1)
+                self._safe_emit_online_count(-1)
                 return
             self._busy = True
             url = f'{CLOUD_FUNCTIONS_BASE_URL}/presenceHeartbeat'
@@ -57,27 +75,27 @@ class PresenceWorker(QObject):
                 try:
                     data = resp.json() or {}
                     online = int(data.get('online', 0))
-                    self.update_online_count.emit(max(online, 0))
+                    self._safe_emit_online_count(max(online, 0))
                 except Exception as e:
                     logging.warning(f'PresenceWorker: parse error: {e}', exc_info=True)
-                    self.update_online_count.emit(-1)
+                    self._safe_emit_online_count(-1)
             else:
-                self.update_online_count.emit(-1)
+                self._safe_emit_online_count(-1)
         except requests.Timeout as e:
             safe_msg = sanitize_log_message(f'PresenceWorker: timeout error: {e}')
             logging.debug(safe_msg)
-            self.update_online_count.emit(-1)
+            self._safe_emit_online_count(-1)
         except requests.ConnectionError as e:
             safe_msg = sanitize_log_message(f'PresenceWorker: connection error: {e}')
             logging.debug(safe_msg)
-            self.update_online_count.emit(-1)
+            self._safe_emit_online_count(-1)
         except requests.RequestException as e:
             safe_msg = sanitize_log_message(f'PresenceWorker: request error: {e}')
             logging.debug(safe_msg)
-            self.update_online_count.emit(-1)
+            self._safe_emit_online_count(-1)
         finally:
             self._busy = False
-            self.finished.emit()
+            self._safe_emit_finished()
 
 
 class BgLoader(QThread):
@@ -612,6 +630,8 @@ class InstallModsThread(QThread):
                             file_key = str(chapter_id)
                         files_data[file_key] = file_info
                 config_data = {'is_local_mod': False, 'key': mod.key, 'name': mod.name, 'author': mod.author, 'version': mod.version, 'game_version': mod.game_version, 'game': mod.game, 'files': files_data, 'tags': mod.tags}
+                if hasattr(mod, 'icon_url') and mod.icon_url:
+                    config_data['icon_url'] = mod.icon_url
                 mod_configs[mod.key] = {'folder_name': mod_folder_name, 'config': config_data}
             try:
                 os.makedirs(self.main_window.app_state.mods_dir, exist_ok=True)

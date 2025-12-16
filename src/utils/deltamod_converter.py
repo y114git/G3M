@@ -4,9 +4,10 @@ import re
 import shutil
 import uuid
 import logging
+import zipfile
 import xml.etree.ElementTree as ET
 from datetime import datetime
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Tuple
 from managers.localization_manager import tr
 from utils.file_utils import get_unique_mod_dir, find_deltamod_info_file
 
@@ -46,6 +47,30 @@ class DeltamodConverter:
         except Exception as e:
             logging.error(f'Deltamod conversion failed: {e}')
             return None
+
+    def _parse_to_path(self, to_path: str) -> Tuple[Optional[str], Optional[str], str]:
+        if not to_path:
+            return (None, None, '')
+        to_path = to_path.lstrip('./').replace('\\', '/')
+        chapter_key = None
+        if 'demo' in to_path.lower():
+            chapter_key = 'demo'
+        else:
+            match = re.search('chapter(\\d+)', to_path, re.IGNORECASE)
+            if match:
+                chapter_num = int(match.group(1))
+                if chapter_num >= 0:
+                    chapter_key = str(chapter_num)
+            else:
+                chapter_key = '0'
+        if not chapter_key:
+            return (None, None, '')
+        path_without_chapter = re.sub('chapter\\d+_windows?/', '', to_path, flags=re.IGNORECASE)
+        path_without_chapter = path_without_chapter.lstrip('./')
+        dir_part = os.path.dirname(path_without_chapter)
+        filename = os.path.basename(path_without_chapter)
+        relative_path = dir_part.replace('\\', '/') + '/' if dir_part else ''
+        return (chapter_key, relative_path, filename)
 
     def _validate_source(self) -> bool:
         info_path = find_deltamod_info_file(self.source_path)
@@ -106,16 +131,12 @@ class DeltamodConverter:
             to_path = patch.get('to', '')
             patch_file = patch.get('patch', '')
             patch_type = patch.get('type', '')
-            chapter_key = None
-            if 'demo' in to_path:
-                chapter_key = 'demo'
-            else:
-                match = re.search('chapter(\\d+)', to_path, re.IGNORECASE)
-                if match:
-                    chapter_num = int(match.group(1))
-                    if chapter_num > 0:
-                        chapter_key = str(chapter_num)
+            if not to_path or not patch_file or (not patch_type):
+                logging.warning(f'DeltamodConverter: skipping patch with missing fields (to={to_path}, patch={patch_file}, type={patch_type})')
+                continue
+            chapter_key, relative_path, filename = self._parse_to_path(to_path)
             if not chapter_key:
+                logging.warning(f'DeltamodConverter: could not determine chapter for path: {to_path}')
                 continue
             if chapter_key not in files_structure:
                 files_structure[chapter_key] = {}
@@ -125,11 +146,27 @@ class DeltamodConverter:
             elif patch_type == 'override':
                 if 'extra_files' not in files_structure[chapter_key]:
                     files_structure[chapter_key]['extra_files'] = {}
-                group_key = os.path.splitext(os.path.basename(patch_file))[0]
-                if group_key not in files_structure[chapter_key]['extra_files']:
-                    files_structure[chapter_key]['extra_files'][group_key] = []
-                files_structure[chapter_key]['extra_files'][group_key].append(os.path.basename(patch_file))
+                archive_key = (relative_path + filename).replace('/', '_').replace('\\', '_')
+                if not archive_key:
+                    archive_key = filename
+                if archive_key not in files_structure[chapter_key]['extra_files']:
+                    files_structure[chapter_key]['extra_files'][archive_key] = []
+                archive_name = f'extra_file_{archive_key}.zip'
+                if archive_name not in files_structure[chapter_key]['extra_files'][archive_key]:
+                    files_structure[chapter_key]['extra_files'][archive_key].append(archive_name)
         return files_structure
+
+    def _create_extra_file_archive(self, source_file: str, archive_path: str, relative_path: str, filename: str) -> bool:
+        try:
+            os.makedirs(os.path.dirname(archive_path), exist_ok=True)
+            with zipfile.ZipFile(archive_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                archive_internal_path = relative_path + filename
+                zipf.write(source_file, archive_internal_path)
+            logging.debug(f'Created extra_file archive: {archive_path} with internal path: {archive_internal_path}')
+            return True
+        except Exception as e:
+            logging.error(f'Failed to create extra_file archive {archive_path}: {e}', exc_info=True)
+            return False
 
     def _process_files(self, target_mod_dir: str) -> None:
         if self.modding_xml is None:
@@ -149,19 +186,38 @@ class DeltamodConverter:
             to_path = patch.get('to', '')
             patch_file_rel = patch.get('patch', '').lstrip('./')
             patch_file_abs = os.path.join(self.source_path, patch_file_rel)
+            patch_type = patch.get('type', '')
             if not os.path.exists(patch_file_abs):
+                logging.warning(f'DeltamodConverter: patch file not found: {patch_file_abs}')
                 continue
-            chapter_key = None
-            if 'demo' in to_path:
-                chapter_key = 'demo'
-            else:
-                match = re.search('chapter(\\d+)', to_path, re.IGNORECASE)
-                if match:
-                    chapter_num = int(match.group(1))
-                    if chapter_num > 0:
-                        chapter_key = f'chapter_{chapter_num}'
+            if not to_path or not patch_type:
+                logging.warning(f'DeltamodConverter: skipping patch with missing to or type: {to_path}, {patch_type}')
+                continue
+            chapter_key, relative_path, filename = self._parse_to_path(to_path)
             if not chapter_key:
+                logging.warning(f'DeltamodConverter: could not determine chapter for path: {to_path}')
                 continue
-            target_chapter_dir = os.path.join(target_mod_dir, chapter_key)
+            if chapter_key == 'demo':
+                chapter_dir_name = 'demo'
+            elif chapter_key == '0':
+                chapter_dir_name = 'chapter_0'
+            else:
+                chapter_dir_name = f'chapter_{chapter_key}'
+            target_chapter_dir = os.path.join(target_mod_dir, chapter_dir_name)
             os.makedirs(target_chapter_dir, exist_ok=True)
-            shutil.copy2(patch_file_abs, os.path.join(target_chapter_dir, os.path.basename(patch_file_abs)))
+            if patch_type == 'override':
+                archive_key = (relative_path + filename).replace('/', '_').replace('\\', '_')
+                if not archive_key:
+                    archive_key = filename
+                archive_name = f'extra_file_{archive_key}.zip'
+                archive_path = os.path.join(target_chapter_dir, archive_name)
+                if self._create_extra_file_archive(patch_file_abs, archive_path, relative_path, filename):
+                    logging.info(f'Created override archive: {archive_name} for chapter {chapter_key} with path {relative_path}{filename}')
+                else:
+                    logging.error(f'Failed to create override archive for: {to_path}')
+            elif patch_type == 'xdelta':
+                target_patch_path = os.path.join(target_chapter_dir, os.path.basename(patch_file_abs))
+                shutil.copy2(patch_file_abs, target_patch_path)
+                logging.info(f'Copied xdelta patch: {os.path.basename(patch_file_abs)} for chapter {chapter_key}, target: {to_path}')
+            else:
+                logging.warning(f'DeltamodConverter: unknown patch type: {patch_type}')
