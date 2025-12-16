@@ -38,18 +38,17 @@ class CreateModpackThread(QThread):
         self.status_update.emit('Operation cancelled', 'error')
 
     def run(self):
+        success = False
         try:
             if self.isInterruptionRequested() or self._cancelled:
-                self.finished.emit(False)
                 return
             self.merger = MultiModMerger(self.app_state, self.mod_manager, None)
             self.merger.progress_update.connect(self.progress_update.emit)
             self.merger.status_update.connect(self.status_update.emit)
             self.merger._cancelled = False
             if self.isInterruptionRequested() or self._cancelled:
-                self.finished.emit(False)
                 return
-            success = self.merger.process_mod_merge(self.chapter_mods, is_modpack=True, modpack_dir=self.modpack_dir, fast_merge=self.fast_merge)
+            success = self.merger.process_mod_merge(self.chapter_mods, is_modpack=True, modpack_dir=self.modpack_dir, fast_merge=self.fast_merge, xdelta_modpack=self.xdelta_modpack)
             if self.isInterruptionRequested() or self._cancelled:
                 self.merger._cancelled = True
                 success = False
@@ -63,14 +62,27 @@ class CreateModpackThread(QThread):
                 if self.xdelta_modpack:
                     self._create_xdelta_patches()
                 self._create_config_json()
-            self.finished.emit(success)
         except Exception as e:
             logging.error(f'CreateModpackThread failed: {e}', exc_info=True)
             self.status_update.emit(f'Modpack creation failed: {str(e)}', 'error')
-            self.finished.emit(False)
+            success = False
         finally:
             if self.merger:
-                self.merger.cleanup(force=True)
+                try:
+                    try:
+                        self.merger.progress_update.disconnect()
+                    except (TypeError, RuntimeError):
+                        pass
+                    try:
+                        self.merger.status_update.disconnect()
+                    except (TypeError, RuntimeError):
+                        pass
+                    self.merger.cleanup(force=True)
+                except Exception as cleanup_error:
+                    logging.warning(f'Error during merger cleanup: {cleanup_error}', exc_info=True)
+                finally:
+                    self.merger = None
+            self.finished.emit(success)
 
     def _create_xdelta_patches(self):
         try:

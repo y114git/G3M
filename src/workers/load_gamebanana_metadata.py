@@ -17,7 +17,7 @@ class LoadGameBananaMetadataThread(QThread):
         self.metadata_cache = metadata_cache
         self.api = GameBananaAPI()
         self._cancelled = False
-        self._batch_size = 5
+        self._batch_size = 3
 
     def cancel(self):
         self._cancelled = True
@@ -53,8 +53,9 @@ class LoadGameBananaMetadataThread(QThread):
                         logger.error(f'LoadGameBananaMetadataThread: Error loading metadata for mod {mod_id_str}: {e}', exc_info=True)
                         continue
                     self.progress.emit(loaded_count, total)
+                    self.msleep(300)
                 if i + self._batch_size < total and (not self._cancelled) and (not self.isInterruptionRequested()):
-                    self.msleep(100)
+                    self.msleep(500)
             self.finished.emit()
         except Exception as e:
             logger.error(f'LoadGameBananaMetadataThread: Unexpected error: {e}', exc_info=True)

@@ -19,6 +19,23 @@ class GameBananaAPI:
         self.core_api_base = 'https://api.gamebanana.com'
         self.session = get_session()
         self._compatibility_cache: Dict[int, Dict[str, Any]] = {}
+        self._last_request_time = 0.0
+        self._min_request_interval = 0.2
+        self._rate_limit_wait_time = 0.0
+
+    def _wait_for_rate_limit(self):
+        current_time = time.time()
+        time_since_last = current_time - self._last_request_time
+        if self._rate_limit_wait_time > 0:
+            wait_time = max(self._rate_limit_wait_time, self._min_request_interval - time_since_last)
+            if wait_time > 0:
+                logger.debug(f'GameBananaAPI: Rate limiting - waiting {wait_time:.2f} seconds')
+                time.sleep(wait_time)
+                self._rate_limit_wait_time = 0.0
+        elif time_since_last < self._min_request_interval:
+            wait_time = self._min_request_interval - time_since_last
+            time.sleep(wait_time)
+        self._last_request_time = time.time()
 
     def _handle_request_exception(self, e: Exception, mod_id: Optional[int] = None, operation: str = 'operation') -> None:
         status_code = None
@@ -30,6 +47,13 @@ class GameBananaAPI:
                 else:
                     logger.debug(f'{operation} failed (400 Bad Request): {e}')
                 return
+            elif status_code == 429:
+                self._rate_limit_wait_time = max(self._rate_limit_wait_time, 5.0)
+                if mod_id:
+                    logger.warning(f'{operation} for mod {mod_id}: Rate limit (429) - will wait before next requests')
+                else:
+                    logger.warning(f'{operation}: Rate limit (429) - will wait before next requests')
+                return
         if status_code and status_code >= 500:
             if mod_id:
                 logger.error(f'{operation} for mod {mod_id}: Server error {status_code}: {e}')
@@ -40,95 +64,106 @@ class GameBananaAPI:
         else:
             logger.warning(f'{operation}: {e}')
 
-    def get_game_mods(self, game_id: int, page: int = 1, per_page: int = 20, sort: str = 'default', metadata_cache=None) -> Tuple[Optional[List[ModInfo]], List[str]]:
+    def get_game_mods(self, game_id: int, page: int = 1, per_page: int = 20, sort: str = 'default', metadata_cache=None, max_retries: int = 2) -> Tuple[Optional[List[ModInfo]], List[str]]:
         valid_sorts = ['default', 'new', 'updated']
         effective_sort = sort if sort in valid_sorts else 'default'
         url = f'{self.base_url}/Game/{game_id}/Subfeed'
         params = {'_nPage': page, '_nPerpage': per_page, '_sSort': effective_sort, '_csvModelInclusions': 'Mod'}
         mods_needing_metadata = []
-        try:
-            response = self.session.get(url, params=params, timeout=NETWORK_TIMEOUT_MEDIUM)
-            response.raise_for_status()
-            data = response.json()
-            records = data.get('_aRecords', [])
-            game_name = None
-            for name, id_val in GAMEBANANA_GAME_IDS.items():
-                if id_val == game_id:
-                    game_name = name
-                    break
-            if not game_name:
-                game_name = 'deltarune'
-            mapped_mods: List[ModInfo] = []
-            for record in records:
-                if record.get('_sModelName') == 'Mod':
-                    mod_id = record.get('_idRow')
-                    if mod_id:
-                        mod_id_str = str(mod_id)
-                        mod_info = self._map_mod_data(record, game_name)
-                        if mod_info:
-                            downloads_from_gb = record.get('_nDownloadCount')
-                            downloads_value = 0
-                            if downloads_from_gb is not None:
-                                try:
-                                    downloads_value = int(downloads_from_gb)
-                                except (ValueError, TypeError):
-                                    downloads_value = 0
-                            mod_info.downloads = downloads_value
-                            cache_valid = False
-                            cached_category = None
-                            if metadata_cache:
-                                cache_valid = metadata_cache.is_valid(mod_id_str)
-                                if cache_valid:
-                                    cached_downloads = metadata_cache.get_downloads(mod_id_str)
-                                    cached_tagline = metadata_cache.get_tagline(mod_id_str)
-                                    cached_category = metadata_cache.get_category(mod_id_str)
-                                    if cached_downloads is not None and cached_downloads > 0:
-                                        mod_info.downloads = cached_downloads
-                                    elif downloads_value > 0:
-                                        mod_info.downloads = downloads_value
-                                    if cached_tagline:
-                                        mod_info.tagline = cached_tagline
-                                    if cached_category:
-                                        mod_info.gamebanana_category = cached_category
-                            current_downloads = mod_info.downloads
-                            if current_downloads is None:
-                                current_downloads = 0
-                            else:
-                                try:
-                                    current_downloads = int(current_downloads)
-                                except (ValueError, TypeError):
+        for attempt in range(max_retries + 1):
+            try:
+                self._wait_for_rate_limit()
+                response = self.session.get(url, params=params, timeout=NETWORK_TIMEOUT_MEDIUM)
+                response.raise_for_status()
+                data = response.json()
+                records = data.get('_aRecords', [])
+                game_name = None
+                for name, id_val in GAMEBANANA_GAME_IDS.items():
+                    if id_val == game_id:
+                        game_name = name
+                        break
+                if not game_name:
+                    game_name = 'deltarune'
+                mapped_mods: List[ModInfo] = []
+                for record in records:
+                    if record.get('_sModelName') == 'Mod':
+                        mod_id = record.get('_idRow')
+                        if mod_id:
+                            mod_id_str = str(mod_id)
+                            mod_info = self._map_mod_data(record, game_name)
+                            if mod_info:
+                                downloads_from_gb = record.get('_nDownloadCount')
+                                downloads_value = 0
+                                if downloads_from_gb is not None:
+                                    try:
+                                        downloads_value = int(downloads_from_gb)
+                                    except (ValueError, TypeError):
+                                        downloads_value = 0
+                                mod_info.downloads = downloads_value
+                                cache_valid = False
+                                cached_category = None
+                                if metadata_cache:
+                                    cache_valid = metadata_cache.is_valid(mod_id_str)
+                                    if cache_valid:
+                                        cached_downloads = metadata_cache.get_downloads(mod_id_str)
+                                        cached_tagline = metadata_cache.get_tagline(mod_id_str)
+                                        cached_category = metadata_cache.get_category(mod_id_str)
+                                        if cached_downloads is not None and cached_downloads > 0:
+                                            mod_info.downloads = cached_downloads
+                                        elif downloads_value > 0:
+                                            mod_info.downloads = downloads_value
+                                        if cached_tagline:
+                                            mod_info.tagline = cached_tagline
+                                        if cached_category:
+                                            mod_info.gamebanana_category = cached_category
+                                current_downloads = mod_info.downloads
+                                if current_downloads is None:
                                     current_downloads = 0
-                            mod_info.downloads = current_downloads
-                            current_tagline = mod_info.tagline
-                            current_category = mod_info.gamebanana_category
-                            needs_downloads = current_downloads == 0 or current_downloads is None
-                            needs_tagline = not current_tagline or current_tagline == 'No description' or len(current_tagline) < 10
-                            needs_category = not current_category
-                            if (needs_downloads or needs_tagline or needs_category) and (not cache_valid):
-                                mods_needing_metadata.append(mod_id_str)
-                                try:
-                                    mod_info.has_full_metadata = False
-                                except Exception:
-                                    pass
-                            else:
-                                try:
-                                    mod_info.has_full_metadata = True
-                                except Exception:
-                                    pass
-                            mapped_mods.append(mod_info)
-            return (mapped_mods, mods_needing_metadata)
-        except requests.RequestException as e:
-            logger.error(f'Error fetching mods for game {game_id}: {e}')
-            return (None, [])
-        except Exception as e:
-            logger.error(f'Unexpected error fetching mods for game {game_id}: {e}')
-            return (None, [])
+                                else:
+                                    try:
+                                        current_downloads = int(current_downloads)
+                                    except (ValueError, TypeError):
+                                        current_downloads = 0
+                                mod_info.downloads = current_downloads
+                                current_tagline = mod_info.tagline
+                                current_category = mod_info.gamebanana_category
+                                needs_downloads = current_downloads == 0 or current_downloads is None
+                                needs_tagline = not current_tagline or current_tagline == 'No description' or len(current_tagline) < 10
+                                needs_category = not current_category
+                                if (needs_downloads or needs_tagline or needs_category) and (not cache_valid):
+                                    mods_needing_metadata.append(mod_id_str)
+                                    try:
+                                        mod_info.has_full_metadata = False
+                                    except Exception:
+                                        pass
+                                else:
+                                    try:
+                                        mod_info.has_full_metadata = True
+                                    except Exception:
+                                        pass
+                                mapped_mods.append(mod_info)
+                return (mapped_mods, mods_needing_metadata)
+            except requests.RequestException as e:
+                status_code = getattr(e.response, 'status_code', None) if hasattr(e, 'response') and e.response else None
+                if status_code == 429 and attempt < max_retries:
+                    wait_time = (attempt + 1) * 3
+                    self._rate_limit_wait_time = max(self._rate_limit_wait_time, wait_time)
+                    logger.warning(f'get_game_mods: Rate limit (429) for game {game_id}, waiting {wait_time} seconds before retry')
+                    time.sleep(wait_time)
+                    continue
+                self._handle_request_exception(e, None, f'Error fetching mods for game {game_id}')
+                return (None, [])
+            except Exception as e:
+                logger.error(f'Unexpected error fetching mods for game {game_id}: {e}')
+                return (None, [])
+        return (None, [])
 
     def _get_item_field(self, mod_id: int, field_name: str, extractor_func=None, max_retries: int = 2) -> Optional[Any]:
         url = f'{self.core_api_base}/Core/Item/Data'
         params = {'itemtype': 'Mod', 'itemid': mod_id, 'fields': field_name}
         for attempt in range(max_retries + 1):
             try:
+                self._wait_for_rate_limit()
                 logger.debug(f'_get_item_field: Fetching {field_name} for mod {mod_id}')
                 response = self.session.get(url, params=params, timeout=NETWORK_TIMEOUT_MEDIUM)
                 response.raise_for_status()
@@ -160,7 +195,8 @@ class GameBananaAPI:
             except requests.RequestException as e:
                 status_code = getattr(e.response, 'status_code', None) if hasattr(e, 'response') and e.response else None
                 if status_code == 429 and attempt < max_retries:
-                    wait_time = (attempt + 1) * 2
+                    wait_time = (attempt + 1) * 3
+                    self._rate_limit_wait_time = max(self._rate_limit_wait_time, wait_time)
                     logger.warning(f'_get_item_field: Rate limit (429) for mod {mod_id}, waiting {wait_time} seconds before retry')
                     time.sleep(wait_time)
                     continue
@@ -223,6 +259,7 @@ class GameBananaAPI:
         params = {'itemtype': 'Mod', 'itemid': mod_id, 'fields': 'text,screenshots'}
         for attempt in range(max_retries + 1):
             try:
+                self._wait_for_rate_limit()
                 logger.debug(f'get_mod_text_and_screenshots: Fetching text and screenshots for mod {mod_id}')
                 response = self.session.get(url, params=params, timeout=NETWORK_TIMEOUT_SHORT)
                 response.raise_for_status()
@@ -256,7 +293,8 @@ class GameBananaAPI:
             except requests.RequestException as e:
                 status_code = getattr(e.response, 'status_code', None) if hasattr(e, 'response') and e.response else None
                 if status_code == 429 and attempt < max_retries:
-                    wait_time = (attempt + 1) * 2
+                    wait_time = (attempt + 1) * 3
+                    self._rate_limit_wait_time = max(self._rate_limit_wait_time, wait_time)
                     logger.warning(f'get_mod_text_and_screenshots: Rate limit (429) for mod {mod_id}, waiting {wait_time} seconds before retry')
                     time.sleep(wait_time)
                     continue
@@ -272,6 +310,7 @@ class GameBananaAPI:
         params = {'itemtype': 'Mod', 'itemid': mod_id, 'fields': 'text,description,screenshots'}
         for attempt in range(max_retries + 1):
             try:
+                self._wait_for_rate_limit()
                 logger.debug(f'get_mod_full_details_for_display: Fetching details for mod {mod_id}')
                 response = self.session.get(url, params=params, timeout=NETWORK_TIMEOUT_MEDIUM)
                 response.raise_for_status()
@@ -304,7 +343,8 @@ class GameBananaAPI:
             except requests.RequestException as e:
                 status_code = getattr(e.response, 'status_code', None) if hasattr(e, 'response') and e.response else None
                 if status_code == 429 and attempt < max_retries:
-                    wait_time = (attempt + 1) * 2
+                    wait_time = (attempt + 1) * 3
+                    self._rate_limit_wait_time = max(self._rate_limit_wait_time, wait_time)
                     logger.warning(f'get_mod_full_details_for_display: Rate limit (429) for mod {mod_id}, waiting {wait_time} seconds before retry')
                     time.sleep(wait_time)
                     continue
@@ -318,101 +358,141 @@ class GameBananaAPI:
     def _get_mod_full_details(self, mod_id: int) -> Optional[Dict]:
         return self.get_mod_full_details_for_display(mod_id)
 
-    def get_mod_details(self, mod_id: int) -> Optional[Dict]:
+    def get_mod_details(self, mod_id: int, max_retries: int = 2) -> Optional[Dict]:
         url = f'{self.base_url}/Mod/{mod_id}'
-        try:
-            response = self.session.get(url, timeout=NETWORK_TIMEOUT_MEDIUM)
-            response.raise_for_status()
-            data = response.json()
-            if not isinstance(data, dict):
-                logger.warning(f'get_mod_details: Response for mod {mod_id} is not a dict, type: {type(data)}')
+        for attempt in range(max_retries + 1):
+            try:
+                self._wait_for_rate_limit()
+                response = self.session.get(url, timeout=NETWORK_TIMEOUT_MEDIUM)
+                response.raise_for_status()
+                data = response.json()
+                if not isinstance(data, dict):
+                    logger.warning(f'get_mod_details: Response for mod {mod_id} is not a dict, type: {type(data)}')
+                    return None
+                return data
+            except requests.RequestException as e:
+                status_code = getattr(e.response, 'status_code', None) if hasattr(e, 'response') and e.response else None
+                if status_code == 429 and attempt < max_retries:
+                    wait_time = (attempt + 1) * 3
+                    self._rate_limit_wait_time = max(self._rate_limit_wait_time, wait_time)
+                    logger.warning(f'get_mod_details: Rate limit (429) for mod {mod_id}, waiting {wait_time} seconds before retry')
+                    time.sleep(wait_time)
+                    continue
+                self._handle_request_exception(e, mod_id, 'Error fetching mod details')
                 return None
-            return data
-        except requests.RequestException as e:
-            self._handle_request_exception(e, mod_id, 'Error fetching mod details')
-            return None
-        except (json.JSONDecodeError, ValueError) as e:
-            logger.error(f'Error parsing mod details JSON for {mod_id}: {e}')
-            return None
-        except Exception as e:
-            logger.error(f'Unexpected error fetching mod details for {mod_id}: {e}', exc_info=True)
-            return None
+            except (json.JSONDecodeError, ValueError) as e:
+                logger.error(f'Error parsing mod details JSON for {mod_id}: {e}')
+                return None
+            except Exception as e:
+                logger.error(f'Unexpected error fetching mod details for {mod_id}: {e}', exc_info=True)
+                return None
+        return None
 
-    def get_mod_preview_media(self, mod_id: int) -> Optional[Dict]:
+    def get_mod_preview_media(self, mod_id: int, max_retries: int = 2) -> Optional[Dict]:
         url = f'{self.core_api_base}/Core/Item/Data'
         params = {'itemtype': 'Mod', 'itemid': mod_id, 'fields': 'Preview().aPreviewMedia()'}
-        try:
-            logger.debug(f'get_mod_preview_media: Fetching preview media for mod {mod_id}')
-            response = self.session.get(url, params=params, timeout=NETWORK_TIMEOUT_MEDIUM)
-            response.raise_for_status()
-            data = response.json()
-            logger.debug(f'get_mod_preview_media: Got response for mod {mod_id}, data type: {type(data)}')
-            if isinstance(data, list) and len(data) > 0:
-                preview_media = data[0]
-                if isinstance(preview_media, dict):
-                    return preview_media
-            elif isinstance(data, dict):
-                return data
-            return None
-        except requests.RequestException as e:
-            self._handle_request_exception(e, mod_id, 'Error fetching preview media')
-            return None
-        except Exception as e:
-            logger.error(f'Unexpected error fetching preview media for mod {mod_id}: {e}', exc_info=True)
-            return None
+        for attempt in range(max_retries + 1):
+            try:
+                self._wait_for_rate_limit()
+                logger.debug(f'get_mod_preview_media: Fetching preview media for mod {mod_id}')
+                response = self.session.get(url, params=params, timeout=NETWORK_TIMEOUT_MEDIUM)
+                response.raise_for_status()
+                data = response.json()
+                logger.debug(f'get_mod_preview_media: Got response for mod {mod_id}, data type: {type(data)}')
+                if isinstance(data, list) and len(data) > 0:
+                    preview_media = data[0]
+                    if isinstance(preview_media, dict):
+                        return preview_media
+                elif isinstance(data, dict):
+                    return data
+                return None
+            except requests.RequestException as e:
+                status_code = getattr(e.response, 'status_code', None) if hasattr(e, 'response') and e.response else None
+                if status_code == 429 and attempt < max_retries:
+                    wait_time = (attempt + 1) * 3
+                    self._rate_limit_wait_time = max(self._rate_limit_wait_time, wait_time)
+                    logger.warning(f'get_mod_preview_media: Rate limit (429) for mod {mod_id}, waiting {wait_time} seconds before retry')
+                    time.sleep(wait_time)
+                    continue
+                self._handle_request_exception(e, mod_id, 'Error fetching preview media')
+                return None
+            except Exception as e:
+                logger.error(f'Unexpected error fetching preview media for mod {mod_id}: {e}', exc_info=True)
+                return None
+        return None
 
-    def get_mod_profile_page(self, mod_id: int) -> Optional[Dict]:
+    def get_mod_profile_page(self, mod_id: int, max_retries: int = 2) -> Optional[Dict]:
         url = f'{self.base_url}/Mod/{mod_id}/ProfilePage'
-        try:
-            logger.debug(f'get_mod_profile_page: Fetching profile for mod {mod_id}')
-            response = self.session.get(url, timeout=NETWORK_TIMEOUT_MEDIUM)
-            response.raise_for_status()
-            data = response.json()
-            if isinstance(data, dict):
-                return data
-            logger.warning(f'get_mod_profile_page: Unexpected response type for mod {mod_id}: {type(data)}')
-            return None
-        except requests.RequestException as e:
-            self._handle_request_exception(e, mod_id, 'Error fetching profile page')
-            return None
-        except Exception as e:
-            logger.error(f'Unexpected error fetching profile page for mod {mod_id}: {e}', exc_info=True)
-            return None
+        for attempt in range(max_retries + 1):
+            try:
+                self._wait_for_rate_limit()
+                logger.debug(f'get_mod_profile_page: Fetching profile for mod {mod_id}')
+                response = self.session.get(url, timeout=NETWORK_TIMEOUT_MEDIUM)
+                response.raise_for_status()
+                data = response.json()
+                if isinstance(data, dict):
+                    return data
+                logger.warning(f'get_mod_profile_page: Unexpected response type for mod {mod_id}: {type(data)}')
+                return None
+            except requests.RequestException as e:
+                status_code = getattr(e.response, 'status_code', None) if hasattr(e, 'response') and e.response else None
+                if status_code == 429 and attempt < max_retries:
+                    wait_time = (attempt + 1) * 3
+                    self._rate_limit_wait_time = max(self._rate_limit_wait_time, wait_time)
+                    logger.warning(f'get_mod_profile_page: Rate limit (429) for mod {mod_id}, waiting {wait_time} seconds before retry')
+                    time.sleep(wait_time)
+                    continue
+                self._handle_request_exception(e, mod_id, 'Error fetching profile page')
+                return None
+            except Exception as e:
+                logger.error(f'Unexpected error fetching profile page for mod {mod_id}: {e}', exc_info=True)
+                return None
+        return None
 
-    def get_mod_files(self, mod_id: int) -> Optional[List[Dict]]:
+    def get_mod_files(self, mod_id: int, max_retries: int = 2) -> Optional[List[Dict]]:
         url = f'{self.core_api_base}/Core/Item/Data'
         import urllib.parse
         fields_param = 'Files().aFiles()'
         params = {'itemtype': 'Mod', 'itemid': mod_id, 'fields': fields_param}
-        try:
-            full_url = f'{url}?itemtype=Mod&itemid={mod_id}&fields={urllib.parse.quote(fields_param)}'
-            logger.debug(f'get_mod_files: Requesting URL: {full_url}')
-            response = self.session.get(url, params=params, timeout=NETWORK_TIMEOUT_MEDIUM)
-            response.raise_for_status()
-            data = response.json()
-            logger.debug(f'get_mod_files: Response status: {response.status_code}, data type: {type(data)}')
-            if isinstance(data, list) and len(data) > 0:
-                files_dict = data[0]
-                if isinstance(files_dict, dict):
-                    files_list = []
-                    for file_id, file_data in files_dict.items():
-                        if isinstance(file_data, dict):
-                            files_list.append(file_data)
-                        else:
-                            logger.warning(f'Unexpected file data type for file_id {file_id}: {type(file_data)}')
-                    logger.debug(f'get_mod_files: Found {len(files_list)} files for mod {mod_id}')
-                    return files_list if files_list else None
+        for attempt in range(max_retries + 1):
+            try:
+                self._wait_for_rate_limit()
+                full_url = f'{url}?itemtype=Mod&itemid={mod_id}&fields={urllib.parse.quote(fields_param)}'
+                logger.debug(f'get_mod_files: Requesting URL: {full_url}')
+                response = self.session.get(url, params=params, timeout=NETWORK_TIMEOUT_MEDIUM)
+                response.raise_for_status()
+                data = response.json()
+                logger.debug(f'get_mod_files: Response status: {response.status_code}, data type: {type(data)}')
+                if isinstance(data, list) and len(data) > 0:
+                    files_dict = data[0]
+                    if isinstance(files_dict, dict):
+                        files_list = []
+                        for file_id, file_data in files_dict.items():
+                            if isinstance(file_data, dict):
+                                files_list.append(file_data)
+                            else:
+                                logger.warning(f'Unexpected file data type for file_id {file_id}: {type(file_data)}')
+                        logger.debug(f'get_mod_files: Found {len(files_list)} files for mod {mod_id}')
+                        return files_list if files_list else None
+                    else:
+                        logger.warning(f'get_mod_files: Expected dict for files, got {type(files_dict)}, value: {files_dict}')
                 else:
-                    logger.warning(f'get_mod_files: Expected dict for files, got {type(files_dict)}, value: {files_dict}')
-            else:
-                logger.warning(f"get_mod_files: Unexpected response format for mod {mod_id}: {type(data)}, length: {(len(data) if isinstance(data, list) else 'N/A')}")
-            return None
-        except requests.RequestException as e:
-            self._handle_request_exception(e, mod_id, 'Error fetching mod files')
-            return None
-        except Exception as e:
-            logger.error(f'Unexpected error fetching mod files for {mod_id}: {e}', exc_info=True)
-            return None
+                    logger.warning(f"get_mod_files: Unexpected response format for mod {mod_id}: {type(data)}, length: {(len(data) if isinstance(data, list) else 'N/A')}")
+                return None
+            except requests.RequestException as e:
+                status_code = getattr(e.response, 'status_code', None) if hasattr(e, 'response') and e.response else None
+                if status_code == 429 and attempt < max_retries:
+                    wait_time = (attempt + 1) * 3
+                    self._rate_limit_wait_time = max(self._rate_limit_wait_time, wait_time)
+                    logger.warning(f'get_mod_files: Rate limit (429) for mod {mod_id}, waiting {wait_time} seconds before retry')
+                    time.sleep(wait_time)
+                    continue
+                self._handle_request_exception(e, mod_id, 'Error fetching mod files')
+                return None
+            except Exception as e:
+                logger.error(f'Unexpected error fetching mod files for {mod_id}: {e}', exc_info=True)
+                return None
+        return None
 
     def _get_mod_file_compatibility(self, mod_id: int) -> Dict[str, Any]:
         cached = self._compatibility_cache.get(mod_id)
@@ -503,50 +583,60 @@ class GameBananaAPI:
         download_count = self._safe_int(self._first_value(sources, '_nDownloadCount'))
         return {'id': file_id, 'name': self._first_value(sources, '_sFile', f'file_{file_id}'), 'version': self._first_value(sources, '_sVersion', '1.0.0'), 'description': self._first_value(sources, '_sDescription', ''), 'download_url': self._first_value(sources, '_sDownloadUrl'), 'size_bytes': size_val or 0, 'timestamp': timestamp_val, 'download_count': download_count or 0, 'md5': self._first_value(sources, '_sMd5Checksum'), 'analysis_state': self._first_value(sources, '_sAnalysisState'), 'analysis_result': self._first_value(sources, '_sAnalysisResult'), 'analysis_result_verbose': self._first_value(sources, '_sAnalysisResultVerbose'), 'av_state': self._first_value(sources, '_sAvState'), 'av_result': self._first_value(sources, '_sAvResult'), 'is_archived': bool(self._first_value(sources, '_bIsArchived', False)), 'has_contents': bool(self._first_value(sources, '_bHasContents', False)), 'tool_ids': tool_ids, 'tool_names': tool_names, 'compatibility': compatibility_label}
 
-    def get_file_contents(self, file_id: int) -> Optional[List[str]]:
+    def get_file_contents(self, file_id: int, max_retries: int = 2) -> Optional[List[str]]:
         url = f'{self.core_api_base}/Core/Item/Data'
         params = {'itemtype': 'File', 'itemid': file_id, 'fields': 'aFileTree()'}
-        try:
-            logger.debug(f'get_file_contents: Fetching file tree for file_id {file_id}')
-            response = self.session.get(url, params=params, timeout=NETWORK_TIMEOUT_MEDIUM)
-            response.raise_for_status()
-            data = response.json()
-            logger.debug(f'get_file_contents: Got response for file_id {file_id}, data type: {type(data)}')
-            file_tree = data[0] if isinstance(data, list) and len(data) > 0 else data
-            logger.debug(f'get_file_contents: Processing file_tree type: {type(file_tree)}')
-            if isinstance(file_tree, dict):
-                file_list = []
-                for key, value in file_tree.items():
-                    if key in ('screenshots', 'folders') or isinstance(value, (list, dict)):
-                        continue
-                    if isinstance(value, str):
-                        file_list.append(value)
-                logger.info(f'get_file_contents: Extracted {len(file_list)} file names from dict format for file_id {file_id}')
-                return file_list if file_list else None
-            elif isinstance(file_tree, list):
-                if len(file_tree) > 0:
-                    if isinstance(file_tree[0], str):
-                        logger.debug(f'get_file_contents: Returning list of {len(file_tree)} file names')
-                        return file_tree
-                    elif isinstance(file_tree[0], list):
-                        logger.debug('get_file_contents: Found nested list structure, extracting first element')
-                        return file_tree[0]
+        for attempt in range(max_retries + 1):
+            try:
+                self._wait_for_rate_limit()
+                logger.debug(f'get_file_contents: Fetching file tree for file_id {file_id}')
+                response = self.session.get(url, params=params, timeout=NETWORK_TIMEOUT_MEDIUM)
+                response.raise_for_status()
+                data = response.json()
+                logger.debug(f'get_file_contents: Got response for file_id {file_id}, data type: {type(data)}')
+                file_tree = data[0] if isinstance(data, list) and len(data) > 0 else data
+                logger.debug(f'get_file_contents: Processing file_tree type: {type(file_tree)}')
+                if isinstance(file_tree, dict):
+                    file_list = []
+                    for key, value in file_tree.items():
+                        if key in ('screenshots', 'folders') or isinstance(value, (list, dict)):
+                            continue
+                        if isinstance(value, str):
+                            file_list.append(value)
+                    logger.info(f'get_file_contents: Extracted {len(file_list)} file names from dict format for file_id {file_id}')
+                    return file_list if file_list else None
+                elif isinstance(file_tree, list):
+                    if len(file_tree) > 0:
+                        if isinstance(file_tree[0], str):
+                            logger.debug(f'get_file_contents: Returning list of {len(file_tree)} file names')
+                            return file_tree
+                        elif isinstance(file_tree[0], list):
+                            logger.debug('get_file_contents: Found nested list structure, extracting first element')
+                            return file_tree[0]
+                        else:
+                            logger.warning(f'get_file_contents: Unexpected list element type: {type(file_tree[0])}')
                     else:
-                        logger.warning(f'get_file_contents: Unexpected list element type: {type(file_tree[0])}')
+                        logger.debug('get_file_contents: Empty list returned')
+                        return []
                 else:
-                    logger.debug('get_file_contents: Empty list returned')
-                    return []
-            else:
-                logger.warning(f'get_file_contents: Unexpected file_tree type: {type(file_tree)}, value: {str(file_tree)[:200]}')
-            return None
-        except requests.RequestException as e:
-            logger.error(f'Error fetching file contents for {file_id}: {e}')
-            if hasattr(e, 'response') and e.response is not None:
-                logger.error(f'Response status: {e.response.status_code}, response text: {e.response.text[:200]}')
-            return None
-        except Exception as e:
-            logger.error(f'Unexpected error fetching file contents for {file_id}: {e}', exc_info=True)
-            return None
+                    logger.warning(f'get_file_contents: Unexpected file_tree type: {type(file_tree)}, value: {str(file_tree)[:200]}')
+                return None
+            except requests.RequestException as e:
+                status_code = getattr(e.response, 'status_code', None) if hasattr(e, 'response') and e.response else None
+                if status_code == 429 and attempt < max_retries:
+                    wait_time = (attempt + 1) * 3
+                    self._rate_limit_wait_time = max(self._rate_limit_wait_time, wait_time)
+                    logger.warning(f'get_file_contents: Rate limit (429) for file_id {file_id}, waiting {wait_time} seconds before retry')
+                    time.sleep(wait_time)
+                    continue
+                logger.error(f'Error fetching file contents for {file_id}: {e}')
+                if hasattr(e, 'response') and e.response is not None:
+                    logger.error(f'Response status: {e.response.status_code}, response text: {e.response.text[:200]}')
+                return None
+            except Exception as e:
+                logger.error(f'Unexpected error fetching file contents for {file_id}: {e}', exc_info=True)
+                return None
+        return None
 
     def check_file_has_deltamodinfo(self, file_id: int) -> bool:
         file_type = self.check_file_compatibility(file_id)
@@ -620,31 +710,41 @@ class GameBananaAPI:
         logger.warning(f'find_compatible_file: No compatible file found for mod_id {mod_id}')
         return None
 
-    def search_mods(self, game_id: int, search_string: Optional[str] = None, page: int = 1, per_page: int = 20, sort: str = 'best_match') -> Optional[Dict]:
+    def search_mods(self, game_id: int, search_string: Optional[str] = None, page: int = 1, per_page: int = 20, sort: str = 'best_match', max_retries: int = 2) -> Optional[Dict]:
         url = f'{self.base_url}/Util/Search/Results'
         params = {'_idGameRow': game_id, '_sModelName': 'Mod', '_nPage': page, '_nPerpage': min(per_page, 50), '_sOrder': sort}
         if search_string and len(search_string.strip()) >= 2:
             params['_sSearchString'] = search_string.strip()
         else:
             params['_sSearchString'] = '  '
-        try:
-            logger.debug(f'search_mods: Requesting URL: {url} with params: {params} for game {game_id}, page {page}, sort={sort}')
-            response = self.session.get(url, params=params, timeout=NETWORK_TIMEOUT_MEDIUM)
-            logger.debug(f'search_mods: Response status: {response.status_code}, URL: {response.url}')
-            response.raise_for_status()
-            data = response.json()
-            records = data.get('_aRecords', [])
-            logger.debug(f'search_mods: Got {len(records)} results for game {game_id}, page {page}, sort={sort}')
-            return data
-        except requests.RequestException as e:
-            logger.error(f'Error searching mods for game {game_id}: {e}')
-            if hasattr(e, 'response') and e.response is not None:
-                logger.error(f'Response status: {e.response.status_code}, response text: {e.response.text[:500]}')
-                logger.error(f"Request URL: {(response.url if hasattr(e, 'response') and hasattr(e.response, 'url') else url)}")
-            return None
-        except Exception as e:
-            logger.error(f'Unexpected error searching mods for game {game_id}: {e}', exc_info=True)
-            return None
+        for attempt in range(max_retries + 1):
+            try:
+                self._wait_for_rate_limit()
+                logger.debug(f'search_mods: Requesting URL: {url} with params: {params} for game {game_id}, page {page}, sort={sort}')
+                response = self.session.get(url, params=params, timeout=NETWORK_TIMEOUT_MEDIUM)
+                logger.debug(f'search_mods: Response status: {response.status_code}, URL: {response.url}')
+                response.raise_for_status()
+                data = response.json()
+                records = data.get('_aRecords', [])
+                logger.debug(f'search_mods: Got {len(records)} results for game {game_id}, page {page}, sort={sort}')
+                return data
+            except requests.RequestException as e:
+                status_code = getattr(e.response, 'status_code', None) if hasattr(e, 'response') and e.response else None
+                if status_code == 429 and attempt < max_retries:
+                    wait_time = (attempt + 1) * 3
+                    self._rate_limit_wait_time = max(self._rate_limit_wait_time, wait_time)
+                    logger.warning(f'search_mods: Rate limit (429) for game {game_id}, waiting {wait_time} seconds before retry')
+                    time.sleep(wait_time)
+                    continue
+                logger.error(f'Error searching mods for game {game_id}: {e}')
+                if hasattr(e, 'response') and e.response is not None:
+                    logger.error(f'Response status: {e.response.status_code}, response text: {e.response.text[:500]}')
+                    logger.error(f"Request URL: {(response.url if hasattr(e, 'response') and hasattr(e.response, 'url') else url)}")
+                return None
+            except Exception as e:
+                logger.error(f'Unexpected error searching mods for game {game_id}: {e}', exc_info=True)
+                return None
+        return None
 
     @staticmethod
     def timestamp_to_date(timestamp: Optional[int]) -> Optional[str]:

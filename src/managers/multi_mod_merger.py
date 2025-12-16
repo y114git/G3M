@@ -82,10 +82,12 @@ class MultiModMerger(QObject):
         self.resource_modification_history: Dict[str, List[Dict[str, Any]]] = {}
         self._active_processes: List[subprocess.Popen] = []
         self._temp_files_to_cleanup: List[str] = []
+        self.xdelta_modpack = False
         if hasattr(self.utmt_wrapper, 'set_active_processes_list'):
             self.utmt_wrapper.set_active_processes_list(self._active_processes)
 
-    def process_mod_merge(self, chapter_mods: Dict[int, List[Any]], is_modpack: bool, modpack_dir: Optional[str] = None, fast_merge: bool = False) -> bool:
+    def process_mod_merge(self, chapter_mods: Dict[int, List[Any]], is_modpack: bool, modpack_dir: Optional[str] = None, fast_merge: bool = False, xdelta_modpack: bool = False) -> bool:
+        self.xdelta_modpack = xdelta_modpack
         clear_logs_enabled = self.app_state.local_config.get('clear_logs_on_startup', False)
         if clear_logs_enabled:
             clear_patching_logs()
@@ -628,7 +630,7 @@ class MultiModMerger(QObject):
 
             def export_progress_callback(p, msg):
                 return self.progress_update.emit(p, msg)
-            if not self._perform_parallel_export(mods_to_export, mod_patched_files, mod_types, vanilla_data_win, merge_root, cache_running_dir, chapter_str, chapter_id, progress_base + int(xdelta_progress), export_progress, export_progress_callback):
+            if not self._perform_parallel_export(mods_to_export, mods_to_apply, mod_patched_files, mod_types, vanilla_data_win, merge_root, cache_running_dir, chapter_str, chapter_id, progress_base + int(xdelta_progress), export_progress, export_progress_callback):
                 if not is_modpack and self.backup_manager:
                     self.backup_manager.restore_backups(chapter_id)
                 return False
@@ -1968,47 +1970,22 @@ class MultiModMerger(QObject):
                                     self.patching_logger.info(f'Applied xdelta patch {file} to {os.path.relpath(target_file, target_dir)}')
                                     patch_applied = True
                                 else:
-                                    self.patching_logger.debug(f'Failed to apply xdelta patch {file} to {os.path.relpath(target_file, target_dir)}, will copy instead')
+                                    self.patching_logger.warning(f'Failed to apply xdelta patch {file} to {os.path.relpath(target_file, target_dir)}, skipping (xdelta files should only patch data.win/game.ios)')
                             if not patch_applied:
-                                rel_path = os.path.relpath(source_path, mod_source_dir)
-                                target_path = os.path.join(target_dir, rel_path)
-                                if chapter_id is not None and self.backup_manager:
-                                    if os.path.exists(target_path):
-                                        self.backup_manager.backup_file(chapter_id, target_path)
-                                    else:
-                                        self.backup_manager.mark_file_added(chapter_id, target_path)
-                                        if self._session_manifest_path:
-                                            self.backup_manager.save_backups_to_manifest(self._session_manifest_path)
-                                os.makedirs(os.path.dirname(target_path), exist_ok=True)
-                                try:
-                                    shutil.copy2(source_path, target_path)
-                                    self.patching_logger.info(f'Copied xdelta file {file} to {os.path.relpath(target_path, target_dir)} (patch application failed)')
-                                except Exception as e:
-                                    self.patching_logger.warning(f'Failed to copy xdelta file {source_path}: {e}')
+                                self.patching_logger.warning(f'Xdelta patch {file} could not be applied to any target files, skipping (xdelta files should not be copied to game directory)')
                         else:
-                            rel_path = os.path.relpath(source_path, mod_source_dir)
-                            target_path = os.path.join(target_dir, rel_path)
-                            if chapter_id is not None and self.backup_manager:
-                                if os.path.exists(target_path):
-                                    self.backup_manager.backup_file(chapter_id, target_path)
-                                else:
-                                    self.backup_manager.mark_file_added(chapter_id, target_path)
-                                    if self._session_manifest_path:
-                                        self.backup_manager.save_backups_to_manifest(self._session_manifest_path)
-                            os.makedirs(os.path.dirname(target_path), exist_ok=True)
-                            try:
-                                shutil.copy2(source_path, target_path)
-                                self.patching_logger.debug(f'Copied xdelta file {file} (no target files found)')
-                            except Exception as e:
-                                self.patching_logger.warning(f'Failed to copy xdelta file {source_path}: {e}')
-                    else:
+                            self.patching_logger.debug(f'No target files found for xdelta patch {file}, skipping (xdelta files should only patch data.win/game.ios)')
+                    elif self.xdelta_modpack:
                         rel_path = os.path.relpath(source_path, mod_source_dir)
                         target_path = os.path.join(target_dir, rel_path)
                         os.makedirs(os.path.dirname(target_path), exist_ok=True)
                         try:
                             shutil.copy2(source_path, target_path)
+                            self.patching_logger.debug(f'Copied xdelta file {file} to modpack (xdelta_modpack enabled)')
                         except Exception as e:
                             self.patching_logger.warning(f'Failed to copy xdelta file {source_path}: {e}')
+                    else:
+                        self.patching_logger.debug(f'Skipping xdelta file {file} (xdelta_modpack disabled)')
                     continue
                 if file_lower.endswith(xdelta_extensions):
                     continue
@@ -2519,7 +2496,7 @@ class MultiModMerger(QObject):
                 except Exception as restore_error:
                     self.patching_logger.error(f'Failed to restore vanilla file: {restore_error}', exc_info=True)
 
-    def _perform_parallel_export(self, mods_to_export: List[Any], mod_patched_files: Dict[int, str], mod_types: Dict[int, Dict], vanilla_data_win: str, merge_root: str, cache_running_dir: str, chapter_str: str, chapter_id: int, progress_base: int, export_progress: int, progress_callback) -> bool:
+    def _perform_parallel_export(self, mods_to_export: List[Any], mods_to_apply: List[Any], mod_patched_files: Dict[int, str], mod_types: Dict[int, Dict], vanilla_data_win: str, merge_root: str, cache_running_dir: str, chapter_str: str, chapter_id: int, progress_base: int, export_progress: int, progress_callback) -> bool:
         if not mods_to_export:
             return True
         log_lock = threading.Lock()
@@ -2576,7 +2553,7 @@ class MultiModMerger(QObject):
                 return (mod_number, False, mod_name, str(e))
         export_tasks = []
         for idx, mod_data in enumerate(mods_to_export):
-            original_idx = mods_to_export.index(mod_data) if mod_data in mods_to_export else idx
+            original_idx = mods_to_apply.index(mod_data) if mod_data in mods_to_apply else idx
             mod_number = original_idx + 1
             export_tasks.append((mod_data, idx, original_idx, mod_number))
         results = {}

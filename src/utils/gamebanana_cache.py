@@ -44,7 +44,7 @@ class GameBananaMetadataCache:
                 atomic_write_json(self.cache_file, self._cache, indent=2)
                 logger.debug(f'GameBananaMetadataCache: Saved {len(self._cache)} entries to cache')
             except (IOError, PermissionError, OSError) as e:
-                logger.error(f'GameBananaMetadataCache: Failed to save cache: {e}', exc_info=True)
+                logger.warning(f'GameBananaMetadataCache: Failed to save cache (non-critical): {e}')
 
     def get(self, mod_id: str) -> Optional[Dict]:
         with self._lock:

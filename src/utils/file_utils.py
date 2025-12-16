@@ -142,7 +142,7 @@ def atomic_write_json(path: str, data: Dict, indent: int = 2) -> None:
     save_json(path, data, indent=indent)
 
 
-def save_json(path: str, data: Dict, indent: int = 2) -> None:
+def save_json(path: str, data: Dict, indent: int = 2, max_retries: int = 5, delay: float = 0.1) -> None:
     dir_path = os.path.dirname(path)
     if dir_path:
         os.makedirs(dir_path, exist_ok=True)
@@ -153,26 +153,64 @@ def save_json(path: str, data: Dict, indent: int = 2) -> None:
         if 'modgame' in data_to_save and 'game' in data_to_save:
             del data_to_save['modgame']
     tmp = os.path.join(dir_path, f'{os.path.basename(path)}.{os.getpid()}.{threading.get_ident()}.tmp') if dir_path else f'{path}.{os.getpid()}.{threading.get_ident()}.tmp'
-    try:
-        with open(tmp, 'w', encoding='utf-8') as f:
-            json.dump(data_to_save, f, indent=indent, ensure_ascii=False)
-            f.flush()
-            os.fsync(f.fileno())
-        os.replace(tmp, path)
-    except (PermissionError, OSError):
+    last_error = None
+    for attempt in range(max_retries):
         try:
-            if os.path.exists(tmp):
-                os.remove(tmp)
-        except OSError:
-            pass
-        raise
-    except (TypeError, ValueError) as e:
-        try:
-            if os.path.exists(tmp):
-                os.remove(tmp)
-        except OSError:
-            pass
-        raise ValueError(f'Data is not JSON-serializable: {e}') from e
+            with open(tmp, 'w', encoding='utf-8') as f:
+                json.dump(data_to_save, f, indent=indent, ensure_ascii=False)
+                f.flush()
+                os.fsync(f.fileno())
+            try:
+                if platform.system() == 'Windows' and os.path.exists(path):
+                    try:
+                        os.chmod(path, stat.S_IWRITE | stat.S_IREAD)
+                    except OSError:
+                        pass
+                os.replace(tmp, path)
+                return
+            except (PermissionError, OSError) as e:
+                last_error = e
+                if attempt < max_retries - 1:
+                    logging.debug(f'save_json: Attempt {attempt + 1}/{max_retries} failed for {path}: {e}, retrying...')
+                    time.sleep(delay * (attempt + 1))
+                    try:
+                        if os.path.exists(tmp):
+                            os.remove(tmp)
+                    except OSError:
+                        pass
+                else:
+                    try:
+                        if os.path.exists(tmp):
+                            os.remove(tmp)
+                    except OSError:
+                        pass
+                    raise
+        except (PermissionError, OSError) as e:
+            last_error = e
+            if attempt < max_retries - 1:
+                logging.debug(f'save_json: Attempt {attempt + 1}/{max_retries} failed for {path}: {e}, retrying...')
+                time.sleep(delay * (attempt + 1))
+                try:
+                    if os.path.exists(tmp):
+                        os.remove(tmp)
+                except OSError:
+                    pass
+            else:
+                try:
+                    if os.path.exists(tmp):
+                        os.remove(tmp)
+                except OSError:
+                    pass
+                raise
+        except (TypeError, ValueError) as e:
+            try:
+                if os.path.exists(tmp):
+                    os.remove(tmp)
+            except OSError:
+                pass
+            raise ValueError(f'Data is not JSON-serializable: {e}') from e
+    if last_error:
+        raise last_error
 
 
 def load_json(path: str, migrate_config: bool = True) -> Dict:
