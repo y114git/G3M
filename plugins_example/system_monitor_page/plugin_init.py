@@ -7,7 +7,7 @@ from PyQt6.QtCore import Qt
 PLUGIN_ID = "system_monitor"  # Unique plugin identifier (used for config prefixes)
 PLUGIN_NAME = "system_monitor_tab_title"  # Plugin display name (localization key)
 VERSION = "1.0.0"
-AUTHOR = "DELTAHUB"  # Plugin author (optional, displayed in plugin plaque)
+AUTHOR = "DELTAHUBEVILGENIUS"  # Plugin author (optional, displayed in plugin plaque)
 DESCRIPTION = "Displays system monitoring information in a tab"
 TAB_HIDE = False
 
