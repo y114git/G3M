@@ -1672,10 +1672,6 @@ class AppWindow(QWidget):
             from config.constants import CLOUD_FUNCTIONS_BASE_URL
             get_session(self.app_state).post(f'{CLOUD_FUNCTIONS_BASE_URL}/presenceHeartbeat', json={'sessionId': self.session_id}, timeout=5)
         except Exception as e:
-            import logging
-            from utils.network_utils import sanitize_log_message
-            safe_msg = sanitize_log_message(f'_init_session: heartbeat failed: {e}')
-            logging.debug(safe_msg)
             self.app_state.has_internet = False
 
     def _on_theme_changed_by_manager(self):

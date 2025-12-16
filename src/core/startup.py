@@ -132,8 +132,7 @@ def register_url_protocol():
                 f.write(desktop_file_content)
             subprocess.run(['xdg-mime', 'default', 'deltahub.desktop', 'x-scheme-handler/deltahub'], check=False)
     except Exception as e:
-        safe_msg = sanitize_log_message(f'Failed to register URL protocol: {e}')
-        logging.warning(safe_msg)
+        pass
 
 
 class SingleInstanceServer(QLocalServer):
@@ -228,16 +227,11 @@ def _load_config_file() -> dict:
             logging.info(f'Removed corrupted config file: {config_path}')
         except Exception:
             pass
-        safe_msg = sanitize_log_message(f'Failed to parse config JSON: {e}')
-        logging.warning(safe_msg)
+        pass
         return {}
     except (PermissionError, OSError) as e:
-        safe_msg = sanitize_log_message(f'Failed to read config file: {e}')
-        logging.warning(safe_msg)
         return {}
     except Exception as e:
-        safe_msg = sanitize_log_message(f'Failed to read config file: {e}')
-        logging.warning(safe_msg)
         return {}
 
 
@@ -281,8 +275,7 @@ def run_app():
     try:
         register_url_protocol()
     except Exception as e:
-        safe_msg = sanitize_log_message(f'Could not register protocol handler: {e}')
-        logging.warning(safe_msg)
+        pass
     if args.shortcut_launch:
         from core.app_window import AppWindow
         try:

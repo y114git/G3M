@@ -148,7 +148,9 @@ def save_json(path: str, data: Dict, indent: int = 2, max_retries: int = 5, dela
         os.makedirs(dir_path, exist_ok=True)
     data_to_save = data.copy() if isinstance(data, dict) else data
     if isinstance(data_to_save, dict) and (path.endswith('mod_config.json') or (path.endswith('config.json') and ('mod_key' in data_to_save or 'key' in data_to_save))):
-        if 'mod_key' in data_to_save and 'key' in data_to_save:
+        if 'mod_key' in data_to_save:
+            if 'key' not in data_to_save:
+                data_to_save['key'] = data_to_save['mod_key']
             del data_to_save['mod_key']
         if 'modgame' in data_to_save and 'game' in data_to_save:
             del data_to_save['modgame']

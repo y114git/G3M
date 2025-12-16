@@ -15,7 +15,7 @@ from utils.file_utils import get_unique_mod_dir, has_deltamod_info_file, check_f
 from utils.deltamod_converter import DeltamodConverter
 from utils.pizzaoven_utils import find_pizzaoven_folder, is_explicit_pizzaoven_path
 from utils.pizzaoven_converter import PizzaOvenConverter
-from utils.network_utils import download_file, sanitize_log_message
+from utils.network_utils import download_file
 from utils.ui_utils import format_size_mb
 import logging
 
@@ -82,16 +82,11 @@ class PresenceWorker(QObject):
             else:
                 self._safe_emit_online_count(-1)
         except requests.Timeout as e:
-            safe_msg = sanitize_log_message(f'PresenceWorker: timeout error: {e}')
-            logging.debug(safe_msg)
             self._safe_emit_online_count(-1)
         except requests.ConnectionError as e:
-            safe_msg = sanitize_log_message(f'PresenceWorker: connection error: {e}')
-            logging.debug(safe_msg)
             self._safe_emit_online_count(-1)
         except requests.RequestException as e:
-            safe_msg = sanitize_log_message(f'PresenceWorker: request error: {e}')
-            logging.debug(safe_msg)
+            pass
             self._safe_emit_online_count(-1)
         finally:
             self._busy = False
@@ -139,8 +134,6 @@ class FetchChangelogWorker(QObject):
             else:
                 text = self.source
         except Exception as e:
-            safe_msg = sanitize_log_message(f'FetchChangelogWorker: failed to load changelog: {e}')
-            logging.warning(safe_msg, exc_info=True)
             text = tr('errors.changelog_load_failed')
         finally:
             self.finished.emit(text)
@@ -355,8 +348,6 @@ class InstallModsThread(QThread):
                     os.remove(target_path)
                 except OSError as rm_e:
                     logging.debug(f'_download_component_file: cleanup failed: {rm_e}')
-            safe_msg = sanitize_log_message(f'_download_component_file: network error downloading file: {e}')
-            logging.error(safe_msg, exc_info=True)
             raise
         except requests.RequestException as e:
             if os.path.exists(target_path):
@@ -364,11 +355,6 @@ class InstallModsThread(QThread):
                     os.remove(target_path)
                 except OSError as rm_e:
                     logging.debug(f'_download_component_file: cleanup failed: {rm_e}')
-            status_code = getattr(e.response, 'status_code', None)
-            safe_msg = sanitize_log_message(f'_download_component_file: request error downloading file: {e}')
-            if status_code:
-                safe_msg = f'{safe_msg} [HTTP {status_code}]'
-            logging.error(safe_msg, exc_info=True)
             raise
         except RuntimeError as e:
             if str(e) == 'download_cancelled':
@@ -383,8 +369,6 @@ class InstallModsThread(QThread):
                     os.remove(target_path)
                 except OSError:
                     pass
-            safe_msg = sanitize_log_message(f'_download_component_file: unexpected error downloading file: {e}')
-            logging.error(safe_msg, exc_info=True)
             raise
         except Exception as e:
             if os.path.exists(target_path):
@@ -392,8 +376,6 @@ class InstallModsThread(QThread):
                     os.remove(target_path)
                 except OSError:
                     pass
-            safe_msg = sanitize_log_message(f'_download_component_file: unexpected error downloading file: {e}')
-            logging.error(safe_msg, exc_info=True)
             raise
 
     def run(self):
@@ -454,29 +436,19 @@ class InstallModsThread(QThread):
                     file_sizes_cache[u] = content_length
                     total_bytes += content_length
                 except requests.Timeout as e:
-                    safe_msg = sanitize_log_message(f'InstallModsThread: HEAD timeout: {e}')
-                    logging.warning(safe_msg)
                     file_sizes_cache[u] = 0
                     total_bytes = 0
                     break
                 except requests.HTTPError as e:
-                    status_code = e.response.status_code if e.response else None
-                    safe_msg = sanitize_log_message(f'InstallModsThread: HEAD HTTP error: {e}')
-                    if status_code:
-                        safe_msg = f'{safe_msg} [HTTP {status_code}]'
-                    logging.warning(safe_msg)
                     file_sizes_cache[u] = 0
                     total_bytes = 0
                     break
                 except requests.RequestException as e:
-                    safe_msg = sanitize_log_message(f'InstallModsThread: HEAD request error: {e}')
-                    logging.warning(safe_msg)
                     file_sizes_cache[u] = 0
                     total_bytes = 0
                     break
                 except Exception as e:
-                    safe_msg = sanitize_log_message(f'InstallModsThread: unexpected error during HEAD: {e}')
-                    logging.warning(safe_msg, exc_info=True)
+                    pass
                     file_sizes_cache[u] = 0
                     total_bytes = 0
                     break
@@ -573,12 +545,8 @@ class InstallModsThread(QThread):
                 except RuntimeError as e:
                     if str(e) == 'download_cancelled':
                         raise
-                    safe_msg = sanitize_log_message(f'InstallModsThread._download_mod_file: download failed: {e}')
-                    logging.error(safe_msg, exc_info=True)
                     raise
                 except Exception as e:
-                    safe_msg = sanitize_log_message(f'InstallModsThread._download_mod_file: download failed: {e}')
-                    logging.error(safe_msg, exc_info=True)
                     raise
                 mod_key = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
                 if key not in installed_mods:
@@ -1359,8 +1327,7 @@ class ModScanThread(QThread):
                         from utils.file_utils import migrate_mod_config
                         migrate_mod_config(folder_path)
                     except Exception as e:
-                        safe_msg = sanitize_log_message(f'ModScanThread: failed to migrate mod config in {folder_path}: {e}')
-                        logging.warning(safe_msg, exc_info=True)
+                        logging.warning(f'ModScanThread: failed to migrate mod config in {folder_path}')
                     config_path = os.path.join(folder_path, MOD_CONFIG_FILENAME)
                     if not os.path.exists(config_path):
                         continue
@@ -1400,27 +1367,21 @@ class ModScanThread(QThread):
                         mod_info = {'key': key, 'folder_path': folder_path, 'folder_name': folder_name, 'config_data': config_data, 'config_mtime': config_mtime}
                         cache[key] = mod_info
                     except (OSError, PermissionError) as e:
-                        safe_msg = sanitize_log_message(f'ModScanThread: Corrupted config detected (failed to access) in {config_path}: {e}')
-                        logging.warning(safe_msg, exc_info=True)
+                        logging.warning(f'ModScanThread: Corrupted config detected (failed to access) in {config_path}')
                         continue
                     except json.JSONDecodeError as e:
-                        safe_msg = sanitize_log_message(f'ModScanThread: Corrupted config detected (invalid JSON) in {config_path}: {e}')
-                        logging.warning(safe_msg, exc_info=True)
+                        logging.warning(f'ModScanThread: Corrupted config detected (invalid JSON) in {config_path}')
                         continue
                     except KeyError as e:
-                        safe_msg = sanitize_log_message(f'ModScanThread: missing key in {config_path}: {e}')
-                        logging.debug(safe_msg)
+                        logging.debug(f'ModScanThread: missing key in {config_path}')
                         continue
                     except Exception as e:
-                        safe_msg = sanitize_log_message(f'ModScanThread: Corrupted config detected (unexpected error) in {folder_path}: {e}')
-                        logging.error(safe_msg, exc_info=True)
+                        logging.error(f'ModScanThread: Corrupted config detected (unexpected error) in {folder_path}')
                         continue
         except OSError as e:
-            safe_msg = sanitize_log_message(f'ModScanThread: failed to list directory {self.mods_dir}: {e}')
-            logging.error(safe_msg, exc_info=True)
+            logging.error(f'ModScanThread: failed to list directory {self.mods_dir}')
         except Exception as e:
-            safe_msg = sanitize_log_message(f'ModScanThread: unexpected error during scan: {e}')
-            logging.error(safe_msg, exc_info=True)
+            pass
         try:
             self._save_cache(cache)
         except Exception as e:

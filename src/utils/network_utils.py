@@ -115,8 +115,7 @@ def get_filename_from_url(session, url):
             if '.' in potential_name:
                 return potential_name
     except (requests.RequestException, ValueError, AttributeError) as e:
-        safe_msg = sanitize_log_message(f'get_filename_from_url: header parsing failed: {e}')
-        logging.debug(safe_msg)
+        pass
     return Path(url.split('?', 1)[0]).name or 'file.tmp'
 
 
@@ -128,8 +127,6 @@ def download_file(session, url, tmp_path, progress_callback=None, total_size: in
         h = session.head(url, allow_redirects=True, timeout=NETWORK_TIMEOUT_HEAD)
         expected_size = int(h.headers.get('content-length', 0))
     except (requests.RequestException, ValueError) as e:
-        safe_msg = sanitize_log_message(f'download_file: failed to get expected size: {e}')
-        logging.debug(safe_msg)
         expected_size = 0
     attempt = 0
     while attempt < max_retries:
@@ -197,8 +194,6 @@ def download_file(session, url, tmp_path, progress_callback=None, total_size: in
         except (requests.RequestException, OSError, IOError) as e:
             if attempt >= max_retries:
                 raise
-            safe_msg = sanitize_log_message(f'download_file: attempt {attempt}/{max_retries} failed: {e}')
-            logging.debug(safe_msg)
             try:
                 time.sleep(min(2.0, 0.2 * attempt))
             except OSError as sleep_e:
@@ -226,12 +221,8 @@ def safe_request(method: str, url: str, session=None, timeout=None, **kwargs):
         method_func = getattr(session, method.lower())
         return method_func(url, timeout=timeout, **kwargs)
     except requests.RequestException as e:
-        safe_msg = sanitize_log_message(f'safe_request {method.upper()} {url}: {e}')
-        logging.debug(safe_msg)
         return None
     except Exception as e:
-        safe_msg = sanitize_log_message(f'safe_request {method.upper()} {url}: unexpected error: {e}')
-        logging.error(safe_msg, exc_info=True)
         return None
 
 
