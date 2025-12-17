@@ -1917,6 +1917,12 @@ class MultiModMerger(QObject):
                         scripts_to_run.append('ImportGML')
                     if self.utmt_wrapper.get_script_path('ImportTilesets'):
                         scripts_to_run.append('ImportTilesets')
+                    if self.utmt_wrapper.get_script_path('ImportFonts'):
+                        scripts_to_run.append('ImportFonts')
+                    if self.utmt_wrapper.get_script_path('ImportSounds'):
+                        scripts_to_run.append('ImportSounds')
+                    if self.utmt_wrapper.get_script_path('ImportRooms'):
+                        scripts_to_run.append('ImportRooms')
                     if scripts_to_run:
                         returncode, stdout, stderr = self.utmt_wrapper.execute_scripts(base_file, scripts_to_run, output_path=base_file, cwd=export_temp)
                         if returncode == 0:
