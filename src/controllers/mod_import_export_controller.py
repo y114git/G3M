@@ -116,8 +116,9 @@ class ModImportExportController:
                     key = config.get('key') or config.get('mod_key')
                     mod_name = config.get('name', 'Unknown')
                     logging.info(f'[IMPORT] Mod name: {mod_name}, key: {key}')
+                    from utils.file_utils import sanitize_filename, remove_archive_extension
                     if not key:
-                        from utils.file_utils import sanitize_filename, save_json
+                        from utils.file_utils import save_json
                         key = f"local_{sanitize_filename(mod_name).lower().replace(' ', '_')}"
                         config['key'] = key
                         if 'mod_key' in config:
@@ -126,7 +127,6 @@ class ModImportExportController:
                         save_json(config_path_to_read, config, indent=2)
                         mod_key_generated = True
                         logging.info(f'[IMPORT] Generated key: {key}')
-                    from utils.file_utils import remove_archive_extension
                     archive_name = remove_archive_extension(os.path.basename(file_path))
                     folder_name = sanitize_filename(archive_name)
                     target_mod_dir = os.path.join(self.app_state.mods_dir, folder_name)
