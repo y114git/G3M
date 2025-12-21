@@ -83,6 +83,10 @@ string bgrFolder = Path.Combine(outputRoot, "Backgrounds");
 string shadersOut = Path.Combine(outputRoot, "Shaders");
 string soundsOut = Path.Combine(outputRoot, "Sounds");
 string roomsOut = Path.Combine(outputRoot, "Rooms");
+string audioGroupsOut = Path.Combine(outputRoot, "AudioGroups");
+string pathsOut = Path.Combine(outputRoot, "Paths");
+string timelinesOut = Path.Combine(outputRoot, "Timelines");
+string extensionsOut = Path.Combine(outputRoot, "Extensions");
 
 Directory.CreateDirectory(codeFolder);
 Directory.CreateDirectory(sprFolder);
@@ -91,6 +95,10 @@ Directory.CreateDirectory(bgrFolder);
 Directory.CreateDirectory(shadersOut);
 Directory.CreateDirectory(soundsOut);
 Directory.CreateDirectory(roomsOut);
+Directory.CreateDirectory(audioGroupsOut);
+Directory.CreateDirectory(pathsOut);
+Directory.CreateDirectory(timelinesOut);
+Directory.CreateDirectory(extensionsOut);
 
 PrintLine($"[ExportAllAssets] Starting full export for mod {modNo}...");
 
@@ -249,8 +257,12 @@ List<UndertaleFont> allFonts = Data.Fonts.ToList();
 List<UndertaleShader> allShaders = Data.Shaders.ToList();
 List<UndertaleSound> allSounds = Data.Sounds.ToList();
 List<UndertaleRoom> allRooms = Data.Rooms.ToList();
+List<UndertaleAudioGroup> allAudioGroups = Data.AudioGroups?.ToList() ?? new List<UndertaleAudioGroup>();
+List<UndertalePath> allPaths = Data.Paths?.ToList() ?? new List<UndertalePath>();
+List<UndertaleTimeline> allTimelines = Data.Timelines?.ToList() ?? new List<UndertaleTimeline>();
+List<UndertaleExtension> allExtensions = Data.Extensions?.ToList() ?? new List<UndertaleExtension>();
 
-int totalItems = allCode.Count + allSprites.Count + allBackgrounds.Count + allFonts.Count + allShaders.Count + allSounds.Count + allRooms.Count;
+int totalItems = allCode.Count + allSprites.Count + allBackgrounds.Count + allFonts.Count + allShaders.Count + allSounds.Count + allRooms.Count + allAudioGroups.Count + allPaths.Count + allTimelines.Count + allExtensions.Count;
 
 SetProgressBar(null, "Exporting All Assets", 0, totalItems);
 StartProgressBarUpdater();
@@ -266,6 +278,10 @@ using (worker = new TextureWorker())
     await DumpSounds();
     await DumpTilesets();
     await DumpRooms();
+    await DumpAudioGroups();
+    await DumpPaths();
+    await DumpTimelines();
+    await DumpExtensions();
 }
 
 await StopProgressBarUpdater();
@@ -808,6 +824,269 @@ void DumpRoom(UndertaleRoom room)
     IncrementProgressParallel();
 }
 
+async Task DumpAudioGroups()
+{
+    await Task.Run(() => Parallel.ForEach(allAudioGroups, DumpAudioGroup));
+}
+
+void DumpAudioGroup(UndertaleAudioGroup audioGroup)
+{
+    if (audioGroup?.Name?.Content == null) return;
+
+    try
+    {
+        string name = SafeName(audioGroup.Name.Content);
+        string jsonPath = Path.Combine(audioGroupsOut, name + ".json");
+
+        var json = new StringBuilder();
+        json.Append("{\n");
+        WriteJsonString(json, "name"); json.Append(": "); WriteJsonString(json, audioGroup.Name.Content);
+        if (audioGroup.Path != null)
+        {
+            json.Append(",\n");
+            WriteJsonString(json, "path"); json.Append(": "); WriteJsonString(json, audioGroup.Path.Content ?? "");
+        }
+        json.Append("\n}");
+
+        File.WriteAllText(jsonPath, json.ToString(), Encoding.UTF8);
+    }
+    catch (Exception ex)
+    {
+        PrintLine($"[ExportAllAssets] Failed to export audio group {audioGroup.Name?.Content}: {ex.Message}");
+    }
+
+    IncrementProgressParallel();
+}
+
+async Task DumpPaths()
+{
+    await Task.Run(() => Parallel.ForEach(allPaths, DumpPath));
+}
+
+void DumpPath(UndertalePath path)
+{
+    if (path?.Name?.Content == null) return;
+
+    try
+    {
+        string name = SafeName(path.Name.Content);
+        string jsonPath = Path.Combine(pathsOut, name + ".json");
+
+        var json = new StringBuilder();
+        json.Append("{\n");
+        WriteJsonString(json, "name"); json.Append(": "); WriteJsonString(json, path.Name.Content); json.Append(",\n");
+        WriteJsonString(json, "isSmooth"); json.Append(": "); WriteJsonBool(json, path.IsSmooth); json.Append(",\n");
+        WriteJsonString(json, "isClosed"); json.Append(": "); WriteJsonBool(json, path.IsClosed); json.Append(",\n");
+        WriteJsonString(json, "precision"); json.Append(": "); WriteJsonNumber(json, (int)path.Precision); json.Append(",\n");
+
+        json.Append("  \"points\": [\n");
+        for (int i = 0; i < path.Points.Count; i++)
+        {
+            var point = path.Points[i];
+            json.Append("    {\n");
+            WriteJsonString(json, "x"); json.Append(": "); WriteJsonNumber(json, point.X); json.Append(",\n");
+            WriteJsonString(json, "y"); json.Append(": "); WriteJsonNumber(json, point.Y); json.Append(",\n");
+            WriteJsonString(json, "speed"); json.Append(": "); WriteJsonNumber(json, point.Speed);
+            json.Append("\n    }");
+            if (i < path.Points.Count - 1) json.Append(",");
+            json.Append("\n");
+        }
+        json.Append("  ]\n");
+
+        json.Append("}");
+
+        File.WriteAllText(jsonPath, json.ToString(), Encoding.UTF8);
+    }
+    catch (Exception ex)
+    {
+        PrintLine($"[ExportAllAssets] Failed to export path {path.Name?.Content}: {ex.Message}");
+    }
+
+    IncrementProgressParallel();
+}
+
+async Task DumpTimelines()
+{
+    await Task.Run(() => Parallel.ForEach(allTimelines, DumpTimeline));
+}
+
+void DumpTimeline(UndertaleTimeline timeline)
+{
+    if (timeline?.Name?.Content == null) return;
+
+    try
+    {
+        string name = SafeName(timeline.Name.Content);
+        string jsonPath = Path.Combine(timelinesOut, name + ".json");
+
+        var json = new StringBuilder();
+        json.Append("{\n");
+        WriteJsonString(json, "name"); json.Append(": "); WriteJsonString(json, timeline.Name.Content); json.Append(",\n");
+
+        json.Append("  \"moments\": [\n");
+        for (int i = 0; i < timeline.Moments.Count; i++)
+        {
+            var moment = timeline.Moments[i];
+            json.Append("    {\n");
+            WriteJsonString(json, "step"); json.Append(": "); WriteJsonNumber(json, (int)moment.Step);
+
+            if (moment.Event != null && moment.Event.Count > 0)
+            {
+                json.Append(",\n");
+                json.Append("    \"actions\": [\n");
+                for (int j = 0; j < moment.Event.Count; j++)
+                {
+                    var action = moment.Event[j];
+                    json.Append("      {\n");
+                    if (action.CodeId != null && action.CodeId.Name != null)
+                    {
+                        WriteJsonString(json, "codeId"); json.Append(": "); WriteJsonString(json, action.CodeId.Name.Content ?? "");
+                    }
+                    else
+                    {
+                        WriteJsonString(json, "codeId"); json.Append(": "); json.Append("null");
+                    }
+                    json.Append("\n      }");
+                    if (j < moment.Event.Count - 1) json.Append(",");
+                    json.Append("\n");
+                }
+                json.Append("    ]");
+            }
+
+            json.Append("\n    }");
+            if (i < timeline.Moments.Count - 1) json.Append(",");
+            json.Append("\n");
+        }
+        json.Append("  ]\n");
+
+        json.Append("}");
+
+        File.WriteAllText(jsonPath, json.ToString(), Encoding.UTF8);
+    }
+    catch (Exception ex)
+    {
+        PrintLine($"[ExportAllAssets] Failed to export timeline {timeline.Name?.Content}: {ex.Message}");
+    }
+
+    IncrementProgressParallel();
+}
+
+async Task DumpExtensions()
+{
+    await Task.Run(() => Parallel.ForEach(allExtensions, DumpExtension));
+}
+
+void DumpExtension(UndertaleExtension extension)
+{
+    if (extension?.Name?.Content == null) return;
+
+    try
+    {
+        string name = SafeName(extension.Name.Content);
+        string jsonPath = Path.Combine(extensionsOut, name + ".json");
+
+        var json = new StringBuilder();
+        json.Append("{\n");
+        WriteJsonString(json, "name"); json.Append(": "); WriteJsonString(json, extension.Name.Content); json.Append(",\n");
+        WriteJsonString(json, "folderName"); json.Append(": "); WriteJsonString(json, extension.FolderName?.Content ?? ""); json.Append(",\n");
+        if (extension.Version != null)
+        {
+            WriteJsonString(json, "version"); json.Append(": "); WriteJsonString(json, extension.Version.Content ?? ""); json.Append(",\n");
+        }
+        if (extension.ClassName != null)
+        {
+            WriteJsonString(json, "className"); json.Append(": "); WriteJsonString(json, extension.ClassName.Content ?? "");
+            if (extension.Files == null || extension.Files.Count == 0)
+            {
+                json.Append("\n");
+            }
+        }
+
+        if (extension.Files != null && extension.Files.Count > 0)
+        {
+            json.Append(",\n  \"files\": [\n");
+            for (int i = 0; i < extension.Files.Count; i++)
+            {
+                var file = extension.Files[i];
+                json.Append("    {\n");
+                WriteJsonString(json, "filename"); json.Append(": "); WriteJsonString(json, file.Filename?.Content ?? ""); json.Append(",\n");
+                WriteJsonString(json, "kind"); json.Append(": "); WriteJsonNumber(json, (int)file.Kind); json.Append(",\n");
+                if (file.InitScript != null)
+                {
+                    WriteJsonString(json, "initScript"); json.Append(": "); WriteJsonString(json, file.InitScript.Content ?? ""); json.Append(",\n");
+                }
+                if (file.CleanupScript != null)
+                {
+                    WriteJsonString(json, "cleanupScript"); json.Append(": "); WriteJsonString(json, file.CleanupScript.Content ?? ""); json.Append(",\n");
+                }
+                WriteJsonString(json, "functions"); json.Append(": [\n");
+                if (file.Functions != null)
+                {
+                    for (int j = 0; j < file.Functions.Count; j++)
+                    {
+                        var func = file.Functions[j];
+                        json.Append("      {\n");
+                        WriteJsonString(json, "name"); json.Append(": "); WriteJsonString(json, func.Name?.Content ?? ""); json.Append(",\n");
+                        if (func.ExtName != null)
+                        {
+                            WriteJsonString(json, "extName"); json.Append(": "); WriteJsonString(json, func.ExtName.Content ?? ""); json.Append(",\n");
+                        }
+                        WriteJsonString(json, "id"); json.Append(": "); WriteJsonNumber(json, (int)func.ID); json.Append(",\n");
+                        WriteJsonString(json, "kind"); json.Append(": "); WriteJsonNumber(json, (int)func.Kind); json.Append(",\n");
+                        WriteJsonString(json, "retType"); json.Append(": "); WriteJsonNumber(json, (int)func.RetType); json.Append(",\n");
+                        WriteJsonString(json, "arguments"); json.Append(": [\n");
+                        if (func.Arguments != null)
+                        {
+                            for (int k = 0; k < func.Arguments.Count; k++)
+                            {
+                                var arg = func.Arguments[k];
+                                json.Append("        {\n");
+                                WriteJsonString(json, "type"); json.Append(": "); WriteJsonNumber(json, (int)arg.Type);
+                                json.Append("\n        }");
+                                if (k < func.Arguments.Count - 1) json.Append(",");
+                                json.Append("\n");
+                            }
+                        }
+                        json.Append("      ]\n      }");
+                        if (j < file.Functions.Count - 1) json.Append(",");
+                        json.Append("\n");
+                    }
+                }
+                json.Append("    ]\n    }");
+                if (i < extension.Files.Count - 1) json.Append(",");
+                json.Append("\n");
+            }
+            json.Append("  ]");
+        }
+
+        if (extension.Options != null && extension.Options.Count > 0)
+        {
+            json.Append(",\n  \"options\": [\n");
+            for (int i = 0; i < extension.Options.Count; i++)
+            {
+                var option = extension.Options[i];
+                json.Append("    {\n");
+                WriteJsonString(json, "name"); json.Append(": "); WriteJsonString(json, option.Name?.Content ?? ""); json.Append(",\n");
+                WriteJsonString(json, "value"); json.Append(": "); WriteJsonString(json, option.Value?.Content ?? "");
+                json.Append("\n    }");
+                if (i < extension.Options.Count - 1) json.Append(",");
+                json.Append("\n");
+            }
+            json.Append("  ]");
+        }
+
+        json.Append("\n}");
+
+        File.WriteAllText(jsonPath, json.ToString(), Encoding.UTF8);
+    }
+    catch (Exception ex)
+    {
+        PrintLine($"[ExportAllAssets] Failed to export extension {extension.Name?.Content}: {ex.Message}");
+    }
+
+    IncrementProgressParallel();
+}
+
 PrintLine($"\n[ExportAllAssets] Summary for Mod {modNo}:");
 PrintLine($"  Code - Exported: {allCode.Count}");
 PrintLine($"  Sprites - Exported: {allSprites.Count}");
@@ -816,5 +1095,9 @@ PrintLine($"  Fonts - Exported: {allFonts.Count}");
 PrintLine($"  Shaders - Exported: {allShaders.Count}");
 PrintLine($"  Sounds - Exported: {allSounds.Count}");
 PrintLine($"  Rooms - Exported: {allRooms.Count}");
+PrintLine($"  AudioGroups - Exported: {allAudioGroups.Count}");
+PrintLine($"  Paths - Exported: {allPaths.Count}");
+PrintLine($"  Timelines - Exported: {allTimelines.Count}");
+PrintLine($"  Extensions - Exported: {allExtensions.Count}");
 PrintLine("[ExportAllAssets] Done.");
 

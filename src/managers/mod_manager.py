@@ -781,8 +781,15 @@ class ModManager(QObject):
                     safe_mod_info = {'key': key, 'name': config_data.get('name', tr('defaults.local_mod')), 'version': config_data.get('version', '1.0.0'), 'author': config_data.get('author', tr('defaults.unknown')), 'tagline': config_data.get('tagline', tr('defaults.no_description')), 'game_version': config_data.get('game_version', tr('defaults.not_specified')), 'description_url': '', 'downloads': 0, 'game': config_data.get('game') or config_data.get('modgame', 'deltarune'), 'is_verified': False, 'icon_url': icon_url, 'tags': ['local'], 'hide_mod': False, 'is_local_mod': config_data.get('is_local_mod', True), 'ban_status': False, 'demo_url': None, 'demo_version': '1.0.0', 'created_date': config_data.get('created_date', 'N/A'), 'last_updated': config_data.get('created_date', 'N/A'), 'external_url': config_data.get('external_url')}
                     mod = mod_models.ModInfo(**safe_mod_info)
                     files_data = config_data.get('files', {})
+                    if not isinstance(files_data, dict):
+                        logging.warning(f'load_local_mods: files_data is not a dict for mod {key}, skipping files processing')
+                        files_data = {}
                     for file_key, ch_info in list(files_data.items()):
+                        if not isinstance(ch_info, dict):
+                            logging.warning(f'load_local_mods: ch_info is not a dict for mod {key}, file_key={file_key}, skipping')
+                            continue
                         chapter_files = ch_info
+                        chapter_folder = None
                         if mod_folder_path:
                             if file_key == 'demo':
                                 chapter_folder = os.path.join(mod_folder_path, 'demo')
@@ -802,15 +809,28 @@ class ModManager(QObject):
                                 except ValueError:
                                     continue
                         data_file_url = ''
-                        if chapter_files.get('data_file_url') and mod_folder_path:
+                        if chapter_files.get('data_file_url') and mod_folder_path and chapter_folder:
                             data_file_url = os.path.join(chapter_folder, chapter_files['data_file_url'])
                         from models.mod_models import ModExtraFile
                         extra_files = []
                         if chapter_files.get('extra_files') and mod_folder_path:
-                            for group_key, filenames in list(chapter_files['extra_files'].items()):
-                                for filename in filenames:
-                                    file_path = os.path.join(chapter_folder, filename)
-                                    extra_files.append(ModExtraFile(key=group_key, url=file_path, version='1.0.0'))
+                            extra_files_data = chapter_files['extra_files']
+                            if isinstance(extra_files_data, dict):
+                                if chapter_folder:
+                                    for group_key, filenames in list(extra_files_data.items()):
+                                        if isinstance(filenames, list):
+                                            for filename in filenames:
+                                                file_path = os.path.join(chapter_folder, filename)
+                                                extra_files.append(ModExtraFile(key=group_key, url=file_path, version='1.0.0'))
+                            elif isinstance(extra_files_data, list):
+                                for ef_data in extra_files_data:
+                                    if isinstance(ef_data, dict):
+                                        url = ef_data.get('url', '')
+                                        if url and (not os.path.isabs(url)) and chapter_folder:
+                                            url = os.path.join(chapter_folder, url)
+                                        extra_files.append(ModExtraFile(key=ef_data.get('key', ''), url=url, version=ef_data.get('version', '1.0.0')))
+                                    elif isinstance(ef_data, ModExtraFile):
+                                        extra_files.append(ef_data)
                         mod_chapter = ModChapterData(description=config_data.get('tagline', ''), data_file_url=data_file_url, data_file_version=chapter_files.get('data_file_version', (ch_info.get('versions', {}) or {}).get('data', '1.0.0')), extra_files=extra_files)
                         mod.files[file_key] = mod_chapter
                     game = mod.game or config_data.get('game') or config_data.get('modgame', '')

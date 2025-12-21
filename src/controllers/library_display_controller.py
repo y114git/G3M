@@ -304,13 +304,30 @@ class LibraryDisplayController:
                     minimal_mod_data = {'key': key}
                     if mod_name:
                         minimal_mod_data['name'] = mod_name
-                    self.slot_manager.remove_mod_from_all_chapters(minimal_mod_data)
+                    try:
+                        self.slot_manager.remove_mod_from_all_chapters(minimal_mod_data)
+                    except Exception as e:
+                        import logging
+                        logging.warning(f'Failed to remove mod from chapters after deletion: {e}', exc_info=True)
                 else:
-                    self.slot_manager.remove_mod_from_all_chapters(mod_data)
-                self.mod_manager.invalidate_mods_cache()
-                self.mod_manager.load_local_mods()
-                self.mod_manager.mod_list_updated.emit()
-                self.update_display()
+                    try:
+                        self.slot_manager.remove_mod_from_all_chapters(mod_data)
+                    except Exception as e:
+                        import logging
+                        logging.warning(f'Failed to remove mod from chapters after deletion: {e}', exc_info=True)
+                try:
+                    self.mod_manager.invalidate_mods_cache()
+                    self.mod_manager.load_local_mods()
+                    self.mod_manager.mod_list_updated.emit()
+                    self.update_display()
+                except Exception as e:
+                    import logging
+                    logging.error(f'Failed to reload mods after deletion: {e}', exc_info=True)
+                    try:
+                        self.mod_manager.mod_list_updated.emit()
+                        self.update_display()
+                    except Exception as e2:
+                        logging.error(f'Failed to update display after mod deletion: {e2}', exc_info=True)
                 try:
                     self.app.search_display.update_search_plaques()
                     self.app.search_display.update_filtered_mods(preserve_page=True)

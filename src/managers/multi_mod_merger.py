@@ -1389,7 +1389,42 @@ class MultiModMerger(QObject):
                 if os.path.exists(rooms_path):
                     return [os.path.splitext(f)[0] for f in os.listdir(rooms_path) if f.endswith('.json')]
                 return []
-            asset_configs = [{'script_name': 'ImportGraphics', 'has_assets': has_graphics, 'step_number': '1/13', 'resource_type': 'sprite', 'resource_action': 'imported', 'get_resources_func': get_sprite_resources}, {'script_name': 'ImportShaders', 'has_assets': has_shaders, 'step_number': '2/13', 'resource_type': 'shader', 'resource_action': 'imported', 'get_resources_func': get_shader_resources}, {'script_name': 'ImportGML', 'has_assets': has_gml, 'step_number': '5/13', 'resource_type': 'code', 'resource_action': 'modified', 'get_resources_func': get_gml_resources, 'analyze_errors': True}, {'script_name': 'ImportTilesets', 'has_assets': has_tilesets, 'step_number': '10/13', 'resource_type': 'tileset', 'resource_action': 'imported', 'get_resources_func': get_tileset_resources, 'extra_resources_func': get_tileset_config_resource}, {'script_name': 'ImportFonts', 'has_assets': has_fonts, 'step_number': '11/13', 'resource_type': 'font', 'resource_action': 'modified', 'get_resources_func': get_font_resources}, {'script_name': 'ImportSounds', 'has_assets': has_sounds, 'step_number': '12/13', 'resource_type': 'sound', 'resource_action': 'modified', 'get_resources_func': get_sound_resources}, {'script_name': 'ImportRooms', 'has_assets': has_rooms, 'step_number': '13/13', 'resource_type': 'room', 'resource_action': 'modified', 'get_resources_func': get_room_resources, 'check_dir_func': lambda obj_dir: os.path.exists(os.path.join(obj_dir, 'Rooms'))}]
+
+            def get_audiogroup_resources(obj_dir):
+                audiogroups_path = os.path.join(obj_dir, 'AudioGroups')
+                if os.path.exists(audiogroups_path):
+                    return [os.path.splitext(f)[0] for f in os.listdir(audiogroups_path) if f.endswith('.json')]
+                return []
+
+            def get_path_resources(obj_dir):
+                paths_path = os.path.join(obj_dir, 'Paths')
+                if os.path.exists(paths_path):
+                    return [os.path.splitext(f)[0] for f in os.listdir(paths_path) if f.endswith('.json')]
+                return []
+
+            def get_timeline_resources(obj_dir):
+                timelines_path = os.path.join(obj_dir, 'Timelines')
+                if os.path.exists(timelines_path):
+                    return [os.path.splitext(f)[0] for f in os.listdir(timelines_path) if f.endswith('.json')]
+                return []
+
+            def get_extension_resources(obj_dir):
+                extensions_path = os.path.join(obj_dir, 'Extensions')
+                if os.path.exists(extensions_path):
+                    return [os.path.splitext(f)[0] for f in os.listdir(extensions_path) if f.endswith('.json')]
+                return []
+            audio_groups_dir = os.path.join(objects_dir, 'AudioGroups')
+            has_audio_groups = bool(os.path.exists(audio_groups_dir) and os.listdir(audio_groups_dir))
+            paths_dir = os.path.join(objects_dir, 'Paths')
+            has_paths = bool(os.path.exists(paths_dir) and os.listdir(paths_dir))
+            timelines_dir = os.path.join(objects_dir, 'Timelines')
+            has_timelines = bool(os.path.exists(timelines_dir) and os.listdir(timelines_dir))
+            extensions_dir = os.path.join(objects_dir, 'Extensions')
+            has_extensions = bool(os.path.exists(extensions_dir) and os.listdir(extensions_dir))
+            if not (has_graphics or has_gml or has_shaders or has_tilesets or has_fonts or has_sounds or has_rooms or has_audio_groups or has_paths or has_timelines or has_extensions):
+                self.patching_logger.debug(f'Objects directory has no assets to import: {objects_dir}')
+                return True
+            asset_configs = [{'script_name': 'ImportGraphics', 'has_assets': has_graphics, 'step_number': '1/17', 'resource_type': 'sprite', 'resource_action': 'imported', 'get_resources_func': get_sprite_resources}, {'script_name': 'ImportShaders', 'has_assets': has_shaders, 'step_number': '2/17', 'resource_type': 'shader', 'resource_action': 'imported', 'get_resources_func': get_shader_resources}, {'script_name': 'ImportGML', 'has_assets': has_gml, 'step_number': '5/17', 'resource_type': 'code', 'resource_action': 'modified', 'get_resources_func': get_gml_resources, 'analyze_errors': True}, {'script_name': 'ImportTilesets', 'has_assets': has_tilesets, 'step_number': '10/17', 'resource_type': 'tileset', 'resource_action': 'imported', 'get_resources_func': get_tileset_resources, 'extra_resources_func': get_tileset_config_resource}, {'script_name': 'ImportFonts', 'has_assets': has_fonts, 'step_number': '11/17', 'resource_type': 'font', 'resource_action': 'modified', 'get_resources_func': get_font_resources}, {'script_name': 'ImportSounds', 'has_assets': has_sounds, 'step_number': '12/17', 'resource_type': 'sound', 'resource_action': 'modified', 'get_resources_func': get_sound_resources}, {'script_name': 'ImportRooms', 'has_assets': has_rooms, 'step_number': '13/17', 'resource_type': 'room', 'resource_action': 'modified', 'get_resources_func': get_room_resources, 'check_dir_func': lambda obj_dir: os.path.exists(os.path.join(obj_dir, 'Rooms'))}, {'script_name': 'ImportAudioGroups', 'has_assets': has_audio_groups, 'step_number': '14/17', 'resource_type': 'audiogroup', 'resource_action': 'modified', 'get_resources_func': get_audiogroup_resources}, {'script_name': 'ImportPaths', 'has_assets': has_paths, 'step_number': '15/17', 'resource_type': 'path', 'resource_action': 'modified', 'get_resources_func': get_path_resources}, {'script_name': 'ImportTimelines', 'has_assets': has_timelines, 'step_number': '16/17', 'resource_type': 'timeline', 'resource_action': 'modified', 'get_resources_func': get_timeline_resources}, {'script_name': 'ImportExtensions', 'has_assets': has_extensions, 'step_number': '17/17', 'resource_type': 'extension', 'resource_action': 'modified', 'get_resources_func': get_extension_resources}]
             for asset_config in asset_configs:
                 self._import_asset_type(asset_config, data_win_path, data_win_dir, objects_dir, mod_name_for_tracking)
             if 'DeltahubMergeWorkspace' in data_win_dir:
