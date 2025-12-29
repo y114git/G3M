@@ -144,8 +144,18 @@ class ThemeController:
         self.app.disable_splash_checkbox.setChecked(self.app_state.local_config.get('disable_splash', False))
         self.app.background_music_button.setText(self.customization_manager.get_background_music_button_text())
         self.app.startup_sound_button.setText(self.customization_manager.get_startup_sound_button_text())
-        self.customization_manager.stop_background_music()
-        self.customization_manager.maybe_start_background_music(force=True)
+        current_music_path = self.customization_manager.get_background_music_path()
+        if not current_music_path:
+            self.customization_manager.stop_background_music()
+        else:
+            should_restart = True
+            if hasattr(self.customization_manager, '_current_music_path'):
+                if self.customization_manager._current_music_path == current_music_path:
+                    if hasattr(self.customization_manager, '_bg_music_thread') and self.customization_manager._bg_music_thread is not None and self.customization_manager._bg_music_thread.isRunning():
+                        should_restart = False
+            if should_restart:
+                self.customization_manager.stop_background_music()
+                self.customization_manager.maybe_start_background_music(force=True)
 
     def on_custom_style_edited(self):
         self.settings_manager.on_custom_style_edited(self.app.color_widgets)

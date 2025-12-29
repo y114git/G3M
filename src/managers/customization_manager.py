@@ -23,6 +23,8 @@ class CustomizationManager(QObject):
         self._bg_music_thread = None
         self._bg_music_instance = None
         self.bg_fallback_proc = None
+        self._music_starting = False
+        self._current_music_path = None
 
     def get_background_music_path(self) -> str:
         import logging
@@ -70,11 +72,18 @@ class CustomizationManager(QObject):
 
     def start_background_music(self):
         import logging
+        if self._music_starting:
+            logging.debug('[CustomizationManager] Music start already in progress, skipping')
+            return
+        if self._bg_music_thread is not None and self._bg_music_thread.isRunning():
+            logging.debug('[CustomizationManager] Music thread already running, will restart')
         try:
+            self._music_starting = True
             music_path = self.get_background_music_path()
             logging.info(f'[CustomizationManager] start_background_music called, path: {music_path}')
             if not music_path or not os.path.exists(music_path):
                 logging.warning(f'[CustomizationManager] Cannot start music: path invalid or file not found: {music_path}')
+                self._music_starting = False
                 return
             logging.info('[CustomizationManager] Stopping existing music and starting new')
             self.stop_background_music()
@@ -89,13 +98,13 @@ class CustomizationManager(QObject):
                     self.outer, self.path = (outer, path)
 
                 def run(self):
-                    while getattr(self.outer, '_bg_music_running', False):
+                    while getattr(self.outer, '_bg_music_running', False) and (not self.isInterruptionRequested()):
                         try:
                             inst = playsound(self.path, block=False)
                             self.outer._bg_music_instance = inst
-                            while getattr(self.outer, '_bg_music_running', False) and hasattr(inst, 'is_alive') and inst.is_alive():
+                            while getattr(self.outer, '_bg_music_running', False) and (not self.isInterruptionRequested()) and hasattr(inst, 'is_alive') and inst.is_alive():
                                 time.sleep(0.05)
-                            if not getattr(self.outer, '_bg_music_running', False):
+                            if not getattr(self.outer, '_bg_music_running', False) or self.isInterruptionRequested():
                                 try:
                                     if hasattr(inst, 'stop'):
                                         inst.stop()
@@ -103,17 +112,23 @@ class CustomizationManager(QObject):
                                     pass
                                 break
                         except Exception:
+                            if not getattr(self.outer, '_bg_music_running', False) or self.isInterruptionRequested():
+                                break
                             time.sleep(3)
                             continue
             self._bg_music_thread = _MusicLoop(self, music_path)
             logging.info('[CustomizationManager] Starting background music thread')
             self._bg_music_thread.start()
+            self._current_music_path = music_path
             self.music_started.emit()
             logging.info('[CustomizationManager] Background music thread started, signal emitted')
+            self._music_starting = False
         except Exception as e:
             logging.error(f'[CustomizationManager] Failed to start background music: {e}', exc_info=True)
+            self._music_starting = False
 
     def stop_background_music(self):
+        import logging
         try:
             self._bg_music_running = False
             inst = getattr(self, '_bg_music_instance', None)
@@ -127,12 +142,18 @@ class CustomizationManager(QObject):
                     pass
             self._bg_music_instance = None
             thr = getattr(self, '_bg_music_thread', None)
-            if thr and thr.isRunning():
-                thr.requestInterruption()
-                thr.quit()
+            if thr:
+                if thr.isRunning():
+                    thr.requestInterruption()
+                    thr.quit()
+                    if not thr.wait(2000):
+                        logging.warning('[CustomizationManager] Thread did not finish in time, terminating')
+                        thr.terminate()
+                        thr.wait(500)
+                thr.deleteLater()
             self._bg_music_thread = None
-        except Exception:
-            pass
+        except Exception as e:
+            logging.error(f'[CustomizationManager] Error stopping music: {e}', exc_info=True)
         try:
             if hasattr(self, 'bg_fallback_proc') and self.bg_fallback_proc:
                 if self.bg_fallback_proc.poll() is None:
@@ -150,15 +171,22 @@ class CustomizationManager(QObject):
             pass
         finally:
             self.bg_fallback_proc = None
+            self._current_music_path = None
             self.music_stopped.emit()
 
     def maybe_start_background_music(self, force=False):
         import logging
+        if self._music_starting:
+            logging.debug('[CustomizationManager] maybe_start_background_music: Music start already in progress, skipping')
+            return
         try:
             music_path = self.get_background_music_path()
             logging.info(f'[CustomizationManager] maybe_start_background_music called, path: {music_path}, force: {force}')
             if not music_path or not os.path.exists(music_path):
                 logging.debug(f'[CustomizationManager] No music file found or path invalid: {music_path}')
+                if self._bg_music_thread is not None and self._bg_music_thread.isRunning():
+                    logging.info('[CustomizationManager] No music file but music is running, stopping')
+                    self.stop_background_music()
                 return
             logging.info(f'[CustomizationManager] Music file exists: {os.path.exists(music_path)}')
             if hasattr(self, 'parent_widget') and self.parent_widget:
@@ -166,6 +194,12 @@ class CustomizationManager(QObject):
                 is_visible = self.parent_widget.isVisible()
                 logging.info(f'[CustomizationManager] parent_widget exists: {self.parent_widget is not None}, is_shown_to_user: {is_shown_to_user}, is_visible: {is_visible}, force: {force}')
                 if force or (is_shown_to_user and is_visible):
+                    if self._bg_music_thread is not None and self._bg_music_thread.isRunning() and (self._current_music_path == music_path):
+                        if not force:
+                            logging.debug(f'[CustomizationManager] Music already running same file ({music_path}), skipping start')
+                            return
+                        if self._current_music_path == music_path:
+                            logging.debug(f'[CustomizationManager] Music already running same file, but force=True. Checking if restart needed...')
                     logging.info('[CustomizationManager] Starting background music')
                     self.start_background_music()
                 else:
@@ -174,6 +208,7 @@ class CustomizationManager(QObject):
                 logging.warning(f"[CustomizationManager] parent_widget not available: hasattr={hasattr(self, 'parent_widget')}, value={getattr(self, 'parent_widget', None)}")
         except Exception as e:
             logging.error(f'[CustomizationManager] Error in maybe_start_background_music: {e}', exc_info=True)
+            self._music_starting = False
 
     def load_custom_style_settings(self, color_widgets: dict, apply_theme_callback: Optional[Callable] = None):
         theme_defaults = THEMES['default']
