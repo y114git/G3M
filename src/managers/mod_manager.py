@@ -650,15 +650,13 @@ class ModManager(QObject):
                         if existing_mod:
                             if (not hasattr(existing_mod, 'files') or not existing_mod.files) and config_data.get('files'):
                                 try:
-                                    new_mod = self.create_mod_object_from_info(config_data, self.app_state.all_mods)
-                                    for i, mod in enumerate(self.app_state.all_mods):
-                                        mod_key_attr = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
-                                        if mod_key_attr == key:
-                                            self.app_state.all_mods[i] = new_mod
-                                            break
+                                    temp_mod = self.create_mod_object_from_info(config_data, self.app_state.all_mods)
+                                    if hasattr(temp_mod, 'files') and temp_mod.files:
+                                        existing_mod.files = temp_mod.files
                                 except Exception as e:
-                                    logging.warning(f'load_local_mods: Failed to reload mod {key} from config: {e}', exc_info=True)
+                                    logging.warning(f'load_local_mods: Failed to load files for mod {key}: {e}', exc_info=True)
                             continue
+                    continue
                 elif key in existing_keys:
                     existing_mod = None
                     for mod in self.app_state.all_mods:
@@ -914,7 +912,8 @@ class ModManager(QObject):
             mod_id = int(key.replace('gb_', '', 1)) if key and key.startswith('gb_') else None
             if not mod_id:
                 return None
-            compat = api.get_supported_files_for_mod(int(mod_id))
+            external_url = getattr(mod_info, 'external_url', None)
+            compat = api.get_supported_files_for_mod(int(mod_id), external_url=external_url)
             files = compat.get('supported_files') or []
             if files:
                 mod_info.gamebanana_supported_files = files

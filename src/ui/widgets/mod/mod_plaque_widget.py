@@ -28,7 +28,8 @@ class CompatibilityCheckThread(QThread):
             api = GameBananaAPI()
             if self.isInterruptionRequested():
                 return
-            compat = api.get_supported_files_for_mod(int(mod_id))
+            external_url = getattr(self.mod_data, 'external_url', None)
+            compat = api.get_supported_files_for_mod(int(mod_id), external_url=external_url)
             self.compatibility_checked.emit(self.mod_data, compat)
         except Exception as e:
             logging.warning(f'CompatibilityCheckThread: Error checking compatibility: {e}', exc_info=True)

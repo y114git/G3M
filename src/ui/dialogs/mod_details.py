@@ -46,6 +46,8 @@ class LoadModDetailsThread(QThread):
                             if cached_text:
                                 result['text'] = cached_text
                             if cached_screenshots:
+                                external_url = getattr(self.mod_data, 'external_url', None)
+                                cached_screenshots = api.fix_screenshot_urls(cached_screenshots, external_url=external_url)
                                 result['screenshots'] = cached_screenshots
                             if result:
                                 if not self.isInterruptionRequested():
@@ -57,7 +59,8 @@ class LoadModDetailsThread(QThread):
                 return
             from utils.gamebanana_api import GameBananaAPI
             api = GameBananaAPI()
-            details = api.get_mod_text_and_screenshots(mod_id)
+            external_url = getattr(self.mod_data, 'external_url', None)
+            details = api.get_mod_text_and_screenshots(mod_id, external_url=external_url)
             if details and (not self.isInterruptionRequested()):
                 result = {}
                 text_field = details.get('text')
@@ -73,15 +76,17 @@ class LoadModDetailsThread(QThread):
                 screenshots_field = details.get('screenshots')
                 screenshots = []
                 if screenshots_field:
+                    external_url = getattr(self.mod_data, 'external_url', None)
+                    is_wip = external_url and '/wips/' in external_url
                     screenshots_data = None
                     if isinstance(screenshots_field, list) and len(screenshots_field) > 0:
                         screenshots_data = screenshots_field[0]
                     elif not isinstance(screenshots_field, list):
                         screenshots_data = screenshots_field
                     if isinstance(screenshots_data, str):
-                        screenshots = api.extract_screenshots_from_api(screenshots_data)
+                        screenshots = api.extract_screenshots_from_api(screenshots_data, external_url=external_url)
                     elif isinstance(screenshots_data, list):
-                        base_url = 'https://images.gamebanana.com/img/ss/mods'
+                        base_url = 'https://images.gamebanana.com/img/ss/wips' if is_wip else 'https://images.gamebanana.com/img/ss/mods'
                         for screenshot_obj in screenshots_data:
                             if self.isInterruptionRequested():
                                 break
@@ -94,7 +99,7 @@ class LoadModDetailsThread(QThread):
                         import json
                         try:
                             screenshots_str = json.dumps(screenshots_data)
-                            screenshots = api.extract_screenshots_from_api(screenshots_str)
+                            screenshots = api.extract_screenshots_from_api(screenshots_str, external_url=external_url)
                         except (TypeError, ValueError):
                             screenshots = []
                 result['screenshots'] = screenshots
@@ -260,6 +265,10 @@ def open_mod_details_dialog(parent, mod_data):
     screenshots_container_layout = QVBoxLayout(screenshots_container)
     screenshots_container_layout.setContentsMargins(0, 0, 0, 0)
     screenshots = getattr(mod_data, 'screenshots_url', []) or []
+    external_url = getattr(mod_data, 'external_url', None)
+    if screenshots and external_url:
+        from utils.gamebanana_api import GameBananaAPI
+        screenshots = GameBananaAPI.fix_screenshot_urls(screenshots, external_url=external_url)
     screenshots_widget = None
     if isinstance(screenshots, list) and any((isinstance(u, str) and u.strip() for u in screenshots)):
         screenshots_title = QLabel(f"<b>{tr('ui.screenshots_title')}</b>")

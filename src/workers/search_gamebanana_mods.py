@@ -62,9 +62,11 @@ class SearchGameBananaModsThread(QThread):
                         break
                     if time.time() - self._start_time > SEARCH_TIMEOUT_SECONDS:
                         break
-                    if record.get('_sModelName') != 'Mod':
+                    model_name = record.get('_sModelName')
+                    if model_name not in ('Mod', 'Wip', 'WIP'):
                         continue
-                    mod_info = self.api._map_mod_data(record, game_name)
+                    is_wip = model_name in ('Wip', 'WIP')
+                    mod_info = self.api._map_mod_data(record, game_name, is_wip=is_wip)
                     if not mod_info:
                         continue
                     mod_id = record.get('_idRow')

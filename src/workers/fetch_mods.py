@@ -185,7 +185,25 @@ class FetchModsThread(QThread):
                 if hasattr(mod, 'is_local_mod') and mod.is_local_mod:
                     continue
                 key = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
-                if key and key in existing_mods_with_files:
+                is_gamebanana_mod = key and key.startswith('gb_')
+                if is_gamebanana_mod and (key in existing_mods_with_files or key in installed_mods_with_files):
+                    if key in existing_mods_with_files:
+                        existing_mod = existing_mods_with_files[key]
+                        if hasattr(existing_mod, 'files') and existing_mod.files:
+                            mod.files = existing_mod.files
+                    elif key in installed_mods_with_files:
+                        installed_mod_config = installed_mods_with_files[key]
+                        if installed_mod_config.get('files'):
+                            mod_manager = getattr(self.main_window, 'mod_manager', None)
+                            if mod_manager:
+                                try:
+                                    temp_mod = mod_manager.create_mod_object_from_info(installed_mod_config, [])
+                                    if hasattr(temp_mod, 'files') and temp_mod.files:
+                                        mod.files = temp_mod.files
+                                except Exception as e:
+                                    logger.debug(f'Failed to load files for installed mod {key}: {e}')
+                    all_mods_filtered.append(mod)
+                elif key and key in existing_mods_with_files:
                     existing_mod = existing_mods_with_files[key]
                     for attr in ['name', 'author', 'tagline', 'game_version', 'description_url', 'downloads', 'icon_url', 'is_verified']:
                         if hasattr(mod, attr):

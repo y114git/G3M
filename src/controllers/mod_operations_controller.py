@@ -203,7 +203,8 @@ class ModOperationsController:
         try:
             from utils.gamebanana_api import GameBananaAPI
             api = GameBananaAPI()
-            compat = api.get_supported_files_for_mod(int(mod_id))
+            external_url = getattr(mod, 'external_url', None)
+            compat = api.get_supported_files_for_mod(int(mod_id), external_url=external_url)
             files = compat.get('supported_files') or []
             if files:
                 setattr(mod, 'gamebanana_supported_files', files)
@@ -399,6 +400,7 @@ class ModOperationsController:
                 mod_already_in_all_mods = False
                 if key:
                     mod_already_in_all_mods = any(((getattr(m, 'key', None) or getattr(m, 'mod_key', None)) == key for m in self.app_state.all_mods))
+                is_gamebanana_mod = key and key.startswith('gb_')
                 if not mod_already_in_all_mods:
                     try:
                         cache = self.mod_manager._get_mods_cache()
@@ -412,6 +414,24 @@ class ModOperationsController:
                             logging.warning(f'ModOperationsController: Could not create mod object for installed mod (key: {key})')
                     except Exception as e:
                         logging.warning(f'ModOperationsController: Failed to add installed mod to all_mods: {e}', exc_info=True)
+                elif is_gamebanana_mod and mod_already_in_all_mods:
+                    try:
+                        existing_mod = None
+                        for m in self.app_state.all_mods:
+                            mod_key_attr = getattr(m, 'key', None) or getattr(m, 'mod_key', None)
+                            if mod_key_attr == key:
+                                existing_mod = m
+                                break
+                        if existing_mod:
+                            cache = self.mod_manager._get_mods_cache()
+                            if key and key in cache:
+                                config_data = cache[key].config_data
+                                if config_data.get('files') and (not hasattr(existing_mod, 'files') or not existing_mod.files):
+                                    temp_mod = self.mod_manager.create_mod_object_from_info(config_data, self.app_state.all_mods)
+                                    if hasattr(temp_mod, 'files') and temp_mod.files:
+                                        existing_mod.files = temp_mod.files
+                    except Exception as e:
+                        logging.debug(f'ModOperationsController: Failed to update files for GameBanana mod {key}: {e}')
         except Exception as e:
             logging.warning(f'ModOperationsController: Failed to reload local mods: {e}', exc_info=True)
 

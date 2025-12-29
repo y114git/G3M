@@ -54,7 +54,8 @@ class LoadGameBananaDetailsThread(QThread):
                         time.sleep(0.1)
                         if self._cancelled:
                             break
-                    full_details = self.api.get_mod_full_details_for_display(mod_id)
+                    external_url = getattr(mod, 'external_url', None)
+                    full_details = self.api.get_mod_full_details_for_display(mod_id, external_url=external_url)
                     if self._cancelled:
                         break
                     if full_details:
@@ -162,16 +163,18 @@ class LoadGameBananaDetailsThread(QThread):
             logger.debug(f'LoadGameBananaDetailsThread: No downloads field for mod {mod_id_str}, using fallback: {mod.downloads}')
         screenshots_field = full_details.get('screenshots')
         if screenshots_field:
+            external_url = getattr(mod, 'external_url', None)
+            is_wip = external_url and '/wips/' in external_url
             screenshots_data = None
             if isinstance(screenshots_field, list) and len(screenshots_field) > 0:
                 screenshots_data = screenshots_field[0]
             elif not isinstance(screenshots_field, list):
                 screenshots_data = screenshots_field
             if isinstance(screenshots_data, str):
-                mod.screenshots_url = self.api.extract_screenshots_from_api(screenshots_data)
+                mod.screenshots_url = self.api.extract_screenshots_from_api(screenshots_data, external_url=external_url)
             elif isinstance(screenshots_data, list):
                 screenshots = []
-                base_url = 'https://images.gamebanana.com/img/ss/mods'
+                base_url = 'https://images.gamebanana.com/img/ss/wips' if is_wip else 'https://images.gamebanana.com/img/ss/mods'
                 for screenshot_obj in screenshots_data:
                     if isinstance(screenshot_obj, dict):
                         file_name = screenshot_obj.get('_sFile') or screenshot_obj.get('_sFile800') or screenshot_obj.get('_sFile530') or screenshot_obj.get('_sFile220')
@@ -182,7 +185,7 @@ class LoadGameBananaDetailsThread(QThread):
             elif isinstance(screenshots_data, dict):
                 try:
                     screenshots_str = json.dumps(screenshots_data)
-                    mod.screenshots_url = self.api.extract_screenshots_from_api(screenshots_str)
+                    mod.screenshots_url = self.api.extract_screenshots_from_api(screenshots_str, external_url=external_url)
                 except (TypeError, ValueError):
                     mod.screenshots_url = []
             else:

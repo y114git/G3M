@@ -68,7 +68,7 @@ class GameBananaAPI:
         valid_sorts = ['default', 'new', 'updated']
         effective_sort = sort if sort in valid_sorts else 'default'
         url = f'{self.base_url}/Game/{game_id}/Subfeed'
-        params = {'_nPage': page, '_nPerpage': per_page, '_sSort': effective_sort, '_csvModelInclusions': 'Mod'}
+        params = {'_nPage': page, '_nPerpage': per_page, '_sSort': effective_sort, '_csvModelInclusions': 'Mod,Wip'}
         mods_needing_metadata = []
         for attempt in range(max_retries + 1):
             try:
@@ -86,62 +86,65 @@ class GameBananaAPI:
                     game_name = 'deltarune'
                 mapped_mods: List[ModInfo] = []
                 for record in records:
-                    if record.get('_sModelName') == 'Mod':
-                        mod_id = record.get('_idRow')
-                        if mod_id:
-                            mod_id_str = str(mod_id)
-                            mod_info = self._map_mod_data(record, game_name)
-                            if mod_info:
-                                downloads_from_gb = record.get('_nDownloadCount')
-                                downloads_value = 0
-                                if downloads_from_gb is not None:
-                                    try:
-                                        downloads_value = int(downloads_from_gb)
-                                    except (ValueError, TypeError):
-                                        downloads_value = 0
-                                mod_info.downloads = downloads_value
-                                cache_valid = False
-                                cached_category = None
-                                if metadata_cache:
-                                    cache_valid = metadata_cache.is_valid(mod_id_str)
-                                    if cache_valid:
-                                        cached_downloads = metadata_cache.get_downloads(mod_id_str)
-                                        cached_tagline = metadata_cache.get_tagline(mod_id_str)
-                                        cached_category = metadata_cache.get_category(mod_id_str)
-                                        if cached_downloads is not None and cached_downloads > 0:
-                                            mod_info.downloads = cached_downloads
-                                        elif downloads_value > 0:
-                                            mod_info.downloads = downloads_value
-                                        if cached_tagline:
-                                            mod_info.tagline = cached_tagline
-                                        if cached_category:
-                                            mod_info.gamebanana_category = cached_category
-                                current_downloads = mod_info.downloads
-                                if current_downloads is None:
+                    model_name = record.get('_sModelName')
+                    if model_name not in ('Mod', 'Wip', 'WIP'):
+                        continue
+                    mod_id = record.get('_idRow')
+                    if mod_id:
+                        mod_id_str = str(mod_id)
+                        is_wip = model_name in ('Wip', 'WIP')
+                        mod_info = self._map_mod_data(record, game_name, is_wip=is_wip)
+                        if mod_info:
+                            downloads_from_gb = record.get('_nDownloadCount')
+                            downloads_value = 0
+                            if downloads_from_gb is not None:
+                                try:
+                                    downloads_value = int(downloads_from_gb)
+                                except (ValueError, TypeError):
+                                    downloads_value = 0
+                            mod_info.downloads = downloads_value
+                            cache_valid = False
+                            cached_category = None
+                            if metadata_cache:
+                                cache_valid = metadata_cache.is_valid(mod_id_str)
+                                if cache_valid:
+                                    cached_downloads = metadata_cache.get_downloads(mod_id_str)
+                                    cached_tagline = metadata_cache.get_tagline(mod_id_str)
+                                    cached_category = metadata_cache.get_category(mod_id_str)
+                                    if cached_downloads is not None and cached_downloads > 0:
+                                        mod_info.downloads = cached_downloads
+                                    elif downloads_value > 0:
+                                        mod_info.downloads = downloads_value
+                                    if cached_tagline:
+                                        mod_info.tagline = cached_tagline
+                                    if cached_category:
+                                        mod_info.gamebanana_category = cached_category
+                            current_downloads = mod_info.downloads
+                            if current_downloads is None:
+                                current_downloads = 0
+                            else:
+                                try:
+                                    current_downloads = int(current_downloads)
+                                except (ValueError, TypeError):
                                     current_downloads = 0
-                                else:
-                                    try:
-                                        current_downloads = int(current_downloads)
-                                    except (ValueError, TypeError):
-                                        current_downloads = 0
-                                mod_info.downloads = current_downloads
-                                current_tagline = mod_info.tagline
-                                current_category = mod_info.gamebanana_category
-                                needs_downloads = current_downloads == 0 or current_downloads is None
-                                needs_tagline = not current_tagline or current_tagline == 'No description' or len(current_tagline) < 10
-                                needs_category = not current_category
-                                if (needs_downloads or needs_tagline or needs_category) and (not cache_valid):
-                                    mods_needing_metadata.append(mod_id_str)
-                                    try:
-                                        mod_info.has_full_metadata = False
-                                    except Exception:
-                                        pass
-                                else:
-                                    try:
-                                        mod_info.has_full_metadata = True
-                                    except Exception:
-                                        pass
-                                mapped_mods.append(mod_info)
+                            mod_info.downloads = current_downloads
+                            current_tagline = mod_info.tagline
+                            current_category = mod_info.gamebanana_category
+                            needs_downloads = current_downloads == 0 or current_downloads is None
+                            needs_tagline = not current_tagline or current_tagline == 'No description' or len(current_tagline) < 10
+                            needs_category = not current_category
+                            if (needs_downloads or needs_tagline or needs_category) and (not cache_valid):
+                                mods_needing_metadata.append(mod_id_str)
+                                try:
+                                    mod_info.has_full_metadata = False
+                                except Exception:
+                                    pass
+                            else:
+                                try:
+                                    mod_info.has_full_metadata = True
+                                except Exception:
+                                    pass
+                            mapped_mods.append(mod_info)
                 return (mapped_mods, mods_needing_metadata)
             except requests.RequestException as e:
                 status_code = getattr(e.response, 'status_code', None) if hasattr(e, 'response') and e.response else None
@@ -158,9 +161,16 @@ class GameBananaAPI:
                 return (None, [])
         return (None, [])
 
-    def _get_item_field(self, mod_id: int, field_name: str, extractor_func=None, max_retries: int = 2) -> Optional[Any]:
+    def _get_item_type_from_url(self, external_url: Optional[str] = None) -> str:
+        if external_url and '/wips/' in external_url:
+            return 'Wip'
+        return 'Mod'
+
+    def _get_item_field(self, mod_id: int, field_name: str, extractor_func=None, itemtype: Optional[str] = None, external_url: Optional[str] = None, max_retries: int = 2) -> Optional[Any]:
         url = f'{self.core_api_base}/Core/Item/Data'
-        params = {'itemtype': 'Mod', 'itemid': mod_id, 'fields': field_name}
+        if not itemtype:
+            itemtype = self._get_item_type_from_url(external_url)
+        params = {'itemtype': itemtype, 'itemid': mod_id, 'fields': field_name}
         for attempt in range(max_retries + 1):
             try:
                 self._wait_for_rate_limit()
@@ -207,7 +217,7 @@ class GameBananaAPI:
                 return None
         return None
 
-    def get_mod_downloads_only(self, mod_id: int) -> Optional[int]:
+    def get_mod_downloads_only(self, mod_id: int, external_url: Optional[str] = None) -> Optional[int]:
 
         def extract_downloads(value):
             if isinstance(value, (int, float)):
@@ -218,14 +228,14 @@ class GameBananaAPI:
                 except (ValueError, TypeError):
                     return None
             return None
-        result = self._get_item_field(mod_id, 'downloads', extract_downloads)
+        result = self._get_item_field(mod_id, 'downloads', extract_downloads, external_url=external_url)
         if result is not None:
             logger.debug(f'get_mod_downloads_only: Successfully got downloads for mod {mod_id}: {result}')
         else:
             logger.warning(f'get_mod_downloads_only: No valid downloads value for mod {mod_id}')
         return result
 
-    def get_mod_description_only(self, mod_id: int) -> Optional[str]:
+    def get_mod_description_only(self, mod_id: int, external_url: Optional[str] = None) -> Optional[str]:
 
         def extract_description(value):
             if isinstance(value, str):
@@ -233,14 +243,14 @@ class GameBananaAPI:
             elif value is not None:
                 return str(value).strip() if str(value).strip() else None
             return None
-        result = self._get_item_field(mod_id, 'description', extract_description)
+        result = self._get_item_field(mod_id, 'description', extract_description, external_url=external_url)
         if result:
             logger.debug(f'get_mod_description_only: Successfully got description for mod {mod_id}')
         else:
             logger.debug(f'get_mod_description_only: No valid description value for mod {mod_id}')
         return result
 
-    def get_mod_category_only(self, mod_id: int) -> Optional[str]:
+    def get_mod_category_only(self, mod_id: int, external_url: Optional[str] = None) -> Optional[str]:
 
         def extract_category(value):
             if isinstance(value, str):
@@ -252,11 +262,12 @@ class GameBananaAPI:
             if category_value and category_value.lower() not in ('none', 'null', ''):
                 return category_value
             return None
-        return self._get_item_field(mod_id, 'Category().name', extract_category)
+        return self._get_item_field(mod_id, 'Category().name', extract_category, external_url=external_url)
 
-    def get_mod_text_and_screenshots(self, mod_id: int, max_retries: int = 2) -> Optional[Dict]:
+    def get_mod_text_and_screenshots(self, mod_id: int, external_url: Optional[str] = None, max_retries: int = 2) -> Optional[Dict]:
         url = f'{self.core_api_base}/Core/Item/Data'
-        params = {'itemtype': 'Mod', 'itemid': mod_id, 'fields': 'text,screenshots'}
+        itemtype = self._get_item_type_from_url(external_url)
+        params = {'itemtype': itemtype, 'itemid': mod_id, 'fields': 'text,screenshots'}
         for attempt in range(max_retries + 1):
             try:
                 self._wait_for_rate_limit()
@@ -305,9 +316,10 @@ class GameBananaAPI:
                 return None
         return None
 
-    def get_mod_full_details_for_display(self, mod_id: int, max_retries: int = 2) -> Optional[Dict]:
+    def get_mod_full_details_for_display(self, mod_id: int, external_url: Optional[str] = None, max_retries: int = 2) -> Optional[Dict]:
         url = f'{self.core_api_base}/Core/Item/Data'
-        params = {'itemtype': 'Mod', 'itemid': mod_id, 'fields': 'text,description,screenshots'}
+        itemtype = self._get_item_type_from_url(external_url)
+        params = {'itemtype': itemtype, 'itemid': mod_id, 'fields': 'text,description,screenshots'}
         for attempt in range(max_retries + 1):
             try:
                 self._wait_for_rate_limit()
@@ -355,11 +367,12 @@ class GameBananaAPI:
                 return None
         return None
 
-    def _get_mod_full_details(self, mod_id: int) -> Optional[Dict]:
-        return self.get_mod_full_details_for_display(mod_id)
+    def _get_mod_full_details(self, mod_id: int, external_url: Optional[str] = None) -> Optional[Dict]:
+        return self.get_mod_full_details_for_display(mod_id, external_url=external_url)
 
-    def get_mod_details(self, mod_id: int, max_retries: int = 2) -> Optional[Dict]:
-        url = f'{self.base_url}/Mod/{mod_id}'
+    def get_mod_details(self, mod_id: int, external_url: Optional[str] = None, max_retries: int = 2) -> Optional[Dict]:
+        itemtype = self._get_item_type_from_url(external_url)
+        url = f'{self.base_url}/{itemtype}/{mod_id}'
         for attempt in range(max_retries + 1):
             try:
                 self._wait_for_rate_limit()
@@ -388,9 +401,10 @@ class GameBananaAPI:
                 return None
         return None
 
-    def get_mod_preview_media(self, mod_id: int, max_retries: int = 2) -> Optional[Dict]:
+    def get_mod_preview_media(self, mod_id: int, external_url: Optional[str] = None, max_retries: int = 2) -> Optional[Dict]:
         url = f'{self.core_api_base}/Core/Item/Data'
-        params = {'itemtype': 'Mod', 'itemid': mod_id, 'fields': 'Preview().aPreviewMedia()'}
+        itemtype = self._get_item_type_from_url(external_url)
+        params = {'itemtype': itemtype, 'itemid': mod_id, 'fields': 'Preview().aPreviewMedia()'}
         for attempt in range(max_retries + 1):
             try:
                 self._wait_for_rate_limit()
@@ -421,8 +435,9 @@ class GameBananaAPI:
                 return None
         return None
 
-    def get_mod_profile_page(self, mod_id: int, max_retries: int = 2) -> Optional[Dict]:
-        url = f'{self.base_url}/Mod/{mod_id}/ProfilePage'
+    def get_mod_profile_page(self, mod_id: int, external_url: Optional[str] = None, max_retries: int = 2) -> Optional[Dict]:
+        itemtype = self._get_item_type_from_url(external_url)
+        url = f'{self.base_url}/{itemtype}/{mod_id}/ProfilePage'
         for attempt in range(max_retries + 1):
             try:
                 self._wait_for_rate_limit()
@@ -449,15 +464,16 @@ class GameBananaAPI:
                 return None
         return None
 
-    def get_mod_files(self, mod_id: int, max_retries: int = 2) -> Optional[List[Dict]]:
+    def get_mod_files(self, mod_id: int, external_url: Optional[str] = None, max_retries: int = 2) -> Optional[List[Dict]]:
         url = f'{self.core_api_base}/Core/Item/Data'
         import urllib.parse
+        itemtype = self._get_item_type_from_url(external_url)
         fields_param = 'Files().aFiles()'
-        params = {'itemtype': 'Mod', 'itemid': mod_id, 'fields': fields_param}
+        params = {'itemtype': itemtype, 'itemid': mod_id, 'fields': fields_param}
         for attempt in range(max_retries + 1):
             try:
                 self._wait_for_rate_limit()
-                full_url = f'{url}?itemtype=Mod&itemid={mod_id}&fields={urllib.parse.quote(fields_param)}'
+                full_url = f'{url}?itemtype={itemtype}&itemid={mod_id}&fields={urllib.parse.quote(fields_param)}'
                 logger.debug(f'get_mod_files: Requesting URL: {full_url}')
                 response = self.session.get(url, params=params, timeout=NETWORK_TIMEOUT_MEDIUM)
                 response.raise_for_status()
@@ -494,13 +510,13 @@ class GameBananaAPI:
                 return None
         return None
 
-    def _get_mod_file_compatibility(self, mod_id: int) -> Dict[str, Any]:
+    def _get_mod_file_compatibility(self, mod_id: int, external_url: Optional[str] = None) -> Dict[str, Any]:
         cached = self._compatibility_cache.get(mod_id)
         if cached:
             return cached
         compatibility: Dict[str, Any] = {'supported_files': [], 'has_supported_files': False, 'preferred_format': None, 'tool_ids': set(), 'has_deltahub_file': False, 'has_deltamod_file': False, 'has_pizzaoven_file': False, 'compatibility_checked': False}
         try:
-            profile_data = self.get_mod_profile_page(mod_id) or {}
+            profile_data = self.get_mod_profile_page(mod_id, external_url=external_url) or {}
             profile_files = profile_data.get('_aFiles') or []
             if isinstance(profile_files, dict):
                 profile_files = list(profile_files.values())
@@ -556,8 +572,8 @@ class GameBananaAPI:
         self._compatibility_cache[mod_id] = compatibility
         return compatibility
 
-    def get_supported_files_for_mod(self, mod_id: int) -> Dict[str, Any]:
-        return self._get_mod_file_compatibility(int(mod_id))
+    def get_supported_files_for_mod(self, mod_id: int, external_url: Optional[str] = None) -> Dict[str, Any]:
+        return self._get_mod_file_compatibility(int(mod_id), external_url=external_url)
 
     @staticmethod
     def _safe_int(value: Any) -> Optional[int]:
@@ -673,8 +689,8 @@ class GameBananaAPI:
         logger.debug(f'check_file_compatibility: No compatible file found in file_id {file_id}')
         return None
 
-    def find_compatible_file(self, mod_id: int) -> Optional[Dict]:
-        files = self.get_mod_files(mod_id)
+    def find_compatible_file(self, mod_id: int, external_url: Optional[str] = None) -> Optional[Dict]:
+        files = self.get_mod_files(mod_id, external_url=external_url)
         if not files:
             logger.debug(f'find_compatible_file: No files found for mod_id {mod_id}')
             return None
@@ -712,7 +728,7 @@ class GameBananaAPI:
 
     def search_mods(self, game_id: int, search_string: Optional[str] = None, page: int = 1, per_page: int = 20, sort: str = 'best_match', max_retries: int = 2) -> Optional[Dict]:
         url = f'{self.base_url}/Util/Search/Results'
-        params = {'_idGameRow': game_id, '_sModelName': 'Mod', '_nPage': page, '_nPerpage': min(per_page, 50), '_sOrder': sort}
+        params = {'_idGameRow': game_id, '_sModelName': 'Mod,Wip', '_nPage': page, '_nPerpage': min(per_page, 50), '_sOrder': sort}
         if search_string and len(search_string.strip()) >= 2:
             params['_sSearchString'] = search_string.strip()
         else:
@@ -757,7 +773,26 @@ class GameBananaAPI:
             return None
 
     @staticmethod
-    def extract_screenshots_from_api(screenshots_data: Optional[str]) -> List[str]:
+    def fix_screenshot_urls(screenshots: list, external_url: Optional[str] = None) -> list:
+        if not screenshots or not isinstance(screenshots, list):
+            return screenshots
+        is_wip = external_url and '/wips/' in external_url
+        if not is_wip:
+            return screenshots
+        fixed_screenshots = []
+        for url in screenshots:
+            if isinstance(url, str):
+                if '/img/ss/mods/' in url:
+                    fixed_url = url.replace('/img/ss/mods/', '/img/ss/wips/')
+                    fixed_screenshots.append(fixed_url)
+                else:
+                    fixed_screenshots.append(url)
+            else:
+                fixed_screenshots.append(url)
+        return fixed_screenshots
+
+    @staticmethod
+    def extract_screenshots_from_api(screenshots_data: Optional[str], external_url: Optional[str] = None) -> List[str]:
         screenshots = []
         if not screenshots_data or not isinstance(screenshots_data, str):
             return screenshots
@@ -765,7 +800,8 @@ class GameBananaAPI:
             screenshots_list = json.loads(screenshots_data)
             if not isinstance(screenshots_list, list):
                 return screenshots
-            base_url = 'https://images.gamebanana.com/img/ss/mods'
+            is_wip = external_url and '/wips/' in external_url
+            base_url = 'https://images.gamebanana.com/img/ss/wips' if is_wip else 'https://images.gamebanana.com/img/ss/mods'
             for screenshot_obj in screenshots_list:
                 if isinstance(screenshot_obj, dict):
                     file_name = screenshot_obj.get('_sFile') or screenshot_obj.get('_sFile800') or screenshot_obj.get('_sFile530') or screenshot_obj.get('_sFile220')
@@ -851,7 +887,7 @@ class GameBananaAPI:
                 return 'customization'
         return 'other'
 
-    def _map_mod_data(self, gb_data: Dict, game_name: str) -> Optional[ModInfo]:
+    def _map_mod_data(self, gb_data: Dict, game_name: str, is_wip: bool = False) -> Optional[ModInfo]:
         mod_id = gb_data.get('_idRow')
         if not mod_id:
             return None
@@ -895,7 +931,13 @@ class GameBananaAPI:
                     category = category.get('_sName') or category.get('name')
                 elif not isinstance(category, str):
                     category = str(category) if category else None
-        return ModInfo(key=f'gb_{mod_id}', name=name, version=version, author=author, tagline=tagline, game_version=game_version, downloads=downloads, created_date=created_date, last_updated=last_updated, game=game_name, is_verified=gb_data.get('_bIsVerified', False), icon_url=icon_url, tags=tags, external_url=gb_data.get('_sProfileUrl'), screenshots_url=screenshots, description_url=gb_data.get('_sTextUrl', ''), full_description=None, gamebanana_has_compatible_file=False, gamebanana_category=category, gamebanana_is_tool_compatible=False, gamebanana_supported_files=[], gamebanana_supported_tool_ids=[], gamebanana_preferred_format=None, gamebanana_has_deltahub_file=False, gamebanana_has_deltamod_file=False, gamebanana_compatibility_checked=False)
+        external_url = gb_data.get('_sProfileUrl')
+        if not external_url and mod_id:
+            if is_wip:
+                external_url = f'https://gamebanana.com/wips/{mod_id}'
+            else:
+                external_url = f'https://gamebanana.com/mods/{mod_id}'
+        return ModInfo(key=f'gb_{mod_id}', name=name, version=version, author=author, tagline=tagline, game_version=game_version, downloads=downloads, created_date=created_date, last_updated=last_updated, game=game_name, is_verified=gb_data.get('_bIsVerified', False), icon_url=icon_url, tags=tags, external_url=external_url, screenshots_url=screenshots, description_url=gb_data.get('_sTextUrl', ''), full_description=None, gamebanana_has_compatible_file=False, gamebanana_category=category, gamebanana_is_tool_compatible=False, gamebanana_supported_files=[], gamebanana_supported_tool_ids=[], gamebanana_preferred_format=None, gamebanana_has_deltahub_file=False, gamebanana_has_deltamod_file=False, gamebanana_compatibility_checked=False)
 
     @staticmethod
     def mod_data_dict_to_mod_info(mod_data: Dict[str, Any], game_name: str = 'deltarune') -> Optional[ModInfo]:
