@@ -48,6 +48,46 @@ class DeltamodConverter:
             logging.error(f'Deltamod conversion failed: {e}')
             return None
 
+    def _find_file_case_insensitive(self, base_path: str, relative_path: str) -> Optional[str]:
+        if os.name != 'nt':
+            return None
+        try:
+            parts = relative_path.replace('\\', '/').split('/')
+            current_path = base_path
+            for part in parts:
+                if not part:
+                    continue
+                if not os.path.exists(current_path):
+                    return None
+                try:
+                    entries = os.listdir(current_path)
+                    found = None
+                    for entry in entries:
+                        if entry.lower() == part.lower():
+                            found = entry
+                            break
+                    if found is None:
+                        return None
+                    current_path = os.path.join(current_path, found)
+                except OSError:
+                    return None
+            return current_path if os.path.exists(current_path) else None
+        except Exception:
+            return None
+
+    def _find_file_recursive(self, base_path: str, filename: str) -> Optional[str]:
+        if not os.path.exists(base_path):
+            return None
+        filename_lower = filename.lower()
+        try:
+            for root, dirs, files in os.walk(base_path):
+                for file in files:
+                    if file.lower() == filename_lower:
+                        return os.path.join(root, file)
+        except Exception as e:
+            logging.debug(f'Error in recursive file search: {e}')
+        return None
+
     def _parse_to_path(self, to_path: str) -> Tuple[Optional[str], Optional[str], str]:
         if not to_path:
             return (None, None, '')
@@ -158,6 +198,9 @@ class DeltamodConverter:
 
     def _create_extra_file_archive(self, source_file: str, archive_path: str, relative_path: str, filename: str) -> bool:
         try:
+            if not os.path.exists(source_file):
+                logging.error(f'Source file does not exist: {source_file}')
+                return False
             os.makedirs(os.path.dirname(archive_path), exist_ok=True)
             with zipfile.ZipFile(archive_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
                 archive_internal_path = relative_path + filename
@@ -185,11 +228,7 @@ class DeltamodConverter:
         for patch in patches:
             to_path = patch.get('to', '')
             patch_file_rel = patch.get('patch', '').lstrip('./')
-            patch_file_abs = os.path.join(self.source_path, patch_file_rel)
             patch_type = patch.get('type', '')
-            if not os.path.exists(patch_file_abs):
-                logging.warning(f'DeltamodConverter: patch file not found: {patch_file_abs}')
-                continue
             if not to_path or not patch_type:
                 logging.warning(f'DeltamodConverter: skipping patch with missing to or type: {to_path}, {patch_type}')
                 continue
@@ -206,6 +245,37 @@ class DeltamodConverter:
             target_chapter_dir = os.path.join(target_mod_dir, chapter_dir_name)
             os.makedirs(target_chapter_dir, exist_ok=True)
             if patch_type == 'override':
+                patch_file_abs = os.path.join(self.source_path, patch_file_rel)
+                if not os.path.exists(patch_file_abs):
+                    normalized_rel = patch_file_rel.replace('\\', '/')
+                    patch_file_abs = os.path.join(self.source_path, normalized_rel)
+                if not os.path.exists(patch_file_abs):
+                    backslash_rel = patch_file_rel.replace('/', '\\')
+                    patch_file_abs = os.path.join(self.source_path, backslash_rel)
+                if not os.path.exists(patch_file_abs):
+                    if os.name == 'nt':
+                        found_path = self._find_file_case_insensitive(self.source_path, patch_file_rel)
+                        if found_path:
+                            patch_file_abs = found_path
+                if not patch_file_abs or not os.path.exists(patch_file_abs):
+                    filename_only = os.path.basename(patch_file_rel)
+                    found_path = self._find_file_recursive(self.source_path, filename_only)
+                    if found_path:
+                        patch_file_abs = found_path
+                        logging.info(f'DeltamodConverter: found file via recursive search: {filename_only} -> {found_path}')
+                if not patch_file_abs or not os.path.exists(patch_file_abs):
+                    logging.error(f'DeltamodConverter: override patch file not found: {patch_file_rel} (tried: {os.path.join(self.source_path, patch_file_rel)})')
+                    try:
+                        available_files = []
+                        for root, dirs, files in os.walk(self.source_path):
+                            for file in files:
+                                rel_path = os.path.relpath(os.path.join(root, file), self.source_path)
+                                available_files.append(rel_path.replace('\\', '/'))
+                        if available_files:
+                            logging.debug(f'Available files in source: {available_files[:20]}')
+                    except Exception:
+                        pass
+                    continue
                 archive_key = (relative_path + filename).replace('/', '_').replace('\\', '_')
                 if not archive_key:
                     archive_key = filename
@@ -216,6 +286,10 @@ class DeltamodConverter:
                 else:
                     logging.error(f'Failed to create override archive for: {to_path}')
             elif patch_type == 'xdelta':
+                patch_file_abs = os.path.join(self.source_path, patch_file_rel)
+                if not os.path.exists(patch_file_abs):
+                    logging.warning(f'DeltamodConverter: xdelta patch file not found: {patch_file_abs}')
+                    continue
                 target_patch_path = os.path.join(target_chapter_dir, os.path.basename(patch_file_abs))
                 shutil.copy2(patch_file_abs, target_patch_path)
                 logging.info(f'Copied xdelta patch: {os.path.basename(patch_file_abs)} for chapter {chapter_key}, target: {to_path}')
