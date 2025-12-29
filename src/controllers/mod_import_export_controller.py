@@ -50,6 +50,7 @@ class ModImportExportController:
                 self._install_mod_from_url(dialog.selected_url)
 
     def _install_mod_from_file(self, file_path: str):
+        from utils.file_utils import sanitize_filename, remove_archive_extension
         logging.info(f'[IMPORT] Starting mod import from file: {file_path}')
         try:
             with tempfile.TemporaryDirectory(prefix='deltahub_import_') as temp_dir:
@@ -82,7 +83,6 @@ class ModImportExportController:
                     if is_explicit_pizzaoven or is_pizza_tower:
                         logging.info(f'[IMPORT] PizzaOven format detected at: {pizzaoven_path}, converting...')
                         try:
-                            from utils.file_utils import remove_archive_extension
                             archive_name = remove_archive_extension(os.path.basename(file_path))
                             if os.path.commonpath([content_path, pizzaoven_path]) == content_path:
                                 converter = PizzaOvenConverter(content_path, self.app_state.mods_dir, archive_name=archive_name)
@@ -116,7 +116,6 @@ class ModImportExportController:
                     key = config.get('key') or config.get('mod_key')
                     mod_name = config.get('name', 'Unknown')
                     logging.info(f'[IMPORT] Mod name: {mod_name}, key: {key}')
-                    from utils.file_utils import sanitize_filename, remove_archive_extension
                     if not key:
                         from utils.file_utils import save_json
                         key = f"local_{sanitize_filename(mod_name).lower().replace(' ', '_')}"
