@@ -168,6 +168,21 @@ class CreateModpackThread(QThread):
             logging.error(f'Failed to create xdelta patches: {e}', exc_info=True)
             self.status_update.emit(tr('errors.xdelta_patch_creation_failed_general'), 'error')
 
+    def _determine_primary_game_type(self, detected_games: List[str]) -> str:
+        if not detected_games:
+            from utils.game_utils import get_game_type_string
+            return get_game_type_string(self.app_state.game_mode)
+        unique_games = list(set(detected_games))
+        if len(unique_games) == 1:
+            primary_game = unique_games[0]
+            if primary_game in ('pizzatower', 'pizzaoven'):
+                return 'pizzatower'
+            return primary_game
+        most_common = max(set(detected_games), key=detected_games.count)
+        if most_common in ('pizzatower', 'pizzaoven'):
+            return 'pizzatower'
+        return most_common
+
     def _find_original_data_file(self, chapter_id: int, game: str, data_filename: str) -> str:
         try:
             from models.game_modes import DemoGameMode, UndertaleGameMode, UndertaleYellowGameMode, PizzaTowerGameMode, FullGameMode
@@ -209,6 +224,7 @@ class CreateModpackThread(QThread):
     def _create_config_json(self):
         try:
             files_data = {}
+            detected_games = []
             for chapter_id, mods_list in self.chapter_mods.items():
                 if chapter_id == -1:
                     chapter_key = 'demo'
@@ -224,6 +240,8 @@ class CreateModpackThread(QThread):
                         config = getattr(first_mod, 'config_data')
                         if isinstance(config, dict):
                             game = config.get('game') or config.get('modgame')
+                if game:
+                    detected_games.append(game)
                 from utils.file_utils import get_chapter_folder_name
                 chapter_folder_name = get_chapter_folder_name(chapter_id, game=game)
                 chapter_modpack_dir = os.path.join(self.modpack_dir, chapter_folder_name)
@@ -257,7 +275,8 @@ class CreateModpackThread(QThread):
                     file_info['data_file_version'] = '1.0.0'
                     files_data[chapter_key] = file_info
             key = f'local_{uuid.uuid4().hex[:12]}'
-            config_data = {'is_local_mod': True, 'key': key, 'name': self.modpack_name, 'author': tr('defaults.multiple_authors'), 'version': '1.0.0', 'tagline': tr('defaults.no_short_description'), 'game_version': tr('defaults.not_specified'), 'game': 'deltarune', 'files': files_data, 'tags': [], 'created_date': time.strftime('%d.%m.%y %H:%M'), 'is_available_on_server': False}
+            detected_game = self._determine_primary_game_type(detected_games)
+            config_data = {'is_local_mod': True, 'key': key, 'name': self.modpack_name, 'author': tr('defaults.multiple_authors'), 'version': '1.0.0', 'tagline': tr('defaults.no_short_description'), 'game_version': tr('defaults.not_specified'), 'game': detected_game, 'files': files_data, 'tags': [], 'created_date': time.strftime('%d.%m.%y %H:%M'), 'is_available_on_server': False}
             config_path = os.path.join(self.modpack_dir, 'mod_config.json')
             with open(config_path, 'w', encoding='utf-8') as f:
                 json.dump(config_data, f, indent=4, ensure_ascii=False)
