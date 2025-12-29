@@ -181,13 +181,11 @@ class MultiModMerger(QObject):
                             config = getattr(first_mod, 'config_data')
                             if isinstance(config, dict):
                                 game = config.get('game') or config.get('modgame')
+                        if not game:
+                            game = getattr(first_mod, 'game', None)
                     chapter_folder_name = get_chapter_folder_name(chapter_id, game=game)
                     chapter_modpack_dir = os.path.join(modpack_dir, chapter_folder_name)
-                    target_dir = self._get_target_dir(chapter_id)
-                    if not target_dir:
-                        self.patching_logger.warning(f'Target directory not found for chapter {chapter_id}, skipping mods for this chapter in modpack')
-                        continue
-                    if not self._merge_mods_for_chapter_to_dir(chapter_id, mods_list, chapter_modpack_dir, chapter_progress_base, total_chapters, fast_merge=fast_merge):
+                    if not self._merge_mods_for_chapter_to_dir(chapter_id, mods_list, chapter_modpack_dir, chapter_progress_base, total_chapters, fast_merge=fast_merge, game=game):
                         self.patching_logger.error(f'Failed to merge mods for chapter {chapter_id} in modpack')
                         try:
                             failed_msg = tr('status.merge_failed')
@@ -1008,12 +1006,12 @@ class MultiModMerger(QObject):
         self.patching_logger.info('Multi-mod merge completed successfully')
         return True
 
-    def _merge_mods_for_chapter_to_dir(self, chapter_id: int, mods_list: List[Any], modpack_dir: str, progress_base: int = 0, total_chapters: int = 1, fast_merge: bool = False) -> bool:
-        self.patching_logger.debug(f'_merge_mods_for_chapter_to_dir: chapter_id={chapter_id}, mods_count={len(mods_list)}, modpack_dir={modpack_dir}')
+    def _merge_mods_for_chapter_to_dir(self, chapter_id: int, mods_list: List[Any], modpack_dir: str, progress_base: int = 0, total_chapters: int = 1, fast_merge: bool = False, game: Optional[str] = None) -> bool:
+        self.patching_logger.debug(f'_merge_mods_for_chapter_to_dir: chapter_id={chapter_id}, mods_count={len(mods_list)}, modpack_dir={modpack_dir}, game={game}')
         os.makedirs(modpack_dir, exist_ok=True)
-        target_dir = self._get_target_dir(chapter_id)
+        target_dir = self._get_target_dir(chapter_id, game=game)
         if not target_dir:
-            self.patching_logger.error(f'Target directory not found for chapter {chapter_id}')
+            self.patching_logger.error(f'Target directory not found for chapter {chapter_id} (game={game})')
             return False
         self.patching_logger.debug(f'Target directory: {target_dir}')
         data_win_path = self._find_data_win(target_dir)
@@ -2748,10 +2746,32 @@ class MultiModMerger(QObject):
             return None
         return chapter_dir
 
-    def _get_target_dir(self, chapter_id: int) -> Optional[str]:
-        base_path = self.app_state.game_mode.get_game_path(self.app_state.local_config)
-        if not base_path:
-            return None
+    def _get_target_dir(self, chapter_id: int, game: Optional[str] = None) -> Optional[str]:
+        if game:
+            from models.game_modes import DemoGameMode, UndertaleGameMode, UndertaleYellowGameMode, PizzaTowerGameMode, FullGameMode
+            game_mode = None
+            base_path = None
+            if game == 'deltarune_demo':
+                game_mode = DemoGameMode()
+                base_path = self.app_state.demo_game_path
+            elif game == 'undertale':
+                game_mode = UndertaleGameMode()
+                base_path = game_mode.get_game_path(self.app_state.local_config)
+            elif game == 'undertaleyellow':
+                game_mode = UndertaleYellowGameMode()
+                base_path = game_mode.get_game_path(self.app_state.local_config)
+            elif game == 'pizzatower' or game == 'pizzaoven':
+                game_mode = PizzaTowerGameMode()
+                base_path = game_mode.get_game_path(self.app_state.local_config)
+            else:
+                game_mode = FullGameMode()
+                base_path = self.app_state.game_path
+            if not base_path:
+                return None
+        else:
+            base_path = self.app_state.game_mode.get_game_path(self.app_state.local_config)
+            if not base_path:
+                return None
         return find_chapter_resource_dir(base_path, chapter_id)
 
     def _find_data_win(self, target_dir: str) -> Optional[str]:
