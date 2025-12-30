@@ -155,3 +155,93 @@ class TestCustomizationManager:
         manager = CustomizationManager(app_state)
         assert manager is not None
         assert manager.app_state == app_state
+
+
+class TestBackupManager:
+
+    def test_backup_restoration_order(self, temp_dir):
+        from managers.backup_manager import BackupManager
+        from utils.patching_logger import get_patching_logger
+        backup_dir = os.path.join(temp_dir, 'backups')
+        backup_manager = BackupManager(backup_dir, patching_logger=get_patching_logger())
+        chapter_id = 1
+        # Create test files
+        test_dir = os.path.join(temp_dir, 'test_game')
+        os.makedirs(test_dir, exist_ok=True)
+        file1 = os.path.join(test_dir, 'file1.txt')
+        file2 = os.path.join(test_dir, 'file2.txt')
+        file3 = os.path.join(test_dir, 'file3.txt')
+        for f in [file1, file2, file3]:
+            with open(f, 'w') as fh:
+                fh.write('original')
+        # Backup files in order
+        backup_manager.backup_file(chapter_id, file1)
+        backup_manager.backup_file(chapter_id, file2)
+        backup_manager.backup_file(chapter_id, file3)
+        # Modify files
+        for f in [file1, file2, file3]:
+            with open(f, 'w') as fh:
+                fh.write('modified')
+        # Restore - should restore in reverse order
+        backup_manager.restore_backups(chapter_id)
+        # Verify files are restored
+        for f in [file1, file2, file3]:
+            with open(f, 'r') as fh:
+                content = fh.read()
+                assert content == 'original', f'File {f} was not restored correctly'
+
+    def test_backup_restoration_validation(self, temp_dir):
+        from managers.backup_manager import BackupManager
+        from utils.patching_logger import get_patching_logger
+        backup_dir = os.path.join(temp_dir, 'backups')
+        backup_manager = BackupManager(backup_dir, patching_logger=get_patching_logger())
+        chapter_id = 1
+        # Create test file
+        test_dir = os.path.join(temp_dir, 'test_game')
+        os.makedirs(test_dir, exist_ok=True)
+        test_file = os.path.join(test_dir, 'test.txt')
+        original_content = 'original content'
+        with open(test_file, 'w') as f:
+            f.write(original_content)
+        # Backup file
+        backup_manager.backup_file(chapter_id, test_file)
+        # Modify file
+        with open(test_file, 'w') as f:
+            f.write('modified content')
+        # Restore
+        backup_manager.restore_backups(chapter_id)
+        # Verify file integrity (size and content)
+        assert os.path.exists(test_file)
+        with open(test_file, 'r') as f:
+            restored_content = f.read()
+            assert restored_content == original_content
+        backup_size = os.path.getsize(os.path.join(backup_dir, 'chapter_1_test.txt'))
+        restored_size = os.path.getsize(test_file)
+        assert backup_size == restored_size
+
+    def test_sound_file_backup_restoration(self, temp_dir):
+        from managers.backup_manager import BackupManager
+        from utils.patching_logger import get_patching_logger
+        backup_dir = os.path.join(temp_dir, 'backups')
+        backup_manager = BackupManager(backup_dir, patching_logger=get_patching_logger())
+        chapter_id = 1
+        # Create test sound directory structure
+        sound_dir = os.path.join(temp_dir, 'test_game', 'sound', 'Desktop')
+        os.makedirs(sound_dir, exist_ok=True)
+        bank_file = os.path.join(sound_dir, 'test.bank')
+        original_content = b'BANK_FILE_CONTENT'
+        with open(bank_file, 'wb') as f:
+            f.write(original_content)
+        # Backup sound file
+        backup_manager.backup_file(chapter_id, bank_file)
+        # Modify sound file
+        modified_content = b'MODIFIED_BANK_CONTENT'
+        with open(bank_file, 'wb') as f:
+            f.write(modified_content)
+        # Restore
+        backup_manager.restore_backups(chapter_id)
+        # Verify sound file is restored
+        assert os.path.exists(bank_file)
+        with open(bank_file, 'rb') as f:
+            restored_content = f.read()
+            assert restored_content == original_content

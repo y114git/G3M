@@ -209,3 +209,49 @@ class TestGameExecutableSimulation:
             resource_dir = find_chapter_resource_dir(game_dir, chapter_id)
             assert resource_dir is not None
             assert f'chapter{chapter_id}' in resource_dir.lower()
+
+    def test_pizzatower_path_validation(self, temp_dir):
+        from utils.game_utils import is_valid_game_path
+        game_dir = os.path.join(temp_dir, 'game')
+        os.makedirs(game_dir, exist_ok=True)
+        system = platform.system()
+        if system == 'Darwin':
+            app_path = os.path.join(game_dir, 'PizzaTower.app')
+            os.makedirs(app_path, exist_ok=True)
+        elif system == 'Windows':
+            exe_path = os.path.join(game_dir, 'PizzaTower.exe')
+            with open(exe_path, 'w') as f:
+                f.write('mock')
+        else:
+            exe_path = os.path.join(game_dir, 'PizzaTower')
+            with open(exe_path, 'w') as f:
+                f.write('mock')
+            os.chmod(exe_path, 493)
+        is_valid = is_valid_game_path(game_dir, skip_data_check=False, game_type='pizzatower')
+        assert is_valid is True
+
+    def test_pizzatower_custom_executable_validation(self, temp_dir):
+        from utils.game_utils import is_valid_game_path
+        game_dir = os.path.join(temp_dir, 'game')
+        os.makedirs(game_dir, exist_ok=True)
+        system = platform.system()
+        custom_dir = os.path.join(game_dir, 'custom')
+        os.makedirs(custom_dir, exist_ok=True)
+        if system == 'Windows':
+            custom_exe = os.path.join(custom_dir, 'PizzaTowerCustom.exe')
+            with open(custom_exe, 'w') as f:
+                f.write('mock')
+            main_exe = os.path.join(game_dir, 'PizzaTower.exe')
+            with open(main_exe, 'w') as f:
+                f.write('mock')
+        else:
+            custom_exe = os.path.join(custom_dir, 'PizzaTowerCustom')
+            with open(custom_exe, 'w') as f:
+                f.write('mock')
+            os.chmod(custom_exe, 493)
+            main_exe = os.path.join(game_dir, 'PizzaTower')
+            with open(main_exe, 'w') as f:
+                f.write('mock')
+            os.chmod(main_exe, 493)
+        is_valid = is_valid_game_path(game_dir, skip_data_check=False, game_type='pizzatower')
+        assert is_valid is True

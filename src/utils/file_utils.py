@@ -294,9 +294,22 @@ def remove_archive_extension(filename: str) -> str:
 
 
 def get_chapter_folder_name(chapter_id: int, game: Optional[str] = None, modgame: Optional[str] = None) -> str:
+    from config.constants import SLOT_ID_PIZZA_TOWER, SLOT_ID_UNDERTALE, SLOT_ID_UNDERTALE_YELLOW, SLOT_ID_DEMO
     game_value = game or modgame
-    if chapter_id == -1:
+    if chapter_id == -1 or chapter_id == SLOT_ID_DEMO:
         return 'demo'
+    elif chapter_id == SLOT_ID_PIZZA_TOWER:
+        if game_value == 'pizzaoven' or game_value == 'pizzatower':
+            return 'pizzaoven'
+        return f'chapter_{chapter_id}'
+    elif chapter_id == SLOT_ID_UNDERTALE or chapter_id == 0:
+        if game_value == 'undertale' and chapter_id == SLOT_ID_UNDERTALE:
+            return 'chapter_0'
+        return 'chapter_0'
+    elif chapter_id == SLOT_ID_UNDERTALE_YELLOW:
+        if game_value == 'undertaleyellow':
+            return 'chapter_0'
+        return 'chapter_0'
     elif chapter_id == 0:
         if game_value == 'pizzaoven':
             return 'pizzaoven'
@@ -396,15 +409,27 @@ def autodetect_path(game_name: str) -> str | None:
         program_files = [os.getenv('ProgramFiles(x86)'), os.getenv('ProgramFiles')]
         steam_paths = [os.path.join(p, 'Steam', 'steamapps', 'common', game_name) for p in program_files if p]
         paths.extend(steam_paths)
+        if game_name == 'Pizza Tower':
+            pizza_tower_variations = ['Pizza Tower', 'PizzaTower', 'pizzatower']
+            for variation in pizza_tower_variations:
+                for p in program_files:
+                    if p:
+                        paths.append(os.path.join(p, 'Steam', 'steamapps', 'common', variation))
         drive_letters = 'CDEFGHIJKLMNOPQRSTUVWXYZ'
         for drive in drive_letters:
             for steam_subpath_parts in [['Steam', 'steamapps', 'common'], ['SteamLibrary', 'steamapps', 'common'], ['Program Files', 'Steam', 'steamapps', 'common'], ['Program Files (x86)', 'Steam', 'steamapps', 'common']]:
                 path = os.path.join(f'{drive}:', *steam_subpath_parts, game_name)
                 paths.append(path)
+                if game_name == 'Pizza Tower':
+                    for variation in ['Pizza Tower', 'PizzaTower', 'pizzatower']:
+                        paths.append(os.path.join(f'{drive}:', *steam_subpath_parts, variation))
     elif system == 'Linux':
         home = os.path.expanduser('~')
         base_steam_paths = [f'{home}/.steam/steam/steamapps/common/{game_name}', f'{home}/.local/share/Steam/steamapps/common/{game_name}', f'{home}/.var/app/com.valvesoftware.Steam/data/Steam/steamapps/common/{game_name}']
         paths.extend(base_steam_paths)
+        if game_name == 'Pizza Tower':
+            for variation in ['Pizza Tower', 'PizzaTower', 'pizzatower']:
+                paths.extend([f'{home}/.steam/steam/steamapps/common/{variation}', f'{home}/.local/share/Steam/steamapps/common/{variation}', f'{home}/.var/app/com.valvesoftware.Steam/data/Steam/steamapps/common/{variation}'])
         mount_points = ['/mnt', '/media', '/run/media', f'{home}/.steam/steam/steamapps']
         for mount_base in mount_points:
             if os.path.isdir(mount_base):
@@ -425,6 +450,9 @@ def autodetect_path(game_name: str) -> str | None:
     elif system == 'Darwin':
         home = os.path.expanduser('~')
         base_paths = [f'{home}/Library/Application Support/Steam/steamapps/common/{game_name}', f'/Applications/{game_name}', f'{home}/Steam/steamapps/common/{game_name}']
+        if game_name == 'Pizza Tower':
+            for variation in ['Pizza Tower', 'PizzaTower', 'pizzatower']:
+                base_paths.extend([f'{home}/Library/Application Support/Steam/steamapps/common/{variation}', f'/Applications/{variation}', f'{home}/Steam/steamapps/common/{variation}'])
         if game_name.endswith('demo'):
             for parent in filter(os.path.isdir, base_paths):
                 for app_name in [f'{game_name}.app', 'DELTARUNE.app']:
@@ -434,6 +462,10 @@ def autodetect_path(game_name: str) -> str | None:
         else:
             app_paths = [f'{p}/{game_name}.app' for p in base_paths]
             paths.extend(filter(os.path.isdir, app_paths))
+            if game_name == 'Pizza Tower':
+                for variation in ['Pizza Tower', 'PizzaTower', 'pizzatower']:
+                    variation_paths = [f'{p}/{variation}.app' for p in base_paths]
+                    paths.extend(filter(os.path.isdir, variation_paths))
     return next((p for p in paths if os.path.exists(p)), None)
 
 

@@ -520,17 +520,38 @@ class GameLauncher(QObject):
 
     def _find_and_validate_game_path(self, selections: Optional[Dict[int, Any]] = None, is_initial: bool = False):
         from utils.file_utils import autodetect_path
+        from utils.game_utils import is_valid_game_path, get_game_type_string
         path_from_config = self._get_current_game_path()
         game_name = get_game_name_string(self.app_state.game_mode)
+        game_type = get_game_type_string(self.app_state.game_mode)
         if path_from_config and os.path.exists(path_from_config):
-            self.status_changed.emit(tr('status.game_path', path=path_from_config), UI_COLORS['status_info'])
-            return True
+            if is_valid_game_path(path_from_config, skip_data_check=False, game_type=game_type):
+                self.status_changed.emit(tr('status.game_path', path=path_from_config), UI_COLORS['status_info'])
+                return True
+            else:
+                parent_path = os.path.dirname(path_from_config)
+                if parent_path and os.path.exists(parent_path) and is_valid_game_path(parent_path, skip_data_check=False, game_type=game_type):
+                    self.app_state.game_mode.set_game_path(self.app_state.local_config, parent_path)
+                    self.status_changed.emit(tr('status.game_folder_found', path=parent_path), UI_COLORS['status_success'])
+                    return True
+        use_custom_exe = self.app_state.local_config.get('use_custom_executable', False)
+        if use_custom_exe:
+            custom_exec_key = self.app_state.game_mode.get_custom_exec_config_key()
+            custom_exec_path = self.app_state.local_config.get(custom_exec_key, '')
+            if custom_exec_path and os.path.isfile(custom_exec_path):
+                custom_dir = os.path.dirname(custom_exec_path)
+                if custom_dir and os.path.exists(custom_dir):
+                    if is_valid_game_path(custom_dir, skip_data_check=False, game_type=game_type):
+                        self.app_state.game_mode.set_game_path(self.app_state.local_config, custom_dir)
+                        self.status_changed.emit(tr('status.game_folder_found', path=custom_dir), UI_COLORS['status_success'])
+                        return True
         self.status_changed.emit(tr('status.autodetecting_path'), UI_COLORS['status_info'])
         autodetected_path = autodetect_path(game_name)
         if autodetected_path and os.path.exists(autodetected_path):
-            self.app_state.game_mode.set_game_path(self.app_state.local_config, autodetected_path)
-            self.status_changed.emit(tr('status.game_folder_found', path=autodetected_path), UI_COLORS['status_success'])
-            return True
+            if is_valid_game_path(autodetected_path, skip_data_check=False, game_type=game_type):
+                self.app_state.game_mode.set_game_path(self.app_state.local_config, autodetected_path)
+                self.status_changed.emit(tr('status.game_folder_found', path=autodetected_path), UI_COLORS['status_success'])
+                return True
         if is_initial:
             self.status_changed.emit(tr('status.no_game_path'), UI_COLORS['status_error'])
         return False

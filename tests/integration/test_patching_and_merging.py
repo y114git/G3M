@@ -157,28 +157,22 @@ class TestMerging:
     def test_progress_throttler_initialization(self, app_state, feedback_manager, qapp):
         from managers.multi_mod_merger import ProgressThrottler
         from PyQt6.QtCore import QTimer
-
         callback_calls = []
 
         def test_callback(progress, message):
             callback_calls.append((progress, message))
-
         throttler = ProgressThrottler(test_callback, throttle_ms=50, parent=qapp)
         assert throttler is not None
         assert throttler.callback == test_callback
         assert throttler.throttle_ms == 50
-
         throttler.update_progress(10, 'Test message 1')
         throttler.update_progress(20, 'Test message 2')
         throttler.update_progress(30, 'Test message 3')
-
         import time
         time.sleep(0.1)
         qapp.processEvents()
-
         throttler.flush()
         qapp.processEvents()
-
         assert len(callback_calls) > 0
         assert callback_calls[-1] == (30, 'Test message 3')
 
@@ -250,7 +244,32 @@ class TestRestoreOriginal:
         data_win_path = Path(chapter1_dir) / 'data.win'
         if not data_win_path.exists():
             pytest.skip('Original data.win not found.')
-        assert True
+        assert data_win_path.exists()
+        original_size = data_win_path.stat().st_size
+        assert original_size > 0
 
     def test_restore_after_merge(self, game_data_dir):
         assert True
+
+    def test_backup_manifest_tracking(self, temp_dir, app_state, feedback_manager):
+        from managers.multi_mod_merger import MultiModMerger
+        from managers.mod_manager import ModManager
+        from managers.backup_manager import BackupManager
+        import json
+        mod_manager = ModManager(app_state, feedback_manager)
+        merger = MultiModMerger(app_state, mod_manager)
+        backup_dir = os.path.join(temp_dir, 'backups')
+        os.makedirs(backup_dir, exist_ok=True)
+        merger.backup_manager = BackupManager(backup_dir, patching_logger=merger.patching_logger)
+        chapter_id = 1
+        test_file = os.path.join(temp_dir, 'test.txt')
+        with open(test_file, 'w') as f:
+            f.write('test')
+        merger.backup_manager.backup_file(chapter_id, test_file)
+        manifest_path = os.path.join(temp_dir, 'manifest.json')
+        merger.backup_manager.save_backups_to_manifest(manifest_path)
+        with open(manifest_path, 'r') as f:
+            manifest_data = json.load(f)
+        assert 'modification_order' in manifest_data
+        assert str(chapter_id) in manifest_data['modification_order']
+        assert test_file in manifest_data['modification_order'][str(chapter_id)]

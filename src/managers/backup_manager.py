@@ -14,16 +14,19 @@ class BackupManager:
         self.original_files: Dict[int, Dict[str, Optional[str]]] = {}
         self.added_files: Dict[int, Dict[str, bool]] = {}
         self._session_manifest_path: Optional[str] = None
+        self._modification_order: Dict[int, list] = {}
         if backup_dir:
             os.makedirs(backup_dir, exist_ok=True)
 
     def backup_file(self, chapter_id: int, file_path: str) -> bool:
         if chapter_id not in self.original_files:
             self.original_files[chapter_id] = {}
+            self._modification_order[chapter_id] = []
         if file_path in self.original_files[chapter_id]:
             return True
         if not os.path.exists(file_path):
             self.original_files[chapter_id][file_path] = None
+            self._modification_order[chapter_id].append(file_path)
             self.patching_logger.debug(f'[BACKUP] File does not exist, will be removed on restore: {file_path} (chapter {chapter_id})')
             return True
         try:
@@ -36,6 +39,7 @@ class BackupManager:
                 counter += 1
             shutil.copyfile(file_path, backup_path)
             self.original_files[chapter_id][file_path] = backup_path
+            self._modification_order[chapter_id].append(file_path)
             self.patching_logger.info(f'[BACKUP] Backed up file: {file_path} -> {backup_path} (chapter {chapter_id})')
             return True
         except Exception as e:
@@ -72,11 +76,13 @@ class BackupManager:
     def save_backups_to_manifest(self, manifest_path: str):
         self._session_manifest_path = manifest_path
         try:
-            manifest_data = {'original_files': {}, 'added_files': {}}
+            manifest_data = {'original_files': {}, 'added_files': {}, 'modification_order': {}}
             for chapter_id, files_dict in self.original_files.items():
                 manifest_data['original_files'][str(chapter_id)] = files_dict
             for chapter_id, files_dict in self.added_files.items():
                 manifest_data['added_files'][str(chapter_id)] = list(files_dict.keys())
+            for chapter_id, file_order in self._modification_order.items():
+                manifest_data['modification_order'][str(chapter_id)] = file_order
             os.makedirs(os.path.dirname(manifest_path), exist_ok=True)
             with open(manifest_path, 'w', encoding='utf-8') as f:
                 json.dump(manifest_data, f, indent=2, ensure_ascii=False)
@@ -87,18 +93,29 @@ class BackupManager:
     def restore_backups(self, chapter_id: int) -> None:
         if chapter_id in self.original_files:
             self.patching_logger.info(f'[RESTORE] Restoring backups for chapter {chapter_id}')
-            for file_path, backup_path in self.original_files[chapter_id].items():
+            file_order = self._modification_order.get(chapter_id, list(self.original_files[chapter_id].keys()))
+            file_order = list(reversed(file_order))
+            restored_files = []
+            failed_files = []
+            for file_path in file_order:
+                if file_path not in self.original_files[chapter_id]:
+                    continue
+                backup_path = self.original_files[chapter_id][file_path]
                 if backup_path is None:
                     if os.path.exists(file_path):
                         if safe_remove(file_path):
                             self.patching_logger.info(f'[RESTORE] Removed file created by mod: {file_path} (chapter {chapter_id})')
+                            restored_files.append(file_path)
                         else:
                             self.patching_logger.error(f'[RESTORE] Failed to remove file created by mod {file_path} (chapter {chapter_id})')
+                            failed_files.append(file_path)
                     else:
                         self.patching_logger.debug(f'[RESTORE] File created by mod already removed: {file_path} (chapter {chapter_id})')
+                        restored_files.append(file_path)
                     continue
                 if not os.path.exists(backup_path):
                     self.patching_logger.warning(f'[RESTORE] Backup file not found: {backup_path} (original: {file_path}, chapter {chapter_id})')
+                    failed_files.append(file_path)
                     continue
                 try:
                     target_dir = os.path.dirname(file_path)
@@ -106,9 +123,25 @@ class BackupManager:
                         os.makedirs(target_dir, exist_ok=True)
                         self.patching_logger.debug(f'[RESTORE] Created target directory: {target_dir}')
                     shutil.copyfile(backup_path, file_path)
-                    self.patching_logger.info(f'[RESTORE] Restored backup: {file_path} <- {backup_path} (chapter {chapter_id})')
+                    if os.path.exists(file_path):
+                        backup_size = os.path.getsize(backup_path)
+                        restored_size = os.path.getsize(file_path)
+                        if backup_size == restored_size:
+                            self.patching_logger.info(f'[RESTORE] Restored backup: {file_path} <- {backup_path} (chapter {chapter_id}, size: {restored_size} bytes)')
+                            restored_files.append(file_path)
+                        else:
+                            self.patching_logger.error(f'[RESTORE] File size mismatch after restoration: {file_path} (backup: {backup_size} bytes, restored: {restored_size} bytes, chapter {chapter_id})')
+                            failed_files.append(file_path)
+                    else:
+                        self.patching_logger.error(f'[RESTORE] File does not exist after restoration attempt: {file_path} (chapter {chapter_id})')
+                        failed_files.append(file_path)
                 except Exception as e:
                     self.patching_logger.error(f'[RESTORE] Failed to restore backup {backup_path} to {file_path} (chapter {chapter_id}): {e}', exc_info=True)
+                    failed_files.append(file_path)
+            if failed_files:
+                self.patching_logger.warning(f'[RESTORE] Restoration completed with {len(failed_files)} failure(s) for chapter {chapter_id}: {failed_files}')
+            else:
+                self.patching_logger.info(f'[RESTORE] Successfully restored {len(restored_files)} file(s) for chapter {chapter_id}')
         if chapter_id in self.added_files:
             self.patching_logger.info(f'[RESTORE] Removing added files for chapter {chapter_id}')
             added_paths = sorted(self.added_files[chapter_id].keys(), key=lambda p: p.count(os.sep), reverse=True)
@@ -164,4 +197,5 @@ class BackupManager:
     def clear_backups(self):
         self.original_files.clear()
         self.added_files.clear()
+        self._modification_order.clear()
         self._session_manifest_path = None
