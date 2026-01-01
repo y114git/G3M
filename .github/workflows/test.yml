@@ -50,7 +50,7 @@ jobs:
             - name: Download and extract UTMTCLI for Linux
               run: |
                   mkdir -p src/assets/bin/utmtcli_linux
-                  curl -L -o utmtcli_linux.zip "https://github.com/UnderminersTeam/UndertaleModTool/releases/download/bleeding-edge/CLI-ubuntu-latest-Debug-isBundled-true.zip"
+                  curl -L -o utmtcli_linux.zip "https://github.com/UnderminersTeam/UndertaleModTool/releases/download/nightly/CLI-ubuntu-latest-Debug-isBundled-true.zip"
                   unzip -q utmtcli_linux.zip -d src/assets/bin/utmtcli_linux
                   rm utmtcli_linux.zip
                   chmod +x src/assets/bin/utmtcli_linux/* 2>/dev/null || true
@@ -158,7 +158,7 @@ jobs:
             - name: Download and extract UTMTCLI for macOS x64
               run: |
                   mkdir -p src/assets/bin/utmtcli_macos
-                  curl -L -o utmtcli_macos.zip "https://github.com/UnderminersTeam/UndertaleModTool/releases/download/bleeding-edge/CLI-macOS-latest-Debug-isBundled-true.zip"
+                  curl -L -o utmtcli_macos.zip "https://github.com/UnderminersTeam/UndertaleModTool/releases/download/nightly/CLI-macOS-latest-Debug-isBundled-true.zip"
                   unzip -q utmtcli_macos.zip -d src/assets/bin/utmtcli_macos
                   rm utmtcli_macos.zip
                   chmod +x src/assets/bin/utmtcli_macos/* 2>/dev/null || true
@@ -262,7 +262,7 @@ jobs:
             - name: Download and extract UTMTCLI for macOS arm64
               run: |
                   mkdir -p src/assets/bin/utmtcli_macos
-                  curl -L -o utmtcli_macos.zip "https://github.com/UnderminersTeam/UndertaleModTool/releases/download/bleeding-edge/CLI-macOS-latest-Debug-isBundled-true.zip"
+                  curl -L -o utmtcli_macos.zip "https://github.com/UnderminersTeam/UndertaleModTool/releases/download/nightly/CLI-macOS-latest-Debug-isBundled-true.zip"
                   unzip -q utmtcli_macos.zip -d src/assets/bin/utmtcli_macos
                   rm utmtcli_macos.zip
                   chmod +x src/assets/bin/utmtcli_macos/* 2>/dev/null || true
@@ -368,7 +368,7 @@ jobs:
               run: |
                   New-Item -ItemType Directory -Force -Path "src\assets\bin\utmtcli_windows" | Out-Null
                   $zipPath = "utmtcli_windows.zip"
-                  Invoke-WebRequest -Uri "https://github.com/UnderminersTeam/UndertaleModTool/releases/download/bleeding-edge/CLI-windows-latest-Debug-isBundled-true.zip" -OutFile $zipPath
+                  Invoke-WebRequest -Uri "https://github.com/UnderminersTeam/UndertaleModTool/releases/download/nightly/CLI-windows-latest-Debug-isBundled-true.zip" -OutFile $zipPath
                   Expand-Archive -Path $zipPath -DestinationPath "src\assets\bin\utmtcli_windows" -Force
                   Remove-Item $zipPath
             - name: Debug test discovery
