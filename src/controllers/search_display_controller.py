@@ -1119,7 +1119,6 @@ class SearchDisplayController(QObject):
                 self.update_filtered_mods(preserve_page=True)
             elif updated_mods:
                 self._update_plaques_for_mods(updated_mods)
-            QTimer.singleShot(100, self.update_search_plaques)
         except Exception as e:
             logger.error(f'SearchDisplayController: Error in _apply_pending_metadata_updates: {e}', exc_info=True)
             self._pending_metadata_updates.clear()
@@ -1163,7 +1162,7 @@ class SearchDisplayController(QObject):
         try:
             if not hasattr(self.app, 'mod_list_layout'):
                 return
-            updated_count = 0
+            updated_widgets = []
             for i in range(self.app.mod_list_layout.count() - 1):
                 item = self.app.mod_list_layout.itemAt(i)
                 if item:
@@ -1176,9 +1175,23 @@ class SearchDisplayController(QObject):
                                 try:
                                     widget.update_installation_status()
                                     widget.update_mod_data()
-                                    updated_count += 1
+                                    if hasattr(widget, 'update_install_button_state'):
+                                        widget.update_install_button_state()
+                                    updated_widgets.append(widget)
                                 except Exception as e:
                                     logger.warning(f'SearchDisplayController: Error updating plaque for mod {mod_id}: {e}')
+            if updated_widgets:
+
+                def deferred_refresh():
+                    for widget in updated_widgets:
+                        try:
+                            if hasattr(widget, 'update_mod_data'):
+                                widget.update_mod_data()
+                            if hasattr(widget, 'update_install_button_state'):
+                                widget.update_install_button_state()
+                        except (RuntimeError, AttributeError):
+                            pass
+                QTimer.singleShot(100, deferred_refresh)
         except Exception as e:
             logger.error(f'SearchDisplayController: Error in _update_plaques_for_mods: {e}', exc_info=True)
 

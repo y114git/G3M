@@ -152,8 +152,19 @@ class ModInstallWorker(BaseInstallWorker):
                 else:
                     shutil.copy2(src_path, dst_path)
             target_config_path = os.path.join(target_mod_dir, MOD_CONFIG_FILENAME)
+            config_updated = False
             if self.gamebanana_metadata:
                 config_data['is_local_mod'] = False
+                if 'mod_id' in self.gamebanana_metadata:
+                    mod_id = self.gamebanana_metadata['mod_id']
+                    expected_mod_key = f'gb_{mod_id}'
+                    old_key = config_data.get('key') or config_data.get('mod_key')
+                    config_data['key'] = expected_mod_key
+                    if 'mod_key' in config_data:
+                        del config_data['mod_key']
+                    if old_key != expected_mod_key:
+                        config_updated = True
+                    logging.info(f'ModInstallWorker: Set GameBanana mod key to {expected_mod_key} for mod_id {mod_id}')
                 if 'profile_url' in self.gamebanana_metadata and (not config_data.get('external_url')):
                     config_data['external_url'] = self.gamebanana_metadata['profile_url']
                 if 'icon_url' in self.gamebanana_metadata:
@@ -178,7 +189,6 @@ class ModInstallWorker(BaseInstallWorker):
                     config_data['tags'] = existing_tags
             else:
                 config_data['is_local_mod'] = True
-            config_updated = False
             game = config_data.get('game') or config_data.get('modgame', 'deltarune')
             if 'files' in config_data:
                 for chapter_key, chapter_data in config_data['files'].items():

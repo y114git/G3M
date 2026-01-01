@@ -151,7 +151,7 @@ class MultiModMerger(QObject):
                     merge_msg = f'Merging mods... {current_progress}%'
             self.progress_update.emit(min(current_progress, 95), merge_msg)
             chapter_index = 0
-            for chapter_id, mods_list in chapter_mods.items():
+            for chapter_id, mods_list in sorted(chapter_mods.items()):
                 if not mods_list:
                     continue
                 if is_modpack and chapter_id == -1:
@@ -551,8 +551,8 @@ class MultiModMerger(QObject):
             original_filename = os.path.basename(original_data_win)
             mod_data_win = os.path.join(mod_dir, original_filename)
             shutil.copyfile(original_data_win, mod_data_win)
-            is_pizzaoven_mod = mod_type.get('is_pizzaoven_mod', False)
-            if is_pizzaoven_mod:
+            mod_is_pizzaoven_type = mod_type.get('is_pizzaoven_mod', False)
+            if mod_is_pizzaoven_type:
                 self.patching_logger.info(f'Applying PizzaOven mod {mod_name} (mod {mod_number})')
                 success, file_overrides = self._apply_pizzaoven_mod(mod_source_dir, mod_data_win, chapter_id)
                 if not success:
@@ -584,7 +584,7 @@ class MultiModMerger(QObject):
                 self.patching_logger.info(f'Successfully merged ready data.win files from {mod_name} (mod {mod_number})')
                 target_dir_result = self._get_target_dir(chapter_id)
                 if target_dir_result is not None and mod_source_dir:
-                    if not is_pizzaoven_mod:
+                    if not mod_is_pizzaoven_type:
                         used_archive_names = set()
                         if not self._apply_file_overrides(mod_source_dir, target_dir_result, used_archive_names, False):
                             self.patching_logger.warning(f'Failed to apply file overrides from {mod_name} after ready data.win merge')
@@ -617,7 +617,7 @@ class MultiModMerger(QObject):
             if not ready_data_win_files and (not data_patches) and (not csx_scripts):
                 target_dir_result = self._get_target_dir(chapter_id)
                 if target_dir_result is not None and mod_source_dir:
-                    if not is_pizzaoven_mod:
+                    if not mod_is_pizzaoven_type:
                         used_archive_names = set()
                         if self._apply_file_overrides(mod_source_dir, target_dir_result, used_archive_names, False):
                             self.patching_logger.info(f'Applied file overrides from {mod_name} (mod {mod_number})')

@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Text.Json;
 using UndertaleModLib;
 using UndertaleModLib.Models;
 using UndertaleModLib.Util;
@@ -104,28 +105,6 @@ PrintLine($"[ExportAllAssets] Starting full export for mod {modNo}...");
 
 GlobalDecompileContext globalDecompileContext = new(Data);
 Underanalyzer.Decompiler.IDecompileSettings decompilerSettings = Data.ToolInfo.DecompilerSettings;
-
-void WriteJsonString(StringBuilder sb, string value)
-{
-    if (value == null) { sb.Append("null"); return; }
-    sb.Append("\"");
-    foreach (var ch in value)
-    {
-        if (ch == '"') sb.Append("\\\"");
-        else if (ch == '\\') sb.Append("\\\\");
-        else if (ch == '\n') sb.Append("\\n");
-        else if (ch == '\r') sb.Append("\\r");
-        else if (ch == '\t') sb.Append("\\t");
-        else sb.Append(ch);
-    }
-    sb.Append("\"");
-}
-
-void WriteJsonBool(StringBuilder sb, bool value) => sb.Append(value ? "true" : "false");
-void WriteJsonNumber(StringBuilder sb, int value) => sb.Append(value);
-void WriteJsonNumber(StringBuilder sb, uint value) => sb.Append(value);
-void WriteJsonNumber(StringBuilder sb, float value) => sb.Append(value.ToString("G9"));
-void WriteJsonNumber(StringBuilder sb, double value) => sb.Append(value.ToString("G9"));
 
 void ExportShader(UndertaleShader shader, string outputDir)
 {
@@ -495,326 +474,279 @@ void DumpRoom(UndertaleRoom room)
         string name = SafeName(room.Name.Content);
         string jsonPath = Path.Combine(roomsOut, name + ".json");
 
-        var json = new StringBuilder();
-        json.Append("{\n");
-
-
-        WriteJsonString(json, "name"); json.Append(": "); WriteJsonString(json, room.Name.Content); json.Append(",\n");
-        WriteJsonString(json, "caption"); json.Append(": "); WriteJsonString(json, room.Caption?.Content ?? ""); json.Append(",\n");
-        WriteJsonString(json, "width"); json.Append(": "); WriteJsonNumber(json, (int)room.Width); json.Append(",\n");
-        WriteJsonString(json, "height"); json.Append(": "); WriteJsonNumber(json, (int)room.Height); json.Append(",\n");
-        WriteJsonString(json, "speed"); json.Append(": "); WriteJsonNumber(json, (int)room.Speed); json.Append(",\n");
-        WriteJsonString(json, "persistent"); json.Append(": "); WriteJsonBool(json, room.Persistent); json.Append(",\n");
-        WriteJsonString(json, "backgroundColor"); json.Append(": "); WriteJsonNumber(json, (int)room.BackgroundColor); json.Append(",\n");
-        WriteJsonString(json, "drawBackgroundColor"); json.Append(": "); WriteJsonBool(json, room.DrawBackgroundColor); json.Append(",\n");
-        WriteJsonString(json, "creationCodeId"); json.Append(": "); WriteJsonString(json, room.CreationCodeId?.Name?.Content ?? ""); json.Append(",\n");
-        WriteJsonString(json, "flags"); json.Append(": "); WriteJsonNumber(json, (int)room.Flags); json.Append(",\n");
-        WriteJsonString(json, "world"); json.Append(": "); WriteJsonBool(json, room.World); json.Append(",\n");
-        WriteJsonString(json, "top"); json.Append(": "); WriteJsonNumber(json, (int)room.Top); json.Append(",\n");
-        WriteJsonString(json, "left"); json.Append(": "); WriteJsonNumber(json, (int)room.Left); json.Append(",\n");
-        WriteJsonString(json, "right"); json.Append(": "); WriteJsonNumber(json, (int)room.Right); json.Append(",\n");
-        WriteJsonString(json, "bottom"); json.Append(": "); WriteJsonNumber(json, (int)room.Bottom); json.Append(",\n");
-        WriteJsonString(json, "gravityX"); json.Append(": "); WriteJsonNumber(json, room.GravityX); json.Append(",\n");
-        WriteJsonString(json, "gravityY"); json.Append(": "); WriteJsonNumber(json, room.GravityY); json.Append(",\n");
-        WriteJsonString(json, "metersPerPixel"); json.Append(": "); WriteJsonNumber(json, room.MetersPerPixel); json.Append(",\n");
-        WriteJsonString(json, "gridWidth"); json.Append(": "); WriteJsonNumber(json, (float)room.GridWidth); json.Append(",\n");
-        WriteJsonString(json, "gridHeight"); json.Append(": "); WriteJsonNumber(json, (float)room.GridHeight); json.Append(",\n");
-        WriteJsonString(json, "gridThicknessPx"); json.Append(": "); WriteJsonNumber(json, (float)room.GridThicknessPx); json.Append(",\n");
-
-
-        json.Append("  \"backgrounds\": [\n");
-        for (int i = 0; i < room.Backgrounds.Count; i++)
+        using (var stream = new FileStream(jsonPath, FileMode.Create, FileAccess.Write))
+        using (var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = true }))
         {
-            var bg = room.Backgrounds[i];
-            json.Append("    {\n");
-            WriteJsonString(json, "enabled"); json.Append(": "); WriteJsonBool(json, bg.Enabled); json.Append(",\n");
-            WriteJsonString(json, "foreground"); json.Append(": "); WriteJsonBool(json, bg.Foreground); json.Append(",\n");
-            WriteJsonString(json, "backgroundDefinition"); json.Append(": "); WriteJsonString(json, bg.BackgroundDefinition?.Name?.Content ?? ""); json.Append(",\n");
-            WriteJsonString(json, "x"); json.Append(": "); WriteJsonNumber(json, bg.X); json.Append(",\n");
-            WriteJsonString(json, "y"); json.Append(": "); WriteJsonNumber(json, bg.Y); json.Append(",\n");
-            WriteJsonString(json, "tiledHorizontally"); json.Append(": "); WriteJsonBool(json, bg.TiledHorizontally); json.Append(",\n");
-            WriteJsonString(json, "tiledVertically"); json.Append(": "); WriteJsonBool(json, bg.TiledVertically); json.Append(",\n");
-            WriteJsonString(json, "speedX"); json.Append(": "); WriteJsonNumber(json, bg.SpeedX); json.Append(",\n");
-            WriteJsonString(json, "speedY"); json.Append(": "); WriteJsonNumber(json, bg.SpeedY); json.Append(",\n");
-            WriteJsonString(json, "stretch"); json.Append(": "); WriteJsonBool(json, bg.Stretch);
-            json.Append("\n    }");
-            if (i < room.Backgrounds.Count - 1) json.Append(",");
-            json.Append("\n");
-        }
-        json.Append("  ],\n");
+            writer.WriteStartObject();
 
+            writer.WriteString("name", room.Name.Content);
+            writer.WriteString("caption", room.Caption?.Content ?? "");
+            writer.WriteNumber("width", (int)room.Width);
+            writer.WriteNumber("height", (int)room.Height);
+            writer.WriteNumber("speed", (int)room.Speed);
+            writer.WriteBoolean("persistent", room.Persistent);
+            writer.WriteNumber("backgroundColor", (int)room.BackgroundColor);
+            writer.WriteBoolean("drawBackgroundColor", room.DrawBackgroundColor);
+            writer.WriteString("creationCodeId", room.CreationCodeId?.Name?.Content ?? "");
+            writer.WriteNumber("flags", (int)room.Flags);
+            writer.WriteBoolean("world", room.World);
+            writer.WriteNumber("top", (int)room.Top);
+            writer.WriteNumber("left", (int)room.Left);
+            writer.WriteNumber("right", (int)room.Right);
+            writer.WriteNumber("bottom", (int)room.Bottom);
+            writer.WriteNumber("gravityX", room.GravityX);
+            writer.WriteNumber("gravityY", room.GravityY);
+            writer.WriteNumber("metersPerPixel", room.MetersPerPixel);
+            writer.WriteNumber("gridWidth", (float)room.GridWidth);
+            writer.WriteNumber("gridHeight", (float)room.GridHeight);
+            writer.WriteNumber("gridThicknessPx", (float)room.GridThicknessPx);
 
-        json.Append("  \"views\": [\n");
-        for (int i = 0; i < room.Views.Count; i++)
-        {
-            var view = room.Views[i];
-            json.Append("    {\n");
-            WriteJsonString(json, "enabled"); json.Append(": "); WriteJsonBool(json, view.Enabled); json.Append(",\n");
-            WriteJsonString(json, "viewX"); json.Append(": "); WriteJsonNumber(json, view.ViewX); json.Append(",\n");
-            WriteJsonString(json, "viewY"); json.Append(": "); WriteJsonNumber(json, view.ViewY); json.Append(",\n");
-            WriteJsonString(json, "viewWidth"); json.Append(": "); WriteJsonNumber(json, view.ViewWidth); json.Append(",\n");
-            WriteJsonString(json, "viewHeight"); json.Append(": "); WriteJsonNumber(json, view.ViewHeight); json.Append(",\n");
-            WriteJsonString(json, "portX"); json.Append(": "); WriteJsonNumber(json, view.PortX); json.Append(",\n");
-            WriteJsonString(json, "portY"); json.Append(": "); WriteJsonNumber(json, view.PortY); json.Append(",\n");
-            WriteJsonString(json, "portWidth"); json.Append(": "); WriteJsonNumber(json, view.PortWidth); json.Append(",\n");
-            WriteJsonString(json, "portHeight"); json.Append(": "); WriteJsonNumber(json, view.PortHeight); json.Append(",\n");
-            WriteJsonString(json, "borderX"); json.Append(": "); WriteJsonNumber(json, (int)view.BorderX); json.Append(",\n");
-            WriteJsonString(json, "borderY"); json.Append(": "); WriteJsonNumber(json, (int)view.BorderY); json.Append(",\n");
-            WriteJsonString(json, "speedX"); json.Append(": "); WriteJsonNumber(json, view.SpeedX); json.Append(",\n");
-            WriteJsonString(json, "speedY"); json.Append(": "); WriteJsonNumber(json, view.SpeedY); json.Append(",\n");
-            WriteJsonString(json, "objectId"); json.Append(": "); WriteJsonString(json, view.ObjectId?.Name?.Content ?? "");
-            json.Append("\n    }");
-            if (i < room.Views.Count - 1) json.Append(",");
-            json.Append("\n");
-        }
-        json.Append("  ],\n");
-
-
-        json.Append("  \"gameObjects\": [\n");
-        for (int i = 0; i < room.GameObjects.Count; i++)
-        {
-            var obj = room.GameObjects[i];
-            json.Append("    {\n");
-            WriteJsonString(json, "x"); json.Append(": "); WriteJsonNumber(json, obj.X); json.Append(",\n");
-            WriteJsonString(json, "y"); json.Append(": "); WriteJsonNumber(json, obj.Y); json.Append(",\n");
-            WriteJsonString(json, "objectDefinition"); json.Append(": "); WriteJsonString(json, obj.ObjectDefinition?.Name?.Content ?? ""); json.Append(",\n");
-            WriteJsonString(json, "instanceID"); json.Append(": "); WriteJsonNumber(json, (int)obj.InstanceID); json.Append(",\n");
-            WriteJsonString(json, "creationCode"); json.Append(": "); WriteJsonString(json, obj.CreationCode?.Name?.Content ?? ""); json.Append(",\n");
-            WriteJsonString(json, "scaleX"); json.Append(": "); WriteJsonNumber(json, obj.ScaleX); json.Append(",\n");
-            WriteJsonString(json, "scaleY"); json.Append(": "); WriteJsonNumber(json, obj.ScaleY); json.Append(",\n");
-            WriteJsonString(json, "color"); json.Append(": "); WriteJsonNumber(json, (int)obj.Color); json.Append(",\n");
-            WriteJsonString(json, "rotation"); json.Append(": "); WriteJsonNumber(json, obj.Rotation); json.Append(",\n");
-            WriteJsonString(json, "preCreateCode"); json.Append(": "); WriteJsonString(json, obj.PreCreateCode?.Name?.Content ?? "");
-            if (Data.IsVersionAtLeast(2, 2, 2, 302))
+            writer.WriteStartArray("backgrounds");
+            foreach (var bg in room.Backgrounds)
             {
-                json.Append(",\n");
-                WriteJsonString(json, "imageSpeed"); json.Append(": "); WriteJsonNumber(json, obj.ImageSpeed); json.Append(",\n");
-                WriteJsonString(json, "imageIndex"); json.Append(": "); WriteJsonNumber(json, obj.ImageIndex);
+                writer.WriteStartObject();
+                writer.WriteBoolean("enabled", bg.Enabled);
+                writer.WriteBoolean("foreground", bg.Foreground);
+                writer.WriteString("backgroundDefinition", bg.BackgroundDefinition?.Name?.Content ?? "");
+                writer.WriteNumber("x", bg.X);
+                writer.WriteNumber("y", bg.Y);
+                writer.WriteBoolean("tiledHorizontally", bg.TiledHorizontally);
+                writer.WriteBoolean("tiledVertically", bg.TiledVertically);
+                writer.WriteNumber("speedX", bg.SpeedX);
+                writer.WriteNumber("speedY", bg.SpeedY);
+                writer.WriteBoolean("stretch", bg.Stretch);
+                writer.WriteEndObject();
             }
-            json.Append("\n    }");
-            if (i < room.GameObjects.Count - 1) json.Append(",");
-            json.Append("\n");
-        }
-        json.Append("  ],\n");
+            writer.WriteEndArray();
 
-
-        json.Append("  \"tiles\": [\n");
-        for (int i = 0; i < room.Tiles.Count; i++)
-        {
-            var tile = room.Tiles[i];
-            json.Append("    {\n");
-            WriteJsonString(json, "x"); json.Append(": "); WriteJsonNumber(json, tile.X); json.Append(",\n");
-            WriteJsonString(json, "y"); json.Append(": "); WriteJsonNumber(json, tile.Y); json.Append(",\n");
-            WriteJsonString(json, "spriteMode"); json.Append(": "); WriteJsonBool(json, tile.spriteMode); json.Append(",\n");
-            if (tile.spriteMode)
+            writer.WriteStartArray("views");
+            foreach (var view in room.Views)
             {
-                WriteJsonString(json, "spriteDefinition"); json.Append(": "); WriteJsonString(json, tile.SpriteDefinition?.Name?.Content ?? ""); json.Append(",\n");
+                writer.WriteStartObject();
+                writer.WriteBoolean("enabled", view.Enabled);
+                writer.WriteNumber("viewX", view.ViewX);
+                writer.WriteNumber("viewY", view.ViewY);
+                writer.WriteNumber("viewWidth", view.ViewWidth);
+                writer.WriteNumber("viewHeight", view.ViewHeight);
+                writer.WriteNumber("portX", view.PortX);
+                writer.WriteNumber("portY", view.PortY);
+                writer.WriteNumber("portWidth", view.PortWidth);
+                writer.WriteNumber("portHeight", view.PortHeight);
+                writer.WriteNumber("borderX", (int)view.BorderX);
+                writer.WriteNumber("borderY", (int)view.BorderY);
+                writer.WriteNumber("speedX", view.SpeedX);
+                writer.WriteNumber("speedY", view.SpeedY);
+                writer.WriteString("objectId", view.ObjectId?.Name?.Content ?? "");
+                writer.WriteEndObject();
             }
-            else
-            {
-                WriteJsonString(json, "backgroundDefinition"); json.Append(": "); WriteJsonString(json, tile.BackgroundDefinition?.Name?.Content ?? ""); json.Append(",\n");
-            }
-            WriteJsonString(json, "sourceX"); json.Append(": "); WriteJsonNumber(json, tile.SourceX); json.Append(",\n");
-            WriteJsonString(json, "sourceY"); json.Append(": "); WriteJsonNumber(json, tile.SourceY); json.Append(",\n");
-            WriteJsonString(json, "width"); json.Append(": "); WriteJsonNumber(json, (int)tile.Width); json.Append(",\n");
-            WriteJsonString(json, "height"); json.Append(": "); WriteJsonNumber(json, (int)tile.Height); json.Append(",\n");
-            WriteJsonString(json, "tileDepth"); json.Append(": "); WriteJsonNumber(json, tile.TileDepth); json.Append(",\n");
-            WriteJsonString(json, "instanceID"); json.Append(": "); WriteJsonNumber(json, (int)tile.InstanceID); json.Append(",\n");
-            WriteJsonString(json, "scaleX"); json.Append(": "); WriteJsonNumber(json, tile.ScaleX); json.Append(",\n");
-            WriteJsonString(json, "scaleY"); json.Append(": "); WriteJsonNumber(json, tile.ScaleY); json.Append(",\n");
-            WriteJsonString(json, "color"); json.Append(": "); WriteJsonNumber(json, (int)tile.Color);
-            json.Append("\n    }");
-            if (i < room.Tiles.Count - 1) json.Append(",");
-            json.Append("\n");
-        }
-        json.Append("  ]");
+            writer.WriteEndArray();
 
-
-        if (Data.IsGameMaker2() && room.Layers != null && room.Layers.Count > 0)
-        {
-            json.Append(",\n  \"layers\": [\n");
-            for (int i = 0; i < room.Layers.Count; i++)
+            writer.WriteStartArray("gameObjects");
+            foreach (var obj in room.GameObjects)
             {
-                var layer = room.Layers[i];
-                json.Append("    {\n");
-                WriteJsonString(json, "layerName"); json.Append(": "); WriteJsonString(json, layer.LayerName?.Content ?? ""); json.Append(",\n");
-                WriteJsonString(json, "layerId"); json.Append(": "); WriteJsonNumber(json, (int)layer.LayerId); json.Append(",\n");
-                WriteJsonString(json, "layerType"); json.Append(": "); WriteJsonNumber(json, (int)layer.LayerType); json.Append(",\n");
-                WriteJsonString(json, "layerDepth"); json.Append(": "); WriteJsonNumber(json, layer.LayerDepth); json.Append(",\n");
-                WriteJsonString(json, "xOffset"); json.Append(": "); WriteJsonNumber(json, layer.XOffset); json.Append(",\n");
-                WriteJsonString(json, "yOffset"); json.Append(": "); WriteJsonNumber(json, layer.YOffset); json.Append(",\n");
-                WriteJsonString(json, "hSpeed"); json.Append(": "); WriteJsonNumber(json, layer.HSpeed); json.Append(",\n");
-                WriteJsonString(json, "vSpeed"); json.Append(": "); WriteJsonNumber(json, layer.VSpeed); json.Append(",\n");
-                WriteJsonString(json, "isVisible"); json.Append(": "); WriteJsonBool(json, layer.IsVisible);
-                if (Data.IsVersionAtLeast(2022, 1))
+                writer.WriteStartObject();
+                writer.WriteNumber("x", obj.X);
+                writer.WriteNumber("y", obj.Y);
+                writer.WriteString("objectDefinition", obj.ObjectDefinition?.Name?.Content ?? "");
+                writer.WriteNumber("instanceID", (int)obj.InstanceID);
+                writer.WriteString("creationCode", obj.CreationCode?.Name?.Content ?? "");
+                writer.WriteNumber("scaleX", obj.ScaleX);
+                writer.WriteNumber("scaleY", obj.ScaleY);
+                writer.WriteNumber("color", (int)obj.Color);
+                writer.WriteNumber("rotation", obj.Rotation);
+                writer.WriteString("preCreateCode", obj.PreCreateCode?.Name?.Content ?? "");
+                if (Data.IsVersionAtLeast(2, 2, 2, 302))
                 {
-                    json.Append(",\n");
-                    WriteJsonString(json, "effectEnabled"); json.Append(": "); WriteJsonBool(json, layer.EffectEnabled); json.Append(",\n");
-                    WriteJsonString(json, "effectType"); json.Append(": "); WriteJsonString(json, layer.EffectType?.Content ?? "");
+                    writer.WriteNumber("imageSpeed", obj.ImageSpeed);
+                    writer.WriteNumber("imageIndex", obj.ImageIndex);
                 }
+                writer.WriteEndObject();
+            }
+            writer.WriteEndArray();
 
-
-                if (layer.LayerType == UndertaleRoom.LayerType.Instances && layer.InstancesData != null)
+            writer.WriteStartArray("tiles");
+            foreach (var tile in room.Tiles)
+            {
+                writer.WriteStartObject();
+                writer.WriteNumber("x", tile.X);
+                writer.WriteNumber("y", tile.Y);
+                writer.WriteBoolean("spriteMode", tile.spriteMode);
+                if (tile.spriteMode)
                 {
-                    json.Append(",\n");
-                    json.Append("      \"instanceIds\": [\n");
-                    if (layer.InstancesData.Instances != null)
+                    writer.WriteString("spriteDefinition", tile.SpriteDefinition?.Name?.Content ?? "");
+                }
+                else
+                {
+                    writer.WriteString("backgroundDefinition", tile.BackgroundDefinition?.Name?.Content ?? "");
+                }
+                writer.WriteNumber("sourceX", tile.SourceX);
+                writer.WriteNumber("sourceY", tile.SourceY);
+                writer.WriteNumber("width", (int)tile.Width);
+                writer.WriteNumber("height", (int)tile.Height);
+                writer.WriteNumber("tileDepth", tile.TileDepth);
+                writer.WriteNumber("instanceID", (int)tile.InstanceID);
+                writer.WriteNumber("scaleX", tile.ScaleX);
+                writer.WriteNumber("scaleY", tile.ScaleY);
+                writer.WriteNumber("color", (int)tile.Color);
+                writer.WriteEndObject();
+            }
+            writer.WriteEndArray();
+
+
+            if (Data.IsGameMaker2() && room.Layers != null && room.Layers.Count > 0)
+            {
+                writer.WriteStartArray("layers");
+                foreach (var layer in room.Layers)
+                {
+                    writer.WriteStartObject();
+                    writer.WriteString("layerName", layer.LayerName?.Content ?? "");
+                    writer.WriteNumber("layerId", (int)layer.LayerId);
+                    writer.WriteNumber("layerType", (int)layer.LayerType);
+                    writer.WriteNumber("layerDepth", layer.LayerDepth);
+                    writer.WriteNumber("xOffset", layer.XOffset);
+                    writer.WriteNumber("yOffset", layer.YOffset);
+                    writer.WriteNumber("hSpeed", layer.HSpeed);
+                    writer.WriteNumber("vSpeed", layer.VSpeed);
+                    writer.WriteBoolean("isVisible", layer.IsVisible);
+                    if (Data.IsVersionAtLeast(2022, 1))
                     {
-                        for (int j = 0; j < layer.InstancesData.Instances.Count; j++)
-                        {
-                            var inst = layer.InstancesData.Instances[j];
-                            json.Append("        ");
-                            WriteJsonNumber(json, (int)inst.InstanceID);
-                            if (j < layer.InstancesData.Instances.Count - 1) json.Append(",");
-                            json.Append("\n");
-                        }
+                        writer.WriteBoolean("effectEnabled", layer.EffectEnabled);
+                        writer.WriteString("effectType", layer.EffectType?.Content ?? "");
                     }
-                    json.Append("      ]");
-                }
-                else if (layer.LayerType == UndertaleRoom.LayerType.Tiles && layer.TilesData != null)
-                {
-                    var tilesData = layer.TilesData;
-                    json.Append(",\n");
-                    WriteJsonString(json, "tilesBackground"); json.Append(": "); WriteJsonString(json, tilesData.Background?.Name?.Content ?? ""); json.Append(",\n");
-                    WriteJsonString(json, "tilesX"); json.Append(": "); WriteJsonNumber(json, (int)tilesData.TilesX); json.Append(",\n");
-                    WriteJsonString(json, "tilesY"); json.Append(": "); WriteJsonNumber(json, (int)tilesData.TilesY); json.Append(",\n");
-                    json.Append("      \"tileData\": [\n");
-                    if (tilesData.TileData != null)
+
+                    if (layer.LayerType == UndertaleRoom.LayerType.Instances && layer.InstancesData != null)
                     {
-                        for (int y = 0; y < tilesData.TileData.Length; y++)
+                        writer.WriteStartArray("instanceIds");
+                        if (layer.InstancesData.Instances != null)
                         {
-                            json.Append("        [");
-                            var row = tilesData.TileData[y];
-                            if (row != null)
+                            foreach (var inst in layer.InstancesData.Instances)
                             {
-                                for (int x = 0; x < row.Length; x++)
-                                {
-                                    json.Append(row[x]);
-                                    if (x < row.Length - 1) json.Append(", ");
-                                }
+                                writer.WriteNumberValue((int)inst.InstanceID);
                             }
-                            json.Append("]");
-                            if (y < tilesData.TileData.Length - 1) json.Append(",");
-                            json.Append("\n");
                         }
+                        writer.WriteEndArray();
                     }
-                    json.Append("      ]");
-                }
-                else if (layer.LayerType == UndertaleRoom.LayerType.Background && layer.BackgroundData != null)
-                {
-                    var bgData = layer.BackgroundData;
-                    json.Append(",\n");
-                    json.Append("      \"backgroundData\": {\n");
-                    WriteJsonString(json, "visible"); json.Append(": "); WriteJsonBool(json, bgData.Visible); json.Append(",\n");
-                    WriteJsonString(json, "foreground"); json.Append(": "); WriteJsonBool(json, bgData.Foreground); json.Append(",\n");
-                    WriteJsonString(json, "sprite"); json.Append(": "); WriteJsonString(json, bgData.Sprite?.Name?.Content ?? ""); json.Append(",\n");
-                    WriteJsonString(json, "tiledHorizontally"); json.Append(": "); WriteJsonBool(json, bgData.TiledHorizontally); json.Append(",\n");
-                    WriteJsonString(json, "tiledVertically"); json.Append(": "); WriteJsonBool(json, bgData.TiledVertically); json.Append(",\n");
-                    WriteJsonString(json, "stretch"); json.Append(": "); WriteJsonBool(json, bgData.Stretch); json.Append(",\n");
-                    WriteJsonString(json, "color"); json.Append(": "); WriteJsonNumber(json, (int)bgData.Color); json.Append(",\n");
-                    WriteJsonString(json, "firstFrame"); json.Append(": "); WriteJsonNumber(json, bgData.FirstFrame); json.Append(",\n");
-                    WriteJsonString(json, "animationSpeed"); json.Append(": "); WriteJsonNumber(json, bgData.AnimationSpeed); json.Append(",\n");
-                    WriteJsonString(json, "animationSpeedType"); json.Append(": "); WriteJsonNumber(json, (int)bgData.AnimationSpeedType);
-                    json.Append("\n      }");
-                }
-                else if (layer.LayerType == UndertaleRoom.LayerType.Assets && layer.AssetsData != null)
-                {
-                    var assetsData = layer.AssetsData;
-                    json.Append(",\n");
-                    json.Append("      \"assetsData\": {\n");
-
-                    json.Append("        \"legacyTiles\": [\n");
-                    if (assetsData.LegacyTiles != null)
+                    else if (layer.LayerType == UndertaleRoom.LayerType.Tiles && layer.TilesData != null)
                     {
-                        for (int j = 0; j < assetsData.LegacyTiles.Count; j++)
+                        var tilesData = layer.TilesData;
+                        writer.WriteString("tilesBackground", tilesData.Background?.Name?.Content ?? "");
+                        writer.WriteNumber("tilesX", (int)tilesData.TilesX);
+                        writer.WriteNumber("tilesY", (int)tilesData.TilesY);
+                        writer.WriteStartArray("tileData");
+                        if (tilesData.TileData != null)
                         {
-                            var tile = assetsData.LegacyTiles[j];
-                            json.Append("          {\n");
-                            WriteJsonString(json, "x"); json.Append(": "); WriteJsonNumber(json, tile.X); json.Append(",\n");
-                            WriteJsonString(json, "y"); json.Append(": "); WriteJsonNumber(json, tile.Y); json.Append(",\n");
-                            WriteJsonString(json, "sourceX"); json.Append(": "); WriteJsonNumber(json, (int)tile.SourceX); json.Append(",\n");
-                            WriteJsonString(json, "sourceY"); json.Append(": "); WriteJsonNumber(json, (int)tile.SourceY); json.Append(",\n");
-                            WriteJsonString(json, "width"); json.Append(": "); WriteJsonNumber(json, (int)tile.Width); json.Append(",\n");
-                            WriteJsonString(json, "height"); json.Append(": "); WriteJsonNumber(json, (int)tile.Height); json.Append(",\n");
-                            WriteJsonString(json, "tileDepth"); json.Append(": "); WriteJsonNumber(json, tile.TileDepth); json.Append(",\n");
-                            WriteJsonString(json, "instanceID"); json.Append(": "); WriteJsonNumber(json, (int)tile.InstanceID); json.Append(",\n");
-                            WriteJsonString(json, "scaleX"); json.Append(": "); WriteJsonNumber(json, tile.ScaleX); json.Append(",\n");
-                            WriteJsonString(json, "scaleY"); json.Append(": "); WriteJsonNumber(json, tile.ScaleY); json.Append(",\n");
-                            WriteJsonString(json, "color"); json.Append(": "); WriteJsonNumber(json, (int)tile.Color); json.Append(",\n");
-                            WriteJsonString(json, "background"); json.Append(": "); WriteJsonString(json, tile.BackgroundDefinition?.Name?.Content ?? "");
-                            json.Append("\n          }");
-                            if (j < assetsData.LegacyTiles.Count - 1) json.Append(",");
-                            json.Append("\n");
+                            foreach (var row in tilesData.TileData)
+                            {
+                                writer.WriteStartArray();
+                                if (row != null)
+                                {
+                                    foreach (var value in row)
+                                    {
+                                        writer.WriteNumberValue(value);
+                                    }
+                                }
+                                writer.WriteEndArray();
+                            }
                         }
+                        writer.WriteEndArray();
                     }
-                    json.Append("        ],\n");
-
-                    json.Append("        \"sprites\": [\n");
-                    if (assetsData.Sprites != null)
+                    else if (layer.LayerType == UndertaleRoom.LayerType.Background && layer.BackgroundData != null)
                     {
-                        for (int j = 0; j < assetsData.Sprites.Count; j++)
-                        {
-                            var spr = assetsData.Sprites[j];
-                            json.Append("          {\n");
-                            WriteJsonString(json, "name"); json.Append(": "); WriteJsonString(json, spr.Name?.Content ?? ""); json.Append(",\n");
-                            WriteJsonString(json, "sprite"); json.Append(": "); WriteJsonString(json, spr.Sprite?.Name?.Content ?? ""); json.Append(",\n");
-                            WriteJsonString(json, "x"); json.Append(": "); WriteJsonNumber(json, spr.X); json.Append(",\n");
-                            WriteJsonString(json, "y"); json.Append(": "); WriteJsonNumber(json, spr.Y); json.Append(",\n");
-                            WriteJsonString(json, "scaleX"); json.Append(": "); WriteJsonNumber(json, spr.ScaleX); json.Append(",\n");
-                            WriteJsonString(json, "scaleY"); json.Append(": "); WriteJsonNumber(json, spr.ScaleY); json.Append(",\n");
-                            WriteJsonString(json, "color"); json.Append(": "); WriteJsonNumber(json, (int)spr.Color); json.Append(",\n");
-                            WriteJsonString(json, "animationSpeed"); json.Append(": "); WriteJsonNumber(json, spr.AnimationSpeed); json.Append(",\n");
-                            WriteJsonString(json, "animationSpeedType"); json.Append(": "); WriteJsonNumber(json, (int)spr.AnimationSpeedType); json.Append(",\n");
-                            WriteJsonString(json, "frameIndex"); json.Append(": "); WriteJsonNumber(json, spr.FrameIndex); json.Append(",\n");
-                            WriteJsonString(json, "rotation"); json.Append(": "); WriteJsonNumber(json, spr.Rotation);
-                            json.Append("\n          }");
-                            if (j < assetsData.Sprites.Count - 1) json.Append(",");
-                            json.Append("\n");
-                        }
+                        var bgData = layer.BackgroundData;
+                        writer.WriteStartObject("backgroundData");
+                        writer.WriteBoolean("visible", bgData.Visible);
+                        writer.WriteBoolean("foreground", bgData.Foreground);
+                        writer.WriteString("sprite", bgData.Sprite?.Name?.Content ?? "");
+                        writer.WriteBoolean("tiledHorizontally", bgData.TiledHorizontally);
+                        writer.WriteBoolean("tiledVertically", bgData.TiledVertically);
+                        writer.WriteBoolean("stretch", bgData.Stretch);
+                        writer.WriteNumber("color", (int)bgData.Color);
+                        writer.WriteNumber("firstFrame", bgData.FirstFrame);
+                        writer.WriteNumber("animationSpeed", bgData.AnimationSpeed);
+                        writer.WriteNumber("animationSpeedType", (int)bgData.AnimationSpeedType);
+                        writer.WriteEndObject();
                     }
-                    json.Append("        ]\n");
-                    json.Append("      }");
+                    else if (layer.LayerType == UndertaleRoom.LayerType.Assets && layer.AssetsData != null)
+                    {
+                        var assetsData = layer.AssetsData;
+                        writer.WriteStartObject("assetsData");
+
+                        writer.WriteStartArray("legacyTiles");
+                        if (assetsData.LegacyTiles != null)
+                        {
+                            foreach (var tile in assetsData.LegacyTiles)
+                            {
+                                writer.WriteStartObject();
+                                writer.WriteNumber("x", tile.X);
+                                writer.WriteNumber("y", tile.Y);
+                                writer.WriteNumber("sourceX", (int)tile.SourceX);
+                                writer.WriteNumber("sourceY", (int)tile.SourceY);
+                                writer.WriteNumber("width", (int)tile.Width);
+                                writer.WriteNumber("height", (int)tile.Height);
+                                writer.WriteNumber("tileDepth", tile.TileDepth);
+                                writer.WriteNumber("instanceID", (int)tile.InstanceID);
+                                writer.WriteNumber("scaleX", tile.ScaleX);
+                                writer.WriteNumber("scaleY", tile.ScaleY);
+                                writer.WriteNumber("color", (int)tile.Color);
+                                writer.WriteString("background", tile.BackgroundDefinition?.Name?.Content ?? "");
+                                writer.WriteEndObject();
+                            }
+                        }
+                        writer.WriteEndArray();
+
+                        writer.WriteStartArray("sprites");
+                        if (assetsData.Sprites != null)
+                        {
+                            foreach (var spr in assetsData.Sprites)
+                            {
+                                writer.WriteStartObject();
+                                writer.WriteString("name", spr.Name?.Content ?? "");
+                                writer.WriteString("sprite", spr.Sprite?.Name?.Content ?? "");
+                                writer.WriteNumber("x", spr.X);
+                                writer.WriteNumber("y", spr.Y);
+                                writer.WriteNumber("scaleX", spr.ScaleX);
+                                writer.WriteNumber("scaleY", spr.ScaleY);
+                                writer.WriteNumber("color", (int)spr.Color);
+                                writer.WriteNumber("animationSpeed", spr.AnimationSpeed);
+                                writer.WriteNumber("animationSpeedType", (int)spr.AnimationSpeedType);
+                                writer.WriteNumber("frameIndex", spr.FrameIndex);
+                                writer.WriteNumber("rotation", spr.Rotation);
+                                writer.WriteEndObject();
+                            }
+                        }
+                        writer.WriteEndArray();
+
+                        writer.WriteEndObject();
+                    }
+
+                    writer.WriteEndObject();
                 }
-
-                json.Append("\n    }");
-                if (i < room.Layers.Count - 1) json.Append(",");
-                json.Append("\n");
+                writer.WriteEndArray();
             }
-            json.Append("  ]");
-        }
 
 
-        if (Data.IsVersionAtLeast(2, 3) && room.Sequences != null && room.Sequences.Count > 0)
-        {
-            json.Append(",\n  \"sequences\": [\n");
-            for (int i = 0; i < room.Sequences.Count; i++)
+            if (Data.IsVersionAtLeast(2, 3) && room.Sequences != null && room.Sequences.Count > 0)
             {
-                var seq = room.Sequences[i];
-                json.Append("    ");
-                WriteJsonString(json, seq?.Resource?.Name?.Content ?? "");
-                if (i < room.Sequences.Count - 1) json.Append(",");
-                json.Append("\n");
+                writer.WriteStartArray("sequences");
+                foreach (var seq in room.Sequences)
+                {
+                    writer.WriteStringValue(seq?.Resource?.Name?.Content ?? "");
+                }
+                writer.WriteEndArray();
             }
-            json.Append("  ]");
-        }
 
-
-        if (Data.IsVersionAtLeast(2024, 13) && room.InstanceCreationOrderIDs != null && room.InstanceCreationOrderIDs.InstanceIDs != null && room.InstanceCreationOrderIDs.InstanceIDs.Count > 0)
-        {
-            json.Append(",\n  \"instanceCreationOrderIDs\": [\n");
-            for (int i = 0; i < room.InstanceCreationOrderIDs.InstanceIDs.Count; i++)
+            if (Data.IsVersionAtLeast(2024, 13) && room.InstanceCreationOrderIDs != null && room.InstanceCreationOrderIDs.InstanceIDs != null && room.InstanceCreationOrderIDs.InstanceIDs.Count > 0)
             {
-                json.Append("    ");
-                WriteJsonNumber(json, room.InstanceCreationOrderIDs.InstanceIDs[i]);
-                if (i < room.InstanceCreationOrderIDs.InstanceIDs.Count - 1) json.Append(",");
-                json.Append("\n");
+                writer.WriteStartArray("instanceCreationOrderIDs");
+                foreach (var id in room.InstanceCreationOrderIDs.InstanceIDs)
+                {
+                    writer.WriteNumberValue(id);
+                }
+                writer.WriteEndArray();
             }
-            json.Append("  ]");
+
+            writer.WriteEndObject();
         }
-
-        json.Append("\n}");
-
-        File.WriteAllText(jsonPath, json.ToString(), Encoding.UTF8);
     }
     catch (Exception ex)
     {
@@ -838,17 +770,17 @@ void DumpAudioGroup(UndertaleAudioGroup audioGroup)
         string name = SafeName(audioGroup.Name.Content);
         string jsonPath = Path.Combine(audioGroupsOut, name + ".json");
 
-        var json = new StringBuilder();
-        json.Append("{\n");
-        WriteJsonString(json, "name"); json.Append(": "); WriteJsonString(json, audioGroup.Name.Content);
-        if (audioGroup.Path != null)
+        using (var stream = new FileStream(jsonPath, FileMode.Create, FileAccess.Write))
+        using (var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = true }))
         {
-            json.Append(",\n");
-            WriteJsonString(json, "path"); json.Append(": "); WriteJsonString(json, audioGroup.Path.Content ?? "");
+            writer.WriteStartObject();
+            writer.WriteString("name", audioGroup.Name.Content);
+            if (audioGroup.Path != null)
+            {
+                writer.WriteString("path", audioGroup.Path.Content ?? "");
+            }
+            writer.WriteEndObject();
         }
-        json.Append("\n}");
-
-        File.WriteAllText(jsonPath, json.ToString(), Encoding.UTF8);
     }
     catch (Exception ex)
     {
@@ -872,30 +804,28 @@ void DumpPath(UndertalePath path)
         string name = SafeName(path.Name.Content);
         string jsonPath = Path.Combine(pathsOut, name + ".json");
 
-        var json = new StringBuilder();
-        json.Append("{\n");
-        WriteJsonString(json, "name"); json.Append(": "); WriteJsonString(json, path.Name.Content); json.Append(",\n");
-        WriteJsonString(json, "isSmooth"); json.Append(": "); WriteJsonBool(json, path.IsSmooth); json.Append(",\n");
-        WriteJsonString(json, "isClosed"); json.Append(": "); WriteJsonBool(json, path.IsClosed); json.Append(",\n");
-        WriteJsonString(json, "precision"); json.Append(": "); WriteJsonNumber(json, (int)path.Precision); json.Append(",\n");
-
-        json.Append("  \"points\": [\n");
-        for (int i = 0; i < path.Points.Count; i++)
+        using (var stream = new FileStream(jsonPath, FileMode.Create, FileAccess.Write))
+        using (var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = true }))
         {
-            var point = path.Points[i];
-            json.Append("    {\n");
-            WriteJsonString(json, "x"); json.Append(": "); WriteJsonNumber(json, point.X); json.Append(",\n");
-            WriteJsonString(json, "y"); json.Append(": "); WriteJsonNumber(json, point.Y); json.Append(",\n");
-            WriteJsonString(json, "speed"); json.Append(": "); WriteJsonNumber(json, point.Speed);
-            json.Append("\n    }");
-            if (i < path.Points.Count - 1) json.Append(",");
-            json.Append("\n");
+            writer.WriteStartObject();
+            writer.WriteString("name", path.Name.Content);
+            writer.WriteBoolean("isSmooth", path.IsSmooth);
+            writer.WriteBoolean("isClosed", path.IsClosed);
+            writer.WriteNumber("precision", (int)path.Precision);
+
+            writer.WriteStartArray("points");
+            foreach (var point in path.Points)
+            {
+                writer.WriteStartObject();
+                writer.WriteNumber("x", point.X);
+                writer.WriteNumber("y", point.Y);
+                writer.WriteNumber("speed", point.Speed);
+                writer.WriteEndObject();
+            }
+            writer.WriteEndArray();
+
+            writer.WriteEndObject();
         }
-        json.Append("  ]\n");
-
-        json.Append("}");
-
-        File.WriteAllText(jsonPath, json.ToString(), Encoding.UTF8);
     }
     catch (Exception ex)
     {
@@ -919,49 +849,43 @@ void DumpTimeline(UndertaleTimeline timeline)
         string name = SafeName(timeline.Name.Content);
         string jsonPath = Path.Combine(timelinesOut, name + ".json");
 
-        var json = new StringBuilder();
-        json.Append("{\n");
-        WriteJsonString(json, "name"); json.Append(": "); WriteJsonString(json, timeline.Name.Content); json.Append(",\n");
-
-        json.Append("  \"moments\": [\n");
-        for (int i = 0; i < timeline.Moments.Count; i++)
+        using (var stream = new FileStream(jsonPath, FileMode.Create, FileAccess.Write))
+        using (var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = true }))
         {
-            var moment = timeline.Moments[i];
-            json.Append("    {\n");
-            WriteJsonString(json, "step"); json.Append(": "); WriteJsonNumber(json, (int)moment.Step);
+            writer.WriteStartObject();
+            writer.WriteString("name", timeline.Name.Content);
 
-            if (moment.Event != null && moment.Event.Count > 0)
+            writer.WriteStartArray("moments");
+            foreach (var moment in timeline.Moments)
             {
-                json.Append(",\n");
-                json.Append("    \"actions\": [\n");
-                for (int j = 0; j < moment.Event.Count; j++)
+                writer.WriteStartObject();
+                writer.WriteNumber("step", (int)moment.Step);
+
+                if (moment.Event != null && moment.Event.Count > 0)
                 {
-                    var action = moment.Event[j];
-                    json.Append("      {\n");
-                    if (action.CodeId != null && action.CodeId.Name != null)
+                    writer.WriteStartArray("actions");
+                    foreach (var action in moment.Event)
                     {
-                        WriteJsonString(json, "codeId"); json.Append(": "); WriteJsonString(json, action.CodeId.Name.Content ?? "");
+                        writer.WriteStartObject();
+                        if (action.CodeId != null && action.CodeId.Name != null)
+                        {
+                            writer.WriteString("codeId", action.CodeId.Name.Content ?? "");
+                        }
+                        else
+                        {
+                            writer.WriteNull("codeId");
+                        }
+                        writer.WriteEndObject();
                     }
-                    else
-                    {
-                        WriteJsonString(json, "codeId"); json.Append(": "); json.Append("null");
-                    }
-                    json.Append("\n      }");
-                    if (j < moment.Event.Count - 1) json.Append(",");
-                    json.Append("\n");
+                    writer.WriteEndArray();
                 }
-                json.Append("    ]");
+
+                writer.WriteEndObject();
             }
+            writer.WriteEndArray();
 
-            json.Append("\n    }");
-            if (i < timeline.Moments.Count - 1) json.Append(",");
-            json.Append("\n");
+            writer.WriteEndObject();
         }
-        json.Append("  ]\n");
-
-        json.Append("}");
-
-        File.WriteAllText(jsonPath, json.ToString(), Encoding.UTF8);
     }
     catch (Exception ex)
     {
@@ -985,99 +909,90 @@ void DumpExtension(UndertaleExtension extension)
         string name = SafeName(extension.Name.Content);
         string jsonPath = Path.Combine(extensionsOut, name + ".json");
 
-        var json = new StringBuilder();
-        json.Append("{\n");
-        WriteJsonString(json, "name"); json.Append(": "); WriteJsonString(json, extension.Name.Content); json.Append(",\n");
-        WriteJsonString(json, "folderName"); json.Append(": "); WriteJsonString(json, extension.FolderName?.Content ?? ""); json.Append(",\n");
-        if (extension.Version != null)
+        using (var stream = new FileStream(jsonPath, FileMode.Create, FileAccess.Write))
+        using (var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = true }))
         {
-            WriteJsonString(json, "version"); json.Append(": "); WriteJsonString(json, extension.Version.Content ?? ""); json.Append(",\n");
-        }
-        if (extension.ClassName != null)
-        {
-            WriteJsonString(json, "className"); json.Append(": "); WriteJsonString(json, extension.ClassName.Content ?? "");
-            if (extension.Files == null || extension.Files.Count == 0)
+            writer.WriteStartObject();
+            writer.WriteString("name", extension.Name.Content);
+            writer.WriteString("folderName", extension.FolderName?.Content ?? "");
+            if (extension.Version != null)
             {
-                json.Append("\n");
+                writer.WriteString("version", extension.Version.Content ?? "");
             }
-        }
-
-        if (extension.Files != null && extension.Files.Count > 0)
-        {
-            json.Append(",\n  \"files\": [\n");
-            for (int i = 0; i < extension.Files.Count; i++)
+            if (extension.ClassName != null)
             {
-                var file = extension.Files[i];
-                json.Append("    {\n");
-                WriteJsonString(json, "filename"); json.Append(": "); WriteJsonString(json, file.Filename?.Content ?? ""); json.Append(",\n");
-                WriteJsonString(json, "kind"); json.Append(": "); WriteJsonNumber(json, (int)file.Kind); json.Append(",\n");
-                if (file.InitScript != null)
+                writer.WriteString("className", extension.ClassName.Content ?? "");
+            }
+
+            if (extension.Files != null && extension.Files.Count > 0)
+            {
+                writer.WriteStartArray("files");
+                foreach (var file in extension.Files)
                 {
-                    WriteJsonString(json, "initScript"); json.Append(": "); WriteJsonString(json, file.InitScript.Content ?? ""); json.Append(",\n");
-                }
-                if (file.CleanupScript != null)
-                {
-                    WriteJsonString(json, "cleanupScript"); json.Append(": "); WriteJsonString(json, file.CleanupScript.Content ?? ""); json.Append(",\n");
-                }
-                WriteJsonString(json, "functions"); json.Append(": [\n");
-                if (file.Functions != null)
-                {
-                    for (int j = 0; j < file.Functions.Count; j++)
+                    writer.WriteStartObject();
+                    writer.WriteString("filename", file.Filename?.Content ?? "");
+                    writer.WriteNumber("kind", (int)file.Kind);
+                    if (file.InitScript != null)
                     {
-                        var func = file.Functions[j];
-                        json.Append("      {\n");
-                        WriteJsonString(json, "name"); json.Append(": "); WriteJsonString(json, func.Name?.Content ?? ""); json.Append(",\n");
-                        if (func.ExtName != null)
-                        {
-                            WriteJsonString(json, "extName"); json.Append(": "); WriteJsonString(json, func.ExtName.Content ?? ""); json.Append(",\n");
-                        }
-                        WriteJsonString(json, "id"); json.Append(": "); WriteJsonNumber(json, (int)func.ID); json.Append(",\n");
-                        WriteJsonString(json, "kind"); json.Append(": "); WriteJsonNumber(json, (int)func.Kind); json.Append(",\n");
-                        WriteJsonString(json, "retType"); json.Append(": "); WriteJsonNumber(json, (int)func.RetType); json.Append(",\n");
-                        WriteJsonString(json, "arguments"); json.Append(": [\n");
-                        if (func.Arguments != null)
-                        {
-                            for (int k = 0; k < func.Arguments.Count; k++)
-                            {
-                                var arg = func.Arguments[k];
-                                json.Append("        {\n");
-                                WriteJsonString(json, "type"); json.Append(": "); WriteJsonNumber(json, (int)arg.Type);
-                                json.Append("\n        }");
-                                if (k < func.Arguments.Count - 1) json.Append(",");
-                                json.Append("\n");
-                            }
-                        }
-                        json.Append("      ]\n      }");
-                        if (j < file.Functions.Count - 1) json.Append(",");
-                        json.Append("\n");
+                        writer.WriteString("initScript", file.InitScript.Content ?? "");
                     }
+                    if (file.CleanupScript != null)
+                    {
+                        writer.WriteString("cleanupScript", file.CleanupScript.Content ?? "");
+                    }
+
+                    writer.WriteStartArray("functions");
+                    if (file.Functions != null)
+                    {
+                        foreach (var func in file.Functions)
+                        {
+                            writer.WriteStartObject();
+                            writer.WriteString("name", func.Name?.Content ?? "");
+                            if (func.ExtName != null)
+                            {
+                                writer.WriteString("extName", func.ExtName.Content ?? "");
+                            }
+                            writer.WriteNumber("id", (int)func.ID);
+                            writer.WriteNumber("kind", (int)func.Kind);
+                            writer.WriteNumber("retType", (int)func.RetType);
+
+                            writer.WriteStartArray("arguments");
+                            if (func.Arguments != null)
+                            {
+                                foreach (var arg in func.Arguments)
+                                {
+                                    writer.WriteStartObject();
+                                    writer.WriteNumber("type", (int)arg.Type);
+                                    writer.WriteEndObject();
+                                }
+                            }
+                            writer.WriteEndArray();
+
+                            writer.WriteEndObject();
+                        }
+                    }
+                    writer.WriteEndArray();
+
+                    writer.WriteEndObject();
                 }
-                json.Append("    ]\n    }");
-                if (i < extension.Files.Count - 1) json.Append(",");
-                json.Append("\n");
+                writer.WriteEndArray();
             }
-            json.Append("  ]");
-        }
 
-        if (extension.Options != null && extension.Options.Count > 0)
-        {
-            json.Append(",\n  \"options\": [\n");
-            for (int i = 0; i < extension.Options.Count; i++)
+            if (extension.Options != null && extension.Options.Count > 0)
             {
-                var option = extension.Options[i];
-                json.Append("    {\n");
-                WriteJsonString(json, "name"); json.Append(": "); WriteJsonString(json, option.Name?.Content ?? ""); json.Append(",\n");
-                WriteJsonString(json, "value"); json.Append(": "); WriteJsonString(json, option.Value?.Content ?? "");
-                json.Append("\n    }");
-                if (i < extension.Options.Count - 1) json.Append(",");
-                json.Append("\n");
+                writer.WriteStartArray("options");
+                foreach (var option in extension.Options)
+                {
+                    writer.WriteStartObject();
+                    writer.WriteString("name", option.Name?.Content ?? "");
+                    writer.WriteString("value", option.Value?.Content ?? "");
+                    writer.WriteEndObject();
+                }
+                writer.WriteEndArray();
             }
-            json.Append("  ]");
+
+            writer.WriteEndObject();
         }
-
-        json.Append("\n}");
-
-        File.WriteAllText(jsonPath, json.ToString(), Encoding.UTF8);
     }
     catch (Exception ex)
     {
