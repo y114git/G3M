@@ -728,38 +728,47 @@ class GameBananaAPI:
 
     def search_mods(self, game_id: int, search_string: Optional[str] = None, page: int = 1, per_page: int = 20, sort: str = 'best_match', max_retries: int = 2) -> Optional[Dict]:
         url = f'{self.base_url}/Util/Search/Results'
-        params = {'_idGameRow': game_id, '_sModelName': 'Mod,Wip', '_nPage': page, '_nPerpage': min(per_page, 50), '_sOrder': sort}
-        if search_string and len(search_string.strip()) >= 2:
-            params['_sSearchString'] = search_string.strip()
-        else:
-            params['_sSearchString'] = '  '
-        for attempt in range(max_retries + 1):
-            try:
-                self._wait_for_rate_limit()
-                logger.debug(f'search_mods: Requesting URL: {url} with params: {params} for game {game_id}, page {page}, sort={sort}')
-                response = self.session.get(url, params=params, timeout=NETWORK_TIMEOUT_MEDIUM)
-                logger.debug(f'search_mods: Response status: {response.status_code}, URL: {response.url}')
-                response.raise_for_status()
-                data = response.json()
-                records = data.get('_aRecords', [])
-                logger.debug(f'search_mods: Got {len(records)} results for game {game_id}, page {page}, sort={sort}')
-                return data
-            except requests.RequestException as e:
-                status_code = getattr(e.response, 'status_code', None) if hasattr(e, 'response') and e.response else None
-                if status_code == 429 and attempt < max_retries:
-                    wait_time = (attempt + 1) * 3
-                    self._rate_limit_wait_time = max(self._rate_limit_wait_time, wait_time)
-                    logger.warning(f'search_mods: Rate limit (429) for game {game_id}, waiting {wait_time} seconds before retry')
-                    time.sleep(wait_time)
-                    continue
-                logger.error(f'Error searching mods for game {game_id}: {e}')
-                if hasattr(e, 'response') and e.response is not None:
-                    logger.error(f'Response status: {e.response.status_code}, response text: {e.response.text[:500]}')
-                    logger.error(f"Request URL: {(response.url if hasattr(e, 'response') and hasattr(e.response, 'url') else url)}")
-                return None
-            except Exception as e:
-                logger.error(f'Unexpected error searching mods for game {game_id}: {e}', exc_info=True)
-                return None
+        search_str = search_string.strip() if search_string and len(search_string.strip()) >= 2 else '  '
+        per_page_limit = min(per_page, 50)
+        all_records = []
+        all_data = {}
+        for model_type in ['Mod', 'Wip']:
+            params = {'_idGameRow': game_id, '_sModelName': model_type, '_nPage': page, '_nPerpage': per_page_limit, '_sOrder': sort, '_sSearchString': search_str}
+            for attempt in range(max_retries + 1):
+                try:
+                    self._wait_for_rate_limit()
+                    logger.debug(f'search_mods: Requesting {model_type} URL: {url} with params: {params} for game {game_id}, page {page}, sort={sort}')
+                    response = self.session.get(url, params=params, timeout=NETWORK_TIMEOUT_MEDIUM)
+                    logger.debug(f'search_mods: {model_type} response status: {response.status_code}, URL: {response.url}')
+                    response.raise_for_status()
+                    data = response.json()
+                    records = data.get('_aRecords', [])
+                    logger.debug(f'search_mods: Got {len(records)} {model_type} results for game {game_id}, page {page}, sort={sort}')
+                    all_records.extend(records)
+                    if not all_data:
+                        all_data = data.copy()
+                    break
+                except requests.RequestException as e:
+                    status_code = getattr(e.response, 'status_code', None) if hasattr(e, 'response') and e.response else None
+                    if status_code == 429 and attempt < max_retries:
+                        wait_time = (attempt + 1) * 3
+                        self._rate_limit_wait_time = max(self._rate_limit_wait_time, wait_time)
+                        logger.warning(f'search_mods: Rate limit (429) for {model_type} game {game_id}, waiting {wait_time} seconds before retry')
+                        time.sleep(wait_time)
+                        continue
+                    logger.error(f'Error searching {model_type} mods for game {game_id}: {e}')
+                    if hasattr(e, 'response') and e.response is not None:
+                        logger.error(f'Response status: {e.response.status_code}, response text: {e.response.text[:500]}')
+                    break
+                except Exception as e:
+                    logger.error(f'Unexpected error searching {model_type} mods for game {game_id}: {e}', exc_info=True)
+                    break
+        if all_data:
+            all_data['_aRecords'] = all_records
+            if '_nRecordCount' in all_data:
+                all_data['_nRecordCount'] = len(all_records)
+            logger.debug(f'search_mods: Combined {len(all_records)} total results (Mod + Wip) for game {game_id}, page {page}, sort={sort}')
+            return all_data
         return None
 
     @staticmethod
