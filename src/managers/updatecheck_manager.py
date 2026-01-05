@@ -141,7 +141,7 @@ class UpdateChecker(QObject):
                     import time
                     result = ctypes.windll.shell32.ShellExecuteW(None, 'runas', new_exe_path, None, None, 1)
                     if result > 32:
-                        time.sleep(0.5)
+                        time.sleep(1.0)
                         installer_name = os.path.basename(new_exe_path)
                         try:
                             import psutil
@@ -154,11 +154,16 @@ class UpdateChecker(QObject):
                             logging.info('[UPDATE] psutil not available, skipping process verification')
                         except Exception as e:
                             logging.warning(f'[UPDATE] Could not verify installer process: {e}')
-                        logging.info(f'[UPDATE] Installer launched successfully (result code: {result}), closing launcher')
+                        logging.info(f'[UPDATE] Installer launched successfully (result code: {result}), force terminating launcher')
                         self.feedback_manager.update_status(tr('status.installer_launched_closing'), UI_COLORS['status_success'])
                         installer_launched = True
-                        self.quit_requested.emit()
-                        return
+                        logging.info('[UPDATE] Force terminating launcher process to allow installer to replace files')
+                        try:
+                            import gc
+                            gc.collect()
+                        except Exception:
+                            pass
+                        os._exit(0)
                     else:
                         logging.error(f'[UPDATE] Failed to launch installer (result code: {result})')
                         raise RuntimeError(tr('errors.installer_launch_failed', code=result))
