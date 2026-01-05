@@ -15,7 +15,7 @@ from utils.network_utils import sanitize_log_message
 from core.splash import create_png_splash
 from utils.path_utils import resource_path, get_user_data_root, get_launcher_dir
 from logging.handlers import RotatingFileHandler
-from config.constants import SPLASH_MIN_DURATION, LAUNCHER_FALLBACK_TIMEOUT, SPLASH_RETRY_DELAY
+from config.constants import SPLASH_MIN_DURATION, LAUNCHER_FALLBACK_TIMEOUT, SPLASH_RETRY_DELAY, SPLASH_WATCHDOG_TIMEOUT
 import traceback
 if platform.system() == 'Windows':
     import winreg
@@ -212,6 +212,18 @@ def _load_config_file() -> dict:
         import json
         with open(config_path, 'r', encoding='utf-8') as f:
             config = json.load(f)
+        if not isinstance(config, dict):
+            logging.warning(f'Config file does not contain a dictionary, resetting to empty config')
+            backup_path = f'{config_path}.invalid.bak'
+            try:
+                import shutil
+                shutil.copy2(config_path, backup_path)
+                logging.warning(f'Invalid config structure detected, backed up to {backup_path}')
+                os.remove(config_path)
+                logging.info(f'Removed invalid config file: {config_path}')
+            except Exception:
+                pass
+            return {}
         if config_path == old_config_path and (not os.path.exists(settings_path)):
             import shutil
             shutil.move(old_config_path, settings_path)
@@ -227,11 +239,12 @@ def _load_config_file() -> dict:
             logging.info(f'Removed corrupted config file: {config_path}')
         except Exception:
             pass
-        pass
         return {}
     except (PermissionError, OSError) as e:
+        logging.warning(f'Permission or OS error loading config file: {e}')
         return {}
     except Exception as e:
+        logging.warning(f'Unexpected error loading config file: {e}', exc_info=True)
         return {}
 
 
@@ -293,6 +306,7 @@ def run_app():
     def create_launcher_and_show_splash(app, initial_url, show_animation: bool):
         global _splash_start_time
         launcher_app = {}
+        window_shown_flag = {'shown': False}
         splash = create_png_splash()
         if show_animation:
             _splash_start_time = time.time()
@@ -348,6 +362,23 @@ def run_app():
                 close_splash()
                 show_launcher_window(launcher_app.get('instance'))
 
+        def watchdog_callback():
+            if window_shown_flag['shown']:
+                return
+            instance = launcher_app.get('instance')
+            if instance:
+                try:
+                    if not instance.isVisible():
+                        logging.warning('Startup timed out, forcing main window display')
+                        window_shown_flag['shown'] = True
+                        close_splash()
+                        show_launcher_window(instance)
+                except Exception as e:
+                    logging.error(f'Watchdog callback error: {e}', exc_info=True)
+            else:
+                logging.warning('Startup timed out, but main window instance not yet created')
+        QTimer.singleShot(SPLASH_WATCHDOG_TIMEOUT, watchdog_callback)
+
         def create_launcher():
             try:
                 from core.app_window import AppWindow
@@ -363,7 +394,6 @@ def run_app():
                     launcher_app['instance']._splash_was_shown = True
                 launcher_app['instance']._post_show_initialization()
                 mods_display_ready_flag = {'ready': False}
-                window_shown_flag = {'shown': False}
 
                 def on_mods_display_ready():
                     if window_shown_flag['shown']:

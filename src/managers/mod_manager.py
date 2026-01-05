@@ -583,24 +583,32 @@ class ModManager(QObject):
             conversion_happened = self.convert_legacy_mods()
             if conversion_happened:
                 return self.load_local_mods(_skip_conversion=True)
-        cache = self._get_mods_cache(use_async=False)
+        try:
+            cache = self._get_mods_cache(use_async=False)
+        except Exception as e:
+            logging.error(f'load_local_mods: Failed to get mods cache: {e}', exc_info=True)
+            cache = {}
         installed_mods = {}
         try:
             for cache_key, mod_info in cache.items():
-                config_data = mod_info.config_data
-                if not config_data:
-                    continue
-                key = config_data.get('key') or config_data.get('mod_key')
-                if not key and (config_data.get('key') or config_data.get('mod_key')) and (config_data.get('key') or config_data.get('mod_key')).startswith('gb_'):
+                try:
+                    config_data = mod_info.config_data
+                    if not config_data:
+                        continue
                     key = config_data.get('key') or config_data.get('mod_key')
-                    logging.warning(f'load_local_mods: Found GameBanana mod with empty key, using {key}')
-                    config_data['key'] = key
-                    if 'mod_key' in config_data:
-                        del config_data['mod_key']
-                elif not key:
-                    logging.warning('load_local_mods: Found mod with empty key, skipping')
+                    if not key and (config_data.get('key') or config_data.get('mod_key')) and (config_data.get('key') or config_data.get('mod_key')).startswith('gb_'):
+                        key = config_data.get('key') or config_data.get('mod_key')
+                        logging.warning(f'load_local_mods: Found GameBanana mod with empty key, using {key}')
+                        config_data['key'] = key
+                        if 'mod_key' in config_data:
+                            del config_data['mod_key']
+                    elif not key:
+                        logging.warning('load_local_mods: Found mod with empty key, skipping')
+                        continue
+                    installed_mods[key] = config_data
+                except Exception as e:
+                    logging.warning(f'load_local_mods: Error processing mod info from cache (key={cache_key}): {e}', exc_info=True)
                     continue
-                installed_mods[key] = config_data
             installed_gamebanana_by_key = {}
             for key, config_data in installed_mods.items():
                 if key and key.startswith('gb_'):
@@ -650,9 +658,13 @@ class ModManager(QObject):
                         if existing_mod:
                             if (not hasattr(existing_mod, 'files') or not existing_mod.files) and config_data.get('files'):
                                 try:
-                                    temp_mod = self.create_mod_object_from_info(config_data, self.app_state.all_mods)
-                                    if hasattr(temp_mod, 'files') and temp_mod.files:
-                                        existing_mod.files = temp_mod.files
+                                    files_data = config_data.get('files', {})
+                                    if isinstance(files_data, dict) and files_data:
+                                        temp_mod = self.create_mod_object_from_info(config_data, self.app_state.all_mods)
+                                        if hasattr(temp_mod, 'files') and temp_mod.files:
+                                            existing_mod.files = temp_mod.files
+                                    else:
+                                        logging.debug(f'load_local_mods: Skipping mod {key} with empty/invalid files data')
                                 except Exception as e:
                                     logging.warning(f'load_local_mods: Failed to load files for mod {key}: {e}', exc_info=True)
                             continue
@@ -667,12 +679,16 @@ class ModManager(QObject):
                     if existing_mod:
                         if (not hasattr(existing_mod, 'files') or not existing_mod.files) and config_data.get('files'):
                             try:
-                                new_mod = self.create_mod_object_from_info(config_data, self.app_state.all_mods)
-                                for i, mod in enumerate(self.app_state.all_mods):
-                                    mod_key_attr = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
-                                    if mod_key_attr == key:
-                                        self.app_state.all_mods[i] = new_mod
-                                        break
+                                files_data = config_data.get('files', {})
+                                if isinstance(files_data, dict) and files_data:
+                                    new_mod = self.create_mod_object_from_info(config_data, self.app_state.all_mods)
+                                    for i, mod in enumerate(self.app_state.all_mods):
+                                        mod_key_attr = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
+                                        if mod_key_attr == key:
+                                            self.app_state.all_mods[i] = new_mod
+                                            break
+                                else:
+                                    logging.debug(f'load_local_mods: Skipping mod {key} with empty/invalid files data')
                             except Exception as e:
                                 logging.warning(f'load_local_mods: Failed to reload mod {key}: {e}', exc_info=True)
                     continue
@@ -708,30 +724,41 @@ class ModManager(QObject):
                     safe_mod_info = {'key': key, 'name': config_data.get('name', 'Installed Mod'), 'version': config_data.get('version', '1.0.0'), 'author': config_data.get('author', tr('defaults.unknown')), 'tagline': config_data.get('tagline', tr('defaults.no_description')), 'game_version': config_data.get('game_version', tr('defaults.not_specified')), 'description_url': '', 'downloads': 0, 'game': config_data.get('game') or config_data.get('modgame', 'deltarune'), 'is_verified': False, 'icon_url': icon_url, 'tags': tags, 'hide_mod': False, 'is_local_mod': False, 'ban_status': False, 'demo_url': None, 'demo_version': '1.0.0', 'created_date': config_data.get('created_date', 'N/A'), 'last_updated': config_data.get('created_date', 'N/A'), 'external_url': config_data.get('external_url')}
                     mod = mod_models.ModInfo(**safe_mod_info)
                     files_data = config_data.get('files', {})
-                    for file_key, ch_info in list(files_data.items()):
-                        if not isinstance(ch_info, dict):
-                            continue
-                        extra_files_list = []
-                        extra_files_raw = ch_info.get('extra_files', [])
-                        if isinstance(extra_files_raw, list):
-                            for ef_data in extra_files_raw:
-                                if isinstance(ef_data, dict):
-                                    try:
-                                        extra_files_list.append(mod_models.ModExtraFile(key=ef_data.get('key', ''), version=ef_data.get('version', '1.0.0'), url=ef_data.get('url', '')))
-                                    except (KeyError, TypeError, ValueError):
-                                        pass
-                        elif isinstance(extra_files_raw, dict):
-                            for group_key, filenames in extra_files_raw.items():
-                                if isinstance(filenames, list):
-                                    for filename in filenames:
-                                        extra_files_list.append(mod_models.ModExtraFile(key=group_key, version=ch_info.get('versions', {}).get(group_key, '1.0.0') if isinstance(ch_info.get('versions'), dict) else '1.0.0', url=filename))
-                        data_file_version = ch_info.get('data_file_version')
-                        if not data_file_version and isinstance(ch_info.get('versions'), dict):
-                            data_file_version = ch_info.get('versions', {}).get('data')
-                        if not data_file_version:
-                            data_file_version = '1.0.0'
-                        valid_chapter_fields = {'description': ch_info.get('description'), 'data_file_url': ch_info.get('data_file_url'), 'data_file_version': data_file_version, 'extra_files': extra_files_list}
-                        mod.files[file_key] = ModChapterData(**valid_chapter_fields)
+                    if not isinstance(files_data, dict):
+                        logging.warning(f'load_local_mods: Invalid files_data type for mod {key}, expected dict, got {type(files_data).__name__}')
+                        files_data = {}
+                    try:
+                        for file_key, ch_info in list(files_data.items()):
+                            if not isinstance(ch_info, dict):
+                                logging.debug(f'load_local_mods: Skipping invalid chapter info for mod {key}, file_key={file_key}')
+                                continue
+                            try:
+                                extra_files_list = []
+                                extra_files_raw = ch_info.get('extra_files', [])
+                                if isinstance(extra_files_raw, list):
+                                    for ef_data in extra_files_raw:
+                                        if isinstance(ef_data, dict):
+                                            try:
+                                                extra_files_list.append(mod_models.ModExtraFile(key=ef_data.get('key', ''), version=ef_data.get('version', '1.0.0'), url=ef_data.get('url', '')))
+                                            except (KeyError, TypeError, ValueError):
+                                                pass
+                                elif isinstance(extra_files_raw, dict):
+                                    for group_key, filenames in extra_files_raw.items():
+                                        if isinstance(filenames, list):
+                                            for filename in filenames:
+                                                extra_files_list.append(mod_models.ModExtraFile(key=group_key, version=ch_info.get('versions', {}).get(group_key, '1.0.0') if isinstance(ch_info.get('versions'), dict) else '1.0.0', url=filename))
+                                data_file_version = ch_info.get('data_file_version')
+                                if not data_file_version and isinstance(ch_info.get('versions'), dict):
+                                    data_file_version = ch_info.get('versions', {}).get('data')
+                                if not data_file_version:
+                                    data_file_version = '1.0.0'
+                                valid_chapter_fields = {'description': ch_info.get('description'), 'data_file_url': ch_info.get('data_file_url'), 'data_file_version': data_file_version, 'extra_files': extra_files_list}
+                                mod.files[file_key] = ModChapterData(**valid_chapter_fields)
+                            except Exception as e:
+                                logging.warning(f'load_local_mods: Failed to process chapter data for mod {key}, file_key={file_key}: {e}', exc_info=True)
+                                continue
+                    except Exception as e:
+                        logging.warning(f'load_local_mods: Error processing files_data for mod {key}: {e}', exc_info=True)
                     game = config_data.get('game') or config_data.get('modgame', '')
                     if mod.files or game == 'pizzaoven':
                         if game == 'pizzaoven' and (not mod.files):
@@ -881,7 +908,7 @@ class ModManager(QObject):
             self._write_metadata({'mod_files_to_cleanup': [], 'mod_dirs_to_cleanup': []})
             return True
         except Exception as e:
-            logging.error(f'_load_local_mods_from_folders failed: {e}', exc_info=True)
+            logging.error(f'load_local_mods failed: {e}', exc_info=True)
             return False
 
     def get_mod_config(self, key: str) -> dict:
