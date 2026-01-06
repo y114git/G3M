@@ -573,7 +573,7 @@ class ModOperationsController:
         if self.app_state.is_installing:
             return
         if self.feedback_manager.ask_question('dialogs.delete_confirmation', 'dialogs.delete_mod_confirmation', '', False, mod_name=mod.name):
-            self.uninstall_mod(mod)
+            QTimer.singleShot(5, lambda m=mod: self.uninstall_mod(m))
 
     def uninstall_mod(self, mod):
         self.mod_manager.uninstall_mod(mod)
