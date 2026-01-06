@@ -695,6 +695,11 @@ class ModManager(QObject):
                 try:
                     mod_folder_path = self.get_mod_folder_path(key)
                     icon_url = config_data.get('icon_url', '')
+                    if icon_url and (not icon_url.startswith(('http://', 'https://'))) and mod_folder_path:
+                        if not os.path.isabs(icon_url):
+                            resolved_relative = os.path.normpath(os.path.join(mod_folder_path, icon_url))
+                            if os.path.exists(resolved_relative) and os.path.isfile(resolved_relative):
+                                icon_url = resolved_relative
                     if not icon_url and mod_folder_path:
                         resolved_icon = resolve_mod_icon(config_data, mod_folder_path)
                         if resolved_icon:
@@ -796,10 +801,22 @@ class ModManager(QObject):
                     logging.debug(f'load_local_mods: Skipping local mod {key} - already in all_mods')
                     continue
                 try:
-                    mod_folder_path = mod_info.folder_path if hasattr(mod_info, 'folder_path') else self.get_mod_folder_path(key)
+                    mod_info_from_cache = cache.get(key)
+                    if mod_info_from_cache and hasattr(mod_info_from_cache, 'folder_path'):
+                        mod_folder_path = mod_info_from_cache.folder_path
+                    else:
+                        mod_folder_path = self.get_mod_folder_path(key)
                     mod_folder_for_icon = mod_folder_path or self.get_mod_folder_path(key)
+                    icon_url_from_config = config_data.get('icon_url', '')
                     icon_url = ''
-                    if mod_folder_for_icon:
+                    if icon_url_from_config and (not icon_url_from_config.startswith(('http://', 'https://'))) and mod_folder_for_icon:
+                        if not os.path.isabs(icon_url_from_config):
+                            resolved_relative = os.path.normpath(os.path.join(mod_folder_for_icon, icon_url_from_config))
+                            if os.path.exists(resolved_relative) and os.path.isfile(resolved_relative):
+                                icon_url = resolved_relative
+                        else:
+                            icon_url = icon_url_from_config
+                    if not icon_url and mod_folder_for_icon:
                         resolved_icon = resolve_mod_icon(config_data, mod_folder_for_icon)
                         if resolved_icon:
                             icon_url = resolved_icon

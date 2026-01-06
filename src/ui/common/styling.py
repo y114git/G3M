@@ -80,8 +80,8 @@ def clear_layout_widgets(layout, keep_last_n=1, hide_instead_of_delete=False):
             else:
                 widget.setParent(None)
                 widget.deleteLater()
-        except (RuntimeError, AttributeError):
-            pass
+        except (RuntimeError, AttributeError) as e:
+            logging.debug(f'clear_layout_widgets: Error removing widget: {e}')
 
 
 def load_mod_icon_universal(icon_label, mod_data, size=80):
@@ -100,7 +100,8 @@ def load_mod_icon_universal(icon_label, mod_data, size=80):
                     else:
                         default_pixmap = default_pixmap.scaled(size, size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
                     break
-            except Exception:
+            except Exception as e:
+                logging.debug(f'load_mod_icon_universal: Error loading default icon from {default_icon_path}: {e}')
                 default_pixmap = None
     if default_pixmap is None:
         default_pixmap = QPixmap(size, size)
@@ -111,17 +112,40 @@ def load_mod_icon_universal(icon_label, mod_data, size=80):
         icon_url = getattr(mod_data, 'icon_url', None)
         local_icon_to_load = None
         if icon_url and (not icon_url.startswith(('http://', 'https://'))):
-            local_icon_to_load = icon_url
+            if os.path.isabs(icon_url):
+                local_icon_to_load = icon_url
+            else:
+                is_local_mod = getattr(mod_data, 'is_local_mod', False)
+                if is_local_mod:
+                    mod_folder_path = None
+                    try:
+                        if hasattr(mod_data, 'folder_path'):
+                            mod_folder_path = mod_data.folder_path
+                    except Exception as e:
+                        logging.debug(f'load_mod_icon_universal: Error getting folder_path from mod_data: {e}')
+                    if mod_folder_path and os.path.isdir(mod_folder_path):
+                        resolved_path = os.path.normpath(os.path.join(mod_folder_path, icon_url))
+                        if os.path.exists(resolved_path):
+                            local_icon_to_load = resolved_path
+                        else:
+                            local_icon_to_load = icon_url
+                    else:
+                        local_icon_to_load = icon_url
+                else:
+                    local_icon_to_load = icon_url
         elif icon_path:
             local_icon_to_load = icon_path
         if local_icon_to_load and os.path.exists(local_icon_to_load):
-            pixmap = QPixmap(local_icon_to_load)
-            if not pixmap.isNull():
-                icon_size = min(pixmap.width(), pixmap.height())
-                cropped = pixmap.copy((pixmap.width() - icon_size) // 2, (pixmap.height() - icon_size) // 2, icon_size, icon_size)
-                scaled_pixmap = cropped.scaled(size, size, Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation)
-                icon_label.setPixmap(scaled_pixmap)
-                return
+            try:
+                pixmap = QPixmap(local_icon_to_load)
+                if not pixmap.isNull():
+                    icon_size = min(pixmap.width(), pixmap.height())
+                    cropped = pixmap.copy((pixmap.width() - icon_size) // 2, (pixmap.height() - icon_size) // 2, icon_size, icon_size)
+                    scaled_pixmap = cropped.scaled(size, size, Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                    icon_label.setPixmap(scaled_pixmap)
+                    return
+            except Exception as e:
+                logging.debug(f'load_mod_icon_universal: Error loading pixmap from {local_icon_to_load}: {e}')
         if icon_url and isinstance(icon_url, str) and icon_url.startswith(('http://', 'https://')):
             try:
                 from workers import WorkerSignals
@@ -158,7 +182,7 @@ def load_mod_icon_universal(icon_label, mod_data, size=80):
                         logging.debug(f'load_mod_icon_universal: Error setting pixmap: {e}')
 
                 def _on_error(url, err):
-                    pass
+                    logging.debug(f'load_mod_icon_universal: Failed to load image from URL {url}: {err}')
                 signals.result.connect(_on_loaded_image)
                 signals.error.connect(_on_error)
                 runnable = ImageLoaderRunnable(icon_url, signals)
@@ -169,27 +193,27 @@ def load_mod_icon_universal(icon_label, mod_data, size=80):
                     try:
                         signals.result.disconnect(_on_loaded_image)
                         signals.error.disconnect(_on_error)
-                    except (TypeError, RuntimeError):
-                        pass
+                    except (TypeError, RuntimeError) as e:
+                        logging.debug(f'load_mod_icon_universal: Error disconnecting signals in cleanup: {e}')
                     try:
                         if hasattr(icon_label, '_icon_loader_signals'):
                             delattr(icon_label, '_icon_loader_signals')
                         if hasattr(icon_label, '_icon_loader_runnable'):
                             delattr(icon_label, '_icon_loader_runnable')
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logging.debug(f'load_mod_icon_universal: Error cleaning up icon loader attributes: {e}')
                     try:
                         if pool is not None and pool.activeThreadCount() > 0:
                             pool.waitForDone(1000)
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logging.debug(f'load_mod_icon_universal: Error waiting for pool in cleanup: {e}')
                 try:
                     icon_label.destroyed.connect(_cleanup_refs)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logging.debug(f'load_mod_icon_universal: Error connecting destroyed signal: {e}')
                 if pool is not None:
                     pool.start(runnable)
-            except Exception:
-                pass
-    except Exception:
-        pass
+            except Exception as e:
+                logging.debug(f'load_mod_icon_universal: Error setting up async icon loader for {icon_url}: {e}')
+    except Exception as e:
+        logging.debug(f'load_mod_icon_universal: Unexpected error: {e}')

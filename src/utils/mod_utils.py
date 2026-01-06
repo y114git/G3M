@@ -21,7 +21,7 @@ def get_mod_name(mod_data: Any, default: str = 'Unknown') -> str:
 def resolve_mod_icon(config_data: dict, mod_folder_path: str) -> Optional[str]:
     if not mod_folder_path or not os.path.isdir(mod_folder_path):
         return None
-    icon_field = config_data.get('icon')
+    icon_field = config_data.get('icon') or config_data.get('icon_url')
     if icon_field and isinstance(icon_field, str) and icon_field.strip():
         icon_field = icon_field.strip()
         if icon_field.startswith(('http://', 'https://')):
