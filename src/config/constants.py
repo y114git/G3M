@@ -1,6 +1,6 @@
 import platform
 from .loader import get_config_value
-LAUNCHER_VERSION = '2.4.3stable'
+LAUNCHER_VERSION = '2.4.4stable'
 APP_ID = 'deltahub.y.114'
 DATA_FIREBASE_URL = get_config_value('DATA_FIREBASE_URL', '')
 CLOUD_FUNCTIONS_BASE_URL = get_config_value('CLOUD_FUNCTIONS_BASE_URL', '')
