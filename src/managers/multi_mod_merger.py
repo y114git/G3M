@@ -201,10 +201,32 @@ class MultiModMerger(QObject):
                     self.patching_logger.error(f'Failed to merge mods for chapter {chapter_id}, restoring backups')
                     if self.backup_manager:
                         self.backup_manager.restore_backups(chapter_id)
-                    try:
-                        failed_msg = tr('status.merge_failed')
-                    except BaseException:
-                        failed_msg = 'Mod merge failed'
+                    data_modifying_count = 0
+                    for mod_data in mods_list:
+                        mod_source_dir = self._get_mod_source_dir(mod_data, chapter_id)
+                        if mod_source_dir:
+                            mod_type = self._detect_mod_type(mod_source_dir)
+                            if mod_type.get('is_pizzaoven_mod'):
+                                patches = self._find_data_patches(mod_source_dir)
+                                ready_files = self._find_ready_data_win_files(mod_source_dir)
+                                if patches or ready_files:
+                                    data_modifying_count += 1
+                            elif mod_type.get('has_xdelta_patch') or mod_type.get('has_ready_data_win') or mod_type.get('has_csx_scripts'):
+                                data_modifying_count += 1
+                    is_fast_path = not is_modpack and data_modifying_count <= 1
+                    if is_fast_path and len(mods_list) == 1:
+                        mod_name = getattr(mods_list[0], 'name', 'Unknown')
+                        try:
+                            failed_msg = tr('errors.mod_patch_failed_single', mod_name=mod_name)
+                        except BaseException:
+                            failed_msg = f'Failed to apply mod {mod_name}'
+                        self.status_update.emit(failed_msg, 'error')
+                    else:
+                        try:
+                            failed_msg = tr('status.merge_failed')
+                        except BaseException:
+                            failed_msg = 'Mod merge failed'
+                        self.status_update.emit(failed_msg, 'error')
                     self.progress_update.emit(0, failed_msg)
                     return False
                 chapter_progress = chapter_index * (100 // total_chapters) if total_chapters > 0 else 100
@@ -362,6 +384,8 @@ class MultiModMerger(QObject):
                             self.patching_logger.info(f'[FAST_PATH] Successfully copied ready data.win/game.ios from {mod_name} to {output_data_win_path} (size: {file_size} bytes, chapter {chapter_id})')
                         except Exception as e:
                             self.patching_logger.error(f'[FAST_PATH] Failed to copy ready data.win file from {mod_name}: {e}', exc_info=True)
+                            error_msg = str(e)[:200] if len(str(e)) > 200 else str(e)
+                            self.status_update.emit(tr('errors.mod_patch_failed', mod_name=mod_name, error=error_msg), 'error')
                             if not is_modpack:
                                 self.backup_manager.restore_backups(chapter_id)
                             return False
@@ -393,6 +417,8 @@ class MultiModMerger(QObject):
                                 self.patching_logger.info(f'[FAST_PATH] Successfully applied PizzaOven mod {mod_name}')
                             except Exception as e:
                                 self.patching_logger.error(f'[FAST_PATH] Failed to apply PizzaOven mod: {e}', exc_info=True)
+                                error_msg = str(e)[:200] if len(str(e)) > 200 else str(e)
+                                self.status_update.emit(tr('errors.mod_patch_failed', mod_name=mod_name, error=error_msg), 'error')
                                 if not is_modpack:
                                     self.backup_manager.restore_backups(chapter_id)
                                 return False
@@ -411,6 +437,8 @@ class MultiModMerger(QObject):
                                 self.patching_logger.info(f'[FAST_PATH] Successfully applied xdelta patches from {mod_name} to {output_data_win_path}')
                             except Exception as e:
                                 self.patching_logger.error(f'[FAST_PATH] Failed to apply xdelta patches: {e}', exc_info=True)
+                                error_msg = str(e)[:200] if len(str(e)) > 200 else str(e)
+                                self.status_update.emit(tr('errors.mod_patch_failed', mod_name=mod_name, error=error_msg), 'error')
                                 if not is_modpack:
                                     self.backup_manager.restore_backups(chapter_id)
                                 return False
@@ -423,12 +451,15 @@ class MultiModMerger(QObject):
                                     self.backup_manager.backup_file(extracted_chapter_id, output_data_win_path)
                             if not self._apply_csx_scripts(output_data_win_path, csx_scripts):
                                 self.patching_logger.error(f'[FAST_PATH] Failed to execute CSX scripts from {mod_name}')
+                                self.status_update.emit(tr('errors.mod_patch_failed', mod_name=mod_name, error=tr('errors.csx_script_failed', script=mod_name)), 'error')
                                 if not is_modpack:
                                     self.backup_manager.restore_backups(chapter_id)
                                 return False
                             self.patching_logger.info(f'[FAST_PATH] Successfully executed CSX scripts from {mod_name} on {output_data_win_path}')
                         except Exception as e:
                             self.patching_logger.error(f'[FAST_PATH] Failed to execute CSX scripts: {e}', exc_info=True)
+                            error_msg = str(e)[:200] if len(str(e)) > 200 else str(e)
+                            self.status_update.emit(tr('errors.mod_patch_failed', mod_name=mod_name, error=error_msg), 'error')
                             if not is_modpack:
                                 self.backup_manager.restore_backups(chapter_id)
                             return False
@@ -1078,6 +1109,7 @@ class MultiModMerger(QObject):
                 self.patching_logger.error(f'Failed to check/set xdelta permissions: {e}', exc_info=True)
         if not os.path.exists(data_win_path):
             self.patching_logger.error(f'Input file does not exist: {data_win_path}')
+            self.status_update.emit(tr('errors.xdelta_patch_file_not_found', patch=os.path.basename(data_win_path) if data_win_path else 'data.win'), 'error')
             return False
         total_patches = len(data_patches)
         for idx, patch_path in enumerate(data_patches):
@@ -1089,7 +1121,7 @@ class MultiModMerger(QObject):
                 progress_callback(idx / total_patches if total_patches > 0 else 0)
             if not os.path.exists(patch_path):
                 self.patching_logger.error(f'Patch file does not exist: {patch_path}')
-                self.status_update.emit(tr('errors.xdelta_patch_failed', patch=os.path.basename(patch_path)), 'error')
+                self.status_update.emit(tr('errors.xdelta_patch_file_not_found', patch=os.path.basename(patch_path)), 'error')
                 return False
             temp_output = None
             try:
@@ -1098,7 +1130,7 @@ class MultiModMerger(QObject):
                 temp_dir = os.path.dirname(temp_output)
                 if not os.access(temp_dir, os.W_OK):
                     self.patching_logger.error(f'Temp directory is not writable: {temp_dir}')
-                    self.status_update.emit(tr('errors.xdelta_patch_failed', patch=os.path.basename(patch_path)), 'error')
+                    self.status_update.emit(tr('errors.xdelta_patch_permission_denied', patch=os.path.basename(patch_path)), 'error')
                     return False
                 cmd = [self.xdelta_path, '-d', '-s', data_win_path, patch_path, temp_output]
                 startupinfo = None
@@ -1120,19 +1152,37 @@ class MultiModMerger(QObject):
                 if progress_callback:
                     progress_callback((idx + 1) / total_patches if total_patches > 0 else 1.0)
                 if returncode != 0:
-                    error_msg = stderr.strip() if stderr else 'Unknown error'
-                    if 'checksum mismatch' in error_msg.lower() or 'XD3_INVALID_INPUT' in error_msg:
+                    error_msg = stderr.strip() if stderr else stdout.strip() if stdout else 'Unknown error'
+                    error_msg_lower = error_msg.lower()
+                    if 'checksum mismatch' in error_msg_lower or 'XD3_INVALID_INPUT' in error_msg:
                         detailed_error = f'[XDELTA] Patch "{os.path.basename(patch_path)}" failed: checksum mismatch. This usually means the patch was created for the original data.win, but the file has already been modified by previous mods. The patch cannot be applied to a modified file.\nError details: {error_msg}'
                         self.patching_logger.error(detailed_error)
                         self.status_update.emit(tr('errors.xdelta_patch_checksum_mismatch', patch=os.path.basename(patch_path), error=error_msg[:100]), 'error')
+                    elif 'no such file' in error_msg_lower or 'cannot find' in error_msg_lower or 'file not found' in error_msg_lower:
+                        detailed_error = f'[XDELTA] Patch "{os.path.basename(patch_path)}" failed: file not found. {error_msg}'
+                        self.patching_logger.error(detailed_error)
+                        self.status_update.emit(tr('errors.xdelta_patch_file_not_found', patch=os.path.basename(patch_path)), 'error')
+                    elif 'permission denied' in error_msg_lower or 'access denied' in error_msg_lower:
+                        detailed_error = f'[XDELTA] Patch "{os.path.basename(patch_path)}" failed: permission denied. {error_msg}'
+                        self.patching_logger.error(detailed_error)
+                        self.status_update.emit(tr('errors.xdelta_patch_permission_denied', patch=os.path.basename(patch_path)), 'error')
+                    elif 'XD3_INTERNAL' in error_msg or 'corrupt' in error_msg_lower or 'invalid' in error_msg_lower:
+                        detailed_error = f'[XDELTA] Patch "{os.path.basename(patch_path)}" failed: patch file appears corrupted or invalid. {error_msg}'
+                        self.patching_logger.error(detailed_error)
+                        self.status_update.emit(tr('errors.xdelta_patch_corrupted', patch=os.path.basename(patch_path)), 'error')
+                    elif 'io error' in error_msg_lower or 'input/output' in error_msg_lower or 'disk' in error_msg_lower:
+                        detailed_error = f'[XDELTA] Patch "{os.path.basename(patch_path)}" failed: I/O error. {error_msg}'
+                        self.patching_logger.error(detailed_error)
+                        self.status_update.emit(tr('errors.xdelta_patch_io_error', patch=os.path.basename(patch_path)), 'error')
                     else:
                         detailed_error = f'[XDELTA] Patch "{os.path.basename(patch_path)}" failed: {error_msg}'
                         self.patching_logger.error(detailed_error)
-                        self.status_update.emit(tr('errors.xdelta_patch_failed', patch=os.path.basename(patch_path)), 'error')
+                        error_display = error_msg[:200] if len(error_msg) > 200 else error_msg
+                        self.status_update.emit(tr('errors.xdelta_patch_unknown_error', patch=os.path.basename(patch_path), error=error_display), 'error')
                     return False
                 if not os.path.exists(temp_output):
                     self.patching_logger.error(f'Temp output file was not created: {temp_output}')
-                    self.status_update.emit(tr('errors.xdelta_patch_failed', patch=os.path.basename(patch_path)), 'error')
+                    self.status_update.emit(tr('errors.xdelta_patch_io_error', patch=os.path.basename(patch_path)), 'error')
                     return False
                 if not safe_move(temp_output, data_win_path):
                     raise OSError(f'Failed to move patched file from {temp_output} to {data_win_path}')
@@ -1141,6 +1191,7 @@ class MultiModMerger(QObject):
                 self.patching_logger.info(f'Patch {idx + 1}/{total_patches} applied successfully')
             except subprocess.TimeoutExpired:
                 self.patching_logger.error(f'xdelta patch timed out after 300 seconds: {patch_path}')
+                self.status_update.emit(tr('errors.xdelta_patch_timeout_detailed', patch=os.path.basename(patch_path)), 'error')
                 if temp_output and os.path.exists(temp_output):
                     try:
                         safe_remove(temp_output)
@@ -1148,7 +1199,17 @@ class MultiModMerger(QObject):
                         pass
                 return False
             except Exception as e:
+                error_str = str(e)
                 self.patching_logger.error(f'xdelta patch error: {e}', exc_info=True)
+                if 'permission' in error_str.lower() or 'access' in error_str.lower():
+                    self.status_update.emit(tr('errors.xdelta_patch_permission_denied', patch=os.path.basename(patch_path)), 'error')
+                elif 'not found' in error_str.lower() or 'no such file' in error_str.lower():
+                    self.status_update.emit(tr('errors.xdelta_patch_file_not_found', patch=os.path.basename(patch_path)), 'error')
+                elif 'io' in error_str.lower() or 'disk' in error_str.lower():
+                    self.status_update.emit(tr('errors.xdelta_patch_io_error', patch=os.path.basename(patch_path)), 'error')
+                else:
+                    error_display = error_str[:200] if len(error_str) > 200 else error_str
+                    self.status_update.emit(tr('errors.xdelta_patch_unknown_error', patch=os.path.basename(patch_path), error=error_display), 'error')
                 if temp_output and os.path.exists(temp_output):
                     try:
                         safe_remove(temp_output)
