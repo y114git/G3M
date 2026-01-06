@@ -80,7 +80,7 @@ class FetchModsThread(QThread):
                         selected_game = 'deltarune'
                         if self.app_state and hasattr(self.app_state, 'local_config'):
                             selected_game = self.app_state.local_config.get('selected_search_game', 'deltarune')
-                        game_mapping = {'deltarune': 'deltarune', 'deltarunedemo': 'deltarune', 'undertale': 'undertale', 'undertaleyellow': 'undertaleyellow', 'pizzatower': 'pizzatower'}
+                        game_mapping = {'deltarune': 'deltarune', 'deltarunedemo': 'deltarune', 'undertale': 'undertale', 'undertaleyellow': 'undertaleyellow', 'pizzatower': 'pizzatower', 'sugaryspire': 'sugaryspire'}
                         gamebanana_game = game_mapping.get(selected_game, 'deltarune')
                         if gamebanana_game not in GAMEBANANA_GAME_IDS:
                             logger.warning(f'GameBananaFetcher: Unknown game {gamebanana_game}, defaulting to deltarune')
@@ -139,7 +139,7 @@ class FetchModsThread(QThread):
                     app_state = getattr(self.main_window, 'app_state', None)
                     if app_state:
                         selected_game = app_state.local_config.get('selected_search_game', 'deltarune') if hasattr(app_state, 'local_config') else 'deltarune'
-                        game_mapping = {'deltarune': 'deltarune', 'deltarunedemo': 'deltarune', 'undertale': 'undertale', 'undertaleyellow': 'undertaleyellow', 'pizzatower': 'pizzatower'}
+                        game_mapping = {'deltarune': 'deltarune', 'deltarunedemo': 'deltarune', 'undertale': 'undertale', 'undertaleyellow': 'undertaleyellow', 'pizzatower': 'pizzatower', 'sugaryspire': 'sugaryspire'}
                         gamebanana_game = game_mapping.get(selected_game, 'deltarune')
                         if gamebanana_game in GAMEBANANA_GAME_IDS:
                             game_id = GAMEBANANA_GAME_IDS[gamebanana_game]

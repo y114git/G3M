@@ -953,7 +953,7 @@ class SearchDisplayController(QObject):
 
     def _map_modgame_to_gamebanana(self, game: str) -> str:
         game_value = game
-        mapping = {'deltarune': 'deltarune', 'deltarunedemo': 'deltarune', 'undertale': 'undertale', 'undertaleyellow': 'undertaleyellow', 'pizzatower': 'pizzatower'}
+        mapping = {'deltarune': 'deltarune', 'deltarunedemo': 'deltarune', 'undertale': 'undertale', 'undertaleyellow': 'undertaleyellow', 'pizzatower': 'pizzatower', 'sugaryspire': 'sugaryspire'}
         return mapping.get((game_value or '').lower(), '')
 
     def load_mods_for_selected_game(self):

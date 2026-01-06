@@ -11,7 +11,7 @@ from PyQt6.QtWidgets import QDialog
 from managers.localization_manager import tr
 from utils.file_utils import ensure_writable, is_path_in_steam_common
 from utils.game_utils import is_game_running, get_game_name_string
-from models.game_modes import UndertaleGameMode, UndertaleYellowGameMode, PizzaTowerGameMode, FullGameMode
+from models.game_modes import UndertaleGameMode, UndertaleYellowGameMode, PizzaTowerGameMode, SugarySpireGameMode, FullGameMode
 from utils.path_utils import find_chapter_resource_dir, resolve_game_executable
 from utils.mod_utils import get_mod_key
 from utils.patching_logger import clear_patching_logs, clear_conflicts_log
@@ -285,7 +285,8 @@ class GameLauncher(QObject):
             return None
         is_undertale = isinstance(self.app_state.game_mode, UndertaleGameMode) or isinstance(self.app_state.game_mode, UndertaleYellowGameMode)
         is_pizzatower = isinstance(self.app_state.game_mode, PizzaTowerGameMode)
-        if is_pizzatower:
+        is_sugaryspire = isinstance(self.app_state.game_mode, SugarySpireGameMode)
+        if is_pizzatower or is_sugaryspire:
             from utils.game_utils import get_game_type_string
             game_type = get_game_type_string(self.app_state.game_mode)
             executable = resolve_game_executable(current_game_path, is_undertale=False, game_type=game_type)

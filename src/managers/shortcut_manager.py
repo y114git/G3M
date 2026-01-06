@@ -11,11 +11,11 @@ from core.app_state import AppState
 from ui.common.feedback import FeedbackManager
 from managers.mod_manager import ModManager
 from models.game_modes import FullGameMode
-from config.constants import LAUNCHER_VERSION, UI_COLORS, SLOT_ID_UNIVERSAL, SLOT_ID_DEMO, SLOT_ID_UNDERTALE, SLOT_ID_MENU, SLOT_ID_CHAPTER_1, SLOT_ID_CHAPTER_2, SLOT_ID_CHAPTER_3, SLOT_ID_CHAPTER_4
+from config.constants import LAUNCHER_VERSION, UI_COLORS, SLOT_ID_UNIVERSAL, SLOT_ID_DEMO, SLOT_ID_UNDERTALE, SLOT_ID_UNDERTALE_YELLOW, SLOT_ID_PIZZA_TOWER, SLOT_ID_SUGARY_SPIRE, SLOT_ID_MENU, SLOT_ID_CHAPTER_1, SLOT_ID_CHAPTER_2, SLOT_ID_CHAPTER_3, SLOT_ID_CHAPTER_4
 from managers.localization_manager import tr
 from utils.path_utils import resource_path
 from utils.mod_utils import get_mod_key
-from models.game_modes import DemoGameMode, UndertaleGameMode, UndertaleYellowGameMode, PizzaTowerGameMode
+from models.game_modes import DemoGameMode, UndertaleGameMode, UndertaleYellowGameMode, PizzaTowerGameMode, SugarySpireGameMode
 
 
 class ShortcutManager(QObject):
@@ -41,7 +41,8 @@ class ShortcutManager(QObject):
         description_lines = [tr('dialogs.shortcut_description'), '', tr('dialogs.current_shortcut_settings'), '']
         is_undertaleyellow = settings.get('is_undertaleyellow_mode', False)
         is_pizzatower = settings.get('is_pizzatower_mode', False)
-        game_name = tr('ui.undertaleyellow') if is_undertaleyellow else tr('ui.undertale') if settings.get('is_undertale_mode', False) else tr('ui.pizzatower') if is_pizzatower else tr('ui.deltarunedemo') if settings.get('is_demo_mode', False) else tr('ui.deltarune')
+        is_sugaryspire = settings.get('is_sugaryspire_mode', False)
+        game_name = tr('ui.sugaryspire') if is_sugaryspire else tr('ui.undertaleyellow') if is_undertaleyellow else tr('ui.undertale') if settings.get('is_undertale_mode', False) else tr('ui.pizzatower') if is_pizzatower else tr('ui.deltarunedemo') if settings.get('is_demo_mode', False) else tr('ui.deltarune')
         description_lines.append(f"<b>{tr('ui.mod_type_label')}</b> {game_name}")
         if settings.get('is_demo_mode', False):
             mod_data = settings['mods'].get('demo')
@@ -60,6 +61,21 @@ class ShortcutManager(QObject):
                 description_lines.append(f"<b>{tr('status.mod_label')}</b> <i>{tr('status.vanilla')}</i>")
         elif settings.get('is_undertaleyellow_mode', False):
             mod_data = settings['mods'].get('undertaleyellow')
+            if mod_data:
+                mod_keys = mod_data if isinstance(mod_data, list) else [mod_data]
+                mod_names = []
+                for key in mod_keys:
+                    mod_config = self.mod_manager.get_mod_config(key)
+                    mod_name = mod_config.get('name', tr('errors.mod_not_found_by_key', mod_key=key)) if mod_config else tr('errors.mod_not_found_by_key', mod_key=key)
+                    mod_names.append(mod_name)
+                if len(mod_names) == 1:
+                    description_lines.append(f"<b>{tr('status.mod_label')}</b> {mod_names[0]}")
+                else:
+                    description_lines.append(f"<b>{tr('status.mod_label')}</b> {len(mod_names)} mod(s): {', '.join(mod_names)}")
+            else:
+                description_lines.append(f"<b>{tr('status.mod_label')}</b> <i>{tr('status.vanilla')}</i>")
+        elif settings.get('is_sugaryspire_mode', False):
+            mod_data = settings['mods'].get('sugaryspire')
             if mod_data:
                 mod_keys = mod_data if isinstance(mod_data, list) else [mod_data]
                 mod_names = []
@@ -147,7 +163,7 @@ class ShortcutManager(QObject):
         if settings.get('launch_via_steam'):
             description_lines.append(f"✓ {tr('ui.steam_launch')}")
         elif settings.get('use_custom_executable'):
-            custom_path = settings.get('custom_executable_path', '') or settings.get('demo_custom_executable_path', '') or settings.get('undertaleyellow_custom_executable_path', '') or settings.get('pizzatower_custom_executable_path', '')
+            custom_path = settings.get('custom_executable_path', '') or settings.get('demo_custom_executable_path', '') or settings.get('undertaleyellow_custom_executable_path', '') or settings.get('pizzatower_custom_executable_path', '') or settings.get('sugaryspire_custom_executable_path', '')
             exe_name = os.path.basename(custom_path) if custom_path else '?'
             description_lines.append(f"✓ {tr('status.custom_executable_launch', exe_name=exe_name)}")
         else:
@@ -161,6 +177,7 @@ class ShortcutManager(QObject):
         is_undertale = settings.get('is_undertale_mode', False)
         is_undertaleyellow = settings.get('is_undertaleyellow_mode', False)
         is_pizzatower = settings.get('is_pizzatower_mode', False)
+        is_sugaryspire = settings.get('is_sugaryspire_mode', False)
         is_chapter_mode = settings.get('is_chapter_mode', False)
         if is_demo:
             mod_data = settings['mods'].get('demo')
@@ -207,16 +224,20 @@ class ShortcutManager(QObject):
         is_undertale = isinstance(self.app_state.game_mode, UndertaleGameMode)
         is_undertaleyellow = isinstance(self.app_state.game_mode, UndertaleYellowGameMode)
         is_pizzatower = isinstance(self.app_state.game_mode, PizzaTowerGameMode)
+        is_sugaryspire = isinstance(self.app_state.game_mode, SugarySpireGameMode)
         undertale_game_path = ''
         undertaleyellow_game_path = ''
         pizzatower_game_path = ''
+        sugaryspire_game_path = ''
         if is_undertale:
             undertale_game_path = self.app_state.game_mode.get_game_path(self.app_state.local_config) or ''
         elif is_undertaleyellow:
             undertaleyellow_game_path = self.app_state.game_mode.get_game_path(self.app_state.local_config) or ''
         elif is_pizzatower:
             pizzatower_game_path = self.app_state.game_mode.get_game_path(self.app_state.local_config) or ''
-        settings = {'launcher_version': LAUNCHER_VERSION, 'game_path': self.app_state.game_path, 'demo_game_path': self.app_state.demo_game_path, 'undertale_game_path': undertale_game_path, 'undertaleyellow_game_path': undertaleyellow_game_path, 'pizzatower_game_path': pizzatower_game_path, 'is_demo_mode': is_demo, 'is_chapter_mode': is_chapter_mode, 'is_undertale_mode': is_undertale, 'is_undertaleyellow_mode': is_undertaleyellow, 'is_pizzatower_mode': is_pizzatower, 'launch_via_steam': self.parent_widget.launch_via_steam_checkbox.isChecked(), 'use_custom_executable': self.parent_widget.use_custom_executable_checkbox.isChecked(), 'custom_executable_path': self.app_state.local_config.get(FullGameMode().get_custom_exec_config_key(), ''), 'demo_custom_executable_path': self.app_state.local_config.get(DemoGameMode().get_custom_exec_config_key(), ''), 'undertale_custom_executable_path': self.app_state.local_config.get(UndertaleGameMode().get_custom_exec_config_key(), ''), 'undertaleyellow_custom_executable_path': self.app_state.local_config.get(UndertaleYellowGameMode().get_custom_exec_config_key(), ''), 'pizzatower_custom_executable_path': self.app_state.local_config.get(PizzaTowerGameMode().get_custom_exec_config_key(), ''), 'direct_launch_slot_id': self.app_state.local_config.get('direct_launch_slot_id', SLOT_ID_UNIVERSAL), 'mods': {}}
+        elif is_sugaryspire:
+            sugaryspire_game_path = self.app_state.game_mode.get_game_path(self.app_state.local_config) or ''
+        settings = {'launcher_version': LAUNCHER_VERSION, 'game_path': self.app_state.game_path, 'demo_game_path': self.app_state.demo_game_path, 'undertale_game_path': undertale_game_path, 'undertaleyellow_game_path': undertaleyellow_game_path, 'pizzatower_game_path': pizzatower_game_path, 'sugaryspire_game_path': sugaryspire_game_path, 'is_demo_mode': is_demo, 'is_chapter_mode': is_chapter_mode, 'is_undertale_mode': is_undertale, 'is_undertaleyellow_mode': is_undertaleyellow, 'is_pizzatower_mode': is_pizzatower, 'is_sugaryspire_mode': is_sugaryspire, 'launch_via_steam': self.parent_widget.launch_via_steam_checkbox.isChecked(), 'use_custom_executable': self.parent_widget.use_custom_executable_checkbox.isChecked(), 'custom_executable_path': self.app_state.local_config.get(FullGameMode().get_custom_exec_config_key(), ''), 'demo_custom_executable_path': self.app_state.local_config.get(DemoGameMode().get_custom_exec_config_key(), ''), 'undertale_custom_executable_path': self.app_state.local_config.get(UndertaleGameMode().get_custom_exec_config_key(), ''), 'undertaleyellow_custom_executable_path': self.app_state.local_config.get(UndertaleYellowGameMode().get_custom_exec_config_key(), ''), 'pizzatower_custom_executable_path': self.app_state.local_config.get(PizzaTowerGameMode().get_custom_exec_config_key(), ''), 'sugaryspire_custom_executable_path': self.app_state.local_config.get(SugarySpireGameMode().get_custom_exec_config_key(), ''), 'direct_launch_slot_id': self.app_state.local_config.get('direct_launch_slot_id', SLOT_ID_UNIVERSAL), 'mods': {}}
         slot_manager = getattr(self.parent_widget, 'slot_manager', None) if self.parent_widget else None
         if not slot_manager or not hasattr(slot_manager, 'get_active_mod_selections'):
             if is_demo:
@@ -227,6 +248,8 @@ class ShortcutManager(QObject):
                 settings['mods']['undertaleyellow'] = None
             elif is_pizzatower:
                 settings['mods']['pizzatower'] = None
+            elif is_sugaryspire:
+                settings['mods']['sugaryspire'] = None
             elif is_chapter_mode:
                 for chapter_id in range(5):
                     settings['mods'][str(chapter_id)] = None
@@ -255,6 +278,13 @@ class ShortcutManager(QObject):
                 settings['mods']['undertaleyellow'] = mod_keys[0] if len(mod_keys) == 1 else mod_keys
             else:
                 settings['mods']['undertaleyellow'] = None
+        elif is_sugaryspire:
+            sugaryspire_mods = slot_manager.get_used_mods_list(SLOT_ID_SUGARY_SPIRE)
+            if sugaryspire_mods:
+                mod_keys = [get_mod_key(mod) for mod in sugaryspire_mods if get_mod_key(mod)]
+                settings['mods']['sugaryspire'] = mod_keys[0] if len(mod_keys) == 1 else mod_keys
+            else:
+                settings['mods']['sugaryspire'] = None
         elif is_pizzatower:
             from config.constants import SLOT_ID_PIZZA_TOWER
             pizzatower_mods = slot_manager.get_used_mods_list(SLOT_ID_PIZZA_TOWER)
@@ -293,6 +323,7 @@ class ShortcutManager(QObject):
             is_demo = isinstance(self.app_state.game_mode, DemoGameMode)
             is_undertale = isinstance(self.app_state.game_mode, UndertaleGameMode)
             is_undertaleyellow = isinstance(self.app_state.game_mode, UndertaleYellowGameMode)
+            is_sugaryspire = isinstance(self.app_state.game_mode, SugarySpireGameMode)
             if is_chapter_mode is None:
                 is_chapter_mode = self.app_state.current_mode == 'chapter'
             if is_demo:
@@ -329,6 +360,17 @@ class ShortcutManager(QObject):
                         slot_manager.set_mods_list(SLOT_ID_UNDERTALE_YELLOW, [], save_state=False)
                 else:
                     slot_manager.set_mods_list(SLOT_ID_UNDERTALE_YELLOW, [], save_state=False)
+            elif is_sugaryspire:
+                mod_data = mods_settings.get('sugaryspire')
+                if mod_data and mod_data != 'no_change':
+                    mod_keys = mod_data if isinstance(mod_data, list) else [mod_data]
+                    mods_list = self._get_mods_from_keys(mod_keys)
+                    if mods_list:
+                        slot_manager.set_mods_list(SLOT_ID_SUGARY_SPIRE, mods_list, save_state=False)
+                    else:
+                        slot_manager.set_mods_list(SLOT_ID_SUGARY_SPIRE, [], save_state=False)
+                else:
+                    slot_manager.set_mods_list(SLOT_ID_SUGARY_SPIRE, [], save_state=False)
             else:
                 universal_data = mods_settings.get('universal')
                 if universal_data and universal_data != 'no_change':
@@ -385,7 +427,7 @@ class ShortcutManager(QObject):
                 mods_list.append(mod_data)
         return mods_list
 
-    def launch_game_from_shortcut(self, launch_via_steam=False, use_custom_executable=False, custom_exec_path='', demo_custom_exec_path='', undertale_custom_exec_path='', undertaleyellow_custom_exec_path='', pizzatower_custom_exec_path='', direct_launch_slot_id=-1):
+    def launch_game_from_shortcut(self, launch_via_steam=False, use_custom_executable=False, custom_exec_path='', demo_custom_exec_path='', undertale_custom_exec_path='', undertaleyellow_custom_exec_path='', pizzatower_custom_exec_path='', sugaryspire_custom_exec_path='', direct_launch_slot_id=-1):
         try:
             if not self.parent_widget:
                 raise Exception(tr('errors.parent_widget_not_found'))
@@ -402,6 +444,7 @@ class ShortcutManager(QObject):
                 is_undertale = isinstance(self.app_state.game_mode, UndertaleGameMode)
                 is_undertaleyellow = isinstance(self.app_state.game_mode, UndertaleYellowGameMode)
                 is_pizzatower = isinstance(self.app_state.game_mode, PizzaTowerGameMode)
+                is_sugaryspire = isinstance(self.app_state.game_mode, SugarySpireGameMode)
                 if is_demo:
                     exec_path = demo_custom_exec_path
                     if exec_path:
@@ -414,6 +457,10 @@ class ShortcutManager(QObject):
                     exec_path = undertaleyellow_custom_exec_path
                     if exec_path:
                         self.app_state.local_config[UndertaleYellowGameMode().get_custom_exec_config_key()] = exec_path
+                elif is_sugaryspire:
+                    exec_path = sugaryspire_custom_exec_path
+                    if exec_path:
+                        self.app_state.local_config[SugarySpireGameMode().get_custom_exec_config_key()] = exec_path
                 elif is_pizzatower:
                     exec_path = pizzatower_custom_exec_path
                     if exec_path:

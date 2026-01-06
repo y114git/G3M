@@ -12,7 +12,7 @@ from PyQt6.QtCore import QTranslator, Qt, QEvent, QThread, QTimer, pyqtSignal, Q
 from PyQt6.QtGui import QColor, QIcon, QPainter, QPixmap, QDesktopServices
 from PyQt6.QtWidgets import QApplication, QCheckBox, QFrame, QLabel, QProgressBar, QPushButton, QTabWidget, QVBoxLayout, QWidget, QHBoxLayout, QSizePolicy, QColorDialog
 from managers.localization_manager import localization_manager, tr
-from models.game_modes import FullGameMode, DemoGameMode, UndertaleGameMode, UndertaleYellowGameMode, PizzaTowerGameMode
+from models.game_modes import FullGameMode, DemoGameMode, UndertaleGameMode, UndertaleYellowGameMode, PizzaTowerGameMode, SugarySpireGameMode
 from config.constants import UI_COLORS, SOCIAL_LINKS, ONLINE_UPDATE_INTERVAL, INITIALIZATION_TIMEOUT, THREAD_WAIT_TIMEOUT, SLOT_ID_UNIVERSAL
 from utils.game_utils import is_game_running
 from utils.ui_utils import safe_stop_thread, DebounceTimer
@@ -324,6 +324,8 @@ class AppWindow(QWidget):
                 self.app_state.game_mode = UndertaleGameMode()
             elif settings.get('is_pizzatower_mode', False):
                 self.app_state.game_mode = PizzaTowerGameMode()
+            elif settings.get('is_sugaryspire_mode', False):
+                self.app_state.game_mode = SugarySpireGameMode()
             else:
                 self.app_state.game_mode = DemoGameMode() if settings.get('is_demo_mode', False) else FullGameMode()
             game_path = settings.get('game_path', '')
@@ -331,6 +333,7 @@ class AppWindow(QWidget):
             undertale_game_path = settings.get('undertale_game_path', '')
             undertaleyellow_game_path = settings.get('undertaleyellow_game_path', '')
             pizzatower_game_path = settings.get('pizzatower_game_path', '')
+            sugaryspire_game_path = settings.get('sugaryspire_game_path', '')
             self.app_state.game_path = game_path
             self.app_state.demo_game_path = demo_game_path
             self.app_state.undertale_game_path = undertale_game_path
@@ -344,6 +347,8 @@ class AppWindow(QWidget):
                 self.app_state.local_config['undertaleyellow_game_path'] = undertaleyellow_game_path
             if pizzatower_game_path:
                 self.app_state.local_config['pizzatower_game_path'] = pizzatower_game_path
+            if sugaryspire_game_path:
+                self.app_state.local_config['sugaryspire_game_path'] = sugaryspire_game_path
             launch_via_steam = settings.get('launch_via_steam', False)
             use_custom_executable = settings.get('use_custom_executable', False)
             custom_exec_path = settings.get('custom_executable_path', '')
@@ -351,6 +356,7 @@ class AppWindow(QWidget):
             undertale_custom_exec_path = settings.get('undertale_custom_executable_path', '')
             undertaleyellow_custom_exec_path = settings.get('undertaleyellow_custom_executable_path', '')
             pizzatower_custom_exec_path = settings.get('pizzatower_custom_executable_path', '')
+            sugaryspire_custom_exec_path = settings.get('sugaryspire_custom_executable_path', '')
             direct_launch_slot_id = settings.get('direct_launch_slot_id', SLOT_ID_UNIVERSAL)
             is_chapter_mode = settings.get('is_chapter_mode', False)
             if is_chapter_mode:
@@ -365,7 +371,7 @@ class AppWindow(QWidget):
             if not mods_settings:
                 mods_settings = settings.get('selections', {})
             self.shortcut_manager.apply_shortcut_mods(mods_settings, is_chapter_mode=is_chapter_mode)
-            self.shortcut_manager.launch_game_from_shortcut(launch_via_steam=launch_via_steam, use_custom_executable=use_custom_executable, custom_exec_path=custom_exec_path, demo_custom_exec_path=demo_custom_exec_path, undertale_custom_exec_path=undertale_custom_exec_path, undertaleyellow_custom_exec_path=undertaleyellow_custom_exec_path, pizzatower_custom_exec_path=pizzatower_custom_exec_path, direct_launch_slot_id=direct_launch_slot_id)
+            self.shortcut_manager.launch_game_from_shortcut(launch_via_steam=launch_via_steam, use_custom_executable=use_custom_executable, custom_exec_path=custom_exec_path, demo_custom_exec_path=demo_custom_exec_path, undertale_custom_exec_path=undertale_custom_exec_path, undertaleyellow_custom_exec_path=undertaleyellow_custom_exec_path, pizzatower_custom_exec_path=pizzatower_custom_exec_path, sugaryspire_custom_exec_path=sugaryspire_custom_exec_path, direct_launch_slot_id=direct_launch_slot_id)
         except (OSError, FileNotFoundError) as e:
             logging.error(f'Launch error (file system): {e}')
             raise ShortcutLaunchError(f'File system error: {e}')
@@ -615,10 +621,14 @@ class AppWindow(QWidget):
         elif saved_game_type == 'pizzatower':
             from models.game_modes import PizzaTowerGameMode
             self.app_state.game_mode = PizzaTowerGameMode()
+        elif saved_game_type == 'sugaryspire':
+            from models.game_modes import SugarySpireGameMode
+            self.app_state.game_mode = SugarySpireGameMode()
         else:
             self.app_state.game_mode = FullGameMode()
         self.app_state.game_mode_changed.connect(self._on_game_mode_updated_by_state)
         self._update_checkbox_visibility()
+        self._update_change_path_button_text()
         self._setup_chapter_tabs()
         if saved_chapter_mode and hasattr(self, '_show_chapter_mode_instruction'):
             QTimer.singleShot(600, self._show_chapter_mode_instruction)
@@ -958,7 +968,7 @@ class AppWindow(QWidget):
         if game_type == 'deltarune':
             self.chapter_mode_checkbox.setVisible(True)
             self.full_install_checkbox.setVisible(False)
-        elif game_type == 'deltarunedemo' or game_type == 'undertaleyellow':
+        elif game_type == 'deltarunedemo' or game_type == 'undertaleyellow' or game_type == 'sugaryspire':
             self.chapter_mode_checkbox.setVisible(False)
             self.full_install_checkbox.setVisible(True)
         else:
@@ -990,8 +1000,10 @@ class AppWindow(QWidget):
     def _full_install_tooltip(self) -> str:
         if platform.system() == 'Darwin':
             return tr('tooltips.macos_install_unavailable')
-        from models.game_modes import UndertaleYellowGameMode
-        if isinstance(self.app_state.game_mode, UndertaleYellowGameMode):
+        from models.game_modes import UndertaleYellowGameMode, SugarySpireGameMode
+        if isinstance(self.app_state.game_mode, SugarySpireGameMode):
+            return tr('tooltips.full_spire_install_instructions')
+        elif isinstance(self.app_state.game_mode, UndertaleYellowGameMode):
             return tr('tooltips.full_yellow_install_instructions')
         return tr('tooltips.full_install_instructions')
 

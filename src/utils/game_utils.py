@@ -24,6 +24,8 @@ def is_valid_mac_game_path(path: str, skip_data_check: bool, game_type: str) -> 
             app_names = ('UNDERTALE.app',)
         elif game_type == 'pizzatower':
             app_names = ('PizzaTower.app',)
+        elif game_type == 'sugaryspire':
+            app_names = ('SugarySpire_ExhibitionNight.app',)
         else:
             app_names = ('DELTARUNE.app', 'DELTARUNEdemo.app')
         app_path = next((app_path / name for name in app_names if (app_path / name).is_dir()), None)
@@ -60,8 +62,8 @@ def is_valid_game_path(path: str, skip_data_check: bool = False, game_type: str 
 
 
 def get_chapter_id_for_game_mode(game_mode: 'GameMode') -> int:
-    from models.game_modes import DemoGameMode, UndertaleGameMode, UndertaleYellowGameMode, PizzaTowerGameMode
-    from config.constants import SLOT_ID_DEMO, SLOT_ID_UNDERTALE, SLOT_ID_UNDERTALE_YELLOW, SLOT_ID_PIZZA_TOWER, SLOT_ID_UNIVERSAL
+    from models.game_modes import DemoGameMode, UndertaleGameMode, UndertaleYellowGameMode, PizzaTowerGameMode, SugarySpireGameMode
+    from config.constants import SLOT_ID_DEMO, SLOT_ID_UNDERTALE, SLOT_ID_UNDERTALE_YELLOW, SLOT_ID_PIZZA_TOWER, SLOT_ID_SUGARY_SPIRE, SLOT_ID_UNIVERSAL
     if isinstance(game_mode, DemoGameMode):
         return SLOT_ID_DEMO
     elif isinstance(game_mode, UndertaleGameMode):
@@ -70,12 +72,14 @@ def get_chapter_id_for_game_mode(game_mode: 'GameMode') -> int:
         return SLOT_ID_UNDERTALE_YELLOW
     elif isinstance(game_mode, PizzaTowerGameMode):
         return SLOT_ID_PIZZA_TOWER
+    elif isinstance(game_mode, SugarySpireGameMode):
+        return SLOT_ID_SUGARY_SPIRE
     else:
         return SLOT_ID_UNIVERSAL
 
 
 def get_game_type_string(game_mode: 'GameMode') -> str:
-    from models.game_modes import DemoGameMode, UndertaleGameMode, UndertaleYellowGameMode, PizzaTowerGameMode
+    from models.game_modes import DemoGameMode, UndertaleGameMode, UndertaleYellowGameMode, PizzaTowerGameMode, SugarySpireGameMode
     if isinstance(game_mode, DemoGameMode):
         return 'deltarune'
     elif isinstance(game_mode, UndertaleGameMode):
@@ -84,12 +88,14 @@ def get_game_type_string(game_mode: 'GameMode') -> str:
         return 'undertaleyellow'
     elif isinstance(game_mode, PizzaTowerGameMode):
         return 'pizzatower'
+    elif isinstance(game_mode, SugarySpireGameMode):
+        return 'sugaryspire'
     else:
         return 'deltarune'
 
 
 def get_game_name_string(game_mode: 'GameMode') -> str:
-    from models.game_modes import DemoGameMode, UndertaleGameMode, UndertaleYellowGameMode, PizzaTowerGameMode
+    from models.game_modes import DemoGameMode, UndertaleGameMode, UndertaleYellowGameMode, PizzaTowerGameMode, SugarySpireGameMode
     if isinstance(game_mode, DemoGameMode):
         return 'DELTARUNEdemo'
     elif isinstance(game_mode, UndertaleGameMode):
@@ -98,6 +104,8 @@ def get_game_name_string(game_mode: 'GameMode') -> str:
         return 'UNDERTALE Yellow'
     elif isinstance(game_mode, PizzaTowerGameMode):
         return 'Pizza Tower'
+    elif isinstance(game_mode, SugarySpireGameMode):
+        return 'Sugary Spire'
     else:
         return 'DELTARUNE'
 

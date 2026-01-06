@@ -5,7 +5,7 @@ from PyQt6.QtCore import QObject, pyqtSignal
 from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QVBoxLayout, QFileDialog, QWidget
 from managers.localization_manager import tr
 from config.constants import UI_COLORS
-from models.game_modes import DemoGameMode, UndertaleYellowGameMode
+from models.game_modes import DemoGameMode, UndertaleYellowGameMode, SugarySpireGameMode
 from workers.background_workers import FullInstallThread
 
 
@@ -45,7 +45,7 @@ class GameLaunchController(QObject):
             self.app_state.action_button_text = tr('status.please_wait')
             self.app_state.action_button_enabled = False
             return
-        is_full_install_enabled = isinstance(self.app_state.game_mode, (DemoGameMode, UndertaleYellowGameMode)) and self._full_install_checkbox_is_checked
+        is_full_install_enabled = isinstance(self.app_state.game_mode, (DemoGameMode, UndertaleYellowGameMode, SugarySpireGameMode)) and self._full_install_checkbox_is_checked
         action_text = tr('buttons.install') if is_full_install_enabled else tr('ui.update_button') if self.slot_manager.check_used_mods_need_updates() else tr('ui.launch_button')
         self.app_state.action_button_text = action_text
         self.app_state.action_button_enabled = True
@@ -109,7 +109,7 @@ class GameLaunchController(QObject):
         if self.app_state.is_merging or (merge_thread and merge_thread.isRunning()):
             self._cancel_operation('merge')
             return
-        if isinstance(self.app_state.game_mode, (DemoGameMode, UndertaleYellowGameMode)) and self._full_install_checkbox_is_checked:
+        if isinstance(self.app_state.game_mode, (DemoGameMode, UndertaleYellowGameMode, SugarySpireGameMode)) and self._full_install_checkbox_is_checked:
             self.perform_full_install()
             return
         if self.slot_manager.check_used_mods_need_updates():
@@ -151,10 +151,16 @@ class GameLaunchController(QObject):
             return
         self.app_state.action_button_enabled = False
         is_yellow = isinstance(self.app_state.game_mode, UndertaleYellowGameMode)
+        is_spire = isinstance(self.app_state.game_mode, SugarySpireGameMode)
         dlg = QDialog(cast(QWidget, self.app))
-        dlg.setWindowTitle(tr('dialogs.full_yellow_install' if is_yellow else 'dialogs.full_demo_install'))
-        install_location_key = 'dialogs.install_yellow_location' if is_yellow else 'dialogs.install_demo_location'
-        folder_name = 'UNDERTALE Yellow' if is_yellow else 'DELTARUNEdemo'
+        if is_spire:
+            dlg.setWindowTitle(tr('dialogs.full_spire_install'))
+            install_location_key = 'dialogs.install_spire_location'
+            folder_name = 'Sugary Spire'
+        else:
+            dlg.setWindowTitle(tr('dialogs.full_yellow_install' if is_yellow else 'dialogs.full_demo_install'))
+            install_location_key = 'dialogs.install_yellow_location' if is_yellow else 'dialogs.install_demo_location'
+            folder_name = 'UNDERTALE Yellow' if is_yellow else 'DELTARUNEdemo'
         v = QVBoxLayout(dlg)
         lbl = QLabel(self.app._full_install_tooltip())
         lbl.setWordWrap(True)
@@ -196,6 +202,8 @@ class GameLaunchController(QObject):
             if isinstance(self.app_state.game_mode, DemoGameMode):
                 self.app_state.demo_game_path = self.app_state.local_config['demo_game_path'] = target_dir
             elif isinstance(self.app_state.game_mode, UndertaleYellowGameMode):
+                self.app_state.game_mode.set_game_path(self.app_state.local_config, target_dir)
+            elif isinstance(self.app_state.game_mode, SugarySpireGameMode):
                 self.app_state.game_mode.set_game_path(self.app_state.local_config, target_dir)
             else:
                 self.app_state.game_path = self.app_state.local_config['game_path'] = target_dir

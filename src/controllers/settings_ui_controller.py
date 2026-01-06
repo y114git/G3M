@@ -103,6 +103,9 @@ class SettingsUiController:
             self.app_state.game_mode = UndertaleYellowGameMode()
         elif game_type == 'pizzatower':
             self.app_state.game_mode = PizzaTowerGameMode()
+        elif game_type == 'sugaryspire':
+            from models.game_modes import SugarySpireGameMode
+            self.app_state.game_mode = SugarySpireGameMode()
         else:
             self.app_state.game_mode = FullGameMode()
         self.app_state.local_config['selected_game_type'] = game_type

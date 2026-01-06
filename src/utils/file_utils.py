@@ -294,7 +294,7 @@ def remove_archive_extension(filename: str) -> str:
 
 
 def get_chapter_folder_name(chapter_id: int, game: Optional[str] = None, modgame: Optional[str] = None) -> str:
-    from config.constants import SLOT_ID_PIZZA_TOWER, SLOT_ID_UNDERTALE, SLOT_ID_UNDERTALE_YELLOW, SLOT_ID_DEMO
+    from config.constants import SLOT_ID_PIZZA_TOWER, SLOT_ID_UNDERTALE, SLOT_ID_UNDERTALE_YELLOW, SLOT_ID_DEMO, SLOT_ID_SUGARY_SPIRE
     game_value = game or modgame
     if chapter_id == -1 or chapter_id == SLOT_ID_DEMO:
         return 'demo'
@@ -308,6 +308,10 @@ def get_chapter_folder_name(chapter_id: int, game: Optional[str] = None, modgame
         return 'chapter_0'
     elif chapter_id == SLOT_ID_UNDERTALE_YELLOW:
         if game_value == 'undertaleyellow':
+            return 'chapter_0'
+        return 'chapter_0'
+    elif chapter_id == SLOT_ID_SUGARY_SPIRE:
+        if game_value == 'sugaryspire':
             return 'chapter_0'
         return 'chapter_0'
     elif chapter_id == 0:
@@ -402,6 +406,8 @@ def is_path_in_steam_common(game_path: str, game_name: str) -> bool:
 
 def autodetect_path(game_name: str) -> str | None:
     if game_name == 'UNDERTALE YELLOW' or game_name == 'UndertaleYellow' or game_name == 'undertaleyellow':
+        return None
+    if game_name == 'SUGARY SPIRE' or game_name == 'SugarySpire' or game_name == 'sugaryspire':
         return None
     system = platform.system()
     paths = []

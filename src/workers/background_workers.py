@@ -169,8 +169,10 @@ class FullInstallThread(QThread):
             self.status.emit(tr('status.operation_cancelled'), UI_COLORS['status_error'])
 
     def run(self):
-        from models.game_modes import UndertaleYellowGameMode
-        if isinstance(self.main_window.app_state.game_mode, UndertaleYellowGameMode):
+        from models.game_modes import UndertaleYellowGameMode, SugarySpireGameMode
+        if isinstance(self.main_window.app_state.game_mode, SugarySpireGameMode):
+            full_install_url = self.main_window.app_state.global_settings.get('full_spire_install_url')
+        elif isinstance(self.main_window.app_state.game_mode, UndertaleYellowGameMode):
             full_install_url = self.main_window.app_state.global_settings.get('full_yellow_install_url')
         else:
             full_install_url = self.main_window.app_state.global_settings.get('full_install_url')

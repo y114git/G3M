@@ -4,7 +4,7 @@ from managers.localization_manager import tr
 from ui.common.styling import clear_layout_widgets, show_empty_message_in_layout
 from ui.widgets.mod.installed_mod_widget import InstalledModWidget
 from ui.dialogs.mod_priority_dialog import ModPriorityDialog
-from config.constants import SLOT_ID_UNIVERSAL, SLOT_ID_DEMO, SLOT_ID_UNDERTALE, SLOT_ID_UNDERTALE_YELLOW, SLOT_ID_MENU, SLOT_ID_CHAPTER_1, SLOT_ID_CHAPTER_2, SLOT_ID_CHAPTER_3, SLOT_ID_CHAPTER_4
+from config.constants import SLOT_ID_UNIVERSAL, SLOT_ID_DEMO, SLOT_ID_UNDERTALE, SLOT_ID_UNDERTALE_YELLOW, SLOT_ID_SUGARY_SPIRE, SLOT_ID_MENU, SLOT_ID_CHAPTER_1, SLOT_ID_CHAPTER_2, SLOT_ID_CHAPTER_3, SLOT_ID_CHAPTER_4
 from utils.mod_filter_utils import filter_and_sort_mods
 from utils.mod_utils import get_mod_key
 from utils.game_utils import get_chapter_id_for_game_mode
@@ -410,7 +410,7 @@ class LibraryDisplayController:
         for chapter_id in range(5):
             if _check_slot_for_mods(chapter_id):
                 return chapter_id
-        for slot_id in [SLOT_ID_DEMO, SLOT_ID_UNDERTALE, SLOT_ID_UNDERTALE_YELLOW]:
+        for slot_id in [SLOT_ID_DEMO, SLOT_ID_UNDERTALE, SLOT_ID_UNDERTALE_YELLOW, SLOT_ID_SUGARY_SPIRE]:
             if _check_slot_for_mods(slot_id):
                 return slot_id
         if mods_universal and len(mods_universal) > 0:

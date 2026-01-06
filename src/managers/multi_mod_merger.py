@@ -2799,7 +2799,7 @@ class MultiModMerger(QObject):
 
     def _get_target_dir(self, chapter_id: int, game: Optional[str] = None) -> Optional[str]:
         if game:
-            from models.game_modes import DemoGameMode, UndertaleGameMode, UndertaleYellowGameMode, PizzaTowerGameMode, FullGameMode
+            from models.game_modes import DemoGameMode, UndertaleGameMode, UndertaleYellowGameMode, PizzaTowerGameMode, SugarySpireGameMode, FullGameMode
             from config.constants import SLOT_ID_PIZZA_TOWER
             game_mode = None
             base_path = None
@@ -2874,6 +2874,25 @@ class MultiModMerger(QObject):
                     return base_path
                 if not base_path:
                     return None
+            elif game == 'sugaryspire':
+                from models.game_modes import SugarySpireGameMode
+                game_mode = SugarySpireGameMode()
+                base_path = game_mode.get_game_path(self.app_state.local_config)
+                from config.constants import SLOT_ID_SUGARY_SPIRE
+                if chapter_id == SLOT_ID_SUGARY_SPIRE or chapter_id == 0:
+                    if not base_path:
+                        self.patching_logger.warning(f'Sugary Spire game path not found in config for chapter {chapter_id}')
+                        return None
+                    import platform
+                    if platform.system() == 'Darwin':
+                        if base_path.endswith('.app'):
+                            return os.path.join(base_path, 'Contents', 'Resources')
+                        app_path = os.path.join(base_path, 'SugarySpire_ExhibitionNight.app')
+                        if os.path.isdir(app_path):
+                            return os.path.join(app_path, 'Contents', 'Resources')
+                    return base_path
+                if not base_path:
+                    return None
             else:
                 game_mode = FullGameMode()
                 base_path = self.app_state.game_path
@@ -2883,8 +2902,8 @@ class MultiModMerger(QObject):
             base_path = self.app_state.game_mode.get_game_path(self.app_state.local_config)
             if not base_path:
                 return None
-            from models.game_modes import PizzaTowerGameMode, UndertaleGameMode, UndertaleYellowGameMode, DemoGameMode
-            from config.constants import SLOT_ID_PIZZA_TOWER, SLOT_ID_UNDERTALE, SLOT_ID_UNDERTALE_YELLOW, SLOT_ID_DEMO
+            from models.game_modes import PizzaTowerGameMode, UndertaleGameMode, UndertaleYellowGameMode, DemoGameMode, SugarySpireGameMode
+            from config.constants import SLOT_ID_PIZZA_TOWER, SLOT_ID_UNDERTALE, SLOT_ID_UNDERTALE_YELLOW, SLOT_ID_DEMO, SLOT_ID_SUGARY_SPIRE
             import platform
             if isinstance(self.app_state.game_mode, PizzaTowerGameMode) and chapter_id == SLOT_ID_PIZZA_TOWER:
                 if platform.system() == 'Darwin':
@@ -2907,6 +2926,14 @@ class MultiModMerger(QObject):
                     if base_path.endswith('.app'):
                         return os.path.join(base_path, 'Contents', 'Resources')
                     app_path = os.path.join(base_path, 'Undertale Yellow.app')
+                    if os.path.isdir(app_path):
+                        return os.path.join(app_path, 'Contents', 'Resources')
+                return base_path
+            elif isinstance(self.app_state.game_mode, SugarySpireGameMode) and (chapter_id == SLOT_ID_SUGARY_SPIRE or chapter_id == 0):
+                if platform.system() == 'Darwin':
+                    if base_path.endswith('.app'):
+                        return os.path.join(base_path, 'Contents', 'Resources')
+                    app_path = os.path.join(base_path, 'SugarySpire_ExhibitionNight.app')
                     if os.path.isdir(app_path):
                         return os.path.join(app_path, 'Contents', 'Resources')
                 return base_path

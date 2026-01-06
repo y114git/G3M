@@ -134,3 +134,20 @@ class PizzaTowerGameMode(GameMode):
             elif mod.files.get('0') or mod.files.get('pizzatower'):
                 filtered.append(mod)
         return {0: filtered}
+
+
+class SugarySpireGameMode(GameMode):
+
+    def __init__(self):
+        self._path_key = 'sugaryspire_game_path'
+        self._custom_exec_key = 'sugaryspire_custom_executable_path'
+        self.steam_id = ''
+        self._path_change_button_key = 'buttons.change_sugaryspire_path'
+        self._tab_name_keys = ['tabs.sugaryspire']
+        self.direct_launch_allowed = True
+
+    def get_chapter_id(self, ui_index: int) -> int:
+        return 0
+
+    def filter_mods_for_ui(self, all_mods: list['ModInfo']) -> dict[int, list['ModInfo']]:
+        return {0: [mod for mod in all_mods if mod.game == 'sugaryspire' and (not mod.hide_mod) and (not mod.ban_status) and mod.files.get('undertale')]}
