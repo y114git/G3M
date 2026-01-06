@@ -104,6 +104,25 @@ class TestPathUtils:
         resolved = resolve_game_executable(game_dir, is_undertale=False, game_type='pizzatower')
         assert resolved is not None
 
+    def test_resolve_game_executable_sugaryspire(self, temp_dir):
+        game_dir = os.path.join(temp_dir, 'game')
+        os.makedirs(game_dir, exist_ok=True)
+        system = platform.system()
+        if system == 'Darwin':
+            app_path = os.path.join(game_dir, 'SugarySpire_ExhibitionNight.app')
+            os.makedirs(app_path, exist_ok=True)
+        elif system == 'Windows':
+            exe_path = os.path.join(game_dir, 'SugarySpire_ExhibitionNight.exe')
+            with open(exe_path, 'w') as f:
+                f.write('mock')
+        else:
+            exe_path = os.path.join(game_dir, 'SugarySpire_ExhibitionNight')
+            with open(exe_path, 'w') as f:
+                f.write('mock')
+            os.chmod(exe_path, 493)
+        resolved = resolve_game_executable(game_dir, is_undertale=False, game_type='sugaryspire')
+        assert resolved is not None
+
     def test_resolve_game_executable_not_found(self, temp_dir):
         game_dir = os.path.join(temp_dir, 'empty_game')
         os.makedirs(game_dir, exist_ok=True)

@@ -64,3 +64,11 @@ class TestGameModes:
         assert hasattr(mode, 'filter_mods_for_ui')
         assert mode.steam_id is not None
         assert mode.direct_launch_allowed is True
+
+    def test_sugary_spire_game_mode(self):
+        from models.game_modes import SugarySpireGameMode
+        mode = SugarySpireGameMode()
+        assert mode is not None
+        assert hasattr(mode, 'get_chapter_id')
+        assert hasattr(mode, 'filter_mods_for_ui')
+        assert mode.direct_launch_allowed is True

@@ -25,6 +25,7 @@ class TestConstants:
         assert 'undertale' in GAMEBANANA_GAME_IDS
         assert 'undertaleyellow' in GAMEBANANA_GAME_IDS
         assert 'pizzatower' in GAMEBANANA_GAME_IDS
+        assert 'sugaryspire' in GAMEBANANA_GAME_IDS
         assert GAMEBANANA_TOOL_ID_DELTAHUB is not None
         assert GAMEBANANA_TOOL_ID_DELTAMOD is not None
 
