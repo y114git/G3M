@@ -124,18 +124,6 @@ class InstallGameBananaModThread(BaseInstallWorker):
                     logger.error(f'Error installing DELTAHUB mod from GameBanana: {e}', exc_info=True)
                     raise ValueError(tr('errors.gamebanana_installation_failed'))
                 return
-            elif file_format == 'pizzaoven':
-                self.status.emit(tr('status.converting_mod'), UI_COLORS['status_info'])
-                gb_metadata = {'mod_id': mod_id, 'mod_name': self.mod_info.name, 'author': self.mod_info.author, 'tagline': self.mod_info.tagline, 'version': self.mod_info.version, 'profile_url': self.mod_info.external_url, 'icon_url': self.mod_info.icon_url, 'tags': self.mod_info.tags if hasattr(self.mod_info, 'tags') and self.mod_info.tags else [], 'category': self.mod_info.gamebanana_category if hasattr(self.mod_info, 'gamebanana_category') else None}
-                from utils.gamebanana_pizzaoven_converter import GameBananaPizzaOvenConverter
-                converter = GameBananaPizzaOvenConverter(archive_path, self.main_window.app_state.mods_dir, gb_metadata)
-                mod_dir = converter.convert()
-                self._cleanup_temp_files(archive_path, archive_dir)
-                if not mod_dir:
-                    raise ValueError(tr('errors.gamebanana_conversion_failed'))
-                mod_name = os.path.basename(mod_dir)
-                self.finished.emit(True, tr('status.install_complete_success', mod_name=mod_name))
-                return
             self.status.emit(tr('status.converting_mod'), UI_COLORS['status_info'])
             gb_metadata = {'mod_id': mod_id, 'profile_url': self.mod_info.external_url, 'icon_url': self.mod_info.icon_url, 'tags': self.mod_info.tags if hasattr(self.mod_info, 'tags') and self.mod_info.tags else [], 'category': self.mod_info.gamebanana_category if hasattr(self.mod_info, 'gamebanana_category') else None}
             converter = GameBananaConverter(archive_path, self.main_window.app_state.mods_dir, gb_metadata)

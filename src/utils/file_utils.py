@@ -299,8 +299,8 @@ def get_chapter_folder_name(chapter_id: int, game: Optional[str] = None, modgame
     if chapter_id == -1 or chapter_id == SLOT_ID_DEMO:
         return 'demo'
     elif chapter_id == SLOT_ID_PIZZA_TOWER:
-        if game_value == 'pizzaoven' or game_value == 'pizzatower':
-            return 'pizzaoven'
+        if game_value == 'pizzatower':
+            return 'pizzatower'
         return f'chapter_{chapter_id}'
     elif chapter_id == SLOT_ID_UNDERTALE or chapter_id == 0:
         if game_value == 'undertale' and chapter_id == SLOT_ID_UNDERTALE:
@@ -315,9 +315,7 @@ def get_chapter_folder_name(chapter_id: int, game: Optional[str] = None, modgame
             return 'sugaryspire'
         return 'sugaryspire'
     elif chapter_id == 0:
-        if game_value == 'pizzaoven':
-            return 'pizzaoven'
-        elif game_value == 'pizzatower':
+        if game_value == 'pizzatower':
             return 'pizzatower'
         elif game_value == 'sugaryspire':
             return 'sugaryspire'

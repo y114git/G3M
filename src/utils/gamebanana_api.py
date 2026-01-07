@@ -5,7 +5,7 @@ import re
 import time
 from typing import Dict, List, Optional, Any, Tuple
 from datetime import datetime
-from config.constants import GAMEBANANA_API_BASE, GAMEBANANA_GAME_IDS, GAMEBANANA_TOOL_ID_DELTAHUB, GAMEBANANA_TOOL_ID_DELTAMOD, GAMEBANANA_TOOL_ID_PIZZAOVEN, NETWORK_TIMEOUT_MEDIUM, NETWORK_TIMEOUT_SHORT
+from config.constants import GAMEBANANA_API_BASE, GAMEBANANA_GAME_IDS, GAMEBANANA_TOOL_ID_DELTAHUB, GAMEBANANA_TOOL_ID_DELTAMOD, NETWORK_TIMEOUT_MEDIUM, NETWORK_TIMEOUT_SHORT
 from utils.network_utils import get_session
 from utils.file_utils import check_filename_is_deltamod_info
 from models.mod_models import ModInfo
@@ -514,7 +514,7 @@ class GameBananaAPI:
         cached = self._compatibility_cache.get(mod_id)
         if cached:
             return cached
-        compatibility: Dict[str, Any] = {'supported_files': [], 'has_supported_files': False, 'preferred_format': None, 'tool_ids': set(), 'has_deltahub_file': False, 'has_deltamod_file': False, 'has_pizzaoven_file': False, 'compatibility_checked': False}
+        compatibility: Dict[str, Any] = {'supported_files': [], 'has_supported_files': False, 'preferred_format': None, 'tool_ids': set(), 'has_deltahub_file': False, 'has_deltamod_file': False, 'compatibility_checked': False}
         try:
             profile_data = self.get_mod_profile_page(mod_id, external_url=external_url) or {}
             profile_files = profile_data.get('_aFiles') or []
@@ -549,9 +549,6 @@ class GameBananaAPI:
                 elif GAMEBANANA_TOOL_ID_DELTAMOD in file_tool_ids:
                     compatibility_label = 'deltamod'
                     compatibility['has_deltamod_file'] = True
-                elif GAMEBANANA_TOOL_ID_PIZZAOVEN in file_tool_ids:
-                    compatibility_label = 'pizzaoven'
-                    compatibility['has_pizzaoven_file'] = True
                 if not compatibility_label:
                     continue
                 details_entry = None
@@ -564,8 +561,6 @@ class GameBananaAPI:
                     compatibility['preferred_format'] = 'deltahub'
                 elif compatibility['has_deltamod_file']:
                     compatibility['preferred_format'] = 'deltamod'
-                elif compatibility['has_pizzaoven_file']:
-                    compatibility['preferred_format'] = 'pizzaoven'
             compatibility['tool_ids'] = sorted(list(compatibility['tool_ids']))
         except Exception as e:
             logger.warning(f'_get_mod_file_compatibility: Failed to collect compatibility for mod {mod_id}: {e}', exc_info=True)

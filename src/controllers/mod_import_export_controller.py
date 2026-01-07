@@ -10,8 +10,6 @@ from managers.localization_manager import tr
 from utils.archive_utils import extract_archive
 from utils.file_utils import find_deltamod_info_file
 from utils.deltamod_converter import DeltamodConverter
-from utils.pizzaoven_converter import PizzaOvenConverter
-from utils.pizzaoven_utils import find_pizzaoven_folder, is_pizzaoven_mod, is_explicit_pizzaoven_path
 from config.constants import MOD_CONFIG_FILENAME, LEGACY_MOD_CONFIG_FILENAME
 
 
@@ -75,33 +73,6 @@ class ModImportExportController:
                         logging.error('[IMPORT] DELTAMOD conversion failed')
                         QMessageBox.critical(self.app_window, tr('errors.error'), tr('errors.mod_import_failed', error='Conversion failed'))
                     return
-                from models.game_modes import PizzaTowerGameMode
-                is_pizza_tower = isinstance(self.app_state.game_mode, PizzaTowerGameMode)
-                pizzaoven_path = find_pizzaoven_folder(content_path)
-                if pizzaoven_path:
-                    is_explicit_pizzaoven = is_explicit_pizzaoven_path(pizzaoven_path, content_path)
-                    if is_explicit_pizzaoven or is_pizza_tower:
-                        logging.info(f'[IMPORT] PizzaOven format detected at: {pizzaoven_path}, converting...')
-                        try:
-                            archive_name = remove_archive_extension(os.path.basename(file_path))
-                            if os.path.commonpath([content_path, pizzaoven_path]) == content_path:
-                                converter = PizzaOvenConverter(content_path, self.app_state.mods_dir, archive_name=archive_name)
-                            else:
-                                converter = PizzaOvenConverter(pizzaoven_path, self.app_state.mods_dir, archive_name=archive_name)
-                            new_mod_path = converter.convert()
-                            if new_mod_path:
-                                logging.info(f'[IMPORT] PizzaOven mod converted successfully to: {new_mod_path}')
-                                self.mod_manager.invalidate_mods_cache()
-                                self.mod_manager.load_local_mods(_skip_conversion=True)
-                                self.mod_manager.mod_list_updated.emit()
-                                QMessageBox.information(self.app_window, tr('dialogs.success'), tr('status.mod_imported_success'))
-                            else:
-                                logging.error('[IMPORT] PizzaOven conversion failed')
-                                QMessageBox.critical(self.app_window, tr('errors.error'), tr('errors.mod_import_failed', error='Conversion failed'))
-                        except Exception as e:
-                            logging.error(f'[IMPORT] PizzaOven conversion error: {e}', exc_info=True)
-                            QMessageBox.critical(self.app_window, tr('errors.error'), tr('errors.mod_import_failed', error=str(e)))
-                        return
                 config_path_to_read = os.path.join(content_path, MOD_CONFIG_FILENAME)
                 if not os.path.exists(config_path_to_read):
                     legacy_config_path = os.path.join(content_path, LEGACY_MOD_CONFIG_FILENAME)
@@ -357,26 +328,11 @@ class ModImportExportController:
                     except Exception:
                         pass
             with zipfile.ZipFile(export_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-                if game == 'pizzaoven' or is_pizzaoven_mod(mod):
-                    config_path = os.path.join(mod_dir, MOD_CONFIG_FILENAME)
-                    if os.path.exists(config_path):
-                        zipf.write(config_path, MOD_CONFIG_FILENAME)
-                    pizzaoven_path = find_pizzaoven_folder(mod_dir)
-                    if pizzaoven_path and os.path.isdir(pizzaoven_path):
-                        for root, dirs, files in os.walk(pizzaoven_path):
-                            for file in files:
-                                file_path = os.path.join(root, file)
-                                arcname = os.path.join('pizzaoven', os.path.relpath(file_path, pizzaoven_path))
-                                zipf.write(file_path, arcname)
-                    icon_path = os.path.join(mod_dir, '_icon.png')
-                    if os.path.exists(icon_path):
-                        zipf.write(icon_path, '_icon.png')
-                else:
-                    for root, dirs, files in os.walk(mod_dir):
-                        for file in files:
-                            file_path = os.path.join(root, file)
-                            arcname = os.path.relpath(file_path, mod_dir)
-                            zipf.write(file_path, arcname)
+                for root, dirs, files in os.walk(mod_dir):
+                    for file in files:
+                        file_path = os.path.join(root, file)
+                        arcname = os.path.relpath(file_path, mod_dir)
+                        zipf.write(file_path, arcname)
             QMessageBox.information(self.app_window, tr('dialogs.success'), tr('status.mod_exported_success'))
             dialog.accept()
         except Exception as e:

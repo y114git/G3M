@@ -16,7 +16,6 @@ from utils.file_utils import ensure_writable, sanitize_filename, safe_remove, sa
 from config.constants import DATA_WIN_FILENAME
 from managers.localization_manager import tr
 from utils.mod_utils import get_mod_key, get_mod_name
-from utils.pizzaoven_utils import is_pizzaoven_mod, find_pizzaoven_folder
 from utils.patching_logger import get_patching_logger, get_conflicts_logger, clear_patching_logs
 
 
@@ -206,12 +205,7 @@ class MultiModMerger(QObject):
                         mod_source_dir = self._get_mod_source_dir(mod_data, chapter_id)
                         if mod_source_dir:
                             mod_type = self._detect_mod_type(mod_source_dir)
-                            if mod_type.get('is_pizzaoven_mod'):
-                                patches = self._find_data_patches(mod_source_dir)
-                                ready_files = self._find_ready_data_win_files(mod_source_dir)
-                                if patches or ready_files:
-                                    data_modifying_count += 1
-                            elif mod_type.get('has_xdelta_patch') or mod_type.get('has_ready_data_win') or mod_type.get('has_csx_scripts'):
+                            if mod_type.get('has_xdelta_patch') or mod_type.get('has_ready_data_win') or mod_type.get('has_csx_scripts'):
                                 data_modifying_count += 1
                     is_fast_path = not is_modpack and data_modifying_count <= 1
                     if is_fast_path and len(mods_list) == 1:
@@ -346,12 +340,7 @@ class MultiModMerger(QObject):
             mod_source_dir = self._get_mod_source_dir(mod_data, chapter_id)
             if mod_source_dir:
                 mod_type = self._detect_mod_type(mod_source_dir)
-                if mod_type.get('is_pizzaoven_mod'):
-                    patches = self._find_data_patches(mod_source_dir)
-                    ready_files = self._find_ready_data_win_files(mod_source_dir)
-                    if patches or ready_files:
-                        data_modifying_mods.append(mod_data)
-                elif mod_type.get('has_xdelta_patch') or mod_type.get('has_ready_data_win') or mod_type.get('has_csx_scripts'):
+                if mod_type.get('has_xdelta_patch') or mod_type.get('has_ready_data_win') or mod_type.get('has_csx_scripts'):
                     data_modifying_mods.append(mod_data)
         self.patching_logger.info(f'[OPTIMIZATION] Found {len(data_modifying_mods)} mod(s) that modify data.win out of {len(mods_list)} total mod(s)')
         mods_count = len(mods_list)
@@ -390,58 +379,25 @@ class MultiModMerger(QObject):
                                 self.backup_manager.restore_backups(chapter_id)
                             return False
                     elif data_patches and (not ready_data_win_files) and (not csx_scripts):
-                        mod_type = self._detect_mod_type(mod_source_dir)
-                        if mod_type.get('is_pizzaoven_mod'):
-                            self.patching_logger.info(f'[FAST_PATH] Applying PizzaOven mod {mod_name} with special patch handling')
-                            try:
-                                if os.path.exists(output_data_win_path):
-                                    extracted_chapter_id = self._extract_chapter_id_from_path(target_dir)
-                                    if extracted_chapter_id is not None:
-                                        self.backup_manager.backup_file(extracted_chapter_id, output_data_win_path)
-                                pizzaoven_file_overrides = []
-                                for patch_path in data_patches:
-                                    patch_name = os.path.basename(patch_path)
-                                    success = False
-                                    try:
-                                        if self._apply_xdelta_to_file(output_data_win_path, patch_path):
-                                            self.patching_logger.info(f'[FAST_PATH] Applied PizzaOven patch {patch_name} to data.win')
-                                            success = True
-                                    except Exception as e:
-                                        self.patching_logger.debug(f'[FAST_PATH] Patch {patch_name} does not match data.win, will try .bank files: {e}')
-                                    if not success:
-                                        pizzaoven_file_overrides.append({'type': 'xdelta_bank', 'patch_path': patch_path, 'patch_name': patch_name})
-                                        self.patching_logger.info(f'[FAST_PATH] PizzaOven patch {patch_name} will be applied to .bank files')
-                                if pizzaoven_file_overrides:
-                                    if not self._apply_pizzaoven_file_overrides(pizzaoven_file_overrides, target_dir, chapter_id):
-                                        self.patching_logger.warning('[FAST_PATH] Some PizzaOven file overrides failed to apply')
-                                self.patching_logger.info(f'[FAST_PATH] Successfully applied PizzaOven mod {mod_name}')
-                            except Exception as e:
-                                self.patching_logger.error(f'[FAST_PATH] Failed to apply PizzaOven mod: {e}', exc_info=True)
-                                error_msg = str(e)[:200] if len(str(e)) > 200 else str(e)
-                                self.status_update.emit(tr('errors.mod_patch_failed', mod_name=mod_name, error=error_msg), 'error')
+                        self.patching_logger.info(f'[FAST_PATH] Mod {mod_name} with only xdelta patch(es) - applying directly')
+                        try:
+                            if os.path.exists(output_data_win_path):
+                                extracted_chapter_id = self._extract_chapter_id_from_path(target_dir)
+                                if extracted_chapter_id is not None:
+                                    self.backup_manager.backup_file(extracted_chapter_id, output_data_win_path)
+                            if not self._apply_xdelta_patches(output_data_win_path, data_patches, progress_callback=lambda p: self.progress_update.emit(min(int(p * 50), 95), f'Applying patch from {mod_name}...')):
+                                self.patching_logger.error(f'[FAST_PATH] Failed to apply xdelta patches from {mod_name}')
                                 if not is_modpack:
                                     self.backup_manager.restore_backups(chapter_id)
                                 return False
-                        else:
-                            self.patching_logger.info(f'[FAST_PATH] Mod {mod_name} with only xdelta patch(es) - applying directly')
-                            try:
-                                if os.path.exists(output_data_win_path):
-                                    extracted_chapter_id = self._extract_chapter_id_from_path(target_dir)
-                                    if extracted_chapter_id is not None:
-                                        self.backup_manager.backup_file(extracted_chapter_id, output_data_win_path)
-                                if not self._apply_xdelta_patches(output_data_win_path, data_patches, progress_callback=lambda p: self.progress_update.emit(min(int(p * 50), 95), f'Applying patch from {mod_name}...')):
-                                    self.patching_logger.error(f'[FAST_PATH] Failed to apply xdelta patches from {mod_name}')
-                                    if not is_modpack:
-                                        self.backup_manager.restore_backups(chapter_id)
-                                    return False
-                                self.patching_logger.info(f'[FAST_PATH] Successfully applied xdelta patches from {mod_name} to {output_data_win_path}')
-                            except Exception as e:
-                                self.patching_logger.error(f'[FAST_PATH] Failed to apply xdelta patches: {e}', exc_info=True)
-                                error_msg = str(e)[:200] if len(str(e)) > 200 else str(e)
-                                self.status_update.emit(tr('errors.mod_patch_failed', mod_name=mod_name, error=error_msg), 'error')
-                                if not is_modpack:
-                                    self.backup_manager.restore_backups(chapter_id)
-                                return False
+                            self.patching_logger.info(f'[FAST_PATH] Successfully applied xdelta patches from {mod_name} to {output_data_win_path}')
+                        except Exception as e:
+                            self.patching_logger.error(f'[FAST_PATH] Failed to apply xdelta patches: {e}', exc_info=True)
+                            error_msg = str(e)[:200] if len(str(e)) > 200 else str(e)
+                            self.status_update.emit(tr('errors.mod_patch_failed', mod_name=mod_name, error=error_msg), 'error')
+                            if not is_modpack:
+                                self.backup_manager.restore_backups(chapter_id)
+                            return False
                     elif csx_scripts and (not ready_data_win_files) and (not data_patches):
                         self.patching_logger.info(f'[FAST_PATH] Mod {mod_name} with only CSX script(s) - executing directly without vanilla export')
                         try:
@@ -466,51 +422,15 @@ class MultiModMerger(QObject):
             else:
                 self.patching_logger.info('[FAST_PATH] No mods modify data.win, skipping data.win changes')
             self.patching_logger.info(f'[FAST_PATH] Applying file overrides from all {len(mods_list)} mod(s)')
-            pizzaoven_file_overrides = []
             for mod_data in mods_list:
                 mod_source_dir = self._get_mod_source_dir(mod_data, chapter_id)
                 if mod_source_dir:
                     mod_name = getattr(mod_data, 'name', 'Unknown')
-                    mod_type = self._detect_mod_type(mod_source_dir)
-                    if mod_type.get('is_pizzaoven_mod'):
-                        data_patches_fast = self._find_data_patches(mod_source_dir)
-                        processed_patches = set()
-                        if data_patches_fast:
-                            for patch_path in data_patches_fast:
-                                processed_patches.add(os.path.basename(patch_path).lower())
-                        for root, dirs, files in os.walk(mod_source_dir):
-                            for file in files:
-                                file_path = os.path.join(root, file)
-                                extension = os.path.splitext(file)[1].lower()
-                                if extension == '.xdelta':
-                                    if file.lower() in processed_patches:
-                                        continue
-                                if extension == '.txt':
-                                    try:
-                                        with open(file_path, 'r', encoding='utf-8') as f:
-                                            content = f.read()
-                                            if 'lang = ' in content.lower():
-                                                pizzaoven_file_overrides.append({'type': 'lang_txt', 'source_path': file_path, 'filename': file})
-                                    except Exception:
-                                        pass
-                                elif extension == '.png' and 'fonts' in root.lower():
-                                    pizzaoven_file_overrides.append({'type': 'font_png', 'source_path': file_path, 'filename': file})
-                                elif extension == '.bank':
-                                    pizzaoven_file_overrides.append({'type': 'bank', 'source_path': file_path, 'filename': file})
-                                elif extension == '.dll':
-                                    pizzaoven_file_overrides.append({'type': 'dll', 'source_path': file_path, 'filename': file})
-                                elif extension == '.mp4':
-                                    pizzaoven_file_overrides.append({'type': 'mp4', 'source_path': file_path, 'filename': file})
+                    used_archive_names = set()
+                    if self._apply_file_overrides(mod_source_dir, target_dir, used_archive_names, False):
+                        self.patching_logger.debug(f'[FAST_PATH] Applied file overrides from {mod_name}')
                     else:
-                        used_archive_names = set()
-                        if self._apply_file_overrides(mod_source_dir, target_dir, used_archive_names, False):
-                            self.patching_logger.debug(f'[FAST_PATH] Applied file overrides from {mod_name}')
-                        else:
-                            self.patching_logger.warning(f'[FAST_PATH] Failed to apply file overrides from {mod_name}')
-            if pizzaoven_file_overrides:
-                self.patching_logger.info(f'[FAST_PATH] Applying {len(pizzaoven_file_overrides)} PizzaOven file override(s)')
-                if not self._apply_pizzaoven_file_overrides(pizzaoven_file_overrides, target_dir, chapter_id):
-                    self.patching_logger.warning('[FAST_PATH] Some PizzaOven file overrides failed to apply')
+                        self.patching_logger.warning(f'[FAST_PATH] Failed to apply file overrides from {mod_name}')
             self.patching_logger.info('[FAST_PATH] Fast path completed successfully, skipping full export/import cycle')
             return True
         vanilla_objects_dir = os.path.join(vanilla_dir, 'Objects')
@@ -557,7 +477,6 @@ class MultiModMerger(QObject):
         existing_assets = {'sprites': {}, 'backgrounds': {}, 'tilesets': {}, 'shaders': {}}
         mods_already_exported = set()
         mod_types = {}
-        pizzaoven_file_overrides = []
         for idx, mod_data in enumerate(mods_to_apply):
             if self._cancelled:
                 return False
@@ -582,27 +501,9 @@ class MultiModMerger(QObject):
             original_filename = os.path.basename(original_data_win)
             mod_data_win = os.path.join(mod_dir, original_filename)
             shutil.copyfile(original_data_win, mod_data_win)
-            mod_is_pizzaoven_type = mod_type.get('is_pizzaoven_mod', False)
-            if mod_is_pizzaoven_type:
-                self.patching_logger.info(f'Applying PizzaOven mod {mod_name} (mod {mod_number})')
-                success, file_overrides = self._apply_pizzaoven_mod(mod_source_dir, mod_data_win, chapter_id)
-                if not success:
-                    self.patching_logger.error(f'Failed to apply PizzaOven mod {mod_name}')
-                    if not is_modpack and self.backup_manager:
-                        self.backup_manager.restore_backups(chapter_id)
-                    return False
-                pizzaoven_file_overrides.extend(file_overrides)
-                mod_patched_files[mod_number] = mod_data_win
-                shutil.copyfile(mod_data_win, original_data_win)
-                self.patching_logger.info(f'Updated original_data_win after PizzaOven mod {mod_name} for next mod')
-                self.patching_logger.info(f'PizzaOven mod {mod_name} applied to mod_data_win, continuing with merge pipeline')
-                ready_data_win_files = []
-                data_patches = []
-                csx_scripts = []
-            else:
-                ready_data_win_files = self._find_ready_data_win_files(mod_source_dir)
-                data_patches = self._find_data_patches(mod_source_dir)
-                csx_scripts = self._find_csx_scripts(mod_source_dir)
+            ready_data_win_files = self._find_ready_data_win_files(mod_source_dir)
+            data_patches = self._find_data_patches(mod_source_dir)
+            csx_scripts = self._find_csx_scripts(mod_source_dir)
             if ready_data_win_files:
                 self.patching_logger.info(f'Found {len(ready_data_win_files)} ready data.win/game.ios file(s) from {mod_name} (mod {mod_number}), merging')
                 patch_progress = mod_progress_start + int(mod_progress_range * 0.5)
@@ -615,10 +516,9 @@ class MultiModMerger(QObject):
                 self.patching_logger.info(f'Successfully merged ready data.win files from {mod_name} (mod {mod_number})')
                 target_dir_result = self._get_target_dir(chapter_id)
                 if target_dir_result is not None and mod_source_dir:
-                    if not mod_is_pizzaoven_type:
-                        used_archive_names = set()
-                        if not self._apply_file_overrides(mod_source_dir, target_dir_result, used_archive_names, False):
-                            self.patching_logger.warning(f'Failed to apply file overrides from {mod_name} after ready data.win merge')
+                    used_archive_names = set()
+                    if not self._apply_file_overrides(mod_source_dir, target_dir_result, used_archive_names, False):
+                        self.patching_logger.warning(f'Failed to apply file overrides from {mod_name} after ready data.win merge')
                 if not data_patches and (not csx_scripts):
                     mods_already_exported.add(mod_number)
                     self.patching_logger.info(f'Mod {mod_name} (number {mod_number}) has only ready data.win, will skip export scripts')
@@ -648,10 +548,9 @@ class MultiModMerger(QObject):
             if not ready_data_win_files and (not data_patches) and (not csx_scripts):
                 target_dir_result = self._get_target_dir(chapter_id)
                 if target_dir_result is not None and mod_source_dir:
-                    if not mod_is_pizzaoven_type:
-                        used_archive_names = set()
-                        if self._apply_file_overrides(mod_source_dir, target_dir_result, used_archive_names, False):
-                            self.patching_logger.info(f'Applied file overrides from {mod_name} (mod {mod_number})')
+                    used_archive_names = set()
+                    if self._apply_file_overrides(mod_source_dir, target_dir_result, used_archive_names, False):
+                        self.patching_logger.info(f'Applied file overrides from {mod_name} (mod {mod_number})')
             if mod_number not in mod_patched_files:
                 mod_patched_files[mod_number] = mod_data_win
             self.progress_update.emit(min(mod_progress_end, 95), f'Completed {mod_name}')
@@ -1018,9 +917,8 @@ class MultiModMerger(QObject):
             for mod_data in mods_to_apply:
                 mod_source_dir = self._get_mod_source_dir(mod_data, chapter_id)
                 if mod_source_dir:
-                    if not is_pizzaoven_mod(mod_data):
-                        if not self._apply_file_overrides(mod_source_dir, modpack_dir, set(), True):
-                            self.patching_logger.warning(f"Failed to apply file overrides from {getattr(mod_data, 'name', 'Unknown')}")
+                    if not self._apply_file_overrides(mod_source_dir, modpack_dir, set(), True):
+                        self.patching_logger.warning(f"Failed to apply file overrides from {getattr(mod_data, 'name', 'Unknown')}")
         else:
             used_archive_names = set()
             for mod_data in mods_to_apply:
@@ -1029,15 +927,8 @@ class MultiModMerger(QObject):
                     return False
                 mod_source_dir = self._get_mod_source_dir(mod_data, chapter_id)
                 if mod_source_dir:
-                    if not is_pizzaoven_mod(mod_data):
-                        if not self._apply_file_overrides(mod_source_dir, target_dir, used_archive_names, False):
-                            self.patching_logger.warning(f"Failed to apply file overrides from {getattr(mod_data, 'name', 'Unknown')}")
-            if pizzaoven_file_overrides:
-                self.patching_logger.info(f'Applying {len(pizzaoven_file_overrides)} PizzaOven file override(s) after merge')
-                if not self._apply_pizzaoven_file_overrides(pizzaoven_file_overrides, target_dir, chapter_id):
-                    self.patching_logger.warning('Some PizzaOven file overrides failed to apply')
-                else:
-                    self.patching_logger.info('Successfully applied all PizzaOven file overrides')
+                    if not self._apply_file_overrides(mod_source_dir, target_dir, used_archive_names, False):
+                        self.patching_logger.warning(f"Failed to apply file overrides from {getattr(mod_data, 'name', 'Unknown')}")
         self.patching_logger.info('Multi-mod merge completed successfully')
         return True
 
@@ -1056,36 +947,21 @@ class MultiModMerger(QObject):
 
     def _apply_file_overrides_only_to_dir(self, chapter_id: int, mods_list: List[Any], modpack_dir: str) -> bool:
         mods_to_apply = list(reversed(mods_list))
-        pizzaoven_file_overrides = []
         for mod_data in mods_to_apply:
             mod_source_dir = self._get_mod_source_dir(mod_data, chapter_id)
             if mod_source_dir:
-                if is_pizzaoven_mod(mod_data):
-                    _, file_overrides = self._apply_pizzaoven_mod(mod_source_dir, '', chapter_id)
-                    pizzaoven_file_overrides.extend(file_overrides)
-                elif not self._apply_file_overrides(mod_source_dir, modpack_dir, set(), True):
+                if not self._apply_file_overrides(mod_source_dir, modpack_dir, set(), True):
                     return False
-        if pizzaoven_file_overrides:
-            game_root = modpack_dir
-            if not self._apply_pizzaoven_file_overrides(pizzaoven_file_overrides, game_root, chapter_id):
-                self.patching_logger.warning('Some PizzaOven file overrides failed to apply in modpack')
         return True
 
     def _apply_file_overrides_only(self, chapter_id: int, mods_list: List[Any], target_dir: str) -> bool:
         mods_to_apply = list(reversed(mods_list))
         used_archive_names = set()
-        pizzaoven_file_overrides = []
         for mod_data in mods_to_apply:
             mod_source_dir = self._get_mod_source_dir(mod_data, chapter_id)
             if mod_source_dir:
-                if is_pizzaoven_mod(mod_data):
-                    _, file_overrides = self._apply_pizzaoven_mod(mod_source_dir, '', chapter_id)
-                    pizzaoven_file_overrides.extend(file_overrides)
-                elif not self._apply_file_overrides(mod_source_dir, target_dir, used_archive_names, False):
+                if not self._apply_file_overrides(mod_source_dir, target_dir, used_archive_names, False):
                     return False
-        if pizzaoven_file_overrides:
-            if not self._apply_pizzaoven_file_overrides(pizzaoven_file_overrides, target_dir, chapter_id):
-                self.patching_logger.warning('Some PizzaOven file overrides failed to apply')
         return True
 
     def _apply_xdelta_patches(self, data_win_path: str, data_patches: List[str], progress_callback=None) -> bool:
@@ -2070,12 +1946,8 @@ class MultiModMerger(QObject):
         archive_extensions = ('.zip', '.7z', '.rar', '.tar.gz', '.lzma')
         processed_archives = set()
         skip_files = ('config.json', 'mod_config.json', '_icon.png', 'icon.png', 'meta.json', '_deltamodInfo.json')
-        skip_dirs = ('pizzaoven',)
         for root, dirs, files in os.walk(mod_source_dir):
-            dirs[:] = [d for d in dirs if d.lower() not in skip_dirs]
             rel_path = os.path.relpath(root, mod_source_dir)
-            if 'pizzaoven' in rel_path.lower().split(os.sep):
-                continue
             for file in files:
                 if file.lower() in skip_files:
                     continue
@@ -2260,13 +2132,9 @@ class MultiModMerger(QObject):
         return self._find_files_by_extension(mod_source_dir, ['.csx'])
 
     def _detect_mod_type(self, mod_source_dir: str) -> Dict[str, bool]:
-        mod_type = {'has_xdelta_patch': False, 'has_ready_data_win': False, 'has_csx_scripts': False, 'has_file_overrides': False, 'is_pizzaoven_mod': False}
+        mod_type = {'has_xdelta_patch': False, 'has_ready_data_win': False, 'has_csx_scripts': False, 'has_file_overrides': False}
         if not os.path.isdir(mod_source_dir):
             return mod_type
-        mod_dir_name = os.path.basename(mod_source_dir)
-        mod_dir_path_lower = mod_source_dir.lower()
-        if mod_dir_name == 'pizzaoven' or os.path.sep + 'pizzaoven' + os.path.sep in mod_dir_path_lower or mod_dir_path_lower.endswith(os.path.sep + 'pizzaoven'):
-            mod_type['is_pizzaoven_mod'] = True
         patches = self._find_data_patches(mod_source_dir)
         if patches:
             mod_type['has_xdelta_patch'] = True
@@ -2374,198 +2242,25 @@ class MultiModMerger(QObject):
         comparison_file = None
         return (scripts, comparison_file)
 
-    def _apply_pizzaoven_mod(self, mod_source_dir: str, mod_data_win: str, chapter_id: int, target_dir: Optional[str] = None) -> tuple[bool, List[Dict[str, Any]]]:
-        if not os.path.isdir(mod_source_dir):
-            self.patching_logger.error(f'PizzaOven mod source directory not found: {mod_source_dir}')
-            return (False, [])
-        requires_data_win = False
-        errors = 0
-        successes = 0
-        file_overrides = []
-        for root, dirs, files in os.walk(mod_source_dir):
-            for file in files:
-                extension = os.path.splitext(file)[1].lower()
-                if extension in ('.xdelta', '.win'):
-                    requires_data_win = True
-                    break
-            if requires_data_win:
-                break
-        if requires_data_win:
-            if not mod_data_win or not os.path.exists(mod_data_win):
-                self.patching_logger.error(f'mod_data_win not found but required for .xdelta/.win files: {mod_data_win}')
-                return (False, [])
-        self.patching_logger.debug(f'Scanning PizzaOven mod directory: {mod_source_dir}')
-        file_count = 0
-        for root, dirs, files in os.walk(mod_source_dir):
-            file_count += len(files)
-            self.patching_logger.debug(f'Found {len(files)} file(s) in {root}')
-            for file in files:
-                if self._cancelled:
-                    return (False, file_overrides)
-                file_path = os.path.join(root, file)
-                extension = os.path.splitext(file)[1].lower()
-                self.patching_logger.debug(f'Processing PizzaOven file: {file} (extension: {extension})')
-                try:
-                    if extension == '.xdelta':
-                        if not mod_data_win or not os.path.exists(mod_data_win):
-                            file_overrides.append({'type': 'xdelta_bank', 'patch_path': file_path, 'patch_name': file})
-                            self.patching_logger.info(f'PizzaOven xdelta patch {file} will be applied to .bank files (mod_data_win not available)')
-                            successes += 1
-                        else:
-                            success = False
-                            try:
-                                if self._apply_xdelta_to_file(mod_data_win, file_path):
-                                    self.patching_logger.info(f'Applied PizzaOven xdelta patch {file} to mod_data_win (data.win)')
-                                    successes += 1
-                                    success = True
-                            except Exception as e:
-                                self.patching_logger.warning(f'Failed to apply xdelta patch {file} to mod_data_win: {e}')
-                            if not success:
-                                file_overrides.append({'type': 'xdelta_bank', 'patch_path': file_path, 'patch_name': file})
-                                self.patching_logger.info(f'PizzaOven xdelta patch {file} will be applied to .bank files after merge')
-                                successes += 1
-                    elif extension == '.win':
-                        if not mod_data_win or not os.path.exists(mod_data_win):
-                            self.patching_logger.warning(f'Cannot copy .win file {file}: mod_data_win not available')
-                            errors += 1
-                        else:
-                            if chapter_id is not None and self.backup_manager:
-                                backup_path = f'{mod_data_win}.po'
-                                if not os.path.exists(backup_path):
-                                    self.backup_manager.backup_file(chapter_id, mod_data_win)
-                            shutil.copy2(file_path, mod_data_win)
-                            self.patching_logger.info(f'Copied PizzaOven .win file {file} to replace mod_data_win')
-                            successes += 1
-                    elif extension == '.txt':
-                        try:
-                            with open(file_path, 'r', encoding='utf-8') as f:
-                                content = f.read()
-                                if 'lang = ' in content.lower():
-                                    file_overrides.append({'type': 'lang_txt', 'source_path': file_path, 'filename': file})
-                                    self.patching_logger.info(f'Queued PizzaOven language file {file} for lang/')
-                                    successes += 1
-                        except Exception as e:
-                            self.patching_logger.warning(f'Failed to process PizzaOven txt file {file}: {e}')
-                    elif extension == '.png':
-                        if 'fonts' in root.lower():
-                            file_overrides.append({'type': 'font_png', 'source_path': file_path, 'filename': file})
-                            self.patching_logger.info(f'Queued PizzaOven font file {file} for lang/fonts/')
-                            successes += 1
-                    elif extension == '.bank':
-                        file_overrides.append({'type': 'bank', 'source_path': file_path, 'filename': file})
-                        self.patching_logger.info(f'Queued PizzaOven .bank file {file} for sound/Desktop/')
-                        successes += 1
-                    elif extension == '.dll':
-                        file_overrides.append({'type': 'dll', 'source_path': file_path, 'filename': file})
-                        self.patching_logger.info(f'Queued PizzaOven .dll file {file} for game root')
-                        successes += 1
-                    elif extension == '.mp4':
-                        file_overrides.append({'type': 'mp4', 'source_path': file_path, 'filename': file})
-                        self.patching_logger.info(f'Queued PizzaOven .mp4 file {file} for game root')
-                        successes += 1
-                except Exception as e:
-                    self.patching_logger.error(f'Error processing PizzaOven file {file}: {e}', exc_info=True)
-                    errors += 1
-        self.patching_logger.info(f'PizzaOven mod processing complete: {file_count} total file(s), {successes} success(es), {errors} error(s), {len(file_overrides)} file override(s)')
-        if successes == 0:
-            self.patching_logger.error(f'No PizzaOven files were applied from {mod_source_dir} (found {file_count} total files)')
-            return (False, file_overrides)
-        if errors > 0:
-            self.patching_logger.warning(f'PizzaOven mod applied with {errors} error(s)')
-        return (True, file_overrides)
-
-    def _apply_pizzaoven_file_overrides(self, file_overrides: List[Dict[str, Any]], target_dir: str, chapter_id: int) -> bool:
-        if not target_dir or not os.path.exists(target_dir):
-            self.patching_logger.error(f'Game root directory not found: {target_dir}')
-            return False
-        game_root = target_dir
-        errors = 0
-        successes = 0
-        xdelta_bank_patches = [fo for fo in file_overrides if fo.get('type') == 'xdelta_bank']
-        bank_files_to_patch = []
-        if xdelta_bank_patches:
-            sound_desktop_dir = os.path.join(game_root, 'sound', 'Desktop')
-            if os.path.exists(sound_desktop_dir):
-                for root, dirs, files in os.walk(sound_desktop_dir):
-                    for file in files:
-                        if file.lower().endswith('.bank'):
-                            bank_files_to_patch.append(os.path.join(root, file))
-        for patch_info in xdelta_bank_patches:
-            patch_path = patch_info.get('patch_path')
-            patch_name = patch_info.get('patch_name', 'unknown')
-            if not patch_path or not os.path.exists(patch_path):
-                continue
-            success = False
-            for bank_file in bank_files_to_patch:
-                if not os.path.exists(bank_file):
-                    continue
-                try:
-                    if chapter_id is not None and self.backup_manager:
-                        backup_path = f'{bank_file}.po'
-                        if not os.path.exists(backup_path):
-                            self.backup_manager.backup_file(chapter_id, bank_file)
-                    if self._apply_xdelta_to_file(bank_file, patch_path):
-                        self.patching_logger.info(f'Applied PizzaOven xdelta patch {patch_name} to {os.path.basename(bank_file)}')
-                        successes += 1
-                        success = True
-                        break
-                except Exception:
-                    self.patching_logger.debug(f'PizzaOven patch {patch_name} does not match {os.path.basename(bank_file)} (trying next file)')
-                    continue
-            if not success:
-                self.patching_logger.warning(f'PizzaOven xdelta patch {patch_name} could not be applied to any .bank file')
-                errors += 1
-        for override in file_overrides:
-            if override.get('type') == 'xdelta_bank':
-                continue
-            source_path = override.get('source_path')
-            filename = override.get('filename')
-            override_type = override.get('type')
-            if not source_path or not os.path.exists(source_path):
-                continue
-            try:
-                if override_type == 'lang_txt':
-                    lang_dir = os.path.join(game_root, 'lang')
-                    os.makedirs(lang_dir, exist_ok=True)
-                    target_path = os.path.join(lang_dir, filename)
-                    shutil.copy2(source_path, target_path)
-                    self.patching_logger.info(f'Copied PizzaOven language file {filename} to lang/')
-                    successes += 1
-                elif override_type == 'font_png':
-                    lang_fonts_dir = os.path.join(game_root, 'lang', 'fonts')
-                    os.makedirs(lang_fonts_dir, exist_ok=True)
-                    target_path = os.path.join(lang_fonts_dir, filename)
-                    shutil.copy2(source_path, target_path)
-                    self.patching_logger.info(f'Copied PizzaOven font file {filename} to lang/fonts/')
-                    successes += 1
-                elif override_type == 'bank':
-                    sound_desktop_target = os.path.join(game_root, 'sound', 'Desktop')
-                    os.makedirs(sound_desktop_target, exist_ok=True)
-                    target_path = os.path.join(sound_desktop_target, filename)
-                    if os.path.exists(target_path):
-                        if chapter_id is not None and self.backup_manager:
-                            backup_path = f'{target_path}.po'
-                            if not os.path.exists(backup_path):
-                                self.backup_manager.backup_file(chapter_id, target_path)
-                    shutil.copy2(source_path, target_path)
-                    self.patching_logger.info(f'Copied PizzaOven .bank file {filename} to sound/Desktop/')
-                    successes += 1
-                elif override_type == 'dll':
-                    target_path = os.path.join(game_root, filename)
-                    shutil.copy2(source_path, target_path)
-                    self.patching_logger.info(f'Copied PizzaOven .dll file {filename} to game root')
-                    successes += 1
-                elif override_type == 'mp4':
-                    target_path = os.path.join(game_root, filename)
-                    shutil.copy2(source_path, target_path)
-                    self.patching_logger.info(f'Copied PizzaOven .mp4 file {filename} to game root')
-                    successes += 1
-            except Exception as e:
-                self.patching_logger.error(f'Error applying PizzaOven file override {filename} ({override_type}): {e}', exc_info=True)
-                errors += 1
-        if errors > 0:
-            self.patching_logger.warning(f'PizzaOven file overrides applied with {errors} error(s)')
-        return successes > 0
+    def _determine_target_path(self, root: str, filename: str, mod_source_dir: str) -> Optional[str]:
+        full_path = os.path.join(root, filename)
+        rel_path_from_mod_root = os.path.relpath(full_path, mod_source_dir).replace('\\', '/')
+        rel_path_lower = rel_path_from_mod_root.lower()
+        parts = rel_path_from_mod_root.split('/')
+        if 'sound' in rel_path_lower and 'desktop' in rel_path_lower:
+            for i in range(len(parts) - 1):
+                if parts[i].lower() == 'sound' and parts[i + 1].lower() == 'desktop':
+                    return '/'.join(parts[i:])
+        if (filename.endswith('.bank') or filename.endswith('.guid')) and 'sound' not in rel_path_lower:
+            return f'sound/Desktop/{filename}'
+        if 'fonts' in rel_path_lower and filename.endswith('.png'):
+            return f'lang/fonts/{filename}'
+        if filename.endswith('.txt') and 'lang' in rel_path_lower:
+            for i in range(len(parts)):
+                if parts[i].lower() == 'lang':
+                    return '/'.join(parts[i:])
+            return f'lang/{filename}'
+        return None
 
     def _check_critical_script_errors(self, stderr: str, script_name: str, context: str = '') -> None:
         if not stderr:
@@ -2822,11 +2517,6 @@ class MultiModMerger(QObject):
                                 pass
                 if not source_dir:
                     return None
-        if is_pizzaoven_mod(mod_data):
-            pizzaoven_path = find_pizzaoven_folder(source_dir)
-            if pizzaoven_path and os.path.isdir(pizzaoven_path):
-                return pizzaoven_path
-            return None
         game = getattr(mod_data, 'game', None) or getattr(mod_data, 'modgame', None)
         if not game:
             if hasattr(mod_data, 'config_data'):
@@ -2846,7 +2536,7 @@ class MultiModMerger(QObject):
         chapter_dir = os.path.join(source_dir, chapter_folder_name)
         if not os.path.isdir(chapter_dir):
             if chapter_id == 0:
-                if game == 'pizzatower' or game == 'pizzaoven':
+                if game == 'pizzatower':
                     pizzatower_dir = os.path.join(source_dir, 'pizzatower')
                     if os.path.isdir(pizzatower_dir):
                         return pizzatower_dir
@@ -2918,7 +2608,7 @@ class MultiModMerger(QObject):
                     return base_path
                 if not base_path:
                     return None
-            elif game == 'pizzatower' or game == 'pizzaoven':
+            elif game == 'pizzatower':
                 game_mode = PizzaTowerGameMode()
                 base_path = game_mode.get_game_path(self.app_state.local_config)
                 if chapter_id == SLOT_ID_PIZZA_TOWER:

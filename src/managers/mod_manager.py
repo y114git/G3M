@@ -765,9 +765,7 @@ class ModManager(QObject):
                     except Exception as e:
                         logging.warning(f'load_local_mods: Error processing files_data for mod {key}: {e}', exc_info=True)
                     game = config_data.get('game') or config_data.get('modgame', '')
-                    if mod.files or game == 'pizzaoven':
-                        if game == 'pizzaoven' and (not mod.files):
-                            logging.debug(f'Adding PizzaOven mod {key} ({mod.name}) with empty files, game={mod.game}')
+                    if mod.files:
                         self.app_state.append_mod(mod)
                     else:
                         logging.debug(f'Skipping mod {key} ({mod.name}): game={mod.game}, has_files={bool(mod.files)}')
@@ -876,9 +874,7 @@ class ModManager(QObject):
                         mod_chapter = ModChapterData(description=config_data.get('tagline', ''), data_file_url=data_file_url, data_file_version=chapter_files.get('data_file_version', (ch_info.get('versions', {}) or {}).get('data', '1.0.0')), extra_files=extra_files)
                         mod.files[file_key] = mod_chapter
                     game = mod.game or config_data.get('game') or config_data.get('modgame', '')
-                    if mod.files or game == 'pizzaoven':
-                        if game == 'pizzaoven' and (not mod.files):
-                            logging.info(f'Adding PizzaOven mod {key} ({mod.name}) with empty files, game={mod.game}')
+                    if mod.files:
                         self.app_state.append_mod(mod)
                     else:
                         logging.debug(f'Skipping mod {key} ({mod.name}): game={mod.game}, has_files={bool(mod.files)}')

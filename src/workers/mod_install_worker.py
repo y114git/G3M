@@ -9,8 +9,6 @@ from utils.network_utils import get_session
 from utils.archive_utils import extract_archive
 from utils.file_utils import sanitize_filename, has_deltamod_info_file
 from utils.deltamod_converter import DeltamodConverter
-from utils.pizzaoven_converter import PizzaOvenConverter
-from utils.pizzaoven_utils import find_pizzaoven_folder, is_explicit_pizzaoven_path
 from config.constants import UI_COLORS, MOD_CONFIG_FILENAME, LEGACY_MOD_CONFIG_FILENAME
 from workers.base_install_worker import BaseInstallWorker
 
@@ -95,18 +93,6 @@ class ModInstallWorker(BaseInstallWorker):
                 else:
                     logging.error('ModInstallWorker: Deltamod conversion failed')
                     return False
-            pizzaoven_path = find_pizzaoven_folder(content_path)
-            if pizzaoven_path:
-                is_explicit_pizzaoven = is_explicit_pizzaoven_path(pizzaoven_path, content_path)
-                if is_explicit_pizzaoven or self.is_pizza_tower_selected:
-                    self.status.emit(tr('status.pizzaoven_archive_detected_url', default='PizzaOven mod detected'), UI_COLORS['status_warning'])
-                    converter = PizzaOvenConverter(content_path, self.mods_dir)
-                    new_mod_path = converter.convert()
-                    if new_mod_path:
-                        return True
-                    else:
-                        logging.error('ModInstallWorker: PizzaOven conversion failed')
-                        return False
             mod_config_path = None
             for root, dirs, files in os.walk(content_path):
                 if MOD_CONFIG_FILENAME in files:

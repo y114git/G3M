@@ -168,7 +168,6 @@
     "gamebanana_install_progress": "Downloading... {progress}%",
     "gamebanana_format_deltahub": "DELTAHUB",
     "gamebanana_format_deltamod": "Deltamod",
-    "gamebanana_format_pizzaoven": "Pizza Oven",
     "open_instructions": "Open instructions",
     "version_colon": "Version:",
     "windows_shortcut_filter": "Windows Shortcut (*.bat)",

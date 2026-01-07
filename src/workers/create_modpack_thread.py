@@ -175,12 +175,8 @@ class CreateModpackThread(QThread):
         unique_games = list(set(detected_games))
         if len(unique_games) == 1:
             primary_game = unique_games[0]
-            if primary_game in ('pizzatower', 'pizzaoven'):
-                return 'pizzatower'
             return primary_game
         most_common = max(set(detected_games), key=detected_games.count)
-        if most_common in ('pizzatower', 'pizzaoven'):
-            return 'pizzatower'
         return most_common
 
     def _find_original_data_file(self, chapter_id: int, game: str, data_filename: str) -> str:
