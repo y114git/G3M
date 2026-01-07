@@ -231,6 +231,18 @@ class TestGameExecutableSimulation:
         if system == 'Darwin':
             app_path = os.path.join(game_dir, 'PizzaTower.app')
             os.makedirs(app_path, exist_ok=True)
+            contents_path = os.path.join(app_path, 'Contents')
+            macos_path = os.path.join(contents_path, 'MacOS')
+            resources_path = os.path.join(contents_path, 'Resources')
+            os.makedirs(macos_path, exist_ok=True)
+            os.makedirs(resources_path, exist_ok=True)
+            exe_path = os.path.join(macos_path, 'PizzaTower')
+            with open(exe_path, 'w') as f:
+                f.write('mock')
+            os.chmod(exe_path, 493)
+            data_path = os.path.join(resources_path, 'game.ios')
+            with open(data_path, 'w') as f:
+                f.write('mock')
         elif system == 'Windows':
             exe_path = os.path.join(game_dir, 'PizzaTower.exe')
             with open(exe_path, 'w') as f:
@@ -248,20 +260,26 @@ class TestGameExecutableSimulation:
         game_dir = os.path.join(temp_dir, 'game')
         os.makedirs(game_dir, exist_ok=True)
         system = platform.system()
-        custom_dir = os.path.join(game_dir, 'custom')
-        os.makedirs(custom_dir, exist_ok=True)
-        if system == 'Windows':
-            custom_exe = os.path.join(custom_dir, 'PizzaTowerCustom.exe')
-            with open(custom_exe, 'w') as f:
+        if system == 'Darwin':
+            app_path = os.path.join(game_dir, 'PizzaTower.app')
+            os.makedirs(app_path, exist_ok=True)
+            contents_path = os.path.join(app_path, 'Contents')
+            macos_path = os.path.join(contents_path, 'MacOS')
+            resources_path = os.path.join(contents_path, 'Resources')
+            os.makedirs(macos_path, exist_ok=True)
+            os.makedirs(resources_path, exist_ok=True)
+            exe_path = os.path.join(macos_path, 'PizzaTower')
+            with open(exe_path, 'w') as f:
                 f.write('mock')
+            os.chmod(exe_path, 493)
+            data_path = os.path.join(resources_path, 'game.ios')
+            with open(data_path, 'w') as f:
+                f.write('mock')
+        elif system == 'Windows':
             main_exe = os.path.join(game_dir, 'PizzaTower.exe')
             with open(main_exe, 'w') as f:
                 f.write('mock')
         else:
-            custom_exe = os.path.join(custom_dir, 'PizzaTowerCustom')
-            with open(custom_exe, 'w') as f:
-                f.write('mock')
-            os.chmod(custom_exe, 493)
             main_exe = os.path.join(game_dir, 'PizzaTower')
             with open(main_exe, 'w') as f:
                 f.write('mock')
@@ -277,6 +295,18 @@ class TestGameExecutableSimulation:
         if system == 'Darwin':
             app_path = os.path.join(game_dir, 'SugarySpire_ExhibitionNight.app')
             os.makedirs(app_path, exist_ok=True)
+            contents_path = os.path.join(app_path, 'Contents')
+            macos_path = os.path.join(contents_path, 'MacOS')
+            resources_path = os.path.join(contents_path, 'Resources')
+            os.makedirs(macos_path, exist_ok=True)
+            os.makedirs(resources_path, exist_ok=True)
+            exe_path = os.path.join(macos_path, 'SugarySpire_ExhibitionNight')
+            with open(exe_path, 'w') as f:
+                f.write('mock')
+            os.chmod(exe_path, 493)
+            data_path = os.path.join(resources_path, 'game.ios')
+            with open(data_path, 'w') as f:
+                f.write('mock')
         elif system == 'Windows':
             exe_path = os.path.join(game_dir, 'SugarySpire_ExhibitionNight.exe')
             with open(exe_path, 'w') as f:

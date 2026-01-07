@@ -197,12 +197,23 @@ class TestPathUtils:
         elif system == 'Darwin':
             app_path = os.path.join(game_dir, 'PizzaTower.app')
             os.makedirs(app_path, exist_ok=True)
+            contents_path = os.path.join(app_path, 'Contents')
+            macos_path = os.path.join(contents_path, 'MacOS')
+            resources_path = os.path.join(contents_path, 'Resources')
+            os.makedirs(macos_path, exist_ok=True)
+            os.makedirs(resources_path, exist_ok=True)
+            exe_path = os.path.join(macos_path, 'PizzaTower')
+            with open(exe_path, 'w') as f:
+                f.write('mock')
+            os.chmod(exe_path, 493)
+            data_path = os.path.join(resources_path, 'game.ios')
+            with open(data_path, 'w') as f:
+                f.write('mock')
         else:
             exe_path = os.path.join(game_dir, 'PizzaTower')
             with open(exe_path, 'w') as f:
                 f.write('mock')
             os.chmod(exe_path, 493)
-        # Test validation with game_type
         is_valid = is_valid_game_path(game_dir, skip_data_check=False, game_type='pizzatower')
         assert is_valid is True
         # Test with invalid path
