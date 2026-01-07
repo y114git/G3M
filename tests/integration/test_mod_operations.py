@@ -91,3 +91,29 @@ class TestModImportExport:
         mock_app_window = Mock()
         controller = ModImportExportController(app_state=app_state, mod_manager=mod_manager, app_window=mock_app_window)
         assert controller is not None
+
+
+class TestManualInstall:
+
+    def test_prepare_gamebanana_manual_install_worker_initialization(self):
+        from workers.prepare_gamebanana_manual_install_worker import PrepareGameBananaManualInstallWorker
+        from unittest.mock import Mock
+        mock_mod = Mock()
+        mock_mod.key = 'gb_12345'
+        mock_mod.name = 'Test Mod'
+        selected_file = {'download_url': 'https://example.com/mod.zip', 'name': 'mod.zip'}
+        worker = PrepareGameBananaManualInstallWorker(mock_mod, selected_file)
+        assert worker is not None
+        assert worker.mod == mock_mod
+        assert worker.selected_file == selected_file
+
+    def test_mod_operations_controller_manual_install_methods(self, app_state, feedback_manager):
+        from controllers.mod_operations_controller import ModOperationsController
+        from managers.mod_manager import ModManager
+        from unittest.mock import Mock
+        mod_manager = ModManager(app_state, feedback_manager)
+        mock_app_window = Mock()
+        controller = ModOperationsController(app_state=app_state, feedback_manager=feedback_manager, mod_manager=mod_manager, app_window=mock_app_window)
+        assert hasattr(controller, '_start_manual_install_from_gamebanana')
+        assert hasattr(controller, '_start_prepare_worker')
+        assert hasattr(controller, '_prepare_gamebanana_files_for_manual_install')

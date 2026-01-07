@@ -132,7 +132,7 @@ def mock_gamebanana_api():
         mock_api_class.return_value = mock_api
         mock_api.get_game_mods.return_value = ([], [])
         mock_api.get_mod_details.return_value = {}
-        mock_api.get_supported_files_for_mod.return_value = {'supported_files': [], 'has_supported_files': False, 'compatibility_checked': True}
+        mock_api.get_supported_files_for_mod.return_value = {'supported_files': [], 'has_supported_files': False, 'compatibility_checked': True, 'preferred_format': None, 'tool_ids': [], 'has_deltahub_file': False, 'has_deltamod_file': False}
         mock_api.get_file_contents.return_value = []
         yield mock_api
 
@@ -219,7 +219,7 @@ def deltarune_chapter_dirs(game_data_dir):
 @pytest.fixture
 def game_dirs(game_data_dir):
     base = Path(game_data_dir)
-    return {'deltarune': str(base / 'deltarune'), 'deltarune_demo': str(base / 'deltarune_demo'), 'undertale': str(base / 'undertale'), 'undertale_yellow': str(base / 'undertale_yellow'), 'pizzatower': str(base / 'pizzatower')}
+    return {'deltarune': str(base / 'deltarune'), 'deltarune_demo': str(base / 'deltarune_demo'), 'undertale': str(base / 'undertale'), 'undertale_yellow': str(base / 'undertale_yellow'), 'pizzatower': str(base / 'pizzatower'), 'sugaryspire': str(base / 'sugaryspire')}
 
 
 @pytest.fixture
@@ -248,7 +248,7 @@ def patches_game_dirs(patches_dir):
     deltarune_path = patches_path / 'deltarune'
     if deltarune_path.exists():
         result['deltarune'] = {'menu': str(deltarune_path / 'chapter0_menu'), 'chapter1': str(deltarune_path / 'chapter1_'), 'chapter2': str(deltarune_path / 'chapter2_'), 'chapter3': str(deltarune_path / 'chapter3_'), 'chapter4': str(deltarune_path / 'chapter4_')}
-    for game_name in ['deltarune_demo', 'undertale', 'undertale_yellow', 'pizzatower']:
+    for game_name in ['deltarune_demo', 'undertale', 'undertale_yellow', 'pizzatower', 'sugaryspire']:
         game_path = patches_path / game_name
         if game_path.exists():
             result[game_name] = str(game_path)

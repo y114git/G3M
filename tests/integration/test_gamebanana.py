@@ -48,6 +48,36 @@ class TestGameBananaAPI:
         result = api.get_supported_files_for_mod(mod_id=12345)
         assert isinstance(result, dict)
         assert 'supported_files' in result
+        assert 'has_supported_files' in result
+        assert 'compatibility_checked' in result
+        assert 'preferred_format' in result
+        assert 'tool_ids' in result
+        assert 'has_deltahub_file' in result
+        assert 'has_deltamod_file' in result
+        assert isinstance(result['supported_files'], list)
+        assert isinstance(result['has_supported_files'], bool)
+        assert isinstance(result['compatibility_checked'], bool)
+        assert isinstance(result['tool_ids'], list)
+        assert isinstance(result['has_deltahub_file'], bool)
+        assert isinstance(result['has_deltamod_file'], bool)
+
+    @patch('requests.Session')
+    def test_get_supported_files_with_external_url(self, mock_session_class):
+        from utils.gamebanana_api import GameBananaAPI
+        mock_session = MagicMock()
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {'_aFiles': [{'_idRow': 1, '_sFile': 'mod.zip', '_nDownloadCount': 500}]}
+        mock_response.raise_for_status = MagicMock()
+        mock_session.get.return_value = mock_response
+        mock_session_class.return_value = mock_session
+        api = GameBananaAPI()
+        external_url = 'https://gamebanana.com/mods/12345'
+        result = api.get_supported_files_for_mod(mod_id=12345, external_url=external_url)
+        assert isinstance(result, dict)
+        assert 'supported_files' in result
+        assert 'has_supported_files' in result
+        assert 'compatibility_checked' in result
 
 
 class TestGameBananaConverter:
