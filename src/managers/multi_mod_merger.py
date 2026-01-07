@@ -1151,7 +1151,6 @@ class MultiModMerger(QObject):
             if not has_assets:
                 return True
             return self.utmt_wrapper.merge_assets(data_win_path, mod_source_dir)
-            return True
         except Exception as e:
             self.patching_logger.error(f'UTMTCLI asset merge failed: {e}', exc_info=True)
             return False
