@@ -427,7 +427,7 @@ class MultiModMerger(QObject):
                 if mod_source_dir:
                     mod_name = getattr(mod_data, 'name', 'Unknown')
                     used_archive_names = set()
-                    if self._apply_file_overrides(mod_source_dir, target_dir, used_archive_names, False):
+                    if self._apply_file_overrides(mod_source_dir, target_dir, used_archive_names, False, chapter_id):
                         self.patching_logger.debug(f'[FAST_PATH] Applied file overrides from {mod_name}')
                     else:
                         self.patching_logger.warning(f'[FAST_PATH] Failed to apply file overrides from {mod_name}')
@@ -517,7 +517,7 @@ class MultiModMerger(QObject):
                 target_dir_result = self._get_target_dir(chapter_id)
                 if target_dir_result is not None and mod_source_dir:
                     used_archive_names = set()
-                    if not self._apply_file_overrides(mod_source_dir, target_dir_result, used_archive_names, False):
+                    if not self._apply_file_overrides(mod_source_dir, target_dir_result, used_archive_names, False, chapter_id):
                         self.patching_logger.warning(f'Failed to apply file overrides from {mod_name} after ready data.win merge')
                 if not data_patches and (not csx_scripts):
                     mods_already_exported.add(mod_number)
@@ -549,7 +549,7 @@ class MultiModMerger(QObject):
                 target_dir_result = self._get_target_dir(chapter_id)
                 if target_dir_result is not None and mod_source_dir:
                     used_archive_names = set()
-                    if self._apply_file_overrides(mod_source_dir, target_dir_result, used_archive_names, False):
+                    if self._apply_file_overrides(mod_source_dir, target_dir_result, used_archive_names, False, chapter_id):
                         self.patching_logger.info(f'Applied file overrides from {mod_name} (mod {mod_number})')
             if mod_number not in mod_patched_files:
                 mod_patched_files[mod_number] = mod_data_win
@@ -917,7 +917,7 @@ class MultiModMerger(QObject):
             for mod_data in mods_to_apply:
                 mod_source_dir = self._get_mod_source_dir(mod_data, chapter_id)
                 if mod_source_dir:
-                    if not self._apply_file_overrides(mod_source_dir, modpack_dir, set(), True):
+                    if not self._apply_file_overrides(mod_source_dir, modpack_dir, set(), True, chapter_id):
                         self.patching_logger.warning(f"Failed to apply file overrides from {getattr(mod_data, 'name', 'Unknown')}")
         else:
             used_archive_names = set()
@@ -927,7 +927,7 @@ class MultiModMerger(QObject):
                     return False
                 mod_source_dir = self._get_mod_source_dir(mod_data, chapter_id)
                 if mod_source_dir:
-                    if not self._apply_file_overrides(mod_source_dir, target_dir, used_archive_names, False):
+                    if not self._apply_file_overrides(mod_source_dir, target_dir, used_archive_names, False, chapter_id):
                         self.patching_logger.warning(f"Failed to apply file overrides from {getattr(mod_data, 'name', 'Unknown')}")
         self.patching_logger.info('Multi-mod merge completed successfully')
         return True
@@ -950,7 +950,7 @@ class MultiModMerger(QObject):
         for mod_data in mods_to_apply:
             mod_source_dir = self._get_mod_source_dir(mod_data, chapter_id)
             if mod_source_dir:
-                if not self._apply_file_overrides(mod_source_dir, modpack_dir, set(), True):
+                if not self._apply_file_overrides(mod_source_dir, modpack_dir, set(), True, chapter_id):
                     return False
         return True
 
@@ -960,7 +960,7 @@ class MultiModMerger(QObject):
         for mod_data in mods_to_apply:
             mod_source_dir = self._get_mod_source_dir(mod_data, chapter_id)
             if mod_source_dir:
-                if not self._apply_file_overrides(mod_source_dir, target_dir, used_archive_names, False):
+                if not self._apply_file_overrides(mod_source_dir, target_dir, used_archive_names, False, chapter_id):
                     return False
         return True
 
@@ -1936,7 +1936,7 @@ class MultiModMerger(QObject):
                     return True
         return False
 
-    def _apply_file_overrides(self, mod_source_dir: str, target_dir: str, used_archive_names: set, is_modpack: bool) -> bool:
+    def _apply_file_overrides(self, mod_source_dir: str, target_dir: str, used_archive_names: set, is_modpack: bool, chapter_id: Optional[int] = None) -> bool:
         if not os.path.isdir(mod_source_dir):
             return True
         if used_archive_names is None:
@@ -1946,6 +1946,8 @@ class MultiModMerger(QObject):
         archive_extensions = ('.zip', '.7z', '.rar', '.tar.gz', '.lzma')
         processed_archives = set()
         skip_files = ('config.json', 'mod_config.json', '_icon.png', 'icon.png', 'meta.json', '_deltamodInfo.json')
+        if chapter_id is None:
+            chapter_id = self._extract_chapter_id_from_path(target_dir)
         for root, dirs, files in os.walk(mod_source_dir):
             rel_path = os.path.relpath(root, mod_source_dir)
             for file in files:
@@ -1955,14 +1957,14 @@ class MultiModMerger(QObject):
                 file_lower = file.lower()
                 if file_lower.endswith(('.xdelta', '.vcdiff')):
                     if not is_modpack:
-                        chapter_id = self._extract_chapter_id_from_path(target_dir)
+                        xdelta_chapter_id = chapter_id if chapter_id is not None else self._extract_chapter_id_from_path(target_dir)
                         target_files = self._find_target_files_for_xdelta(target_dir, file)
                         if target_files:
                             patch_applied = False
                             for target_file in target_files:
-                                if chapter_id is not None and self.backup_manager:
+                                if xdelta_chapter_id is not None and self.backup_manager:
                                     if os.path.exists(target_file):
-                                        self.backup_manager.backup_file(chapter_id, target_file)
+                                        self.backup_manager.backup_file(xdelta_chapter_id, target_file)
                                 if self._apply_xdelta_to_file(target_file, source_path):
                                     self.patching_logger.info(f'Applied xdelta patch {file} to {os.path.relpath(target_file, target_dir)}')
                                     patch_applied = True
@@ -2017,7 +2019,7 @@ class MultiModMerger(QObject):
                             return False
                     else:
                         self.patching_logger.debug(f'Extracting archive contents: {os.path.basename(file)}')
-                        if not self._extract_archive_to_target(source_path, target_dir):
+                        if not self._extract_archive_to_target(source_path, target_dir, chapter_id):
                             self.patching_logger.warning(f'Failed to extract archive {source_path}, continuing...')
                     continue
                 rel_path = os.path.relpath(source_path, mod_source_dir)
@@ -2025,11 +2027,12 @@ class MultiModMerger(QObject):
                 if os.path.normpath(source_path) in processed_archives:
                     continue
                 if not is_modpack:
-                    chapter_id = self._extract_chapter_id_from_path(target_dir)
                     is_new_file = not os.path.exists(target_path)
                     if not is_new_file:
                         if chapter_id is not None and self.backup_manager:
                             self.backup_manager.backup_file(chapter_id, target_path)
+                            if self._session_manifest_path:
+                                self.backup_manager.save_backups_to_manifest(self._session_manifest_path)
                     elif chapter_id is not None and self.backup_manager:
                         self.backup_manager.mark_file_added(chapter_id, target_path)
                         if self._session_manifest_path:
@@ -2042,11 +2045,12 @@ class MultiModMerger(QObject):
                     return False
         return True
 
-    def _extract_archive_to_target(self, archive_path: str, target_dir: str) -> bool:
+    def _extract_archive_to_target(self, archive_path: str, target_dir: str, chapter_id: Optional[int] = None) -> bool:
         try:
             from utils.archive_utils import extract_any_archive
             import tempfile
-            chapter_id = self._extract_chapter_id_from_path(target_dir)
+            if chapter_id is None:
+                chapter_id = self._extract_chapter_id_from_path(target_dir)
             with tempfile.TemporaryDirectory(prefix='mm_extract_') as temp_extract_dir:
                 extract_any_archive(archive_path, temp_extract_dir)
                 for root, dirs, files in os.walk(temp_extract_dir):
@@ -2065,12 +2069,13 @@ class MultiModMerger(QObject):
                         if not is_new_file:
                             if chapter_id is not None and self.backup_manager:
                                 self.backup_manager.backup_file(chapter_id, target_file)
+                                if self._session_manifest_path:
+                                    self.backup_manager.save_backups_to_manifest(self._session_manifest_path)
                         elif chapter_id is not None and self.backup_manager:
                             self.backup_manager.mark_file_added(chapter_id, target_file)
+                            if self._session_manifest_path:
+                                self.backup_manager.save_backups_to_manifest(self._session_manifest_path)
                         shutil.copy2(source_file, target_file)
-                if chapter_id is not None and self.backup_manager and (chapter_id in self.backup_manager.added_files):
-                    if self._session_manifest_path:
-                        self.backup_manager.save_backups_to_manifest(self._session_manifest_path)
             self.patching_logger.debug(f'Extracted archive: {archive_path}')
             return True
         except Exception as e:
