@@ -23,6 +23,7 @@ def filter_and_sort_mods(mods_list: List[Any], filters: Dict[str, Any], sort_con
     hide_banned = filters.get('hide_banned', True)
     hide_local = filters.get('hide_local', False)
     show_only_local = filters.get('show_only_local', False)
+    hide_mods_without_files = filters.get('hide_mods_without_files', False)
     status_filter = filters.get('status_filter', ['approved', 'pending'])
     filtered_list = []
     for item in mods_list:

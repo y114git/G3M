@@ -93,7 +93,6 @@ class GameLauncher(QObject):
             self._hook_result = hook_result
         self.status_changed.emit(tr('status.launching_game'), UI_COLORS['status_success'])
         has_selected_mods = self._has_selected_mods(selections)
-        use_steam = self.app_state.local_config.get('launch_via_steam', False)
         current_path = self._get_current_game_path()
         if not current_path or not os.path.exists(current_path):
             if not self._find_and_validate_game_path(selections, is_initial=False):
@@ -164,7 +163,9 @@ class GameLauncher(QObject):
                 return
             system = platform.system()
             if system == 'Darwin':
-                use_custom_exe = self.app_state.local_config.get('use_custom_executable', False)
+                custom_exec_key = self.app_state.game_mode.get_custom_exec_config_key()
+                custom_path = self.app_state.local_config.get(custom_exec_key, '')
+                use_custom_exe = custom_path and os.path.isfile(custom_path) and (os.path.abspath(custom_path) == os.path.abspath(target_path))
                 if use_custom_exe:
                     subprocess.Popen(['open', target_path])
                     self.status_changed.emit(tr('status.macos_file_opened'), UI_COLORS['status_steam'])
@@ -192,7 +193,19 @@ class GameLauncher(QObject):
                 creationflags = 0
                 if system == 'Windows':
                     creationflags = 8
-                process = subprocess.Popen(command, cwd=working_directory, creationflags=creationflags)
+                try:
+                    process = subprocess.Popen(command, cwd=working_directory, creationflags=creationflags)
+                except (OSError, ValueError, subprocess.SubprocessError) as launch_error:
+                    error_msg = str(launch_error).lower()
+                    invalid_exe_keywords = ['not a valid', 'invalid', 'cannot execute', 'exec format error', 'bad executable', 'invalid executable']
+                    is_invalid_exe = any((keyword in error_msg for keyword in invalid_exe_keywords))
+                    if is_invalid_exe:
+                        self.status_changed.emit(tr('errors.invalid_executable_file', file=os.path.basename(target_path)), UI_COLORS['status_error'])
+                    else:
+                        self.status_changed.emit(tr('errors.game_launch_error', error=str(launch_error)), UI_COLORS['status_error'])
+                    if hasattr(self, 'restore_window_callback') and self.restore_window_callback:
+                        self.restore_window_callback()
+                    return
             self.status_changed.emit(tr('status.game_launched_waiting_for_exit'), UI_COLORS['status_steam'])
             self.monitor_thread = QThread(self)
             self.monitor_worker = GameMonitorWorker(process, vanilla_mode)
@@ -253,7 +266,9 @@ class GameLauncher(QObject):
             return None
         chapter_folder = find_chapter_resource_dir(self._get_current_game_path(), chapter_id)
         source_exe = self._get_source_executable_path()
-        use_custom_exe = self.app_state.local_config.get('use_custom_executable', False)
+        custom_exec_key = self.app_state.game_mode.get_custom_exec_config_key()
+        custom_path = self.app_state.local_config.get(custom_exec_key, '')
+        use_custom_exe = custom_path and os.path.isfile(custom_path) and (os.path.abspath(custom_path) == os.path.abspath(source_exe))
         if not chapter_folder or not source_exe:
             self.status_changed.emit(tr('errors.direct_launch_error'), UI_COLORS['status_error'])
             return None
@@ -275,11 +290,9 @@ class GameLauncher(QObject):
             return None
 
     def _get_executable_path(self):
-        use_custom_exe = self.app_state.local_config.get('use_custom_executable', False)
-        if use_custom_exe:
-            custom_path = self.app_state.local_config.get(self.app_state.game_mode.get_custom_exec_config_key(), '')
-            if custom_path and os.path.isfile(custom_path):
-                return custom_path
+        custom_path = self.app_state.local_config.get(self.app_state.game_mode.get_custom_exec_config_key(), '')
+        if custom_path and os.path.isfile(custom_path):
+            return custom_path
         current_game_path = self._get_current_game_path()
         if not current_game_path or not os.path.isdir(current_game_path):
             return None
@@ -295,9 +308,10 @@ class GameLauncher(QObject):
         return executable
 
     def _get_source_executable_path(self):
-        if self.app_state.local_config.get('use_custom_executable', False):
-            cfg_key = self.app_state.game_mode.get_custom_exec_config_key()
-            return self.app_state.local_config.get(cfg_key, '')
+        cfg_key = self.app_state.game_mode.get_custom_exec_config_key()
+        custom_path = self.app_state.local_config.get(cfg_key, '')
+        if custom_path and os.path.isfile(custom_path):
+            return custom_path
         return self._get_executable_path()
 
     def _get_current_game_path(self) -> str:
@@ -535,17 +549,17 @@ class GameLauncher(QObject):
                     self.app_state.game_mode.set_game_path(self.app_state.local_config, parent_path)
                     self.status_changed.emit(tr('status.game_folder_found', path=parent_path), UI_COLORS['status_success'])
                     return True
-        use_custom_exe = self.app_state.local_config.get('use_custom_executable', False)
-        if use_custom_exe:
-            custom_exec_key = self.app_state.game_mode.get_custom_exec_config_key()
-            custom_exec_path = self.app_state.local_config.get(custom_exec_key, '')
-            if custom_exec_path and os.path.isfile(custom_exec_path):
-                custom_dir = os.path.dirname(custom_exec_path)
-                if custom_dir and os.path.exists(custom_dir):
-                    if is_valid_game_path(custom_dir, skip_data_check=False, game_type=game_type):
-                        self.app_state.game_mode.set_game_path(self.app_state.local_config, custom_dir)
-                        self.status_changed.emit(tr('status.game_folder_found', path=custom_dir), UI_COLORS['status_success'])
-                        return True
+        custom_exec_key = self.app_state.game_mode.get_custom_exec_config_key()
+        custom_path = self.app_state.local_config.get(custom_exec_key, '')
+        if custom_path and os.path.isfile(custom_path):
+            if path_from_config and os.path.isdir(path_from_config):
+                self.status_changed.emit(tr('status.game_path', path=path_from_config), UI_COLORS['status_info'])
+                return True
+            custom_dir = os.path.dirname(custom_path)
+            if custom_dir and os.path.exists(custom_dir):
+                self.app_state.game_mode.set_game_path(self.app_state.local_config, custom_dir)
+                self.status_changed.emit(tr('status.game_folder_found', path=custom_dir), UI_COLORS['status_success'])
+                return True
         self.status_changed.emit(tr('status.autodetecting_path'), UI_COLORS['status_info'])
         autodetected_path = autodetect_path(game_name)
         if autodetected_path and os.path.exists(autodetected_path):

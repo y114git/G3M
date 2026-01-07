@@ -27,6 +27,17 @@ class LibraryTabBuilder:
         import_export_button.setObjectName('import_export_button')
         controls_layout.addWidget(import_export_button)
         controls_layout.addSpacing(20)
+        custom_executable_button = QPushButton(tr('buttons.custom_executable'))
+        custom_executable_button.setObjectName('custom_executable_button')
+        custom_executable_button.setToolTip(tr('tooltips.custom_executable_library'))
+        controls_layout.addWidget(custom_executable_button)
+        reset_custom_exe_button = QPushButton('⭯')
+        reset_custom_exe_button.setObjectName('reset_custom_exe_button')
+        reset_custom_exe_button.setStyleSheet('min-width: 35px; max-width: 35px; padding-left: 0px; padding-right: 0px;')
+        reset_custom_exe_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        reset_custom_exe_button.setVisible(False)
+        controls_layout.addWidget(reset_custom_exe_button)
+        controls_layout.addSpacing(10)
         change_path_button = QPushButton()
         change_path_button.setObjectName('change_path_button')
         controls_layout.addWidget(change_path_button)
@@ -157,6 +168,8 @@ class LibraryTabBuilder:
             pass
         self.widgets['library_filters_widget'] = library_filters_widget
         self.widgets['import_export_button'] = import_export_button
+        self.widgets['custom_executable_button'] = custom_executable_button
+        self.widgets['reset_custom_exe_button'] = reset_custom_exe_button
         self.widgets['change_path_button'] = change_path_button
         self.widgets['game_type_combo'] = game_type_combo
         self.widgets['chapter_mode_checkbox'] = chapter_mode_checkbox

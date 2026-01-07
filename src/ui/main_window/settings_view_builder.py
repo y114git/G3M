@@ -105,9 +105,9 @@ class SettingsViewBuilder:
         launch_via_steam_checkbox = QCheckBox(tr('ui.steam_launch'))
         launch_via_steam_checkbox.setToolTip("<html><body style='white-space: normal;'>" + tr('tooltips.steam') + '</body></html>')
         left_column.addWidget(launch_via_steam_checkbox)
-        use_custom_executable_checkbox = QCheckBox(tr('ui.custom_executable'))
-        use_custom_executable_checkbox.setToolTip("<html><body style='white-space: normal;'>" + tr('tooltips.custom_exe') + '</body></html>')
-        right_column.addWidget(use_custom_executable_checkbox)
+        hide_mods_without_files_checkbox = QCheckBox(tr('ui.hide_mods_without_files'))
+        hide_mods_without_files_checkbox.setToolTip("<html><body style='white-space: normal;'>" + tr('tooltips.hide_mods_without_files') + '</body></html>')
+        right_column.addWidget(hide_mods_without_files_checkbox)
         checkboxes_layout.addWidget(left_column_widget)
         checkboxes_layout.addWidget(right_column_widget)
         settings_center_container.addWidget(checkboxes_container, alignment=Qt.AlignmentFlag.AlignHCenter)
@@ -130,17 +130,6 @@ class SettingsViewBuilder:
             portproton_frame.setVisible(False)
             use_portproton_checkbox.setVisible(False)
         settings_center_container.addWidget(portproton_frame, alignment=Qt.AlignmentFlag.AlignHCenter)
-        select_custom_executable_button = QPushButton(tr('buttons.select_file'))
-        select_custom_executable_button.setFixedWidth(153)
-        custom_executable_path_label = QLabel(tr('ui.file_not_selected'))
-        custom_executable_path_label.setFixedHeight(20)
-        custom_exe_frame = QFrame()
-        custom_exe_layout = QVBoxLayout(custom_exe_frame)
-        custom_exe_layout.setAlignment(Qt.AlignmentFlag.AlignHCenter)
-        custom_exe_layout.addWidget(select_custom_executable_button, alignment=Qt.AlignmentFlag.AlignHCenter)
-        custom_exe_layout.addWidget(custom_executable_path_label, alignment=Qt.AlignmentFlag.AlignHCenter)
-        settings_center_container.addWidget(custom_exe_frame, alignment=Qt.AlignmentFlag.AlignHCenter)
-        custom_exe_frame.setVisible(False)
         open_deltahub_folder_button = QPushButton(tr('buttons.open_deltahub_folder'))
         open_deltahub_folder_button.setFixedWidth(300)
         settings_center_container.addWidget(open_deltahub_folder_button, alignment=Qt.AlignmentFlag.AlignHCenter)
@@ -168,10 +157,7 @@ class SettingsViewBuilder:
         self.widgets['select_portproton_path_button'] = select_portproton_path_button
         self.widgets['portproton_path_label'] = portproton_path_label
         self.widgets['portproton_frame'] = portproton_frame
-        self.widgets['use_custom_executable_checkbox'] = use_custom_executable_checkbox
-        self.widgets['select_custom_executable_button'] = select_custom_executable_button
-        self.widgets['custom_executable_path_label'] = custom_executable_path_label
-        self.widgets['custom_exe_frame'] = custom_exe_frame
+        self.widgets['hide_mods_without_files_checkbox'] = hide_mods_without_files_checkbox
         self.widgets['open_deltahub_folder_button'] = open_deltahub_folder_button
         self.widgets['customization_button'] = customization_button
         self.widgets['settings_customization_button'] = customization_button
@@ -247,6 +233,7 @@ class SettingsViewBuilder:
         theme_button.setFixedWidth(400)
         theme_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         settings_customization_layout.addWidget(theme_button, 0, Qt.AlignmentFlag.AlignHCenter)
+        self.widgets['theme_button'] = theme_button
         self.widgets['disable_background_checkbox'] = disable_background_checkbox
         self.widgets['disable_splash_checkbox'] = disable_splash_checkbox
         self.widgets['back_button_cust'] = back_button_cust

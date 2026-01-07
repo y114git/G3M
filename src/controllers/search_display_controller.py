@@ -492,6 +492,7 @@ class SearchDisplayController(QObject):
                     QTimer.singleShot(100, lambda: self._load_search_results_if_needed(self.app_state.mods_per_page))
 
     def _build_filters_and_sort(self):
+        hide_mods_without_files = self.app_state.local_config.get('hide_mods_without_files', False)
         selected_tags = []
         tag_checkboxes = {'tag_textedit': 'textedit', 'tag_customization': 'customization', 'tag_gameplay': 'gameplay', 'tag_other': 'other'}
         for attr_name, tag_value in tag_checkboxes.items():
@@ -500,7 +501,7 @@ class SearchDisplayController(QObject):
         selected_game = 'deltarune'
         if hasattr(self.app, 'modgame_combo'):
             selected_game = self.app.modgame_combo.currentData() or 'deltarune'
-        filters = {'tags': selected_tags, 'game': selected_game, 'search_text': self.app_state.search_text, 'hide_banned': True, 'hide_local': True, 'status_filter': ['approved', 'pending']}
+        filters = {'tags': selected_tags, 'game': selected_game, 'search_text': self.app_state.search_text, 'hide_banned': True, 'hide_local': True, 'hide_mods_without_files': hide_mods_without_files, 'status_filter': ['approved', 'pending']}
         sort_config = None
         if hasattr(self.app, 'sort_combo'):
             sort_type = self.app.sort_combo.currentIndex()

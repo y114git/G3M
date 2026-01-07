@@ -66,10 +66,43 @@ class SearchGameBananaModsThread(QThread):
                     if model_name not in ('Mod', 'Wip', 'WIP'):
                         continue
                     is_wip = model_name in ('Wip', 'WIP')
+                    mod_id = record.get('_idRow')
+                    if not mod_id:
+                        continue
+                    hide_mods_without_files = False
+                    try:
+                        parent = self.parent()
+                        if parent and hasattr(parent, 'app_state'):
+                            app_state = parent.app_state
+                            if app_state and hasattr(app_state, 'local_config'):
+                                hide_mods_without_files = app_state.local_config.get('hide_mods_without_files', False)
+                            else:
+                                hide_mods_without_files = False
+                    except Exception:
+                        hide_mods_without_files = False
+                    if hide_mods_without_files:
+                        files_data = record.get('_aFiles')
+                        has_files = False
+                        if files_data:
+                            if isinstance(files_data, dict) and len(files_data) > 0:
+                                has_files = True
+                            elif isinstance(files_data, list) and len(files_data) > 0:
+                                has_files = True
+                        if not has_files:
+                            try:
+                                if is_wip:
+                                    external_url = f'https://gamebanana.com/wips/{mod_id}'
+                                else:
+                                    external_url = f'https://gamebanana.com/mods/{mod_id}'
+                                files = self.api.get_mod_files(mod_id, external_url=external_url)
+                                has_files = bool(files and len(files) > 0)
+                            except Exception:
+                                has_files = False
+                        if not has_files:
+                            continue
                     mod_info = self.api._map_mod_data(record, game_name, is_wip=is_wip)
                     if not mod_info:
                         continue
-                    mod_id = record.get('_idRow')
                     if mod_id:
                         mod_id_str = str(mod_id)
                         downloads_from_gb = record.get('_nDownloadCount')

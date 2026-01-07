@@ -109,58 +109,10 @@ class LoadGameBananaDetailsThread(QThread):
             mod.tagline = tagline_clean[:200].strip()
             if len(tagline_clean) > 200:
                 mod.tagline += '...'
-        downloads_field = full_details.get('downloads')
-        downloads_value = None
-        if downloads_field is not None:
-            try:
-                if isinstance(downloads_field, list):
-                    if len(downloads_field) > 0 and downloads_field[0] is not None:
-                        downloads_value = downloads_field[0]
-                elif isinstance(downloads_field, (int, float)):
-                    downloads_value = downloads_field
-                elif isinstance(downloads_field, str) and downloads_field.strip():
-                    try:
-                        downloads_value = int(float(downloads_field))
-                    except (ValueError, TypeError):
-                        downloads_value = None
-                else:
-                    downloads_value = None
-                if downloads_value is not None:
-                    try:
-                        mod.downloads = int(float(downloads_value))
-                        logger.debug(f'LoadGameBananaDetailsThread: Set downloads for mod {mod.get_gamebanana_mod_id()} to {mod.downloads}')
-                    except (ValueError, TypeError):
-                        key = getattr(mod, 'key', None)
-                        mod_id_str = key.replace('gb_', '', 1) if key else 'unknown'
-                        logger.warning(f'LoadGameBananaDetailsThread: Could not convert downloads value {downloads_value} to int for mod {mod_id_str}')
-                        if fallback_downloads > 0:
-                            mod.downloads = fallback_downloads
-                        else:
-                            mod.downloads = 0
-                else:
-                    if fallback_downloads > 0:
-                        mod.downloads = fallback_downloads
-                    else:
-                        mod.downloads = 0
-                    key = getattr(mod, 'key', None)
-                    mod_id_str = key.replace('gb_', '', 1) if key else 'unknown'
-                    logger.debug(f'LoadGameBananaDetailsThread: No valid downloads value for mod {mod_id_str}, using fallback: {mod.downloads}')
-            except Exception as e:
-                key = getattr(mod, 'key', None)
-                mod_id_str = key.replace('gb_', '', 1) if key else 'unknown'
-                logger.error(f'LoadGameBananaDetailsThread: Error processing downloads for mod {mod_id_str}: {e}', exc_info=True)
-                if fallback_downloads > 0:
-                    mod.downloads = fallback_downloads
-                else:
-                    mod.downloads = 0
-        else:
-            if fallback_downloads > 0:
-                mod.downloads = fallback_downloads
-            else:
-                mod.downloads = 0
-            key = getattr(mod, 'key', None)
-            mod_id_str = key.replace('gb_', '', 1) if key else 'unknown'
-            logger.debug(f'LoadGameBananaDetailsThread: No downloads field for mod {mod_id_str}, using fallback: {mod.downloads}')
+        if fallback_downloads is not None and fallback_downloads >= 0:
+            mod.downloads = fallback_downloads
+        elif not hasattr(mod, 'downloads') or mod.downloads is None:
+            mod.downloads = 0
         screenshots_field = full_details.get('screenshots')
         if screenshots_field:
             external_url = getattr(mod, 'external_url', None)

@@ -115,22 +115,10 @@ class SettingsManager(QObject):
             return filepath
         return None
 
-    def on_toggle_custom_executable(self, enabled: bool):
-        self.app_state.local_config['use_custom_executable'] = enabled
-        if not enabled:
-            self.app_state.local_config[self.app_state.game_mode.get_custom_exec_config_key()] = ''
+    def on_toggle_hide_mods_without_files(self, enabled: bool):
+        self.app_state.local_config['hide_mods_without_files'] = enabled
         self.write_local_config()
         self.settings_changed.emit()
-
-    def select_custom_executable_file(self) -> Optional[str]:
-        dlg_title = tr('ui.select_launch_file')
-        filepath, _ = QFileDialog.getOpenFileName(self.parent_widget, dlg_title)
-        if filepath:
-            self.app_state.local_config[self.app_state.game_mode.get_custom_exec_config_key()] = filepath
-            self.write_local_config()
-            self.settings_changed.emit()
-            return filepath
-        return None
 
     def on_toggle_disable_background(self, enabled: bool):
         self.app_state.local_config['background_disabled'] = enabled

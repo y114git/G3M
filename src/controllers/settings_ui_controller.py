@@ -68,7 +68,6 @@ class SettingsUiController:
             self.app.use_portproton_checkbox.setChecked(False)
             if hasattr(self.app, '_update_portproton_ui'):
                 self.app._update_portproton_ui()
-        self.app.use_custom_executable_checkbox.setChecked(False)
         self.app.chapter_mode_checkbox.setChecked(False)
         self.app.beta_updates_checkbox.setChecked(False)
         self.app.fullscreen_checkbox.setChecked(False)
@@ -184,10 +183,11 @@ class SettingsUiController:
         if hasattr(self.app, '_update_portproton_ui'):
             self.app._update_portproton_ui()
 
-    def on_toggle_custom_executable(self):
-        use_custom = self.app.use_custom_executable_checkbox.isChecked()
-        self.settings_manager.on_toggle_custom_executable(use_custom)
-        self.app._update_custom_executable_ui()
+    def on_toggle_hide_mods_without_files(self):
+        hide_mods = self.app.hide_mods_without_files_checkbox.isChecked()
+        self.settings_manager.on_toggle_hide_mods_without_files(hide_mods)
+        if hasattr(self.app, 'search_display'):
+            self.app.search_display.update_filtered_mods()
 
     def on_toggle_clear_logs(self):
         clear_logs_enabled = self.app.clear_logs_checkbox.isChecked()

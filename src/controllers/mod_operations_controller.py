@@ -3,12 +3,13 @@ import shutil
 import logging
 from typing import Dict, List, Optional
 from PyQt6.QtCore import QTimer
-from PyQt6.QtWidgets import QDialog
+from PyQt6.QtWidgets import QDialog, QMessageBox
 from managers.localization_manager import tr
 from config.constants import UI_COLORS
 from ui.widgets.mod.installed_mod_widget import InstalledModWidget
 from workers.background_workers import InstallModsThread
 from workers.install_gamebanana_mod import InstallGameBananaModThread
+from workers.prepare_gamebanana_manual_install_worker import PrepareGameBananaManualInstallWorker
 from utils.mod_utils import get_mod_key, get_mod_name
 from ui.dialogs.gamebanana_file_picker_dialog import GameBananaFilePickerDialog
 
@@ -181,11 +182,16 @@ class ModOperationsController:
         msg_box.setIcon(QMessageBox.Icon.Information)
         msg_box.setWindowTitle(tr('errors.mod_not_compatible_title'))
         msg_box.setText(tr('errors.mod_requires_manual_installation'))
+        msg_box.setInformativeText(tr('dialogs.manual_install_available'))
+        manual_install_btn = msg_box.addButton(tr('ui.manual_install'), QMessageBox.ButtonRole.AcceptRole)
         open_btn = msg_box.addButton(tr('ui.open_instructions'), QMessageBox.ButtonRole.AcceptRole)
         msg_box.addButton(tr('buttons.close'), QMessageBox.ButtonRole.RejectRole)
-        msg_box.setDefaultButton(open_btn)
+        msg_box.setDefaultButton(manual_install_btn)
         msg_box.exec()
-        if msg_box.clickedButton() == open_btn and url_to_open:
+        clicked_btn = msg_box.clickedButton()
+        if clicked_btn == manual_install_btn and mod:
+            self._start_manual_install_from_gamebanana(mod)
+        elif clicked_btn == open_btn and url_to_open:
             webbrowser.open(url_to_open)
 
     def _get_available_gamebanana_files(self, mod) -> List[Dict]:
@@ -214,6 +220,47 @@ class ModOperationsController:
             return files
         except Exception as e:
             logging.warning(f'ModOperationsController: Failed to refresh GameBanana files for {mod_id}: {e}')
+            return []
+
+    def _get_all_gamebanana_files(self, mod) -> List[Dict]:
+        key = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
+        if not key or not key.startswith('gb_'):
+            return []
+        mod_id_str = key.replace('gb_', '', 1)
+        if not mod_id_str:
+            return []
+        mod_id = int(mod_id_str)
+        try:
+            from utils.gamebanana_api import GameBananaAPI
+            api = GameBananaAPI()
+            external_url = getattr(mod, 'external_url', None)
+            all_files = api.get_mod_files(mod_id, external_url=external_url)
+            if not all_files:
+                return []
+            formatted_files = []
+            for file_data in all_files:
+                file_id = file_data.get('_idRow')
+                if not file_id:
+                    for key in file_data.keys():
+                        if key.isdigit():
+                            file_id = int(key)
+                            break
+                if not file_id:
+                    logging.warning(f'ModOperationsController: Could not extract file_id from file_data: {file_data}')
+                    continue
+                has_contents = file_data.get('_bHasContents', True)
+                if not has_contents:
+                    continue
+                file_name = file_data.get('_sFile') or file_data.get('_sName') or file_data.get('name') or f'file_{file_id}'
+                download_url = file_data.get('_sDownloadUrl') or file_data.get('download_url')
+                if not download_url:
+                    download_url = f'https://gamebanana.com/dl/{file_id}'
+                    logging.debug(f'ModOperationsController: Constructed download URL for file {file_id}: {download_url}')
+                formatted_file = {'id': file_id, 'name': file_name, 'download_url': download_url, '_sDownloadUrl': download_url, '_sFile': file_name, '_idRow': file_id, '_bHasContents': True, 'version': file_data.get('_sVersion') or file_data.get('version', '1.0.0'), 'size_bytes': file_data.get('_nFilesize') or file_data.get('size_bytes', 0), 'download_count': file_data.get('_nDownloadCount') or file_data.get('download_count', 0)}
+                formatted_files.append(formatted_file)
+            return formatted_files
+        except Exception as e:
+            logging.error(f'ModOperationsController: Failed to get all GameBanana files for {mod_id}: {e}', exc_info=True)
             return []
 
     def _get_mod_identifier(self, mod) -> Optional[str]:
@@ -583,6 +630,121 @@ class ModOperationsController:
             self.app.library_display.update_display()
         if hasattr(self.app, 'search_display'):
             self.app.search_display.update_filtered_mods(preserve_page=True)
+
+    def _start_manual_install_from_gamebanana(self, mod):
+        try:
+            available_files = self._get_all_gamebanana_files(mod)
+            if not available_files:
+                self.feedback_manager.show_message('error', tr('errors.error'), tr('errors.no_gamebanana_files_for_manual_install'))
+                return
+            selected_file = available_files[0]
+            if len(available_files) > 1:
+                dialog = GameBananaFilePickerDialog(self.app, available_files, mod.name, getattr(mod, 'external_url', None))
+                result = dialog.exec()
+                if result != QDialog.DialogCode.Accepted:
+                    self.feedback_manager.update_status(tr('status.operation_cancelled'), UI_COLORS['status_warning'])
+                    return
+                selection = dialog.get_selected_file()
+                if selection:
+                    selected_file = selection
+            self._start_prepare_worker(mod, selected_file)
+        except Exception as e:
+            logging.error(f'Manual install from GameBanana failed: {e}', exc_info=True)
+            self.feedback_manager.show_message('error', tr('errors.error'), tr('errors.manual_install_failed', error=str(e)))
+
+    def _start_prepare_worker(self, mod, selected_file: Dict):
+        worker = PrepareGameBananaManualInstallWorker(mod, selected_file, parent=self.app)
+        self.app_state.is_installing = True
+        self.app_state._scan_blocked = True
+        self.set_install_buttons_enabled(False)
+        self.app.game_launch.update_button_state()
+
+        def on_finished(success: bool, result):
+            self.app_state.is_installing = False
+            self.app_state._scan_blocked = False
+            self.set_install_buttons_enabled(True)
+            self.app_state.progress_bar_visible = False
+            self.app_state.progress_bar_value = 0
+            self.app_state.clear_current_task()
+            self.app.game_launch.update_button_state()
+            if success and isinstance(result, tuple):
+                prepared_path, gb_metadata, temp_dir = result
+                try:
+                    from ui.dialogs.manual_mod_install_dialog import ManualModInstallDialog
+                    from utils.game_utils import get_game_type_string
+                    initial_game_type = getattr(mod, 'game', None)
+                    if not initial_game_type and self.app_state and hasattr(self.app_state, 'game_mode'):
+                        initial_game_type = get_game_type_string(self.app_state.game_mode)
+                    dialog = ManualModInstallDialog(self.app, prepared_path, gamebanana_metadata=gb_metadata, source_file_path=None, initial_game_type=initial_game_type)
+                    dialog.temp_dir_to_cleanup = temp_dir
+                    if dialog.exec() == QDialog.DialogCode.Accepted:
+                        self.mod_manager.invalidate_mods_cache()
+                        self.mod_manager.load_local_mods(_skip_conversion=True)
+                        self.mod_manager.mod_list_updated.emit()
+                        if hasattr(self.app, 'search_display'):
+                            self.app.search_display.update_search_plaques()
+                        QMessageBox.information(self.app, tr('dialogs.success'), tr('dialogs.mod_created_successfully'))
+                except Exception as e:
+                    logging.error(f'Failed to open manual install dialog: {e}', exc_info=True)
+                    self.feedback_manager.show_message('error', tr('errors.error'), tr('errors.manual_install_failed', error=str(e)))
+            else:
+                error_msg = result if isinstance(result, str) else tr('errors.manual_install_failed', error='Unknown error')
+                self.feedback_manager.show_message('error', tr('errors.error'), error_msg)
+        worker.finished_with_result.connect(on_finished)
+        worker.progress.connect(lambda p: setattr(self.app_state, 'progress_bar_value', p))
+        worker.status.connect(lambda s, c: self.feedback_manager.update_status(s, c))
+        self.app_state.progress_bar_visible = True
+        self.app_state.progress_bar_value = 0
+        self.app_state.current_task = worker
+        worker.start()
+
+    def _prepare_gamebanana_files_for_manual_install(self, mod, selected_file: Dict) -> tuple:
+        import tempfile
+        from utils.file_utils import download_file_with_progress
+        from utils.archive_utils import extract_archive
+        from config.constants import NETWORK_TIMEOUT_HEAD
+        from utils.network_utils import get_session
+        temp_dir = None
+        try:
+            mod_key = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
+            mod_id_str = mod_key.replace('gb_', '', 1) if mod_key and mod_key.startswith('gb_') else None
+            if not mod_id_str:
+                raise ValueError(tr('errors.invalid_gamebanana_mod_id'))
+            mod_id = int(mod_id_str)
+            download_url = selected_file.get('download_url') or selected_file.get('_sDownloadUrl')
+            if not download_url:
+                raise ValueError(tr('errors.no_download_url'))
+            file_name = selected_file.get('name') or selected_file.get('_sFile') or selected_file.get('_sName') or f'mod_{mod_id}.zip'
+            temp_dir = tempfile.mkdtemp(prefix='gb_manual_install_')
+            archive_path = os.path.join(temp_dir, file_name)
+            session = get_session()
+            downloaded_ref = [0]
+            total_size = 0
+            try:
+                head_response = session.head(download_url, allow_redirects=True, timeout=NETWORK_TIMEOUT_HEAD)
+                total_size = int(head_response.headers.get('content-length', 0))
+            except Exception:
+                pass
+            success = download_file_with_progress(download_url, archive_path, session=session, downloaded_ref=downloaded_ref)
+            if not success:
+                raise RuntimeError('download_failed')
+            extract_dir = os.path.join(temp_dir, 'extracted')
+            os.makedirs(extract_dir, exist_ok=True)
+            extract_archive(archive_path, extract_dir)
+            content_path = extract_dir
+            contents = os.listdir(extract_dir)
+            if len(contents) == 1 and os.path.isdir(os.path.join(extract_dir, contents[0])):
+                content_path = os.path.join(extract_dir, contents[0])
+            gb_metadata = {'mod_id': mod_id, 'name': getattr(mod, 'name', 'Unknown Mod'), 'icon_url': getattr(mod, 'icon_url', None), 'external_url': getattr(mod, 'external_url', None), 'tags': getattr(mod, 'tags', []) if hasattr(mod, 'tags') and mod.tags else [], 'category': getattr(mod, 'gamebanana_category', None) if hasattr(mod, 'gamebanana_category') else None, 'author': getattr(mod, 'author', 'Unknown'), 'tagline': getattr(mod, 'tagline', ''), 'game': getattr(mod, 'game', 'deltarune'), 'version': getattr(mod, 'version', '1.0.0')}
+            return (content_path, gb_metadata, temp_dir)
+        except Exception as e:
+            logging.error(f'Failed to prepare GameBanana files: {e}', exc_info=True)
+            if temp_dir and os.path.exists(temp_dir):
+                try:
+                    shutil.rmtree(temp_dir, ignore_errors=True)
+                except Exception:
+                    pass
+            raise
 
     def set_install_buttons_enabled(self, enabled: bool):
         self._safe_execute(lambda: (self.app.action_button.setEnabled(True if self.app_state.is_installing else enabled), self.app.saves_button.setEnabled(True), self.app.shortcut_button.setEnabled(enabled)), 'Failed to set install buttons enabled')

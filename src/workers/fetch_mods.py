@@ -105,7 +105,7 @@ class FetchModsThread(QThread):
                             if not self.api:
                                 return (mods, mods_needing_metadata)
                             for page in range(start_page, start_page + num_pages):
-                                mods_data, page_mods_needing_metadata = self.api.get_game_mods(game_id, page=page, per_page=GAMEBANANA_PER_PAGE, sort=sort, metadata_cache=self.metadata_cache)
+                                mods_data, page_mods_needing_metadata = self.api.get_game_mods(game_id, page=page, per_page=GAMEBANANA_PER_PAGE, sort=sort, metadata_cache=self.metadata_cache, app_state=self.app_state)
                                 if not mods_data:
                                     logger.debug(f'No mods data for {game_name} page {page}')
                                     break

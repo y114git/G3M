@@ -308,7 +308,7 @@ class RefreshController:
                 remaining_mod_ids = all_mod_ids[MAX_METADATA_BATCH_SIZE:]
                 self.app_state.gamebanana_mods_needing_metadata = remaining_mod_ids
                 from workers.load_gamebanana_metadata import LoadGameBananaMetadataThread
-                self.metadata_thread = LoadGameBananaMetadataThread(mod_ids_to_load, metadata_cache, parent=self.app_window)
+                self.metadata_thread = LoadGameBananaMetadataThread(mod_ids_to_load, metadata_cache, parent=self.app_window, app_state=self.app_state)
                 if self.app_window and hasattr(self.app_window, 'search_display'):
                     self.metadata_thread.mod_updated.connect(self.app_window.search_display.on_metadata_updated)
                 self.metadata_thread.finished.connect(self._on_metadata_loading_finished)

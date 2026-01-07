@@ -529,6 +529,8 @@ class AppWindow(QWidget):
         library_widgets = library_builder.get_widgets()
         self.library_filters_widget = library_widgets['library_filters_widget']
         self.import_export_button = library_widgets.get('import_export_button')
+        self.custom_executable_button = library_widgets.get('custom_executable_button')
+        self.reset_custom_exe_button = library_widgets.get('reset_custom_exe_button')
         self.change_path_button = library_widgets.get('change_path_button')
         self.game_type_combo = library_widgets['game_type_combo']
         self.chapter_mode_checkbox = library_widgets['chapter_mode_checkbox']
@@ -679,10 +681,7 @@ class AppWindow(QWidget):
         self.select_portproton_path_button = settings_widgets.get('select_portproton_path_button')
         self.portproton_path_label = settings_widgets.get('portproton_path_label')
         self.portproton_frame = settings_widgets.get('portproton_frame')
-        self.use_custom_executable_checkbox = settings_widgets['use_custom_executable_checkbox']
-        self.select_custom_executable_button = settings_widgets['select_custom_executable_button']
-        self.custom_executable_path_label = settings_widgets['custom_executable_path_label']
-        self.custom_exe_frame = settings_widgets['custom_exe_frame']
+        self.hide_mods_without_files_checkbox = settings_widgets['hide_mods_without_files_checkbox']
         self.open_deltahub_folder_button = settings_widgets['open_deltahub_folder_button']
         self.customization_button = settings_widgets['customization_button']
         self.settings_customization_button = settings_widgets['settings_customization_button']
@@ -712,10 +711,13 @@ class AppWindow(QWidget):
             self.use_portproton_checkbox.stateChanged.connect(self._update_portproton_ui)
         if self.select_portproton_path_button:
             self.select_portproton_path_button.clicked.connect(self._select_portproton_path)
-        self.use_custom_executable_checkbox.stateChanged.connect(self.settings_ui.on_toggle_custom_executable)
-        self.select_custom_executable_button.clicked.connect(self._select_custom_executable_file)
+        self.hide_mods_without_files_checkbox.stateChanged.connect(self.settings_ui.on_toggle_hide_mods_without_files)
         if self.change_path_button:
             self.change_path_button.clicked.connect(self._prompt_for_game_path)
+        if self.custom_executable_button:
+            self.custom_executable_button.clicked.connect(self._select_custom_executable_file)
+        if self.reset_custom_exe_button:
+            self.reset_custom_exe_button.clicked.connect(self._reset_custom_executable)
         self.open_deltahub_folder_button.clicked.connect(self._open_deltahub_folder)
         self.customization_button.clicked.connect(lambda: self._switch_settings_page(self.settings_customization_page))
         self.reset_button.clicked.connect(self.settings_ui.reset_settings)
@@ -1119,7 +1121,7 @@ class AppWindow(QWidget):
             self.hide_library_filters_checkbox.setChecked(self.app_state.local_config.get('hide_library_filters', False))
         self._update_change_path_button_text()
         self.theme.update_background_button_state()
-        self.use_custom_executable_checkbox.setChecked(self.app_state.local_config.get('use_custom_executable', False))
+        self.hide_mods_without_files_checkbox.setChecked(self.app_state.local_config.get('hide_mods_without_files', False))
         self.launch_via_steam_checkbox.setChecked(self.app_state.local_config.get('launch_via_steam', False))
         if self.use_portproton_checkbox:
             self.use_portproton_checkbox.setChecked(self.app_state.local_config.get('use_portproton', False))
@@ -1282,16 +1284,31 @@ class AppWindow(QWidget):
             self.online_label.setText(f"<span style='color:{UI_COLORS['status_ready']};'>●</span> {tr('status.online_count', count=display_count)}")
 
     def _select_custom_executable_file(self):
-        filepath = self.settings_manager.select_custom_executable_file()
+        dlg_title = tr('ui.select_launch_file')
+        from PyQt6.QtWidgets import QFileDialog
+        filepath, _ = QFileDialog.getOpenFileName(self, dlg_title)
         if filepath:
+            config_key = self.app_state.game_mode.get_custom_exec_config_key()
+            self.app_state.local_config[config_key] = filepath
+            self.settings_manager.write_local_config()
+            self.settings_manager.settings_changed.emit()
             self._update_custom_executable_ui()
 
+    def _reset_custom_executable(self):
+        config_key = self.app_state.game_mode.get_custom_exec_config_key()
+        self.app_state.local_config[config_key] = ''
+        self.settings_manager.write_local_config()
+        self.settings_manager.settings_changed.emit()
+        self._update_custom_executable_ui()
+
     def _update_custom_executable_ui(self):
-        use_custom = self.app_state.local_config.get('use_custom_executable', False)
-        path = self.app_state.local_config.get(self.app_state.game_mode.get_custom_exec_config_key(), '')
-        self.custom_exe_frame.setVisible(use_custom and self.use_custom_executable_checkbox.isEnabled())
-        if self.custom_exe_frame.isVisible():
-            self.custom_executable_path_label.setText(tr('ui.currently_selected', filename=os.path.basename(path)) if path else tr('ui.file_not_selected'))
+        if not hasattr(self, 'custom_executable_button') or not self.custom_executable_button:
+            return
+        config_key = self.app_state.game_mode.get_custom_exec_config_key()
+        path = self.app_state.local_config.get(config_key, '')
+        has_custom_exe = bool(path)
+        if self.reset_custom_exe_button:
+            self.reset_custom_exe_button.setVisible(has_custom_exe)
 
     def _select_portproton_path(self):
         if not self.select_portproton_path_button:
@@ -1404,6 +1421,11 @@ class AppWindow(QWidget):
             self.gb_sort_combo.setItemText(1, tr('ui.gamebanana_sort_new'))
             self.gb_sort_combo.setItemText(2, tr('ui.gamebanana_sort_updated'))
             self.gb_sort_combo.setToolTip(tr('ui.gamebanana_sort_tooltip'))
+        if hasattr(self, 'custom_executable_button') and self.custom_executable_button:
+            self.custom_executable_button.setText(tr('buttons.custom_executable'))
+            self.custom_executable_button.setToolTip(tr('tooltips.custom_executable_library'))
+        if hasattr(self, 'reset_custom_exe_button') and self.reset_custom_exe_button:
+            self._update_custom_executable_ui()
         if hasattr(self, 'auto_sorting_checkbox') and self.auto_sorting_checkbox:
             self.auto_sorting_checkbox.setText(tr('ui.auto_sorting'))
             self.auto_sorting_checkbox.setToolTip(tr('ui.auto_sorting_tooltip'))
@@ -1424,9 +1446,8 @@ class AppWindow(QWidget):
             self.use_portproton_checkbox.setToolTip("<html><body style='white-space: normal;'>" + tr('tooltips.portproton') + '</body></html>')
         if self.select_portproton_path_button:
             self.select_portproton_path_button.setText(tr('buttons.select_portproton_path'))
-        self.use_custom_executable_checkbox.setText(tr('ui.custom_executable'))
-        self.use_custom_executable_checkbox.setToolTip("<html><body style='white-space: normal;'>" + tr('tooltips.custom_exe') + '</body></html>')
-        self.select_custom_executable_button.setText(tr('buttons.select_file'))
+        self.hide_mods_without_files_checkbox.setText(tr('ui.hide_mods_without_files'))
+        self.hide_mods_without_files_checkbox.setToolTip("<html><body style='white-space: normal;'>" + tr('tooltips.hide_mods_without_files') + '</body></html>')
         self._update_change_path_button_text()
         self.open_deltahub_folder_button.setText(tr('buttons.open_deltahub_folder'))
         self.customization_button.setText(tr('tags.customization'))
@@ -1476,6 +1497,8 @@ class AppWindow(QWidget):
         self.changelog_button.setText(tr('buttons.close') if self.app_state.is_changelog_view else tr('buttons.changelog'))
         if hasattr(self, 'report_bug_button') and self.report_bug_button:
             self.report_bug_button.setText(tr('buttons.report_bug'))
+        if hasattr(self, 'theme_button') and self.theme_button:
+            self.theme_button.setText(tr('buttons.theme_management'))
 
     def _retranslate_ui(self):
         self._suppress_tab_handlers = True

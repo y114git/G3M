@@ -64,7 +64,7 @@ class GameBananaAPI:
         else:
             logger.warning(f'{operation}: {e}')
 
-    def get_game_mods(self, game_id: int, page: int = 1, per_page: int = 20, sort: str = 'default', metadata_cache=None, max_retries: int = 2) -> Tuple[Optional[List[ModInfo]], List[str]]:
+    def get_game_mods(self, game_id: int, page: int = 1, per_page: int = 20, sort: str = 'default', metadata_cache=None, max_retries: int = 2, app_state=None) -> Tuple[Optional[List[ModInfo]], List[str]]:
         valid_sorts = ['default', 'new', 'updated']
         effective_sort = sort if sort in valid_sorts else 'default'
         url = f'{self.base_url}/Game/{game_id}/Subfeed'
@@ -93,6 +93,31 @@ class GameBananaAPI:
                     if mod_id:
                         mod_id_str = str(mod_id)
                         is_wip = model_name in ('Wip', 'WIP')
+                        hide_mods_without_files = False
+                        if app_state and hasattr(app_state, 'local_config'):
+                            hide_mods_without_files = app_state.local_config.get('hide_mods_without_files', False)
+                        else:
+                            hide_mods_without_files = False
+                        if hide_mods_without_files:
+                            files_data = record.get('_aFiles')
+                            has_files = False
+                            if files_data:
+                                if isinstance(files_data, dict) and len(files_data) > 0:
+                                    has_files = True
+                                elif isinstance(files_data, list) and len(files_data) > 0:
+                                    has_files = True
+                            if not has_files:
+                                try:
+                                    if is_wip:
+                                        external_url = f'https://gamebanana.com/wips/{mod_id}'
+                                    else:
+                                        external_url = f'https://gamebanana.com/mods/{mod_id}'
+                                    files = self.get_mod_files(mod_id, external_url=external_url)
+                                    has_files = bool(files and len(files) > 0)
+                                except Exception:
+                                    has_files = False
+                            if not has_files:
+                                continue
                         mod_info = self._map_mod_data(record, game_name, is_wip=is_wip)
                         if mod_info:
                             downloads_from_gb = record.get('_nDownloadCount')
@@ -335,7 +360,14 @@ class GameBananaAPI:
                 elif isinstance(data, list) and len(data) > 0:
                     if isinstance(data[0], dict):
                         logger.debug('get_mod_full_details_for_display: Response is list with dict at index 0')
-                        return data[0]
+                        result = {}
+                        if 'text' in data[0]:
+                            result['text'] = data[0].get('text')
+                        if 'description' in data[0]:
+                            result['description'] = data[0].get('description')
+                        if 'screenshots' in data[0]:
+                            result['screenshots'] = data[0].get('screenshots')
+                        return result if result else None
                     else:
                         logger.warning(f"get_mod_full_details_for_display: Response is list but has {len(data)} elements (expected 3), first element type: {(type(data[0]) if len(data) > 0 else 'N/A')}")
                         result = {}
@@ -348,7 +380,14 @@ class GameBananaAPI:
                         return result if result else None
                 elif isinstance(data, dict):
                     logger.debug(f'get_mod_full_details_for_display: Response is dict, keys: {list(data.keys())}')
-                    return data
+                    result = {}
+                    if 'text' in data:
+                        result['text'] = data.get('text')
+                    if 'description' in data:
+                        result['description'] = data.get('description')
+                    if 'screenshots' in data:
+                        result['screenshots'] = data.get('screenshots')
+                    return result if result else None
                 else:
                     logger.warning(f'get_mod_full_details_for_display: Unexpected response format for mod {mod_id}: {type(data)}, value: {str(data)[:200]}')
                     return None

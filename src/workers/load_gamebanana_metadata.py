@@ -11,13 +11,14 @@ class LoadGameBananaMetadataThread(QThread):
     progress = pyqtSignal(int, int)
     finished = pyqtSignal()
 
-    def __init__(self, mod_ids: List[str], metadata_cache: GameBananaMetadataCache, parent=None):
+    def __init__(self, mod_ids: List[str], metadata_cache: GameBananaMetadataCache, parent=None, app_state=None):
         super().__init__(parent)
         self.mod_ids = mod_ids
         self.metadata_cache = metadata_cache
         self.api = GameBananaAPI()
         self._cancelled = False
         self._batch_size = 3
+        self.app_state = app_state
 
     def cancel(self):
         self._cancelled = True

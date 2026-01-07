@@ -154,10 +154,10 @@ class ModImportExportController:
                     QMessageBox.information(self.app_window, tr('dialogs.success'), tr('status.mod_imported_success'))
                 else:
                     logging.error(f'[IMPORT] Mod config not found at: {config_path_to_read}')
-                    QMessageBox.critical(self.app_window, tr('errors.error'), tr('errors.invalid_mod_format'))
+                    self._show_import_error_with_manual_install(file_path, tr('errors.invalid_mod_format'))
         except Exception as e:
             logging.error(f'[IMPORT] Mod import failed: {e}', exc_info=True)
-            QMessageBox.critical(self.app_window, tr('errors.error'), tr('errors.mod_import_failed', error=str(e)))
+            self._show_import_error_with_manual_install(file_path, tr('errors.mod_import_failed', error=str(e)))
 
     def _install_mod_from_url(self, url: str):
         try:
@@ -176,6 +176,57 @@ class ModImportExportController:
         except Exception as e:
             logging.error(f'ModImportExportController: Error installing mod from URL: {e}', exc_info=True)
             self.app_window.feedback_manager.show_message('error', 'errors.error', tr('mods.installation_error', error=str(e)))
+
+    def _show_import_error_with_manual_install(self, file_path: str, error_message: str):
+        msg_box = QMessageBox(self.app_window)
+        msg_box.setIcon(QMessageBox.Icon.Critical)
+        msg_box.setWindowTitle(tr('errors.error'))
+        msg_box.setText(error_message)
+        msg_box.setInformativeText(tr('dialogs.manual_install_available'))
+        manual_install_btn = msg_box.addButton(tr('ui.manual_install'), QMessageBox.ButtonRole.AcceptRole)
+        ok_btn = msg_box.addButton(tr('buttons.ok'), QMessageBox.ButtonRole.RejectRole)
+        msg_box.setDefaultButton(ok_btn)
+        msg_box.exec()
+        if msg_box.clickedButton() == manual_install_btn:
+            self._start_manual_install_from_file(file_path)
+
+    def _start_manual_install_from_file(self, file_path: str):
+        try:
+            prepared_path, temp_dir = self._prepare_local_files_for_manual_install(file_path)
+            if prepared_path:
+                from ui.dialogs.manual_mod_install_dialog import ManualModInstallDialog
+                from utils.game_utils import get_game_type_string
+                initial_game_type = None
+                if self.app_state and hasattr(self.app_state, 'game_mode'):
+                    initial_game_type = get_game_type_string(self.app_state.game_mode)
+                dialog = ManualModInstallDialog(self.app_window, prepared_path, gamebanana_metadata=None, source_file_path=file_path, initial_game_type=initial_game_type)
+                dialog.temp_dir_to_cleanup = temp_dir
+                if dialog.exec() == QDialog.DialogCode.Accepted:
+                    self.mod_manager.invalidate_mods_cache()
+                    self.mod_manager.load_local_mods(_skip_conversion=True)
+                    self.mod_manager.mod_list_updated.emit()
+                    QMessageBox.information(self.app_window, tr('dialogs.success'), tr('dialogs.mod_created_successfully'))
+        except Exception as e:
+            logging.error(f'Manual install from file failed: {e}', exc_info=True)
+            QMessageBox.critical(self.app_window, tr('errors.error'), tr('errors.manual_install_failed', error=str(e)))
+
+    def _prepare_local_files_for_manual_install(self, file_path: str) -> str:
+        import tempfile
+        temp_dir = tempfile.mkdtemp(prefix='deltahub_manual_install_')
+        try:
+            extract_archive(file_path, temp_dir)
+            content_path = temp_dir
+            contents = os.listdir(temp_dir)
+            if len(contents) == 1 and os.path.isdir(os.path.join(temp_dir, contents[0])):
+                content_path = os.path.join(temp_dir, contents[0])
+            return (content_path, temp_dir)
+        except Exception as e:
+            logging.error(f'Failed to prepare local files: {e}', exc_info=True)
+            try:
+                shutil.rmtree(temp_dir, ignore_errors=True)
+            except Exception:
+                pass
+            raise
 
     def _on_mod_install_finished(self, success: bool, message: str):
         self.app_state.is_installing = False
