@@ -1968,11 +1968,11 @@ class MultiModMerger(QObject):
                                     self.patching_logger.info(f'Applied xdelta patch {file} to {os.path.relpath(target_file, target_dir)}')
                                     patch_applied = True
                                 else:
-                                    self.patching_logger.warning(f'Failed to apply xdelta patch {file} to {os.path.relpath(target_file, target_dir)}, skipping (xdelta files should only patch data.win/game.ios)')
+                                    self.patching_logger.warning(f'Failed to apply xdelta patch {file} to {os.path.relpath(target_file, target_dir)}, skipping')
                             if not patch_applied:
                                 self.patching_logger.warning(f'Xdelta patch {file} could not be applied to any target files, skipping (xdelta files should not be copied to game directory)')
                         else:
-                            self.patching_logger.debug(f'No target files found for xdelta patch {file}, skipping (xdelta files should only patch data.win/game.ios)')
+                            self.patching_logger.debug(f'No target files found for xdelta patch {file}, skipping (expected filename: {os.path.splitext(file)[0]})')
                     elif self.xdelta_modpack:
                         rel_path = os.path.relpath(source_path, mod_source_dir)
                         target_path = os.path.join(target_dir, rel_path)
@@ -2064,6 +2064,49 @@ class MultiModMerger(QObject):
                             target_file = os.path.join(target_dir, file)
                         target_dirname = os.path.dirname(target_file)
                         os.makedirs(target_dirname, exist_ok=True)
+                        file_lower = file.lower()
+                        if file_lower.endswith(('.xdelta', '.vcdiff')):
+                            target_files = self._find_target_files_for_xdelta(target_dir, file)
+                            if target_files:
+                                patch_applied = False
+                                for patch_target_file in target_files:
+                                    if chapter_id is not None and self.backup_manager:
+                                        if os.path.exists(patch_target_file):
+                                            self.backup_manager.backup_file(chapter_id, patch_target_file)
+                                            if self._session_manifest_path:
+                                                self.backup_manager.save_backups_to_manifest(self._session_manifest_path)
+                                    if self._apply_xdelta_to_file(patch_target_file, source_file):
+                                        self.patching_logger.info(f'Applied xdelta patch {file} from archive to {os.path.relpath(patch_target_file, target_dir)}')
+                                        patch_applied = True
+                                    else:
+                                        self.patching_logger.warning(f'Failed to apply xdelta patch {file} from archive to {os.path.relpath(patch_target_file, target_dir)}, skipping')
+                                if not patch_applied:
+                                    self.patching_logger.warning(f'Xdelta patch {file} from archive could not be applied to any target files, copying as regular file')
+                                    is_new_file = not os.path.exists(target_file)
+                                    if not is_new_file:
+                                        if chapter_id is not None and self.backup_manager:
+                                            self.backup_manager.backup_file(chapter_id, target_file)
+                                            if self._session_manifest_path:
+                                                self.backup_manager.save_backups_to_manifest(self._session_manifest_path)
+                                    elif chapter_id is not None and self.backup_manager:
+                                        self.backup_manager.mark_file_added(chapter_id, target_file)
+                                        if self._session_manifest_path:
+                                            self.backup_manager.save_backups_to_manifest(self._session_manifest_path)
+                                    shutil.copy2(source_file, target_file)
+                            else:
+                                self.patching_logger.debug(f'No target files found for xdelta patch {file} from archive, copying as regular file (expected filename: {os.path.splitext(file)[0]})')
+                                is_new_file = not os.path.exists(target_file)
+                                if not is_new_file:
+                                    if chapter_id is not None and self.backup_manager:
+                                        self.backup_manager.backup_file(chapter_id, target_file)
+                                        if self._session_manifest_path:
+                                            self.backup_manager.save_backups_to_manifest(self._session_manifest_path)
+                                elif chapter_id is not None and self.backup_manager:
+                                    self.backup_manager.mark_file_added(chapter_id, target_file)
+                                    if self._session_manifest_path:
+                                        self.backup_manager.save_backups_to_manifest(self._session_manifest_path)
+                                shutil.copy2(source_file, target_file)
+                            continue
                         is_new_file = not os.path.exists(target_file)
                         if not is_new_file:
                             if chapter_id is not None and self.backup_manager:
@@ -2729,25 +2772,20 @@ class MultiModMerger(QObject):
         if not os.path.isdir(target_dir):
             return target_files
         excluded_files = {DATA_WIN_FILENAME.lower(), 'game.ios'}
-        target_extensions = ('.win', '.ios', '.bank')
-        patch_base = os.path.splitext(patch_filename)[0].lower()
-        potential_target_name = None
-        for ext in target_extensions:
-            if patch_base.endswith(ext):
-                potential_target_name = patch_base
-                break
+        patch_lower = patch_filename.lower()
+        if patch_lower.endswith('.xdelta'):
+            patch_base_lower = os.path.splitext(patch_filename)[0].lower()
+        elif patch_lower.endswith('.vcdiff'):
+            patch_base_lower = os.path.splitext(patch_filename)[0].lower()
+        else:
+            patch_base_lower = os.path.splitext(patch_filename)[0].lower()
         for root, dirs, files in os.walk(target_dir):
             for file in files:
                 file_lower = file.lower()
-                if file_lower.endswith(target_extensions):
-                    if file_lower in excluded_files:
-                        continue
-                    file_path = os.path.join(root, file)
-                    if potential_target_name:
-                        if file_lower == potential_target_name:
-                            target_files.append(file_path)
-                    else:
-                        target_files.append(file_path)
+                if file_lower in excluded_files:
+                    continue
+                if file_lower == patch_base_lower:
+                    target_files.append(os.path.join(root, file))
         return target_files
 
     def _apply_xdelta_to_file(self, target_file: str, patch_path: str) -> bool:

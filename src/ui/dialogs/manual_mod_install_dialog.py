@@ -329,7 +329,7 @@ class ManualModInstallDialog(QDialog):
                 path_input = widget.findChild(QLineEdit, 'path_input')
                 if path_input:
                     path_input.setText(normalized)
-        if normalized:
+        if file_path not in self.unused_files:
             self.extra_files_mappings[file_path] = normalized
         elif file_path in self.extra_files_mappings:
             del self.extra_files_mappings[file_path]
@@ -491,9 +491,17 @@ class ManualModInstallDialog(QDialog):
             shutil.copy2(data_file_path, target_data_path)
             files_structure[chapter_key]['data_file_url'] = data_file_name
             pass
-        for extra_file_path, relative_path in self.extra_files_mappings.items():
-            if extra_file_path in self.unused_files:
+        archive_files_map = {}
+        selected_data_files = set(self.data_file_selections.values())
+        all_extra_files = []
+        for file_path, rel_path in self.all_files:
+            if file_path in selected_data_files:
                 continue
+            if file_path in self.unused_files:
+                continue
+            relative_path = self.extra_files_mappings.get(file_path, '')
+            all_extra_files.append((file_path, relative_path))
+        for extra_file_path, relative_path in all_extra_files:
             is_data_file = False
             for ch_id, data_path in self.data_file_selections.items():
                 if extra_file_path == data_path:
@@ -526,11 +534,6 @@ class ManualModInstallDialog(QDialog):
                 chapter_key = '0'
             if chapter_key not in files_structure:
                 continue
-            if game == 'deltarune':
-                chapter_folder_name = get_chapter_folder_name(target_chapter_id, game=game)
-            else:
-                chapter_folder_name = chapter_key
-            chapter_folder = os.path.join(target_mod_dir, chapter_folder_name)
             extra_file_name = os.path.basename(extra_file_path)
             clean_path = relative_path.rstrip('/') if relative_path else ''
             if clean_path:
@@ -539,22 +542,41 @@ class ManualModInstallDialog(QDialog):
                     archive_key = 'root'
             else:
                 archive_key = 'root'
-            if 'extra_files' not in files_structure[chapter_key]:
-                files_structure[chapter_key]['extra_files'] = {}
-            if archive_key not in files_structure[chapter_key]['extra_files']:
-                files_structure[chapter_key]['extra_files'][archive_key] = []
-            archive_name = f'extra_file_{archive_key}.zip'
-            archive_path = os.path.join(chapter_folder, archive_name)
             clean_relative_path = relative_path.rstrip('/') if relative_path else ''
             if clean_relative_path:
                 archive_internal_path = f'{clean_relative_path}/{extra_file_name}'
             else:
                 archive_internal_path = extra_file_name
+            archive_map_key = (chapter_key, archive_key)
+            if archive_map_key not in archive_files_map:
+                archive_files_map[archive_map_key] = []
+            archive_files_map[archive_map_key].append((extra_file_path, relative_path, archive_internal_path))
+        for (chapter_key, archive_key), file_list in archive_files_map.items():
+            if game == 'deltarune':
+                if chapter_key == '0':
+                    target_chapter_id = 0
+                else:
+                    try:
+                        target_chapter_id = int(chapter_key)
+                    except ValueError:
+                        target_chapter_id = 0
+                chapter_folder_name = get_chapter_folder_name(target_chapter_id, game=game)
+            else:
+                chapter_folder_name = chapter_key
+            chapter_folder = os.path.join(target_mod_dir, chapter_folder_name)
+            archive_name = f'extra_file_{archive_key}.zip'
+            archive_path = os.path.join(chapter_folder, archive_name)
+            if 'extra_files' not in files_structure[chapter_key]:
+                files_structure[chapter_key]['extra_files'] = {}
+            if archive_key not in files_structure[chapter_key]['extra_files']:
+                files_structure[chapter_key]['extra_files'][archive_key] = []
             try:
                 os.makedirs(os.path.dirname(archive_path), exist_ok=True)
                 with zipfile.ZipFile(archive_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-                    zipf.write(extra_file_path, archive_internal_path)
-                logging.debug(f'Created extra_file archive: {archive_path} with internal path: {archive_internal_path}')
+                    for file_path, relative_path, internal_path in file_list:
+                        zipf.write(file_path, internal_path)
+                        logging.debug(f'Added {file_path} to archive {archive_path} with internal path: {internal_path}')
+                logging.debug(f'Created extra_file archive: {archive_path} with {len(file_list)} file(s)')
             except Exception as e:
                 logging.error(f'Failed to create extra_file archive {archive_path}: {e}', exc_info=True)
                 raise
