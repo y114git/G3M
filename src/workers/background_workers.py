@@ -79,12 +79,11 @@ class PresenceWorker(QObject):
                     self._safe_emit_online_count(-1)
             else:
                 self._safe_emit_online_count(-1)
-        except requests.Timeout as e:
+        except requests.Timeout:
             self._safe_emit_online_count(-1)
-        except requests.ConnectionError as e:
+        except requests.ConnectionError:
             self._safe_emit_online_count(-1)
-        except requests.RequestException as e:
-            pass
+        except requests.RequestException:
             self._safe_emit_online_count(-1)
         finally:
             self._busy = False
@@ -131,7 +130,7 @@ class FetchChangelogWorker(QObject):
                     text = f.read()
             else:
                 text = self.source
-        except Exception as e:
+        except Exception:
             text = tr('errors.changelog_load_failed')
         finally:
             self.finished.emit(text)
@@ -342,14 +341,14 @@ class InstallModsThread(QThread):
             def on_response(r):
                 self._active_response = r
             download_file(session, url, target_path, progress_callback, total_size, downloaded_ref, cancel_check=lambda: self._cancelled, on_response=on_response)
-        except (requests.Timeout, requests.ConnectionError) as e:
+        except (requests.Timeout, requests.ConnectionError):
             if os.path.exists(target_path):
                 try:
                     os.remove(target_path)
                 except OSError as rm_e:
                     logging.debug(f'_download_component_file: cleanup failed: {rm_e}')
             raise
-        except requests.RequestException as e:
+        except requests.RequestException:
             if os.path.exists(target_path):
                 try:
                     os.remove(target_path)
@@ -370,7 +369,7 @@ class InstallModsThread(QThread):
                 except OSError:
                     pass
             raise
-        except Exception as e:
+        except Exception:
             if os.path.exists(target_path):
                 try:
                     os.remove(target_path)
@@ -435,19 +434,19 @@ class InstallModsThread(QThread):
                     content_length = int(h.headers.get('content-length', 0))
                     file_sizes_cache[u] = content_length
                     total_bytes += content_length
-                except requests.Timeout as e:
+                except requests.Timeout:
                     file_sizes_cache[u] = 0
                     total_bytes = 0
                     break
-                except requests.HTTPError as e:
+                except requests.HTTPError:
                     file_sizes_cache[u] = 0
                     total_bytes = 0
                     break
-                except requests.RequestException as e:
+                except requests.RequestException:
                     file_sizes_cache[u] = 0
                     total_bytes = 0
                     break
-                except Exception as e:
+                except Exception:
                     pass
                     file_sizes_cache[u] = 0
                     total_bytes = 0
@@ -546,7 +545,7 @@ class InstallModsThread(QThread):
                     if str(e) == 'download_cancelled':
                         raise
                     raise
-                except Exception as e:
+                except Exception:
                     raise
                 mod_key = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
                 if key not in installed_mods:
@@ -1005,7 +1004,7 @@ class UrlInstallThread(QThread):
                 if len(contents) == 1 and os.path.isdir(os.path.join(extract_dir, contents[0])):
                     content_path = os.path.join(extract_dir, contents[0])
                 self.manual_install_required.emit(content_path, preserved_archive_path, persistent_temp_dir)
-            except Exception as e:
+            except Exception:
                 try:
                     shutil.rmtree(persistent_temp_dir, ignore_errors=True)
                 except Exception:
@@ -1325,7 +1324,7 @@ class ModScanThread(QThread):
                     try:
                         from utils.file_utils import migrate_mod_config
                         migrate_mod_config(folder_path)
-                    except Exception as e:
+                    except Exception:
                         logging.warning(f'ModScanThread: failed to migrate mod config in {folder_path}')
                     config_path = os.path.join(folder_path, MOD_CONFIG_FILENAME)
                     if not os.path.exists(config_path):
@@ -1365,21 +1364,21 @@ class ModScanThread(QThread):
                                 continue
                         mod_info = {'key': key, 'folder_path': folder_path, 'folder_name': folder_name, 'config_data': config_data, 'config_mtime': config_mtime}
                         cache[key] = mod_info
-                    except (OSError, PermissionError) as e:
+                    except (OSError, PermissionError):
                         logging.warning(f'ModScanThread: Corrupted config detected (failed to access) in {config_path}')
                         continue
-                    except json.JSONDecodeError as e:
+                    except json.JSONDecodeError:
                         logging.warning(f'ModScanThread: Corrupted config detected (invalid JSON) in {config_path}')
                         continue
-                    except KeyError as e:
+                    except KeyError:
                         logging.debug(f'ModScanThread: missing key in {config_path}')
                         continue
-                    except Exception as e:
+                    except Exception:
                         logging.error(f'ModScanThread: Corrupted config detected (unexpected error) in {folder_path}')
                         continue
-        except OSError as e:
+        except OSError:
             logging.error(f'ModScanThread: failed to list directory {self.mods_dir}')
-        except Exception as e:
+        except Exception:
             pass
         try:
             self._save_cache(cache)
