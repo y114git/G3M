@@ -48,8 +48,11 @@ class SecureLogFilter(logging.Filter):
             if record.getMessage():
                 record.msg = sanitize_log_message(str(record.msg))
                 record.args = ()
-        except Exception:
-            pass
+        except Exception as e:
+            try:
+                logging.debug(f'Error in SecureLogFilter: {e}')
+            except Exception:
+                pass
         return True
 
 
@@ -132,7 +135,7 @@ def register_url_protocol():
                 f.write(desktop_file_content)
             subprocess.run(['xdg-mime', 'default', 'deltahub.desktop', 'x-scheme-handler/deltahub'], check=False)
     except Exception as e:
-        pass
+        logging.warning(f'Failed to register URL protocol handler: {e}', exc_info=True)
 
 
 class SingleInstanceServer(QLocalServer):
@@ -193,8 +196,8 @@ def cleanup_old_temp_directories():
                             if safe_rmtree(temp_dir):
                                 cleaned_count += 1
                                 logging.debug(f'Cleaned up old temp directory: {temp_dir}')
-                    except OSError:
-                        pass
+                    except OSError as e:
+                        logging.debug(f'Failed to check/remove temp directory {temp_dir}: {e}')
         except Exception as e:
             logging.debug(f'Failed to cleanup temp directories matching {pattern}: {e}')
     if cleaned_count > 0:
@@ -221,15 +224,15 @@ def _load_config_file() -> dict:
                 logging.warning(f'Invalid config structure detected, backed up to {backup_path}')
                 os.remove(config_path)
                 logging.info(f'Removed invalid config file: {config_path}')
-            except Exception:
-                pass
+            except Exception as e:
+                logging.warning(f'Failed to backup invalid config file: {e}')
             return {}
         if config_path == old_config_path and (not os.path.exists(settings_path)):
             import shutil
             shutil.move(old_config_path, settings_path)
             logging.info('Migrated settings config.json to settings.json in startup')
         return config
-    except json.JSONDecodeError as e:
+    except json.JSONDecodeError:
         backup_path = f'{config_path}.invalid.bak'
         try:
             import shutil
@@ -237,8 +240,8 @@ def _load_config_file() -> dict:
             logging.warning(f'Corrupted config file detected, backed up to {backup_path}')
             os.remove(config_path)
             logging.info(f'Removed corrupted config file: {config_path}')
-        except Exception:
-            pass
+        except Exception as e:
+            logging.warning(f'Failed to backup corrupted config file: {e}')
         return {}
     except (PermissionError, OSError) as e:
         logging.warning(f'Permission or OS error loading config file: {e}')
@@ -264,6 +267,9 @@ def run_app():
     parser.add_argument('--force-start', action='store_true', help='Force start even if another instance is detected')
     args, unknown_args = parser.parse_known_args()
     url_arg = next((arg for arg in sys.argv[1:] if arg.startswith('deltahub://')), None)
+    if platform.system() == 'Linux' and (not args.shortcut_launch):
+        os.environ.setdefault('NO_AT_BRIDGE', '1')
+    app = setup_app()
     socket = QLocalSocket()
     socket.connectToServer(SINGLE_INSTANCE_KEY)
     if socket.waitForConnected(500):
@@ -277,18 +283,14 @@ def run_app():
     if not args.force_start:
         running_game = check_game_processes()
         if running_game:
-            app = setup_app()
             error_msg = tr('errors.game_running_message', game_name=running_game)
             logging.error(f'STARTUP ERROR: {error_msg}')
             QMessageBox.critical(None, tr('errors.game_running_title'), error_msg)
             sys.exit(1)
-    if platform.system() == 'Linux' and (not args.shortcut_launch):
-        os.environ.setdefault('NO_AT_BRIDGE', '1')
-    app = setup_app()
     try:
         register_url_protocol()
     except Exception as e:
-        pass
+        logging.warning(f'Failed to register URL protocol during startup: {e}', exc_info=True)
     if args.shortcut_launch:
         from core.app_window import AppWindow
         try:
