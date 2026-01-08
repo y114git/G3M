@@ -10,7 +10,7 @@ from typing import Optional
 import logging
 from PyQt6.QtCore import QTranslator, Qt, QEvent, QThread, QTimer, pyqtSignal, QUrl
 from PyQt6.QtGui import QColor, QIcon, QPainter, QPixmap, QDesktopServices
-from PyQt6.QtWidgets import QApplication, QCheckBox, QFrame, QLabel, QProgressBar, QPushButton, QTabWidget, QVBoxLayout, QWidget, QHBoxLayout, QSizePolicy, QColorDialog
+from PyQt6.QtWidgets import QApplication, QCheckBox, QFrame, QLabel, QProgressBar, QPushButton, QTabWidget, QVBoxLayout, QWidget, QHBoxLayout, QSizePolicy, QColorDialog, QDialog, QMessageBox
 from managers.localization_manager import localization_manager, tr
 from models.game_modes import FullGameMode, DemoGameMode, UndertaleGameMode, UndertaleYellowGameMode, PizzaTowerGameMode, SugarySpireGameMode
 from config.constants import UI_COLORS, SOCIAL_LINKS, ONLINE_UPDATE_INTERVAL, INITIALIZATION_TIMEOUT, THREAD_WAIT_TIMEOUT, SLOT_ID_UNIVERSAL
@@ -249,6 +249,49 @@ class AppWindow(QWidget):
             worker.status.connect(lambda msg, color: self.feedback_manager.update_status(msg, color))
             worker.progress.connect(lambda p: setattr(self.app_state, 'progress_bar_value', p))
 
+            def on_manual_install_required(prepared_path, archive_path, temp_dir):
+                self.app_state.is_installing = False
+                self.app_state.progress_bar_visible = False
+                self.app_state.progress_bar_value = 0
+                self.app_state.clear_current_task()
+                try:
+                    from ui.dialogs.manual_mod_install_dialog import ManualModInstallDialog
+                    from utils.game_utils import get_game_type_string
+                    initial_game_type = None
+                    if self.app_state and hasattr(self.app_state, 'game_mode'):
+                        initial_game_type = get_game_type_string(self.app_state.game_mode)
+                    dialog = ManualModInstallDialog(self, prepared_path, gamebanana_metadata=None, source_file_path=archive_path, initial_game_type=initial_game_type)
+                    dialog.temp_dir_to_cleanup = temp_dir
+                    if dialog.exec() == QDialog.DialogCode.Accepted:
+                        if self.plugin_manager:
+                            self.plugin_manager.convert_plugin_archives()
+                            self.plugin_manager.load_plugins()
+                        if hasattr(self, '_update_plugin_tabs'):
+                            self._update_plugin_tabs()
+                        if hasattr(self, 'plugin_display'):
+                            self.plugin_display.update_display()
+                        if self.mod_manager:
+                            self.mod_manager.invalidate_mods_cache()
+                            QTimer.singleShot(0, lambda: (self.mod_manager.load_local_mods(_skip_conversion=True), self.mod_manager.mod_list_updated.emit()))
+                        if hasattr(self, 'library_display'):
+                            self.library_display.update_display()
+                        if hasattr(self, 'search_display'):
+                            self.search_display.update_search_plaques()
+                            self.search_display.update_filtered_mods(preserve_page=True)
+                        if hasattr(self, 'settings_manager'):
+                            self.settings_manager.theme_changed.emit()
+                        self.feedback_manager.update_status(tr('dialogs.mod_created_successfully'), UI_COLORS['status_success'])
+                        QMessageBox.information(self, tr('dialogs.success'), tr('dialogs.mod_created_successfully'))
+                        QTimer.singleShot(1000, lambda: self._on_refresh_clicked(is_initial=False))
+                except Exception as e:
+                    logging.error(f'Failed to open manual install dialog: {e}', exc_info=True)
+                    self.feedback_manager.show_message('error', tr('errors.error'), tr('errors.manual_install_failed', error=str(e)))
+                    try:
+                        import shutil
+                        shutil.rmtree(temp_dir, ignore_errors=True)
+                    except Exception:
+                        pass
+
             def on_finished(success, message):
                 self.app_state.is_installing = False
                 self.app_state.progress_bar_visible = False
@@ -277,6 +320,7 @@ class AppWindow(QWidget):
                 else:
                     logging.warning(f'Installation failed for deltahub:// URL: {message}')
                     self.feedback_manager.update_status(message or tr('errors.error'), UI_COLORS['status_error'])
+            worker.manual_install_required.connect(on_manual_install_required)
             worker.finished.connect(on_finished)
             self.app_state.is_installing = True
             self.app_state.progress_bar_visible = True

@@ -407,6 +407,7 @@
     "gamebanana_picker_details": "Versión: {version}\nTamaño: {size}\nActualizado: {updated}\nDescargas: {downloads}\nFormato: {format}\nSeguridad: {security}\nMD5: {md5}\n\nDescripción:\n{description}",
     "manual_install_available": "La instalación manual es posible. ¿Desea continuar?",
     "manual_install_title": "Instalación Manual de Mod",
+    "select_data_file": "Seleccionar archivo {file_type}",
     "data_tab": "DATA",
     "extra_files_tab": "Archivos Adicionales",
     "data_tab_info": "Seleccione el archivo de datos principal para cada capítulo. Solo se puede seleccionar un archivo de datos por capítulo.",

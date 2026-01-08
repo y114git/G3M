@@ -680,6 +680,7 @@ class UrlInstallThread(QThread):
     progress = pyqtSignal(int)
     finished = pyqtSignal(bool, str)
     prompt_required = pyqtSignal(str, str)
+    manual_install_required = pyqtSignal(str, str, str)
 
     def __init__(self, main_window, url: str):
         super().__init__(main_window)
@@ -738,7 +739,7 @@ class UrlInstallThread(QThread):
                 elif content_type == 'mod':
                     self._install_mod_from_archive(archive_path, temp_dir)
                 else:
-                    raise ValueError(tr('errors.unsupported_mod_format_url'))
+                    self._prepare_for_manual_install(archive_path)
         except Exception as e:
             self.finished.emit(False, str(e))
 
@@ -987,6 +988,32 @@ class UrlInstallThread(QThread):
             except Exception as e:
                 logging.error(f'UrlInstallThread: Error detecting content type from extracted: {e}', exc_info=True)
         return None
+
+    def _prepare_for_manual_install(self, archive_path: str):
+        try:
+            from utils.archive_utils import extract_archive
+            persistent_temp_dir = tempfile.mkdtemp(prefix='deltahub_url_manual_install_')
+            try:
+                archive_filename = os.path.basename(archive_path)
+                preserved_archive_path = os.path.join(persistent_temp_dir, archive_filename)
+                shutil.copy2(archive_path, preserved_archive_path)
+                extract_dir = os.path.join(persistent_temp_dir, 'extracted')
+                os.makedirs(extract_dir, exist_ok=True)
+                extract_archive(preserved_archive_path, extract_dir)
+                content_path = extract_dir
+                contents = os.listdir(extract_dir)
+                if len(contents) == 1 and os.path.isdir(os.path.join(extract_dir, contents[0])):
+                    content_path = os.path.join(extract_dir, contents[0])
+                self.manual_install_required.emit(content_path, preserved_archive_path, persistent_temp_dir)
+            except Exception as e:
+                try:
+                    shutil.rmtree(persistent_temp_dir, ignore_errors=True)
+                except Exception:
+                    pass
+                raise
+        except Exception as e:
+            logging.error(f'UrlInstallThread: Error preparing for manual install: {e}', exc_info=True)
+            self.finished.emit(False, tr('errors.manual_install_failed', error=str(e)))
 
     def _install_theme_from_file(self, theme_file_path: str):
         try:

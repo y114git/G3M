@@ -406,6 +406,7 @@
     "gamebanana_picker_details": "版本：{version}\n大小：{size}\n更新時間：{updated}\n下載次數：{downloads}\n格式：{format}\n安全性：{security}\nMD5：{md5}\n\n說明：\n{description}",
     "manual_install_available": "可以手動安裝。是否繼續？",
     "manual_install_title": "手動安裝模組",
+    "select_data_file": "選擇{file_type}檔案",
     "data_tab": "DATA",
     "extra_files_tab": "額外檔案",
     "data_tab_info": "為每個章節選擇主要資料檔案。每個章節只能選擇一個資料檔案。",

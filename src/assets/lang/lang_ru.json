@@ -407,6 +407,7 @@
     "gamebanana_picker_details": "Версия: {version}\nРазмер: {size}\nОбновлено: {updated}\nЗагрузки: {downloads}\nФормат: {format}\nПроверка: {security}\nMD5: {md5}\n\nОписание:\n{description}",
     "manual_install_available": "Возможна ручная установка. Хотите продолжить?",
     "manual_install_title": "Ручная установка мода",
+    "select_data_file": "Выберите {file_type} файл",
     "data_tab": "DATA",
     "extra_files_tab": "Дополнительные файлы",
     "data_tab_info": "Выберите основной файл данных для каждой главы. Только один файл данных может быть выбран для каждой главы.",
