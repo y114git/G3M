@@ -61,7 +61,6 @@ class LibraryDisplayController:
         if selected_chapter_id is None:
             if hasattr(self.app, '_show_chapter_mode_instruction'):
                 self.app._show_chapter_mode_instruction()
-                return
             return
         self.app._updating_chapter_mods = True
         clear_layout_widgets(self.app.installed_mods_layout, keep_last_n=1)

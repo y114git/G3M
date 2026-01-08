@@ -126,7 +126,6 @@ class GameLauncher(QObject):
                 self.app_state.is_merging = False
                 self._handle_launch_failure()
                 return
-            return
         else:
             self._continue_after_merge(selections, True, needs_multi_mod)
 
