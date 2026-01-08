@@ -87,6 +87,7 @@ class ModImportExportController:
                     key = config.get('key') or config.get('mod_key')
                     mod_name = config.get('name', 'Unknown')
                     logging.info(f'[IMPORT] Mod name: {mod_name}, key: {key}')
+                    mod_key_generated = False
                     if not key:
                         from utils.file_utils import save_json
                         key = f"local_{sanitize_filename(mod_name).lower().replace(' ', '_')}"
