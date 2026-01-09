@@ -18,6 +18,7 @@ class LibraryDisplayController:
         self.mod_manager = mod_manager
         self.slot_manager = slot_manager
         self.app = app_window
+        self._updating_display = False
 
     def update_display(self):
         if not hasattr(self.app, 'installed_mods_layout'):
@@ -101,6 +102,8 @@ class LibraryDisplayController:
         self.app._updating_chapter_mods = False
 
     def refresh_async(self):
+        if hasattr(self.app, '_installed_scan_thread') and self.app._installed_scan_thread and self.app._installed_scan_thread.isRunning():
+            return
         is_chapter_mode = hasattr(self.app, 'chapter_mode_checkbox') and self.app.chapter_mode_checkbox.isChecked()
         if is_chapter_mode:
             selected_id = self.app_state.selected_chapter_id
@@ -126,8 +129,13 @@ class LibraryDisplayController:
                     mods = self.outer.mod_manager.get_installed_mods_list()
                 except Exception:
                     mods = []
-                self.outer.update_display_from_list(mods)
+                QTimer.singleShot(0, lambda: self.outer.update_display_from_list(mods))
         try:
+            if hasattr(self.app, '_installed_scan_thread') and self.app._installed_scan_thread:
+                if self.app._installed_scan_thread.isRunning():
+                    self.app._installed_scan_thread.requestInterruption()
+                    self.app._installed_scan_thread.wait(100)
+                self.app._installed_scan_thread.deleteLater()
             self.app._installed_scan_thread = _Scan(self)
             self.app._installed_scan_thread.start()
         except Exception:
@@ -135,6 +143,9 @@ class LibraryDisplayController:
             self.update_display_from_list(mods)
 
     def update_display_from_list(self, installed_mods):
+        if self._updating_display:
+            return
+        self._updating_display = True
         try:
             is_chapter_mode = hasattr(self.app, 'chapter_mode_checkbox') and self.app.chapter_mode_checkbox.isChecked()
             if is_chapter_mode:
@@ -212,6 +223,8 @@ class LibraryDisplayController:
             _build_next_batch()
         except Exception:
             pass
+        finally:
+            self._updating_display = False
 
     def cleanup_missing_mods(self, installed_mods):
         installed_mod_keys = {mod.get('key') or mod.get('mod_key') for mod in installed_mods if mod.get('key') or mod.get('mod_key')}
@@ -318,21 +331,15 @@ class LibraryDisplayController:
                     self.mod_manager.invalidate_mods_cache()
                     self.mod_manager.load_local_mods()
                     self.mod_manager.mod_list_updated.emit()
-                    self.update_display()
+                    QTimer.singleShot(100, lambda: self._safe_update_after_mod_deletion())
                 except Exception as e:
                     import logging
                     logging.error(f'Failed to reload mods after deletion: {e}', exc_info=True)
                     try:
                         self.mod_manager.mod_list_updated.emit()
-                        self.update_display()
+                        QTimer.singleShot(100, lambda: self._safe_update_after_mod_deletion())
                     except Exception as e2:
                         logging.error(f'Failed to update display after mod deletion: {e2}', exc_info=True)
-                try:
-                    self.app.search_display.update_search_plaques()
-                    self.app.search_display.update_filtered_mods(preserve_page=True)
-                except Exception as e:
-                    import logging
-                    logging.debug(f'Failed to update search plaques after mod removal: {e}')
         except (OSError, IOError, PermissionError) as e:
             import logging
             logging.error(f'File operation failed during mod removal: {e}', exc_info=True)
@@ -341,6 +348,16 @@ class LibraryDisplayController:
             import logging
             logging.error(f'Unexpected error during mod removal: {e}', exc_info=True)
             self.feedback_manager.show_message('error', 'errors.mod_removal_failed', error=str(e))
+
+    def _safe_update_after_mod_deletion(self):
+        try:
+            self.update_display()
+            if hasattr(self.app, 'search_display'):
+                self.app.search_display.update_search_plaques()
+                self.app.search_display.update_filtered_mods(preserve_page=True)
+        except Exception as e:
+            import logging
+            logging.error(f'Error updating UI after mod deletion: {e}', exc_info=True)
 
     def on_mod_use(self, mod_data):
         target_chapter_id = get_chapter_id_for_game_mode(self.app_state.game_mode)
@@ -567,6 +584,18 @@ class LibraryDisplayController:
         color = UI_COLORS.get(f'status_{status_type}', UI_COLORS['status_error'])
         self.feedback_manager.update_status(message, color)
 
+    def _safe_update_after_modpack_creation(self, modpack_dir: str):
+        try:
+            self.update_display()
+            if hasattr(self.app, 'search_display'):
+                self.app.search_display.update_filtered_mods(preserve_page=True)
+                self.app.search_display.update_search_plaques()
+            QTimer.singleShot(300, self.refresh_async)
+            self.feedback_manager.show_message('success', 'dialogs.modpack_created_title', tr('dialogs.modpack_created_message', modpack_dir=modpack_dir))
+        except Exception as e:
+            import logging
+            logging.error(f'Error updating UI after modpack creation: {e}', exc_info=True)
+
     def _on_modpack_finished(self, success: bool, modpack_dir: str):
         import os
         self.app_state.is_merging = False
@@ -578,12 +607,7 @@ class LibraryDisplayController:
             self.mod_manager.invalidate_mods_cache()
             self.mod_manager.load_local_mods()
             self.mod_manager.mod_list_updated.emit()
-            self.update_display()
-            if hasattr(self.app, 'search_display'):
-                self.app.search_display.update_filtered_mods(preserve_page=True)
-                self.app.search_display.update_search_plaques()
-            QTimer.singleShot(200, self.refresh_async)
-            self.feedback_manager.show_message('success', 'dialogs.modpack_created_title', tr('dialogs.modpack_created_message', modpack_dir=modpack_dir))
+            QTimer.singleShot(100, lambda: self._safe_update_after_modpack_creation(modpack_dir))
         else:
             if os.path.exists(modpack_dir):
                 try:
