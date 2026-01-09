@@ -2849,19 +2849,11 @@ class MultiModMerger(QObject):
                 self._temp_files_to_cleanup.remove(temp_output)
             self.patching_logger.info(f'Successfully applied xdelta patch to {os.path.basename(target_file)}')
             return True
-        except subprocess.TimeoutExpired:
-            self.patching_logger.warning(f'xdelta patch timed out after 300 seconds for {target_file}')
-            if temp_output and os.path.exists(temp_output):
-                try:
-                    safe_remove(temp_output)
-                except Exception:
-                    pass
-            return False
         except Exception as e:
-            self.patching_logger.warning(f'xdelta patch error for {target_file}: {e}')
+            self.patching_logger.error(f'Error applying xdelta patch to {os.path.basename(target_file)}: {e}', exc_info=True)
             if temp_output and os.path.exists(temp_output):
                 try:
-                    safe_remove(temp_output)
+                    os.remove(temp_output)
                 except Exception:
                     pass
             return False

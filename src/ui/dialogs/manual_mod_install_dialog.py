@@ -28,6 +28,8 @@ class ManualModInstallDialog(QDialog):
         self.all_files = []
         self.extra_file_widgets = {}
         self.unused_files = set()
+        self.xdelta_patches_mappings = {}
+        self.xdelta_patch_widgets = {}
         self.setWindowTitle(tr('dialogs.manual_install_title'))
         self.setModal(True)
         self.resize(900, 700)
@@ -192,15 +194,28 @@ class ManualModInstallDialog(QDialog):
         clear_btn.clicked.connect(lambda checked, cid=chapter_id: self._clear_data_file(cid))
         file_path_layout.addWidget(clear_btn)
         layout.addLayout(file_path_layout)
+        layout.addSpacing(20)
+        add_xdelta_btn = QPushButton(tr('dialogs.add_additional_xdelta'))
+        add_xdelta_btn.clicked.connect(lambda checked, cid=chapter_id: self._add_xdelta_patch(cid))
+        layout.addWidget(add_xdelta_btn)
+        layout.addSpacing(10)
+        xdelta_patches_section = self._create_xdelta_patches_section(chapter_id)
+        if xdelta_patches_section:
+            layout.addWidget(xdelta_patches_section)
         layout.addStretch()
         return widget
 
     def _browse_data_file(self, chapter_id: int):
         extensions = list(DATA_FILE_EXTENSIONS) + ['.data', '.ios', '.droid', '.unx']
         selected_data_files = set(self.data_file_selections.values())
+        used_as_patches = set()
+        for patches in self.xdelta_patches_mappings.values():
+            used_as_patches.update(patches.keys())
         found_files = []
         for file_path, rel_path in self.all_files:
             if file_path in selected_data_files:
+                continue
+            if file_path in used_as_patches:
                 continue
             file_ext = os.path.splitext(file_path)[1].lower()
             if file_ext in extensions:
@@ -236,6 +251,7 @@ class ManualModInstallDialog(QDialog):
                     self.data_file_edits[chapter_id].setText(os.path.basename(file_path))
                 self._update_data_file_visibility()
                 self._populate_extra_files_list()
+                self._update_xdelta_patches_section(chapter_id)
 
     def _clear_data_file(self, chapter_id: int):
         if chapter_id in self.data_file_selections:
@@ -244,12 +260,211 @@ class ManualModInstallDialog(QDialog):
             self.data_file_edits[chapter_id].clear()
         self._update_data_file_visibility()
         self._populate_extra_files_list()
+        self._update_xdelta_patches_section(chapter_id)
 
     def _update_data_file_visibility(self):
-        pass
+        for chapter_id in list(self.xdelta_patch_widgets.keys()):
+            self._update_xdelta_patches_section(chapter_id)
 
     def _on_data_tab_changed(self, index: int):
         pass
+
+    def _get_available_xdelta_files(self, chapter_id: int) -> List[tuple]:
+        available = []
+        selected_data_files = set(self.data_file_selections.values())
+        xdelta_extensions = ('.xdelta', '.vcdiff')
+        used_as_patches = set()
+        for cid, patches in self.xdelta_patches_mappings.items():
+            used_as_patches.update(patches.keys())
+        for file_path, rel_path in self.all_files:
+            if file_path in selected_data_files:
+                continue
+            if file_path in self.unused_files:
+                continue
+            if file_path in used_as_patches:
+                continue
+            file_ext = os.path.splitext(file_path)[1].lower()
+            if file_ext in xdelta_extensions:
+                available.append((file_path, rel_path))
+        return available
+
+    def _create_xdelta_patches_section(self, chapter_id: int) -> Optional[QWidget]:
+        if chapter_id not in self.xdelta_patches_mappings or not self.xdelta_patches_mappings[chapter_id]:
+            return None
+        section_widget = QWidget()
+        section_layout = QVBoxLayout(section_widget)
+        section_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        section_layout.setSpacing(10)
+        info_label = QLabel(tr('dialogs.xdelta_patches_info'))
+        info_label.setWordWrap(True)
+        info_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        info_label.setStyleSheet('font-size: 11px; color: #888; padding: 10px;')
+        section_layout.addWidget(info_label)
+        section_title = QLabel(tr('dialogs.xdelta_patches_section'))
+        section_title.setStyleSheet('font-weight: bold; font-size: 12px;')
+        section_layout.addWidget(section_title)
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll_area.setMaximumHeight(300)
+        scroll_area.setMinimumHeight(150)
+        scroll_content = QWidget()
+        patches_layout = QVBoxLayout(scroll_content)
+        patches_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        patches_layout.setSpacing(10)
+        if chapter_id not in self.xdelta_patch_widgets:
+            self.xdelta_patch_widgets[chapter_id] = {}
+        for file_path in self.xdelta_patches_mappings[chapter_id].keys():
+            rel_path = next((rp for fp, rp in self.all_files if fp == file_path), '')
+            patch_widget = self._create_xdelta_patch_widget(file_path, rel_path, chapter_id)
+            patches_layout.addWidget(patch_widget)
+            self.xdelta_patch_widgets[chapter_id][file_path] = patch_widget
+        patches_layout.addStretch()
+        scroll_area.setWidget(scroll_content)
+        section_layout.addWidget(scroll_area)
+        return section_widget
+
+    def _create_xdelta_patch_widget(self, file_path: str, rel_path: str, chapter_id: int) -> QWidget:
+        widget = QWidget()
+        layout = QHBoxLayout(widget)
+        layout.setContentsMargins(5, 5, 5, 5)
+        layout.setSpacing(10)
+        file_name_label = QLabel(os.path.basename(file_path))
+        file_name_label.setToolTip(rel_path)
+        file_name_label.setMinimumWidth(150)
+        file_name_label.setMaximumWidth(200)
+        layout.addWidget(file_name_label)
+        path_input = QLineEdit()
+        path_input.setObjectName(f'xdelta_path_input_{file_path}')
+        path_input.setMinimumWidth(300)
+        path_input.setMaximumWidth(300)
+        if chapter_id in self.xdelta_patches_mappings and file_path in self.xdelta_patches_mappings[chapter_id]:
+            path_input.setText(self.xdelta_patches_mappings[chapter_id][file_path])
+        path_input.setPlaceholderText(tr('dialogs.xdelta_patch_target_path'))
+        path_input.textChanged.connect(lambda text, fp=file_path, cid=chapter_id: self._on_xdelta_target_path_changed(fp, text, cid))
+        layout.addWidget(path_input)
+        browse_btn = QPushButton(tr('ui.browse_button'))
+        browse_btn.setMaximumWidth(80)
+        browse_btn.clicked.connect(lambda checked, fp=file_path, cid=chapter_id: self._browse_xdelta_target_file(fp, cid))
+        layout.addWidget(browse_btn)
+        clear_btn = QPushButton(tr('ui.clear_button'))
+        clear_btn.setMaximumWidth(70)
+        clear_btn.setObjectName(f'xdelta_clear_btn_{file_path}')
+        clear_btn.clicked.connect(lambda checked, fp=file_path, cid=chapter_id: self._clear_xdelta_patch(fp, cid))
+        layout.addWidget(clear_btn)
+        return widget
+
+    def _on_xdelta_target_path_changed(self, file_path: str, text: str, chapter_id: int):
+        normalized = self._normalize_xdelta_target_path(text)
+        if normalized != text:
+            if chapter_id in self.xdelta_patch_widgets and file_path in self.xdelta_patch_widgets[chapter_id]:
+                widget = self.xdelta_patch_widgets[chapter_id][file_path]
+                path_input = widget.findChild(QLineEdit, f'xdelta_path_input_{file_path}')
+                if path_input:
+                    path_input.setText(normalized)
+        if chapter_id not in self.xdelta_patches_mappings:
+            self.xdelta_patches_mappings[chapter_id] = {}
+        if normalized:
+            self.xdelta_patches_mappings[chapter_id][file_path] = normalized
+        elif file_path in self.xdelta_patches_mappings[chapter_id]:
+            del self.xdelta_patches_mappings[chapter_id][file_path]
+
+    def _normalize_xdelta_target_path(self, path: str) -> str:
+        if not path:
+            return ''
+        path = path.strip()
+        path = path.replace('\\', '/')
+        path = path.strip('/')
+        parts = path.split('/')
+        valid_parts = []
+        for part in parts:
+            if part and part != '..' and (not os.path.isabs(part)):
+                valid_parts.append(part)
+        return '/'.join(valid_parts)
+
+    def _browse_xdelta_target_file(self, file_path: str, chapter_id: int):
+        game_root = self._get_or_prompt_game_folder()
+        if not game_root:
+            return
+        target_file, _ = QFileDialog.getOpenFileName(self, tr('dialogs.select_target_folder'), game_root)
+        if target_file:
+            game_root_normalized = os.path.normpath(os.path.abspath(game_root))
+            file_normalized = os.path.normpath(os.path.abspath(target_file))
+            if file_normalized.startswith(game_root_normalized):
+                rel_file = os.path.relpath(target_file, game_root)
+                rel_file = rel_file.replace('\\', '/')
+                if chapter_id in self.xdelta_patch_widgets and file_path in self.xdelta_patch_widgets[chapter_id]:
+                    widget = self.xdelta_patch_widgets[chapter_id][file_path]
+                    path_input = widget.findChild(QLineEdit, f'xdelta_path_input_{file_path}')
+                    if path_input:
+                        path_input.setText(rel_file)
+                        if chapter_id not in self.xdelta_patches_mappings:
+                            self.xdelta_patches_mappings[chapter_id] = {}
+                        self.xdelta_patches_mappings[chapter_id][file_path] = rel_file
+            else:
+                QMessageBox.warning(self, tr('errors.error'), tr('dialogs.path_outside_game_folder'))
+
+    def _add_xdelta_patch(self, chapter_id: int):
+        available_xdelta = self._get_available_xdelta_files(chapter_id)
+        if not available_xdelta:
+            QMessageBox.information(self, tr('dialogs.no_data_files'), tr('dialogs.no_xdelta_files_available'))
+            return
+        from PyQt6.QtWidgets import QListWidget
+        file_dialog = QDialog(self)
+        file_dialog.setWindowTitle(tr('dialogs.select_xdelta_patch'))
+        file_dialog.resize(600, 400)
+        layout = QVBoxLayout(file_dialog)
+        label = QLabel(tr('dialogs.select_xdelta_patch_info'))
+        layout.addWidget(label)
+        list_widget = QListWidget()
+        for file_path, rel_path in available_xdelta:
+            item_text = f'{os.path.basename(file_path)} ({rel_path})'
+            list_widget.addItem(item_text)
+            list_widget.item(list_widget.count() - 1).setData(Qt.ItemDataRole.UserRole, file_path)
+        if list_widget.count() > 0:
+            list_widget.setCurrentRow(0)
+        layout.addWidget(list_widget)
+        button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        button_box.accepted.connect(file_dialog.accept)
+        button_box.rejected.connect(file_dialog.reject)
+        layout.addWidget(button_box)
+        if file_dialog.exec() == QDialog.DialogCode.Accepted:
+            current_item = list_widget.currentItem()
+            if current_item:
+                file_path = current_item.data(Qt.ItemDataRole.UserRole)
+                if chapter_id not in self.xdelta_patches_mappings:
+                    self.xdelta_patches_mappings[chapter_id] = {}
+                self.xdelta_patches_mappings[chapter_id][file_path] = ''
+                self._update_xdelta_patches_section(chapter_id)
+                self._populate_extra_files_list()
+
+    def _clear_xdelta_patch(self, file_path: str, chapter_id: int):
+        if chapter_id in self.xdelta_patches_mappings and file_path in self.xdelta_patches_mappings[chapter_id]:
+            del self.xdelta_patches_mappings[chapter_id][file_path]
+        self._update_xdelta_patches_section(chapter_id)
+        self._populate_extra_files_list()
+
+    def _update_xdelta_patches_section(self, chapter_id: int):
+        current_tab_index = self.data_tabs.currentIndex()
+        if self.data_tabs.count() > current_tab_index:
+            current_widget = self.data_tabs.widget(current_tab_index)
+            if current_widget:
+                layout = current_widget.layout()
+                if layout:
+                    for i in range(layout.count()):
+                        item = layout.itemAt(i)
+                        if item and item.widget():
+                            widget = item.widget()
+                            if hasattr(widget, 'objectName') and widget.objectName() == 'xdelta_patches_section':
+                                layout.removeWidget(widget)
+                                widget.deleteLater()
+                                break
+                    if chapter_id in self.xdelta_patches_mappings and self.xdelta_patches_mappings[chapter_id]:
+                        xdelta_section = self._create_xdelta_patches_section(chapter_id)
+                        if xdelta_section:
+                            xdelta_section.setObjectName('xdelta_patches_section')
+                            layout.insertWidget(layout.count() - 1, xdelta_section)
 
     def _populate_extra_files_list(self):
         if hasattr(self, 'extra_files_list_layout'):
@@ -258,7 +473,10 @@ class ManualModInstallDialog(QDialog):
                 if item.widget():
                     item.widget().deleteLater()
         selected_data_files = set(self.data_file_selections.values())
-        extra_files = [(fp, rp) for fp, rp in self.all_files if fp not in selected_data_files]
+        used_as_patches = set()
+        for patches in self.xdelta_patches_mappings.values():
+            used_as_patches.update(patches.keys())
+        extra_files = [(fp, rp) for fp, rp in self.all_files if fp not in selected_data_files and fp not in used_as_patches]
         if not extra_files:
             no_files_label = QLabel(tr('dialogs.no_data_files'))
             no_files_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -428,6 +646,11 @@ class ManualModInstallDialog(QDialog):
         if not self.data_file_selections:
             QMessageBox.warning(self, tr('errors.error'), tr('dialogs.no_data_file_selected'))
             return
+        for chapter_id, patches in self.xdelta_patches_mappings.items():
+            for file_path, target_path in patches.items():
+                if not target_path or not target_path.strip():
+                    QMessageBox.warning(self, tr('errors.error'), tr('dialogs.xdelta_patch_no_target_path'))
+                    return
         try:
             self._create_mod_from_files()
             self.accept()
@@ -490,17 +713,71 @@ class ManualModInstallDialog(QDialog):
             target_data_path = os.path.join(chapter_folder, data_file_name)
             shutil.copy2(data_file_path, target_data_path)
             files_structure[chapter_key]['data_file_url'] = data_file_name
-            pass
         archive_files_map = {}
         selected_data_files = set(self.data_file_selections.values())
+        used_as_patches = set()
+        for patches in self.xdelta_patches_mappings.values():
+            used_as_patches.update(patches.keys())
         all_extra_files = []
         for file_path, rel_path in self.all_files:
             if file_path in selected_data_files:
                 continue
             if file_path in self.unused_files:
                 continue
+            if file_path in used_as_patches:
+                continue
             relative_path = self.extra_files_mappings.get(file_path, '')
             all_extra_files.append((file_path, relative_path))
+        for chapter_id, patches in self.xdelta_patches_mappings.items():
+            if game == 'deltarune':
+                if chapter_id == 0:
+                    patch_chapter_key = '0'
+                elif chapter_id > 0:
+                    patch_chapter_key = str(chapter_id)
+                else:
+                    continue
+            elif game == 'deltarunedemo':
+                patch_chapter_key = 'demo'
+            elif game == 'undertale':
+                patch_chapter_key = 'undertale'
+            elif game == 'undertaleyellow':
+                patch_chapter_key = 'undertaleyellow'
+            elif game == 'pizzatower':
+                patch_chapter_key = 'pizzatower'
+            elif game == 'sugaryspire':
+                patch_chapter_key = 'sugaryspire'
+            else:
+                patch_chapter_key = '0'
+            if patch_chapter_key not in files_structure:
+                continue
+            for xdelta_file_path, target_path in patches.items():
+                if not target_path or not target_path.strip():
+                    continue
+                target_path_normalized = target_path.replace('\\', '/').strip('/')
+                if not target_path_normalized:
+                    continue
+                dir_part = os.path.dirname(target_path_normalized)
+                file_part = os.path.basename(target_path_normalized)
+                if dir_part:
+                    relative_path = dir_part + '/'
+                else:
+                    relative_path = ''
+                clean_path = relative_path.rstrip('/') if relative_path else ''
+                if clean_path:
+                    archive_key = clean_path.replace('/', '_').replace('\\', '_').strip('_')
+                    if not archive_key:
+                        archive_key = 'root'
+                else:
+                    archive_key = 'root'
+                renamed_xdelta_name = f'{file_part}.xdelta'
+                if clean_path:
+                    archive_internal_path = f'{clean_path}/{renamed_xdelta_name}'
+                else:
+                    archive_internal_path = renamed_xdelta_name
+                archive_map_key = (patch_chapter_key, archive_key)
+                if archive_map_key not in archive_files_map:
+                    archive_files_map[archive_map_key] = []
+                archive_files_map[archive_map_key].append((xdelta_file_path, relative_path, archive_internal_path))
         for extra_file_path, relative_path in all_extra_files:
             is_data_file = False
             for ch_id, data_path in self.data_file_selections.items():
