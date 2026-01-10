@@ -41,12 +41,20 @@ class LoadGameBananaMetadataThread(QThread):
                     try:
                         mod_id = int(mod_id_str)
                         downloads, tagline, category = self._load_mod_metadata(mod_id)
-                        downloads = downloads if downloads is not None else 0
-                        tagline = tagline if tagline else 'No description'
-                        category = category if category else None
-                        self.metadata_cache.set(mod_id_str, downloads, tagline, category=category)
-                        self.mod_updated.emit(mod_id_str, downloads, tagline, category or '')
-                        loaded_count += 1
+                        if downloads is not None:
+                            tagline_to_save = tagline if tagline else 'No description'
+                            category_to_save = category if category else None
+                            self.metadata_cache.set(mod_id_str, downloads, tagline_to_save, category=category_to_save)
+                            self.mod_updated.emit(mod_id_str, downloads, tagline_to_save, category_to_save or '')
+                            loaded_count += 1
+                        elif tagline or category:
+                            tagline_to_save = tagline if tagline else 'No description'
+                            category_to_save = category if category else None
+                            self.metadata_cache.set(mod_id_str, None, tagline_to_save, category=category_to_save)
+                            self.mod_updated.emit(mod_id_str, 0, tagline_to_save, category_to_save or '')
+                            loaded_count += 1
+                        else:
+                            logger.debug(f'LoadGameBananaMetadataThread: Failed to load metadata for mod {mod_id_str}, will retry later')
                     except (ValueError, TypeError) as e:
                         logger.warning(f'LoadGameBananaMetadataThread: Invalid mod_id {mod_id_str}: {e}')
                         continue

@@ -163,13 +163,19 @@ class MultiModMerger(QObject):
                 chapter_index += 1
                 chapter_progress_base = (chapter_index - 1) * (100 // total_chapters) if total_chapters > 0 else 0
                 self.patching_logger.info(f'Processing chapter {chapter_id} with {len(mods_list)} mod(s)')
-                try:
-                    chapter_msg = tr('status.merging_chapter', chapter=chapter_id, current=chapter_index, total=total_chapters)
-                except BaseException:
-                    if is_modpack:
-                        chapter_msg = f'Processing chapter {chapter_id} ({chapter_index}/{total_chapters})...'
-                    else:
+                from config.constants import SLOT_ID_CHAPTER_1, SLOT_ID_CHAPTER_2, SLOT_ID_CHAPTER_3, SLOT_ID_CHAPTER_4
+                is_actual_chapter = chapter_id in (SLOT_ID_CHAPTER_1, SLOT_ID_CHAPTER_2, SLOT_ID_CHAPTER_3, SLOT_ID_CHAPTER_4)
+                if is_actual_chapter:
+                    try:
+                        chapter_msg = tr('status.merging_chapter', chapter=chapter_id, current=chapter_index, total=total_chapters)
+                    except BaseException:
                         chapter_msg = f'Merging chapter {chapter_id} ({chapter_index}/{total_chapters})...'
+                else:
+                    progress_pct = min(chapter_progress_base + 5, 95)
+                    try:
+                        chapter_msg = tr('status.merging_mods', progress=progress_pct)
+                    except BaseException:
+                        chapter_msg = f'Merging mods... {progress_pct}%'
                 self.progress_update.emit(min(chapter_progress_base + 5, 95), chapter_msg)
                 if is_modpack and modpack_dir:
                     game = None

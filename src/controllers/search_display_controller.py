@@ -1046,6 +1046,19 @@ class SearchDisplayController(QObject):
 
     def on_metadata_updated(self, mod_id: str, downloads: int, tagline: str, category: str = ''):
         try:
+            if downloads is not None or tagline or category:
+                try:
+                    if hasattr(self.app, 'refresh_controller') and self.app.refresh_controller:
+                        if hasattr(self.app.refresh_controller, '_current_metadata_batch'):
+                            if mod_id in self.app.refresh_controller._current_metadata_batch:
+                                self.app.refresh_controller._current_metadata_batch.remove(mod_id)
+                                logger.debug(f'SearchDisplayController: Removed mod {mod_id} from current batch after successful load')
+                    if hasattr(self.app_state, 'gamebanana_mods_needing_metadata') and self.app_state.gamebanana_mods_needing_metadata:
+                        if mod_id in self.app_state.gamebanana_mods_needing_metadata:
+                            self.app_state.gamebanana_mods_needing_metadata.remove(mod_id)
+                            logger.debug(f'SearchDisplayController: Removed mod {mod_id} from metadata queue after successful load')
+                except (ValueError, AttributeError) as e:
+                    logger.debug(f'SearchDisplayController: Error removing mod {mod_id} from queue: {e}')
             self._pending_metadata_updates[mod_id] = (downloads, tagline, category)
             if self._metadata_update_timer is None:
                 self._metadata_update_timer = QTimer()
@@ -1061,7 +1074,6 @@ class SearchDisplayController(QObject):
             if not self._pending_metadata_updates:
                 return
             updated_mods = []
-            needs_resort = False
             needs_refilter = False
             downloads_changed = False
             if hasattr(self.app_state, 'all_mods') and self.app_state.all_mods:
@@ -1091,11 +1103,9 @@ class SearchDisplayController(QObject):
                                     downloads_int = 0
                                 if old_downloads != downloads_int:
                                     mod.downloads = downloads_int
-                                    needs_resort = True
                                     downloads_changed = True
                                 elif mod.downloads != downloads_int:
                                     mod.downloads = downloads_int
-                                    needs_resort = True
                                     downloads_changed = True
                             if tagline and tagline != 'No description' and (mod.tagline != tagline):
                                 mod.tagline = tagline
@@ -1113,10 +1123,10 @@ class SearchDisplayController(QObject):
             sort_type = None
             if hasattr(self.app, 'sort_combo'):
                 sort_type = self.app.sort_combo.currentIndex()
-                if sort_type == 0 and downloads_changed:
+                if sort_type == 0 and downloads_changed and (len(updated_mods) > 1):
                     sort_needs_resort = True
-            if sort_needs_resort or needs_refilter:
-                logger.debug(f"SearchDisplayController: Re-sorting mods after metadata update (downloads_changed={downloads_changed}, needs_resort={needs_resort}, needs_refilter={needs_refilter}, sort_type={(sort_type if sort_type is not None else 'N/A')})")
+            if (sort_needs_resort or needs_refilter) and len(updated_mods) > 1:
+                logger.debug(f"SearchDisplayController: Re-sorting mods after metadata update (downloads_changed={downloads_changed}, needs_refilter={needs_refilter}, sort_type={(sort_type if sort_type is not None else 'N/A')}, mods_count={len(updated_mods)})")
                 self.update_filtered_mods(preserve_page=True)
             elif updated_mods:
                 self._update_plaques_for_mods(updated_mods)
@@ -1163,6 +1173,7 @@ class SearchDisplayController(QObject):
         try:
             if not hasattr(self.app, 'mod_list_layout'):
                 return
+            mod_ids_set = set(mod_ids)
             updated_widgets = []
             for i in range(self.app.mod_list_layout.count() - 1):
                 item = self.app.mod_list_layout.itemAt(i)
@@ -1170,29 +1181,17 @@ class SearchDisplayController(QObject):
                     widget = item.widget()
                     if isinstance(widget, ModPlaqueWidget):
                         mod = widget.mod_data
-                        if mod.is_gamebanana_mod():
+                        if mod and mod.is_gamebanana_mod():
                             mod_id = mod.get_gamebanana_mod_id()
-                            if mod_id and mod_id in mod_ids:
+                            if mod_id and mod_id in mod_ids_set:
                                 try:
-                                    widget.update_installation_status()
                                     widget.update_mod_data()
+                                    widget.update_installation_status()
                                     if hasattr(widget, 'update_install_button_state'):
                                         widget.update_install_button_state()
                                     updated_widgets.append(widget)
                                 except Exception as e:
                                     logger.warning(f'SearchDisplayController: Error updating plaque for mod {mod_id}: {e}')
-            if updated_widgets:
-
-                def deferred_refresh():
-                    for widget in updated_widgets:
-                        try:
-                            if hasattr(widget, 'update_mod_data'):
-                                widget.update_mod_data()
-                            if hasattr(widget, 'update_install_button_state'):
-                                widget.update_install_button_state()
-                        except (RuntimeError, AttributeError):
-                            pass
-                QTimer.singleShot(100, deferred_refresh)
         except Exception as e:
             logger.error(f'SearchDisplayController: Error in _update_plaques_for_mods: {e}', exc_info=True)
 

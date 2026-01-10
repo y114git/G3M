@@ -135,7 +135,10 @@ class FetchModsThread(QThread):
                         if app_state:
                             if not hasattr(app_state, 'gamebanana_mods_needing_metadata'):
                                 app_state.gamebanana_mods_needing_metadata = []
-                            app_state.gamebanana_mods_needing_metadata = unique_mods_needing_metadata
+                            existing = set(app_state.gamebanana_mods_needing_metadata)
+                            new_ids = set(unique_mods_needing_metadata)
+                            app_state.gamebanana_mods_needing_metadata = list(existing | new_ids)
+                            logger.info(f'FetchModsThread: Merged {len(new_ids)} new mod IDs needing metadata with {len(existing)} existing, total: {len(app_state.gamebanana_mods_needing_metadata)}')
                     app_state = getattr(self.main_window, 'app_state', None)
                     if app_state:
                         selected_game = app_state.local_config.get('selected_search_game', 'deltarune') if hasattr(app_state, 'local_config') else 'deltarune'

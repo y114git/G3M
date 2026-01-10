@@ -21,6 +21,7 @@ class RefreshController:
         self.fetch_thread = None
         self.details_thread = None
         self.metadata_thread = None
+        self._current_metadata_batch = []
 
     def refresh_mods_list(self, is_initial=False, language_combo=None, retranslate_callback=None, on_fetch_finished_kwargs=None):
         try:
@@ -67,6 +68,18 @@ class RefreshController:
                 self.feedback_manager.update_status(tr('status.cant_update_while_running'), UI_COLORS['status_warning'])
                 return
             self._stop_fetch_thread()
+            try:
+                if self.fetch_thread:
+                    try:
+                        if self.fetch_thread.isRunning():
+                            logging.warning('RefreshController: Previous fetch thread still running, deferring new fetch')
+                            QTimer.singleShot(500, lambda: self.refresh_mods_list(is_initial=is_initial, language_combo=language_combo, retranslate_callback=retranslate_callback, on_fetch_finished_kwargs=on_fetch_finished_kwargs))
+                            return
+                    except (RuntimeError, AttributeError):
+                        self.fetch_thread = None
+            except Exception as e:
+                logging.debug(f'RefreshController: Error checking fetch thread: {e}')
+                self.fetch_thread = None
             QTimer.singleShot(3000, self.update_checker.check_for_updates)
 
             class FetchContext:
@@ -88,47 +101,109 @@ class RefreshController:
 
     def _stop_fetch_thread(self):
         if self.fetch_thread:
-            safe_stop_thread(self.fetch_thread)
-            if not (self.fetch_thread and self.fetch_thread.isRunning()):
-                self.fetch_thread = None
+            fetch_thread = self.fetch_thread
+            self.fetch_thread = None
+            try:
+                try:
+                    if hasattr(fetch_thread, 'cancel'):
+                        fetch_thread.cancel()
+                except (RuntimeError, AttributeError):
+                    pass
+                try:
+                    safe_stop_thread(fetch_thread, timeout=2000, blocking=True)
+                except (RuntimeError, AttributeError):
+                    pass
+                try:
+                    if fetch_thread.isFinished():
+                        fetch_thread.deleteLater()
+                    else:
+
+                        def cleanup_fetch():
+                            try:
+                                if fetch_thread.isFinished():
+                                    fetch_thread.deleteLater()
+                            except (RuntimeError, AttributeError):
+                                pass
+                        try:
+                            fetch_thread.finished.connect(cleanup_fetch)
+                        except (TypeError, RuntimeError, AttributeError):
+                            pass
+                except (RuntimeError, AttributeError):
+                    pass
+            except Exception as e:
+                logging.debug(f'RefreshController: Error stopping fetch thread (thread may be deleted): {e}')
         if self.details_thread:
+            details_thread = self.details_thread
+            self.details_thread = None
             try:
                 try:
-                    self.details_thread.mod_updated.disconnect()
-                    self.details_thread.finished.disconnect()
-                    self.details_thread.progress.disconnect()
-                except (TypeError, RuntimeError):
+                    details_thread.mod_updated.disconnect()
+                    details_thread.finished.disconnect()
+                    details_thread.progress.disconnect()
+                except (TypeError, RuntimeError, AttributeError):
                     pass
-                if hasattr(self.details_thread, 'cancel'):
-                    self.details_thread.cancel()
-                if self.details_thread.isRunning():
-                    safe_stop_thread(self.details_thread, timeout=2000, blocking=False)
-                    if self.details_thread.isRunning():
-                        logging.debug('RefreshController: Details thread still running, will clean up via finished signal')
-                self.details_thread.deleteLater()
+                try:
+                    if hasattr(details_thread, 'cancel'):
+                        details_thread.cancel()
+                except (RuntimeError, AttributeError):
+                    pass
+                try:
+                    if details_thread.isRunning():
+                        safe_stop_thread(details_thread, timeout=2000, blocking=True)
+                    if details_thread.isFinished():
+                        details_thread.deleteLater()
+                    else:
+
+                        def cleanup_details():
+                            try:
+                                if details_thread.isFinished():
+                                    details_thread.deleteLater()
+                            except (RuntimeError, AttributeError):
+                                pass
+                        try:
+                            details_thread.finished.connect(cleanup_details)
+                        except (TypeError, RuntimeError, AttributeError):
+                            pass
+                except (RuntimeError, AttributeError):
+                    pass
             except Exception as e:
-                logging.warning(f'RefreshController: Error stopping details thread: {e}')
-            finally:
-                self.details_thread = None
+                logging.debug(f'RefreshController: Error stopping details thread (thread may be deleted): {e}')
         if self.metadata_thread:
+            metadata_thread = self.metadata_thread
+            self.metadata_thread = None
             try:
                 try:
-                    self.metadata_thread.mod_updated.disconnect()
-                    self.metadata_thread.finished.disconnect()
-                    self.metadata_thread.progress.disconnect()
-                except (TypeError, RuntimeError):
+                    metadata_thread.mod_updated.disconnect()
+                    metadata_thread.finished.disconnect()
+                    metadata_thread.progress.disconnect()
+                except (TypeError, RuntimeError, AttributeError):
                     pass
-                if hasattr(self.metadata_thread, 'cancel'):
-                    self.metadata_thread.cancel()
-                if self.metadata_thread.isRunning():
-                    safe_stop_thread(self.metadata_thread, timeout=2000, blocking=False)
-                    if self.metadata_thread.isRunning():
-                        logging.debug('RefreshController: Metadata thread still running, will clean up via finished signal')
-                self.metadata_thread.deleteLater()
+                try:
+                    if hasattr(metadata_thread, 'cancel'):
+                        metadata_thread.cancel()
+                except (RuntimeError, AttributeError):
+                    pass
+                try:
+                    if metadata_thread.isRunning():
+                        safe_stop_thread(metadata_thread, timeout=2000, blocking=True)
+                    if metadata_thread.isFinished():
+                        metadata_thread.deleteLater()
+                    else:
+
+                        def cleanup_metadata():
+                            try:
+                                if metadata_thread.isFinished():
+                                    metadata_thread.deleteLater()
+                            except (RuntimeError, AttributeError):
+                                pass
+                        try:
+                            metadata_thread.finished.connect(cleanup_metadata)
+                        except (TypeError, RuntimeError, AttributeError):
+                            pass
+                except (RuntimeError, AttributeError):
+                    pass
             except Exception as e:
-                logging.warning(f'RefreshController: Error stopping metadata thread: {e}')
-            finally:
-                self.metadata_thread = None
+                logging.debug(f'RefreshController: Error stopping metadata thread (thread may be deleted): {e}')
 
     def _on_fetch_finished(self, success: bool, retranslate_callback=None, update_filtered_mods_callback=None, update_installed_mods_callback=None, update_action_button_callback=None, update_plugin_tabs_callback=None, mods_loaded_signal=None, fetch_thread=None):
         if not hasattr(self, '_fetch_finished_in_progress'):
@@ -224,18 +299,25 @@ class RefreshController:
             self.feedback_manager.update_status(tr('errors.mod_list_processing_error', error=str(e)), UI_COLORS['status_error'])
         finally:
             self._fetch_finished_in_progress = False
-            if fetch_thread:
-                if fetch_thread.isFinished():
-                    fetch_thread.deleteLater()
-                else:
+            fetch_thread_to_cleanup = fetch_thread if fetch_thread else self.fetch_thread
+            if fetch_thread_to_cleanup:
+                try:
+                    if fetch_thread_to_cleanup.isFinished():
+                        fetch_thread_to_cleanup.deleteLater()
+                    else:
 
-                    def cleanup_fetch_thread():
+                        def cleanup_fetch_thread():
+                            try:
+                                if fetch_thread_to_cleanup and fetch_thread_to_cleanup.isFinished():
+                                    fetch_thread_to_cleanup.deleteLater()
+                            except Exception:
+                                pass
                         try:
-                            if fetch_thread and fetch_thread.isFinished():
-                                fetch_thread.deleteLater()
-                        except Exception:
+                            fetch_thread_to_cleanup.finished.connect(cleanup_fetch_thread)
+                        except (TypeError, RuntimeError):
                             pass
-                    fetch_thread.finished.connect(cleanup_fetch_thread)
+                except Exception as e:
+                    logging.debug(f'RefreshController: Error cleaning up fetch thread: {e}')
             if update_plugin_tabs_callback:
                 update_plugin_tabs_callback()
             self._start_metadata_loading()
@@ -258,42 +340,48 @@ class RefreshController:
             if not hasattr(self.app_state, 'gamebanana_mods_needing_metadata') or not self.app_state.gamebanana_mods_needing_metadata:
                 logging.debug('RefreshController: No mods need metadata loading')
                 return
-            mod_ids = list(self.app_state.gamebanana_mods_needing_metadata)
-            if not mod_ids:
-                return
-            if self.metadata_thread and self.metadata_thread.isRunning():
+            metadata_thread_old = None
+            thread_is_running = False
+            try:
+                if self.metadata_thread:
+                    try:
+                        if self.metadata_thread.isRunning():
+                            remaining_count = len(self.app_state.gamebanana_mods_needing_metadata) if hasattr(self.app_state, 'gamebanana_mods_needing_metadata') and self.app_state.gamebanana_mods_needing_metadata else 0
+                            logging.debug(f'RefreshController: Metadata thread is already running, {remaining_count} mods will be loaded after current batch completes')
+                            thread_is_running = True
+                            return
+                        metadata_thread_old = self.metadata_thread
+                    except (RuntimeError, AttributeError):
+                        pass
+            except Exception as e:
+                logging.warning(f'RefreshController: Error checking metadata thread: {e}')
+            if not thread_is_running:
+                self.metadata_thread = None
+            if metadata_thread_old:
                 try:
-                    logging.debug(f'RefreshController: Metadata thread is already running, {len(mod_ids)} mods will be loaded after current batch completes')
-                    return
-                except Exception as e:
-                    logging.warning(f'RefreshController: Error checking metadata thread: {e}')
-            if self.metadata_thread:
-                try:
-                    if hasattr(self.metadata_thread, 'cancel'):
-                        self.metadata_thread.cancel()
-                    if self.metadata_thread.isRunning():
-                        logging.debug('RefreshController: Metadata thread running, will clean up via finished signal')
-                        try:
-                            self.metadata_thread.mod_updated.disconnect()
-                            self.metadata_thread.finished.disconnect()
-                            self.metadata_thread.progress.disconnect()
-                        except (TypeError, RuntimeError):
-                            pass
+                    try:
+                        if hasattr(metadata_thread_old, 'cancel'):
+                            metadata_thread_old.cancel()
+                        if metadata_thread_old.isRunning():
+                            safe_stop_thread(metadata_thread_old, timeout=2000, blocking=True)
+                        if metadata_thread_old.isFinished():
+                            metadata_thread_old.deleteLater()
+                        else:
 
-                        def cleanup_old_thread():
+                            def cleanup_old_thread():
+                                try:
+                                    if metadata_thread_old.isFinished():
+                                        metadata_thread_old.deleteLater()
+                                except (RuntimeError, AttributeError):
+                                    pass
                             try:
-                                if self.metadata_thread and self.metadata_thread.isFinished():
-                                    self.metadata_thread.deleteLater()
-                            except Exception:
+                                metadata_thread_old.finished.connect(cleanup_old_thread)
+                            except (TypeError, RuntimeError, AttributeError):
                                 pass
-                        self.metadata_thread.finished.connect(cleanup_old_thread)
-                    elif self.metadata_thread.isFinished():
-                        self.metadata_thread.deleteLater()
+                    except (RuntimeError, AttributeError):
+                        pass
                 except Exception as e:
-                    logging.warning(f'RefreshController: Error stopping metadata thread: {e}')
-                finally:
-                    if self.metadata_thread and (not self.metadata_thread.isRunning()):
-                        self.metadata_thread = None
+                    logging.warning(f'RefreshController: Error cleaning up old metadata thread: {e}')
             try:
                 from utils.gamebanana_cache import GameBananaMetadataCache
                 if not hasattr(self.app_state, 'cache_dir') or not self.app_state.cache_dir:
@@ -302,18 +390,21 @@ class RefreshController:
                 metadata_cache = GameBananaMetadataCache(self.app_state.cache_dir)
                 all_mod_ids = list(self.app_state.gamebanana_mods_needing_metadata)
                 if not all_mod_ids:
+                    logging.debug('RefreshController: No mod IDs to load metadata for')
                     return
                 MAX_METADATA_BATCH_SIZE = 20
                 mod_ids_to_load = all_mod_ids[:MAX_METADATA_BATCH_SIZE]
                 remaining_mod_ids = all_mod_ids[MAX_METADATA_BATCH_SIZE:]
+                self._current_metadata_batch = list(mod_ids_to_load)
                 self.app_state.gamebanana_mods_needing_metadata = remaining_mod_ids
+                logging.info(f'RefreshController: Starting metadata loading for batch of {len(mod_ids_to_load)} mods ({len(remaining_mod_ids)} remaining in queue, {len(mod_ids_to_load)} will be processed)')
                 from workers.load_gamebanana_metadata import LoadGameBananaMetadataThread
                 self.metadata_thread = LoadGameBananaMetadataThread(mod_ids_to_load, metadata_cache, parent=self.app_window, app_state=self.app_state)
                 if self.app_window and hasattr(self.app_window, 'search_display'):
                     self.metadata_thread.mod_updated.connect(self.app_window.search_display.on_metadata_updated)
                 self.metadata_thread.finished.connect(self._on_metadata_loading_finished)
                 self.metadata_thread.start()
-                logging.info(f'RefreshController: Started metadata loading for {len(mod_ids_to_load)} mods ({len(remaining_mod_ids)} remaining in queue)')
+                logging.info(f'RefreshController: Metadata loading thread started for {len(mod_ids_to_load)} mods')
             except Exception as e:
                 logging.error(f'RefreshController: Failed to start metadata loading: {e}', exc_info=True)
         except Exception as e:
@@ -322,7 +413,38 @@ class RefreshController:
     def _on_metadata_loading_finished(self):
         try:
             logging.info('RefreshController: Metadata loading finished')
-            has_more_mods = hasattr(self.app_state, 'gamebanana_mods_needing_metadata') and self.app_state.gamebanana_mods_needing_metadata
+            metadata_thread = self.metadata_thread
+            self.metadata_thread = None
+            if metadata_thread:
+                try:
+                    if metadata_thread.isFinished():
+                        metadata_thread.deleteLater()
+                    else:
+
+                        def cleanup_thread():
+                            try:
+                                if metadata_thread.isFinished():
+                                    metadata_thread.deleteLater()
+                            except (RuntimeError, AttributeError):
+                                pass
+                        try:
+                            metadata_thread.finished.connect(cleanup_thread)
+                        except (TypeError, RuntimeError, AttributeError):
+                            pass
+                except (RuntimeError, AttributeError) as e:
+                    logging.debug(f'RefreshController: Thread already cleaned up: {e}')
+                except Exception as e:
+                    logging.warning(f'RefreshController: Error cleaning up metadata thread: {e}')
+            if hasattr(self, '_current_metadata_batch') and self._current_metadata_batch:
+                failed_mods = self._current_metadata_batch
+                if failed_mods:
+                    logging.info(f'RefreshController: {len(failed_mods)} mod(s) in current batch failed to load, re-adding to queue for retry')
+                    if not hasattr(self.app_state, 'gamebanana_mods_needing_metadata'):
+                        self.app_state.gamebanana_mods_needing_metadata = []
+                    existing = set(self.app_state.gamebanana_mods_needing_metadata)
+                    failed_set = set(failed_mods)
+                    self.app_state.gamebanana_mods_needing_metadata = list(existing | failed_set)
+                self._current_metadata_batch = []
             if self.app_window and hasattr(self.app_window, 'search_display') and self.app_window.search_display:
 
                 def ensure_sorted():
@@ -333,27 +455,18 @@ class RefreshController:
                     except Exception as e:
                         logging.error(f'RefreshController: Error ensuring sort after metadata load: {e}', exc_info=True)
                 ensure_sorted()
+            has_more_mods = False
+            remaining_count = 0
+            try:
+                if hasattr(self.app_state, 'gamebanana_mods_needing_metadata') and self.app_state.gamebanana_mods_needing_metadata:
+                    remaining_count = len(self.app_state.gamebanana_mods_needing_metadata)
+                    has_more_mods = remaining_count > 0
+            except Exception as e:
+                logging.warning(f'RefreshController: Error checking remaining mods: {e}')
             if has_more_mods:
-                logging.info(f'RefreshController: Found {len(self.app_state.gamebanana_mods_needing_metadata)} more mods needing metadata, starting another batch')
-                self._start_metadata_loading()
-            if self.metadata_thread:
-                try:
-                    if self.metadata_thread.isFinished():
-                        self.metadata_thread.deleteLater()
-                    else:
-
-                        def cleanup_thread():
-                            try:
-                                if self.metadata_thread and self.metadata_thread.isFinished():
-                                    self.metadata_thread.deleteLater()
-                                    self.metadata_thread = None
-                            except Exception:
-                                pass
-                        self.metadata_thread.finished.connect(cleanup_thread)
-                except Exception as e:
-                    logging.warning(f'RefreshController: Error cleaning up metadata thread: {e}')
-                finally:
-                    if self.metadata_thread and self.metadata_thread.isFinished():
-                        self.metadata_thread = None
+                logging.info(f'RefreshController: Found {remaining_count} more mods needing metadata, starting another batch in 500ms')
+                QTimer.singleShot(500, self._start_metadata_loading)
+            else:
+                logging.info('RefreshController: All metadata loaded, no more mods to process')
         except Exception as e:
-            logging.warning(f'RefreshController: Error in _on_metadata_loading_finished: {e}')
+            logging.warning(f'RefreshController: Error in _on_metadata_loading_finished: {e}', exc_info=True)
