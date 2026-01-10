@@ -770,6 +770,7 @@
     "update_local_as_public": "尝试将本地模组更新为公开模组。",
     "update_permission_error": "更新时权限错误。",
     "update_permission_error_no_write_access": "没有写入权限以更新启动器于：{path}\n\n请手动下载更新或使用管理员/sudo权限运行启动器。",
+    "app_translocation_detected": "应用程序正运行在受限的 'App Translocation' 模式下（只读随机路径）。\n\n请将应用程序移动到 '应用程序' 文件夹（或其他用户文件夹），并从那里启动它以启用更新和正常功能。",
     "url_error": "URL错误",
     "validation_data_error": "数据验证错误。请检查所有字段是否正确。",
     "validation_error": "(❌ 验证错误)",

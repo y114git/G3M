@@ -51,6 +51,25 @@ class ModManager(QObject):
         self._installed_mods_cache: List[dict] = []
         self._installed_mods_cache_valid: bool = False
 
+    def cleanup_stale_used_mods(self):
+        if not self._mods_cache:
+            return
+        valid_mod_keys = set(self._mods_cache.keys())
+        changes_made = False
+        keys_to_check = [k for k in self.app_state.local_config.keys() if k.startswith('used_mods')]
+        for settings_key in keys_to_check:
+            used_mods_list = self.app_state.local_config.get(settings_key)
+            if not isinstance(used_mods_list, list):
+                continue
+            new_list = [mod_id for mod_id in used_mods_list if mod_id in valid_mod_keys]
+            if len(new_list) != len(used_mods_list):
+                extra_ids = set(used_mods_list) - set(new_list)
+                logging.info(f'Cleanup: Removing stale mods from {settings_key}: {extra_ids}')
+                self.app_state.local_config[settings_key] = new_list
+                changes_made = True
+        if changes_made:
+            self.app_state.save_config()
+
     def _scan_mods_directory(self, old_cache: Optional[Dict[str, ModFolderInfo]] = None) -> Dict[str, ModFolderInfo]:
         cache: Dict[str, ModFolderInfo] = {}
         if old_cache is None:
@@ -75,7 +94,21 @@ class ModManager(QObject):
                     migrate_mod_config(folder_path)
                     config_path = os.path.join(folder_path, MOD_CONFIG_FILENAME)
                     if not os.path.exists(config_path):
-                        continue
+                        found_nested = False
+                        try:
+                            with os.scandir(folder_path) as sub_entries:
+                                for sub in sub_entries:
+                                    if sub.is_dir():
+                                        nested_config_path = os.path.join(sub.path, MOD_CONFIG_FILENAME)
+                                        if os.path.exists(nested_config_path):
+                                            config_path = nested_config_path
+                                            folder_path = sub.path
+                                            found_nested = True
+                                            break
+                        except (OSError, PermissionError):
+                            pass
+                        if not found_nested:
+                            continue
                     try:
                         config_size = os.path.getsize(config_path)
                         if config_size == 0:
@@ -919,6 +952,7 @@ class ModManager(QObject):
                     except Exception as e:
                         logging.warning(f'load_local_mods: failed to remove cleanup dir {d}: {e}', exc_info=True)
             self._write_metadata({'mod_files_to_cleanup': [], 'mod_dirs_to_cleanup': []})
+            self.cleanup_stale_used_mods()
             return True
         except Exception as e:
             logging.error(f'load_local_mods failed: {e}', exc_info=True)

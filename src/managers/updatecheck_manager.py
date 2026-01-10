@@ -53,6 +53,10 @@ class UpdateChecker(QObject):
                 self.feedback_manager.update_status(tr('errors.no_build_for_os', platform=current_platform_key), UI_COLORS['status_warning'])
                 return
             update_info = {'version': remote_version, 'url': download_url, 'message': update_message, 'message_ru': update_message_ru, 'message_en': update_message_en}
+            if platform.system() == 'Darwin' and 'AppTranslocation' in sys.executable:
+                logging.warning(f'UpdateChecker: App Translocation detected: {sys.executable}')
+                self.feedback_manager.update_status(tr('errors.app_translocation_detected'), UI_COLORS['status_error'])
+                return
             logging.info(f'UpdateChecker: Update available - version {remote_version}, emitting update_available signal')
             self.update_available.emit(update_info)
         except Exception as e:

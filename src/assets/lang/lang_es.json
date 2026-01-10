@@ -771,6 +771,7 @@
     "update_local_as_public": "Intento de actualizar mod local como público.",
     "update_permission_error": "Error de permisos durante actualización.",
     "update_permission_error_no_write_access": "Sin permiso de escritura para actualizar el launcher en: {path}\n\nPor favor, descarga la actualización manualmente o ejecuta el launcher con privilegios de administrador/sudo.",
+    "app_translocation_detected": "La aplicación se está ejecutando en un modo restringido de 'Translocación de Aplicaciones' (ruta aleatoria de solo lectura).\n\nPor favor, mueve la aplicación a la carpeta 'Aplicaciones' (o cualquier otra carpeta de usuario) y ejecútala desde allí para habilitar las actualizaciones y el funcionamiento correcto.",
     "url_error": "Error de URL",
     "validation_data_error": "Error de validación de datos. Verifica que todos los campos sean correctos.",
     "validation_error": "(❌ error de validación)",
