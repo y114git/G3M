@@ -224,9 +224,22 @@ byte[] GetSoundData(UndertaleSound sound, UndertaleData data, string comparisonP
 }
 
 string comparisonPath = null;
+UndertaleData comparisonData = null;
 if (modNo != "0")
 {
     comparisonPath = Path.Combine(deltahubRoot, "output", "DeltahubMergeWorkspace", chapterNo, "0", "data.win");
+    if (File.Exists(comparisonPath))
+    {
+        try {
+            using (var stream = new FileStream(comparisonPath, FileMode.Open, FileAccess.Read))
+            {
+                comparisonData = UndertaleIO.Read(stream);
+                PrintLine($"[ExportAllAssets] Loaded comparison data from {comparisonPath}");
+            }
+        } catch (Exception ex) {
+            PrintLine($"[ExportAllAssets] Failed to load comparison data: {ex.Message}");
+        }
+    }
 }
 
 List<UndertaleCode> allCode = Data.Code.Where(c => c.ParentEntry is null).ToList();
@@ -261,6 +274,132 @@ using (worker = new TextureWorker())
     await DumpPaths();
     await DumpTimelines();
     await DumpExtensions();
+}
+
+bool AreSpritesIdentical(UndertaleSprite modSprite, UndertaleSprite vanillaSprite)
+{
+    if (modSprite.Width != vanillaSprite.Width || modSprite.Height != vanillaSprite.Height) return false;
+    if (modSprite.MarginLeft != vanillaSprite.MarginLeft || modSprite.MarginRight != vanillaSprite.MarginRight || 
+        modSprite.MarginTop != vanillaSprite.MarginTop || modSprite.MarginBottom != vanillaSprite.MarginBottom) return false;
+    if (modSprite.OriginX != vanillaSprite.OriginX || modSprite.OriginY != vanillaSprite.OriginY) return false;
+    if (modSprite.Textures.Count != vanillaSprite.Textures.Count) return false;
+    if (modSprite.CollisionMasks.Count != vanillaSprite.CollisionMasks.Count) return false;
+    
+    for (int i=0; i < modSprite.CollisionMasks.Count; i++)
+    {
+        var m1 = modSprite.CollisionMasks[i].Data;
+        var m2 = vanillaSprite.CollisionMasks[i].Data;
+        if (m1.Length != m2.Length) return false;
+        if (!m1.SequenceEqual(m2)) return false;
+    }
+
+    for (int i = 0; i < modSprite.Textures.Count; i++)
+    {
+        var modTexItem = modSprite.Textures[i]?.Texture;
+        var vanTexItem = vanillaSprite.Textures[i]?.Texture;
+        
+        if (modTexItem == null && vanTexItem == null) continue;
+        if (modTexItem == null || vanTexItem == null) return false;
+
+        if (modTexItem.SourceX != vanTexItem.SourceX || modTexItem.SourceY != vanTexItem.SourceY ||
+            modTexItem.SourceWidth != vanTexItem.SourceWidth || modTexItem.SourceHeight != vanTexItem.SourceHeight) return false;
+        
+        
+        try {
+            string tempMod = Path.GetTempFileName();
+            string tempVan = Path.GetTempFileName();
+            worker.ExportAsPNG(modTexItem, tempMod);
+            worker.ExportAsPNG(vanTexItem, tempVan);
+            byte[] b1 = File.ReadAllBytes(tempMod);
+            byte[] b2 = File.ReadAllBytes(tempVan);
+            File.Delete(tempMod);
+            File.Delete(tempVan);
+            if (!b1.SequenceEqual(b2)) return false;
+        } catch { return false; } 
+    }
+    return true;
+}
+
+bool AreSoundsIdentical(UndertaleSound modSound, UndertaleSound vanillaSound)
+{
+    if (modSound.AudioID != vanillaSound.AudioID) return false;
+    if (modSound.GroupID != vanillaSound.GroupID) return false;
+    
+    byte[] d1 = GetSoundData(modSound, Data, comparisonPath);
+    byte[] d2 = GetSoundData(vanillaSound, comparisonData, comparisonPath); 
+    if (d1.Length != d2.Length) return false;
+    if (!d1.SequenceEqual(d2)) return false;
+    return true;
+}
+
+bool AreBackgroundsIdentical(UndertaleBackground modBg, UndertaleBackground vanillaBg)
+{
+    if (modBg.Transparent != vanillaBg.Transparent) return false;
+    if (modBg.Smooth != vanillaBg.Smooth) return false;
+    if (modBg.Preload != vanillaBg.Preload) return false;
+    
+    var modTex = modBg.Texture;
+    var vanTex = vanillaBg.Texture;
+    
+    if (modTex == null && vanTex == null) return true;
+    if (modTex == null || vanTex == null) return false;
+    
+    if (modTex.SourceX != vanTex.SourceX || modTex.SourceY != vanTex.SourceY ||
+        modTex.SourceWidth != vanTex.SourceWidth || modTex.SourceHeight != vanTex.SourceHeight) return false;
+
+    try {
+        string tempMod = Path.GetTempFileName();
+        string tempVan = Path.GetTempFileName();
+        worker.ExportAsPNG(modTex, tempMod);
+        worker.ExportAsPNG(vanTex, tempVan);
+        byte[] b1 = File.ReadAllBytes(tempMod);
+        byte[] b2 = File.ReadAllBytes(tempVan);
+        File.Delete(tempMod);
+        File.Delete(tempVan);
+        return b1.SequenceEqual(b2);
+    } catch { return false; }
+}
+
+bool AreFontsIdentical(UndertaleFont modFont, UndertaleFont vanillaFont)
+{
+    if (modFont.DisplayName?.Content != vanillaFont.DisplayName?.Content) return false;
+    if (modFont.EmSize != vanillaFont.EmSize) return false;
+    
+    var modTex = modFont.Texture;
+    var vanTex = vanillaFont.Texture;
+    
+    bool textureIdentical = false;
+    if (modTex == null && vanTex == null) textureIdentical = true;
+    else if (modTex != null && vanTex != null)
+    {
+        if (modTex.SourceX == vanTex.SourceX && modTex.SourceY == vanTex.SourceY &&
+            modTex.SourceWidth == vanTex.SourceWidth && modTex.SourceHeight == vanTex.SourceHeight)
+        {
+            try {
+                string tempMod = Path.GetTempFileName();
+                string tempVan = Path.GetTempFileName();
+                worker.ExportAsPNG(modTex, tempMod);
+                worker.ExportAsPNG(vanTex, tempVan);
+                byte[] b1 = File.ReadAllBytes(tempMod);
+                byte[] b2 = File.ReadAllBytes(tempVan);
+                File.Delete(tempMod);
+                File.Delete(tempVan);
+                if (b1.SequenceEqual(b2)) textureIdentical = true;
+            } catch { }
+        }
+    }
+    
+    if (!textureIdentical) return false;
+    
+    if (modFont.Glyphs.Count != vanillaFont.Glyphs.Count) return false;
+    for(int i=0; i<modFont.Glyphs.Count; ++i) {
+        var g1 = modFont.Glyphs[i];
+        var g2 = vanillaFont.Glyphs[i];
+        if (g1.Character != g2.Character) return false;
+        if (g1.SourceX != g2.SourceX || g1.SourceY != g2.SourceY) return false;
+        if (g1.SourceWidth != g2.SourceWidth || g1.SourceHeight != g2.SourceHeight) return false;
+    }
+    return true;
 }
 
 await StopProgressBarUpdater();
@@ -299,6 +438,17 @@ void DumpSprite(UndertaleSprite sprite)
     {
         return;
     }
+    
+    if (comparisonData != null)
+    {
+        var vanillaSprite = comparisonData.Sprites.ByName(sprite.Name.Content);
+        if (vanillaSprite != null && AreSpritesIdentical(sprite, vanillaSprite))
+        {
+            
+            IncrementProgressParallel();
+            return;
+        }
+    }
 
     for (int i = 0; i < sprite.Textures.Count; i++)
     {
@@ -321,9 +471,19 @@ async Task DumpBackgrounds()
 
 void DumpBackground(UndertaleBackground background)
 {
-    if (background?.Texture is null)
+    if (background is null)
     {
         return;
+    }
+
+    if (comparisonData != null)
+    {
+        var vanillaBg = comparisonData.Backgrounds.ByName(background.Name.Content);
+        if (vanillaBg != null && AreBackgroundsIdentical(background, vanillaBg))
+        {
+            IncrementProgressParallel();
+            return;
+        }
     }
 
     UndertaleTexturePageItem tex = background.Texture;
@@ -340,9 +500,19 @@ async Task DumpFonts()
 
 void DumpFont(UndertaleFont font)
 {
-    if (font?.Texture is null)
+    if (font is null)
     {
         return;
+    }
+    
+    if (comparisonData != null)
+    {
+        var vanillaFont = comparisonData.Fonts.ByName(font.Name.Content);
+        if (vanillaFont != null && AreFontsIdentical(font, vanillaFont))
+        {
+            IncrementProgressParallel();
+            return;
+        }
     }
 
     try
@@ -396,6 +566,16 @@ async Task DumpSounds()
 void DumpSound(UndertaleSound sound)
 {
     if (sound?.Name?.Content == null) return;
+    
+    if (comparisonData != null)
+    {
+        var vanillaSound = comparisonData.Sounds.ByName(sound.Name.Content);
+        if (vanillaSound != null && AreSoundsIdentical(sound, vanillaSound))
+        {
+            IncrementProgressParallel();
+            return;
+        }
+    }
 
     try
     {
