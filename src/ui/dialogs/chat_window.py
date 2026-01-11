@@ -72,7 +72,7 @@ class ChatWindow(QDialog):
         self.messages_area = QScrollArea()
         self.messages_area.setWidgetResizable(True)
         self.messages_area.setFrameShape(QFrame.Shape.NoFrame)
-        self.messages_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.messages_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.messages_widget = QWidget()
         self.messages_layout = QVBoxLayout(self.messages_widget)
         self.messages_layout.setAlignment(Qt.AlignmentFlag.AlignTop)

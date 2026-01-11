@@ -53,7 +53,17 @@ class ModImportExportController:
         try:
             with tempfile.TemporaryDirectory(prefix='deltahub_import_') as temp_dir:
                 logging.info(f'[IMPORT] Extracting archive to temporary directory: {temp_dir}')
-                extract_archive(file_path, temp_dir)
+                logging.info(f'[IMPORT] Extracting archive to temporary directory: {temp_dir}')
+                try:
+                    extract_archive(file_path, temp_dir)
+                except Exception as e:
+                    if 'UnRAR utility is missing' in str(e):
+                        if self._prompt_for_unrar_install():
+                            extract_archive(file_path, temp_dir)
+                        else:
+                            return
+                    else:
+                        raise e
                 content_path = temp_dir
                 contents = os.listdir(temp_dir)
                 if len(contents) == 1 and os.path.isdir(os.path.join(temp_dir, contents[0])):
@@ -160,6 +170,44 @@ class ModImportExportController:
             logging.error(f'[IMPORT] Mod import failed: {e}', exc_info=True)
             self._show_import_error_with_manual_install(file_path, tr('errors.mod_import_failed', error=str(e)))
 
+    def _prompt_for_unrar_install(self) -> bool:
+        reply = QMessageBox.question(self.app_window, tr('errors.unrar_missing_title'), tr('errors.unrar_missing_text'), QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.Yes)
+        if reply == QMessageBox.StandardButton.Yes:
+            from utils.archive_utils import download_and_setup_unrar, _get_unrar_path
+            success = download_and_setup_unrar(status_callback=lambda msg: self.app_window.feedback_manager.update_status(msg, 'blue'))
+            if success:
+                self.app_window.feedback_manager.update_status(tr('status.ready'), 'green')
+                return True
+            else:
+                from PyQt6.QtGui import QDesktopServices
+                from PyQt6.QtCore import QUrl
+                import platform
+                bin_path = os.path.dirname(_get_unrar_path())
+                system_os = platform.system()
+                msg_text = ''
+                url_to_open = ''
+                if system_os == 'Linux':
+                    url_to_open = 'https://www.rarlab.com/rar_add.htm'
+                    msg_text = tr('errors.unrar_manual_install_linux', url=url_to_open, path=bin_path)
+                elif system_os == 'Darwin':
+                    url_to_open = 'https://www.rarlab.com/rar/unrar_MacOSX_10.13.2_64bit.gz'
+                    msg_text = tr('errors.unrar_manual_install_mac', url=url_to_open, path=bin_path)
+                else:
+                    url_to_open = 'https://www.rarlab.com/rar/unrarw64.exe'
+                    msg_text = tr('errors.unrar_manual_install_windows', url=url_to_open, path=bin_path)
+                msg = QMessageBox(self.app_window)
+                msg.setIcon(QMessageBox.Icon.Warning)
+                msg.setWindowTitle(tr('errors.error'))
+                msg.setText(tr('errors.unrar_download_failed', error='Download failed/Platform not supported'))
+                msg.setInformativeText(msg_text)
+                open_btn = msg.addButton(tr('buttons.open_browser') if tr('buttons.open_browser') != 'buttons.open_browser' else 'Open Website', QMessageBox.ButtonRole.ActionRole)
+                ok_btn = msg.addButton(tr('buttons.ok'), QMessageBox.ButtonRole.AcceptRole)
+                msg.exec()
+                if msg.clickedButton() == open_btn:
+                    QDesktopServices.openUrl(QUrl(url_to_open))
+                return False
+        return False
+
     def _install_mod_from_url(self, url: str):
         try:
             from workers.mod_install_worker import ModInstallWorker
@@ -215,7 +263,16 @@ class ModImportExportController:
         import tempfile
         temp_dir = tempfile.mkdtemp(prefix='deltahub_manual_install_')
         try:
-            extract_archive(file_path, temp_dir)
+            try:
+                extract_archive(file_path, temp_dir)
+            except Exception as e:
+                if 'UnRAR utility is missing' in str(e):
+                    if hasattr(self, '_prompt_for_unrar_install') and self._prompt_for_unrar_install():
+                        extract_archive(file_path, temp_dir)
+                    else:
+                        raise Exception('UnRAR required')
+                else:
+                    raise e
             content_path = temp_dir
             contents = os.listdir(temp_dir)
             if len(contents) == 1 and os.path.isdir(os.path.join(temp_dir, contents[0])):
