@@ -178,20 +178,17 @@ def _extract_archive_raw(src_path: str, fname_lower: str, out_dir: str) -> None:
         return
     if fname_lower.endswith('.7z') and py7zr is not None:
         with py7zr.SevenZipFile(src_path, mode='r') as zf:
+            targets = []
             for member in zf.getnames():
                 if not _is_safe_path(member):
                     logging.warning(f'_extract_archive_raw: Skipping suspicious path in 7Z: {member}')
                     continue
+                targets.append(member)
+            if targets:
                 try:
-                    target_path = _safe_join(out_dir_abs, member)
-                    parent_dir = os.path.dirname(target_path)
-                    if parent_dir:
-                        os.makedirs(parent_dir, exist_ok=True)
-                    if not member.endswith('/'):
-                        zf.extract(member, out_dir_abs)
+                    zf.extract(path=out_dir_abs, targets=targets)
                 except (ValueError, OSError) as e:
-                    logging.warning(f'_extract_archive_raw: Failed to extract {member}: {e}')
-                    continue
+                    logging.warning(f'_extract_archive_raw: Failed to extract 7z archive: {e}')
         return
     if fname_lower.endswith('.lzma'):
         _extract_lzma(src_path, out_dir, fname_lower)
