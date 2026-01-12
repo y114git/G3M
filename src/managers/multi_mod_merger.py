@@ -5,6 +5,7 @@ import subprocess
 import time
 import re
 import hashlib
+import json
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, List, Optional, Any
@@ -1537,14 +1538,21 @@ class MultiModMerger(QObject):
                     src_file = os.path.join(root, file)
                     dst_file = os.path.join(target_path, file)
                     if os.path.exists(dst_file) and track_history:
-                        resource_name = rel_path if rel_path != '.' else os.path.splitext(file)[0]
-                        if resource_name in self.resource_modification_history:
-                            prev_mods = [h['mod'] for h in self.resource_modification_history[resource_name]]
-                            prev_mods_filtered = [m for m in prev_mods if m not in ['0', 'vanilla', 'unknown_mod', 'merged_mods']]
-                            if prev_mods_filtered and source_mod_name not in prev_mods_filtered:
-                                self.patching_logger.info(f"[CONFLICT] {resource_type} '{resource_name}': mod {prev_mods_filtered[0]} vs mod {source_mod_name}, using mod {source_mod_name}")
-                                self.conflicts_logger.info(f'''Resource: {resource_type.capitalize()} "{resource_name}" | Conflict between: {', '.join(prev_mods_filtered)} vs "{source_mod_name}" | Resolution: Using "{source_mod_name}" (higher priority)''')
-                                self.detected_conflicts.append({'resource_type': resource_type, 'resource_name': resource_name, 'mods': prev_mods_filtered + [source_mod_name], 'resolution': source_mod_name})
+                        is_identical = False
+                        try:
+                            if self._are_files_semantically_equal(src_file, dst_file, resource_type):
+                                is_identical = True
+                        except Exception:
+                            pass
+                        if not is_identical:
+                            resource_name = rel_path if rel_path != '.' else os.path.splitext(file)[0]
+                            if resource_name in self.resource_modification_history:
+                                prev_mods = [h['mod'] for h in self.resource_modification_history[resource_name]]
+                                prev_mods_filtered = [m for m in prev_mods if m not in ['0', 'vanilla', 'unknown_mod', 'merged_mods']]
+                                if prev_mods_filtered and source_mod_name not in prev_mods_filtered:
+                                    self.patching_logger.info(f"[CONFLICT] {resource_type} '{resource_name}': mod {prev_mods_filtered[0]} vs mod {source_mod_name}, using mod {source_mod_name}")
+                                    self.conflicts_logger.info(f'''Resource: {resource_type.capitalize()} "{resource_name}" | Conflict between: {', '.join(prev_mods_filtered)} vs "{source_mod_name}" | Resolution: Using "{source_mod_name}" (higher priority)''')
+                                    self.detected_conflicts.append({'resource_type': resource_type, 'resource_name': resource_name, 'mods': prev_mods_filtered + [source_mod_name], 'resolution': source_mod_name})
                     safe_copy(src_file, dst_file)
                     if track_history:
                         if source_mod_name != '0' and source_mod_name != 'vanilla' and (source_mod_name != 'unknown_mod'):
@@ -1667,12 +1675,47 @@ class MultiModMerger(QObject):
                     room_name = os.path.splitext(file)[0]
                     file_path = os.path.join(rooms_dir, file)
                     try:
-                        with open(file_path, 'rb') as f:
-                            hash_value = hashlib.sha256(f.read()).hexdigest()
+                        try:
+                            with open(file_path, 'r', encoding='utf-8') as f:
+                                data = json.load(f)
+                            canonical_json = json.dumps(data, sort_keys=True, separators=(',', ':'))
+                            hash_value = hashlib.sha256(canonical_json.encode('utf-8')).hexdigest()
                             hashes['rooms'][room_name] = hash_value
+                        except Exception as e:
+                            self.patching_logger.warning(f'Failed to compute semantic hash for room {room_name}: {e}. Falling back to binary hash.')
+                            try:
+                                with open(file_path, 'rb') as f:
+                                    hash_value = hashlib.sha256(f.read()).hexdigest()
+                                    hashes['rooms'][room_name] = hash_value
+                            except Exception:
+                                raise e
                     except Exception as e:
                         self.patching_logger.warning(f'Failed to compute hash for room {room_name}: {e}')
         return hashes
+
+    def _are_files_semantically_equal(self, file1: str, file2: str, resource_type: str) -> bool:
+        try:
+            if resource_type == 'room' or resource_type == 'rooms':
+                try:
+                    with open(file1, 'r', encoding='utf-8') as f1, open(file2, 'r', encoding='utf-8') as f2:
+                        json1 = json.load(f1)
+                        json2 = json.load(f2)
+                    canonical1 = json.dumps(json1, sort_keys=True, separators=(',', ':'))
+                    canonical2 = json.dumps(json2, sort_keys=True, separators=(',', ':'))
+                    return canonical1 == canonical2
+                except Exception:
+                    pass
+            with open(file1, 'rb') as f1, open(file2, 'rb') as f2:
+                while True:
+                    b1 = f1.read(8192)
+                    b2 = f2.read(8192)
+                    if b1 != b2:
+                        return False
+                    if not b1:
+                        return True
+        except Exception as e:
+            self.patching_logger.warning(f'Failed to compare files {file1} and {file2}: {e}')
+            return False
 
     def _filter_vanilla_identical_resources(self, vanilla_hashes: Dict[str, Dict[str, str]], mod_objects_dir: str, mod_number: int, mod_name: str) -> Optional[str]:
         if not os.path.exists(mod_objects_dir):
