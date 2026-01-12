@@ -126,34 +126,31 @@ def _extract_archive_raw(src_path: str, fname_lower: str, out_dir: str) -> None:
     os.makedirs(out_dir_abs, exist_ok=True)
     if fname_lower.endswith('.zip') or fname_lower.endswith('.dhtheme'):
         with zipfile.ZipFile(src_path, 'r') as zf:
+            targets = []
             for member in zf.namelist():
                 if not _is_safe_path(member):
                     logging.warning(f'_extract_archive_raw: Skipping suspicious path in ZIP: {member}')
                     continue
+                targets.append(member)
+            if targets:
                 try:
-                    target_path = _safe_join(out_dir_abs, member)
-                    parent_dir = os.path.dirname(target_path)
-                    if parent_dir:
-                        os.makedirs(parent_dir, exist_ok=True)
-                    if not member.endswith('/'):
-                        with zf.open(member) as source, open(target_path, 'wb') as target:
-                            shutil.copyfileobj(source, target)
+                    zf.extractall(path=out_dir_abs, members=targets)
                 except (ValueError, OSError) as e:
-                    logging.warning(f'_extract_archive_raw: Failed to extract {member}: {e}')
-                    continue
+                    logging.warning(f'_extract_archive_raw: Failed to extract ZIP archive: {e}')
         return
     if fname_lower.endswith('.tar.gz'):
         with tarfile.open(src_path, 'r:gz') as tf:
+            targets = []
             for member in tf.getmembers():
                 if not _is_safe_path(member.name):
                     logging.warning(f'_extract_archive_raw: Skipping suspicious path in TAR: {member.name}')
                     continue
+                targets.append(member)
+            if targets:
                 try:
-                    target_path = _safe_join(out_dir_abs, member.name)
-                    tf.extract(member, out_dir_abs)
+                    tf.extractall(path=out_dir_abs, members=targets)
                 except (ValueError, OSError, tarfile.TarError) as e:
-                    logging.warning(f'_extract_archive_raw: Failed to extract {member.name}: {e}')
-                    continue
+                    logging.warning(f'_extract_archive_raw: Failed to extract TAR archive: {e}')
         return
     if fname_lower.endswith('.rar'):
         try:
@@ -161,20 +158,17 @@ def _extract_archive_raw(src_path: str, fname_lower: str, out_dir: str) -> None:
         except UnrarMissingError:
             raise
         with rarfile.RarFile(src_path, 'r') as rf:
+            targets = []
             for member in rf.namelist():
                 if not _is_safe_path(member):
                     logging.warning(f'_extract_archive_raw: Skipping suspicious path in RAR: {member}')
                     continue
+                targets.append(member)
+            if targets:
                 try:
-                    target_path = _safe_join(out_dir_abs, member)
-                    parent_dir = os.path.dirname(target_path)
-                    if parent_dir:
-                        os.makedirs(parent_dir, exist_ok=True)
-                    if not member.endswith('/'):
-                        rf.extract(member, out_dir_abs)
+                    rf.extractall(path=out_dir_abs, members=targets)
                 except (ValueError, OSError, rarfile.RarCannotExec) as e:
-                    logging.warning(f'_extract_archive_raw: Failed to extract {member}: {e}')
-                    continue
+                    logging.warning(f'_extract_archive_raw: Failed to extract RAR archive: {e}')
         return
     if fname_lower.endswith('.7z') and py7zr is not None:
         with py7zr.SevenZipFile(src_path, mode='r') as zf:
