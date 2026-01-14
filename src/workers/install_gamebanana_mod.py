@@ -147,7 +147,6 @@ class InstallGameBananaModThread(BaseInstallWorker):
             self.finished.emit(False, str(e))
 
     def _install_deltahub_mod(self, archive_path: str, mod_id: int) -> Optional[str]:
-        import tempfile
         import json
         from utils.archive_utils import extract_any_archive
         from utils.file_utils import sanitize_filename

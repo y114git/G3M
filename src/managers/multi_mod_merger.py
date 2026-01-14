@@ -1855,7 +1855,6 @@ class MultiModMerger(QObject):
         if os.path.exists(source_patches):
             if os.path.exists(target_patches):
                 try:
-                    import json
                     with open(target_patches, 'r', encoding='utf-8') as f_t:
                         target_json = json.load(f_t)
                     with open(source_patches, 'r', encoding='utf-8') as f_s:
@@ -2096,7 +2095,6 @@ class MultiModMerger(QObject):
     def _extract_archive_to_target(self, archive_path: str, target_dir: str, chapter_id: Optional[int] = None) -> bool:
         try:
             from utils.archive_utils import extract_any_archive
-            import tempfile
             if chapter_id is None:
                 chapter_id = self._extract_chapter_id_from_path(target_dir)
             with tempfile.TemporaryDirectory(prefix='mm_extract_') as temp_extract_dir:
@@ -2808,7 +2806,6 @@ class MultiModMerger(QObject):
         return None
 
     def _extract_chapter_id_from_path(self, path: str) -> Optional[int]:
-        import re
         match = re.search('chapter[_-]?(\\d+)', path, re.IGNORECASE)
         if match:
             return int(match.group(1))
@@ -2974,7 +2971,6 @@ class MultiModMerger(QObject):
     def restore_all_backups(self) -> bool:
         if self.backup_manager:
             return self.backup_manager.restore_all_backups()
-        import json
         if self._session_manifest_path and os.path.exists(self._session_manifest_path):
             try:
                 with open(self._session_manifest_path, 'r', encoding='utf-8') as f:

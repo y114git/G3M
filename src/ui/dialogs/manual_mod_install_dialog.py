@@ -38,7 +38,6 @@ class ManualModInstallDialog(QDialog):
     def closeEvent(self, event):
         if self.temp_dir_to_cleanup and os.path.exists(self.temp_dir_to_cleanup):
             try:
-                import shutil
                 shutil.rmtree(self.temp_dir_to_cleanup, ignore_errors=True)
             except Exception as e:
                 logging.warning(f'Failed to cleanup temp directory: {e}')

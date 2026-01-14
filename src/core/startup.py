@@ -191,7 +191,6 @@ def cleanup_old_temp_directories():
                 if os.path.isdir(temp_dir):
                     try:
                         mtime = os.path.getmtime(temp_dir)
-                        import time
                         if time.time() - mtime > 3600:
                             if safe_rmtree(temp_dir):
                                 cleaned_count += 1
@@ -216,7 +215,7 @@ def _load_config_file() -> dict:
         with open(config_path, 'r', encoding='utf-8') as f:
             config = json.load(f)
         if not isinstance(config, dict):
-            logging.warning(f'Config file does not contain a dictionary, resetting to empty config')
+            logging.warning('Config file does not contain a dictionary, resetting to empty config')
             backup_path = f'{config_path}.invalid.bak'
             try:
                 import shutil
@@ -428,7 +427,6 @@ def run_app():
                     fallback_time = max(LAUNCHER_FALLBACK_TIMEOUT, 10000)
                     QTimer.singleShot(fallback_time, fallback_show_window)
             except Exception as e:
-                import traceback
                 traceback.print_exc()
                 if hasattr(splash, 'movie'):
                     splash.stop_gif_animation()
@@ -441,7 +439,6 @@ def run_app():
     try:
         sys.exit(app.exec())
     except Exception as e:
-        import traceback
         traceback.print_exc()
         error_msg = tr('errors.startup_error_message', details=str(e))
         logging.error(f'STARTUP ERROR: {error_msg}')

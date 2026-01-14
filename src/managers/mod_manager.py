@@ -350,7 +350,6 @@ class ModManager(QObject):
             unique_key = f'{base_key}_{counter}'
             counter += 1
             if counter > 10000:
-                import time
                 unique_key = f'{base_key}_{int(time.time())}'
                 break
         return unique_key
@@ -797,7 +796,6 @@ class ModManager(QObject):
                                 continue
                     except Exception as e:
                         logging.warning(f'load_local_mods: Error processing files_data for mod {key}: {e}', exc_info=True)
-                    game = config_data.get('game') or config_data.get('modgame', '')
                     if mod.files:
                         self.app_state.append_mod(mod)
                     else:
@@ -906,7 +904,6 @@ class ModManager(QObject):
                                         extra_files.append(ef_data)
                         mod_chapter = ModChapterData(description=config_data.get('tagline', ''), data_file_url=data_file_url, data_file_version=chapter_files.get('data_file_version', (ch_info.get('versions', {}) or {}).get('data', '1.0.0')), extra_files=extra_files)
                         mod.files[file_key] = mod_chapter
-                    game = mod.game or config_data.get('game') or config_data.get('modgame', '')
                     if mod.files:
                         self.app_state.append_mod(mod)
                     else:

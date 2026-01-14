@@ -287,7 +287,6 @@ class AppWindow(QWidget):
                     logging.error(f'Failed to open manual install dialog: {e}', exc_info=True)
                     self.feedback_manager.show_message('error', tr('errors.error'), tr('errors.manual_install_failed', error=str(e)))
                     try:
-                        import shutil
                         shutil.rmtree(temp_dir, ignore_errors=True)
                     except Exception:
                         pass

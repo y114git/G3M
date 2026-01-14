@@ -54,7 +54,6 @@ def _ensure_unrar_available():
 def download_and_setup_unrar(status_callback: Callable[[str], None] = None) -> bool:
     import platform
     import gzip
-    import shutil
     try:
         import requests
         target_path = _get_unrar_path()

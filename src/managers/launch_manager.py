@@ -317,7 +317,6 @@ class GameLauncher(QObject):
         return self.app_state.game_mode.get_game_path(self.app_state.local_config) or ''
 
     def _prepare_game_files_multi_mod_async(self, selections: Dict[int, List[Any]]) -> bool:
-        import logging
         from workers.mod_merge_thread import ModMergeThread
         logging.info('Starting multi-mod merge in background thread')
         chapter_mods = {chapter_id: mods_list for chapter_id, mods_list in selections.items() if isinstance(mods_list, list) and mods_list}

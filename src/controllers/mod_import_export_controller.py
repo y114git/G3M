@@ -201,7 +201,7 @@ class ModImportExportController:
                 msg.setText(tr('errors.unrar_download_failed', error='Download failed/Platform not supported'))
                 msg.setInformativeText(msg_text)
                 open_btn = msg.addButton(tr('buttons.open_browser') if tr('buttons.open_browser') != 'buttons.open_browser' else 'Open Website', QMessageBox.ButtonRole.ActionRole)
-                ok_btn = msg.addButton(tr('buttons.ok'), QMessageBox.ButtonRole.AcceptRole)
+                _ = msg.addButton(tr('buttons.ok'), QMessageBox.ButtonRole.AcceptRole)
                 msg.exec()
                 if msg.clickedButton() == open_btn:
                     QDesktopServices.openUrl(QUrl(url_to_open))
@@ -260,7 +260,6 @@ class ModImportExportController:
             QMessageBox.critical(self.app_window, tr('errors.error'), tr('errors.manual_install_failed', error=str(e)))
 
     def _prepare_local_files_for_manual_install(self, file_path: str) -> str:
-        import tempfile
         temp_dir = tempfile.mkdtemp(prefix='deltahub_manual_install_')
         try:
             try:
@@ -401,7 +400,6 @@ class ModImportExportController:
                             old_config_path = os.path.join(entry.path, LEGACY_MOD_CONFIG_FILENAME)
                             if os.path.exists(old_config_path):
                                 try:
-                                    import shutil
                                     shutil.move(old_config_path, config_path)
                                     logging.info(f'Migrated mod config.json to mod_config.json during export in {entry.name}')
                                     with open(config_path, 'r', encoding='utf-8') as f:
