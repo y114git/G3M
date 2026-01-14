@@ -308,7 +308,8 @@ def run_app():
         global _splash_start_time
         launcher_app = {}
         window_shown_flag = {'shown': False}
-        splash = create_png_splash()
+        config_dir = os.path.join(user_root, 'settings')
+        splash = create_png_splash(config_dir)
         if show_animation:
             _splash_start_time = time.time()
             from core.splash import CustomSplashScreen

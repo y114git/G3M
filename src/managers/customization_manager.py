@@ -56,6 +56,17 @@ class CustomizationManager(QObject):
         path = self.get_startup_sound_path()
         return tr('buttons.remove_startup_sound') if path else tr('buttons.select_startup_sound')
 
+    def get_custom_logo_path(self) -> str:
+        for ext in ['.png', '.jpg', '.jpeg', '.gif', '.bmp']:
+            logo_path = os.path.join(self.app_state.config_dir, f'custom_logo{ext}')
+            if os.path.exists(logo_path):
+                return logo_path
+        return ''
+
+    def get_logo_button_text(self) -> str:
+        has_logo = bool(self.get_custom_logo_path())
+        return tr('buttons.remove_logo') if has_logo else tr('buttons.change_logo')
+
     def update_translucent_backgrounds(self, search_container: Optional[QWidget] = None, library_container: Optional[QWidget] = None):
         bg_color = get_theme_color(self.app_state.local_config, 'background', '#000000')
         if bg_color.startswith('#'):
@@ -256,7 +267,11 @@ class CustomizationManager(QObject):
 
     def load_launcher_icon(self, icon_label: QLabel):
         try:
-            splash_path = resource_path('assets/images/splash.png')
+            custom_logo_path = self.get_custom_logo_path()
+            if custom_logo_path and os.path.exists(custom_logo_path):
+                splash_path = custom_logo_path
+            else:
+                splash_path = resource_path('assets/images/splash.png')
             if os.path.exists(splash_path):
                 pixmap = QPixmap(splash_path)
                 if not pixmap.isNull():

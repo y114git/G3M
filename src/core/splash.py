@@ -88,9 +88,18 @@ class CustomSplashScreen(QSplashScreen):
         pass
 
 
-def create_png_splash():
+def create_png_splash(config_dir: str = None):
     pixmap = QPixmap()
-    splash_path = resource_path('assets/images/splash.png')
+    splash_path = None
+    if config_dir:
+        import os
+        for ext in ['.png', '.jpg', '.jpeg', '.gif', '.bmp']:
+            logo_path = os.path.join(config_dir, f'custom_logo{ext}')
+            if os.path.exists(logo_path):
+                splash_path = logo_path
+                break
+    if not splash_path:
+        splash_path = resource_path('assets/images/splash.png')
     if not pixmap.load(splash_path):
         pixmap = QPixmap(600, 600)
         pixmap.fill(Qt.GlobalColor.transparent)

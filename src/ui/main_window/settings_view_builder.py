@@ -171,10 +171,18 @@ class SettingsViewBuilder:
         back_button_cust = QPushButton(tr('ui.back_button'))
         settings_customization_layout.addWidget(back_button_cust, alignment=Qt.AlignmentFlag.AlignLeft)
         settings_customization_layout.addSpacing(15)
+        background_buttons_layout = QHBoxLayout()
+        background_buttons_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        background_buttons_layout.setSpacing(10)
         change_background_button = QPushButton()
-        change_background_button.setFixedWidth(400)
+        change_background_button.setFixedWidth(275)
         change_background_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        settings_customization_layout.addWidget(change_background_button, 0, Qt.AlignmentFlag.AlignHCenter)
+        background_buttons_layout.addWidget(change_background_button)
+        change_logo_button = QPushButton()
+        change_logo_button.setFixedWidth(275)
+        change_logo_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        background_buttons_layout.addWidget(change_logo_button)
+        settings_customization_layout.addLayout(background_buttons_layout)
         settings_customization_layout.addSpacing(8)
         sound_buttons_layout = QHBoxLayout()
         sound_buttons_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -238,6 +246,7 @@ class SettingsViewBuilder:
         self.widgets['disable_splash_checkbox'] = disable_splash_checkbox
         self.widgets['back_button_cust'] = back_button_cust
         self.widgets['change_background_button'] = change_background_button
+        self.widgets['change_logo_button'] = change_logo_button
         self.widgets['background_music_button'] = background_music_button
         self.widgets['startup_sound_button'] = startup_sound_button
         self.widgets['custom_style_frame'] = custom_style_frame

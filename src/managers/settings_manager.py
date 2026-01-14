@@ -263,6 +263,40 @@ class SettingsManager(QObject):
                 except Exception:
                     self.feedback_manager.show_message('warning', 'errors.error', tr('errors.copy_startup_sound_failed'))
 
+    def on_logo_button_click(self):
+        existing_logo = ''
+        if self.parent_widget and hasattr(self.parent_widget, 'customization_manager'):
+            existing_logo = self.parent_widget.customization_manager.get_custom_logo_path()
+        if existing_logo:
+            try:
+                for ext in ['.png', '.jpg', '.jpeg', '.gif', '.bmp']:
+                    logo_path = os.path.join(self.app_state.config_dir, f'custom_logo{ext}')
+                    if os.path.exists(logo_path):
+                        os.remove(logo_path)
+                self.feedback_manager.show_message('info', 'dialogs.success', tr('dialogs.logo_removed'))
+                self.theme_changed.emit()
+            except Exception:
+                self.feedback_manager.show_message('warning', 'errors.error', tr('errors.remove_logo_failed'))
+        else:
+            file_path, _ = QFileDialog.getOpenFileName(self.parent_widget, tr('dialogs.select_logo'), '', get_file_filter('background_images'))
+            if file_path:
+                try:
+                    os.makedirs(self.app_state.config_dir, exist_ok=True)
+                    ext = os.path.splitext(file_path)[1].lower()
+                    if ext not in ['.png', '.jpg', '.jpeg', '.gif', '.bmp']:
+                        self.feedback_manager.show_message('warning', 'errors.error', tr('errors.invalid_image_format'))
+                        return
+                    for old_ext in ['.png', '.jpg', '.jpeg', '.gif', '.bmp']:
+                        old_path = os.path.join(self.app_state.config_dir, f'custom_logo{old_ext}')
+                        if os.path.exists(old_path):
+                            os.remove(old_path)
+                    dest_path = os.path.join(self.app_state.config_dir, f'custom_logo{ext}')
+                    shutil.copy2(file_path, dest_path)
+                    self.feedback_manager.show_message('info', 'dialogs.success', tr('dialogs.logo_selected'))
+                    self.theme_changed.emit()
+                except Exception:
+                    self.feedback_manager.show_message('warning', 'errors.error', tr('errors.copy_logo_failed'))
+
     def is_valid_hex_color(self, s: str) -> bool:
         return bool(re.fullmatch('#[0-9a-fA-F]{6}', s or ''))
 
@@ -289,13 +323,17 @@ class SettingsManager(QObject):
                 zipf.write(bg_path, f'background{os.path.splitext(bg_path)[1]}')
             music_path = None
             sound_path = None
+            logo_path = None
             if self.parent_widget and hasattr(self.parent_widget, 'customization_manager'):
                 music_path = self.parent_widget.customization_manager.get_background_music_path() or None
                 sound_path = self.parent_widget.customization_manager.get_startup_sound_path() or None
+                logo_path = self.parent_widget.customization_manager.get_custom_logo_path() or None
             if music_path and os.path.exists(music_path):
                 zipf.write(music_path, f'background_music{os.path.splitext(music_path)[1]}')
             if sound_path and os.path.exists(sound_path):
                 zipf.write(sound_path, f'startup_sound{os.path.splitext(sound_path)[1]}')
+            if logo_path and os.path.exists(logo_path):
+                zipf.write(logo_path, f'custom_logo{os.path.splitext(logo_path)[1]}')
         self.feedback_manager.show_message('info', 'dialogs.success', tr('dialogs.theme_exported_success'))
 
     def import_theme(self):
@@ -331,6 +369,10 @@ class SettingsManager(QObject):
                 for old_file in ['custom_background_music.mp3', 'custom_background_music.wav', 'custom_startup_sound.mp3', 'custom_startup_sound.wav']:
                     if os.path.exists(os.path.join(self.app_state.config_dir, old_file)):
                         os.remove(os.path.join(self.app_state.config_dir, old_file))
+                for ext in ['.png', '.jpg', '.jpeg', '.gif', '.bmp']:
+                    old_logo = os.path.join(self.app_state.config_dir, f'custom_logo{ext}')
+                    if os.path.exists(old_logo):
+                        os.remove(old_logo)
                 self.app_state.local_config['custom_background_path'] = ''
                 for filename in os.listdir(temp_dir):
                     src_path = os.path.join(temp_dir, filename)
@@ -343,6 +385,10 @@ class SettingsManager(QObject):
                         shutil.copy2(src_path, os.path.join(self.app_state.config_dir, f'custom_background_music{os.path.splitext(filename)[1]}'))
                     elif filename.startswith('startup_sound.'):
                         shutil.copy2(src_path, os.path.join(self.app_state.config_dir, f'custom_startup_sound{os.path.splitext(filename)[1]}'))
+                    elif filename.startswith('custom_logo.'):
+                        ext = os.path.splitext(filename)[1]
+                        dest_path = os.path.join(self.app_state.config_dir, f'custom_logo{ext}')
+                        shutil.copy2(src_path, dest_path)
             self.write_local_config()
             self.app_state.local_config['first_launch_splash_shown'] = True
             if 'disable_splash' in theme_settings:

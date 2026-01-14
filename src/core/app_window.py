@@ -733,6 +733,7 @@ class AppWindow(QWidget):
         self.disable_splash_checkbox = settings_widgets['disable_splash_checkbox']
         self.back_button_cust = settings_widgets['back_button_cust']
         self.change_background_button = settings_widgets['change_background_button']
+        self.change_logo_button = settings_widgets['change_logo_button']
         self.background_music_button = settings_widgets['background_music_button']
         self.startup_sound_button = settings_widgets['startup_sound_button']
         self.custom_style_frame = settings_widgets['custom_style_frame']
@@ -768,6 +769,8 @@ class AppWindow(QWidget):
         self.disable_splash_checkbox.stateChanged.connect(self.settings_ui.on_toggle_disable_splash)
         self.back_button_cust.clicked.connect(self._go_back_to_settings_menu)
         self.change_background_button.clicked.connect(self.theme.on_background_button_click)
+        self.change_logo_button.setText(self.customization_manager.get_logo_button_text())
+        self.change_logo_button.clicked.connect(self.theme.on_logo_button_click)
         self.background_music_button.setText(self.customization_manager.get_background_music_button_text())
         self.background_music_button.clicked.connect(self.theme.on_background_music_button_click)
         self.startup_sound_button.setText(self.customization_manager.get_startup_sound_button_text())

@@ -144,6 +144,9 @@ class ThemeController:
         self.app.disable_splash_checkbox.setChecked(self.app_state.local_config.get('disable_splash', False))
         self.app.background_music_button.setText(self.customization_manager.get_background_music_button_text())
         self.app.startup_sound_button.setText(self.customization_manager.get_startup_sound_button_text())
+        self.update_logo_button_state()
+        if hasattr(self.app, 'launcher_icon_label'):
+            self.customization_manager.load_launcher_icon(self.app.launcher_icon_label)
         current_music_path = self.customization_manager.get_background_music_path()
         if not current_music_path:
             self.customization_manager.stop_background_music()
@@ -201,3 +204,13 @@ class ThemeController:
     def on_startup_sound_button_click(self):
         self.settings_manager.on_startup_sound_button_click()
         self.app.startup_sound_button.setText(self.customization_manager.get_startup_sound_button_text())
+
+    def on_logo_button_click(self):
+        self.settings_manager.on_logo_button_click()
+        self.update_logo_button_state()
+        if hasattr(self.app, 'launcher_icon_label'):
+            self.customization_manager.load_launcher_icon(self.app.launcher_icon_label)
+
+    def update_logo_button_state(self):
+        if hasattr(self.app, 'change_logo_button'):
+            self.app.change_logo_button.setText(self.customization_manager.get_logo_button_text())
