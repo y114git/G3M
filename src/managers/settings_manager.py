@@ -361,7 +361,7 @@ class SettingsManager(QObject):
                             theme_json_path = os.path.join(root, 'theme.json')
                             break
                     else:
-                        raise FileNotFoundError(f'theme.json not found in extracted archive')
+                        raise FileNotFoundError('theme.json not found in extracted archive')
                 with open(theme_json_path, 'r', encoding='utf-8') as f:
                     theme_settings = json.load(f)
                 for key, value in theme_settings.items():

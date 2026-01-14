@@ -7,8 +7,10 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using UndertaleModLib.Util;
+using UndertaleModLib.Models;
 using ImageMagick;
 
 EnsureDataLoaded();
@@ -24,6 +26,206 @@ Regex sprFrameRegex = new(@"^(.+?)(?:_(\d+))$", RegexOptions.Compiled);
 string importFolder = CheckValidity();
 
 bool noMasksForBasicRectangles = Data.IsVersionAtLeast(2022, 9);
+
+
+Dictionary<string, JsonElement?> spriteMetadataCache = new();
+
+
+JsonElement? TryLoadSpriteMetadata(string spritesFolder, string spriteName)
+{
+    if (spriteMetadataCache.TryGetValue(spriteName, out JsonElement? cached))
+        return cached;
+
+    
+    string spriteFolder = Path.Combine(spritesFolder, spriteName);
+    string metaFile = Path.Combine(spriteFolder, "sprite_meta.json");
+    
+    if (!File.Exists(metaFile))
+    {
+        spriteMetadataCache[spriteName] = null;
+        return null;
+    }
+
+    try
+    {
+        string jsonContent = File.ReadAllText(metaFile, Encoding.UTF8);
+        JsonDocument jsonDoc = JsonDocument.Parse(jsonContent);
+        spriteMetadataCache[spriteName] = jsonDoc.RootElement.Clone();
+        return spriteMetadataCache[spriteName];
+    }
+    catch
+    {
+        spriteMetadataCache[spriteName] = null;
+        return null;
+    }
+}
+
+
+void ApplySpriteMetadata(UndertaleSprite sprite, JsonElement meta)
+{
+    
+    if (meta.TryGetProperty("originX", out JsonElement originX))
+        sprite.OriginX = originX.GetInt32();
+    if (meta.TryGetProperty("originY", out JsonElement originY))
+        sprite.OriginY = originY.GetInt32();
+
+    
+    if (meta.TryGetProperty("marginLeft", out JsonElement marginLeft))
+        sprite.MarginLeft = marginLeft.GetInt32();
+    if (meta.TryGetProperty("marginRight", out JsonElement marginRight))
+        sprite.MarginRight = marginRight.GetInt32();
+    if (meta.TryGetProperty("marginTop", out JsonElement marginTop))
+        sprite.MarginTop = marginTop.GetInt32();
+    if (meta.TryGetProperty("marginBottom", out JsonElement marginBottom))
+        sprite.MarginBottom = marginBottom.GetInt32();
+
+    
+    if (meta.TryGetProperty("transparent", out JsonElement transparent))
+        sprite.Transparent = transparent.GetBoolean();
+    if (meta.TryGetProperty("smooth", out JsonElement smooth))
+        sprite.Smooth = smooth.GetBoolean();
+    if (meta.TryGetProperty("preload", out JsonElement preload))
+        sprite.Preload = preload.GetBoolean();
+
+    
+    if (meta.TryGetProperty("bboxMode", out JsonElement bboxMode))
+        sprite.BBoxMode = (uint)bboxMode.GetInt64();
+    if (meta.TryGetProperty("sepMasks", out JsonElement sepMasks))
+        sprite.SepMasks = (UndertaleSprite.SepMaskType)sepMasks.GetInt32();
+
+    
+    if (Data.IsGameMaker2())
+    {
+        if (meta.TryGetProperty("gms2PlaybackSpeed", out JsonElement playbackSpeed))
+            sprite.GMS2PlaybackSpeed = (float)playbackSpeed.GetDouble();
+        if (meta.TryGetProperty("gms2PlaybackSpeedType", out JsonElement playbackSpeedType))
+            sprite.GMS2PlaybackSpeedType = (AnimSpeedType)playbackSpeedType.GetInt32();
+    }
+
+    
+    if (meta.TryGetProperty("collisionMasks", out JsonElement masksElm) && masksElm.ValueKind == JsonValueKind.Array)
+    {
+        sprite.CollisionMasks.Clear();
+        foreach (JsonElement maskElm in masksElm.EnumerateArray())
+        {
+            if (maskElm.TryGetProperty("data", out JsonElement dataElm) &&
+                maskElm.TryGetProperty("width", out JsonElement widthElm) &&
+                maskElm.TryGetProperty("height", out JsonElement heightElm))
+            {
+                byte[] maskData = Convert.FromBase64String(dataElm.GetString());
+                int maskWidth = widthElm.GetInt32();
+                int maskHeight = heightElm.GetInt32();
+                var maskEntry = new UndertaleSprite.MaskEntry(maskData, maskWidth, maskHeight);
+                sprite.CollisionMasks.Add(maskEntry);
+            }
+        }
+    }
+
+    
+    if (meta.TryGetProperty("nineSlice", out JsonElement nineSlice) && Data.IsVersionAtLeast(2, 3, 2))
+    {
+        if (sprite.V3NineSlice == null)
+            sprite.V3NineSlice = new UndertaleSprite.NineSlice();
+
+        if (nineSlice.TryGetProperty("left", out JsonElement nsLeft))
+            sprite.V3NineSlice.Left = nsLeft.GetInt32();
+        if (nineSlice.TryGetProperty("top", out JsonElement nsTop))
+            sprite.V3NineSlice.Top = nsTop.GetInt32();
+        if (nineSlice.TryGetProperty("right", out JsonElement nsRight))
+            sprite.V3NineSlice.Right = nsRight.GetInt32();
+        if (nineSlice.TryGetProperty("bottom", out JsonElement nsBottom))
+            sprite.V3NineSlice.Bottom = nsBottom.GetInt32();
+        if (nineSlice.TryGetProperty("enabled", out JsonElement nsEnabled))
+            sprite.V3NineSlice.Enabled = nsEnabled.GetBoolean();
+        
+        
+        if (nineSlice.TryGetProperty("tileModes", out JsonElement tileModes) && tileModes.ValueKind == JsonValueKind.Array)
+        {
+            var modesArray = tileModes.EnumerateArray().ToArray();
+            for (int i = 0; i < Math.Min(5, modesArray.Length); i++)
+            {
+                sprite.V3NineSlice.TileModes[i] = (UndertaleSprite.NineSlice.TileMode)modesArray[i].GetInt32();
+            }
+        }
+    }
+}
+
+
+Dictionary<string, List<Dictionary<string, object>>> textureFrameCache = new();
+
+
+List<Dictionary<string, object>> TryGetTextureFrameData(string spritesFolder, string spriteName)
+{
+    if (textureFrameCache.TryGetValue(spriteName, out var cached))
+        return cached;
+
+    JsonElement? meta = TryLoadSpriteMetadata(spritesFolder, spriteName);
+    if (meta.HasValue && meta.Value.TryGetProperty("textureFrames", out JsonElement framesElm) && framesElm.ValueKind == JsonValueKind.Array)
+    {
+        var frames = new List<Dictionary<string, object>>();
+        foreach (var frameElm in framesElm.EnumerateArray())
+        {
+            var frame = new Dictionary<string, object>();
+            if (frameElm.TryGetProperty("frameIndex", out JsonElement idxElm))
+                frame["frameIndex"] = idxElm.GetInt32();
+            if (frameElm.TryGetProperty("isNull", out JsonElement nullElm))
+                frame["isNull"] = nullElm.GetBoolean();
+            if (frameElm.TryGetProperty("targetX", out JsonElement txElm))
+                frame["targetX"] = (ushort)txElm.GetInt32();
+            if (frameElm.TryGetProperty("targetY", out JsonElement tyElm))
+                frame["targetY"] = (ushort)tyElm.GetInt32();
+            if (frameElm.TryGetProperty("targetWidth", out JsonElement twElm))
+                frame["targetWidth"] = (ushort)twElm.GetInt32();
+            if (frameElm.TryGetProperty("targetHeight", out JsonElement thElm))
+                frame["targetHeight"] = (ushort)thElm.GetInt32();
+            if (frameElm.TryGetProperty("boundingWidth", out JsonElement bwElm))
+                frame["boundingWidth"] = (ushort)bwElm.GetInt32();
+            if (frameElm.TryGetProperty("boundingHeight", out JsonElement bhElm))
+                frame["boundingHeight"] = (ushort)bhElm.GetInt32();
+            frames.Add(frame);
+        }
+        textureFrameCache[spriteName] = frames;
+        return frames;
+    }
+
+    textureFrameCache[spriteName] = null;
+    return null;
+}
+
+
+
+
+
+void ApplyTextureFrameProperties(UndertaleTexturePageItem tpi, string spriteName, int frameIndex, List<Dictionary<string, object>> frameData)
+{
+    if (frameData == null || frameIndex >= frameData.Count)
+        return;
+
+    var frame = frameData[frameIndex];
+    if (frame.ContainsKey("isNull") && (bool)frame["isNull"])
+        return;
+    
+    
+    if (frame.ContainsKey("targetX"))
+        tpi.TargetX = (ushort)frame["targetX"];
+    if (frame.ContainsKey("targetY"))
+        tpi.TargetY = (ushort)frame["targetY"];
+    
+    
+    if (frame.ContainsKey("targetWidth"))
+        tpi.TargetWidth = (ushort)frame["targetWidth"];
+    if (frame.ContainsKey("targetHeight"))
+        tpi.TargetHeight = (ushort)frame["targetHeight"];
+
+    
+    
+    
+    
+    
+    
+    
+    
+}
 
 try
 {
@@ -167,6 +369,13 @@ try
                     UndertaleSprite.TextureEntry texentry = new();
                     texentry.Texture = texturePageItem;
 
+                    
+                    var frameData = TryGetTextureFrameData(spritesPath, spriteName);
+                    if (frameData != null)
+                    {
+                        ApplyTextureFrameProperties(texturePageItem, spriteName, frame, frameData);
+                    }
+
 
 					UndertaleSprite sprite = Data.Sprites.ByName(spriteName);
 					if (sprite is null)
@@ -182,6 +391,14 @@ try
 						newSprite.MarginBottom= n.Texture.TargetY + n.Bounds.Height - 1;
 						newSprite.OriginX = 0;
 						newSprite.OriginY = 0;
+
+						
+						JsonElement? spriteMeta = TryLoadSpriteMetadata(spritesPath, spriteName);
+						if (spriteMeta.HasValue)
+						{
+							ApplySpriteMetadata(newSprite, spriteMeta.Value);
+						}
+
 						if (frame > 0)
 						{
 							for (int i = 0; i < frame; i++)
@@ -192,8 +409,11 @@ try
 						if (!noMasksForBasicRectangles ||
 							newSprite.SepMasks is not (UndertaleSprite.SepMaskType.AxisAlignedRect or UndertaleSprite.SepMaskType.RotatedRect))
 						{
-
-							maskNodes.Add(newSprite, n);
+							
+							if (newSprite.CollisionMasks.Count == 0)
+							{
+								maskNodes.Add(newSprite, n);
+							}
 						}
 
 						newSprite.Textures.Add(texentry);
@@ -229,6 +449,20 @@ try
 						texturePageItem.BoundingHeight = oldTex.BoundingHeight;
 					}
 
+					
+					
+					if (frameData != null)
+					{
+						ApplyTextureFrameProperties(texturePageItem, spriteName, frame, frameData);
+					}
+
+					
+					
+					JsonElement? existingSpriteMeta = TryLoadSpriteMetadata(spritesPath, spriteName);
+					if (existingSpriteMeta.HasValue)
+					{
+						ApplySpriteMetadata(sprite, existingSpriteMeta.Value);
+					}
 
 					sprite.Textures[frame] = texentry;
 

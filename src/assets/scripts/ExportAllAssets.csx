@@ -12,6 +12,7 @@ using System.Text.Json;
 using UndertaleModLib;
 using UndertaleModLib.Models;
 using UndertaleModLib.Util;
+using ImageMagick;
 
 void PrintLine(string s) => Console.WriteLine(s);
 
@@ -21,6 +22,44 @@ string SafeName(string name)
     var sb = new StringBuilder(name.Length);
     foreach (var ch in name) sb.Append(invalid.Contains(ch) ? '_' : ch);
     return sb.ToString();
+}
+
+
+
+
+void ExportSourcePixelsAsPNG(TextureWorker worker, UndertaleTexturePageItem texPageItem, string filePath)
+{
+    
+    var getEmbeddedMethod = worker.GetType().GetMethod("GetEmbeddedTexture", 
+        BindingFlags.Public | BindingFlags.Instance);
+    var embeddedImage = getEmbeddedMethod.Invoke(worker, new object[] { texPageItem.TexturePage }) as MagickImage;
+    
+    if (embeddedImage == null)
+    {
+        throw new Exception($"Failed to get embedded texture for {filePath}");
+    }
+    
+    
+    IMagickImage<byte> croppedImage;
+    lock (embeddedImage)
+    {
+        croppedImage = embeddedImage.CloneArea(
+            texPageItem.SourceX, 
+            texPageItem.SourceY, 
+            texPageItem.SourceWidth, 
+            texPageItem.SourceHeight
+        );
+    }
+    
+    
+    croppedImage.Strip();
+    
+    using (var stream = new FileStream(filePath, FileMode.Create))
+    {
+        croppedImage.Write(stream, MagickFormat.Png32);
+    }
+    
+    croppedImage.Dispose();
 }
 
 EnsureDataLoaded();
@@ -105,6 +144,13 @@ PrintLine($"[ExportAllAssets] Starting full export for mod {modNo}...");
 
 GlobalDecompileContext globalDecompileContext = new(Data);
 Underanalyzer.Decompiler.IDecompileSettings decompilerSettings = Data.ToolInfo.DecompilerSettings;
+
+
+JsonSerializerOptions jsonWriteOptions = new JsonSerializerOptions 
+{ 
+    WriteIndented = true,
+    Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+};
 
 void ExportShader(UndertaleShader shader, string outputDir)
 {
@@ -450,15 +496,152 @@ void DumpSprite(UndertaleSprite sprite)
         }
     }
 
+    string sprFolder2 = Path.Combine(sprFolder, sprite.Name.Content);
+    Directory.CreateDirectory(sprFolder2);
+
+    
+    
+    
     for (int i = 0; i < sprite.Textures.Count; i++)
     {
         if (sprite.Textures[i]?.Texture is not null)
         {
             UndertaleTexturePageItem tex = sprite.Textures[i].Texture;
-            string sprFolder2 = Path.Combine(sprFolder, sprite.Name.Content);
-            Directory.CreateDirectory(sprFolder2);
-            worker.ExportAsPNG(tex, Path.Combine(sprFolder2, $"{sprite.Name.Content}_{i}.png"));
+            
+            ExportSourcePixelsAsPNG(worker, tex, Path.Combine(sprFolder2, $"{sprite.Name.Content}_{i}.png"));
         }
+    }
+
+    
+    try
+    {
+        var spriteMeta = new Dictionary<string, object>
+        {
+            ["name"] = sprite.Name?.Content ?? "",
+            ["width"] = sprite.Width,
+            ["height"] = sprite.Height,
+            ["marginLeft"] = sprite.MarginLeft,
+            ["marginRight"] = sprite.MarginRight,
+            ["marginTop"] = sprite.MarginTop,
+            ["marginBottom"] = sprite.MarginBottom,
+            ["originX"] = sprite.OriginX,
+            ["originY"] = sprite.OriginY,
+            ["transparent"] = sprite.Transparent,
+            ["smooth"] = sprite.Smooth,
+            ["preload"] = sprite.Preload,
+            ["bboxMode"] = sprite.BBoxMode,
+            ["sepMasks"] = (uint)sprite.SepMasks,
+            ["sepMasksDescription"] = sprite.SepMasks.ToString(),
+            ["textureCount"] = sprite.Textures.Count
+        };
+
+        
+        var textureFrames = new List<Dictionary<string, object>>();
+        for (int i = 0; i < sprite.Textures.Count; i++)
+        {
+            var texEntry = sprite.Textures[i];
+            if (texEntry?.Texture != null)
+            {
+                var tex = texEntry.Texture;
+                textureFrames.Add(new Dictionary<string, object>
+                {
+                    ["frameIndex"] = i,
+                    ["sourceX"] = tex.SourceX,
+                    ["sourceY"] = tex.SourceY,
+                    ["sourceWidth"] = tex.SourceWidth,
+                    ["sourceHeight"] = tex.SourceHeight,
+                    ["targetX"] = tex.TargetX,
+                    ["targetY"] = tex.TargetY,
+                    ["targetWidth"] = tex.TargetWidth,
+                    ["targetHeight"] = tex.TargetHeight,
+                    ["boundingWidth"] = tex.BoundingWidth,
+                    ["boundingHeight"] = tex.BoundingHeight
+                });
+            }
+            else
+            {
+                textureFrames.Add(new Dictionary<string, object>
+                {
+                    ["frameIndex"] = i,
+                    ["isNull"] = true
+                });
+            }
+        }
+        spriteMeta["textureFrames"] = textureFrames;
+
+        
+        if (Data.IsGameMaker2())
+        {
+            spriteMeta["isSpecialType"] = sprite.IsSpecialType;
+            spriteMeta["sVersion"] = sprite.SVersion;
+            spriteMeta["sSpriteType"] = (uint)sprite.SSpriteType;
+            spriteMeta["sSpriteTypeDescription"] = sprite.SSpriteType.ToString();
+            spriteMeta["gms2PlaybackSpeed"] = sprite.GMS2PlaybackSpeed;
+            spriteMeta["gms2PlaybackSpeedType"] = (uint)sprite.GMS2PlaybackSpeedType;
+            spriteMeta["gms2PlaybackSpeedTypeDescription"] = sprite.GMS2PlaybackSpeedType.ToString();
+        }
+
+        
+        if (sprite.CollisionMasks != null && sprite.CollisionMasks.Count > 0)
+        {
+            var masksData = new List<Dictionary<string, object>>();
+            foreach (var mask in sprite.CollisionMasks)
+            {
+                if (mask?.Data != null && mask.Data.Length > 0)
+                {
+                    masksData.Add(new Dictionary<string, object>
+                    {
+                        ["width"] = mask.Width,
+                        ["height"] = mask.Height,
+                        ["data"] = Convert.ToBase64String(mask.Data)
+                    });
+                }
+            }
+            spriteMeta["collisionMasks"] = masksData;
+        }
+
+        
+        if (sprite.V3NineSlice != null)
+        {
+            var nineSliceData = new Dictionary<string, object>
+            {
+                ["left"] = sprite.V3NineSlice.Left,
+                ["top"] = sprite.V3NineSlice.Top,
+                ["right"] = sprite.V3NineSlice.Right,
+                ["bottom"] = sprite.V3NineSlice.Bottom,
+                ["enabled"] = sprite.V3NineSlice.Enabled
+            };
+            
+            
+            if (sprite.V3NineSlice.TileModes != null)
+            {
+                nineSliceData["tileModes"] = sprite.V3NineSlice.TileModes.Select(t => (int)t).ToArray();
+            }
+            
+            spriteMeta["nineSlice"] = nineSliceData;
+        }
+
+        
+        if (sprite.IsSpineSprite)
+        {
+            spriteMeta["isSpineSprite"] = true;
+            spriteMeta["spineVersion"] = sprite.SpineVersion;
+        }
+
+        
+        if (sprite.IsYYSWFSprite)
+        {
+            spriteMeta["isYYSWFSprite"] = true;
+            spriteMeta["swfVersion"] = sprite.SWFVersion;
+        }
+
+        string metaJson = JsonSerializer.Serialize(spriteMeta, jsonWriteOptions);
+        string metaFile = Path.Combine(sprFolder2, "sprite_meta.json");
+        File.WriteAllText(metaFile, metaJson, Encoding.UTF8);
+    }
+    catch (Exception ex)
+    {
+        PrintLine($"[ExportAllAssets] Failed to export sprite metadata for {sprite.Name?.Content}: {ex.Message}");
     }
 
     AddProgressParallel(sprite.Textures.Count);
@@ -602,6 +785,39 @@ void DumpSound(UndertaleSound sound)
             string soundFile = Path.Combine(soundsOut, name + audioExt);
             File.WriteAllBytes(soundFile, soundData);
         }
+
+        
+        var soundMeta = new Dictionary<string, object>
+        {
+            ["name"] = sound.Name?.Content ?? "",
+            ["flags"] = (uint)sound.Flags,
+            ["flagsDescription"] = new Dictionary<string, bool>
+            {
+                ["isEmbedded"] = sound.Flags.HasFlag(UndertaleSound.AudioEntryFlags.IsEmbedded),
+                ["isCompressed"] = sound.Flags.HasFlag(UndertaleSound.AudioEntryFlags.IsCompressed),
+                ["isDecompressedOnLoad"] = sound.Flags.HasFlag(UndertaleSound.AudioEntryFlags.IsDecompressedOnLoad),
+                ["regular"] = sound.Flags.HasFlag(UndertaleSound.AudioEntryFlags.Regular)
+            },
+            ["type"] = sound.Type?.Content ?? "",
+            ["file"] = sound.File?.Content ?? "",
+            ["effects"] = sound.Effects,
+            ["volume"] = sound.Volume,
+            ["pitch"] = sound.Pitch,
+            ["preload"] = sound.Preload,
+            ["audioGroupName"] = sound.AudioGroup?.Name?.Content ?? "",
+            ["groupId"] = sound.GroupID,
+            ["audioId"] = sound.AudioID
+        };
+
+        
+        if (Data.IsVersionAtLeast(2024, 6))
+        {
+            soundMeta["audioLength"] = sound.AudioLength;
+        }
+
+        string metaJson = JsonSerializer.Serialize(soundMeta, jsonWriteOptions);
+        string metaFile = Path.Combine(soundsOut, name + ".json");
+        File.WriteAllText(metaFile, metaJson, Encoding.UTF8);
     }
     catch (Exception ex)
     {
@@ -631,6 +847,52 @@ void DumpTileset(UndertaleBackground bg)
     {
         string png = Path.Combine(bgrFolder, name + ".png");
         worker.ExportAsPNG(bg.Texture, png);
+
+        
+        var bgMeta = new Dictionary<string, object>
+        {
+            ["name"] = bg.Name?.Content ?? "",
+            ["transparent"] = bg.Transparent,
+            ["smooth"] = bg.Smooth,
+            ["preload"] = bg.Preload
+        };
+
+        
+        if (Data.IsGameMaker2())
+        {
+            bgMeta["gms2UnknownAlways2"] = bg.GMS2UnknownAlways2;
+            bgMeta["gms2TileWidth"] = bg.GMS2TileWidth;
+            bgMeta["gms2TileHeight"] = bg.GMS2TileHeight;
+            bgMeta["gms2OutputBorderX"] = bg.GMS2OutputBorderX;
+            bgMeta["gms2OutputBorderY"] = bg.GMS2OutputBorderY;
+            bgMeta["gms2TileColumns"] = bg.GMS2TileColumns;
+            bgMeta["gms2ItemsPerTileCount"] = bg.GMS2ItemsPerTileCount;
+            bgMeta["gms2TileCount"] = bg.GMS2TileCount;
+            bgMeta["gms2ExportedSpriteIndex"] = bg.GMS2ExportedSpriteIndex;
+            bgMeta["gms2FrameLength"] = bg.GMS2FrameLength;
+
+            
+            if (Data.IsVersionAtLeast(2024, 14, 1))
+            {
+                bgMeta["gms2TileSeparationX"] = bg.GMS2TileSeparationX;
+                bgMeta["gms2TileSeparationY"] = bg.GMS2TileSeparationY;
+            }
+
+            
+            if (bg.GMS2TileIds != null && bg.GMS2TileIds.Count > 0)
+            {
+                var tileIds = new List<uint>();
+                foreach (var tileId in bg.GMS2TileIds)
+                {
+                    tileIds.Add(tileId.ID);
+                }
+                bgMeta["gms2TileIds"] = tileIds;
+            }
+        }
+
+        string metaJson = JsonSerializer.Serialize(bgMeta, jsonWriteOptions);
+        string metaFile = Path.Combine(bgrFolder, name + ".json");
+        File.WriteAllText(metaFile, metaJson, Encoding.UTF8);
     }
     catch (Exception ex)
     {

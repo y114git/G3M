@@ -210,7 +210,7 @@ class CustomizationManager(QObject):
                             logging.debug(f'[CustomizationManager] Music already running same file ({music_path}), skipping start')
                             return
                         if self._current_music_path == music_path:
-                            logging.debug(f'[CustomizationManager] Music already running same file, but force=True. Checking if restart needed...')
+                            logging.debug('[CustomizationManager] Music already running same file, but force=True. Checking if restart needed...')
                     logging.info('[CustomizationManager] Starting background music')
                     self.start_background_music()
                 else:
