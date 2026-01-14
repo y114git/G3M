@@ -1,15 +1,13 @@
 import os
-import json
 import shutil
 import logging
-import tempfile
 import zipfile
 from typing import Dict, List, Optional
-from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QFileDialog, QMessageBox, QTabWidget, QWidget, QTableWidget, QTableWidgetItem, QCheckBox, QLineEdit, QComboBox, QDialogButtonBox, QScrollArea, QListWidget, QListWidgetItem
+from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QFileDialog, QMessageBox, QTabWidget, QWidget, QLineEdit, QComboBox, QDialogButtonBox, QScrollArea
 from managers.localization_manager import tr
 from config.constants import DATA_FILE_EXTENSIONS, MOD_CONFIG_FILENAME
-from utils.file_utils import get_chapter_folder_name, get_unique_mod_dir, sanitize_filename, save_json
+from utils.file_utils import get_chapter_folder_name, get_unique_mod_dir, save_json
 
 
 class ManualModInstallDialog(QDialog):
@@ -556,7 +554,6 @@ class ManualModInstallDialog(QDialog):
         if not path:
             return ''
         path = path.strip()
-        has_trailing_slash = path.endswith('/') or path.endswith('\\')
         path = path.strip('/').strip('\\')
         path = path.replace('\\', '/')
         parts = path.split('/')
@@ -643,7 +640,14 @@ class ManualModInstallDialog(QDialog):
                 browse_btn.setEnabled(file_path not in self.unused_files)
 
     def _on_finish(self):
-        if not self.data_file_selections:
+        has_data_files = bool(self.data_file_selections)
+        selected_data_files = set(self.data_file_selections.values())
+        used_as_patches = set()
+        for patches in self.xdelta_patches_mappings.values():
+            used_as_patches.update(patches.keys())
+        extra_files_count = sum((1 for fp, _ in self.all_files if fp not in selected_data_files and fp not in self.unused_files and (fp not in used_as_patches)))
+        has_extra_files = extra_files_count > 0
+        if not has_data_files and (not has_extra_files):
             QMessageBox.warning(self, tr('errors.error'), tr('dialogs.no_data_file_selected'))
             return
         for chapter_id, patches in self.xdelta_patches_mappings.items():
@@ -810,7 +814,7 @@ class ManualModInstallDialog(QDialog):
             else:
                 chapter_key = '0'
             if chapter_key not in files_structure:
-                continue
+                files_structure[chapter_key] = {}
             extra_file_name = os.path.basename(extra_file_path)
             clean_path = relative_path.rstrip('/') if relative_path else ''
             if clean_path:
