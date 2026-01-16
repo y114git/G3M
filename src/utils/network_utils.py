@@ -4,7 +4,6 @@ import re
 import time
 import logging
 from pathlib import Path
-from urllib.parse import urlparse
 import requests
 import threading
 from requests.adapters import HTTPAdapter
@@ -12,52 +11,6 @@ from urllib3.util.retry import Retry
 from config.constants import MAX_DOWNLOAD_RETRIES, DOWNLOAD_CHUNK_SIZE, NETWORK_TIMEOUT_SHORT, NETWORK_TIMEOUT_MEDIUM, NETWORK_TIMEOUT_HEAD, NETWORK_TIMEOUT_LONG
 _session_lock = threading.Lock()
 _shared_session = None
-
-
-def mask_url(url: str) -> str:
-    if not url or not isinstance(url, str):
-        return str(url) if url else ''
-    if not url.startswith(('http://', 'https://')):
-        return url
-    try:
-        parsed = urlparse(url)
-        has_query = bool(parsed.query)
-        has_fragment = bool(parsed.fragment)
-        query_suffix = '?[QUERY_PARAMS]' if has_query else ''
-        fragment_suffix = '#[FRAGMENT]' if has_fragment else ''
-        if '/api/' in parsed.path.lower() or '/functions/' in parsed.path.lower() or 'cloudfunctions' in parsed.netloc.lower():
-            return f'{parsed.scheme}://[HIDDEN_DOMAIN]/[API_ENDPOINT]{query_suffix}{fragment_suffix}'
-        elif parsed.path and parsed.path != '/':
-            return f'{parsed.scheme}://[HIDDEN_DOMAIN]/[PATH]{query_suffix}{fragment_suffix}'
-        else:
-            return f'{parsed.scheme}://[HIDDEN_DOMAIN]/[ROOT]{query_suffix}{fragment_suffix}'
-    except Exception:
-        return '[INVALID_URL]'
-
-
-def mask_api_key(text: str) -> str:
-    if not text or not isinstance(text, str):
-        return str(text) if text else ''
-    patterns = [('(?:["\\\']?key["\\\']?\\s*[:=]\\s*["\\\']?)([a-zA-Z0-9_-]{10,})', 'key="[MASKED]"'), ('(?:["\\\']?token["\\\']?\\s*[:=]\\s*["\\\']?)([a-zA-Z0-9_-]{10,})', 'token="[MASKED]"'), ('(?:["\\\']?secret["\\\']?\\s*[:=]\\s*["\\\']?)([a-zA-Z0-9_-]{10,})', 'secret="[MASKED]"'), ('(?:["\\\']?password["\\\']?\\s*[:=]\\s*["\\\']?)([^\\s"\\\']+)', 'password="[MASKED]"'), ('(?:["\\\']?api[_-]?key["\\\']?\\s*[:=]\\s*["\\\']?)([a-zA-Z0-9_-]{10,})', 'api_key="[MASKED]"'), ('(?:["\\\']?auth[_-]?token["\\\']?\\s*[:=]\\s*["\\\']?)([a-zA-Z0-9_-]{10,})', 'auth_token="[MASKED]"'), ('(?:["\\\']?access[_-]?token["\\\']?\\s*[:=]\\s*["\\\']?)([a-zA-Z0-9_-]{10,})', 'access_token="[MASKED]"'), ('[?&](?:key|token|secret|password|api[_-]?key|auth[_-]?token|access[_-]?token)=([a-zA-Z0-9_-]{10,})', '?[PARAM]=[MASKED]'), ('(?:^|\\n)(?:key|token|secret|password|api[_-]?key|auth[_-]?token|access[_-]?token)\\s*:\\s*([a-zA-Z0-9_-]{10,})', '[HEADER]: [MASKED]')]
-    masked = text
-    for pattern, replacement in patterns:
-        masked = re.sub(pattern, replacement, masked, flags=re.IGNORECASE | re.MULTILINE)
-    return masked
-
-
-def sanitize_log_message(message: str) -> str:
-    if not message or not isinstance(message, str):
-        return str(message) if message else ''
-    msg = message
-    msg = mask_api_key(msg)
-    urls = re.findall('https?://[^\\s\\)\\]\\}\\\'\\"\\;\\,]+', msg)
-    for url in urls:
-        msg = msg.replace(url, mask_url(url))
-    domain_patterns = re.findall('(?:^|[^\\w.-])([a-zA-Z0-9][a-zA-Z0-9.-]*\\.(?:cloudfunctions|net|com|org|io|cloud))(?=[^\\w.-]|$)', msg)
-    for domain_match in domain_patterns:
-        if '.' in domain_match and domain_match.count('.') >= 1:
-            msg = re.sub(re.escape(domain_match), '[HIDDEN_DOMAIN]', msg)
-    return msg
 
 
 def get_session(app_state=None) -> requests.Session:

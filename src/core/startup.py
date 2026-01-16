@@ -11,7 +11,6 @@ from PyQt6.QtNetwork import QLocalServer, QLocalSocket
 from PyQt6.QtWidgets import QApplication, QMessageBox
 from managers.localization_manager import localization_manager, tr
 from utils.audio_utils import _audio_manager
-from utils.network_utils import sanitize_log_message
 from core.splash import create_png_splash
 from utils.path_utils import resource_path, get_user_data_root, get_launcher_dir
 from logging.handlers import RotatingFileHandler
@@ -41,28 +40,12 @@ def check_game_processes():
     return None
 
 
-class SecureLogFilter(logging.Filter):
-
-    def filter(self, record):
-        try:
-            if record.getMessage():
-                record.msg = sanitize_log_message(str(record.msg))
-                record.args = ()
-        except Exception as e:
-            try:
-                logging.debug(f'Error in SecureLogFilter: {e}')
-            except Exception:
-                pass
-        return True
-
-
 def configure_logging(app_name: str, user_data_root: str, clear_logs: bool = False) -> str:
     log_path = os.path.join(user_data_root, f'{app_name.lower()}.log')
     root = logging.getLogger()
     if not root.handlers:
         root.setLevel(logging.INFO)
         fmt = logging.Formatter('%(asctime)s %(levelname)s %(name)s: %(message)s')
-        secure_filter = SecureLogFilter()
         if clear_logs and os.path.exists(log_path):
             try:
                 with open(log_path, 'w', encoding='utf-8'):
@@ -71,18 +54,14 @@ def configure_logging(app_name: str, user_data_root: str, clear_logs: bool = Fal
                 logging.warning(f'Failed to clear log file: {e}')
         file_handler = RotatingFileHandler(log_path, maxBytes=10000000, backupCount=3, encoding='utf-8')
         file_handler.setFormatter(fmt)
-        file_handler.addFilter(secure_filter)
         root.addHandler(file_handler)
         console = logging.StreamHandler()
         console.setLevel(logging.WARNING)
         console.setFormatter(fmt)
-        console.addFilter(secure_filter)
         root.addHandler(console)
         urllib3_logger = logging.getLogger('urllib3')
-        urllib3_logger.addFilter(secure_filter)
         urllib3_logger.setLevel(logging.WARNING)
         requests_logger = logging.getLogger('requests')
-        requests_logger.addFilter(secure_filter)
         requests_logger.setLevel(logging.WARNING)
     return log_path
 
