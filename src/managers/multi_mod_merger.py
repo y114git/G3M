@@ -1267,10 +1267,7 @@ class MultiModMerger(QObject):
             backgrounds_dir = os.path.join(objects_dir, 'Backgrounds')
             has_graphics = os.path.exists(sprites_dir) or os.path.exists(backgrounds_dir)
             code_entries_dir = os.path.join(objects_dir, 'CodeEntries')
-            append_code_dir = os.path.join(objects_dir, 'AppendCode')
-            prepend_code_dir = os.path.join(objects_dir, 'PrependCode')
-            code_patches_file = os.path.join(objects_dir, 'CodePatches.json')
-            has_gml = bool(os.path.exists(code_entries_dir) and os.listdir(code_entries_dir) or (os.path.exists(append_code_dir) and os.listdir(append_code_dir)) or (os.path.exists(prepend_code_dir) and os.listdir(prepend_code_dir)) or os.path.exists(code_patches_file))
+            has_gml = bool(os.path.exists(code_entries_dir) and os.listdir(code_entries_dir))
             shaders_dir = os.path.join(objects_dir, 'Shaders')
             has_shaders = bool(os.path.exists(shaders_dir) and os.listdir(shaders_dir))
             tilesets_dir = os.path.join(objects_dir, 'Tilesets')
@@ -1300,22 +1297,11 @@ class MultiModMerger(QObject):
 
             def get_gml_resources(obj_dir):
                 code_entries_path = os.path.join(obj_dir, 'CodeEntries')
-                append_code_path = os.path.join(obj_dir, 'AppendCode')
-                prepend_code_path = os.path.join(obj_dir, 'PrependCode')
-                all_code_names = set()
+                code_files = []
                 if os.path.exists(code_entries_path):
                     for f in os.listdir(code_entries_path):
                         if f.endswith('.gml'):
-                            all_code_names.add(os.path.splitext(f)[0])
-                if os.path.exists(append_code_path):
-                    for f in os.listdir(append_code_path):
-                        if f.endswith('.gml'):
-                            all_code_names.add(os.path.splitext(f)[0])
-                if os.path.exists(prepend_code_path):
-                    for f in os.listdir(prepend_code_path):
-                        if f.endswith('.gml'):
-                            all_code_names.add(os.path.splitext(f)[0])
-                code_files = list(all_code_names)
+                            code_files.append(os.path.splitext(f)[0])
                 if code_files:
                     self.patching_logger.debug(f'[IMPORT] Code files to import: {code_files[:10]}...' if len(code_files) > 10 else f'[IMPORT] Code files to import: {code_files}')
                 return code_files
@@ -1335,7 +1321,13 @@ class MultiModMerger(QObject):
             def get_font_resources(obj_dir):
                 fonts_path = os.path.join(obj_dir, 'Fonts')
                 if os.path.exists(fonts_path):
-                    return [os.path.splitext(f)[0] for f in os.listdir(fonts_path) if f.endswith('.png')]
+                    font_names = set()
+                    for f in os.listdir(fonts_path):
+                        if f.endswith('.png') or f.endswith('.json'):
+                            font_names.add(os.path.splitext(f)[0])
+                        elif f.startswith('glyphs_') and f.endswith('.csv'):
+                            font_names.add(f[7:-4])
+                    return list(font_names)
                 return []
 
             def get_sound_resources(obj_dir):
@@ -1384,7 +1376,7 @@ class MultiModMerger(QObject):
             if not (has_graphics or has_gml or has_shaders or has_tilesets or has_fonts or has_sounds or has_rooms or has_audio_groups or has_paths or has_timelines or has_extensions):
                 self.patching_logger.debug(f'Objects directory has no assets to import: {objects_dir}')
                 return True
-            asset_configs = [{'script_name': 'ImportGraphics', 'has_assets': has_graphics, 'step_number': '1/17', 'resource_type': 'sprite', 'resource_action': 'imported', 'get_resources_func': get_sprite_resources}, {'script_name': 'ImportShaders', 'has_assets': has_shaders, 'step_number': '2/17', 'resource_type': 'shader', 'resource_action': 'imported', 'get_resources_func': get_shader_resources}, {'script_name': 'ImportGML', 'has_assets': has_gml, 'step_number': '5/17', 'resource_type': 'code', 'resource_action': 'modified', 'get_resources_func': get_gml_resources, 'analyze_errors': True}, {'script_name': 'ImportTilesets', 'has_assets': has_tilesets, 'step_number': '10/17', 'resource_type': 'tileset', 'resource_action': 'imported', 'get_resources_func': get_tileset_resources, 'extra_resources_func': get_tileset_config_resource}, {'script_name': 'ImportFonts', 'has_assets': has_fonts, 'step_number': '11/17', 'resource_type': 'font', 'resource_action': 'modified', 'get_resources_func': get_font_resources}, {'script_name': 'ImportSounds', 'has_assets': has_sounds, 'step_number': '12/17', 'resource_type': 'sound', 'resource_action': 'modified', 'get_resources_func': get_sound_resources}, {'script_name': 'ImportRooms', 'has_assets': has_rooms, 'step_number': '13/17', 'resource_type': 'room', 'resource_action': 'modified', 'get_resources_func': get_room_resources, 'check_dir_func': lambda obj_dir: os.path.exists(os.path.join(obj_dir, 'Rooms'))}, {'script_name': 'ImportAudioGroups', 'has_assets': has_audio_groups, 'step_number': '14/17', 'resource_type': 'audiogroup', 'resource_action': 'modified', 'get_resources_func': get_audiogroup_resources}, {'script_name': 'ImportPaths', 'has_assets': has_paths, 'step_number': '15/17', 'resource_type': 'path', 'resource_action': 'modified', 'get_resources_func': get_path_resources}, {'script_name': 'ImportTimelines', 'has_assets': has_timelines, 'step_number': '16/17', 'resource_type': 'timeline', 'resource_action': 'modified', 'get_resources_func': get_timeline_resources}, {'script_name': 'ImportExtensions', 'has_assets': has_extensions, 'step_number': '17/17', 'resource_type': 'extension', 'resource_action': 'modified', 'get_resources_func': get_extension_resources}]
+            asset_configs = [{'script_name': 'ImportGraphics', 'has_assets': has_graphics, 'step_number': '1/17', 'resource_type': 'sprite', 'resource_action': 'imported', 'get_resources_func': get_sprite_resources}, {'script_name': 'ImportShaders', 'has_assets': has_shaders, 'step_number': '2/17', 'resource_type': 'shader', 'resource_action': 'imported', 'get_resources_func': get_shader_resources}, {'script_name': 'ImportFonts', 'has_assets': has_fonts, 'step_number': '3/17', 'resource_type': 'font', 'resource_action': 'modified', 'get_resources_func': get_font_resources}, {'script_name': 'ImportSounds', 'has_assets': has_sounds, 'step_number': '4/17', 'resource_type': 'sound', 'resource_action': 'modified', 'get_resources_func': get_sound_resources}, {'script_name': 'ImportRooms', 'has_assets': has_rooms, 'step_number': '5/17', 'resource_type': 'room', 'resource_action': 'modified', 'get_resources_func': get_room_resources, 'check_dir_func': lambda obj_dir: os.path.exists(os.path.join(obj_dir, 'Rooms'))}, {'script_name': 'ImportAudioGroups', 'has_assets': has_audio_groups, 'step_number': '6/17', 'resource_type': 'audiogroup', 'resource_action': 'modified', 'get_resources_func': get_audiogroup_resources}, {'script_name': 'ImportPaths', 'has_assets': has_paths, 'step_number': '7/17', 'resource_type': 'path', 'resource_action': 'modified', 'get_resources_func': get_path_resources}, {'script_name': 'ImportTimelines', 'has_assets': has_timelines, 'step_number': '8/17', 'resource_type': 'timeline', 'resource_action': 'modified', 'get_resources_func': get_timeline_resources}, {'script_name': 'ImportExtensions', 'has_assets': has_extensions, 'step_number': '9/17', 'resource_type': 'extension', 'resource_action': 'modified', 'get_resources_func': get_extension_resources}, {'script_name': 'ImportTilesets', 'has_assets': has_tilesets, 'step_number': '10/17', 'resource_type': 'tileset', 'resource_action': 'imported', 'get_resources_func': get_tileset_resources, 'extra_resources_func': get_tileset_config_resource}, {'script_name': 'ImportGML', 'has_assets': has_gml, 'step_number': '11/17', 'resource_type': 'code', 'resource_action': 'modified', 'get_resources_func': get_gml_resources, 'analyze_errors': True}]
             for asset_config in asset_configs:
                 self._import_asset_type(asset_config, data_win_path, data_win_dir, objects_dir, mod_name_for_tracking)
             if 'DeltahubMergeWorkspace' in data_win_dir:
@@ -1848,26 +1840,6 @@ class MultiModMerger(QObject):
                         existing_mods = [h['mod'] for h in self.resource_modification_history[code_name]]
                         if source_mod_name not in existing_mods:
                             self.resource_modification_history[code_name].append({'type': 'code', 'mod': source_mod_name, 'action': 'merged', 'timestamp': time.time()})
-        for code_folder in ['AppendCode', 'PrependCode']:
-            self._merge_subdirectory(target_objects_dir, source_objects_dir, code_folder, 'code_injection', source_mod_name, track_history=False)
-        source_patches = os.path.join(source_objects_dir, 'CodePatches.json')
-        target_patches = os.path.join(target_objects_dir, 'CodePatches.json')
-        if os.path.exists(source_patches):
-            if os.path.exists(target_patches):
-                try:
-                    with open(target_patches, 'r', encoding='utf-8') as f_t:
-                        target_json = json.load(f_t)
-                    with open(source_patches, 'r', encoding='utf-8') as f_s:
-                        source_json = json.load(f_s)
-                    if isinstance(target_json, dict) and isinstance(source_json, dict):
-                        target_json.update(source_json)
-                        with open(target_patches, 'w', encoding='utf-8') as f_out:
-                            json.dump(target_json, f_out, indent=2)
-                except Exception as e:
-                    self.patching_logger.warning(f'Failed to merge CodePatches.json: {e}')
-                    safe_copy(source_patches, target_patches)
-            else:
-                self._safe_copy2(source_patches, target_patches)
         source_asset_order = os.path.join(source_objects_dir, 'AssetOrder.txt')
         target_asset_order = os.path.join(target_objects_dir, 'AssetOrder.txt')
         if os.path.exists(source_asset_order):

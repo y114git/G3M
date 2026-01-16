@@ -83,6 +83,66 @@ class UtmtWrapper:
             if returncode != 0:
                 self.patching_logger.warning(f'[UTMT] ImportGraphics failed: {stderr[:200]}')
                 success = False
+        script_path = self.get_script_path('ImportShaders')
+        if script_path:
+            returncode, _, stderr = self.execute_script(data_win_path, 'ImportShaders', cwd=mod_source_dir)
+            if returncode != 0:
+                self.patching_logger.warning(f'[UTMT] ImportShaders failed: {stderr[:200]}')
+                success = False
+        script_path = self.get_script_path('ImportFonts')
+        if script_path:
+            returncode, _, stderr = self.execute_script(data_win_path, 'ImportFonts', cwd=mod_source_dir)
+            if returncode != 0:
+                self.patching_logger.warning(f'[UTMT] ImportFonts failed: {stderr[:200]}')
+                success = False
+        script_path = self.get_script_path('ImportSounds')
+        if script_path:
+            returncode, _, stderr = self.execute_script(data_win_path, 'ImportSounds', cwd=mod_source_dir)
+            if returncode != 0:
+                self.patching_logger.warning(f'[UTMT] ImportSounds failed: {stderr[:200]}')
+                success = False
+        script_path = self.get_script_path('ImportAudioGroups')
+        if script_path:
+            returncode, _, stderr = self.execute_script(data_win_path, 'ImportAudioGroups', cwd=mod_source_dir)
+            if returncode != 0:
+                self.patching_logger.warning(f'[UTMT] ImportAudioGroups failed: {stderr[:200]}')
+                success = False
+        script_path = self.get_script_path('ImportPaths')
+        if script_path:
+            returncode, _, stderr = self.execute_script(data_win_path, 'ImportPaths', cwd=mod_source_dir)
+            if returncode != 0:
+                self.patching_logger.warning(f'[UTMT] ImportPaths failed: {stderr[:200]}')
+                success = False
+        script_path = self.get_script_path('ImportRooms')
+        if script_path:
+            returncode, _, stderr = self.execute_script(data_win_path, 'ImportRooms', cwd=mod_source_dir)
+            if returncode != 0:
+                self.patching_logger.warning(f'[UTMT] ImportRooms failed: {stderr[:200]}')
+                success = False
+        script_path = self.get_script_path('ImportGameObjects')
+        if script_path:
+            returncode, _, stderr = self.execute_script(data_win_path, 'ImportGameObjects', cwd=mod_source_dir)
+            if returncode != 0:
+                self.patching_logger.warning(f'[UTMT] ImportGameObjects failed: {stderr[:200]}')
+                success = False
+        script_path = self.get_script_path('ImportTimelines')
+        if script_path:
+            returncode, _, stderr = self.execute_script(data_win_path, 'ImportTimelines', cwd=mod_source_dir)
+            if returncode != 0:
+                self.patching_logger.warning(f'[UTMT] ImportTimelines failed: {stderr[:200]}')
+                success = False
+        script_path = self.get_script_path('ImportExtensions')
+        if script_path:
+            returncode, _, stderr = self.execute_script(data_win_path, 'ImportExtensions', cwd=mod_source_dir)
+            if returncode != 0:
+                self.patching_logger.warning(f'[UTMT] ImportExtensions failed: {stderr[:200]}')
+                success = False
+        script_path = self.get_script_path('ImportTilesets')
+        if script_path:
+            returncode, _, stderr = self.execute_script(data_win_path, 'ImportTilesets', cwd=mod_source_dir)
+            if returncode != 0:
+                self.patching_logger.warning(f'[UTMT] ImportTilesets failed: {stderr[:200]}')
+                success = False
         script_path = self.get_script_path('ImportGML')
         if script_path:
             returncode, _, stderr = self.execute_script(data_win_path, 'ImportGML', cwd=mod_source_dir)

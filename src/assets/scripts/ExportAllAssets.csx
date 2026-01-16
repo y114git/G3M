@@ -127,6 +127,7 @@ string audioGroupsOut = Path.Combine(outputRoot, "AudioGroups");
 string pathsOut = Path.Combine(outputRoot, "Paths");
 string timelinesOut = Path.Combine(outputRoot, "Timelines");
 string extensionsOut = Path.Combine(outputRoot, "Extensions");
+string gameObjectsOut = Path.Combine(outputRoot, "GameObjects");
 
 Directory.CreateDirectory(codeFolder);
 Directory.CreateDirectory(sprFolder);
@@ -139,6 +140,7 @@ Directory.CreateDirectory(audioGroupsOut);
 Directory.CreateDirectory(pathsOut);
 Directory.CreateDirectory(timelinesOut);
 Directory.CreateDirectory(extensionsOut);
+Directory.CreateDirectory(gameObjectsOut);
 
 PrintLine($"[ExportAllAssets] Starting full export for mod {modNo}...");
 
@@ -299,8 +301,9 @@ List<UndertaleAudioGroup> allAudioGroups = Data.AudioGroups?.ToList() ?? new Lis
 List<UndertalePath> allPaths = Data.Paths?.ToList() ?? new List<UndertalePath>();
 List<UndertaleTimeline> allTimelines = Data.Timelines?.ToList() ?? new List<UndertaleTimeline>();
 List<UndertaleExtension> allExtensions = Data.Extensions?.ToList() ?? new List<UndertaleExtension>();
+List<UndertaleGameObject> allGameObjects = Data.GameObjects?.ToList() ?? new List<UndertaleGameObject>();
 
-int totalItems = allCode.Count + allSprites.Count + allBackgrounds.Count + allFonts.Count + allShaders.Count + allSounds.Count + allRooms.Count + allAudioGroups.Count + allPaths.Count + allTimelines.Count + allExtensions.Count;
+int totalItems = allCode.Count + allSprites.Count + allBackgrounds.Count + allFonts.Count + allShaders.Count + allSounds.Count + allRooms.Count + allAudioGroups.Count + allPaths.Count + allTimelines.Count + allExtensions.Count + allGameObjects.Count;
 
 SetProgressBar(null, "Exporting All Assets", 0, totalItems);
 StartProgressBarUpdater();
@@ -320,6 +323,7 @@ using (worker = new TextureWorker())
     await DumpPaths();
     await DumpTimelines();
     await DumpExtensions();
+    await DumpGameObjects();
 }
 
 bool AreSpritesIdentical(UndertaleSprite modSprite, UndertaleSprite vanillaSprite)
@@ -708,14 +712,87 @@ void DumpFont(UndertaleFont font)
         }
 
         string csv = Path.Combine(fntFolder, $"glyphs_{name}.csv");
-        using (var writer = new StreamWriter(csv, false, Encoding.UTF8))
+        using (var csvWriter = new StreamWriter(csv, false, Encoding.UTF8))
         {
-            writer.WriteLine($"{font.DisplayName?.Content ?? ""};{font.EmSize};{font.Bold};{font.Italic};{font.Charset};{font.AntiAliasing};{font.ScaleX};{font.ScaleY}");
+            csvWriter.WriteLine($"{font.DisplayName?.Content ?? ""};{font.EmSize};{font.Bold};{font.Italic};{font.Charset};{font.AntiAliasing};{font.ScaleX};{font.ScaleY}");
 
             foreach (var g in font.Glyphs)
             {
-                writer.WriteLine($"{g.Character};{g.SourceX};{g.SourceY};{g.SourceWidth};{g.SourceHeight};{g.Shift};{g.Offset}");
+                csvWriter.WriteLine($"{g.Character};{g.SourceX};{g.SourceY};{g.SourceWidth};{g.SourceHeight};{g.Shift};{g.Offset}");
             }
+        }
+
+        string jsonPath = Path.Combine(fntFolder, name + ".json");
+        using (var stream = new FileStream(jsonPath, FileMode.Create))
+        using (var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = true }))
+        {
+            writer.WriteStartObject();
+
+            writer.WriteString("name", font.Name?.Content ?? "");
+            writer.WriteString("displayName", font.DisplayName?.Content ?? "");
+            writer.WriteNumber("emSize", font.EmSize);
+            writer.WriteBoolean("emSizeIsFloat", font.EmSizeIsFloat);
+            writer.WriteBoolean("bold", font.Bold);
+            writer.WriteBoolean("italic", font.Italic);
+            writer.WriteNumber("rangeStart", font.RangeStart);
+            writer.WriteNumber("rangeEnd", font.RangeEnd);
+            writer.WriteNumber("charset", font.Charset);
+            writer.WriteNumber("antiAliasing", font.AntiAliasing);
+            writer.WriteNumber("scaleX", font.ScaleX);
+            writer.WriteNumber("scaleY", font.ScaleY);
+
+            if (Data.GeneralInfo?.BytecodeVersion >= 17)
+            {
+                writer.WriteNumber("ascenderOffset", font.AscenderOffset);
+            }
+
+            if (Data.IsVersionAtLeast(2022, 2))
+            {
+                writer.WriteNumber("ascender", font.Ascender);
+            }
+
+            if (Data.IsVersionAtLeast(2023, 2))
+            {
+                writer.WriteNumber("sdfSpread", font.SDFSpread);
+            }
+
+            if (Data.IsVersionAtLeast(2023, 6))
+            {
+                writer.WriteNumber("lineHeight", font.LineHeight);
+            }
+
+            writer.WritePropertyName("glyphs");
+            writer.WriteStartArray();
+            foreach (var g in font.Glyphs)
+            {
+                writer.WriteStartObject();
+                writer.WriteNumber("character", g.Character);
+                writer.WriteNumber("sourceX", g.SourceX);
+                writer.WriteNumber("sourceY", g.SourceY);
+                writer.WriteNumber("sourceWidth", g.SourceWidth);
+                writer.WriteNumber("sourceHeight", g.SourceHeight);
+                writer.WriteNumber("shift", g.Shift);
+                writer.WriteNumber("offset", g.Offset);
+
+                if (g.Kerning != null && g.Kerning.Count > 0)
+                {
+                    writer.WritePropertyName("kerning");
+                    writer.WriteStartArray();
+                    foreach (var k in g.Kerning)
+                    {
+                        writer.WriteStartObject();
+                        writer.WriteNumber("character", k.Character);
+                        writer.WriteNumber("shiftModifier", k.ShiftModifier);
+                        writer.WriteEndObject();
+                    }
+                    writer.WriteEndArray();
+                }
+
+                writer.WriteEndObject();
+            }
+            writer.WriteEndArray();
+
+            writer.WriteEndObject();
         }
     }
     catch (Exception ex)
@@ -1444,6 +1521,134 @@ void DumpExtension(UndertaleExtension extension)
     IncrementProgressParallel();
 }
 
+async Task DumpGameObjects()
+{
+    await Task.Run(() => Parallel.ForEach(allGameObjects, DumpGameObjectItem));
+}
+
+void DumpGameObjectItem(UndertaleGameObject gameObject)
+{
+    if (gameObject?.Name?.Content == null)
+    {
+        IncrementProgressParallel();
+        return;
+    }
+
+    string objName = SafeName(gameObject.Name.Content);
+    string objFile = Path.Combine(gameObjectsOut, objName + ".json");
+
+    try
+    {
+        using (var stream = new FileStream(objFile, FileMode.Create))
+        using (var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = true }))
+        {
+            writer.WriteStartObject();
+
+            writer.WriteString("name", gameObject.Name?.Content ?? "");
+            writer.WriteString("sprite", gameObject.Sprite?.Name?.Content ?? "");
+            writer.WriteBoolean("visible", gameObject.Visible);
+            writer.WriteBoolean("solid", gameObject.Solid);
+            writer.WriteNumber("depth", gameObject.Depth);
+            writer.WriteBoolean("persistent", gameObject.Persistent);
+            writer.WriteString("parent", gameObject.ParentId?.Name?.Content ?? "");
+            writer.WriteString("textureMask", gameObject.TextureMaskId?.Name?.Content ?? "");
+            
+            if (Data.IsVersionAtLeast(2022, 5))
+            {
+                writer.WriteBoolean("managed", gameObject.Managed);
+            }
+
+            writer.WriteBoolean("usesPhysics", gameObject.UsesPhysics);
+            if (gameObject.UsesPhysics)
+            {
+                writer.WriteBoolean("isSensor", gameObject.IsSensor);
+                writer.WriteNumber("collisionShape", (int)gameObject.CollisionShape);
+                writer.WriteString("collisionShapeDescription", gameObject.CollisionShape.ToString());
+                writer.WriteNumber("density", gameObject.Density);
+                writer.WriteNumber("restitution", gameObject.Restitution);
+                writer.WriteNumber("group", gameObject.Group);
+                writer.WriteNumber("linearDamping", gameObject.LinearDamping);
+                writer.WriteNumber("angularDamping", gameObject.AngularDamping);
+                writer.WriteNumber("friction", gameObject.Friction);
+                writer.WriteBoolean("awake", gameObject.Awake);
+                writer.WriteBoolean("kinematic", gameObject.Kinematic);
+
+                if (gameObject.PhysicsVertices != null && gameObject.PhysicsVertices.Count > 0)
+                {
+                    writer.WritePropertyName("physicsVertices");
+                    writer.WriteStartArray();
+                    foreach (var vertex in gameObject.PhysicsVertices)
+                    {
+                        writer.WriteStartObject();
+                        writer.WriteNumber("x", vertex.X);
+                        writer.WriteNumber("y", vertex.Y);
+                        writer.WriteEndObject();
+                    }
+                    writer.WriteEndArray();
+                }
+            }
+
+            writer.WritePropertyName("events");
+            writer.WriteStartArray();
+            for (int eventTypeIdx = 0; eventTypeIdx < gameObject.Events.Count; eventTypeIdx++)
+            {
+                var eventList = gameObject.Events[eventTypeIdx];
+                if (eventList == null || eventList.Count == 0) continue;
+
+                foreach (var evt in eventList)
+                {
+                    if (evt == null) continue;
+
+                    writer.WriteStartObject();
+                    writer.WriteNumber("eventType", eventTypeIdx);
+                    writer.WriteString("eventTypeName", ((EventType)eventTypeIdx).ToString());
+                    writer.WriteNumber("eventSubtype", evt.EventSubtype);
+
+                    if (eventTypeIdx == (int)EventType.Collision && evt.EventSubtype < Data.GameObjects.Count)
+                    {
+                        var collisionObject = Data.GameObjects[(int)evt.EventSubtype];
+                        writer.WriteString("collisionObjectName", collisionObject?.Name?.Content ?? "");
+                    }
+
+                    writer.WritePropertyName("actions");
+                    writer.WriteStartArray();
+                    foreach (var action in evt.Actions)
+                    {
+                        if (action == null) continue;
+                        writer.WriteStartObject();
+                        writer.WriteNumber("libId", action.LibID);
+                        writer.WriteNumber("id", action.ID);
+                        writer.WriteNumber("kind", action.Kind);
+                        writer.WriteBoolean("useRelative", action.UseRelative);
+                        writer.WriteBoolean("isQuestion", action.IsQuestion);
+                        writer.WriteBoolean("useApplyTo", action.UseApplyTo);
+                        writer.WriteNumber("exeType", action.ExeType);
+                        writer.WriteString("actionName", action.ActionName?.Content ?? "");
+                        writer.WriteString("codeId", action.CodeId?.Name?.Content ?? "");
+                        writer.WriteNumber("argumentCount", action.ArgumentCount);
+                        writer.WriteNumber("who", action.Who);
+                        writer.WriteBoolean("relative", action.Relative);
+                        writer.WriteBoolean("isNot", action.IsNot);
+                        writer.WriteEndObject();
+                    }
+                    writer.WriteEndArray();
+
+                    writer.WriteEndObject();
+                }
+            }
+            writer.WriteEndArray();
+
+            writer.WriteEndObject();
+        }
+    }
+    catch (Exception ex)
+    {
+        PrintLine($"[ExportAllAssets] Failed to export game object {gameObject.Name?.Content}: {ex.Message}");
+    }
+
+    IncrementProgressParallel();
+}
+
 PrintLine($"\n[ExportAllAssets] Summary for Mod {modNo}:");
 PrintLine($"  Code - Exported: {allCode.Count}");
 PrintLine($"  Sprites - Exported: {allSprites.Count}");
@@ -1456,5 +1661,6 @@ PrintLine($"  AudioGroups - Exported: {allAudioGroups.Count}");
 PrintLine($"  Paths - Exported: {allPaths.Count}");
 PrintLine($"  Timelines - Exported: {allTimelines.Count}");
 PrintLine($"  Extensions - Exported: {allExtensions.Count}");
+PrintLine($"  GameObjects - Exported: {allGameObjects.Count}");
 PrintLine("[ExportAllAssets] Done.");
 

@@ -47,12 +47,19 @@ foreach (string pathFile in pathFiles)
         JsonElement root = jsonDoc.RootElement;
         
         UndertalePath path = Data.Paths?.ByName(pathName);
+        bool isNew = false;
+        
         if (path == null)
         {
-            PrintLine($"[ImportPaths] Path '{pathName}' not found in game, skipping (cannot create new paths)");
-            jsonDoc.Dispose();
-            IncrementProgress();
-            continue;
+            
+            path = new UndertalePath();
+            path.Name = Data.Strings.MakeString(pathName);
+            path.Points = new UndertaleSimpleList<UndertalePath.PathPoint>();
+            path.IsSmooth = false;
+            path.IsClosed = false;
+            path.Precision = 4;
+            isNew = true;
+            PrintLine($"[ImportPaths] Creating NEW path: {pathName}");
         }
 
         if (root.TryGetProperty("isSmooth", out JsonElement isSmoothElm))
@@ -92,7 +99,15 @@ foreach (string pathFile in pathFiles)
             }
         }
 
-        PrintLine($"[ImportPaths] Updated path: {pathName}");
+        if (isNew)
+        {
+            Data.Paths.Add(path);
+            PrintLine($"[ImportPaths] Created new path: {pathName}");
+        }
+        else
+        {
+            PrintLine($"[ImportPaths] Updated path: {pathName}");
+        }
         jsonDoc.Dispose();
         IncrementProgress();
     }

@@ -36,6 +36,9 @@ StartProgressBarUpdater();
 
 SyncBinding("Extensions, Code, Strings", true);
 
+int extensionsCreated = 0;
+int extensionsUpdated = 0;
+
 foreach (string extensionFile in extensionFiles)
 {
     try
@@ -46,13 +49,26 @@ foreach (string extensionFile in extensionFiles)
         JsonDocument jsonDoc = JsonDocument.Parse(jsonContent);
         JsonElement root = jsonDoc.RootElement;
         
+        if (root.TryGetProperty("name", out JsonElement nameFromJson))
+        {
+            extensionName = nameFromJson.GetString() ?? extensionName;
+        }
+        
         UndertaleExtension extension = Data.Extensions?.ByName(extensionName);
+        bool isNew = false;
+        
         if (extension == null)
         {
-            PrintLine($"[ImportExtensions] Extension '{extensionName}' not found in game, skipping (cannot create new extensions)");
-            jsonDoc.Dispose();
-            IncrementProgress();
-            continue;
+            extension = new UndertaleExtension();
+            extension.Name = Data.Strings.MakeString(extensionName);
+            extension.Files = new UndertalePointerList<UndertaleExtensionFile>();
+            extension.Options = new UndertalePointerList<UndertaleExtensionOption>();
+            isNew = true;
+            extensionsCreated++;
+        }
+        else
+        {
+            extensionsUpdated++;
         }
 
         if (root.TryGetProperty("folderName", out JsonElement folderNameElm))
@@ -84,144 +100,184 @@ foreach (string extensionFile in extensionFiles)
 
         if (root.TryGetProperty("files", out JsonElement filesElm) && filesElm.ValueKind == JsonValueKind.Array)
         {
-            int fileIndex = 0;
-            foreach (JsonElement fileElm in filesElm.EnumerateArray())
+            var filesArray = filesElm.EnumerateArray().ToArray();
+            
+            for (int fileIndex = 0; fileIndex < filesArray.Length; fileIndex++)
             {
+                JsonElement fileElm = filesArray[fileIndex];
+                
+                UndertaleExtensionFile file;
+                
                 if (fileIndex < extension.Files.Count)
                 {
-                    var file = extension.Files[fileIndex];
+                    file = extension.Files[fileIndex];
+                }
+                else
+                {
+                    file = new UndertaleExtensionFile();
+                    file.Functions = new UndertalePointerList<UndertaleExtensionFunction>();
+                    extension.Files.Add(file);
+                }
+                
+                if (fileElm.TryGetProperty("filename", out JsonElement filenameElm))
+                {
+                    string filename = filenameElm.GetString() ?? "";
+                    if (!string.IsNullOrEmpty(filename))
+                    {
+                        file.Filename = Data.Strings.MakeString(filename);
+                    }
+                }
+
+                if (fileElm.TryGetProperty("kind", out JsonElement kindElm))
+                {
+                    file.Kind = (UndertaleExtensionKind)kindElm.GetInt32();
+                }
+
+                if (fileElm.TryGetProperty("initScript", out JsonElement initScriptElm))
+                {
+                    string initScript = initScriptElm.GetString() ?? "";
+                    file.InitScript = !string.IsNullOrEmpty(initScript) ? Data.Strings.MakeString(initScript) : null;
+                }
+
+                if (fileElm.TryGetProperty("cleanupScript", out JsonElement cleanupScriptElm))
+                {
+                    string cleanupScript = cleanupScriptElm.GetString() ?? "";
+                    file.CleanupScript = !string.IsNullOrEmpty(cleanupScript) ? Data.Strings.MakeString(cleanupScript) : null;
+                }
+
+                if (fileElm.TryGetProperty("functions", out JsonElement functionsElm) && functionsElm.ValueKind == JsonValueKind.Array)
+                {
+                    var functionsArray = functionsElm.EnumerateArray().ToArray();
                     
-                    if (fileElm.TryGetProperty("filename", out JsonElement filenameElm))
+                    for (int funcIndex = 0; funcIndex < functionsArray.Length; funcIndex++)
                     {
-                        string filename = filenameElm.GetString() ?? "";
-                        if (!string.IsNullOrEmpty(filename))
+                        JsonElement funcElm = functionsArray[funcIndex];
+                        
+                        UndertaleExtensionFunction func;
+                        
+                        if (funcIndex < file.Functions.Count)
                         {
-                            file.Filename = Data.Strings.MakeString(filename);
+                            func = file.Functions[funcIndex];
                         }
-                    }
-
-                    if (fileElm.TryGetProperty("kind", out JsonElement kindElm))
-                    {
-                        file.Kind = (UndertaleExtensionKind)kindElm.GetInt32();
-                    }
-
-                    if (fileElm.TryGetProperty("initScript", out JsonElement initScriptElm))
-                    {
-                        string initScript = initScriptElm.GetString() ?? "";
-                        if (!string.IsNullOrEmpty(initScript))
+                        else
                         {
-                            file.InitScript = Data.Strings.MakeString(initScript);
+                            func = new UndertaleExtensionFunction();
+                            func.Arguments = new UndertaleSimpleList<UndertaleExtensionFunctionArg>();
+                            file.Functions.Add(func);
                         }
-                    }
-
-                    if (fileElm.TryGetProperty("cleanupScript", out JsonElement cleanupScriptElm))
-                    {
-                        string cleanupScript = cleanupScriptElm.GetString() ?? "";
-                        if (!string.IsNullOrEmpty(cleanupScript))
+                        
+                        if (funcElm.TryGetProperty("name", out JsonElement funcNameElm))
                         {
-                            file.CleanupScript = Data.Strings.MakeString(cleanupScript);
-                        }
-                    }
-
-                    if (fileElm.TryGetProperty("functions", out JsonElement functionsElm) && functionsElm.ValueKind == JsonValueKind.Array)
-                    {
-                        int funcIndex = 0;
-                        foreach (JsonElement funcElm in functionsElm.EnumerateArray())
-                        {
-                            if (funcIndex < file.Functions.Count)
+                            string funcName = funcNameElm.GetString() ?? "";
+                            if (!string.IsNullOrEmpty(funcName))
                             {
-                                var func = file.Functions[funcIndex];
+                                func.Name = Data.Strings.MakeString(funcName);
+                            }
+                        }
+
+                        if (funcElm.TryGetProperty("extName", out JsonElement extNameElm))
+                        {
+                            string extName = extNameElm.GetString() ?? "";
+                            if (!string.IsNullOrEmpty(extName))
+                            {
+                                func.ExtName = Data.Strings.MakeString(extName);
+                            }
+                        }
+
+                        if (funcElm.TryGetProperty("id", out JsonElement idElm))
+                        {
+                            func.ID = (uint)idElm.GetInt64();
+                        }
+
+                        if (funcElm.TryGetProperty("kind", out JsonElement funcKindElm))
+                        {
+                            func.Kind = (uint)funcKindElm.GetInt64();
+                        }
+
+                        if (funcElm.TryGetProperty("retType", out JsonElement retTypeElm))
+                        {
+                            func.RetType = (UndertaleExtensionVarType)retTypeElm.GetInt32();
+                        }
+
+                        if (funcElm.TryGetProperty("arguments", out JsonElement argsElm) && argsElm.ValueKind == JsonValueKind.Array)
+                        {
+                            var argsArray = argsElm.EnumerateArray().ToArray();
+                            
+                            for (int argIndex = 0; argIndex < argsArray.Length; argIndex++)
+                            {
+                                JsonElement argElm = argsArray[argIndex];
                                 
-                                if (funcElm.TryGetProperty("name", out JsonElement funcNameElm))
+                                UndertaleExtensionFunctionArg arg;
+                                
+                                if (argIndex < func.Arguments.Count)
                                 {
-                                    string funcName = funcNameElm.GetString() ?? "";
-                                    if (!string.IsNullOrEmpty(funcName))
-                                    {
-                                        func.Name = Data.Strings.MakeString(funcName);
-                                    }
+                                    arg = func.Arguments[argIndex];
                                 }
-
-                                if (funcElm.TryGetProperty("extName", out JsonElement extNameElm))
+                                else
                                 {
-                                    string extName = extNameElm.GetString() ?? "";
-                                    if (!string.IsNullOrEmpty(extName))
-                                    {
-                                        func.ExtName = Data.Strings.MakeString(extName);
-                                    }
+                                    arg = new UndertaleExtensionFunctionArg();
+                                    func.Arguments.Add(arg);
                                 }
-
-                                if (funcElm.TryGetProperty("id", out JsonElement idElm))
+                                
+                                if (argElm.TryGetProperty("type", out JsonElement argTypeElm))
                                 {
-                                    func.ID = (uint)idElm.GetInt32();
-                                }
-
-                                if (funcElm.TryGetProperty("kind", out JsonElement kindElm))
-                                {
-                                    func.Kind = (uint)kindElm.GetInt32();
-                                }
-
-                                if (funcElm.TryGetProperty("retType", out JsonElement retTypeElm))
-                                {
-                                    func.RetType = (UndertaleExtensionVarType)retTypeElm.GetInt32();
-                                }
-
-                                if (funcElm.TryGetProperty("arguments", out JsonElement argsElm) && argsElm.ValueKind == JsonValueKind.Array)
-                                {
-                                    int argIndex = 0;
-                                    foreach (JsonElement argElm in argsElm.EnumerateArray())
-                                    {
-                                        if (argIndex < func.Arguments.Count)
-                                        {
-                                            var arg = func.Arguments[argIndex];
-                                            if (argElm.TryGetProperty("type", out JsonElement argTypeElm))
-                                            {
-                                                arg.Type = (UndertaleExtensionVarType)argTypeElm.GetInt32();
-                                            }
-                                        }
-                                        argIndex++;
-                                    }
+                                    arg.Type = (UndertaleExtensionVarType)argTypeElm.GetInt32();
                                 }
                             }
-                            funcIndex++;
                         }
                     }
                 }
-                fileIndex++;
             }
         }
 
         if (root.TryGetProperty("options", out JsonElement optionsElm) && optionsElm.ValueKind == JsonValueKind.Array)
         {
-            int optionIndex = 0;
-            foreach (JsonElement optionElm in optionsElm.EnumerateArray())
+            var optionsArray = optionsElm.EnumerateArray().ToArray();
+            
+            for (int optionIndex = 0; optionIndex < optionsArray.Length; optionIndex++)
             {
+                JsonElement optionElm = optionsArray[optionIndex];
+                
+                UndertaleExtensionOption option;
+                
                 if (optionIndex < extension.Options.Count)
                 {
-                    var option = extension.Options[optionIndex];
-                    
-                    if (optionElm.TryGetProperty("name", out JsonElement optionNameElm))
+                    option = extension.Options[optionIndex];
+                }
+                else
+                {
+                    option = new UndertaleExtensionOption();
+                    extension.Options.Add(option);
+                }
+                
+                if (optionElm.TryGetProperty("name", out JsonElement optionNameElm))
+                {
+                    string optionName = optionNameElm.GetString() ?? "";
+                    if (!string.IsNullOrEmpty(optionName))
                     {
-                        string optionName = optionNameElm.GetString() ?? "";
-                        if (!string.IsNullOrEmpty(optionName))
-                        {
-                            option.Name = Data.Strings.MakeString(optionName);
-                        }
-                    }
-
-                    if (optionElm.TryGetProperty("value", out JsonElement optionValueElm))
-                    {
-                        string optionValue = optionValueElm.GetString() ?? "";
-                        if (!string.IsNullOrEmpty(optionValue))
-                        {
-                            option.Value = Data.Strings.MakeString(optionValue);
-                        }
+                        option.Name = Data.Strings.MakeString(optionName);
                     }
                 }
-                optionIndex++;
+
+                if (optionElm.TryGetProperty("value", out JsonElement optionValueElm))
+                {
+                    string optionValue = optionValueElm.GetString() ?? "";
+                    option.Value = Data.Strings.MakeString(optionValue);
+                }
+                
+                if (optionElm.TryGetProperty("kind", out JsonElement optionKindElm))
+                {
+                    option.Kind = (UndertaleExtensionOption.OptionKind)optionKindElm.GetInt32();
+                }
             }
         }
 
-        PrintLine($"[ImportExtensions] Updated extension: {extensionName}");
+        if (isNew)
+        {
+            Data.Extensions.Add(extension);
+        }
+
+        PrintLine($"[ImportExtensions] {(isNew ? "Created" : "Updated")} extension: {extensionName}");
         jsonDoc.Dispose();
         IncrementProgress();
     }
@@ -234,5 +290,4 @@ foreach (string extensionFile in extensionFiles)
 
 await StopProgressBarUpdater();
 HideProgressBar();
-PrintLine("[ImportExtensions] Done.");
-
+PrintLine($"[ImportExtensions] Done. Created: {extensionsCreated}, Updated: {extensionsUpdated}");

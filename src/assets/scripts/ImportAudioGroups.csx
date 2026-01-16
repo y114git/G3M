@@ -36,6 +36,9 @@ StartProgressBarUpdater();
 
 SyncBinding("AudioGroups, Strings", true);
 
+int created = 0;
+int updated = 0;
+
 foreach (string audioGroupFile in audioGroupFiles)
 {
     try
@@ -47,12 +50,15 @@ foreach (string audioGroupFile in audioGroupFiles)
         JsonElement root = jsonDoc.RootElement;
         
         UndertaleAudioGroup audioGroup = Data.AudioGroups?.ByName(audioGroupName);
+        bool isNew = false;
+        
         if (audioGroup == null)
         {
-            PrintLine($"[ImportAudioGroups] Audio group '{audioGroupName}' not found in game, skipping (cannot create new audio groups)");
-            jsonDoc.Dispose();
-            IncrementProgress();
-            continue;
+            
+            audioGroup = new UndertaleAudioGroup();
+            audioGroup.Name = Data.Strings.MakeString(audioGroupName);
+            isNew = true;
+            PrintLine($"[ImportAudioGroups] Creating NEW audio group: {audioGroupName}");
         }
 
         if (root.TryGetProperty("path", out JsonElement pathElm))
@@ -64,7 +70,17 @@ foreach (string audioGroupFile in audioGroupFiles)
             }
         }
 
-        PrintLine($"[ImportAudioGroups] Updated audio group: {audioGroupName}");
+        if (isNew)
+        {
+            Data.AudioGroups.Add(audioGroup);
+            created++;
+            PrintLine($"[ImportAudioGroups] Created new audio group: {audioGroupName}");
+        }
+        else
+        {
+            updated++;
+            PrintLine($"[ImportAudioGroups] Updated audio group: {audioGroupName}");
+        }
         jsonDoc.Dispose();
         IncrementProgress();
     }
@@ -77,5 +93,6 @@ foreach (string audioGroupFile in audioGroupFiles)
 
 await StopProgressBarUpdater();
 HideProgressBar();
-PrintLine("[ImportAudioGroups] Done.");
+PrintLine($"[ImportAudioGroups] Done. Created: {created}, Updated: {updated}");
+
 

@@ -4,6 +4,7 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Collections.ObjectModel;
 using System.Text.Json;
 using UndertaleModLib;
 using UndertaleModLib.Models;
@@ -36,6 +37,9 @@ StartProgressBarUpdater();
 
 SyncBinding("Timelines, Code, Strings", true);
 
+int timelinesCreated = 0;
+int timelinesUpdated = 0;
+
 foreach (string timelineFile in timelineFiles)
 {
     try
@@ -46,77 +50,136 @@ foreach (string timelineFile in timelineFiles)
         JsonDocument jsonDoc = JsonDocument.Parse(jsonContent);
         JsonElement root = jsonDoc.RootElement;
         
+        if (root.TryGetProperty("name", out JsonElement nameElm))
+        {
+            timelineName = nameElm.GetString() ?? timelineName;
+        }
+        
         UndertaleTimeline timeline = Data.Timelines?.ByName(timelineName);
+        bool isNew = false;
+        
         if (timeline == null)
         {
-            PrintLine($"[ImportTimelines] Timeline '{timelineName}' not found in game, skipping (cannot create new timelines)");
-            jsonDoc.Dispose();
-            IncrementProgress();
-            continue;
+            timeline = new UndertaleTimeline();
+            timeline.Name = Data.Strings.MakeString(timelineName);
+            timeline.Moments = new ObservableCollection<UndertaleTimeline.UndertaleTimelineMoment>();
+            isNew = true;
+            timelinesCreated++;
+        }
+        else
+        {
+            timelinesUpdated++;
         }
 
         if (root.TryGetProperty("moments", out JsonElement momentsElm) && momentsElm.ValueKind == JsonValueKind.Array)
         {
+            var momentsArray = momentsElm.EnumerateArray().ToArray();
             
-            int momentIndex = 0;
-            foreach (JsonElement momentElm in momentsElm.EnumerateArray())
+            for (int momentIndex = 0; momentIndex < momentsArray.Length; momentIndex++)
             {
+                JsonElement momentElm = momentsArray[momentIndex];
+                
+                UndertaleTimeline.UndertaleTimelineMoment moment;
+                
                 if (momentIndex < timeline.Moments.Count)
                 {
-                    var moment = timeline.Moments[momentIndex];
-                    
-                    
-                    if (momentElm.TryGetProperty("step", out JsonElement stepElm))
+                    moment = timeline.Moments[momentIndex];
+                }
+                else
+                {
+                    moment = new UndertaleTimeline.UndertaleTimelineMoment();
+                    moment.Event = new UndertalePointerList<UndertaleGameObject.EventAction>();
+                    timeline.Moments.Add(moment);
+                }
+                
+                if (momentElm.TryGetProperty("step", out JsonElement stepElm))
+                {
+                    moment.Step = (uint)stepElm.GetInt64();
+                }
+                
+                if (momentElm.TryGetProperty("actions", out JsonElement actionsElm) && actionsElm.ValueKind == JsonValueKind.Array)
+                {
+                    if (moment.Event == null)
                     {
-                        moment.Step = (uint)stepElm.GetInt32();
+                        moment.Event = new UndertalePointerList<UndertaleGameObject.EventAction>();
                     }
                     
+                    var actionsArray = actionsElm.EnumerateArray().ToArray();
                     
-                    if (momentElm.TryGetProperty("actions", out JsonElement actionsElm) && actionsElm.ValueKind == JsonValueKind.Array)
+                    for (int actionIndex = 0; actionIndex < actionsArray.Length; actionIndex++)
                     {
-                        if (moment.Event != null)
+                        JsonElement actionElm = actionsArray[actionIndex];
+                        
+                        UndertaleGameObject.EventAction action;
+                        
+                        if (actionIndex < moment.Event.Count)
                         {
-                            int actionIndex = 0;
-                            foreach (JsonElement actionElm in actionsElm.EnumerateArray())
+                            action = moment.Event[actionIndex];
+                        }
+                        else
+                        {
+                            action = new UndertaleGameObject.EventAction();
+                            moment.Event.Add(action);
+                        }
+                        
+                        if (actionElm.TryGetProperty("libId", out JsonElement libIdElm))
+                            action.LibID = (uint)libIdElm.GetInt64();
+                        if (actionElm.TryGetProperty("id", out JsonElement idElm))
+                            action.ID = (uint)idElm.GetInt64();
+                        if (actionElm.TryGetProperty("kind", out JsonElement kindElm))
+                            action.Kind = (uint)kindElm.GetInt64();
+                        if (actionElm.TryGetProperty("useRelative", out JsonElement useRelativeElm))
+                            action.UseRelative = useRelativeElm.GetBoolean();
+                        if (actionElm.TryGetProperty("isQuestion", out JsonElement isQuestionElm))
+                            action.IsQuestion = isQuestionElm.GetBoolean();
+                        if (actionElm.TryGetProperty("useApplyTo", out JsonElement useApplyToElm))
+                            action.UseApplyTo = useApplyToElm.GetBoolean();
+                        if (actionElm.TryGetProperty("exeType", out JsonElement exeTypeElm))
+                            action.ExeType = (uint)exeTypeElm.GetInt64();
+                        if (actionElm.TryGetProperty("actionName", out JsonElement actionNameElm))
+                        {
+                            string actionName = actionNameElm.GetString();
+                            if (!string.IsNullOrEmpty(actionName))
+                                action.ActionName = Data.Strings.MakeString(actionName);
+                        }
+                        if (actionElm.TryGetProperty("codeId", out JsonElement codeIdElm))
+                        {
+                            if (codeIdElm.ValueKind == JsonValueKind.String)
                             {
-                                if (actionIndex < moment.Event.Count)
+                                string codeName = codeIdElm.GetString() ?? "";
+                                if (!string.IsNullOrEmpty(codeName))
                                 {
-                                    var action = moment.Event[actionIndex];
-                                    
-                                    if (actionElm.TryGetProperty("codeId", out JsonElement codeIdElm))
+                                    UndertaleCode code = Data.Code.ByName(codeName);
+                                    if (code != null)
                                     {
-                                        if (codeIdElm.ValueKind == JsonValueKind.String)
-                                        {
-                                            string codeName = codeIdElm.GetString() ?? "";
-                                            if (!string.IsNullOrEmpty(codeName))
-                                            {
-                                                UndertaleCode code = Data.Code.ByName(codeName);
-                                                if (code != null)
-                                                {
-                                                    action.CodeId = code;
-                                                }
-                                                else
-                                                {
-                                                    PrintLine($"[ImportTimelines] Warning: Code '{codeName}' not found for action {actionIndex} in moment {momentIndex} of timeline '{timelineName}'");
-                                                }
-                                            }
-                                        }
-                                        else if (codeIdElm.ValueKind == JsonValueKind.Null)
-                                        {
-                                            action.CodeId = null;
-                                        }
+                                        action.CodeId = code;
                                     }
                                 }
-                                actionIndex++;
+                            }
+                            else if (codeIdElm.ValueKind == JsonValueKind.Null)
+                            {
+                                action.CodeId = null;
                             }
                         }
+                        if (actionElm.TryGetProperty("argumentCount", out JsonElement argumentCountElm))
+                            action.ArgumentCount = (uint)argumentCountElm.GetInt64();
+                        if (actionElm.TryGetProperty("who", out JsonElement whoElm))
+                            action.Who = whoElm.GetInt32();
+                        if (actionElm.TryGetProperty("relative", out JsonElement relativeElm))
+                            action.Relative = relativeElm.GetBoolean();
+                        if (actionElm.TryGetProperty("isNot", out JsonElement isNotElm))
+                            action.IsNot = isNotElm.GetBoolean();
                     }
                 }
-                momentIndex++;
             }
         }
 
-        PrintLine($"[ImportTimelines] Updated timeline: {timelineName}");
+        if (isNew)
+        {
+            Data.Timelines.Add(timeline);
+        }
+
+        PrintLine($"[ImportTimelines] {(isNew ? "Created" : "Updated")} timeline: {timelineName}");
         jsonDoc.Dispose();
         IncrementProgress();
     }
@@ -129,5 +192,4 @@ foreach (string timelineFile in timelineFiles)
 
 await StopProgressBarUpdater();
 HideProgressBar();
-PrintLine("[ImportTimelines] Done.");
-
+PrintLine($"[ImportTimelines] Done. Created: {timelinesCreated}, Updated: {timelinesUpdated}");
