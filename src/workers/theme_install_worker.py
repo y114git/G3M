@@ -3,18 +3,14 @@ import shutil
 import logging
 import tempfile
 import json
-import zipfile
-from PyQt6.QtCore import QThread, pyqtSignal
 from managers.localization_manager import tr
 from utils.network_utils import get_session, download_file
 from utils.ui_utils import format_size_mb
 from config.constants import NETWORK_TIMEOUT_HEAD, UI_COLORS
+from workers.base_install_worker import BaseInstallWorker
 
 
-class ThemeInstallWorker(QThread):
-    progress = pyqtSignal(int)
-    status = pyqtSignal(str, str)
-    finished = pyqtSignal(bool, str)
+class ThemeInstallWorker(BaseInstallWorker):
 
     def __init__(self, archive_path: str, config_dir: str, app_state, settings_manager, parent=None):
         super().__init__(parent)
@@ -64,41 +60,41 @@ class ThemeInstallWorker(QThread):
             theme_json_path = None
             if os.path.isfile(content_path) and content_path.endswith('.dhtheme'):
                 with tempfile.TemporaryDirectory(prefix='dh-theme-extract-') as extract_dir:
-                    from utils.archive_utils import extract_any_archive
-                    with zipfile.ZipFile(content_path, 'r') as zipf:
-                        if 'theme.json' not in zipf.namelist():
-                            logging.error('ThemeInstallWorker: theme.json not found in theme archive')
-                            return False
-                        extract_any_archive(content_path, extract_dir)
-                        theme_json_path = os.path.join(extract_dir, 'theme.json')
-                        if not os.path.exists(theme_json_path):
-                            logging.error('ThemeInstallWorker: theme.json not found after extraction')
-                            return False
-                        with open(theme_json_path, 'r', encoding='utf-8') as f:
-                            theme_settings = json.load(f)
-                        for key, value in theme_settings.items():
-                            self.app_state.local_config[key] = value
-                        for old_file in ['custom_background_music.mp3', 'custom_background_music.wav', 'custom_startup_sound.mp3', 'custom_startup_sound.wav']:
-                            old_file_path = os.path.join(self.config_dir, old_file)
-                            if os.path.exists(old_file_path):
-                                try:
-                                    os.remove(old_file_path)
-                                except Exception as e:
-                                    logging.warning(f'Failed to remove old file {old_file}: {e}')
-                        self.app_state.local_config['custom_background_path'] = ''
-                        for filename in os.listdir(extract_dir):
-                            src_path = os.path.join(extract_dir, filename)
-                            if filename.startswith('background.'):
-                                ext = os.path.splitext(filename)[1]
-                                dest_path = os.path.join(self.config_dir, f'custom_background{ext}')
-                                shutil.copy2(src_path, dest_path)
-                                self.app_state.local_config['custom_background_path'] = dest_path
-                            elif filename.startswith('background_music.'):
-                                dest_path = os.path.join(self.config_dir, f'custom_background_music{os.path.splitext(filename)[1]}')
-                                shutil.copy2(src_path, dest_path)
-                            elif filename.startswith('startup_sound.'):
-                                dest_path = os.path.join(self.config_dir, f'custom_startup_sound{os.path.splitext(filename)[1]}')
-                                shutil.copy2(src_path, dest_path)
+                    from utils.archive_utils import extract_with_unrar_retry
+                    try:
+                        extract_with_unrar_retry(content_path, extract_dir, self)
+                    except Exception as e:
+                        logging.error(f'ThemeInstallWorker: Failed to extract theme archive: {e}')
+                        return False
+                    theme_json_path = os.path.join(extract_dir, 'theme.json')
+                    if not os.path.exists(theme_json_path):
+                        logging.error('ThemeInstallWorker: theme.json not found after extraction')
+                        return False
+                    with open(theme_json_path, 'r', encoding='utf-8') as f:
+                        theme_settings = json.load(f)
+                    for key, value in theme_settings.items():
+                        self.app_state.local_config[key] = value
+                    for old_file in ['custom_background_music.mp3', 'custom_background_music.wav', 'custom_startup_sound.mp3', 'custom_startup_sound.wav']:
+                        old_file_path = os.path.join(self.config_dir, old_file)
+                        if os.path.exists(old_file_path):
+                            try:
+                                os.remove(old_file_path)
+                            except Exception as e:
+                                logging.warning(f'Failed to remove old file {old_file}: {e}')
+                    self.app_state.local_config['custom_background_path'] = ''
+                    for filename in os.listdir(extract_dir):
+                        src_path = os.path.join(extract_dir, filename)
+                        if filename.startswith('background.'):
+                            ext = os.path.splitext(filename)[1]
+                            dest_path = os.path.join(self.config_dir, f'custom_background{ext}')
+                            shutil.copy2(src_path, dest_path)
+                            self.app_state.local_config['custom_background_path'] = dest_path
+                        elif filename.startswith('background_music.'):
+                            dest_path = os.path.join(self.config_dir, f'custom_background_music{os.path.splitext(filename)[1]}')
+                            shutil.copy2(src_path, dest_path)
+                        elif filename.startswith('startup_sound.'):
+                            dest_path = os.path.join(self.config_dir, f'custom_startup_sound{os.path.splitext(filename)[1]}')
+                            shutil.copy2(src_path, dest_path)
             else:
                 theme_json_path = os.path.join(content_path, 'theme.json')
                 if not os.path.exists(theme_json_path):

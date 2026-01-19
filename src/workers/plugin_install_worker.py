@@ -2,17 +2,14 @@ import os
 import shutil
 import logging
 import tempfile
-from PyQt6.QtCore import QThread, pyqtSignal
 from managers.localization_manager import tr
 from utils.network_utils import get_session, download_file
 from utils.ui_utils import format_size_mb
 from config.constants import NETWORK_TIMEOUT_HEAD, UI_COLORS
+from workers.base_install_worker import BaseInstallWorker
 
 
-class PluginInstallWorker(QThread):
-    progress = pyqtSignal(int)
-    status = pyqtSignal(str, str)
-    finished = pyqtSignal(bool, str)
+class PluginInstallWorker(BaseInstallWorker):
 
     def __init__(self, archive_path: str, plugins_dir: str, plugin_manager, parent=None):
         super().__init__(parent)
@@ -31,8 +28,22 @@ class PluginInstallWorker(QThread):
                 logging.debug(f'PluginInstallWorker: Error closing session: {e}')
 
     def _check_archive_has_plugin_init_py(self, archive_path: str) -> bool:
-        from utils.archive_utils import ArchiveExtractor
-        return ArchiveExtractor.check_archive_has_file(archive_path, 'plugin_init.py')
+        from utils.archive_utils import ArchiveExtractor, UnrarMissingError
+        try:
+            return ArchiveExtractor.check_archive_has_file(archive_path, 'plugin_init.py')
+        except Exception as e:
+            if 'File is not a zip file' in str(e) or isinstance(e, UnrarMissingError):
+                if not self.wait_for_unrar_install():
+                    logging.error('PluginInstallWorker: User declined UnRAR installation')
+                    return False
+                try:
+                    return ArchiveExtractor.check_archive_has_file(archive_path, 'plugin_init.py')
+                except Exception as retry_e:
+                    logging.error(f'PluginInstallWorker: Error checking archive: {retry_e}')
+                    return False
+            else:
+                logging.error(f'PluginInstallWorker: Error checking archive: {e}')
+                return False
 
     def _download_archive(self, url: str, target_path: str) -> bool:
         try:
@@ -66,7 +77,9 @@ class PluginInstallWorker(QThread):
             if archive_is_url:
                 url = self.archive_path
                 with tempfile.TemporaryDirectory(prefix='dh-plugin-check-') as temp_dir:
-                    temp_archive_name = f'temp_plugin_{os.getpid()}.zip'
+                    from utils.archive_utils import get_file_extension_from_url
+                    file_ext = get_file_extension_from_url(url)
+                    temp_archive_name = f'temp_plugin_{os.getpid()}{file_ext}'
                     temp_archive_path = os.path.join(temp_dir, temp_archive_name)
                     try:
                         if not self._download_archive(url, temp_archive_path):

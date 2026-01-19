@@ -1,9 +1,10 @@
 import os
+import json
 import shutil
 import logging
 import tempfile
-import json
 from typing import Optional, Dict
+from PyQt6.QtCore import pyqtSignal
 from managers.localization_manager import tr
 from utils.network_utils import get_session
 from utils.archive_utils import extract_archive
@@ -14,6 +15,7 @@ from workers.base_install_worker import BaseInstallWorker
 
 
 class ModInstallWorker(BaseInstallWorker):
+    manual_install_required = pyqtSignal(str, str, str)
 
     def __init__(self, archive_path: str, mods_dir: str, mod_manager=None, gamebanana_metadata: Optional[Dict] = None, parent=None, is_pizza_tower_selected: bool = False):
         super().__init__(parent)
@@ -218,7 +220,9 @@ class ModInstallWorker(BaseInstallWorker):
             if archive_is_url:
                 url = self.archive_path
                 with tempfile.TemporaryDirectory(prefix='dh-mod-import-') as temp_dir:
-                    temp_archive_name = f'temp_mod_{os.getpid()}.zip'
+                    from utils.archive_utils import get_file_extension_from_url
+                    file_ext = get_file_extension_from_url(url)
+                    temp_archive_name = f'temp_mod_{os.getpid()}{file_ext}'
                     temp_archive_path = os.path.join(temp_dir, temp_archive_name)
                     try:
                         if not self._download_archive(url, temp_archive_path):
@@ -233,7 +237,8 @@ class ModInstallWorker(BaseInstallWorker):
                     self.status.emit(tr('mods.extracting_mod'), UI_COLORS['status_warning'])
                     with tempfile.TemporaryDirectory(prefix='dh-mod-extract-') as extract_dir:
                         try:
-                            extract_archive(temp_archive_path, extract_dir)
+                            from utils.archive_utils import extract_with_unrar_retry
+                            extract_with_unrar_retry(temp_archive_path, extract_dir, self, extract_archive)
                         except Exception as e:
                             self.finished.emit(False, tr('mods.extract_error', error=str(e)))
                             return
@@ -257,7 +262,8 @@ class ModInstallWorker(BaseInstallWorker):
                 self.status.emit(tr('mods.extracting_mod'), UI_COLORS['status_warning'])
                 with tempfile.TemporaryDirectory(prefix='dh-mod-extract-') as extract_dir:
                     try:
-                        extract_archive(self.archive_path, extract_dir)
+                        from utils.archive_utils import extract_with_unrar_retry
+                        extract_with_unrar_retry(self.archive_path, extract_dir, self, extract_archive)
                     except Exception as e:
                         self.finished.emit(False, tr('mods.extract_error', error=str(e)))
                         return

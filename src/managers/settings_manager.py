@@ -409,6 +409,7 @@ class SettingsManager(QObject):
             worker.status.connect(lambda msg, color: self.feedback_manager.update_status(msg, color))
             worker.progress.connect(lambda p: setattr(self.app_state, 'progress_bar_value', p))
             worker.finished.connect(self._on_theme_install_finished)
+            worker.unrar_needed.connect(self._on_unrar_needed)
             self.app_state.is_installing = True
             self.app_state.progress_bar_visible = True
             self.app_state.progress_bar_value = 0
@@ -418,6 +419,22 @@ class SettingsManager(QObject):
             import logging
             logging.error(f'SettingsManager: Error installing theme from URL: {e}', exc_info=True)
             self.feedback_manager.show_message('error', 'errors.error', tr('themes.installation_error', error=str(e)))
+
+    def _on_unrar_needed(self):
+        try:
+            from utils.archive_utils import prompt_for_unrar_install
+            worker = self.app_state.current_task
+            success = prompt_for_unrar_install(parent_widget=self.parent_widget)
+            if success:
+                logging.info('UnRAR installed successfully from theme worker request')
+            else:
+                logging.info('User declined UnRAR installation from theme worker request')
+            if worker and hasattr(worker, 'signal_unrar_installed'):
+                worker.signal_unrar_installed(success)
+        except Exception as e:
+            logging.error(f'SettingsManager: Error handling UnRAR installation request: {e}')
+            if self.app_state.current_task and hasattr(self.app_state.current_task, 'signal_unrar_installed'):
+                self.app_state.current_task.signal_unrar_installed(False)
 
     def _on_theme_install_finished(self, success: bool, message: str):
         self.app_state.is_installing = False

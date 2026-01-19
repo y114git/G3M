@@ -8,7 +8,7 @@ import threading
 from dataclasses import dataclass
 from typing import Dict, Optional, List, Tuple, Set
 from PyQt6.QtCore import QObject, pyqtSignal
-from PyQt6.QtWidgets import QApplication
+from PyQt6.QtWidgets import QApplication, QDialog, QMessageBox
 from managers.localization_manager import tr
 from models.mod_models import ModChapterData
 import models.mod_models as mod_models
@@ -1006,8 +1006,67 @@ class ModManager(QObject):
         url_install_thread.status.connect(self.status_changed.emit)
         url_install_thread.finished.connect(self._on_url_install_finished)
         url_install_thread.prompt_required.connect(self.url_prompt_required.emit)
+        url_install_thread.unrar_needed.connect(self._on_unrar_needed)
+        url_install_thread.manual_install_required.connect(self._on_manual_install_required)
         self.app_state.current_task = url_install_thread
         url_install_thread.start()
+
+    def _on_unrar_needed(self):
+        try:
+            from utils.archive_utils import prompt_for_unrar_install
+            worker = self.app_state.current_task
+            success = prompt_for_unrar_install(parent_widget=self.parent())
+            if success:
+                logging.info('UnRAR installed successfully from mod manager worker request')
+            else:
+                logging.info('User declined UnRAR installation from mod manager worker request')
+            if worker and hasattr(worker, 'signal_unrar_installed'):
+                worker.signal_unrar_installed(success)
+        except Exception as e:
+            logging.error(f'ModManager: Error handling UnRAR installation request: {e}')
+            if self.app_state.current_task and hasattr(self.app_state.current_task, 'signal_unrar_installed'):
+                self.app_state.current_task.signal_unrar_installed(False)
+
+    def _on_manual_install_required(self, prepared_path: str, archive_path: str, temp_dir: str):
+        try:
+            from managers.localization_manager import tr
+            self.app_state.is_installing = False
+            self.status_changed.emit(tr('status.ready'), 'status_info')
+            parent = self.parent()
+            msg_box = QMessageBox(parent)
+            msg_box.setIcon(QMessageBox.Icon.Information)
+            msg_box.setWindowTitle(tr('errors.mod_not_compatible_title'))
+            msg_box.setText(tr('errors.mod_requires_manual_installation'))
+            msg_box.setInformativeText(tr('dialogs.manual_install_available'))
+            manual_install_btn = msg_box.addButton(tr('ui.manual_install'), QMessageBox.ButtonRole.AcceptRole)
+            msg_box.addButton(tr('buttons.close'), QMessageBox.ButtonRole.RejectRole)
+            msg_box.setDefaultButton(manual_install_btn)
+            msg_box.exec()
+            if msg_box.clickedButton() != manual_install_btn:
+                try:
+                    shutil.rmtree(temp_dir, ignore_errors=True)
+                except Exception:
+                    pass
+                return
+            from ui.dialogs.manual_mod_install_dialog import ManualModInstallDialog
+            from utils.game_utils import get_game_type_string
+            initial_game_type = None
+            if hasattr(parent, 'app_state') and parent.app_state and hasattr(parent.app_state, 'game_mode'):
+                initial_game_type = get_game_type_string(parent.app_state.game_mode)
+            dialog = ManualModInstallDialog(parent, prepared_path, gamebanana_metadata=None, source_file_path=archive_path, initial_game_type=initial_game_type)
+            dialog.temp_dir_to_cleanup = temp_dir
+            if dialog.exec() == QDialog.DialogCode.Accepted:
+                from utils.ui_utils import refresh_ui_after_mod_install
+                refresh_ui_after_mod_install(parent, self)
+                QMessageBox.information(parent, tr('dialogs.success'), tr('dialogs.mod_created_successfully'))
+        except Exception as e:
+            logging.error(f'ModManager: Error handling manual install request: {e}', exc_info=True)
+            if hasattr(self.parent(), 'feedback_manager'):
+                self.parent().feedback_manager.show_message('error', tr('errors.error'), tr('errors.manual_install_failed', error=str(e)))
+            try:
+                shutil.rmtree(temp_dir, ignore_errors=True)
+            except Exception:
+                pass
 
     def uninstall_mod(self, mod):
         try:

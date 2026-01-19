@@ -184,8 +184,10 @@ class InstallGameBananaModThread(BaseInstallWorker):
                     self.status.emit(tr('status.downloading_from_external'), UI_COLORS['status_info'])
                     try:
                         from utils.file_utils import download_file_with_progress
+                        from utils.archive_utils import get_file_extension_from_url
                         temp_dir = tempfile.mkdtemp(prefix='gb_redirect_')
-                        redirect_archive_path = os.path.join(temp_dir, 'redirect_mod.zip')
+                        file_ext = get_file_extension_from_url(external_url)
+                        redirect_archive_path = os.path.join(temp_dir, f'redirect_mod{file_ext}')
                         session = get_session()
                         self._session = session
                         downloaded_ref = [0]

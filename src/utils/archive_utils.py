@@ -114,6 +114,22 @@ def _extract_lzma(tmp_path: str, target_dir: str, fname: str) -> None:
         shutil.copyfileobj(f_in, f_out)
 
 
+def _detect_archive_format_by_signature(file_path: str) -> str:
+    try:
+        with open(file_path, 'rb') as f:
+            header = f.read(10)
+        if len(header) >= 4:
+            if header[:2] == b'PK':
+                return 'zip'
+            if header[:4] == b'Rar!':
+                return 'rar'
+            if header[:2] == b'7z':
+                return '7z'
+        return 'unknown'
+    except Exception:
+        return 'unknown'
+
+
 def _extract_archive_raw(src_path: str, fname_lower: str, out_dir: str) -> None:
     import rarfile
     try:
@@ -123,7 +139,8 @@ def _extract_archive_raw(src_path: str, fname_lower: str, out_dir: str) -> None:
         py7zr = None
     out_dir_abs = os.path.abspath(out_dir)
     os.makedirs(out_dir_abs, exist_ok=True)
-    if fname_lower.endswith('.zip') or fname_lower.endswith('.dhtheme'):
+    detected_format = _detect_archive_format_by_signature(src_path)
+    if fname_lower.endswith('.zip') or fname_lower.endswith('.dhtheme') or detected_format == 'zip':
         with zipfile.ZipFile(src_path, 'r') as zf:
             targets = []
             for member in zf.namelist():
@@ -151,7 +168,7 @@ def _extract_archive_raw(src_path: str, fname_lower: str, out_dir: str) -> None:
                 except (ValueError, OSError, tarfile.TarError) as e:
                     logging.warning(f'_extract_archive_raw: Failed to extract TAR archive: {e}')
         return
-    if fname_lower.endswith('.rar'):
+    if fname_lower.endswith('.rar') or detected_format == 'rar':
         try:
             _ensure_unrar_available()
         except UnrarMissingError:
@@ -169,7 +186,7 @@ def _extract_archive_raw(src_path: str, fname_lower: str, out_dir: str) -> None:
                 except (ValueError, OSError, rarfile.RarCannotExec) as e:
                     logging.warning(f'_extract_archive_raw: Failed to extract RAR archive: {e}')
         return
-    if fname_lower.endswith('.7z') and py7zr is not None:
+    if (fname_lower.endswith('.7z') or detected_format == '7z') and py7zr is not None:
         with py7zr.SevenZipFile(src_path, mode='r') as zf:
             targets = []
             for member in zf.getnames():
@@ -374,8 +391,9 @@ class ArchiveExtractor:
     @staticmethod
     def check_archive_has_file(archive_path: str, target_filename: str) -> bool:
         archive_lower = archive_path.lower()
+        detected_format = _detect_archive_format_by_signature(archive_path)
         try:
-            if archive_lower.endswith('.zip') or archive_lower.endswith('.dhtheme'):
+            if archive_lower.endswith('.zip') or archive_lower.endswith('.dhtheme') or detected_format == 'zip':
                 with zipfile.ZipFile(archive_path, 'r') as zf:
                     for name in zf.namelist():
                         normalized = name.replace('\\', '/').strip('/')
@@ -387,17 +405,20 @@ class ArchiveExtractor:
                         name = member.name.replace('\\', '/').strip('/')
                         if name == target_filename or name.endswith(f'/{target_filename}'):
                             return True
-            elif archive_lower.endswith('.rar'):
+            elif archive_lower.endswith('.rar') or detected_format == 'rar':
                 try:
+                    _ensure_unrar_available()
                     import rarfile
                     with rarfile.RarFile(archive_path, 'r') as rf:
                         for name in rf.namelist():
                             normalized = name.replace('\\', '/').strip('/')
                             if normalized == target_filename or normalized.endswith(f'/{target_filename}'):
                                 return True
-                except (OSError, ImportError):
-                    return False
-            elif archive_lower.endswith('.7z'):
+                except UnrarMissingError:
+                    raise
+                except (OSError, ImportError) as e:
+                    raise UnrarMissingError(f'Failed to open RAR archive: {e}')
+            elif archive_lower.endswith('.7z') or detected_format == '7z':
                 try:
                     import py7zr
                     with py7zr.SevenZipFile(archive_path, mode='r') as zf:
@@ -407,14 +428,92 @@ class ArchiveExtractor:
                                 return True
                 except (OSError, ImportError):
                     return False
+        except UnrarMissingError:
+            raise
         except Exception as e:
             logging.error(f'ArchiveExtractor.check_archive_has_file: Error checking archive: {e}', exc_info=True)
             return False
         return False
 
 
+def prompt_for_unrar_install(parent_widget=None, signal_callback=None) -> bool:
+    try:
+        _ensure_unrar_available()
+        return True
+    except UnrarMissingError:
+        pass
+    if signal_callback is not None:
+        signal_callback()
+        return False
+    try:
+        from PyQt6.QtWidgets import QMessageBox
+        from managers.localization_manager import tr
+        if parent_widget is None:
+            try:
+                from core.app_state import app_state
+                parent_widget = app_state.main_window
+            except (ImportError, AttributeError):
+                logging.warning('Cannot show UnRAR install prompt: no parent widget available')
+                return False
+        reply = QMessageBox.question(parent_widget, tr('errors.unrar_missing_title'), tr('errors.unrar_missing_text'), QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.Yes)
+        if reply == QMessageBox.StandardButton.Yes:
+            success = download_and_setup_unrar()
+            if success:
+                logging.info('UnRAR utility installed successfully')
+                return True
+            else:
+                logging.error('Failed to install UnRAR utility')
+                return False
+        else:
+            logging.info('User declined UnRAR installation')
+            return False
+    except ImportError:
+        logging.warning('Cannot show UnRAR install prompt: GUI components not available')
+        return False
+
+
+def get_file_extension_from_url(url: str, content_type: str = None) -> str:
+    from urllib.parse import urlparse, unquote
+    parsed = urlparse(url)
+    filename = unquote(os.path.basename(parsed.path))
+    if '.' in filename:
+        ext = os.path.splitext(filename)[1].lower()
+        supported_exts = ['.zip', '.rar', '.7z', '.tar.gz', '.lzma', '.dhtheme']
+        if ext in supported_exts:
+            return ext
+    if content_type:
+        content_type = content_type.lower()
+        content_type_map = {'application/zip': '.zip', 'application/x-rar-compressed': '.rar', 'application/x-rar': '.rar', 'application/x-7z-compressed': '.7z', 'application/x-7z': '.7z', 'application/x-tar': '.tar.gz', 'application/gzip': '.tar.gz', 'application/x-gzip': '.tar.gz', 'application/x-lzma': '.lzma', 'application/x-xz': '.lzma'}
+        if content_type in content_type_map:
+            return content_type_map[content_type]
+    return '.zip'
+
+
+def get_file_extension_from_content(file_path: str) -> str:
+    detected_format = _detect_archive_format_by_signature(file_path)
+    format_extensions = {'zip': '.zip', 'rar': '.rar', '7z': '.7z', 'unknown': '.zip'}
+    return format_extensions.get(detected_format, '.zip')
+
+
 def extract_any_archive(archive_path: str, target_dir: str) -> None:
     ArchiveExtractor.extract(archive_path, target_dir)
+
+
+def extract_with_unrar_retry(archive_path: str, target_dir: str, worker=None, extract_func=None) -> None:
+    if extract_func is None:
+        extract_func = extract_any_archive
+    try:
+        extract_func(archive_path, target_dir)
+    except Exception as e:
+        if 'File is not a zip file' in str(e) or isinstance(e, UnrarMissingError):
+            if worker is not None and hasattr(worker, 'wait_for_unrar_install'):
+                if not worker.wait_for_unrar_install():
+                    raise UnrarMissingError('RAR archive requires UnRAR utility to be installed')
+            elif not prompt_for_unrar_install():
+                raise UnrarMissingError('RAR archive requires UnRAR utility to be installed')
+            extract_func(archive_path, target_dir)
+        else:
+            raise
 
 
 def extract_archive(archive_path: str, target_dir: str, fname: str | None = None, is_game_installation: bool = False, size_cap_bytes: int | None = None) -> None:

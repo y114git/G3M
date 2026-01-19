@@ -164,7 +164,8 @@ class PluginManager(QObject):
                                 continue
                             try:
                                 with tempfile.TemporaryDirectory() as temp_dir:
-                                    shutil.unpack_archive(item_path, temp_dir)
+                                    from utils.archive_utils import extract_with_unrar_retry
+                                    extract_with_unrar_retry(item_path, temp_dir)
                                     contents = os.listdir(temp_dir)
                                     plugin_init_py_path = os.path.join(temp_dir, 'plugin_init.py')
                                     if os.path.isfile(plugin_init_py_path):

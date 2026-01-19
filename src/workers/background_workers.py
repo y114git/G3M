@@ -678,6 +678,7 @@ class UrlInstallThread(QThread):
     status = pyqtSignal(str, str)
     progress = pyqtSignal(int)
     finished = pyqtSignal(bool, str)
+    unrar_needed = pyqtSignal()
     prompt_required = pyqtSignal(str, str)
     manual_install_required = pyqtSignal(str, str, str)
 
@@ -690,6 +691,19 @@ class UrlInstallThread(QThread):
         self._cancelled = False
         self._session = None
         self._active_response = None
+        self._unrar_event = threading.Event()
+        self._unrar_installed = False
+
+    def signal_unrar_installed(self, success: bool):
+        self._unrar_installed = success
+        self._unrar_event.set()
+
+    def wait_for_unrar_install(self, timeout: float = 120.0) -> bool:
+        self._unrar_event.clear()
+        self._unrar_installed = False
+        self.unrar_needed.emit()
+        self._unrar_event.wait(timeout=timeout)
+        return self._unrar_installed
 
     def cancel(self):
         self._cancelled = True
@@ -697,13 +711,13 @@ class UrlInstallThread(QThread):
             if self._session is not None:
                 try:
                     self._session.close()
-                except Exception as e:
-                    logging.warning(f'UrlInstallThread.cancel: session close error: {e}', exc_info=True)
+                except Exception:
+                    logging.warning('UrlInstallThread.cancel: session close error', exc_info=True)
             if self._active_response is not None:
                 try:
                     self._active_response.close()
-                except Exception as e:
-                    logging.warning(f'UrlInstallThread.cancel: response close error: {e}', exc_info=True)
+                except Exception:
+                    logging.warning('UrlInstallThread.cancel: response close error', exc_info=True)
         finally:
             try:
                 self.status.emit(tr('status.operation_cancelled'), UI_COLORS['status_error'])
@@ -712,15 +726,16 @@ class UrlInstallThread(QThread):
 
     def run(self):
         try:
-            if not self.url.startswith('deltahub://'):
-                raise ValueError(tr('errors.invalid_url_scheme'))
-            content = self.url[len('deltahub://'):].split(',')[0].strip().rstrip('/')
-            if len(content) == 64 and all((c in '0123456789abcdef' for c in content.lower())):
-                self._install_mod_from_hash(content)
-                return
-            if not content.startswith(('http://', 'https://')):
-                content = content.replace('https//', 'https://').replace('http//', 'http://')
-            download_url = content
+            if self.url.startswith('deltahub://'):
+                content = self.url[len('deltahub://'):].split(',')[0].strip().rstrip('/')
+                if len(content) == 64 and all((c in '0123456789abcdef' for c in content.lower())):
+                    self._install_mod_from_hash(content)
+                    return
+                if not content.startswith(('http://', 'https://')):
+                    content = content.replace('https//', 'https://').replace('http//', 'http://')
+                download_url = content
+            else:
+                download_url = self.url
             with tempfile.TemporaryDirectory(prefix='dh-url-install-') as temp_dir:
                 self.status.emit(tr('status.downloading_from_external'), UI_COLORS['status_warning'])
                 archive_path = self._download_archive(download_url, temp_dir)
@@ -864,10 +879,14 @@ class UrlInstallThread(QThread):
             session = get_session()
             filename = get_filename_from_url(session, url)
         if not filename:
-            filename = 'archive.zip'
+            from utils.archive_utils import get_file_extension_from_url
+            file_ext = get_file_extension_from_url(url)
+            filename = f'archive{file_ext}'
         supported_extensions = ['.zip', '.rar', '.7z', '.tar.gz', '.lzma', '.dhtheme']
         if not any((filename.lower().endswith(ext) for ext in supported_extensions)):
-            filename = 'archive.zip'
+            from utils.archive_utils import get_file_extension_from_url
+            file_ext = get_file_extension_from_url(url)
+            filename = f'archive{file_ext}'
         archive_path = os.path.join(temp_dir, filename)
         session = get_session()
         self._session = session
@@ -963,7 +982,8 @@ class UrlInstallThread(QThread):
     def _detect_content_type_from_extracted(self, archive_path: str) -> Optional[str]:
         with tempfile.TemporaryDirectory(prefix='dh-detect-type-') as unpack_dir:
             try:
-                shutil.unpack_archive(archive_path, unpack_dir)
+                from utils.archive_utils import extract_any_archive
+                extract_any_archive(archive_path, unpack_dir)
                 content_path = unpack_dir
                 unpacked_items = os.listdir(unpack_dir)
                 if len(unpacked_items) == 1 and os.path.isdir(os.path.join(unpack_dir, unpacked_items[0])):
@@ -990,7 +1010,7 @@ class UrlInstallThread(QThread):
 
     def _prepare_for_manual_install(self, archive_path: str):
         try:
-            from utils.archive_utils import extract_archive
+            from utils.archive_utils import extract_archive, extract_with_unrar_retry
             persistent_temp_dir = tempfile.mkdtemp(prefix='deltahub_url_manual_install_')
             try:
                 archive_filename = os.path.basename(archive_path)
@@ -998,7 +1018,7 @@ class UrlInstallThread(QThread):
                 shutil.copy2(archive_path, preserved_archive_path)
                 extract_dir = os.path.join(persistent_temp_dir, 'extracted')
                 os.makedirs(extract_dir, exist_ok=True)
-                extract_archive(preserved_archive_path, extract_dir)
+                extract_with_unrar_retry(preserved_archive_path, extract_dir, self, extract_archive)
                 content_path = extract_dir
                 contents = os.listdir(extract_dir)
                 if len(contents) == 1 and os.path.isdir(os.path.join(extract_dir, contents[0])):
@@ -1025,9 +1045,9 @@ class UrlInstallThread(QThread):
             with zipfile.ZipFile(theme_file_path, 'r') as zipf:
                 if 'theme.json' not in zipf.namelist():
                     raise ValueError('Missing theme.json')
-                from utils.archive_utils import extract_any_archive
+                from utils.archive_utils import extract_with_unrar_retry
                 with tempfile.TemporaryDirectory(prefix='dh-theme-extract-') as temp_dir:
-                    extract_any_archive(theme_file_path, temp_dir)
+                    extract_with_unrar_retry(theme_file_path, temp_dir, self)
                     theme_json_path = os.path.join(temp_dir, 'theme.json')
                     with open(theme_json_path, 'r', encoding='utf-8') as f:
                         theme_settings = json.load(f)
@@ -1105,7 +1125,9 @@ class UrlInstallThread(QThread):
             plugins_dir = self.main_window.app_state.plugins_dir
             archive_name = os.path.basename(archive_path)
             if not archive_name or '.' not in archive_name:
-                archive_name = 'plugin.zip'
+                from utils.archive_utils import get_file_extension_from_content
+                file_ext = get_file_extension_from_content(archive_path)
+                archive_name = f'plugin{file_ext}'
             target_archive_path = os.path.join(plugins_dir, archive_name)
             shutil.copy2(archive_path, target_archive_path)
             try:
@@ -1122,7 +1144,8 @@ class UrlInstallThread(QThread):
     def _check_redirect(self, archive_path: str, temp_dir: str) -> bool:
         try:
             with tempfile.TemporaryDirectory(prefix='dh-redirect-check-') as unpack_dir:
-                shutil.unpack_archive(archive_path, unpack_dir)
+                from utils.archive_utils import extract_any_archive
+                extract_any_archive(archive_path, unpack_dir)
                 content_path = unpack_dir
                 unpacked_items = os.listdir(unpack_dir)
                 if len(unpacked_items) == 1 and os.path.isdir(os.path.join(unpack_dir, unpacked_items[0])):

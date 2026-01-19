@@ -210,13 +210,13 @@ class ModImportExportController:
 
     def _install_mod_from_url(self, url: str):
         try:
-            from workers.mod_install_worker import ModInstallWorker
-            from models.game_modes import PizzaTowerGameMode
-            is_pizza_tower = isinstance(self.app_state.game_mode, PizzaTowerGameMode)
-            worker = ModInstallWorker(url, self.app_state.mods_dir, self.mod_manager, gamebanana_metadata=None, parent=self.app_window, is_pizza_tower_selected=is_pizza_tower)
+            from workers.background_workers import UrlInstallThread
+            worker = UrlInstallThread(self.app_window, url)
             worker.status.connect(lambda msg, color: self.app_window.feedback_manager.update_status(msg, color))
             worker.progress.connect(lambda p: setattr(self.app_state, 'progress_bar_value', p))
             worker.finished.connect(self._on_mod_install_finished)
+            worker.unrar_needed.connect(self._on_unrar_needed)
+            worker.manual_install_required.connect(self._on_manual_install_required)
             self.app_state.is_installing = True
             self.app_state.progress_bar_visible = True
             self.app_state.progress_bar_value = 0
@@ -225,6 +225,41 @@ class ModImportExportController:
         except Exception as e:
             logging.error(f'ModImportExportController: Error installing mod from URL: {e}', exc_info=True)
             self.app_window.feedback_manager.show_message('error', 'errors.error', tr('mods.installation_error', error=str(e)))
+
+    def _on_unrar_needed(self):
+        worker = self.app_state.current_task
+        success = self._prompt_for_unrar_install()
+        if success:
+            logging.info('UnRAR installed successfully from worker request')
+        else:
+            logging.info('User declined UnRAR installation from worker request')
+        if worker and hasattr(worker, 'signal_unrar_installed'):
+            worker.signal_unrar_installed(success)
+
+    def _on_manual_install_required(self, prepared_path: str, archive_path: str, temp_dir: str):
+        try:
+            self.app_state.is_installing = False
+            self.app_state.progress_bar_visible = False
+            self.app_state.progress_bar_value = 0
+            self.app_state.clear_current_task()
+            from ui.dialogs.manual_mod_install_dialog import ManualModInstallDialog
+            from utils.game_utils import get_game_type_string
+            initial_game_type = None
+            if self.app_state and hasattr(self.app_state, 'game_mode'):
+                initial_game_type = get_game_type_string(self.app_state.game_mode)
+            dialog = ManualModInstallDialog(self.app_window, prepared_path, gamebanana_metadata=None, source_file_path=archive_path, initial_game_type=initial_game_type)
+            dialog.temp_dir_to_cleanup = temp_dir
+            if dialog.exec() == QDialog.DialogCode.Accepted:
+                from utils.ui_utils import refresh_ui_after_mod_install
+                refresh_ui_after_mod_install(self.app_window, self.mod_manager)
+                QMessageBox.information(self.app_window, tr('dialogs.success'), tr('dialogs.mod_created_successfully'))
+        except Exception as e:
+            logging.error(f'Failed to open manual install dialog from URL: {e}', exc_info=True)
+            self.app_window.feedback_manager.show_message('error', tr('errors.error'), tr('errors.manual_install_failed', error=str(e)))
+            try:
+                shutil.rmtree(temp_dir, ignore_errors=True)
+            except Exception:
+                pass
 
     def _show_import_error_with_manual_install(self, file_path: str, error_message: str):
         msg_box = QMessageBox(self.app_window)

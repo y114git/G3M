@@ -2,7 +2,7 @@ import os
 import tempfile
 import shutil
 import logging
-from typing import Dict, Optional, Tuple
+from typing import Dict
 from PyQt6.QtCore import pyqtSignal
 from config.constants import UI_COLORS, NETWORK_TIMEOUT_HEAD
 from managers.localization_manager import tr
@@ -69,7 +69,8 @@ class PrepareGameBananaManualInstallWorker(BaseInstallWorker):
             self.status.emit(tr('status.extracting_mod'), UI_COLORS['status_info'])
             extract_dir = os.path.join(temp_dir, 'extracted')
             os.makedirs(extract_dir, exist_ok=True)
-            extract_archive(archive_path, extract_dir)
+            from utils.archive_utils import extract_with_unrar_retry
+            extract_with_unrar_retry(archive_path, extract_dir, extract_func=extract_archive)
             content_path = extract_dir
             contents = os.listdir(extract_dir)
             if len(contents) == 1 and os.path.isdir(os.path.join(extract_dir, contents[0])):

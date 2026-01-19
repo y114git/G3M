@@ -319,8 +319,19 @@ class AppWindow(QWidget):
                 else:
                     logging.warning(f'Installation failed for deltahub:// URL: {message}')
                     self.feedback_manager.update_status(message or tr('errors.error'), UI_COLORS['status_error'])
+
+            def on_unrar_needed():
+                try:
+                    from utils.archive_utils import prompt_for_unrar_install
+                    if prompt_for_unrar_install(parent_widget=self):
+                        logging.info('UnRAR installed successfully from app_window worker request')
+                    else:
+                        logging.info('User declined UnRAR installation from app_window worker request')
+                except Exception as e:
+                    logging.error(f'AppWindow: Error handling UnRAR installation request: {e}')
             worker.manual_install_required.connect(on_manual_install_required)
             worker.finished.connect(on_finished)
+            worker.unrar_needed.connect(on_unrar_needed)
             self.app_state.is_installing = True
             self.app_state.progress_bar_visible = True
             self.app_state.progress_bar_value = 0

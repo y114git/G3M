@@ -45,6 +45,33 @@ def format_size_mb(size_bytes: int) -> str:
     return f'{mb:.1f} MB'
 
 
+def refresh_ui_after_mod_install(main_window, mod_manager=None):
+    from PyQt6.QtCore import QTimer
+    from config.constants import UI_COLORS
+    from managers.localization_manager import tr
+    if hasattr(main_window, 'plugin_manager') and main_window.plugin_manager:
+        main_window.plugin_manager.convert_plugin_archives()
+        main_window.plugin_manager.load_plugins()
+    if hasattr(main_window, '_update_plugin_tabs'):
+        main_window._update_plugin_tabs()
+    if hasattr(main_window, 'plugin_display'):
+        main_window.plugin_display.update_display()
+    if mod_manager:
+        mod_manager.invalidate_mods_cache()
+        QTimer.singleShot(0, lambda: (mod_manager.load_local_mods(_skip_conversion=True), mod_manager.mod_list_updated.emit()))
+    if hasattr(main_window, 'library_display'):
+        main_window.library_display.update_display()
+    if hasattr(main_window, 'search_display'):
+        main_window.search_display.update_search_plaques()
+        main_window.search_display.update_filtered_mods(preserve_page=True)
+    if hasattr(main_window, 'settings_manager'):
+        main_window.settings_manager.theme_changed.emit()
+    if hasattr(main_window, 'feedback_manager'):
+        main_window.feedback_manager.update_status(tr('dialogs.mod_created_successfully'), UI_COLORS['status_success'])
+    if hasattr(main_window, '_on_refresh_clicked'):
+        QTimer.singleShot(1000, lambda: main_window._on_refresh_clicked(is_initial=False))
+
+
 def safe_stop_thread(thread, timeout=2000, blocking=True):
     if not thread:
         return
