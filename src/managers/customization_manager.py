@@ -275,21 +275,14 @@ class CustomizationManager(QObject):
             if os.path.exists(splash_path):
                 pixmap = QPixmap(splash_path)
                 if not pixmap.isNull():
-                    target_w, target_h = (200, 60)
-                    scaled_pixmap = pixmap.scaled(target_w, target_h, Qt.AspectRatioMode.KeepAspectRatioByExpanding, Qt.TransformationMode.SmoothTransformation)
-                    x = max(0, (scaled_pixmap.width() - target_w) // 2)
-                    y = max(0, (scaled_pixmap.height() - target_h) // 2)
-                    cropped = scaled_pixmap.copy(x, y, target_w, target_h)
-                    icon_label.setFixedSize(target_w, target_h)
+                    scaled_pixmap = pixmap.scaled(icon_label.size(), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
                     icon_label.setScaledContents(False)
-                    icon_label.setPixmap(cropped)
+                    icon_label.setPixmap(scaled_pixmap)
                     return
         except Exception:
             pass
-        target_w, target_h = (200, 60)
-        fallback_pixmap = QPixmap(target_w, target_h)
+        fallback_pixmap = QPixmap(icon_label.size())
         fallback_pixmap.fill(QColor('#333'))
-        icon_label.setFixedSize(target_w, target_h)
         icon_label.setScaledContents(False)
         icon_label.setPixmap(fallback_pixmap)
 

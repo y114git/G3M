@@ -480,7 +480,7 @@ class AppWindow(QWidget):
         self.top_frame.addWidget(self.discord_button)
         self.main_layout.addWidget(self.top_panel_widget)
         self.launcher_icon_label = QLabel(self.top_panel_widget)
-        self.launcher_icon_label.setFixedSize(225, 80)
+        self.launcher_icon_label.setFixedSize(250, 80)
         self.launcher_icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.customization_manager.load_launcher_icon(self.launcher_icon_label)
         self.bottom_widget = QFrame()
