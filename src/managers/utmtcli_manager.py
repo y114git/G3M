@@ -118,7 +118,7 @@ class UTMTCLIManager:
                     else:
                         logging.warning(f'UTMTCLI command failed: {stderr_preview}')
                 return (returncode, stdout, stderr)
-            except Exception as e:
+            except Exception as _:
                 if process and self._active_processes_ref is not None and (process in self._active_processes_ref):
                     self._active_processes_ref.remove(process)
                 if process:

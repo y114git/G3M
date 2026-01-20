@@ -11,7 +11,7 @@ from core.app_state import AppState
 from ui.common.feedback import FeedbackManager
 from managers.mod_manager import ModManager
 from models.game_modes import FullGameMode
-from config.constants import LAUNCHER_VERSION, UI_COLORS, SLOT_ID_UNIVERSAL, SLOT_ID_DEMO, SLOT_ID_UNDERTALE, SLOT_ID_UNDERTALE_YELLOW, SLOT_ID_PIZZA_TOWER, SLOT_ID_SUGARY_SPIRE, SLOT_ID_MENU, SLOT_ID_CHAPTER_1, SLOT_ID_CHAPTER_2, SLOT_ID_CHAPTER_3, SLOT_ID_CHAPTER_4
+from config.constants import LAUNCHER_VERSION, UI_COLORS, SLOT_ID_UNIVERSAL, SLOT_ID_DEMO, SLOT_ID_UNDERTALE, SLOT_ID_SUGARY_SPIRE, SLOT_ID_MENU, SLOT_ID_CHAPTER_1, SLOT_ID_CHAPTER_2, SLOT_ID_CHAPTER_3, SLOT_ID_CHAPTER_4
 from managers.localization_manager import tr
 from utils.path_utils import resource_path
 from utils.mod_utils import get_mod_key
@@ -177,7 +177,6 @@ class ShortcutManager(QObject):
         is_undertale = settings.get('is_undertale_mode', False)
         is_undertaleyellow = settings.get('is_undertaleyellow_mode', False)
         is_pizzatower = settings.get('is_pizzatower_mode', False)
-        is_sugaryspire = settings.get('is_sugaryspire_mode', False)
         is_chapter_mode = settings.get('is_chapter_mode', False)
         if is_demo:
             mod_data = settings['mods'].get('demo')

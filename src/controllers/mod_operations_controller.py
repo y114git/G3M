@@ -719,10 +719,8 @@ class ModOperationsController:
             archive_path = os.path.join(temp_dir, file_name)
             session = get_session()
             downloaded_ref = [0]
-            total_size = 0
             try:
-                head_response = session.head(download_url, allow_redirects=True, timeout=NETWORK_TIMEOUT_HEAD)
-                total_size = int(head_response.headers.get('content-length', 0))
+                session.head(download_url, allow_redirects=True, timeout=NETWORK_TIMEOUT_HEAD)
             except Exception:
                 pass
             success = download_file_with_progress(download_url, archive_path, session=session, downloaded_ref=downloaded_ref)

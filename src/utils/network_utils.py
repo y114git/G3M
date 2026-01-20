@@ -67,7 +67,7 @@ def get_filename_from_url(session, url):
             potential_name = os.path.basename(unquote(path))
             if '.' in potential_name:
                 return potential_name
-    except (requests.RequestException, ValueError, AttributeError) as e:
+    except (requests.RequestException, ValueError, AttributeError):
         pass
     return Path(url.split('?', 1)[0]).name or 'file.tmp'
 
@@ -79,7 +79,7 @@ def download_file(session, url, tmp_path, progress_callback=None, total_size: in
     try:
         h = session.head(url, allow_redirects=True, timeout=NETWORK_TIMEOUT_HEAD)
         expected_size = int(h.headers.get('content-length', 0))
-    except (requests.RequestException, ValueError) as e:
+    except (requests.RequestException, ValueError):
         expected_size = 0
     attempt = 0
     while attempt < max_retries:
@@ -144,7 +144,7 @@ def download_file(session, url, tmp_path, progress_callback=None, total_size: in
             if expected_size and final_size < expected_size:
                 continue
             return
-        except (requests.RequestException, OSError, IOError) as e:
+        except (requests.RequestException, OSError, IOError):
             if attempt >= max_retries:
                 raise
             try:
@@ -173,9 +173,9 @@ def safe_request(method: str, url: str, session=None, timeout=None, **kwargs):
     try:
         method_func = getattr(session, method.lower())
         return method_func(url, timeout=timeout, **kwargs)
-    except requests.RequestException as e:
+    except requests.RequestException:
         return None
-    except Exception as e:
+    except Exception:
         return None
 
 
