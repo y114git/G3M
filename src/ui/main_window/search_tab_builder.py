@@ -177,6 +177,13 @@ class SearchTabBuilder:
         auto_sorting_style = f'\n            QCheckBox {{\n                color: {text_color};\n                font-size: 12px;\n                spacing: 5px;\n            }}\n            QCheckBox::indicator {{\n                width: 16px;\n                height: 16px;\n            }}\n        '
         auto_sorting_checkbox.setStyleSheet(auto_sorting_style)
         mods_per_page_layout.addWidget(auto_sorting_checkbox)
+        mods_per_page_layout.addSpacing(10)
+        blacklist_button = QPushButton(tr('ui.blacklist'))
+        blacklist_button.setObjectName('blacklistBtn')
+        blacklist_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
+        blacklist_button.setMinimumWidth(80)
+        blacklist_button.setToolTip(tr('ui.blacklist_tooltip'))
+        mods_per_page_layout.addWidget(blacklist_button, 0, Qt.AlignmentFlag.AlignVCenter)
         pagination_layout.addLayout(mods_per_page_layout)
         self.widgets['prev_page_btn'] = prev_page_btn
         self.widgets['page_label'] = page_label
@@ -186,6 +193,7 @@ class SearchTabBuilder:
         self.widgets['gb_sort_combo'] = gb_sort_combo
         self.widgets['gb_sort_label'] = gb_sort_label
         self.widgets['auto_sorting_checkbox'] = auto_sorting_checkbox
+        self.widgets['blacklist_button'] = blacklist_button
         return pagination_widget
 
     def get_widgets(self) -> Dict[str, Any]:

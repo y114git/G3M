@@ -1,0 +1,202 @@
+from typing import List
+from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QListWidget, QListWidgetItem, QComboBox, QLineEdit, QGroupBox, QSplitter, QWidget, QMessageBox, QSizePolicy
+from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtGui import QFont
+from managers.localization_manager import tr
+from managers.blacklist_manager import BlacklistManager
+from ui.common.styling import get_theme_color
+
+
+class BlacklistDialog(QDialog):
+    blacklist_changed = pyqtSignal()
+
+    def __init__(self, blacklist_manager: BlacklistManager, current_game: str, available_games: List[str], parent=None):
+        super().__init__(parent)
+        self.blacklist_manager = blacklist_manager
+        self.current_game = current_game
+        self.available_games = available_games
+        self.setup_ui()
+        self.load_blacklist()
+        self.retranslate_ui()
+
+    def setup_ui(self):
+        self.setWindowTitle(tr('blacklist.title'))
+        self.setMinimumSize(600, 500)
+        self.setModal(True)
+        main_layout = QVBoxLayout(self)
+        main_layout.setSpacing(10)
+        main_layout.setContentsMargins(15, 15, 15, 15)
+        game_selector_layout = QHBoxLayout()
+        game_selector_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        game_label = QLabel(tr('blacklist.select_game'))
+        game_label.setFont(QFont('', 10, QFont.Weight.Bold))
+        game_selector_layout.addWidget(game_label)
+        self.game_combo = QComboBox()
+        self.game_combo.setMinimumWidth(150)
+        self.game_combo.currentIndexChanged.connect(self.on_game_changed)
+        game_selector_layout.addWidget(self.game_combo)
+        main_layout.addLayout(game_selector_layout)
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        left_widget = QWidget()
+        left_layout = QVBoxLayout(left_widget)
+        left_layout.setContentsMargins(5, 5, 5, 5)
+        add_group = QGroupBox(tr('blacklist.add_entry'))
+        add_layout = QVBoxLayout(add_group)
+        prefix_layout = QVBoxLayout()
+        prefix_layout.setSpacing(4)
+        prefix_label = QLabel(tr('blacklist.prefix'))
+        prefix_layout.addWidget(prefix_label)
+        self.prefix_combo = QComboBox()
+        self.prefix_combo.addItem(tr('blacklist.prefix_type_id'), BlacklistManager.PREFIX_TYPE_ID)
+        self.prefix_combo.addItem(tr('blacklist.prefix_type_name'), BlacklistManager.PREFIX_TYPE_NAME)
+        self.prefix_combo.addItem(tr('blacklist.prefix_type_category'), BlacklistManager.PREFIX_TYPE_CATEGORY)
+        prefix_layout.addWidget(self.prefix_combo)
+        add_layout.addLayout(prefix_layout)
+        value_layout = QVBoxLayout()
+        value_layout.setSpacing(4)
+        value_label = QLabel(tr('blacklist.value'))
+        value_layout.addWidget(value_label)
+        self.value_edit = QLineEdit()
+        self.value_edit.setPlaceholderText(tr('blacklist.value_placeholder'))
+        self.value_edit.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        value_layout.addWidget(self.value_edit)
+        add_layout.addLayout(value_layout)
+        add_layout.addSpacing(6)
+        button_layout = QHBoxLayout()
+        button_layout.addStretch()
+        self.add_button = QPushButton(tr('blacklist.add'))
+        self.add_button.clicked.connect(self.add_entry)
+        button_layout.addWidget(self.add_button)
+        button_layout.addStretch()
+        add_layout.addLayout(button_layout)
+        left_layout.addWidget(add_group)
+        left_layout.addStretch()
+        right_widget = QWidget()
+        right_layout = QVBoxLayout(right_widget)
+        right_layout.setContentsMargins(5, 5, 5, 5)
+        list_group = QGroupBox(tr('blacklist.current_entries'))
+        list_layout = QVBoxLayout(list_group)
+        self.blacklist_list = QListWidget()
+        self.blacklist_list.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
+        list_layout.addWidget(self.blacklist_list)
+        list_buttons_layout = QHBoxLayout()
+        self.remove_button = QPushButton(tr('blacklist.remove'))
+        self.remove_button.clicked.connect(self.remove_entry)
+        self.remove_button.setEnabled(False)
+        list_buttons_layout.addWidget(self.remove_button)
+        list_buttons_layout.addStretch()
+        list_layout.addLayout(list_buttons_layout)
+        right_layout.addWidget(list_group)
+        splitter.addWidget(left_widget)
+        splitter.addWidget(right_widget)
+        splitter.setSizes([250, 350])
+        main_layout.addWidget(splitter)
+        close_button = QPushButton(tr('common.close'))
+        close_button.clicked.connect(self.accept)
+        button_layout = QHBoxLayout()
+        button_layout.addStretch()
+        button_layout.addWidget(close_button)
+        main_layout.addLayout(button_layout)
+        self.blacklist_list.itemSelectionChanged.connect(self.on_selection_changed)
+        self.apply_theme()
+
+    def apply_theme(self):
+        if hasattr(self.parent(), 'app_state') and self.parent().app_state:
+            app_state = self.parent().app_state
+            bg_color = get_theme_color(app_state.local_config, 'background', '#000000')
+            text_color = get_theme_color(app_state.local_config, 'text', '#ffffff')
+            hover_color = get_theme_color(app_state.local_config, 'button_hover', '#333333')
+            self.setStyleSheet(f'\n                QDialog {{\n                    background-color: {bg_color};\n                    color: {text_color};\n                }}\n                QGroupBox {{\n                    color: {text_color};\n                    border: 2px solid {text_color};\n                    margin-top: 10px;\n                    padding-top: 10px;\n                    background-color: {bg_color};\n                }}\n                QGroupBox::title {{\n                    subcontrol-origin: margin;\n                    left: 10px;\n                    padding: 0 5px 0 5px;\n                    color: {text_color};\n                }}\n                QPushButton {{\n                    background-color: {bg_color};\n                    color: {text_color};\n                    border: 2px solid {text_color};\n                    padding: 5px 15px;\n                    font-size: 12px;\n                }}\n                QPushButton:hover {{\n                    background-color: {hover_color};\n                    color: {text_color};\n                }}\n                QPushButton:disabled {{\n                    background-color: {bg_color};\n                    color: {text_color};\n                    opacity: 0.5;\n                }}\n                QLineEdit, QComboBox, QListWidget {{\n                    background-color: {bg_color};\n                    color: {text_color};\n                    border: 2px solid {text_color};\n                    padding: 3px;\n                }}\n                QListWidget::item:selected {{\n                    background-color: {text_color};\n                    color: {bg_color};\n                }}\n                QLabel {{\n                    color: {text_color};\n                }}\n            ')
+
+    def load_blacklist(self):
+        self.game_combo.clear()
+        game_names = {'deltarune': tr('ui.deltarune'), 'deltarunedemo': tr('ui.deltarunedemo'), 'undertale': tr('ui.undertale'), 'undertaleyellow': tr('ui.undertaleyellow'), 'pizzatower': tr('ui.pizzatower'), 'sugaryspire': tr('ui.sugaryspire'), 'global': tr('blacklist.global')}
+        for game in self.available_games:
+            display_name = game_names.get(game, game)
+            self.game_combo.addItem(display_name, game)
+        current_index = self.game_combo.findData(self.current_game)
+        if current_index >= 0:
+            self.game_combo.setCurrentIndex(current_index)
+        self.update_blacklist_display()
+
+    def update_blacklist_display(self):
+        self.blacklist_list.clear()
+        current_game = self.game_combo.currentData()
+        if not current_game:
+            return
+        entries = self.blacklist_manager.get_blacklist_for_game(current_game)
+        for entry in entries:
+            prefix_type = entry['prefix_type']
+            value = entry['value']
+            prefix_display = self.blacklist_manager.get_prefix_type_display_name(prefix_type)
+            item_text = f'[{prefix_display}] {value}'
+            item = QListWidgetItem(item_text)
+            item.setData(Qt.ItemDataRole.UserRole, entry)
+            self.blacklist_list.addItem(item)
+
+    def on_game_changed(self):
+        self.update_blacklist_display()
+
+    def on_selection_changed(self):
+        has_selection = bool(self.blacklist_list.selectedItems())
+        self.remove_button.setEnabled(has_selection)
+
+    def add_entry(self):
+        prefix_type = self.prefix_combo.currentData()
+        value = self.value_edit.text().strip()
+        if not value:
+            QMessageBox.warning(self, tr('common.warning'), tr('blacklist.empty_value'))
+            return
+        current_game = self.game_combo.currentData()
+        if current_game:
+            self.blacklist_manager.add_blacklist_entry(current_game, prefix_type, value)
+            self.value_edit.clear()
+            self.update_blacklist_display()
+            self.blacklist_changed.emit()
+
+    def remove_entry(self):
+        selected_items = self.blacklist_list.selectedItems()
+        if not selected_items:
+            return
+        current_game = self.game_combo.currentData()
+        if not current_game:
+            return
+        item = selected_items[0]
+        entry = item.data(Qt.ItemDataRole.UserRole)
+        reply = QMessageBox.question(self, tr('blacklist.confirm_remove'), tr('blacklist.confirm_remove_text'), QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        if reply == QMessageBox.StandardButton.Yes:
+            success = self.blacklist_manager.remove_blacklist_entry(current_game, entry['prefix_type'], entry['value'])
+            if success:
+                self.update_blacklist_display()
+                self.blacklist_changed.emit()
+
+    def retranslate_ui(self):
+        self.setWindowTitle(tr('blacklist.title'))
+        if hasattr(self, 'game_combo'):
+            self.load_blacklist()
+        if hasattr(self, 'add_button'):
+            self.add_button.setText(tr('blacklist.add'))
+        if hasattr(self, 'remove_button'):
+            self.remove_button.setText(tr('blacklist.remove'))
+        if hasattr(self, 'value_edit'):
+            self.value_edit.setPlaceholderText(tr('blacklist.value_placeholder'))
+        if hasattr(self, 'prefix_label'):
+            self.prefix_label.setText(tr('blacklist.prefix'))
+        if hasattr(self, 'value_label'):
+            self.value_label.setText(tr('blacklist.value'))
+        if hasattr(self, 'game_label'):
+            self.game_label.setText(tr('blacklist.select_game'))
+        if hasattr(self, 'add_group'):
+            self.add_group.setTitle(tr('blacklist.add_entry'))
+        if hasattr(self, 'list_group'):
+            self.list_group.setTitle(tr('blacklist.current_entries'))
+        prefix_combo_items = [(tr('blacklist.prefix_type_id'), BlacklistManager.PREFIX_TYPE_ID), (tr('blacklist.prefix_type_name'), BlacklistManager.PREFIX_TYPE_NAME), (tr('blacklist.prefix_type_category'), BlacklistManager.PREFIX_TYPE_CATEGORY)]
+        if hasattr(self, 'prefix_combo'):
+            current_data = self.prefix_combo.currentData()
+            self.prefix_combo.clear()
+            for text, data in prefix_combo_items:
+                self.prefix_combo.addItem(text, data)
+            if current_data:
+                index = self.prefix_combo.findData(current_data)
+                if index >= 0:
+                    self.prefix_combo.setCurrentIndex(index)

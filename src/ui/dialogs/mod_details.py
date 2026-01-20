@@ -47,6 +47,8 @@ class LoadModDetailsThread(QThread):
                                 result['text'] = cached_text
                             if cached_screenshots:
                                 external_url = getattr(self.mod_data, 'external_url', None)
+                                from utils.gamebanana_api import GameBananaAPI
+                                api = GameBananaAPI()
                                 cached_screenshots = api.fix_screenshot_urls(cached_screenshots, external_url=external_url)
                                 result['screenshots'] = cached_screenshots
                             if result:
@@ -164,6 +166,11 @@ def open_mod_details_dialog(parent, mod_data):
     downloads_label = QLabel(f"""<span style="color: {text_color};">{tr('ui.downloads_label')}</span> <span style="color: {secondary_text_color};">{mod_data.downloads}</span>""")
     downloads_label.setStyleSheet('font-size: 12px;')
     metadata_layout.addWidget(downloads_label)
+    category = getattr(mod_data, 'gamebanana_category', None) or getattr(mod_data, 'category', None)
+    if category:
+        category_label = QLabel(f"""<span style="color: {text_color};">{tr('ui.category_label')}</span> <span style="color: {secondary_text_color};">{category}</span>""")
+        category_label.setStyleSheet('font-size: 12px;')
+        metadata_layout.addWidget(category_label)
     if hasattr(mod_data, 'tags') and mod_data.tags:
         metadata_layout.addSpacing(8)
         tags_header = QLabel(tr('ui.tags_label'))

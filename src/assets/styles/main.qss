@@ -109,6 +109,15 @@ QPushButton#searchBtn {
     font-weight: bold;
     font-size: 16px;
 }
+QPushButton#blacklistBtn {
+    font-size: 12px;
+    padding: 3px 8px;
+    min-width: 80px;
+}
+QPushButton#blacklistBtn:hover {
+    background-color: %button_hover_color%;
+    color: %main_text_color%;
+}
 QTabBar::tab {
     background-color: %button_color%;
     color: %main_text_color%;

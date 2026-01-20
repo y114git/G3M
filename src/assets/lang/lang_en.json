@@ -6,6 +6,28 @@
     "qt_translation": "qtbase_en",
     "version": "1.0.1"
   },
+  "blacklist": {
+    "title": "Blacklist Manager",
+    "select_game": "Select Game:",
+    "global": "Global",
+    "add_entry": "Add Entry",
+    "current_entries": "Current Entries",
+    "prefix": "Prefix:",
+    "value": "Value:",
+    "value_placeholder": "Enter value to blacklist...",
+    "add": "Add",
+    "remove": "Remove",
+    "prefix_type_id": "ID",
+    "prefix_type_name": "Name",
+    "prefix_type_category": "Category",
+    "empty_value": "Please enter a value",
+    "confirm_remove": "Confirm Remove",
+    "confirm_remove_text": "Are you sure you want to remove this blacklist entry?"
+  },
+  "common": {
+    "close": "Close",
+    "warning": "Warning"
+  },
   "ui": {
     "add_data_file": "Add DATA file",
     "add_data_patch_file": "Add XDELTA file",
@@ -17,6 +39,7 @@
     "border_color": "Border Color:",
     "browse_button": "Browse...",
     "cancel_button": "Cancel",
+    "category_label": "Category:",
     "chapter_1_label": "Chapter 1:",
     "chapter_2_label": "Chapter 2:",
     "chapter_3_label": "Chapter 3:",
@@ -103,7 +126,9 @@
     "mods_per_page_label": "Mods per page:",
     "mods_per_page_tooltip": "Set the number of mods to display per page (5-1000)",
     "auto_sorting": "Auto-sorting",
-    "auto_sorting_tooltip": "Automatically sort mods when new ones are loaded. When disabled, new mods are appended to the end without re-sorting.",
+    "auto_sorting_tooltip": "Automatically sort mods when filters change",
+    "blacklist": "Blacklist",
+    "blacklist_tooltip": "Manage blacklist to hide specific mods",
     "gamebanana_sort_label": "GameBanana Sort:",
     "gamebanana_sort_tooltip": "Select how GameBanana subfeed should be sorted (affects how mods are fetched from GameBanana)",
     "gamebanana_sort_default": "Default",

@@ -2,7 +2,9 @@ from utils.mod_filter_utils import filter_and_sort_mods
 from PyQt6.QtWidgets import QInputDialog, QMessageBox
 from PyQt6.QtCore import QTimer, QObject, pyqtSignal
 from managers.localization_manager import tr
+from managers.blacklist_manager import BlacklistManager
 from ui.dialogs.mod_details import open_mod_details_dialog
+from ui.dialogs.blacklist_dialog import BlacklistDialog
 from ui.widgets.mod.mod_plaque_widget import ModPlaqueWidget
 from workers.load_more_gamebanana_mods import LoadMoreGameBananaModsThread
 from workers.search_gamebanana_mods import SearchGameBananaModsThread
@@ -30,6 +32,7 @@ class SearchDisplayController(QObject):
         self.mod_manager = mod_manager
         self.mod_ops = mod_ops
         self.app = app_window
+        self.blacklist_manager = BlacklistManager()
         self._load_more_threads = []
         self._current_details_thread = None
         self._last_load_attempt = {'items_needed': 0, 'current_total': 0, 'attempts': 0}
@@ -458,6 +461,30 @@ class SearchDisplayController(QObject):
             self._load_more_threads.append(search_thread)
             search_thread.start()
 
+    def show_blacklist_dialog(self):
+        try:
+            selected_game = 'deltarune'
+            if hasattr(self.app, 'modgame_combo'):
+                selected_game = self.app.modgame_combo.currentData() or 'deltarune'
+            all_games = ['deltarune', 'deltarunedemo', 'undertale', 'undertaleyellow', 'pizzatower', 'sugaryspire']
+            all_games.append('global')
+            existing_games = self.blacklist_manager.get_all_games()
+            for game in existing_games:
+                if game not in all_games:
+                    all_games.append(game)
+            dialog = BlacklistDialog(self.blacklist_manager, selected_game, all_games, self.app)
+            dialog.blacklist_changed.connect(self.on_blacklist_changed)
+            dialog.exec()
+        except Exception as e:
+            logger.error(f'SearchDisplayController: Error in show_blacklist_dialog: {e}', exc_info=True)
+
+    def on_blacklist_changed(self):
+        try:
+            self.update_filtered_mods(preserve_page=False)
+            self.update_display()
+        except Exception as e:
+            logger.error(f'SearchDisplayController: Error in on_blacklist_changed: {e}', exc_info=True)
+
     def show_search_dialog(self):
         if self.app_state.search_text:
             for timer in self._active_search_timers[:]:
@@ -532,7 +559,7 @@ class SearchDisplayController(QObject):
 
                 def async_filter():
                     try:
-                        filtered_result = filter_and_sort_mods(self.app_state.all_mods, filters, sort_config)
+                        filtered_result = filter_and_sort_mods(self.app_state.all_mods, filters, sort_config, blacklist_manager=self.blacklist_manager)
                         self.app_state.filtered_mods = filtered_result
                         if not preserve_page:
                             self.app_state.current_page = 1
@@ -572,10 +599,10 @@ class SearchDisplayController(QObject):
                             continue
                     new_mods_to_filter.append(mod)
                 if new_mods_to_filter:
-                    new_filtered = filter_and_sort_mods(new_mods_to_filter, filters, sort_config=None)
+                    new_filtered = filter_and_sort_mods(new_mods_to_filter, filters, sort_config=None, blacklist_manager=self.blacklist_manager)
                     self.app_state.filtered_mods = (self.app_state.filtered_mods or []) + new_filtered
             else:
-                self.app_state.filtered_mods = filter_and_sort_mods(self.app_state.all_mods, filters, sort_config)
+                self.app_state.filtered_mods = filter_and_sort_mods(self.app_state.all_mods, filters, sort_config, blacklist_manager=self.blacklist_manager)
             if not preserve_page:
                 self.app_state.current_page = 1
             else:

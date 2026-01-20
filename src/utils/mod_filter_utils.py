@@ -1,5 +1,6 @@
 from typing import List, Dict, Any, Optional, Callable
 from managers.mod_manager import parse_mod_date
+from managers.blacklist_manager import BlacklistManager
 from utils.gamebanana_api import GameBananaAPI
 
 
@@ -14,7 +15,7 @@ def _get_mod_bool_attr(mod: Any, attr: str, default: bool = False) -> bool:
     return value in [True, 'true', 'True', 1] if value else False
 
 
-def filter_and_sort_mods(mods_list: List[Any], filters: Dict[str, Any], sort_config: Optional[Dict[str, Any]] = None, mod_accessor: Optional[Callable] = None) -> List[Any]:
+def filter_and_sort_mods(mods_list: List[Any], filters: Dict[str, Any], sort_config: Optional[Dict[str, Any]] = None, mod_accessor: Optional[Callable] = None, blacklist_manager: Optional[BlacklistManager] = None) -> List[Any]:
     if not mods_list:
         return []
     selected_tags = filters.get('tags', [])
@@ -45,6 +46,9 @@ def filter_and_sort_mods(mods_list: List[Any], filters: Dict[str, Any], sort_con
         mod_status = _get_mod_attr(mod, 'status', 'approved')
         if mod_status not in status_filter:
             continue
+        if blacklist_manager and selected_game:
+            if blacklist_manager.is_mod_blacklisted(mod, selected_game):
+                continue
         if selected_tags:
             mod_tags = _get_mod_attr(mod, 'tags', []) or []
             if not isinstance(mod_tags, list):

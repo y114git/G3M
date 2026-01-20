@@ -546,9 +546,11 @@ class AppWindow(QWidget):
         self.gb_sort_combo = search_widgets['gb_sort_combo']
         self.gb_sort_label = search_widgets['gb_sort_label']
         self.auto_sorting_checkbox = search_widgets['auto_sorting_checkbox']
+        self.blacklist_button = search_widgets['blacklist_button']
         self.mods_per_page_spinbox.setValue(self.app_state.mods_per_page)
         self.mods_per_page_spinbox.valueChanged.connect(self._on_mods_per_page_changed)
         self.auto_sorting_checkbox.stateChanged.connect(self._on_auto_sorting_changed)
+        self.blacklist_button.clicked.connect(self.search_display.show_blacklist_dialog)
         self.app_state.auto_sorting = self.app_state.local_config.get('auto_sorting', False)
         self.auto_sorting_checkbox.setChecked(self.app_state.auto_sorting)
         self.gb_sort_combo.setCurrentIndex(0)
@@ -1486,6 +1488,10 @@ class AppWindow(QWidget):
         if hasattr(self, 'auto_sorting_checkbox') and self.auto_sorting_checkbox:
             self.auto_sorting_checkbox.setText(tr('ui.auto_sorting'))
             self.auto_sorting_checkbox.setToolTip(tr('ui.auto_sorting_tooltip'))
+        if hasattr(self, 'blacklist_button') and self.blacklist_button:
+            self.blacklist_button.setText(tr('ui.blacklist'))
+            self.blacklist_button.setToolTip(tr('ui.blacklist_tooltip'))
+            self.blacklist_button.setStyleSheet('font-size: 11px; padding: 0px 4px; border: 2px solid white;')
         self.chapter_mode_checkbox.setText(tr('ui.chapter_mode'))
         self.full_install_checkbox.setText(tr('ui.full_install'))
         self.full_install_checkbox.setToolTip(self._full_install_tooltip())
@@ -1618,6 +1624,7 @@ class AppWindow(QWidget):
                 pass
             from ui.common.styling import get_theme_color
             text_color = get_theme_color(self.app_state.local_config, 'text', 'white')
+            bg_color = get_theme_color(self.app_state.local_config, 'background', '#000000')
             if hasattr(self, 'plugin_tab_builder'):
                 plugin_lbl = self.plugin_tab_builder.widgets.get('installed_plugins_label')
                 if plugin_lbl:
@@ -1639,6 +1646,9 @@ class AppWindow(QWidget):
                 for cb in search_checkboxes:
                     if cb:
                         cb.setStyleSheet(checkbox_style)
+            if hasattr(self, 'blacklist_button') and self.blacklist_button:
+                button_style = f'\n                    QPushButton {{\n                        background-color: {bg_color};\n                        color: {text_color};\n                        border: 2px solid white;\n                        padding: 0px 4px;\n                        font-size: 11px;\n                    }}\n                    QPushButton:hover {{\n                        background-color: white;\n                        color: {bg_color};\n                    }}\n                '
+                self.blacklist_button.setStyleSheet(button_style)
             self.search_display.update_filtered_mods()
             self.search_display.update_all_plaques_labels()
             self.library_display.update_display()

@@ -6,6 +6,28 @@
     "qt_translation": "qtbase_zh_tw",
     "version": "1.0.1"
   },
+  "blacklist": {
+    "title": "黑名單管理器",
+    "select_game": "選擇遊戲：",
+    "global": "全域",
+    "add_entry": "新增條目",
+    "current_entries": "目前條目",
+    "prefix": "前綴：",
+    "value": "值：",
+    "value_placeholder": "輸入要加入黑名單的值...",
+    "add": "新增",
+    "remove": "刪除",
+    "prefix_type_id": "ID",
+    "prefix_type_name": "名稱",
+    "prefix_type_category": "類別",
+    "empty_value": "請輸入一個值",
+    "confirm_remove": "確認刪除",
+    "confirm_remove_text": "您確定要刪除這個黑名單條目嗎？"
+  },
+  "common": {
+    "close": "關閉",
+    "warning": "警告"
+  },
   "ui": {
     "add_data_file": "添加DATA檔案",
     "add_data_patch_file": "添加XDELTA檔案",
@@ -17,6 +39,7 @@
     "border_color": "邊框顏色：",
     "browse_button": "瀏覽...",
     "cancel_button": "取消",
+    "category_label": "類別：",
     "chapter_1_label": "第1章：",
     "chapter_2_label": "第2章：",
     "chapter_3_label": "第3章：",
@@ -103,7 +126,9 @@
     "mods_per_page_label": "每頁模組數：",
     "mods_per_page_tooltip": "設定每頁顯示的模組數量（5-1000）",
     "auto_sorting": "自動排序",
-    "auto_sorting_tooltip": "載入新模組時自動排序。停用時，新模組將新增至末尾而不重新排序。",
+    "auto_sorting_tooltip": "篩選器更改時自動排序模組",
+    "blacklist": "黑名單",
+    "blacklist_tooltip": "管理黑名單以隱藏特定模組",
     "gamebanana_sort_label": "GameBanana排序：",
     "gamebanana_sort_tooltip": "選擇GameBanana訂閱源的排序方式（影響從GameBanana如何獲取模組）",
     "gamebanana_sort_default": "預設",

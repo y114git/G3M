@@ -1,0 +1,106 @@
+import json
+import logging
+from typing import Dict, List, Optional
+from pathlib import Path
+from managers.localization_manager import tr
+from utils.path_utils import get_user_data_root
+logger = logging.getLogger(__name__)
+
+
+class BlacklistManager:
+    PREFIX_TYPE_ID = 'id'
+    PREFIX_TYPE_NAME = 'name'
+    PREFIX_TYPE_CATEGORY = 'category'
+
+    def __init__(self, config_path: Optional[Path] = None):
+        if config_path:
+            self.config_path = config_path
+        else:
+            user_root = get_user_data_root()
+            settings_dir = Path(user_root) / 'settings'
+            settings_dir.mkdir(parents=True, exist_ok=True)
+            self.config_path = settings_dir / 'blacklist.json'
+        self._blacklist_data: Dict[str, List[Dict[str, str]]] = {}
+        self._load_blacklist()
+
+    def _load_blacklist(self):
+        try:
+            if self.config_path.exists():
+                with open(self.config_path, 'r', encoding='utf-8') as f:
+                    self._blacklist_data = json.load(f)
+            else:
+                self._blacklist_data = {'global': []}
+        except Exception as e:
+            logger.error(f'BlacklistManager: Error loading blacklist: {e}', exc_info=True)
+            self._blacklist_data = {'global': []}
+
+    def _save_blacklist(self):
+        try:
+            with open(self.config_path, 'w', encoding='utf-8') as f:
+                json.dump(self._blacklist_data, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            logger.error(f'BlacklistManager: Error saving blacklist: {e}', exc_info=True)
+
+    def get_blacklist_for_game(self, game: str) -> List[Dict[str, str]]:
+        return self._blacklist_data.get(game, []) + self._blacklist_data.get('global', [])
+
+    def add_blacklist_entry(self, game: str, prefix_type: str, value: str):
+        if game not in self._blacklist_data:
+            self._blacklist_data[game] = []
+        entry = {'prefix_type': prefix_type, 'value': value}
+        for existing_entry in self._blacklist_data[game]:
+            if existing_entry['prefix_type'] == prefix_type and existing_entry['value'] == value:
+                return
+        self._blacklist_data[game].append(entry)
+        self._save_blacklist()
+
+    def remove_blacklist_entry(self, game: str, prefix_type: str, value: str) -> bool:
+        try:
+            if game not in self._blacklist_data:
+                return False
+            original_length = len(self._blacklist_data[game])
+            self._blacklist_data[game] = [entry for entry in self._blacklist_data[game] if not (entry['prefix_type'] == prefix_type and entry['value'] == value)]
+            if len(self._blacklist_data[game]) == 0 and game != 'global':
+                del self._blacklist_data[game]
+            if len(self._blacklist_data.get(game, [])) != original_length:
+                self._save_blacklist()
+                return True
+            return False
+        except KeyError as e:
+            logger.error(f'BlacklistManager: KeyError in remove_blacklist_entry: {e}', exc_info=True)
+            return False
+
+    def get_all_games(self) -> List[str]:
+        games = list(self._blacklist_data.keys())
+        if 'global' in games:
+            games.remove('global')
+            games.append('global')
+        return games
+
+    def is_mod_blacklisted(self, mod, game: str) -> bool:
+        blacklist_entries = self.get_blacklist_for_game(game)
+        for entry in blacklist_entries:
+            prefix_type = entry['prefix_type']
+            value = entry['value'].lower()
+            if prefix_type == self.PREFIX_TYPE_ID:
+                mod_id = getattr(mod, 'id', None) or getattr(mod, '_id', None)
+                key = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
+                if mod_id and str(mod_id).lower() == value:
+                    return True
+                if key and key.startswith('gb_'):
+                    key_id = key.replace('gb_', '', 1)
+                    if key_id and key_id.lower() == value:
+                        return True
+            elif prefix_type == self.PREFIX_TYPE_NAME:
+                mod_name = getattr(mod, 'name', None) or getattr(mod, 'title', None)
+                if mod_name and value in mod_name.lower():
+                    return True
+            elif prefix_type == self.PREFIX_TYPE_CATEGORY:
+                mod_category = getattr(mod, 'category', None) or getattr(mod, 'cat_name', None) or getattr(mod, 'gamebanana_category', None)
+                if mod_category and mod_category.lower() == value:
+                    return True
+        return False
+
+    def get_prefix_type_display_name(self, prefix_type: str) -> str:
+        display_names = {self.PREFIX_TYPE_ID: tr('blacklist.prefix_type_id'), self.PREFIX_TYPE_NAME: tr('blacklist.prefix_type_name'), self.PREFIX_TYPE_CATEGORY: tr('blacklist.prefix_type_category')}
+        return display_names.get(prefix_type, prefix_type)
