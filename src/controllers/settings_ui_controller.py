@@ -1,7 +1,8 @@
+from PyQt6.QtCore import QTimer
 from PyQt6.QtWidgets import QWidget
 from managers.localization_manager import tr
 from config.constants import UI_COLORS, SLOT_ID_UNIVERSAL
-from models.game_modes import DemoGameMode, UndertaleGameMode, UndertaleYellowGameMode, FullGameMode, PizzaTowerGameMode
+from models.game_modes import DemoGameMode, UndertaleGameMode, UndertaleYellowGameMode, FullGameMode, PizzaTowerGameMode, SugarySpireGameMode
 
 
 class SettingsUiController:
@@ -29,7 +30,6 @@ class SettingsUiController:
             self.app.settings_widget.setVisible(True)
             self.switch_settings_page(self.app.settings_menu_page)
             self.update_settings_page_visibility()
-            from PyQt6.QtCore import QTimer
             QTimer.singleShot(0, lambda: self.customization_manager.load_custom_style_settings(self.app.color_widgets, self.app.theme.apply_theme))
             self.app._update_status(tr('status.launcher_settings'), UI_COLORS['status_info'])
         else:
@@ -38,7 +38,6 @@ class SettingsUiController:
             self.app.settings_widget.setVisible(False)
             self.app.main_tab_widget.setVisible(True)
             self.app.bottom_widget.setVisible(True)
-            from PyQt6.QtCore import QTimer
 
             def apply_theme_and_enable_updates():
                 self.app.theme.apply_theme()
@@ -103,7 +102,6 @@ class SettingsUiController:
         elif game_type == 'pizzatower':
             self.app_state.game_mode = PizzaTowerGameMode()
         elif game_type == 'sugaryspire':
-            from models.game_modes import SugarySpireGameMode
             self.app_state.game_mode = SugarySpireGameMode()
         else:
             self.app_state.game_mode = FullGameMode()
@@ -136,14 +134,12 @@ class SettingsUiController:
         self.app.game_launch.update_button_state()
         if hasattr(self.app, 'chapter_tabs_widget'):
             self.app.chapter_tabs_widget.setVisible(is_chapter)
+        self.app_state.selected_chapter_id = None
         if is_chapter:
-            self.app_state.selected_chapter_id = None
             if hasattr(self.app, '_show_chapter_mode_instruction'):
                 self.app._show_chapter_mode_instruction()
-        else:
-            self.app_state.selected_chapter_id = None
-            if hasattr(self.app, 'library_display'):
-                self.app.library_display.update_display()
+        elif hasattr(self.app, 'library_display'):
+            self.app.library_display.update_display()
         self.app._update_change_path_button_text()
         self.app_state.local_config['chapter_mode_enabled'] = is_chapter
         self.settings_manager.write_local_config()

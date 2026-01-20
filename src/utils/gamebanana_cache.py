@@ -50,6 +50,21 @@ class GameBananaMetadataCache:
         with self._lock:
             return self._cache.get(mod_id)
 
+    def _get_valid_entry(self, mod_id: str) -> Optional[Dict]:
+        with self._lock:
+            entry = self._cache.get(mod_id)
+            if entry and self.is_valid(mod_id):
+                return entry
+            return None
+
+    def _collect_stale_ids(self, current_time: float) -> list[str]:
+        stale_ids = []
+        for mod_id, entry in self._cache.items():
+            timestamp = entry.get('timestamp', 0)
+            if current_time - timestamp > CACHE_TTL:
+                stale_ids.append(mod_id)
+        return stale_ids
+
     def is_valid(self, mod_id: str) -> bool:
         with self._lock:
             if mod_id not in self._cache:
@@ -84,39 +99,24 @@ class GameBananaMetadataCache:
             logger.debug(f'GameBananaMetadataCache: Cached metadata for mod {mod_id}: downloads={downloads}, tagline_length={(len(tagline) if tagline else 0)}, has_desc={bool(full_description)}, screenshots_count={(len(screenshots) if screenshots else 0)}, category={category}')
 
     def get_downloads(self, mod_id: str) -> Optional[int]:
-        with self._lock:
-            entry = self.get(mod_id)
-            if entry and self.is_valid(mod_id):
-                return entry.get('downloads')
-            return None
+        entry = self._get_valid_entry(mod_id)
+        return entry.get('downloads') if entry else None
 
     def get_tagline(self, mod_id: str) -> Optional[str]:
-        with self._lock:
-            entry = self.get(mod_id)
-            if entry and self.is_valid(mod_id):
-                return entry.get('tagline')
-            return None
+        entry = self._get_valid_entry(mod_id)
+        return entry.get('tagline') if entry else None
 
     def get_full_description(self, mod_id: str) -> Optional[str]:
-        with self._lock:
-            entry = self.get(mod_id)
-            if entry and self.is_valid(mod_id):
-                return entry.get('full_description')
-            return None
+        entry = self._get_valid_entry(mod_id)
+        return entry.get('full_description') if entry else None
 
     def get_screenshots(self, mod_id: str) -> Optional[list]:
-        with self._lock:
-            entry = self.get(mod_id)
-            if entry and self.is_valid(mod_id):
-                return entry.get('screenshots')
-            return None
+        entry = self._get_valid_entry(mod_id)
+        return entry.get('screenshots') if entry else None
 
     def get_category(self, mod_id: str) -> Optional[str]:
-        with self._lock:
-            entry = self.get(mod_id)
-            if entry and self.is_valid(mod_id):
-                return entry.get('category')
-            return None
+        entry = self._get_valid_entry(mod_id)
+        return entry.get('category') if entry else None
 
     def clear(self):
         with self._lock:
@@ -127,11 +127,7 @@ class GameBananaMetadataCache:
     def clear_stale(self):
         with self._lock:
             current_time = time.time()
-            stale_ids = []
-            for mod_id, entry in self._cache.items():
-                timestamp = entry.get('timestamp', 0)
-                if current_time - timestamp > CACHE_TTL:
-                    stale_ids.append(mod_id)
+            stale_ids = self._collect_stale_ids(current_time)
             for mod_id in stale_ids:
                 del self._cache[mod_id]
             if stale_ids:
@@ -142,12 +138,7 @@ class GameBananaMetadataCache:
     def get_stale_mod_ids(self) -> list:
         with self._lock:
             current_time = time.time()
-            stale_ids = []
-            for mod_id, entry in self._cache.items():
-                timestamp = entry.get('timestamp', 0)
-                if current_time - timestamp > CACHE_TTL:
-                    stale_ids.append(mod_id)
-            return stale_ids
+            return self._collect_stale_ids(current_time)
 
     def size(self) -> int:
         with self._lock:

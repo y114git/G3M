@@ -111,12 +111,13 @@ class SettingsViewBuilder:
         checkboxes_layout.addWidget(left_column_widget)
         checkboxes_layout.addWidget(right_column_widget)
         settings_center_container.addWidget(checkboxes_container, alignment=Qt.AlignmentFlag.AlignHCenter)
+        is_linux = platform.system() == 'Linux'
         use_portproton_checkbox = QCheckBox(tr('ui.use_portproton'))
         use_portproton_checkbox.setToolTip("<html><body style='white-space: normal;'>" + tr('tooltips.portproton') + '</body></html>')
-        use_portproton_checkbox.setVisible(platform.system() == 'Linux')
+        use_portproton_checkbox.setVisible(is_linux)
         settings_center_container.addWidget(use_portproton_checkbox, alignment=Qt.AlignmentFlag.AlignHCenter)
         select_portproton_path_button = QPushButton(tr('buttons.select_portproton_path'))
-        select_portproton_path_button.setVisible(platform.system() == 'Linux')
+        select_portproton_path_button.setVisible(is_linux)
         select_portproton_path_button.setFixedWidth(153)
         portproton_path_label = QLabel(tr('ui.file_not_selected'))
         portproton_path_label.setFixedHeight(20)
@@ -126,9 +127,6 @@ class SettingsViewBuilder:
         portproton_layout.addWidget(select_portproton_path_button, alignment=Qt.AlignmentFlag.AlignHCenter)
         portproton_layout.addWidget(portproton_path_label, alignment=Qt.AlignmentFlag.AlignHCenter)
         portproton_frame.setVisible(False)
-        if platform.system() != 'Linux':
-            portproton_frame.setVisible(False)
-            use_portproton_checkbox.setVisible(False)
         settings_center_container.addWidget(portproton_frame, alignment=Qt.AlignmentFlag.AlignHCenter)
         open_deltahub_folder_button = QPushButton(tr('buttons.open_deltahub_folder'))
         open_deltahub_folder_button.setFixedWidth(300)
@@ -270,7 +268,6 @@ class SettingsViewBuilder:
             if doc is not None:
                 doc.setDefaultFont(current_font)
                 doc.setDefaultStyleSheet('p { margin-bottom: 0.75em; } ul, ol { margin-left: 1em; } li { margin-bottom: 0.25em; }')
-        changelog_text_edit.setOpenExternalLinks(True)
         changelog_text_edit.setMarkdown(f"<i>{tr('status.loading')}</i>")
         changelog_layout.addWidget(changelog_text_edit)
         changelog_button = QPushButton(tr('buttons.changelog'))

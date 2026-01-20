@@ -1,5 +1,4 @@
 from __future__ import annotations
-import logging
 from PyQt6.QtCore import QRunnable
 from PyQt6.QtGui import QImage
 from workers import WorkerSignals
@@ -17,7 +16,7 @@ class ImageLoaderRunnable(QRunnable):
     def _emit_error(self, message: str) -> None:
         try:
             self.signals.error.emit(self.url, message)
-        except Exception as e:
+        except Exception:
             pass
 
     def run(self) -> None:
@@ -41,7 +40,7 @@ class ImageLoaderRunnable(QRunnable):
                 try:
                     self.signals.result.emit(cached)
                     return
-                except Exception as e:
+                except Exception:
                     pass
             if _NET_SEM:
                 _NET_SEM.acquire()
@@ -52,7 +51,7 @@ class ImageLoaderRunnable(QRunnable):
                 try:
                     if _NET_SEM:
                         _NET_SEM.release()
-                except Exception as e:
+                except Exception:
                     pass
             resp.raise_for_status()
             try:
@@ -76,7 +75,7 @@ class ImageLoaderRunnable(QRunnable):
             add_to_cache(self.url, img)
             try:
                 self.signals.result.emit(img)
-            except Exception as e:
+            except Exception:
                 pass
         except requests.RequestException as e:
             exception_type = type(e).__name__

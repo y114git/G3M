@@ -17,10 +17,9 @@ def hash_secret_key(secret_key: str) -> str:
 
 
 def possible_secret_hashes(secret_key: str) -> list[str]:
-    hashes = []
     salted_key = (secret_key + INTERNAL_SALT).encode('utf-8')
     current = hashlib.sha256(salted_key).hexdigest()
-    hashes.append(current)
+    hashes = [current]
     legacy_salt = 'deltahub_launcher_internal_secret'
     if INTERNAL_SALT != legacy_salt:
         legacy_salted_key = (secret_key + legacy_salt).encode('utf-8')

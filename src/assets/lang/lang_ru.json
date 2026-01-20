@@ -6,15 +6,15 @@
     "qt_translation": "qtbase_ru",
     "version": "1.0.1"
   },
-  "blacklist": {
-    "title": "Менеджер черного списка",
+  "blocklist": {
+    "title": "Менеджер блоклиста",
     "select_game": "Выберите игру:",
     "global": "Общее",
     "add_entry": "Добавить запись",
     "current_entries": "Текущие записи",
     "prefix": "Префикс:",
     "value": "Значение:",
-    "value_placeholder": "Введите значение для черного списка...",
+    "value_placeholder": "Введите значение для блоклиста...",
     "add": "Добавить",
     "remove": "Удалить",
     "prefix_type_id": "ID",
@@ -22,7 +22,7 @@
     "prefix_type_category": "Категория",
     "empty_value": "Пожалуйста, введите значение",
     "confirm_remove": "Подтвердить удаление",
-    "confirm_remove_text": "Вы уверены, что хотите удалить эту запись из черного списка?"
+    "confirm_remove_text": "Вы уверены, что хотите удалить эту запись из блоклиста?"
   },
   "common": {
     "close": "Закрыть",
@@ -127,8 +127,8 @@
     "mods_per_page_tooltip": "Установите количество модов для отображения на странице (5-1000)",
     "auto_sorting": "Автосортировка",
     "auto_sorting_tooltip": "Автоматически сортировать моды при изменении фильтров",
-    "blacklist": "Черный список",
-    "blacklist_tooltip": "Управление черным списком для скрытия определенных модов",
+    "blocklist": "Блоклист",
+    "blocklist_tooltip": "Управление блоклистом для скрытия определенных модов",
     "gamebanana_sort_label": "Сорт. GameBanana:",
     "gamebanana_sort_tooltip": "Выберите, как должна сортироваться лента GameBanana (влияет на то, как моды загружаются с GameBanana)",
     "gamebanana_sort_default": "По умолчанию",

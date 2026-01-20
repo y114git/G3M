@@ -214,6 +214,29 @@ class ModInstallWorker(BaseInstallWorker):
             logging.error(f'ModInstallWorker: Error installing mod from path: {e}', exc_info=True)
             return False
 
+    def _extract_and_install_archive(self, archive_path: str) -> None:
+        self.status.emit(tr('mods.extracting_mod'), UI_COLORS['status_warning'])
+        with tempfile.TemporaryDirectory(prefix='dh-mod-extract-') as extract_dir:
+            try:
+                from utils.archive_utils import extract_with_unrar_retry
+                extract_with_unrar_retry(archive_path, extract_dir, self, extract_archive)
+            except Exception as e:
+                self.finished.emit(False, tr('mods.extract_error', error=str(e)))
+                return
+            if self._cancelled:
+                self.finished.emit(False, tr('status.operation_cancelled'))
+                return
+            content_path = extract_dir
+            contents = os.listdir(extract_dir)
+            if len(contents) == 1 and os.path.isdir(os.path.join(extract_dir, contents[0])):
+                content_path = os.path.join(extract_dir, contents[0])
+            self.status.emit(tr('mods.installing_mod'), UI_COLORS['status_warning'])
+            if self._install_mod_from_path(content_path):
+                self.status.emit(tr('mods.mod_installed'), 'success')
+                self.finished.emit(True, tr('mods.mod_installed_success'))
+            else:
+                self.finished.emit(False, tr('mods.installation_failed'))
+
     def run(self):
         try:
             archive_is_url = self.archive_path.startswith('http://') or self.archive_path.startswith('https://')
@@ -234,52 +257,12 @@ class ModInstallWorker(BaseInstallWorker):
                     if self._cancelled:
                         self.finished.emit(False, tr('status.operation_cancelled'))
                         return
-                    self.status.emit(tr('mods.extracting_mod'), UI_COLORS['status_warning'])
-                    with tempfile.TemporaryDirectory(prefix='dh-mod-extract-') as extract_dir:
-                        try:
-                            from utils.archive_utils import extract_with_unrar_retry
-                            extract_with_unrar_retry(temp_archive_path, extract_dir, self, extract_archive)
-                        except Exception as e:
-                            self.finished.emit(False, tr('mods.extract_error', error=str(e)))
-                            return
-                        if self._cancelled:
-                            self.finished.emit(False, tr('status.operation_cancelled'))
-                            return
-                        content_path = extract_dir
-                        contents = os.listdir(extract_dir)
-                        if len(contents) == 1 and os.path.isdir(os.path.join(extract_dir, contents[0])):
-                            content_path = os.path.join(extract_dir, contents[0])
-                        self.status.emit(tr('mods.installing_mod'), UI_COLORS['status_warning'])
-                        if self._install_mod_from_path(content_path):
-                            self.status.emit(tr('mods.mod_installed'), 'success')
-                            self.finished.emit(True, tr('mods.mod_installed_success'))
-                        else:
-                            self.finished.emit(False, tr('mods.installation_failed'))
+                    self._extract_and_install_archive(temp_archive_path)
             else:
                 if not os.path.exists(self.archive_path):
                     self.finished.emit(False, tr('mods.archive_not_found'))
                     return
-                self.status.emit(tr('mods.extracting_mod'), UI_COLORS['status_warning'])
-                with tempfile.TemporaryDirectory(prefix='dh-mod-extract-') as extract_dir:
-                    try:
-                        from utils.archive_utils import extract_with_unrar_retry
-                        extract_with_unrar_retry(self.archive_path, extract_dir, self, extract_archive)
-                    except Exception as e:
-                        self.finished.emit(False, tr('mods.extract_error', error=str(e)))
-                        return
-                    if self._cancelled:
-                        self.finished.emit(False, tr('status.operation_cancelled'))
-                        return
-                    content_path = extract_dir
-                    contents = os.listdir(extract_dir)
-                    if len(contents) == 1 and os.path.isdir(os.path.join(extract_dir, contents[0])):
-                        content_path = os.path.join(extract_dir, contents[0])
-                    self.status.emit(tr('mods.installing_mod'), UI_COLORS['status_warning'])
-                    if self._install_mod_from_path(content_path):
-                        self.status.emit(tr('mods.mod_installed'), 'success')
-                        self.finished.emit(True, tr('mods.mod_installed_success'))
-                    else:
-                        self.finished.emit(False, tr('mods.installation_failed'))
+                self._extract_and_install_archive(self.archive_path)
         except Exception as e:
             logging.error(f'ModInstallWorker: Installation failed: {e}', exc_info=True)
             self.finished.emit(False, tr('mods.installation_error', error=str(e)))

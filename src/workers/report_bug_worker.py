@@ -30,25 +30,7 @@ class ReportBugWorker(QObject):
 
     def _get_system_info(self) -> str:
         try:
-            info_lines = []
-            info_lines.append('=' * 60)
-            info_lines.append('SYSTEM INFORMATION')
-            info_lines.append('=' * 60)
-            info_lines.append(f"Report Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-            info_lines.append('')
-            info_lines.append(f'Operating System: {platform.system()}')
-            info_lines.append(f'OS Version: {platform.platform()}')
-            info_lines.append(f'Architecture: {platform.architecture()[0]}')
-            info_lines.append(f'Processor: {platform.machine()}')
-            info_lines.append('')
-            info_lines.append(f'Python Version: {sys.version.split()[0]}')
-            info_lines.append(f'PyQt6 Version: {PYQT_VERSION_STR}')
-            info_lines.append(f'DELTAHUB Version: {LAUNCHER_VERSION}')
-            info_lines.append('')
-            info_lines.append('=' * 60)
-            info_lines.append('USER REPORT')
-            info_lines.append('=' * 60)
-            info_lines.append('')
+            info_lines = ['=' * 60, 'SYSTEM INFORMATION', '=' * 60, f"Report Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", '', f'Operating System: {platform.system()}', f'OS Version: {platform.platform()}', f'Architecture: {platform.architecture()[0]}', f'Processor: {platform.machine()}', '', f'Python Version: {sys.version.split()[0]}', f'PyQt6 Version: {PYQT_VERSION_STR}', f'DELTAHUB Version: {LAUNCHER_VERSION}', '', '=' * 60, 'USER REPORT', '=' * 60, '']
             return '\n'.join(info_lines)
         except Exception as e:
             logging.warning(f'ReportBugWorker: Failed to collect system info: {e}')
@@ -66,6 +48,7 @@ class ReportBugWorker(QObject):
                 f.write(self.report_text)
             logging.info('ReportBugWorker: Created REPORT.txt with system information')
             self.progress.emit(20)
+            total_attachments = len(self.attached_files)
             for i, file_path in enumerate(self.attached_files):
                 if not os.path.exists(file_path):
                     logging.warning(f'ReportBugWorker: File not found: {file_path}')
@@ -73,16 +56,13 @@ class ReportBugWorker(QObject):
                 dest_path = os.path.join(self.temp_dir, os.path.basename(file_path))
                 shutil.copy2(file_path, dest_path)
                 logging.info(f'ReportBugWorker: Copied file: {os.path.basename(file_path)}')
-                self.progress.emit(20 + int((i + 1) / len(self.attached_files) * 20) if self.attached_files else 40)
+                self.progress.emit(20 + int((i + 1) / total_attachments * 20) if total_attachments else 40)
             self.progress.emit(40)
             if self.attach_logs:
                 user_data_root = get_user_data_root()
                 log_files = []
                 if os.path.exists(user_data_root):
-                    for root, dirs, files in os.walk(user_data_root):
-                        for file in files:
-                            if file.endswith('.log'):
-                                log_files.append(os.path.join(root, file))
+                    log_files = [os.path.join(root, file) for root, _, files in os.walk(user_data_root) for file in files if file.endswith('.log')]
                 logging.info(f'ReportBugWorker: Found {len(log_files)} log files')
                 for i, log_path in enumerate(log_files):
                     try:

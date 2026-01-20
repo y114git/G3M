@@ -101,15 +101,7 @@ class PrepareGameBananaManualInstallWorker(BaseInstallWorker):
         self._cancelled = True
         self.status.emit(tr('status.operation_cancelled'), UI_COLORS['status_error'])
         try:
-            if self._session is not None:
-                try:
-                    self._session.close()
-                except Exception as e:
-                    logger.warning(f'PrepareGameBananaManualInstallWorker.cancel: session close error: {e}', exc_info=True)
-            if self._active_response is not None:
-                try:
-                    self._active_response.close()
-                except Exception as e:
-                    logger.warning(f'PrepareGameBananaManualInstallWorker.cancel: response close error: {e}', exc_info=True)
+            self._safe_close(self._session, 'session')
+            self._safe_close(self._active_response, 'response')
         except Exception as e:
             logger.warning(f'PrepareGameBananaManualInstallWorker.cancel: cleanup failed: {e}', exc_info=True)

@@ -10,6 +10,7 @@ from managers.localization_manager import tr
 from models.mod_models import ModChapterData, ModExtraFile, ModInfo
 from utils.file_utils import version_sort_key
 logger = logging.getLogger(__name__)
+_GAME_MAPPING = {'deltarune': 'deltarune', 'deltarunedemo': 'deltarune', 'undertale': 'undertale', 'undertaleyellow': 'undertaleyellow', 'pizzatower': 'pizzatower', 'sugaryspire': 'sugaryspire'}
 
 
 class FetchModsThread(QThread):
@@ -80,8 +81,7 @@ class FetchModsThread(QThread):
                         selected_game = 'deltarune'
                         if self.app_state and hasattr(self.app_state, 'local_config'):
                             selected_game = self.app_state.local_config.get('selected_search_game', 'deltarune')
-                        game_mapping = {'deltarune': 'deltarune', 'deltarunedemo': 'deltarune', 'undertale': 'undertale', 'undertaleyellow': 'undertaleyellow', 'pizzatower': 'pizzatower', 'sugaryspire': 'sugaryspire'}
-                        gamebanana_game = game_mapping.get(selected_game, 'deltarune')
+                        gamebanana_game = _GAME_MAPPING.get(selected_game, 'deltarune')
                         if gamebanana_game not in GAMEBANANA_GAME_IDS:
                             logger.warning(f'GameBananaFetcher: Unknown game {gamebanana_game}, defaulting to deltarune')
                             gamebanana_game = 'deltarune'
@@ -142,8 +142,7 @@ class FetchModsThread(QThread):
                     app_state = getattr(self.main_window, 'app_state', None)
                     if app_state:
                         selected_game = app_state.local_config.get('selected_search_game', 'deltarune') if hasattr(app_state, 'local_config') else 'deltarune'
-                        game_mapping = {'deltarune': 'deltarune', 'deltarunedemo': 'deltarune', 'undertale': 'undertale', 'undertaleyellow': 'undertaleyellow', 'pizzatower': 'pizzatower', 'sugaryspire': 'sugaryspire'}
-                        gamebanana_game = game_mapping.get(selected_game, 'deltarune')
+                        gamebanana_game = _GAME_MAPPING.get(selected_game, 'deltarune')
                         if gamebanana_game in GAMEBANANA_GAME_IDS:
                             game_id = GAMEBANANA_GAME_IDS[gamebanana_game]
                             game_mods_count = len(gamebanana_mods)
@@ -406,8 +405,6 @@ class FetchModsThread(QThread):
                 return False
             extra_files_list = [ModExtraFile(key=k, **v) for k, v in extra_files]
             mod_chapter = ModChapterData(data_file_url=chapter_data.get('data_file_url'), data_file_version=chapter_data.get('data_file_version'), extra_files=extra_files_list)
-            if chapter_data.get('description_url'):
-                pass
             if mod_chapter.is_valid():
                 mod.files[file_key] = mod_chapter
         return True

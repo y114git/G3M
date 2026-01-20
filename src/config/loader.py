@@ -2,6 +2,7 @@ import os
 import sys
 from typing import Dict, Any, Optional
 from dotenv import load_dotenv
+_CONFIG_KEYS = ('DATA_FIREBASE_URL', 'CLOUD_FUNCTIONS_BASE_URL', 'INTERNAL_SALT')
 
 
 class ConfigLoader:
@@ -15,7 +16,7 @@ class ConfigLoader:
         self._load_env_files()
         self._load_config_env()
         self._load_secrets_embed()
-        self._config_cache = {'DATA_FIREBASE_URL': os.getenv('DATA_FIREBASE_URL', ''), 'CLOUD_FUNCTIONS_BASE_URL': os.getenv('CLOUD_FUNCTIONS_BASE_URL', ''), 'INTERNAL_SALT': os.getenv('INTERNAL_SALT', '')}
+        self._config_cache = {key: os.getenv(key, '') for key in _CONFIG_KEYS}
         return self._config_cache
 
     def _load_env_files(self) -> None:
@@ -27,10 +28,7 @@ class ConfigLoader:
 
     def _load_config_env(self) -> None:
         try:
-            if getattr(sys, 'frozen', False):
-                exe_dir = os.path.dirname(sys.executable)
-            else:
-                exe_dir = os.path.abspath('.')
+            exe_dir = os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else os.path.abspath('.')
             cfg_path = os.path.join(exe_dir, 'config.env')
             if os.path.exists(cfg_path):
                 load_dotenv(cfg_path)
@@ -41,9 +39,9 @@ class ConfigLoader:
         try:
             import importlib
             _se = importlib.import_module('secrets_embed')
-            for k in ('DATA_FIREBASE_URL', 'CLOUD_FUNCTIONS_BASE_URL', 'INTERNAL_SALT'):
-                if not os.getenv(k, '') and hasattr(_se, k):
-                    os.environ[k] = getattr(_se, k)
+            for key in _CONFIG_KEYS:
+                if not os.getenv(key, '') and hasattr(_se, key):
+                    os.environ[key] = getattr(_se, key)
         except Exception:
             pass
 

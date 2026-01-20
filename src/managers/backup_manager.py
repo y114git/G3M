@@ -19,9 +19,8 @@ class BackupManager:
             os.makedirs(backup_dir, exist_ok=True)
 
     def backup_file(self, chapter_id: int, file_path: str) -> bool:
-        if chapter_id not in self.original_files:
-            self.original_files[chapter_id] = {}
-            self._modification_order[chapter_id] = []
+        self.original_files.setdefault(chapter_id, {})
+        self._modification_order.setdefault(chapter_id, [])
         if file_path in self.original_files[chapter_id]:
             return True
         if not os.path.exists(file_path):
@@ -69,9 +68,7 @@ class BackupManager:
             return None
 
     def mark_file_added(self, chapter_id: int, file_path: str):
-        if chapter_id not in self.added_files:
-            self.added_files[chapter_id] = {}
-        self.added_files[chapter_id][file_path] = True
+        self.added_files.setdefault(chapter_id, {})[file_path] = True
 
     def save_backups_to_manifest(self, manifest_path: str):
         self._session_manifest_path = manifest_path

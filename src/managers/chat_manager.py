@@ -15,11 +15,16 @@ class ChatManager:
             logging.error('ChatManager: CLOUD_FUNCTIONS_BASE_URL is not configured')
         self.channel_map = {'en': 'chat_en', 'ru': 'chat_ru', 'zh': 'chat_zh', 'int': 'chat_int', 'es': 'chat_es'}
 
-    def get_messages(self, channel: str) -> List[Dict[str, str]]:
+    def _check_ready(self, action: str) -> Optional[str]:
         if not self.base_url:
-            logging.error('ChatManager: Cannot get messages - CLOUD_FUNCTIONS_BASE_URL is not configured')
-            return []
+            logging.error(f'ChatManager: Cannot {action} - CLOUD_FUNCTIONS_BASE_URL is not configured')
+            return 'config_error'
         if not check_internet_connection():
+            return 'no_internet'
+        return None
+
+    def get_messages(self, channel: str) -> List[Dict[str, str]]:
+        if self._check_ready('get messages'):
             return []
         try:
             url = f'{self.base_url}/getChatMessages'
@@ -63,11 +68,9 @@ class ChatManager:
         return False
 
     def send_message(self, channel: str, message: str) -> Tuple[bool, Optional[str]]:
-        if not self.base_url:
-            logging.error('ChatManager: Cannot send message - CLOUD_FUNCTIONS_BASE_URL is not configured')
-            return (False, 'config_error')
-        if not check_internet_connection():
-            return (False, 'no_internet')
+        ready_error = self._check_ready('send message')
+        if ready_error:
+            return (False, ready_error)
         message = message.strip()
         if not message:
             return (False, 'empty_message')

@@ -486,16 +486,14 @@ class UsedModsManager(QObject):
             return
         current_direct_launch = self.app_state.local_config.get('direct_launch_slot_id', -1)
         is_currently_enabled = current_direct_launch == chapter_id
+        chapter_names = {1: tr('tabs.chapter_1'), 2: tr('tabs.chapter_2'), 3: tr('tabs.chapter_3'), 4: tr('tabs.chapter_4')}
+        chapter_name = chapter_names.get(chapter_id, tr('ui.chapter_n', chapter=str(chapter_id)))
         if is_currently_enabled:
-            chapter_names = {1: tr('tabs.chapter_1'), 2: tr('tabs.chapter_2'), 3: tr('tabs.chapter_3'), 4: tr('tabs.chapter_4')}
-            chapter_name = chapter_names.get(chapter_id, tr('ui.chapter_n', chapter=str(chapter_id)))
             message = tr('ui.disable_direct_launch', chapter=chapter_name)
             if not self.feedback_manager.ask_question('ui.direct_launch', 'ui.direct_launch', message, False):
                 return
             self.app_state.local_config['direct_launch_slot_id'] = -1
         else:
-            chapter_names = {1: tr('tabs.chapter_1'), 2: tr('tabs.chapter_2'), 3: tr('tabs.chapter_3'), 4: tr('tabs.chapter_4')}
-            chapter_name = chapter_names.get(chapter_id, tr('ui.chapter_n', chapter=str(chapter_id)))
             message = tr('ui.enable_direct_launch', chapter=chapter_name)
             if not self.feedback_manager.ask_question('ui.direct_launch', 'ui.direct_launch', message, False):
                 return

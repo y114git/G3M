@@ -19,6 +19,13 @@ class GameMonitorWorker(QObject):
             except (AttributeError, ValueError):
                 pass
 
+    def _is_interruption_requested(self) -> bool:
+        try:
+            current_thread = QThread.currentThread()
+            return bool(current_thread and current_thread.isInterruptionRequested())
+        except Exception:
+            return False
+
     @pyqtSlot()
     def run(self):
         try:
@@ -35,8 +42,7 @@ class GameMonitorWorker(QObject):
                 game_appeared = False
                 consecutive_checks = 0
                 for _ in range(10):
-                    current_thread = QThread.currentThread()
-                    if current_thread and current_thread.isInterruptionRequested():
+                    if self._is_interruption_requested():
                         logging.debug('GameMonitorWorker.run: interruption requested, stopping')
                         return
                     if is_game_running():
@@ -50,8 +56,7 @@ class GameMonitorWorker(QObject):
                     time.sleep(0.5)
                 if game_appeared:
                     while is_game_running():
-                        current_thread = QThread.currentThread()
-                        if current_thread and current_thread.isInterruptionRequested():
+                        if self._is_interruption_requested():
                             logging.debug('GameMonitorWorker.run: interruption requested during game monitoring')
                             return
                         time.sleep(1)
@@ -67,8 +72,7 @@ class GameMonitorWorker(QObject):
             game_appeared = False
             consecutive_checks = 0
             for _ in range(45):
-                current_thread = QThread.currentThread()
-                if current_thread and current_thread.isInterruptionRequested():
+                if self._is_interruption_requested():
                     logging.debug('GameMonitorWorker.run: interruption requested, stopping')
                     return
                 if is_game_running(self.game_pid):
@@ -84,8 +88,7 @@ class GameMonitorWorker(QObject):
                 return
             time.sleep(3)
             while is_game_running(self.game_pid):
-                current_thread = QThread.currentThread()
-                if current_thread and current_thread.isInterruptionRequested():
+                if self._is_interruption_requested():
                     logging.debug('GameMonitorWorker.run: interruption requested during game monitoring')
                     return
                 time.sleep(1)

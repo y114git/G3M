@@ -55,6 +55,10 @@ class UTMTCLIManager:
     def set_active_processes_list(self, proc_list):
         self._active_processes_ref = proc_list
 
+    def _remove_active_process(self, process) -> None:
+        if process and self._active_processes_ref is not None and (process in self._active_processes_ref):
+            self._active_processes_ref.remove(process)
+
     def get_script_path(self, script_name: str) -> Optional[str]:
         scripts_path = resource_path('assets/scripts')
         if not script_name.endswith('.csx'):
@@ -108,8 +112,7 @@ class UTMTCLIManager:
                     returncode = -1
                     logging.warning(f"UTMTCLI command timed out: {' '.join(command)}")
                 finally:
-                    if process and self._active_processes_ref is not None and (process in self._active_processes_ref):
-                        self._active_processes_ref.remove(process)
+                    self._remove_active_process(process)
                 logging.info(f'UTMTCLI command completed with return code {returncode}')
                 if returncode != 0:
                     stderr_preview = stderr[:500] if stderr else ''
@@ -119,8 +122,7 @@ class UTMTCLIManager:
                         logging.warning(f'UTMTCLI command failed: {stderr_preview}')
                 return (returncode, stdout, stderr)
             except Exception as _:
-                if process and self._active_processes_ref is not None and (process in self._active_processes_ref):
-                    self._active_processes_ref.remove(process)
+                self._remove_active_process(process)
                 if process:
                     try:
                         if process.poll() is None:

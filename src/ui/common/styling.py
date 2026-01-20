@@ -58,6 +58,22 @@ def get_theme_color(config, color_key, default_color):
     return default_color
 
 
+def rgba_from_color(color: str, alpha: int = 128, fallback: str = 'rgba(0, 0, 0, 128)') -> str:
+    if isinstance(color, str) and color.startswith('#') and (len(color) >= 7):
+        try:
+            r = int(color[1:3], 16)
+            g = int(color[3:5], 16)
+            b = int(color[5:7], 16)
+            return f'rgba({r}, {g}, {b}, {alpha})'
+        except ValueError:
+            return fallback
+    return fallback
+
+
+def build_tag_checkbox_style(text_color: str, font_size: int = 12, indicator_size: int = 16, spacing: int = 5) -> str:
+    return f'\n            QCheckBox {{\n                color: {text_color};\n                font-size: {font_size}px;\n                spacing: {spacing}px;\n            }}\n            QCheckBox::indicator {{\n                width: {indicator_size}px;\n                height: {indicator_size}px;\n            }}\n        '
+
+
 def clear_layout_widgets(layout, keep_last_n=1, hide_instead_of_delete=False):
     if not layout:
         return
@@ -86,6 +102,13 @@ def clear_layout_widgets(layout, keep_last_n=1, hide_instead_of_delete=False):
 
 def load_mod_icon_universal(icon_label, mod_data, size=80):
     from utils.path_utils import resource_path
+
+    def _crop_and_scale_pixmap(pixmap, allow_empty=False):
+        icon_size = min(pixmap.width(), pixmap.height())
+        if icon_size <= 0 and allow_empty:
+            return pixmap.scaled(size, size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+        cropped = pixmap.copy((pixmap.width() - icon_size) // 2, (pixmap.height() - icon_size) // 2, icon_size, icon_size)
+        return cropped.scaled(size, size, Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation)
     assets_icon_path = resource_path('assets/icons/icon.ico')
     default_pixmap = None
     for default_icon_path in (assets_icon_path,):
@@ -93,12 +116,7 @@ def load_mod_icon_universal(icon_label, mod_data, size=80):
             try:
                 default_pixmap = QPixmap(default_icon_path)
                 if not default_pixmap.isNull():
-                    icon_size = min(default_pixmap.width(), default_pixmap.height())
-                    if icon_size > 0:
-                        cropped = default_pixmap.copy((default_pixmap.width() - icon_size) // 2, (default_pixmap.height() - icon_size) // 2, icon_size, icon_size)
-                        default_pixmap = cropped.scaled(size, size, Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation)
-                    else:
-                        default_pixmap = default_pixmap.scaled(size, size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                    default_pixmap = _crop_and_scale_pixmap(default_pixmap, allow_empty=True)
                     break
             except Exception as e:
                 logging.debug(f'load_mod_icon_universal: Error loading default icon from {default_icon_path}: {e}')
@@ -139,9 +157,7 @@ def load_mod_icon_universal(icon_label, mod_data, size=80):
             try:
                 pixmap = QPixmap(local_icon_to_load)
                 if not pixmap.isNull():
-                    icon_size = min(pixmap.width(), pixmap.height())
-                    cropped = pixmap.copy((pixmap.width() - icon_size) // 2, (pixmap.height() - icon_size) // 2, icon_size, icon_size)
-                    scaled_pixmap = cropped.scaled(size, size, Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                    scaled_pixmap = _crop_and_scale_pixmap(pixmap)
                     icon_label.setPixmap(scaled_pixmap)
                     return
             except Exception as e:
@@ -172,9 +188,7 @@ def load_mod_icon_universal(icon_label, mod_data, size=80):
                         if img is not None and (not getattr(img, 'isNull', lambda: True)()):
                             pm = QPixmap.fromImage(img)
                             if not pm.isNull():
-                                icon_size = min(pm.width(), pm.height())
-                                cropped = pm.copy((pm.width() - icon_size) // 2, (pm.height() - icon_size) // 2, icon_size, icon_size)
-                                scaled_pixmap = cropped.scaled(size, size, Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                                scaled_pixmap = _crop_and_scale_pixmap(pm)
                                 lbl.setPixmap(scaled_pixmap)
                     except (RuntimeError, AttributeError) as e:
                         logging.debug(f'load_mod_icon_universal: Widget deleted during image load: {e}')

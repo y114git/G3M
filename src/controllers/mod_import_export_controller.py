@@ -20,6 +20,17 @@ class ModImportExportController:
         self.mod_manager = mod_manager
         self.app_window = app_window
 
+    def _reset_install_state(self) -> None:
+        self.app_state.is_installing = False
+        self.app_state.progress_bar_visible = False
+        self.app_state.progress_bar_value = 0
+        self.app_state.clear_current_task()
+
+    def _refresh_mod_list(self) -> None:
+        self.mod_manager.invalidate_mods_cache()
+        self.mod_manager.load_local_mods(_skip_conversion=True)
+        self.mod_manager.mod_list_updated.emit()
+
     def show_import_export_dialog(self):
         dialog = QDialog(self.app_window)
         dialog.setWindowTitle(tr('ui.import_export_mod'))
@@ -53,7 +64,6 @@ class ModImportExportController:
         try:
             with tempfile.TemporaryDirectory(prefix='deltahub_import_') as temp_dir:
                 logging.info(f'[IMPORT] Extracting archive to temporary directory: {temp_dir}')
-                logging.info(f'[IMPORT] Extracting archive to temporary directory: {temp_dir}')
                 try:
                     extract_archive(file_path, temp_dir)
                 except Exception as e:
@@ -75,9 +85,7 @@ class ModImportExportController:
                     new_mod_path = converter.convert()
                     if new_mod_path:
                         logging.info(f'[IMPORT] DELTAMOD converted successfully to: {new_mod_path}')
-                        self.mod_manager.invalidate_mods_cache()
-                        self.mod_manager.load_local_mods(_skip_conversion=True)
-                        self.mod_manager.mod_list_updated.emit()
+                        self._refresh_mod_list()
                         QMessageBox.information(self.app_window, tr('dialogs.success'), tr('status.mod_imported_success'))
                     else:
                         logging.error('[IMPORT] DELTAMOD conversion failed')
@@ -158,9 +166,7 @@ class ModImportExportController:
                         from utils.file_utils import save_json
                         save_json(config_path, config, indent=2)
                     logging.info(f'[IMPORT] Mod installed successfully to: {target_mod_dir}')
-                    self.mod_manager.invalidate_mods_cache()
-                    self.mod_manager.load_local_mods(_skip_conversion=True)
-                    self.mod_manager.mod_list_updated.emit()
+                    self._refresh_mod_list()
                     logging.info('[IMPORT] Mod cache invalidated and mod list reloaded')
                     QMessageBox.information(self.app_window, tr('dialogs.success'), tr('status.mod_imported_success'))
                 else:
@@ -238,10 +244,7 @@ class ModImportExportController:
 
     def _on_manual_install_required(self, prepared_path: str, archive_path: str, temp_dir: str):
         try:
-            self.app_state.is_installing = False
-            self.app_state.progress_bar_visible = False
-            self.app_state.progress_bar_value = 0
-            self.app_state.clear_current_task()
+            self._reset_install_state()
             from ui.dialogs.manual_mod_install_dialog import ManualModInstallDialog
             from utils.game_utils import get_game_type_string
             initial_game_type = None
@@ -321,14 +324,9 @@ class ModImportExportController:
             raise
 
     def _on_mod_install_finished(self, success: bool, message: str):
-        self.app_state.is_installing = False
-        self.app_state.progress_bar_visible = False
-        self.app_state.progress_bar_value = 0
-        self.app_state.clear_current_task()
+        self._reset_install_state()
         if success:
-            self.mod_manager.invalidate_mods_cache()
-            self.mod_manager.load_local_mods(_skip_conversion=True)
-            self.mod_manager.mod_list_updated.emit()
+            self._refresh_mod_list()
             self.app_window.feedback_manager.update_status(message, 'green')
             QMessageBox.information(self.app_window, tr('dialogs.success'), message)
         else:

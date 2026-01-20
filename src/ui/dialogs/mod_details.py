@@ -147,30 +147,23 @@ def open_mod_details_dialog(parent, mod_data):
     left_container.setLayout(left_layout)
     metadata_layout = QVBoxLayout()
     metadata_layout.setSpacing(3)
+
+    def _add_metadata_row(label_key: str, value: str) -> None:
+        row_label = QLabel(f'<span style="color: {text_color};">{tr(label_key)}</span> <span style="color: {secondary_text_color};">{value}</span>')
+        row_label.setStyleSheet('font-size: 12px;')
+        metadata_layout.addWidget(row_label)
     author_text = mod_data.author or tr('defaults.unknown')
-    author_label = QLabel(f"""<span style="color: {text_color};">{tr('ui.author_label')}</span> <span style="color: {secondary_text_color};">{author_text}</span>""")
-    author_label.setStyleSheet('font-size: 12px;')
-    metadata_layout.addWidget(author_label)
+    _add_metadata_row('ui.author_label', author_text)
     game_version_text = mod_data.game_version or 'N/A'
-    game_version_label = QLabel(f"""<span style="color: {text_color};">{tr('ui.game_version_label')}</span> <span style="color: {secondary_text_color};">{game_version_text}</span>""")
-    game_version_label.setStyleSheet('font-size: 12px;')
-    metadata_layout.addWidget(game_version_label)
+    _add_metadata_row('ui.game_version_label', game_version_text)
     created_date_text = mod_data.created_date or 'N/A'
-    created_label = QLabel(f"""<span style="color: {text_color};">{tr('ui.created_label')}</span> <span style="color: {secondary_text_color};">{created_date_text}</span>""")
-    created_label.setStyleSheet('font-size: 12px;')
-    metadata_layout.addWidget(created_label)
+    _add_metadata_row('ui.created_label', created_date_text)
     updated_date_text = mod_data.last_updated or 'N/A'
-    updated_label = QLabel(f"""<span style="color: {text_color};">{tr('ui.updated_label')}</span> <span style="color: {secondary_text_color};">{updated_date_text}</span>""")
-    updated_label.setStyleSheet('font-size: 12px;')
-    metadata_layout.addWidget(updated_label)
-    downloads_label = QLabel(f"""<span style="color: {text_color};">{tr('ui.downloads_label')}</span> <span style="color: {secondary_text_color};">{mod_data.downloads}</span>""")
-    downloads_label.setStyleSheet('font-size: 12px;')
-    metadata_layout.addWidget(downloads_label)
+    _add_metadata_row('ui.updated_label', updated_date_text)
+    _add_metadata_row('ui.downloads_label', str(mod_data.downloads))
     category = getattr(mod_data, 'gamebanana_category', None) or getattr(mod_data, 'category', None)
     if category:
-        category_label = QLabel(f"""<span style="color: {text_color};">{tr('ui.category_label')}</span> <span style="color: {secondary_text_color};">{category}</span>""")
-        category_label.setStyleSheet('font-size: 12px;')
-        metadata_layout.addWidget(category_label)
+        _add_metadata_row('ui.category_label', category)
     if hasattr(mod_data, 'tags') and mod_data.tags:
         metadata_layout.addSpacing(8)
         tags_header = QLabel(tr('ui.tags_label'))

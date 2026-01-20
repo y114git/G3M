@@ -3,7 +3,7 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QFrame, QLabel, QPushButton, QCheckBox, QComboBox, QScrollArea, QSizePolicy, QSpinBox
 from managers.localization_manager import tr
 from ui.widgets.common.custom_controls import NoScrollComboBox
-from ui.common.styling import get_theme_color
+from ui.common.styling import get_theme_color, rgba_from_color, build_tag_checkbox_style
 
 
 class SearchTabBuilder:
@@ -37,8 +37,7 @@ class SearchTabBuilder:
         pagination_widget = self._create_pagination_widget()
         search_container_layout.addWidget(pagination_widget)
         search_bg_color = get_theme_color(self.app_state.local_config, 'background', '#000000')
-        r, g, b = (int(search_bg_color[1:3], 16), int(search_bg_color[3:5], 16), int(search_bg_color[5:7], 16)) if search_bg_color.startswith('#') else (0, 0, 0)
-        search_bg_rgba = f'rgba({r}, {g}, {b}, 128)'
+        search_bg_rgba = rgba_from_color(search_bg_color)
         search_container.setStyleSheet(f'\n            QWidget#search_mods_background {{\n                background-color: {search_bg_rgba};\n                border-radius: 10px;\n                margin: 5px;\n            }}\n        ')
         layout.addWidget(search_container)
         self.widgets['search_container'] = search_container
@@ -90,7 +89,7 @@ class SearchTabBuilder:
         tag_gameplay = QCheckBox(tr('tags.gameplay'))
         tag_other = QCheckBox(tr('tags.other'))
         text_color = get_theme_color(self.app_state.local_config, 'text', 'white')
-        tag_style = f'\n            QCheckBox {{\n                color: {text_color};\n                font-size: 12px;\n                spacing: 5px;\n            }}\n            QCheckBox::indicator {{\n                width: 16px;\n                height: 16px;\n            }}\n        '
+        tag_style = build_tag_checkbox_style(text_color)
         for tag in [tag_textedit, tag_customization, tag_gameplay, tag_other]:
             tag.setStyleSheet(tag_style)
             filters_layout.addWidget(tag)
@@ -174,16 +173,15 @@ class SearchTabBuilder:
         auto_sorting_checkbox.setChecked(self.app_state.local_config.get('auto_sorting', False))
         auto_sorting_checkbox.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
         text_color = get_theme_color(self.app_state.local_config, 'text', 'white')
-        auto_sorting_style = f'\n            QCheckBox {{\n                color: {text_color};\n                font-size: 12px;\n                spacing: 5px;\n            }}\n            QCheckBox::indicator {{\n                width: 16px;\n                height: 16px;\n            }}\n        '
-        auto_sorting_checkbox.setStyleSheet(auto_sorting_style)
+        auto_sorting_checkbox.setStyleSheet(build_tag_checkbox_style(text_color))
         mods_per_page_layout.addWidget(auto_sorting_checkbox)
         mods_per_page_layout.addSpacing(10)
-        blacklist_button = QPushButton(tr('ui.blacklist'))
-        blacklist_button.setObjectName('blacklistBtn')
-        blacklist_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
-        blacklist_button.setMinimumWidth(80)
-        blacklist_button.setToolTip(tr('ui.blacklist_tooltip'))
-        mods_per_page_layout.addWidget(blacklist_button, 0, Qt.AlignmentFlag.AlignVCenter)
+        blocklist_button = QPushButton(tr('ui.blocklist'))
+        blocklist_button.setObjectName('blocklistBtn')
+        blocklist_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
+        blocklist_button.setMinimumWidth(80)
+        blocklist_button.setToolTip(tr('ui.blocklist_tooltip'))
+        mods_per_page_layout.addWidget(blocklist_button, 0, Qt.AlignmentFlag.AlignVCenter)
         pagination_layout.addLayout(mods_per_page_layout)
         self.widgets['prev_page_btn'] = prev_page_btn
         self.widgets['page_label'] = page_label
@@ -193,7 +191,7 @@ class SearchTabBuilder:
         self.widgets['gb_sort_combo'] = gb_sort_combo
         self.widgets['gb_sort_label'] = gb_sort_label
         self.widgets['auto_sorting_checkbox'] = auto_sorting_checkbox
-        self.widgets['blacklist_button'] = blacklist_button
+        self.widgets['blocklist_button'] = blocklist_button
         return pagination_widget
 
     def get_widgets(self) -> Dict[str, Any]:

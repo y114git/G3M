@@ -54,13 +54,14 @@ class LocalizationManager:
             external_data = json.load(f)
         needs_update = False
 
+        def should_skip_key(key: str) -> bool:
+            return key == 'metadata' or key.startswith('_')
+
         def sync_dicts(internal_dict, external_dict):
             nonlocal needs_update
             keys_to_remove = []
             for key in list(external_dict.keys()):
-                if key == 'metadata':
-                    continue
-                if key.startswith('_'):
+                if should_skip_key(key):
                     continue
                 if key not in internal_dict:
                     keys_to_remove.append(key)
@@ -68,7 +69,7 @@ class LocalizationManager:
             for key in keys_to_remove:
                 del external_dict[key]
             for key, internal_value in internal_dict.items():
-                if key == 'metadata':
+                if should_skip_key(key):
                     continue
                 custom_key = f'_{key}'
                 if custom_key in external_dict:

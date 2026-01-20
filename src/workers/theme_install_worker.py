@@ -24,10 +24,32 @@ class ThemeInstallWorker(BaseInstallWorker):
     def cancel(self):
         self._cancelled = True
         if self._session:
-            try:
-                self._session.close()
-            except Exception as e:
-                logging.debug(f'ThemeInstallWorker: Error closing session: {e}')
+            self._safe_close(self._session, 'session')
+
+    def _apply_theme_settings(self, theme_settings: dict, source_dir: str) -> None:
+        for key, value in theme_settings.items():
+            self.app_state.local_config[key] = value
+        for old_file in ['custom_background_music.mp3', 'custom_background_music.wav', 'custom_startup_sound.mp3', 'custom_startup_sound.wav']:
+            old_file_path = os.path.join(self.config_dir, old_file)
+            if os.path.exists(old_file_path):
+                try:
+                    os.remove(old_file_path)
+                except Exception as e:
+                    logging.warning(f'Failed to remove old file {old_file}: {e}')
+        self.app_state.local_config['custom_background_path'] = ''
+        for filename in os.listdir(source_dir):
+            src_path = os.path.join(source_dir, filename)
+            if filename.startswith('background.'):
+                ext = os.path.splitext(filename)[1]
+                dest_path = os.path.join(self.config_dir, f'custom_background{ext}')
+                shutil.copy2(src_path, dest_path)
+                self.app_state.local_config['custom_background_path'] = dest_path
+            elif filename.startswith('background_music.'):
+                dest_path = os.path.join(self.config_dir, f'custom_background_music{os.path.splitext(filename)[1]}')
+                shutil.copy2(src_path, dest_path)
+            elif filename.startswith('startup_sound.'):
+                dest_path = os.path.join(self.config_dir, f'custom_startup_sound{os.path.splitext(filename)[1]}')
+                shutil.copy2(src_path, dest_path)
 
     def _download_archive(self, url: str, target_path: str) -> bool:
         try:
@@ -72,29 +94,7 @@ class ThemeInstallWorker(BaseInstallWorker):
                         return False
                     with open(theme_json_path, 'r', encoding='utf-8') as f:
                         theme_settings = json.load(f)
-                    for key, value in theme_settings.items():
-                        self.app_state.local_config[key] = value
-                    for old_file in ['custom_background_music.mp3', 'custom_background_music.wav', 'custom_startup_sound.mp3', 'custom_startup_sound.wav']:
-                        old_file_path = os.path.join(self.config_dir, old_file)
-                        if os.path.exists(old_file_path):
-                            try:
-                                os.remove(old_file_path)
-                            except Exception as e:
-                                logging.warning(f'Failed to remove old file {old_file}: {e}')
-                    self.app_state.local_config['custom_background_path'] = ''
-                    for filename in os.listdir(extract_dir):
-                        src_path = os.path.join(extract_dir, filename)
-                        if filename.startswith('background.'):
-                            ext = os.path.splitext(filename)[1]
-                            dest_path = os.path.join(self.config_dir, f'custom_background{ext}')
-                            shutil.copy2(src_path, dest_path)
-                            self.app_state.local_config['custom_background_path'] = dest_path
-                        elif filename.startswith('background_music.'):
-                            dest_path = os.path.join(self.config_dir, f'custom_background_music{os.path.splitext(filename)[1]}')
-                            shutil.copy2(src_path, dest_path)
-                        elif filename.startswith('startup_sound.'):
-                            dest_path = os.path.join(self.config_dir, f'custom_startup_sound{os.path.splitext(filename)[1]}')
-                            shutil.copy2(src_path, dest_path)
+                    self._apply_theme_settings(theme_settings, extract_dir)
             else:
                 theme_json_path = os.path.join(content_path, 'theme.json')
                 if not os.path.exists(theme_json_path):
@@ -102,29 +102,7 @@ class ThemeInstallWorker(BaseInstallWorker):
                     return False
                 with open(theme_json_path, 'r', encoding='utf-8') as f:
                     theme_settings = json.load(f)
-                for key, value in theme_settings.items():
-                    self.app_state.local_config[key] = value
-                for old_file in ['custom_background_music.mp3', 'custom_background_music.wav', 'custom_startup_sound.mp3', 'custom_startup_sound.wav']:
-                    old_file_path = os.path.join(self.config_dir, old_file)
-                    if os.path.exists(old_file_path):
-                        try:
-                            os.remove(old_file_path)
-                        except Exception as e:
-                            logging.warning(f'Failed to remove old file {old_file}: {e}')
-                self.app_state.local_config['custom_background_path'] = ''
-                for filename in os.listdir(content_path):
-                    src_path = os.path.join(content_path, filename)
-                    if filename.startswith('background.'):
-                        ext = os.path.splitext(filename)[1]
-                        dest_path = os.path.join(self.config_dir, f'custom_background{ext}')
-                        shutil.copy2(src_path, dest_path)
-                        self.app_state.local_config['custom_background_path'] = dest_path
-                    elif filename.startswith('background_music.'):
-                        dest_path = os.path.join(self.config_dir, f'custom_background_music{os.path.splitext(filename)[1]}')
-                        shutil.copy2(src_path, dest_path)
-                    elif filename.startswith('startup_sound.'):
-                        dest_path = os.path.join(self.config_dir, f'custom_startup_sound{os.path.splitext(filename)[1]}')
-                        shutil.copy2(src_path, dest_path)
+                self._apply_theme_settings(theme_settings, content_path)
             self.settings_manager.write_local_config()
             self.app_state.local_config['first_launch_splash_shown'] = True
             if 'disable_splash' in theme_settings:

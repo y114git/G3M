@@ -34,19 +34,19 @@ class BaseInstallWorker(QThread):
         self._unrar_event.wait(timeout=timeout)
         return self._unrar_installed
 
+    def _safe_close(self, resource, label: str) -> None:
+        if resource is None:
+            return
+        try:
+            resource.close()
+        except Exception as e:
+            logger.debug(f'{self.__class__.__name__}.cancel: Error closing {label}: {e}')
+
     def cancel(self):
         self._cancelled = True
         try:
-            if self._session is not None:
-                try:
-                    self._session.close()
-                except Exception as e:
-                    logger.debug(f'{self.__class__.__name__}.cancel: Error closing session: {e}')
-            if self._active_response is not None:
-                try:
-                    self._active_response.close()
-                except Exception as e:
-                    logger.debug(f'{self.__class__.__name__}.cancel: Error closing response: {e}')
+            self._safe_close(self._session, 'session')
+            self._safe_close(self._active_response, 'response')
         except Exception as e:
             logger.debug(f'{self.__class__.__name__}.cancel: Error during cleanup: {e}')
         finally:

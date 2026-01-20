@@ -72,10 +72,7 @@ class GameLauncher(QObject):
             parent_obj = None
         slot_manager = getattr(parent_obj, 'slot_manager', None) if parent_obj else None
         if not slot_manager or not hasattr(slot_manager, 'get_active_mod_selections'):
-            selections = {}
-            for chapter_id in range(5):
-                selections[chapter_id] = []
-            return selections
+            return {chapter_id: [] for chapter_id in range(5)}
         return slot_manager.get_active_mod_selections()
 
     def _launch_game_with_selections(self, selections: Dict[int, Any], execute_plugin_hooks=None, restore_window_callback=None):
@@ -446,7 +443,6 @@ class GameLauncher(QObject):
         self.status_changed.emit(message, color)
 
     def _on_merge_progress(self, progress: int, message: str):
-        from config.constants import UI_COLORS
         self.app_state.progress_bar_value = progress
         self.app_state.progress_bar_visible = True
         if message:

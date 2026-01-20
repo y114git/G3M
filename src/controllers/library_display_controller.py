@@ -20,18 +20,31 @@ class LibraryDisplayController:
         self.app = app_window
         self._updating_display = False
 
+    def _show_chapter_mode_instruction(self) -> None:
+        if hasattr(self.app, 'installed_mods_container') and hasattr(self.app, 'installed_mods_layout'):
+            self.app.installed_mods_container.setUpdatesEnabled(False)
+            clear_layout_widgets(self.app.installed_mods_layout, keep_last_n=1)
+            self.app._show_chapter_mode_instruction()
+            self.app.installed_mods_container.setUpdatesEnabled(True)
+
+    def _get_mod_availability(self, mod_data, mod_info):
+        is_local = getattr(mod_data, 'is_local_mod', False) or mod_data.is_local
+        is_available = not is_local
+        if not is_available and hasattr(self.app_state, 'all_mods') and self.app_state.all_mods:
+            key = mod_info.get('key') or mod_info.get('mod_key', '')
+            if key and key.startswith('gb_'):
+                is_available = any((mod for mod in self.app_state.all_mods if (getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)) == key))
+            if not is_available:
+                is_available = mod_info.get('is_available_on_server', False)
+        return (is_local, is_available)
+
     def update_display(self):
         if not hasattr(self.app, 'installed_mods_layout'):
             return
         is_chapter_mode = hasattr(self.app, 'chapter_mode_checkbox') and self.app.chapter_mode_checkbox.isChecked()
         if is_chapter_mode:
-            selected_id = self.app_state.selected_chapter_id
-            if selected_id is not None:
-                self.update_for_chapter_mode(selected_id)
-                return
-            else:
-                self.update_for_chapter_mode(None)
-                return
+            self.update_for_chapter_mode(self.app_state.selected_chapter_id)
+            return
         self.refresh_async()
 
     def _build_library_filters_and_sort(self):
@@ -77,14 +90,7 @@ class LibraryDisplayController:
             mod_data = self.mod_manager.create_mod_object_from_info(mod_info, getattr(self.app_state, 'all_mods', None))
             if not mod_data or not self.mod_manager.mod_has_files_for_chapter(mod_data, selected_chapter_id):
                 continue
-            is_local = getattr(mod_data, 'is_local_mod', False) or mod_data.is_local
-            is_available = not is_local
-            if not is_available and hasattr(self.app_state, 'all_mods') and self.app_state.all_mods:
-                key = mod_info.get('key') or mod_info.get('mod_key', '')
-                if key and key.startswith('gb_'):
-                    is_available = any((mod for mod in self.app_state.all_mods if (getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)) == key))
-                if not is_available:
-                    is_available = mod_info.get('is_available_on_server', False)
+            is_local, is_available = self._get_mod_availability(mod_data, mod_info)
             if mod_data:
                 mod_widget = InstalledModWidget(mod_data, is_local, is_available, parent=self.app)
                 mod_widget.clicked.connect(self.on_mod_clicked)
@@ -108,11 +114,7 @@ class LibraryDisplayController:
         if is_chapter_mode:
             selected_id = self.app_state.selected_chapter_id
             if selected_id is None:
-                if hasattr(self.app, 'installed_mods_container') and hasattr(self.app, 'installed_mods_layout'):
-                    self.app.installed_mods_container.setUpdatesEnabled(False)
-                    clear_layout_widgets(self.app.installed_mods_layout, keep_last_n=1)
-                    self.app._show_chapter_mode_instruction()
-                    self.app.installed_mods_container.setUpdatesEnabled(True)
+                self._show_chapter_mode_instruction()
                 return
             else:
                 self.update_for_chapter_mode(selected_id)
@@ -151,11 +153,7 @@ class LibraryDisplayController:
             if is_chapter_mode:
                 selected_id = self.app_state.selected_chapter_id
                 if selected_id is None:
-                    if hasattr(self.app, 'installed_mods_container') and hasattr(self.app, 'installed_mods_layout'):
-                        self.app.installed_mods_container.setUpdatesEnabled(False)
-                        clear_layout_widgets(self.app.installed_mods_layout, keep_last_n=1)
-                        self.app._show_chapter_mode_instruction()
-                        self.app.installed_mods_container.setUpdatesEnabled(True)
+                    self._show_chapter_mode_instruction()
                     return
                 else:
                     self.update_for_chapter_mode(selected_id)
@@ -184,14 +182,7 @@ class LibraryDisplayController:
                         mod_data = self.mod_manager.create_mod_object_from_info(mod_info, getattr(self.app_state, 'all_mods', None))
                         if not mod_data:
                             continue
-                        is_local = getattr(mod_data, 'is_local_mod', False) or mod_data.is_local
-                        is_available = not is_local
-                        if not is_available and hasattr(self.app_state, 'all_mods') and self.app_state.all_mods:
-                            key = mod_info.get('key') or mod_info.get('mod_key', '')
-                            if key and key.startswith('gb_'):
-                                is_available = any((mod for mod in self.app_state.all_mods if (getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)) == key))
-                            if not is_available:
-                                is_available = mod_info.get('is_available_on_server', False)
+                        is_local, is_available = self._get_mod_availability(mod_data, mod_info)
                         has_update = False
                         if not is_local and is_available and hasattr(self.app_state, 'all_mods') and self.app_state.all_mods:
                             mod_key_attr = getattr(mod_data, 'key', None) or getattr(mod_data, 'mod_key', None)

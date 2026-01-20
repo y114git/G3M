@@ -29,6 +29,14 @@ class ShortcutManager(QObject):
         self.mod_manager = mod_manager
         self.parent_widget = parent
 
+    def _get_mod_names_from_keys(self, mod_keys: list) -> list:
+        mod_names = []
+        for key in mod_keys:
+            mod_config = self.mod_manager.get_mod_config(key)
+            mod_name = mod_config.get('name', tr('errors.mod_not_found_by_key', mod_key=key)) if mod_config else tr('errors.mod_not_found_by_key', mod_key=key)
+            mod_names.append(mod_name)
+        return mod_names
+
     def create_shortcut_flow(self):
         settings = self._gather_shortcut_settings()
         if not settings:
@@ -44,87 +52,41 @@ class ShortcutManager(QObject):
         is_sugaryspire = settings.get('is_sugaryspire_mode', False)
         game_name = tr('ui.sugaryspire') if is_sugaryspire else tr('ui.undertaleyellow') if is_undertaleyellow else tr('ui.undertale') if settings.get('is_undertale_mode', False) else tr('ui.pizzatower') if is_pizzatower else tr('ui.deltarunedemo') if settings.get('is_demo_mode', False) else tr('ui.deltarune')
         description_lines.append(f"<b>{tr('ui.mod_type_label')}</b> {game_name}")
+        mod_label = f"<b>{tr('status.mod_label')}</b>"
+
+        def append_mod_summary(mod_data, label, empty_label=None):
+            if mod_data:
+                mod_keys = mod_data if isinstance(mod_data, list) else [mod_data]
+                mod_names = self._get_mod_names_from_keys(mod_keys)
+                if len(mod_names) == 1:
+                    description_lines.append(f'{label} {mod_names[0]}')
+                else:
+                    description_lines.append(f"{label} {len(mod_names)} mod(s): {', '.join(mod_names)}")
+                return True
+            if empty_label is not None:
+                description_lines.append(f'{label} <i>{empty_label}</i>')
+            return False
         if settings.get('is_demo_mode', False):
             mod_data = settings['mods'].get('demo')
-            if mod_data:
-                mod_keys = mod_data if isinstance(mod_data, list) else [mod_data]
-                mod_names = []
-                for key in mod_keys:
-                    mod_config = self.mod_manager.get_mod_config(key)
-                    mod_name = mod_config.get('name', tr('errors.mod_not_found_by_key', mod_key=key)) if mod_config else tr('errors.mod_not_found_by_key', mod_key=key)
-                    mod_names.append(mod_name)
-                if len(mod_names) == 1:
-                    description_lines.append(f"<b>{tr('status.mod_label')}</b> {mod_names[0]}")
-                else:
-                    description_lines.append(f"<b>{tr('status.mod_label')}</b> {len(mod_names)} mod(s): {', '.join(mod_names)}")
-            else:
-                description_lines.append(f"<b>{tr('status.mod_label')}</b> <i>{tr('status.vanilla')}</i>")
+            append_mod_summary(mod_data, mod_label, tr('status.vanilla'))
         elif settings.get('is_undertaleyellow_mode', False):
             mod_data = settings['mods'].get('undertaleyellow')
-            if mod_data:
-                mod_keys = mod_data if isinstance(mod_data, list) else [mod_data]
-                mod_names = []
-                for key in mod_keys:
-                    mod_config = self.mod_manager.get_mod_config(key)
-                    mod_name = mod_config.get('name', tr('errors.mod_not_found_by_key', mod_key=key)) if mod_config else tr('errors.mod_not_found_by_key', mod_key=key)
-                    mod_names.append(mod_name)
-                if len(mod_names) == 1:
-                    description_lines.append(f"<b>{tr('status.mod_label')}</b> {mod_names[0]}")
-                else:
-                    description_lines.append(f"<b>{tr('status.mod_label')}</b> {len(mod_names)} mod(s): {', '.join(mod_names)}")
-            else:
-                description_lines.append(f"<b>{tr('status.mod_label')}</b> <i>{tr('status.vanilla')}</i>")
+            append_mod_summary(mod_data, mod_label, tr('status.vanilla'))
         elif settings.get('is_sugaryspire_mode', False):
             mod_data = settings['mods'].get('sugaryspire')
-            if mod_data:
-                mod_keys = mod_data if isinstance(mod_data, list) else [mod_data]
-                mod_names = []
-                for key in mod_keys:
-                    mod_config = self.mod_manager.get_mod_config(key)
-                    mod_name = mod_config.get('name', tr('errors.mod_not_found_by_key', mod_key=key)) if mod_config else tr('errors.mod_not_found_by_key', mod_key=key)
-                    mod_names.append(mod_name)
-                if len(mod_names) == 1:
-                    description_lines.append(f"<b>{tr('status.mod_label')}</b> {mod_names[0]}")
-                else:
-                    description_lines.append(f"<b>{tr('status.mod_label')}</b> {len(mod_names)} mod(s): {', '.join(mod_names)}")
-            else:
-                description_lines.append(f"<b>{tr('status.mod_label')}</b> <i>{tr('status.vanilla')}</i>")
+            append_mod_summary(mod_data, mod_label, tr('status.vanilla'))
         elif settings.get('is_undertale_mode', False):
             mod_data = settings['mods'].get('undertale')
-            if mod_data:
-                mod_keys = mod_data if isinstance(mod_data, list) else [mod_data]
-                mod_names = []
-                for key in mod_keys:
-                    mod_config = self.mod_manager.get_mod_config(key)
-                    mod_name = mod_config.get('name', tr('errors.mod_not_found_by_key', mod_key=key)) if mod_config else tr('errors.mod_not_found_by_key', mod_key=key)
-                    mod_names.append(mod_name)
-                if len(mod_names) == 1:
-                    description_lines.append(f"<b>{tr('status.mod_label')}</b> {mod_names[0]}")
-                else:
-                    description_lines.append(f"<b>{tr('status.mod_label')}</b> {len(mod_names)} mod(s): {', '.join(mod_names)}")
-            else:
-                description_lines.append(f"<b>{tr('status.mod_label')}</b> <i>{tr('status.vanilla')}</i>")
+            append_mod_summary(mod_data, mod_label, tr('status.vanilla'))
         elif settings.get('is_pizzatower_mode', False):
             mod_data = settings['mods'].get('pizzatower')
-            if mod_data:
-                mod_keys = mod_data if isinstance(mod_data, list) else [mod_data]
-                mod_names = []
-                for key in mod_keys:
-                    mod_config = self.mod_manager.get_mod_config(key)
-                    mod_name = mod_config.get('name', tr('errors.mod_not_found_by_key', mod_key=key)) if mod_config else tr('errors.mod_not_found_by_key', mod_key=key)
-                    mod_names.append(mod_name)
-                if len(mod_names) == 1:
-                    description_lines.append(f"<b>{tr('status.mod_label')}</b> {mod_names[0]}")
-                else:
-                    description_lines.append(f"<b>{tr('status.mod_label')}</b> {len(mod_names)} mod(s): {', '.join(mod_names)}")
-            else:
-                description_lines.append(f"<b>{tr('status.mod_label')}</b> <i>{tr('status.vanilla')}</i>")
+            append_mod_summary(mod_data, mod_label, tr('status.vanilla'))
         else:
             is_chapter_mode = settings.get('is_chapter_mode', False)
             direct_launch_slot_id = settings.get('direct_launch_slot_id', SLOT_ID_UNIVERSAL)
             if is_chapter_mode:
+                chapter_names = {0: tr('chapters.menu'), 1: tr('tabs.chapter_1'), 2: tr('tabs.chapter_2'), 3: tr('tabs.chapter_3'), 4: tr('tabs.chapter_4')}
                 if direct_launch_slot_id >= 0:
-                    chapter_names = {0: tr('chapters.menu'), 1: tr('tabs.chapter_1'), 2: tr('tabs.chapter_2'), 3: tr('tabs.chapter_3'), 4: tr('tabs.chapter_4')}
                     chapter_name = chapter_names.get(direct_launch_slot_id, tr('ui.chapter_tab_title', chapter_num=direct_launch_slot_id))
                     description_lines.append(f"<b>{tr('status.direct_launch_label')}</b> {chapter_name}")
                 else:
@@ -132,33 +94,11 @@ class ShortcutManager(QObject):
                 for chapter_id in [0, 1, 2, 3, 4]:
                     mod_data = settings['mods'].get(str(chapter_id))
                     if mod_data:
-                        mod_keys = mod_data if isinstance(mod_data, list) else [mod_data]
-                        mod_names = []
-                        for key in mod_keys:
-                            mod_config = self.mod_manager.get_mod_config(key)
-                            mod_name = mod_config.get('name', tr('errors.mod_not_found_by_key', mod_key=key)) if mod_config else tr('errors.mod_not_found_by_key', mod_key=key)
-                            mod_names.append(mod_name)
-                        chapter_names = {0: tr('chapters.menu'), 1: tr('tabs.chapter_1'), 2: tr('tabs.chapter_2'), 3: tr('tabs.chapter_3'), 4: tr('tabs.chapter_4')}
                         chapter_name = chapter_names.get(chapter_id, tr('ui.chapter_tab_title', chapter_num=chapter_id))
-                        if len(mod_names) == 1:
-                            description_lines.append(f'<b>{chapter_name}:</b> {mod_names[0]}')
-                        else:
-                            description_lines.append(f"<b>{chapter_name}:</b> {len(mod_names)} mod(s): {', '.join(mod_names)}")
+                        append_mod_summary(mod_data, f'<b>{chapter_name}:</b>')
             else:
                 uni_data = settings['mods'].get('universal')
-                if uni_data:
-                    mod_keys = uni_data if isinstance(uni_data, list) else [uni_data]
-                    mod_names = []
-                    for key in mod_keys:
-                        mod_config = self.mod_manager.get_mod_config(key)
-                        mod_name = mod_config.get('name', tr('errors.mod_not_found_by_key', mod_key=key)) if mod_config else tr('errors.mod_not_found_by_key', mod_key=key)
-                        mod_names.append(mod_name)
-                    if len(mod_names) == 1:
-                        description_lines.append(f"<b>{tr('status.mod_label')}</b> {mod_names[0]}")
-                    else:
-                        description_lines.append(f"<b>{tr('status.mod_label')}</b> {len(mod_names)} mod(s): {', '.join(mod_names)}")
-                else:
-                    description_lines.append(f"<b>{tr('status.mod_label')}</b> <i>{tr('status.no_mod')}</i>")
+                append_mod_summary(uni_data, mod_label, tr('status.no_mod'))
         description_lines.append('')
         if settings.get('launch_via_steam'):
             description_lines.append(f"✓ {tr('ui.steam_launch')}")

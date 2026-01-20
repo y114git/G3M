@@ -13,6 +13,20 @@ class PluginAPI(QObject):
         self._config = {}
         self._load_config()
 
+    def _get_settings_manager(self):
+        if hasattr(self.app_state, 'settings_manager') and self.app_state.settings_manager:
+            return self.app_state.settings_manager
+        if hasattr(self.app_window, 'settings_manager'):
+            return self.app_window.settings_manager
+        return None
+
+    def _get_feedback_manager(self):
+        if hasattr(self.app_state, 'feedback_manager') and self.app_state.feedback_manager:
+            return self.app_state.feedback_manager
+        if hasattr(self.app_window, 'feedback_manager'):
+            return self.app_window.feedback_manager
+        return None
+
     def _load_config(self):
         plugin_configs = self.app_state.local_config.get('plugin_configs', {})
         prefixed_config = plugin_configs.get(self.plugin_id, {})
@@ -31,10 +45,9 @@ class PluginAPI(QObject):
             prefixed_key = f'{self.plugin_id}.{key}'
             prefixed_config[prefixed_key] = value
         self.app_state.local_config['plugin_configs'][self.plugin_id] = prefixed_config
-        if hasattr(self.app_state, 'settings_manager') and self.app_state.settings_manager:
-            self.app_state.settings_manager.write_local_config()
-        elif hasattr(self.app_window, 'settings_manager'):
-            self.app_window.settings_manager.write_local_config()
+        settings_manager = self._get_settings_manager()
+        if settings_manager:
+            settings_manager.write_local_config()
 
     def get_mods(self) -> List[Any]:
         if hasattr(self.app_state, 'get_all_mods'):
@@ -59,11 +72,7 @@ class PluginAPI(QObject):
         self._save_config()
 
     def show_message(self, message_type: str, title: str, message: str):
-        feedback_manager = None
-        if hasattr(self.app_state, 'feedback_manager') and self.app_state.feedback_manager:
-            feedback_manager = self.app_state.feedback_manager
-        elif hasattr(self.app_window, 'feedback_manager'):
-            feedback_manager = self.app_window.feedback_manager
+        feedback_manager = self._get_feedback_manager()
         if feedback_manager:
             feedback_manager.show_message(message_type, title, message)
         else:

@@ -3,7 +3,7 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QFrame, QLabel, QPushButton, QScrollArea, QSizePolicy
 from managers.localization_manager import tr
 from ui.widgets.common.custom_controls import _ZeroHintWidget
-from ui.common.styling import get_theme_color
+from ui.common.styling import get_theme_color, rgba_from_color
 
 
 class PluginTabBuilder:
@@ -61,13 +61,7 @@ class PluginTabBuilder:
         except Exception:
             pass
         plugins_bg_color = get_theme_color(self.app_state.local_config, 'background', '#000000')
-        if plugins_bg_color.startswith('#'):
-            r = int(plugins_bg_color[1:3], 16)
-            g = int(plugins_bg_color[3:5], 16)
-            b = int(plugins_bg_color[5:7], 16)
-            plugins_bg_rgba = f'rgba({r}, {g}, {b}, 128)'
-        else:
-            plugins_bg_rgba = 'rgba(0, 0, 0, 128)'
+        plugins_bg_rgba = rgba_from_color(plugins_bg_color)
         plugins_container.setStyleSheet(f'\n            QWidget#plugins_background {{\n                background-color: {plugins_bg_rgba};\n                border-radius: 10px;\n                margin: 5px;\n            }}\n        ')
         layout.addWidget(plugins_container)
         try:

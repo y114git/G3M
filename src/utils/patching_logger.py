@@ -7,21 +7,26 @@ _patching_logger: Optional[logging.Logger] = None
 _conflicts_logger: Optional[logging.Logger] = None
 
 
+def _init_logger(name: str, log_path: str, level: int, fmt: logging.Formatter) -> logging.Logger:
+    logger = logging.getLogger(name)
+    logger.setLevel(level)
+    logger.handlers.clear()
+    file_handler = RotatingFileHandler(log_path, maxBytes=10000000, backupCount=3, encoding='utf-8')
+    file_handler.setFormatter(fmt)
+    file_handler.setLevel(level)
+    logger.addHandler(file_handler)
+    logger.propagate = False
+    return logger
+
+
 def get_patching_logger() -> logging.Logger:
     global _patching_logger
     if _patching_logger is not None:
         return _patching_logger
     user_root = get_user_data_root()
     log_path = os.path.join(user_root, 'patching.log')
-    _patching_logger = logging.getLogger('patching')
-    _patching_logger.setLevel(logging.DEBUG)
-    _patching_logger.handlers.clear()
     fmt = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
-    file_handler = RotatingFileHandler(log_path, maxBytes=10000000, backupCount=3, encoding='utf-8')
-    file_handler.setFormatter(fmt)
-    file_handler.setLevel(logging.DEBUG)
-    _patching_logger.addHandler(file_handler)
-    _patching_logger.propagate = False
+    _patching_logger = _init_logger('patching', log_path, logging.DEBUG, fmt)
     return _patching_logger
 
 
@@ -31,15 +36,8 @@ def get_conflicts_logger() -> logging.Logger:
         return _conflicts_logger
     user_root = get_user_data_root()
     log_path = os.path.join(user_root, 'merge_conflicts.log')
-    _conflicts_logger = logging.getLogger('conflicts')
-    _conflicts_logger.setLevel(logging.INFO)
-    _conflicts_logger.handlers.clear()
     fmt = logging.Formatter('%(asctime)s [CONFLICT] %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
-    file_handler = RotatingFileHandler(log_path, maxBytes=10000000, backupCount=3, encoding='utf-8')
-    file_handler.setFormatter(fmt)
-    file_handler.setLevel(logging.INFO)
-    _conflicts_logger.addHandler(file_handler)
-    _conflicts_logger.propagate = False
+    _conflicts_logger = _init_logger('conflicts', log_path, logging.INFO, fmt)
     return _conflicts_logger
 
 

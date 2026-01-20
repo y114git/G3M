@@ -80,34 +80,20 @@ def get_chapter_id_for_game_mode(game_mode: 'GameMode') -> int:
 
 def get_game_type_string(game_mode: 'GameMode') -> str:
     from models.game_modes import DemoGameMode, UndertaleGameMode, UndertaleYellowGameMode, PizzaTowerGameMode, SugarySpireGameMode
-    if isinstance(game_mode, DemoGameMode):
-        return 'deltarune'
-    elif isinstance(game_mode, UndertaleGameMode):
-        return 'undertale'
-    elif isinstance(game_mode, UndertaleYellowGameMode):
-        return 'undertaleyellow'
-    elif isinstance(game_mode, PizzaTowerGameMode):
-        return 'pizzatower'
-    elif isinstance(game_mode, SugarySpireGameMode):
-        return 'sugaryspire'
-    else:
-        return 'deltarune'
+    mode_map = {DemoGameMode: 'deltarune', UndertaleGameMode: 'undertale', UndertaleYellowGameMode: 'undertaleyellow', PizzaTowerGameMode: 'pizzatower', SugarySpireGameMode: 'sugaryspire'}
+    for mode_class, value in mode_map.items():
+        if isinstance(game_mode, mode_class):
+            return value
+    return 'deltarune'
 
 
 def get_game_name_string(game_mode: 'GameMode') -> str:
     from models.game_modes import DemoGameMode, UndertaleGameMode, UndertaleYellowGameMode, PizzaTowerGameMode, SugarySpireGameMode
-    if isinstance(game_mode, DemoGameMode):
-        return 'DELTARUNEdemo'
-    elif isinstance(game_mode, UndertaleGameMode):
-        return 'UNDERTALE'
-    elif isinstance(game_mode, UndertaleYellowGameMode):
-        return 'UNDERTALE Yellow'
-    elif isinstance(game_mode, PizzaTowerGameMode):
-        return 'Pizza Tower'
-    elif isinstance(game_mode, SugarySpireGameMode):
-        return 'Sugary Spire'
-    else:
-        return 'DELTARUNE'
+    mode_map = {DemoGameMode: 'DELTARUNEdemo', UndertaleGameMode: 'UNDERTALE', UndertaleYellowGameMode: 'UNDERTALE Yellow', PizzaTowerGameMode: 'Pizza Tower', SugarySpireGameMode: 'Sugary Spire'}
+    for mode_class, value in mode_map.items():
+        if isinstance(game_mode, mode_class):
+            return value
+    return 'DELTARUNE'
 
 
 def get_executable_name_for_game(game_type: str, os_type: str = None) -> Optional[str]:

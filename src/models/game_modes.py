@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable
 from config.constants import STEAM_APP_ID_FULL, STEAM_APP_ID_DEMO, STEAM_APP_ID_UNDERTALE, STEAM_APP_ID_PIZZA_TOWER
 if TYPE_CHECKING:
     from models.mod_models import ModInfo
@@ -34,6 +34,12 @@ class GameMode:
     def get_custom_exec_config_key(self) -> str:
         return self._custom_exec_key
 
+    def _is_visible_mod(self, mod: 'ModInfo') -> bool:
+        return not mod.hide_mod and (not mod.ban_status)
+
+    def _filter_visible_mods(self, all_mods: list['ModInfo'], predicate: Callable[['ModInfo'], bool]) -> list['ModInfo']:
+        return [mod for mod in all_mods if self._is_visible_mod(mod) and predicate(mod)]
+
     def get_chapter_id(self, ui_index: int) -> int:
         raise NotImplementedError
 
@@ -55,7 +61,7 @@ class FullGameMode(GameMode):
         return ui_index
 
     def filter_mods_for_ui(self, all_mods: list['ModInfo']) -> dict[int, list['ModInfo']]:
-        return {i: [mod for mod in all_mods if mod.game == 'deltarune' and (not mod.hide_mod) and (not mod.ban_status) and mod.get_chapter_data(i)] for i in range(5)}
+        return {i: self._filter_visible_mods(all_mods, lambda mod, i=i: mod.game == 'deltarune' and mod.get_chapter_data(i)) for i in range(5)}
 
 
 class DemoGameMode(GameMode):
@@ -72,7 +78,7 @@ class DemoGameMode(GameMode):
         return -1
 
     def filter_mods_for_ui(self, all_mods: list['ModInfo']) -> dict[int, list['ModInfo']]:
-        return {0: [mod for mod in all_mods if mod.is_valid_for_demo() and (not mod.hide_mod) and (not mod.ban_status)]}
+        return {0: self._filter_visible_mods(all_mods, lambda mod: mod.is_valid_for_demo())}
 
 
 class UndertaleGameMode(GameMode):
@@ -89,7 +95,7 @@ class UndertaleGameMode(GameMode):
         return 0
 
     def filter_mods_for_ui(self, all_mods: list['ModInfo']) -> dict[int, list['ModInfo']]:
-        return {0: [mod for mod in all_mods if mod.game == 'undertale' and (not mod.hide_mod) and (not mod.ban_status) and mod.files.get('undertale')]}
+        return {0: self._filter_visible_mods(all_mods, lambda mod: mod.game == 'undertale' and mod.files.get('undertale'))}
 
 
 class UndertaleYellowGameMode(GameMode):
@@ -106,7 +112,7 @@ class UndertaleYellowGameMode(GameMode):
         return 0
 
     def filter_mods_for_ui(self, all_mods: list['ModInfo']) -> dict[int, list['ModInfo']]:
-        return {0: [mod for mod in all_mods if mod.game == 'undertaleyellow' and (not mod.hide_mod) and (not mod.ban_status) and mod.files.get('undertale')]}
+        return {0: self._filter_visible_mods(all_mods, lambda mod: mod.game == 'undertaleyellow' and mod.files.get('undertale'))}
 
 
 class PizzaTowerGameMode(GameMode):
@@ -123,15 +129,7 @@ class PizzaTowerGameMode(GameMode):
         return 0
 
     def filter_mods_for_ui(self, all_mods: list['ModInfo']) -> dict[int, list['ModInfo']]:
-        filtered = []
-        for mod in all_mods:
-            if mod.game != 'pizzatower':
-                continue
-            if mod.hide_mod or mod.ban_status:
-                continue
-            if mod.files.get('0') or mod.files.get('pizzatower'):
-                filtered.append(mod)
-        return {0: filtered}
+        return {0: self._filter_visible_mods(all_mods, lambda mod: mod.game == 'pizzatower' and (mod.files.get('0') or mod.files.get('pizzatower')))}
 
 
 class SugarySpireGameMode(GameMode):
@@ -148,4 +146,4 @@ class SugarySpireGameMode(GameMode):
         return 0
 
     def filter_mods_for_ui(self, all_mods: list['ModInfo']) -> dict[int, list['ModInfo']]:
-        return {0: [mod for mod in all_mods if mod.game == 'sugaryspire' and (not mod.hide_mod) and (not mod.ban_status) and mod.files.get('undertale')]}
+        return {0: self._filter_visible_mods(all_mods, lambda mod: mod.game == 'sugaryspire' and mod.files.get('undertale'))}

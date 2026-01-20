@@ -1,7 +1,8 @@
 from typing import List, Dict, Any, Optional, Callable
 from managers.mod_manager import parse_mod_date
-from managers.blacklist_manager import BlacklistManager
+from managers.blocklist_manager import BlocklistManager
 from utils.gamebanana_api import GameBananaAPI
+_TRUE_VALUES = (True, 'true', 'True', 1)
 
 
 def _get_mod_attr(mod: Any, attr: str, default: Any = None) -> Any:
@@ -12,10 +13,20 @@ def _get_mod_attr(mod: Any, attr: str, default: Any = None) -> Any:
 
 def _get_mod_bool_attr(mod: Any, attr: str, default: bool = False) -> bool:
     value = _get_mod_attr(mod, attr, default)
-    return value in [True, 'true', 'True', 1] if value else False
+    return value in _TRUE_VALUES if value else False
 
 
-def filter_and_sort_mods(mods_list: List[Any], filters: Dict[str, Any], sort_config: Optional[Dict[str, Any]] = None, mod_accessor: Optional[Callable] = None, blacklist_manager: Optional[BlacklistManager] = None) -> List[Any]:
+def _date_tuple_to_sortable(date_tuple) -> int:
+    if not date_tuple or date_tuple == (0, 0, 0, 0, 0):
+        return 0
+    try:
+        year, month, day, hour, minute = date_tuple
+        return year * 100000000 + month * 1000000 + day * 10000 + hour * 100 + minute
+    except (ValueError, TypeError, IndexError):
+        return 0
+
+
+def filter_and_sort_mods(mods_list: List[Any], filters: Dict[str, Any], sort_config: Optional[Dict[str, Any]] = None, mod_accessor: Optional[Callable] = None, blocklist_manager: Optional[BlocklistManager] = None) -> List[Any]:
     if not mods_list:
         return []
     selected_tags = filters.get('tags', [])
@@ -45,8 +56,8 @@ def filter_and_sort_mods(mods_list: List[Any], filters: Dict[str, Any], sort_con
         mod_status = _get_mod_attr(mod, 'status', 'approved')
         if mod_status not in status_filter:
             continue
-        if blacklist_manager and selected_game:
-            if blacklist_manager.is_mod_blacklisted(mod, selected_game):
+        if blocklist_manager and selected_game:
+            if blocklist_manager.is_mod_blocklisted(mod, selected_game):
                 continue
         if selected_tags:
             mod_tags = _get_mod_attr(mod, 'tags', []) or []
@@ -85,15 +96,6 @@ def filter_and_sort_mods(mods_list: List[Any], filters: Dict[str, Any], sort_con
         sort_type = sort_config.get('sort_type', 0)
         reverse = sort_config.get('reverse', False)
 
-        def date_tuple_to_sortable(date_tuple):
-            if not date_tuple or date_tuple == (0, 0, 0, 0, 0):
-                return 0
-            try:
-                year, month, day, hour, minute = date_tuple
-                return year * 100000000 + month * 1000000 + day * 10000 + hour * 100 + minute
-            except (ValueError, TypeError, IndexError):
-                return 0
-
         def get_sort_key(item):
             mod = mod_accessor(item) if mod_accessor else item
             if sort_type == 0:
@@ -108,11 +110,11 @@ def filter_and_sort_mods(mods_list: List[Any], filters: Dict[str, Any], sort_con
             elif sort_type == 1:
                 date_str = _get_mod_attr(mod, 'last_updated') or _get_mod_attr(mod, 'updated_date') or '0'
                 date_tuple = parse_mod_date(date_str)
-                return date_tuple_to_sortable(date_tuple)
+                return _date_tuple_to_sortable(date_tuple)
             elif sort_type == 2:
                 date_str = _get_mod_attr(mod, 'created_date') or _get_mod_attr(mod, 'installed_date') or '0'
                 date_tuple = parse_mod_date(date_str)
-                return date_tuple_to_sortable(date_tuple)
+                return _date_tuple_to_sortable(date_tuple)
             return 0
         filtered_list.sort(key=get_sort_key, reverse=reverse)
     return filtered_list

@@ -189,7 +189,6 @@ class FullInstallThread(QThread):
             def progress_callback(progress):
                 self.progress.emit(progress)
                 if total_size > 0:
-                    from utils.ui_utils import format_size_mb
                     downloaded_mb = format_size_mb(downloaded_ref[0])
                     total_mb = format_size_mb(total_size)
                     self.status.emit(f"{tr('status.installing_game_files')} ({downloaded_mb} / {total_mb})", UI_COLORS['status_warning'])
@@ -377,6 +376,16 @@ class InstallModsThread(QThread):
                     pass
             raise
 
+    def _make_progress_callback(self, mod_name: str, current_index: int, total_items: int, total_bytes: int, downloaded_ref: list[int]):
+
+        def progress_callback(progress):
+            self.progress.emit(progress)
+            if total_bytes > 0:
+                downloaded_mb = format_size_mb(downloaded_ref[0])
+                total_mb = format_size_mb(total_bytes)
+                self.status.emit(f'{mod_name} {current_index}/{total_items} ({downloaded_mb} / {total_mb})', UI_COLORS['status_warning'])
+        return progress_callback
+
     def run(self):
         import requests
         try:
@@ -511,35 +520,17 @@ class InstallModsThread(QThread):
                 try:
                     if is_data_file:
                         if is_xdelta:
-
-                            def progress_callback(progress):
-                                self.progress.emit(progress)
-                                if total_bytes > 0:
-                                    downloaded_mb = format_size_mb(downloaded_ref[0])
-                                    total_mb = format_size_mb(total_bytes)
-                                    self.status.emit(f'{mod.name} {current_index}/{total_items} ({downloaded_mb} / {total_mb})', UI_COLORS['status_warning'])
+                            progress_callback = self._make_progress_callback(mod.name, current_index, total_items, total_bytes, downloaded_ref)
                             self._download_component_file(url, cache_dir, 'data', progress_callback, total_bytes, downloaded_ref, session)
                         else:
                             from utils.file_utils import download_and_extract_archive
-
-                            def progress_callback(progress):
-                                self.progress.emit(progress)
-                                if total_bytes > 0:
-                                    downloaded_mb = format_size_mb(downloaded_ref[0])
-                                    total_mb = format_size_mb(total_bytes)
-                                    self.status.emit(f'{mod.name} {current_index}/{total_items} ({downloaded_mb} / {total_mb})', UI_COLORS['status_warning'])
+                            progress_callback = self._make_progress_callback(mod.name, current_index, total_items, total_bytes, downloaded_ref)
                             download_and_extract_archive(url, cache_dir, progress_callback, total_bytes, downloaded_ref, session, cancel_check=lambda: self._cancelled)
                             if self._cancelled:
                                 self.finished.emit(False)
                                 return
                     else:
-
-                        def progress_callback(progress):
-                            self.progress.emit(progress)
-                            if total_bytes > 0:
-                                downloaded_mb = format_size_mb(downloaded_ref[0])
-                                total_mb = format_size_mb(total_bytes)
-                                self.status.emit(f'{mod.name} {current_index}/{total_items} ({downloaded_mb} / {total_mb})', UI_COLORS['status_warning'])
+                        progress_callback = self._make_progress_callback(mod.name, current_index, total_items, total_bytes, downloaded_ref)
                         self._download_component_file(url, cache_dir, 'extra', progress_callback, total_bytes, downloaded_ref, session)
                 except RuntimeError as e:
                     if str(e) == 'download_cancelled':

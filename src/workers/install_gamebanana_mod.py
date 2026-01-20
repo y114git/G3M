@@ -26,6 +26,9 @@ class InstallGameBananaModThread(BaseInstallWorker):
         self._file_selection_event = None
         self.selected_file = selected_file
 
+    def _build_gb_metadata(self, mod_id: int) -> Dict:
+        return {'mod_id': mod_id, 'profile_url': self.mod_info.external_url, 'icon_url': self.mod_info.icon_url, 'tags': self.mod_info.tags if hasattr(self.mod_info, 'tags') and self.mod_info.tags else [], 'category': self.mod_info.gamebanana_category if hasattr(self.mod_info, 'gamebanana_category') else None}
+
     def set_selected_file(self, file_index: int):
         self._selected_file_index = file_index
         if self._file_selection_event:
@@ -110,7 +113,7 @@ class InstallGameBananaModThread(BaseInstallWorker):
                 self.status.emit(tr('status.installing_mod'), UI_COLORS['status_info'])
                 try:
                     from workers.mod_install_worker import ModInstallWorker
-                    gb_metadata = {'mod_id': mod_id, 'profile_url': self.mod_info.external_url, 'icon_url': self.mod_info.icon_url, 'tags': self.mod_info.tags if hasattr(self.mod_info, 'tags') and self.mod_info.tags else [], 'category': self.mod_info.gamebanana_category if hasattr(self.mod_info, 'gamebanana_category') else None}
+                    gb_metadata = self._build_gb_metadata(mod_id)
                     installer = ModInstallWorker(archive_path=archive_path, mods_dir=self.main_window.app_state.mods_dir, mod_manager=None, gamebanana_metadata=gb_metadata, parent=self.parent())
                     installer.run()
                     self._cleanup_temp_files(archive_path, archive_dir)
@@ -125,7 +128,7 @@ class InstallGameBananaModThread(BaseInstallWorker):
                     raise ValueError(tr('errors.gamebanana_installation_failed'))
                 return
             self.status.emit(tr('status.converting_mod'), UI_COLORS['status_info'])
-            gb_metadata = {'mod_id': mod_id, 'profile_url': self.mod_info.external_url, 'icon_url': self.mod_info.icon_url, 'tags': self.mod_info.tags if hasattr(self.mod_info, 'tags') and self.mod_info.tags else [], 'category': self.mod_info.gamebanana_category if hasattr(self.mod_info, 'gamebanana_category') else None}
+            gb_metadata = self._build_gb_metadata(mod_id)
             converter = GameBananaConverter(archive_path, self.main_window.app_state.mods_dir, gb_metadata)
             mod_dir = converter.convert()
             self._cleanup_temp_files(archive_path, archive_dir)

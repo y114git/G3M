@@ -36,6 +36,9 @@ class GameLaunchController(QObject):
     def set_full_install_checkbox_state(self, checked: bool):
         self._full_install_checkbox_is_checked = checked
 
+    def _is_full_install_enabled(self) -> bool:
+        return isinstance(self.app_state.game_mode, (DemoGameMode, UndertaleYellowGameMode, SugarySpireGameMode)) and self._full_install_checkbox_is_checked
+
     def update_button_state(self):
         if self.app_state.is_installing and (not self.app_state.operation_cancelled) or self.app_state.is_merging:
             self.app_state.action_button_text = tr('ui.cancel_button')
@@ -45,8 +48,7 @@ class GameLaunchController(QObject):
             self.app_state.action_button_text = tr('status.please_wait')
             self.app_state.action_button_enabled = False
             return
-        is_full_install_enabled = isinstance(self.app_state.game_mode, (DemoGameMode, UndertaleYellowGameMode, SugarySpireGameMode)) and self._full_install_checkbox_is_checked
-        action_text = tr('buttons.install') if is_full_install_enabled else tr('ui.update_button') if self.slot_manager.check_used_mods_need_updates() else tr('ui.launch_button')
+        action_text = tr('buttons.install') if self._is_full_install_enabled() else tr('ui.update_button') if self.slot_manager.check_used_mods_need_updates() else tr('ui.launch_button')
         self.app_state.action_button_text = action_text
         self.app_state.action_button_enabled = True
 
@@ -109,7 +111,7 @@ class GameLaunchController(QObject):
         if self.app_state.is_merging or (merge_thread and merge_thread.isRunning()):
             self._cancel_operation('merge')
             return
-        if isinstance(self.app_state.game_mode, (DemoGameMode, UndertaleYellowGameMode, SugarySpireGameMode)) and self._full_install_checkbox_is_checked:
+        if self._is_full_install_enabled():
             self.perform_full_install()
             return
         if self.slot_manager.check_used_mods_need_updates():
@@ -201,9 +203,7 @@ class GameLaunchController(QObject):
         if success:
             if isinstance(self.app_state.game_mode, DemoGameMode):
                 self.app_state.demo_game_path = self.app_state.local_config['demo_game_path'] = target_dir
-            elif isinstance(self.app_state.game_mode, UndertaleYellowGameMode):
-                self.app_state.game_mode.set_game_path(self.app_state.local_config, target_dir)
-            elif isinstance(self.app_state.game_mode, SugarySpireGameMode):
+            elif isinstance(self.app_state.game_mode, (UndertaleYellowGameMode, SugarySpireGameMode)):
                 self.app_state.game_mode.set_game_path(self.app_state.local_config, target_dir)
             else:
                 self.app_state.game_path = self.app_state.local_config['game_path'] = target_dir

@@ -23,6 +23,13 @@ class LoadGameBananaMetadataThread(QThread):
     def cancel(self):
         self._cancelled = True
 
+    def _save_metadata(self, mod_id_str: str, downloads: Optional[int], tagline: Optional[str], category: Optional[str]):
+        tagline_to_save = tagline if tagline else 'No description'
+        category_to_save = category if category else None
+        self.metadata_cache.set(mod_id_str, downloads, tagline_to_save, category=category_to_save)
+        emit_downloads = downloads if downloads is not None else 0
+        self.mod_updated.emit(mod_id_str, emit_downloads, tagline_to_save, category_to_save or '')
+
     def run(self):
         try:
             total = len(self.mod_ids)
@@ -42,16 +49,10 @@ class LoadGameBananaMetadataThread(QThread):
                         mod_id = int(mod_id_str)
                         downloads, tagline, category = self._load_mod_metadata(mod_id)
                         if downloads is not None:
-                            tagline_to_save = tagline if tagline else 'No description'
-                            category_to_save = category if category else None
-                            self.metadata_cache.set(mod_id_str, downloads, tagline_to_save, category=category_to_save)
-                            self.mod_updated.emit(mod_id_str, downloads, tagline_to_save, category_to_save or '')
+                            self._save_metadata(mod_id_str, downloads, tagline, category)
                             loaded_count += 1
                         elif tagline or category:
-                            tagline_to_save = tagline if tagline else 'No description'
-                            category_to_save = category if category else None
-                            self.metadata_cache.set(mod_id_str, None, tagline_to_save, category=category_to_save)
-                            self.mod_updated.emit(mod_id_str, 0, tagline_to_save, category_to_save or '')
+                            self._save_metadata(mod_id_str, None, tagline, category)
                             loaded_count += 1
                         else:
                             logger.debug(f'LoadGameBananaMetadataThread: Failed to load metadata for mod {mod_id_str}, will retry later')

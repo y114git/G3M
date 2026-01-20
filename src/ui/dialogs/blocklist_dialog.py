@@ -3,24 +3,24 @@ from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButt
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont
 from managers.localization_manager import tr
-from managers.blacklist_manager import BlacklistManager
+from managers.blocklist_manager import BlocklistManager
 from ui.common.styling import get_theme_color
 
 
-class BlacklistDialog(QDialog):
-    blacklist_changed = pyqtSignal()
+class BlocklistDialog(QDialog):
+    blocklist_changed = pyqtSignal()
 
-    def __init__(self, blacklist_manager: BlacklistManager, current_game: str, available_games: List[str], parent=None):
+    def __init__(self, blocklist_manager: BlocklistManager, current_game: str, available_games: List[str], parent=None):
         super().__init__(parent)
-        self.blacklist_manager = blacklist_manager
+        self.blocklist_manager = blocklist_manager
         self.current_game = current_game
         self.available_games = available_games
         self.setup_ui()
-        self.load_blacklist()
+        self.load_blocklist()
         self.retranslate_ui()
 
     def setup_ui(self):
-        self.setWindowTitle(tr('blacklist.title'))
+        self.setWindowTitle(tr('blocklist.title'))
         self.setMinimumSize(600, 500)
         self.setModal(True)
         main_layout = QVBoxLayout(self)
@@ -28,7 +28,7 @@ class BlacklistDialog(QDialog):
         main_layout.setContentsMargins(15, 15, 15, 15)
         game_selector_layout = QHBoxLayout()
         game_selector_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        game_label = QLabel(tr('blacklist.select_game'))
+        game_label = QLabel(tr('blocklist.select_game'))
         game_label.setFont(QFont('', 10, QFont.Weight.Bold))
         game_selector_layout.addWidget(game_label)
         self.game_combo = QComboBox()
@@ -40,31 +40,29 @@ class BlacklistDialog(QDialog):
         left_widget = QWidget()
         left_layout = QVBoxLayout(left_widget)
         left_layout.setContentsMargins(5, 5, 5, 5)
-        add_group = QGroupBox(tr('blacklist.add_entry'))
+        add_group = QGroupBox(tr('blocklist.add_entry'))
         add_layout = QVBoxLayout(add_group)
         prefix_layout = QVBoxLayout()
         prefix_layout.setSpacing(4)
-        prefix_label = QLabel(tr('blacklist.prefix'))
+        prefix_label = QLabel(tr('blocklist.prefix'))
         prefix_layout.addWidget(prefix_label)
         self.prefix_combo = QComboBox()
-        self.prefix_combo.addItem(tr('blacklist.prefix_type_id'), BlacklistManager.PREFIX_TYPE_ID)
-        self.prefix_combo.addItem(tr('blacklist.prefix_type_name'), BlacklistManager.PREFIX_TYPE_NAME)
-        self.prefix_combo.addItem(tr('blacklist.prefix_type_category'), BlacklistManager.PREFIX_TYPE_CATEGORY)
+        self._populate_prefix_combo()
         prefix_layout.addWidget(self.prefix_combo)
         add_layout.addLayout(prefix_layout)
         value_layout = QVBoxLayout()
         value_layout.setSpacing(4)
-        value_label = QLabel(tr('blacklist.value'))
+        value_label = QLabel(tr('blocklist.value'))
         value_layout.addWidget(value_label)
         self.value_edit = QLineEdit()
-        self.value_edit.setPlaceholderText(tr('blacklist.value_placeholder'))
+        self.value_edit.setPlaceholderText(tr('blocklist.value_placeholder'))
         self.value_edit.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         value_layout.addWidget(self.value_edit)
         add_layout.addLayout(value_layout)
         add_layout.addSpacing(6)
         button_layout = QHBoxLayout()
         button_layout.addStretch()
-        self.add_button = QPushButton(tr('blacklist.add'))
+        self.add_button = QPushButton(tr('blocklist.add'))
         self.add_button.clicked.connect(self.add_entry)
         button_layout.addWidget(self.add_button)
         button_layout.addStretch()
@@ -74,13 +72,13 @@ class BlacklistDialog(QDialog):
         right_widget = QWidget()
         right_layout = QVBoxLayout(right_widget)
         right_layout.setContentsMargins(5, 5, 5, 5)
-        list_group = QGroupBox(tr('blacklist.current_entries'))
+        list_group = QGroupBox(tr('blocklist.current_entries'))
         list_layout = QVBoxLayout(list_group)
-        self.blacklist_list = QListWidget()
-        self.blacklist_list.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
-        list_layout.addWidget(self.blacklist_list)
+        self.blocklist_list = QListWidget()
+        self.blocklist_list.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
+        list_layout.addWidget(self.blocklist_list)
         list_buttons_layout = QHBoxLayout()
-        self.remove_button = QPushButton(tr('blacklist.remove'))
+        self.remove_button = QPushButton(tr('blocklist.remove'))
         self.remove_button.clicked.connect(self.remove_entry)
         self.remove_button.setEnabled(False)
         list_buttons_layout.addWidget(self.remove_button)
@@ -97,7 +95,7 @@ class BlacklistDialog(QDialog):
         button_layout.addStretch()
         button_layout.addWidget(close_button)
         main_layout.addLayout(button_layout)
-        self.blacklist_list.itemSelectionChanged.connect(self.on_selection_changed)
+        self.blocklist_list.itemSelectionChanged.connect(self.on_selection_changed)
         self.apply_theme()
 
     def apply_theme(self):
@@ -108,54 +106,54 @@ class BlacklistDialog(QDialog):
             hover_color = get_theme_color(app_state.local_config, 'button_hover', '#333333')
             self.setStyleSheet(f'\n                QDialog {{\n                    background-color: {bg_color};\n                    color: {text_color};\n                }}\n                QGroupBox {{\n                    color: {text_color};\n                    border: 2px solid {text_color};\n                    margin-top: 10px;\n                    padding-top: 10px;\n                    background-color: {bg_color};\n                }}\n                QGroupBox::title {{\n                    subcontrol-origin: margin;\n                    left: 10px;\n                    padding: 0 5px 0 5px;\n                    color: {text_color};\n                }}\n                QPushButton {{\n                    background-color: {bg_color};\n                    color: {text_color};\n                    border: 2px solid {text_color};\n                    padding: 5px 15px;\n                    font-size: 12px;\n                }}\n                QPushButton:hover {{\n                    background-color: {hover_color};\n                    color: {text_color};\n                }}\n                QPushButton:disabled {{\n                    background-color: {bg_color};\n                    color: {text_color};\n                    opacity: 0.5;\n                }}\n                QLineEdit, QComboBox, QListWidget {{\n                    background-color: {bg_color};\n                    color: {text_color};\n                    border: 2px solid {text_color};\n                    padding: 3px;\n                }}\n                QListWidget::item:selected {{\n                    background-color: {text_color};\n                    color: {bg_color};\n                }}\n                QLabel {{\n                    color: {text_color};\n                }}\n            ')
 
-    def load_blacklist(self):
+    def load_blocklist(self):
         self.game_combo.clear()
-        game_names = {'deltarune': tr('ui.deltarune'), 'deltarunedemo': tr('ui.deltarunedemo'), 'undertale': tr('ui.undertale'), 'undertaleyellow': tr('ui.undertaleyellow'), 'pizzatower': tr('ui.pizzatower'), 'sugaryspire': tr('ui.sugaryspire'), 'global': tr('blacklist.global')}
+        game_names = {'deltarune': tr('ui.deltarune'), 'deltarunedemo': tr('ui.deltarunedemo'), 'undertale': tr('ui.undertale'), 'undertaleyellow': tr('ui.undertaleyellow'), 'pizzatower': tr('ui.pizzatower'), 'sugaryspire': tr('ui.sugaryspire'), 'global': tr('blocklist.global')}
         for game in self.available_games:
             display_name = game_names.get(game, game)
             self.game_combo.addItem(display_name, game)
         current_index = self.game_combo.findData(self.current_game)
         if current_index >= 0:
             self.game_combo.setCurrentIndex(current_index)
-        self.update_blacklist_display()
+        self.update_blocklist_display()
 
-    def update_blacklist_display(self):
-        self.blacklist_list.clear()
+    def update_blocklist_display(self):
+        self.blocklist_list.clear()
         current_game = self.game_combo.currentData()
         if not current_game:
             return
-        entries = self.blacklist_manager.get_blacklist_for_game(current_game)
+        entries = self.blocklist_manager.get_blocklist_for_game(current_game)
         for entry in entries:
             prefix_type = entry['prefix_type']
             value = entry['value']
-            prefix_display = self.blacklist_manager.get_prefix_type_display_name(prefix_type)
+            prefix_display = self.blocklist_manager.get_prefix_type_display_name(prefix_type)
             item_text = f'[{prefix_display}] {value}'
             item = QListWidgetItem(item_text)
             item.setData(Qt.ItemDataRole.UserRole, entry)
-            self.blacklist_list.addItem(item)
+            self.blocklist_list.addItem(item)
 
     def on_game_changed(self):
-        self.update_blacklist_display()
+        self.update_blocklist_display()
 
     def on_selection_changed(self):
-        has_selection = bool(self.blacklist_list.selectedItems())
+        has_selection = bool(self.blocklist_list.selectedItems())
         self.remove_button.setEnabled(has_selection)
 
     def add_entry(self):
         prefix_type = self.prefix_combo.currentData()
         value = self.value_edit.text().strip()
         if not value:
-            QMessageBox.warning(self, tr('common.warning'), tr('blacklist.empty_value'))
+            QMessageBox.warning(self, tr('common.warning'), tr('blocklist.empty_value'))
             return
         current_game = self.game_combo.currentData()
         if current_game:
-            self.blacklist_manager.add_blacklist_entry(current_game, prefix_type, value)
+            self.blocklist_manager.add_blocklist_entry(current_game, prefix_type, value)
             self.value_edit.clear()
-            self.update_blacklist_display()
-            self.blacklist_changed.emit()
+            self.update_blocklist_display()
+            self.blocklist_changed.emit()
 
     def remove_entry(self):
-        selected_items = self.blacklist_list.selectedItems()
+        selected_items = self.blocklist_list.selectedItems()
         if not selected_items:
             return
         current_game = self.game_combo.currentData()
@@ -163,40 +161,45 @@ class BlacklistDialog(QDialog):
             return
         item = selected_items[0]
         entry = item.data(Qt.ItemDataRole.UserRole)
-        reply = QMessageBox.question(self, tr('blacklist.confirm_remove'), tr('blacklist.confirm_remove_text'), QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        reply = QMessageBox.question(self, tr('blocklist.confirm_remove'), tr('blocklist.confirm_remove_text'), QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         if reply == QMessageBox.StandardButton.Yes:
-            success = self.blacklist_manager.remove_blacklist_entry(current_game, entry['prefix_type'], entry['value'])
+            success = self.blocklist_manager.remove_blocklist_entry(current_game, entry['prefix_type'], entry['value'])
             if success:
-                self.update_blacklist_display()
-                self.blacklist_changed.emit()
+                self.update_blocklist_display()
+                self.blocklist_changed.emit()
 
     def retranslate_ui(self):
-        self.setWindowTitle(tr('blacklist.title'))
+        self.setWindowTitle(tr('blocklist.title'))
         if hasattr(self, 'game_combo'):
-            self.load_blacklist()
+            self.load_blocklist()
         if hasattr(self, 'add_button'):
-            self.add_button.setText(tr('blacklist.add'))
+            self.add_button.setText(tr('blocklist.add'))
         if hasattr(self, 'remove_button'):
-            self.remove_button.setText(tr('blacklist.remove'))
+            self.remove_button.setText(tr('blocklist.remove'))
         if hasattr(self, 'value_edit'):
-            self.value_edit.setPlaceholderText(tr('blacklist.value_placeholder'))
+            self.value_edit.setPlaceholderText(tr('blocklist.value_placeholder'))
         if hasattr(self, 'prefix_label'):
-            self.prefix_label.setText(tr('blacklist.prefix'))
+            self.prefix_label.setText(tr('blocklist.prefix'))
         if hasattr(self, 'value_label'):
-            self.value_label.setText(tr('blacklist.value'))
+            self.value_label.setText(tr('blocklist.value'))
         if hasattr(self, 'game_label'):
-            self.game_label.setText(tr('blacklist.select_game'))
+            self.game_label.setText(tr('blocklist.select_game'))
         if hasattr(self, 'add_group'):
-            self.add_group.setTitle(tr('blacklist.add_entry'))
+            self.add_group.setTitle(tr('blocklist.add_entry'))
         if hasattr(self, 'list_group'):
-            self.list_group.setTitle(tr('blacklist.current_entries'))
-        prefix_combo_items = [(tr('blacklist.prefix_type_id'), BlacklistManager.PREFIX_TYPE_ID), (tr('blacklist.prefix_type_name'), BlacklistManager.PREFIX_TYPE_NAME), (tr('blacklist.prefix_type_category'), BlacklistManager.PREFIX_TYPE_CATEGORY)]
+            self.list_group.setTitle(tr('blocklist.current_entries'))
         if hasattr(self, 'prefix_combo'):
             current_data = self.prefix_combo.currentData()
-            self.prefix_combo.clear()
-            for text, data in prefix_combo_items:
-                self.prefix_combo.addItem(text, data)
-            if current_data:
-                index = self.prefix_combo.findData(current_data)
-                if index >= 0:
-                    self.prefix_combo.setCurrentIndex(index)
+            self._populate_prefix_combo(current_data)
+
+    def _populate_prefix_combo(self, current_data: str | None = None) -> None:
+        if not hasattr(self, 'prefix_combo'):
+            return
+        prefix_combo_items = [(tr('blocklist.prefix_type_id'), BlocklistManager.PREFIX_TYPE_ID), (tr('blocklist.prefix_type_name'), BlocklistManager.PREFIX_TYPE_NAME), (tr('blocklist.prefix_type_category'), BlocklistManager.PREFIX_TYPE_CATEGORY)]
+        self.prefix_combo.clear()
+        for text, data in prefix_combo_items:
+            self.prefix_combo.addItem(text, data)
+        if current_data:
+            index = self.prefix_combo.findData(current_data)
+            if index >= 0:
+                self.prefix_combo.setCurrentIndex(index)

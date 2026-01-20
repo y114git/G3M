@@ -224,24 +224,22 @@ class ModPlaqueWidget(BaseModWidget):
             pass
         return None
 
-    def _init_ui(self):
-        super()._init_ui()
-        downloads_text = ''
+    def _get_downloads_text(self):
         try:
             key = getattr(self.mod_data, 'key', None) or getattr(self.mod_data, 'mod_key', None)
+            downloads_value = getattr(self.mod_data, 'downloads', 0) or 0
             if key and key.startswith('gb_'):
                 has_full = getattr(self.mod_data, 'has_full_metadata', True)
                 if not has_full:
-                    downloads_text = tr('ui.loading_placeholder')
-                else:
-                    downloads_value = getattr(self.mod_data, 'downloads', 0) or 0
-                    downloads_text = f'⤓ {downloads_value}'
-            else:
-                downloads_value = getattr(self.mod_data, 'downloads', 0) or 0
-                downloads_text = f'⤓ {downloads_value}'
+                    return tr('ui.loading_placeholder')
+            return f'⤓ {downloads_value}'
         except Exception:
             downloads_value = getattr(self.mod_data, 'downloads', 0) or 0
-            downloads_text = f'⤓ {downloads_value}'
+            return f'⤓ {downloads_value}'
+
+    def _init_ui(self):
+        super()._init_ui()
+        downloads_text = self._get_downloads_text()
         self.downloads_label = QLabel(downloads_text, self)
         self.downloads_label.setObjectName('secondaryText')
         self.downloads_label.setToolTip(tr('ui.downloads_tooltip'))
@@ -325,7 +323,6 @@ class ModPlaqueWidget(BaseModWidget):
                     import logging
                     logging.warning(f'ModPlaqueWidget: Error checking cache for key {key}: {e}', exc_info=True)
             if not self.is_installed:
-                key = getattr(self.mod_data, 'key', None) or getattr(self.mod_data, 'mod_key', '')
                 try:
                     self.is_installed = self.parent_app.mod_manager.is_mod_installed(key)
                 except Exception as e:
@@ -450,12 +447,7 @@ class ModPlaqueWidget(BaseModWidget):
             return
         self.gb_status_label.setVisible(True)
         if self.is_installed:
-            text = tr('ui.gamebanana_status_installed')
-            color = '#4CAF50'
-            tooltip = tr('ui.gamebanana_status_installed_tooltip')
-            self.gb_status_label.setText(text)
-            self.gb_status_label.setStyleSheet(f'color: {color}; font-size: 13px; font-weight: bold; background: transparent;')
-            self.gb_status_label.setToolTip(tooltip)
+            self._set_gamebanana_status(tr('ui.gamebanana_status_installed'), '#4CAF50', tr('ui.gamebanana_status_installed_tooltip'))
             return
         compatible = bool(getattr(self.mod_data, 'gamebanana_is_tool_compatible', False))
         checked = bool(getattr(self.mod_data, 'gamebanana_compatibility_checked', False))
@@ -473,6 +465,11 @@ class ModPlaqueWidget(BaseModWidget):
             text = tr('ui.gamebanana_status_unknown')
             color = '#9E9E9E'
             tooltip = tr('ui.gamebanana_status_unknown_tooltip')
+        self._set_gamebanana_status(text, color, tooltip)
+
+    def _set_gamebanana_status(self, text: str, color: str, tooltip: str):
+        if not self.gb_status_label:
+            return
         self.gb_status_label.setText(text)
         self.gb_status_label.setStyleSheet(f'color: {color}; font-size: 13px; font-weight: bold; background: transparent;')
         self.gb_status_label.setToolTip(tooltip)
@@ -502,21 +499,7 @@ class ModPlaqueWidget(BaseModWidget):
                 from ui.common.styling import load_mod_icon_universal
                 load_mod_icon_universal(self.icon_label, self.mod_data, size=80)
             if hasattr(self, 'downloads_label'):
-                try:
-                    key = getattr(self.mod_data, 'key', None) or getattr(self.mod_data, 'mod_key', None)
-                    if key and key.startswith('gb_'):
-                        has_full = getattr(self.mod_data, 'has_full_metadata', True)
-                        if not has_full:
-                            self.downloads_label.setText(tr('ui.loading_placeholder'))
-                        else:
-                            downloads = getattr(self.mod_data, 'downloads', 0) or 0
-                            self.downloads_label.setText(f'⤓ {downloads}')
-                    else:
-                        downloads = getattr(self.mod_data, 'downloads', 0) or 0
-                        self.downloads_label.setText(f'⤓ {downloads}')
-                except Exception:
-                    downloads = getattr(self.mod_data, 'downloads', 0) or 0
-                    self.downloads_label.setText(f'⤓ {downloads}')
+                self.downloads_label.setText(self._get_downloads_text())
             if hasattr(self, 'tagline_label'):
                 try:
                     tagline = getattr(self.mod_data, 'tagline', '') or tr('ui.no_description')

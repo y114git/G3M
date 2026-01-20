@@ -138,6 +138,14 @@ def sanitize_filename(name: str) -> str:
     return re.sub('[\\\\/*?:"<>|]', '', name).strip()
 
 
+def _cleanup_tmp(path: str) -> None:
+    try:
+        if os.path.exists(path):
+            os.remove(path)
+    except OSError:
+        pass
+
+
 def atomic_write_json(path: str, data: Dict, indent: int = 2) -> None:
     save_json(path, data, indent=indent)
 
@@ -175,41 +183,21 @@ def save_json(path: str, data: Dict, indent: int = 2, max_retries: int = 5, dela
                 if attempt < max_retries - 1:
                     logging.debug(f'save_json: Attempt {attempt + 1}/{max_retries} failed for {path}: {e}, retrying...')
                     time.sleep(delay * (attempt + 1))
-                    try:
-                        if os.path.exists(tmp):
-                            os.remove(tmp)
-                    except OSError:
-                        pass
+                    _cleanup_tmp(tmp)
                 else:
-                    try:
-                        if os.path.exists(tmp):
-                            os.remove(tmp)
-                    except OSError:
-                        pass
+                    _cleanup_tmp(tmp)
                     raise
         except (PermissionError, OSError) as e:
             last_error = e
             if attempt < max_retries - 1:
                 logging.debug(f'save_json: Attempt {attempt + 1}/{max_retries} failed for {path}: {e}, retrying...')
                 time.sleep(delay * (attempt + 1))
-                try:
-                    if os.path.exists(tmp):
-                        os.remove(tmp)
-                except OSError:
-                    pass
+                _cleanup_tmp(tmp)
             else:
-                try:
-                    if os.path.exists(tmp):
-                        os.remove(tmp)
-                except OSError:
-                    pass
+                _cleanup_tmp(tmp)
                 raise
         except (TypeError, ValueError) as e:
-            try:
-                if os.path.exists(tmp):
-                    os.remove(tmp)
-            except OSError:
-                pass
+            _cleanup_tmp(tmp)
             raise ValueError(f'Data is not JSON-serializable: {e}') from e
     if last_error:
         raise last_error
@@ -303,24 +291,11 @@ def get_chapter_folder_name(chapter_id: int, game: Optional[str] = None, modgame
             return 'pizzatower'
         return f'chapter_{chapter_id}'
     elif chapter_id == SLOT_ID_UNDERTALE or chapter_id == 0:
-        if game_value == 'undertale' and chapter_id == SLOT_ID_UNDERTALE:
-            return 'chapter_0'
         return 'chapter_0'
     elif chapter_id == SLOT_ID_UNDERTALE_YELLOW:
-        if game_value == 'undertaleyellow':
-            return 'chapter_0'
         return 'chapter_0'
     elif chapter_id == SLOT_ID_SUGARY_SPIRE:
-        if game_value == 'sugaryspire':
-            return 'sugaryspire'
         return 'sugaryspire'
-    elif chapter_id == 0:
-        if game_value == 'pizzatower':
-            return 'pizzatower'
-        elif game_value == 'sugaryspire':
-            return 'sugaryspire'
-        else:
-            return 'chapter_0'
     else:
         return f'chapter_{chapter_id}'
 

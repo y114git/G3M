@@ -157,20 +157,12 @@ class ManualModInstallDialog(QDialog):
         layout = QVBoxLayout(widget)
         layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         game = self.game_combo.currentData()
+        info_key_map = {'deltarunedemo': 'dialogs.select_data_file_info_demo', 'undertale': 'dialogs.select_data_file_info_undertale', 'undertaleyellow': 'dialogs.select_data_file_info_undertaleyellow', 'pizzatower': 'dialogs.select_data_file_info_pizzatower', 'sugaryspire': 'dialogs.select_data_file_info_sugaryspire'}
         if game == 'deltarune':
             info_text = tr('dialogs.select_data_file_info', chapter=chapter_id)
-        elif game == 'deltarunedemo':
-            info_text = tr('dialogs.select_data_file_info_demo')
-        elif game == 'undertale':
-            info_text = tr('dialogs.select_data_file_info_undertale')
-        elif game == 'undertaleyellow':
-            info_text = tr('dialogs.select_data_file_info_undertaleyellow')
-        elif game == 'pizzatower':
-            info_text = tr('dialogs.select_data_file_info_pizzatower')
-        elif game == 'sugaryspire':
-            info_text = tr('dialogs.select_data_file_info_sugaryspire')
         else:
-            info_text = tr('dialogs.select_data_file_info', chapter=chapter_id)
+            info_key = info_key_map.get(game)
+            info_text = tr(info_key) if info_key else tr('dialogs.select_data_file_info', chapter=chapter_id)
         info_label = QLabel(info_text)
         info_label.setWordWrap(True)
         info_label.setAlignment(Qt.AlignmentFlag.AlignCenter)

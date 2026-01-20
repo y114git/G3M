@@ -16,25 +16,21 @@ class ChatRequestThread(QThread):
         self._message = None
         self._cancelled = False
 
-    def request_messages(self, channel: str):
+    def _start_request(self, request_type: str, channel: str, message: str | None = None):
         if self.isRunning():
             logging.warning('ChatRequestThread: Already running, ignoring request')
             return
-        self._request_type = 'get_messages'
-        self._channel = channel
-        self._message = None
-        self._cancelled = False
-        self.start()
-
-    def request_send_message(self, channel: str, message: str):
-        if self.isRunning():
-            logging.warning('ChatRequestThread: Already running, ignoring request')
-            return
-        self._request_type = 'send_message'
+        self._request_type = request_type
         self._channel = channel
         self._message = message
         self._cancelled = False
         self.start()
+
+    def request_messages(self, channel: str):
+        self._start_request('get_messages', channel)
+
+    def request_send_message(self, channel: str, message: str):
+        self._start_request('send_message', channel, message)
 
     def cancel(self):
         self._cancelled = True

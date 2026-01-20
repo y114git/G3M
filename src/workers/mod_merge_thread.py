@@ -29,6 +29,16 @@ class ModMergeThread(QThread):
         except RuntimeError:
             pass
 
+    def _restore_backups(self, require_original_files: bool = False):
+        if not self.merger or not self.merger.backup_manager:
+            return
+        if require_original_files and (not self.merger.backup_manager.original_files):
+            return
+        for chapter_id in self.chapter_mods.keys():
+            if require_original_files and chapter_id not in self.merger.backup_manager.original_files:
+                continue
+            self.merger.backup_manager.restore_backups(chapter_id)
+
     def run(self):
         try:
             if self.isInterruptionRequested() or self._cancelled:
@@ -49,9 +59,7 @@ class ModMergeThread(QThread):
             if self.isInterruptionRequested() or self._cancelled:
                 self.merger._cancelled = True
                 if self.merger:
-                    for chapter_id in self.chapter_mods.keys():
-                        if self.merger.backup_manager:
-                            self.merger.backup_manager.restore_backups(chapter_id)
+                    self._restore_backups()
                 success = False
             try:
                 self.finished.emit(success)
@@ -67,10 +75,7 @@ class ModMergeThread(QThread):
         finally:
             if self.merger:
                 if (self.isInterruptionRequested() or self._cancelled) and self.merger.backup_manager:
-                    if self.merger.backup_manager.original_files:
-                        for chapter_id in self.chapter_mods.keys():
-                            if chapter_id in self.merger.backup_manager.original_files:
-                                self.merger.backup_manager.restore_backups(chapter_id)
+                    self._restore_backups(require_original_files=True)
                 if self.isInterruptionRequested() or self._cancelled:
                     self.merger.cleanup(force=True)
                 else:

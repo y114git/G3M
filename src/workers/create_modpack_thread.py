@@ -37,6 +37,17 @@ class CreateModpackThread(QThread):
             self.merger._cancelled = True
         self.status_update.emit('Operation cancelled', 'error')
 
+    def _get_mod_game(self, mods_list: List[Any]):
+        game = None
+        if mods_list:
+            first_mod = mods_list[0]
+            game = getattr(first_mod, 'game', None) or getattr(first_mod, 'modgame', None)
+            if not game and hasattr(first_mod, 'config_data'):
+                config = getattr(first_mod, 'config_data')
+                if isinstance(config, dict):
+                    game = config.get('game') or config.get('modgame')
+        return game
+
     def run(self):
         success = False
         try:
@@ -94,14 +105,7 @@ class CreateModpackThread(QThread):
             for chapter_id, mods_list in self.chapter_mods.items():
                 if self.isInterruptionRequested() or self._cancelled:
                     return
-                game = None
-                if mods_list:
-                    first_mod = mods_list[0]
-                    game = getattr(first_mod, 'game', None) or getattr(first_mod, 'modgame', None)
-                    if not game and hasattr(first_mod, 'config_data'):
-                        config = getattr(first_mod, 'config_data')
-                        if isinstance(config, dict):
-                            game = config.get('game') or config.get('modgame')
+                game = self._get_mod_game(mods_list)
                 from utils.file_utils import get_chapter_folder_name
                 chapter_folder_name = get_chapter_folder_name(chapter_id, game=game)
                 chapter_modpack_dir = os.path.join(self.modpack_dir, chapter_folder_name)
@@ -228,14 +232,7 @@ class CreateModpackThread(QThread):
                     chapter_key = '0'
                 else:
                     chapter_key = str(chapter_id)
-                game = None
-                if mods_list:
-                    first_mod = mods_list[0]
-                    game = getattr(first_mod, 'game', None) or getattr(first_mod, 'modgame', None)
-                    if not game and hasattr(first_mod, 'config_data'):
-                        config = getattr(first_mod, 'config_data')
-                        if isinstance(config, dict):
-                            game = config.get('game') or config.get('modgame')
+                game = self._get_mod_game(mods_list)
                 if game:
                     detected_games.append(game)
                 from utils.file_utils import get_chapter_folder_name

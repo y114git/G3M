@@ -100,13 +100,9 @@ def download_file(session, url, tmp_path, progress_callback=None, total_size: in
                 logging.debug(f'download_file: on_response callback failed: {e}')
             status_code = getattr(r, 'status_code', 200)
             duplicate_remaining = 0
-            mode = 'ab'
-            if status_code == 206 and 'Range' in headers:
-                mode = 'ab'
-            else:
-                mode = 'wb'
-                if current_size > 0:
-                    duplicate_remaining = current_size
+            mode = 'ab' if status_code == 206 and 'Range' in headers else 'wb'
+            if mode == 'wb' and current_size > 0:
+                duplicate_remaining = current_size
             this_request_expected = 0
             try:
                 this_request_expected = int(r.headers.get('content-length', 0))
@@ -173,8 +169,6 @@ def safe_request(method: str, url: str, session=None, timeout=None, **kwargs):
     try:
         method_func = getattr(session, method.lower())
         return method_func(url, timeout=timeout, **kwargs)
-    except requests.RequestException:
-        return None
     except Exception:
         return None
 

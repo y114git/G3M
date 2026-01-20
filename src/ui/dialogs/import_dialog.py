@@ -16,24 +16,15 @@ class ImportDialog(QDialog):
         self.init_ui()
 
     def init_ui(self):
-        if self.import_type == 'themes':
-            title_key = 'themes.import_themes'
-            instructions_key = 'themes.import_instructions'
-            from_file_key = 'themes.import_from_file'
-            from_url_key = 'themes.import_from_url'
-            from_url_button_key = 'themes.import_from_url_button'
-            url_placeholder_key = 'themes.url_placeholder'
-            url_required_key = 'themes.url_required'
-            select_archive_key = 'themes.select_theme_archive'
-        else:
-            title_key = f'{self.import_type}.import_{self.import_type}'
-            instructions_key = f'{self.import_type}.import_instructions'
-            from_file_key = f'{self.import_type}.import_from_file'
-            from_url_key = f'{self.import_type}.import_from_url'
-            from_url_button_key = f'{self.import_type}.import_from_url_button'
-            url_placeholder_key = f'{self.import_type}.url_placeholder'
-            url_required_key = f'{self.import_type}.url_required'
-            select_archive_key = f'{self.import_type}.select_{self.import_type[:-1]}_archive'
+        keys = self._get_import_keys()
+        title_key = keys['title_key']
+        instructions_key = keys['instructions_key']
+        from_file_key = keys['from_file_key']
+        from_url_key = keys['from_url_key']
+        from_url_button_key = keys['from_url_button_key']
+        url_placeholder_key = keys['url_placeholder_key']
+        url_required_key = keys['url_required_key']
+        select_archive_key = keys['select_archive_key']
         self.setWindowTitle(tr(title_key))
         self.setMinimumWidth(500)
         layout = QVBoxLayout(self)
@@ -61,19 +52,27 @@ class ImportDialog(QDialog):
         self.url_required_key = url_required_key
 
     def _import_from_file(self):
-        if self.file_filter:
-            file_filter_text = f"{(tr('file_descriptions.theme_files') if self.import_type == 'themes' else tr(f'{self.import_type}.archive_files'))} ({self.file_filter});;All Files (*)"
-        elif self.import_type == 'themes':
-            file_filter_text = f"{tr('file_descriptions.theme_files')} (*.dhtheme);;All Files (*)"
-        elif self.import_type == 'plugins':
-            file_filter_text = tr('plugins.archive_files') + ' (*.zip *.7z *.rar *.tar.gz *.lzma);;All Files (*)'
-        else:
-            file_filter_text = tr('mods.archive_files') + ' (*.zip *.7z *.rar *.tar.gz *.lzma);;All Files (*)'
+        file_filter_text = self._get_file_filter_text()
         file_path, _ = QFileDialog.getOpenFileName(self, tr(self.select_archive_key), '', file_filter_text)
         if file_path:
             self.selected_file = file_path
             self.import_method = 'file'
             self.accept()
+
+    def _get_import_keys(self) -> dict[str, str]:
+        if self.import_type == 'themes':
+            return {'title_key': 'themes.import_themes', 'instructions_key': 'themes.import_instructions', 'from_file_key': 'themes.import_from_file', 'from_url_key': 'themes.import_from_url', 'from_url_button_key': 'themes.import_from_url_button', 'url_placeholder_key': 'themes.url_placeholder', 'url_required_key': 'themes.url_required', 'select_archive_key': 'themes.select_theme_archive'}
+        return {'title_key': f'{self.import_type}.import_{self.import_type}', 'instructions_key': f'{self.import_type}.import_instructions', 'from_file_key': f'{self.import_type}.import_from_file', 'from_url_key': f'{self.import_type}.import_from_url', 'from_url_button_key': f'{self.import_type}.import_from_url_button', 'url_placeholder_key': f'{self.import_type}.url_placeholder', 'url_required_key': f'{self.import_type}.url_required', 'select_archive_key': f'{self.import_type}.select_{self.import_type[:-1]}_archive'}
+
+    def _get_file_filter_text(self) -> str:
+        if self.file_filter:
+            description = tr('file_descriptions.theme_files') if self.import_type == 'themes' else tr(f'{self.import_type}.archive_files')
+            return f'{description} ({self.file_filter});;All Files (*)'
+        if self.import_type == 'themes':
+            return f"{tr('file_descriptions.theme_files')} (*.dhtheme);;All Files (*)"
+        if self.import_type == 'plugins':
+            return tr('plugins.archive_files') + ' (*.zip *.7z *.rar *.tar.gz *.lzma);;All Files (*)'
+        return tr('mods.archive_files') + ' (*.zip *.7z *.rar *.tar.gz *.lzma);;All Files (*)'
 
     def _import_from_url(self):
         url = self.url_input.text().strip()

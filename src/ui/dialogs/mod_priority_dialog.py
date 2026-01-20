@@ -57,18 +57,19 @@ class ModPriorityDialog(QDialog):
         layout.addLayout(buttons_layout)
 
     def _move_up(self):
-        current_row = self.list_widget.currentRow()
-        if current_row > 0:
-            item = self.list_widget.takeItem(current_row)
-            self.list_widget.insertItem(current_row - 1, item)
-            self.list_widget.setCurrentRow(current_row - 1)
+        self._move_item(-1)
 
     def _move_down(self):
+        self._move_item(1)
+
+    def _move_item(self, offset: int) -> None:
         current_row = self.list_widget.currentRow()
-        if current_row < self.list_widget.count() - 1 and current_row >= 0:
-            item = self.list_widget.takeItem(current_row)
-            self.list_widget.insertItem(current_row + 1, item)
-            self.list_widget.setCurrentRow(current_row + 1)
+        target_row = current_row + offset
+        if current_row < 0 or target_row < 0 or target_row >= self.list_widget.count():
+            return
+        item = self.list_widget.takeItem(current_row)
+        self.list_widget.insertItem(target_row, item)
+        self.list_widget.setCurrentRow(target_row)
 
     def _accept_dialog(self):
         self.result_list = []

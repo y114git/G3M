@@ -3,7 +3,7 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QFrame, QLabel, QPushButton, QCheckBox, QComboBox, QScrollArea, QSizePolicy
 from managers.localization_manager import tr
 from ui.widgets.common.custom_controls import NoScrollComboBox, _ZeroHintWidget
-from ui.common.styling import get_theme_color
+from ui.common.styling import get_theme_color, rgba_from_color, build_tag_checkbox_style
 
 
 class LibraryTabBuilder:
@@ -70,13 +70,13 @@ class LibraryTabBuilder:
         chapter_tabs_widget.setObjectName('chapter_tabs_container')
         chapter_tab_names = [tr('chapters.menu'), tr('tabs.chapter_1'), tr('tabs.chapter_2'), tr('tabs.chapter_3'), tr('tabs.chapter_4')]
         chapter_tab_buttons = []
+        text_color = get_theme_color(self.app_state.local_config, 'text', 'white')
         for i, chapter_name in enumerate(chapter_tab_names):
             chapter_btn = QPushButton(chapter_name)
             chapter_btn.setCheckable(True)
             chapter_btn.setObjectName(f'chapter_tab_{i}')
             chapter_btn.setFixedHeight(40)
             chapter_btn.setMinimumWidth(100)
-            text_color = get_theme_color(self.app_state.local_config, 'text', 'white')
             chapter_btn.setStyleSheet(f'\n                QPushButton#chapter_tab_{i} {{\n                    background-color: {button_color};\n                    border: 2px solid {border_color};\n                    color: {text_color};\n                    font-weight: bold;\n                    font-size: 13px;\n                    border-radius: 0px;\n                    padding: 5px;\n                }}\n                QPushButton#chapter_tab_{i}:checked {{\n                    background-color: {hover_color};\n                    border: 3px solid {border_color};\n                }}\n                QPushButton#chapter_tab_{i}:hover {{\n                    background-color: {hover_color};\n                }}\n            ')
             chapter_tabs_layout.addWidget(chapter_btn)
             chapter_tab_buttons.append(chapter_btn)
@@ -150,13 +150,7 @@ class LibraryTabBuilder:
         except Exception:
             pass
         mods_bg_color = get_theme_color(self.app_state.local_config, 'background', '#000000')
-        if mods_bg_color.startswith('#'):
-            r = int(mods_bg_color[1:3], 16)
-            g = int(mods_bg_color[3:5], 16)
-            b = int(mods_bg_color[5:7], 16)
-            mods_bg_rgba = f'rgba({r}, {g}, {b}, 128)'
-        else:
-            mods_bg_rgba = 'rgba(0, 0, 0, 128)'
+        mods_bg_rgba = rgba_from_color(mods_bg_color)
         installed_mods_container.setStyleSheet(f'\n            QWidget#mods_background {{\n                background-color: {mods_bg_rgba};\n                border-radius: 10px;\n                margin: 5px;\n            }}\n        ')
         layout.addWidget(installed_mods_container)
         try:
@@ -209,7 +203,7 @@ class LibraryTabBuilder:
         library_tag_other = QCheckBox(tr('tags.other'))
         library_tag_local = QCheckBox(tr('tags.local'))
         text_color = get_theme_color(self.app_state.local_config, 'text', 'white')
-        tag_style = f'\n            QCheckBox {{\n                color: {text_color};\n                font-size: 12px;\n                spacing: 5px;\n            }}\n            QCheckBox::indicator {{\n                width: 16px;\n                height: 16px;\n            }}\n        '
+        tag_style = build_tag_checkbox_style(text_color)
         library_tag_widgets = [library_tag_textedit, library_tag_customization, library_tag_gameplay, library_tag_other, library_tag_local]
         for tag in library_tag_widgets:
             tag.setStyleSheet(tag_style)

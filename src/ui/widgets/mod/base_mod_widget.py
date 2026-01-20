@@ -31,10 +31,9 @@ class BaseModWidget(QFrame):
         self.name_label.setObjectName('primaryText')
         self.name_label.setStyleSheet('font-size: 16px; font-weight: bold;')
         title_layout.addWidget(self.name_label)
-        if self.mod_data.version and '|' in self.mod_data.version:
-            mod_version = self.mod_data.version.split('|')[0]
-        else:
-            mod_version = self.mod_data.version
+        mod_version = self.mod_data.version
+        if mod_version and '|' in mod_version:
+            mod_version = mod_version.split('|', 1)[0]
         version_text = mod_version or 'N/A'
         version_label = QLabel(f'({version_text})', self)
         version_label.setObjectName('versionLabel')
@@ -98,15 +97,18 @@ class BaseModWidget(QFrame):
     def _load_icon(self):
         load_mod_icon_universal(self.icon_label, self.mod_data, 80)
 
+    def _resolve_theme_config(self):
+        if self.parent_app:
+            if hasattr(self.parent_app, 'local_config'):
+                return self.parent_app.local_config
+            if hasattr(self.parent_app, 'app_state') and hasattr(self.parent_app.app_state, 'local_config'):
+                return self.parent_app.app_state.local_config
+        return None
+
     def _update_style(self):
         if self.frame_selector:
             update_mod_widget_style(self, self.frame_selector, self.parent_app)
-        config = None
-        if self.parent_app:
-            if hasattr(self.parent_app, 'local_config'):
-                config = self.parent_app.local_config
-            elif hasattr(self.parent_app, 'app_state') and hasattr(self.parent_app.app_state, 'local_config'):
-                config = self.parent_app.app_state.local_config
+        config = self._resolve_theme_config()
         if config:
             text_color = get_theme_color(config, 'text', 'white')
             if hasattr(self, 'name_label') and self.name_label:

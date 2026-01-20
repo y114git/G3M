@@ -90,6 +90,11 @@ class ScreenshotsCarousel(QWidget):
             self._dot_labels.append(lbl)
             self.dots_layout.addWidget(lbl)
 
+    def _ensure_loading_state(self):
+        if not hasattr(self, '_loading'):
+            self._loading = [False] * len(self.urls)
+            self._current_worker = None
+
     def _prev(self):
         if not self.urls:
             return
@@ -127,9 +132,7 @@ class ScreenshotsCarousel(QWidget):
         url = self.urls[self.index]
         img = self._images[self.index]
         if img is None:
-            if not hasattr(self, '_loading'):
-                self._loading = [False] * len(self.urls)
-                self._current_worker = None
+            self._ensure_loading_state()
             if not self._loading[self.index]:
                 self._loading[self.index] = True
                 signals = WorkerSignals()
@@ -167,8 +170,6 @@ class ScreenshotsCarousel(QWidget):
                 signals.result.connect(on_loaded)
                 signals.error.connect(on_error)
                 loader = ImageLoaderRunnable(url, signals)
-                if self.app_state and hasattr(self.app_state, 'network_session'):
-                    pass
                 self._thread_pool.start(loader)
             return
         self._set_pixmap(img)
@@ -181,10 +182,11 @@ class ScreenshotsCarousel(QWidget):
             return
         if idx < 0 or idx >= len(self.urls):
             return
-        if self._images[idx] is not None or (hasattr(self, '_loading') and idx < len(self._loading) and self._loading[idx]):
+        if self._images[idx] is not None:
             return
-        if not hasattr(self, '_loading'):
-            self._loading = [False] * len(self.urls)
+        self._ensure_loading_state()
+        if idx < len(self._loading) and self._loading[idx]:
+            return
         self._loading[idx] = True
         signals = WorkerSignals()
         preload_idx = idx

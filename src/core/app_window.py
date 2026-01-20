@@ -235,6 +235,31 @@ class AppWindow(QWidget):
         self.activateWindow()
         self.raise_()
 
+    def _reset_install_state(self) -> None:
+        self.app_state.is_installing = False
+        self.app_state.progress_bar_visible = False
+        self.app_state.progress_bar_value = 0
+        self.app_state.clear_current_task()
+
+    def _refresh_after_install(self) -> None:
+        if self.plugin_manager:
+            self.plugin_manager.convert_plugin_archives()
+            self.plugin_manager.load_plugins()
+        if hasattr(self, '_update_plugin_tabs'):
+            self._update_plugin_tabs()
+        if hasattr(self, 'plugin_display'):
+            self.plugin_display.update_display()
+        if self.mod_manager:
+            self.mod_manager.invalidate_mods_cache()
+            QTimer.singleShot(0, lambda: (self.mod_manager.load_local_mods(_skip_conversion=True), self.mod_manager.mod_list_updated.emit()))
+        if hasattr(self, 'library_display'):
+            self.library_display.update_display()
+        if hasattr(self, 'search_display'):
+            self.search_display.update_search_plaques()
+            self.search_display.update_filtered_mods(preserve_page=True)
+        if hasattr(self, 'settings_manager'):
+            self.settings_manager.theme_changed.emit()
+
     def handle_one_click_install(self, url: str):
         if is_game_running():
             return
@@ -250,10 +275,7 @@ class AppWindow(QWidget):
             worker.progress.connect(lambda p: setattr(self.app_state, 'progress_bar_value', p))
 
             def on_manual_install_required(prepared_path, archive_path, temp_dir):
-                self.app_state.is_installing = False
-                self.app_state.progress_bar_visible = False
-                self.app_state.progress_bar_value = 0
-                self.app_state.clear_current_task()
+                self._reset_install_state()
                 try:
                     from ui.dialogs.manual_mod_install_dialog import ManualModInstallDialog
                     from utils.game_utils import get_game_type_string
@@ -263,23 +285,7 @@ class AppWindow(QWidget):
                     dialog = ManualModInstallDialog(self, prepared_path, gamebanana_metadata=None, source_file_path=archive_path, initial_game_type=initial_game_type)
                     dialog.temp_dir_to_cleanup = temp_dir
                     if dialog.exec() == QDialog.DialogCode.Accepted:
-                        if self.plugin_manager:
-                            self.plugin_manager.convert_plugin_archives()
-                            self.plugin_manager.load_plugins()
-                        if hasattr(self, '_update_plugin_tabs'):
-                            self._update_plugin_tabs()
-                        if hasattr(self, 'plugin_display'):
-                            self.plugin_display.update_display()
-                        if self.mod_manager:
-                            self.mod_manager.invalidate_mods_cache()
-                            QTimer.singleShot(0, lambda: (self.mod_manager.load_local_mods(_skip_conversion=True), self.mod_manager.mod_list_updated.emit()))
-                        if hasattr(self, 'library_display'):
-                            self.library_display.update_display()
-                        if hasattr(self, 'search_display'):
-                            self.search_display.update_search_plaques()
-                            self.search_display.update_filtered_mods(preserve_page=True)
-                        if hasattr(self, 'settings_manager'):
-                            self.settings_manager.theme_changed.emit()
+                        self._refresh_after_install()
                         self.feedback_manager.update_status(tr('dialogs.mod_created_successfully'), UI_COLORS['status_success'])
                         QMessageBox.information(self, tr('dialogs.success'), tr('dialogs.mod_created_successfully'))
                         QTimer.singleShot(1000, lambda: self._on_refresh_clicked(is_initial=False))
@@ -292,28 +298,9 @@ class AppWindow(QWidget):
                         pass
 
             def on_finished(success, message):
-                self.app_state.is_installing = False
-                self.app_state.progress_bar_visible = False
-                self.app_state.progress_bar_value = 0
-                self.app_state.clear_current_task()
+                self._reset_install_state()
                 if success:
-                    if self.plugin_manager:
-                        self.plugin_manager.convert_plugin_archives()
-                        self.plugin_manager.load_plugins()
-                    if hasattr(self, '_update_plugin_tabs'):
-                        self._update_plugin_tabs()
-                    if hasattr(self, 'plugin_display'):
-                        self.plugin_display.update_display()
-                    if self.mod_manager:
-                        self.mod_manager.invalidate_mods_cache()
-                        QTimer.singleShot(0, lambda: (self.mod_manager.load_local_mods(_skip_conversion=True), self.mod_manager.mod_list_updated.emit()))
-                    if hasattr(self, 'library_display'):
-                        self.library_display.update_display()
-                    if hasattr(self, 'search_display'):
-                        self.search_display.update_search_plaques()
-                        self.search_display.update_filtered_mods(preserve_page=True)
-                    if hasattr(self, 'settings_manager'):
-                        self.settings_manager.theme_changed.emit()
+                    self._refresh_after_install()
                     self.feedback_manager.update_status(message, UI_COLORS['status_success'])
                     QTimer.singleShot(1000, lambda: self._on_refresh_clicked(is_initial=False))
                 else:
@@ -546,11 +533,11 @@ class AppWindow(QWidget):
         self.gb_sort_combo = search_widgets['gb_sort_combo']
         self.gb_sort_label = search_widgets['gb_sort_label']
         self.auto_sorting_checkbox = search_widgets['auto_sorting_checkbox']
-        self.blacklist_button = search_widgets['blacklist_button']
+        self.blocklist_button = search_widgets['blocklist_button']
         self.mods_per_page_spinbox.setValue(self.app_state.mods_per_page)
         self.mods_per_page_spinbox.valueChanged.connect(self._on_mods_per_page_changed)
         self.auto_sorting_checkbox.stateChanged.connect(self._on_auto_sorting_changed)
-        self.blacklist_button.clicked.connect(self.search_display.show_blacklist_dialog)
+        self.blocklist_button.clicked.connect(self.search_display.show_blocklist_dialog)
         self.app_state.auto_sorting = self.app_state.local_config.get('auto_sorting', False)
         self.auto_sorting_checkbox.setChecked(self.app_state.auto_sorting)
         self.gb_sort_combo.setCurrentIndex(0)
@@ -674,13 +661,10 @@ class AppWindow(QWidget):
         elif saved_game_type == 'undertale':
             self.app_state.game_mode = UndertaleGameMode()
         elif saved_game_type == 'undertaleyellow':
-            from models.game_modes import UndertaleYellowGameMode
             self.app_state.game_mode = UndertaleYellowGameMode()
         elif saved_game_type == 'pizzatower':
-            from models.game_modes import PizzaTowerGameMode
             self.app_state.game_mode = PizzaTowerGameMode()
         elif saved_game_type == 'sugaryspire':
-            from models.game_modes import SugarySpireGameMode
             self.app_state.game_mode = SugarySpireGameMode()
         else:
             self.app_state.game_mode = FullGameMode()
@@ -893,7 +877,6 @@ class AppWindow(QWidget):
 
     def _on_auto_sorting_changed(self, state: int):
         try:
-            from PyQt6.QtCore import Qt
             is_checked = state == Qt.CheckState.Checked.value
             self.app_state.auto_sorting = is_checked
             self.app_state.local_config['auto_sorting'] = is_checked
@@ -967,7 +950,6 @@ class AppWindow(QWidget):
                             logging.warning(f'AppWindow: Error stopping metadata thread on sort change: {e}')
             except Exception:
                 pass
-            from PyQt6.QtCore import QTimer
 
             def trigger_refresh():
                 try:
@@ -1061,7 +1043,6 @@ class AppWindow(QWidget):
     def _full_install_tooltip(self) -> str:
         if platform.system() == 'Darwin':
             return tr('tooltips.macos_install_unavailable')
-        from models.game_modes import UndertaleYellowGameMode, SugarySpireGameMode
         if isinstance(self.app_state.game_mode, SugarySpireGameMode):
             return tr('tooltips.full_spire_install_instructions')
         elif isinstance(self.app_state.game_mode, UndertaleYellowGameMode):
@@ -1101,7 +1082,6 @@ class AppWindow(QWidget):
             try:
                 painter.fillRect(self.rect(), QColor(bg_color_str))
             except (ValueError, TypeError) as e:
-                import logging
                 logging.debug(f"Failed to parse color '{bg_color_str}': {e}")
                 painter.fillRect(self.rect(), QColor('rgba(0, 0, 0, 200)'))
         super().paintEvent(event)
@@ -1389,7 +1369,6 @@ class AppWindow(QWidget):
                 self.portproton_path_label.setText(tr('ui.file_not_selected') + ' (using PATH)')
 
     def _on_slot_manager_used_mods_updated(self):
-        import logging
         logging.debug('Used mods updated, refreshing UI')
         if hasattr(self, 'library_display'):
             self.library_display.update_mod_widgets_slot_status()
@@ -1411,7 +1390,6 @@ class AppWindow(QWidget):
         self._update_chapter_tabs_style()
 
     def _on_chapter_tab_clicked(self, chapter_id):
-        import logging
         logging.debug(f'Chapter tab clicked: {chapter_id}')
         from config.constants import SLOT_ID_MENU, SLOT_ID_CHAPTER_1, SLOT_ID_CHAPTER_2, SLOT_ID_CHAPTER_3, SLOT_ID_CHAPTER_4
         chapter_ids = [SLOT_ID_MENU, SLOT_ID_CHAPTER_1, SLOT_ID_CHAPTER_2, SLOT_ID_CHAPTER_3, SLOT_ID_CHAPTER_4]
@@ -1488,10 +1466,10 @@ class AppWindow(QWidget):
         if hasattr(self, 'auto_sorting_checkbox') and self.auto_sorting_checkbox:
             self.auto_sorting_checkbox.setText(tr('ui.auto_sorting'))
             self.auto_sorting_checkbox.setToolTip(tr('ui.auto_sorting_tooltip'))
-        if hasattr(self, 'blacklist_button') and self.blacklist_button:
-            self.blacklist_button.setText(tr('ui.blacklist'))
-            self.blacklist_button.setToolTip(tr('ui.blacklist_tooltip'))
-            self.blacklist_button.setStyleSheet('font-size: 11px; padding: 0px 4px; border: 2px solid white;')
+        if hasattr(self, 'blocklist_button') and self.blocklist_button:
+            self.blocklist_button.setText(tr('ui.blocklist'))
+            self.blocklist_button.setToolTip(tr('ui.blocklist_tooltip'))
+            self.blocklist_button.setStyleSheet('font-size: 11px; padding: 0px 4px; border: 2px solid white;')
         self.chapter_mode_checkbox.setText(tr('ui.chapter_mode'))
         self.full_install_checkbox.setText(tr('ui.full_install'))
         self.full_install_checkbox.setToolTip(self._full_install_tooltip())
@@ -1646,9 +1624,9 @@ class AppWindow(QWidget):
                 for cb in search_checkboxes:
                     if cb:
                         cb.setStyleSheet(checkbox_style)
-            if hasattr(self, 'blacklist_button') and self.blacklist_button:
+            if hasattr(self, 'blocklist_button') and self.blocklist_button:
                 button_style = f'\n                    QPushButton {{\n                        background-color: {bg_color};\n                        color: {text_color};\n                        border: 2px solid white;\n                        padding: 0px 4px;\n                        font-size: 11px;\n                    }}\n                    QPushButton:hover {{\n                        background-color: white;\n                        color: {bg_color};\n                    }}\n                '
-                self.blacklist_button.setStyleSheet(button_style)
+                self.blocklist_button.setStyleSheet(button_style)
             self.search_display.update_filtered_mods()
             self.search_display.update_all_plaques_labels()
             self.library_display.update_display()
@@ -1954,7 +1932,6 @@ class AppWindow(QWidget):
             return
         if index == 1:
             if not getattr(self.app_state, 'library_initialized', False):
-                from PyQt6.QtCore import QTimer
                 QTimer.singleShot(0, self.library_display.update_display)
                 self.app_state.library_initialized = True
             self.previous_tab_index = index

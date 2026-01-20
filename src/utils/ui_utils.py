@@ -1,6 +1,7 @@
 import logging
 from PyQt6.QtCore import QTimer, QThread
 from typing import Callable, Optional
+from utils.format_utils import format_size_mb as _format_size_mb
 
 
 class DebounceTimer:
@@ -39,10 +40,7 @@ class DebounceTimer:
 
 
 def format_size_mb(size_bytes: int) -> str:
-    if size_bytes <= 0:
-        return '0 MB'
-    mb = size_bytes / (1024 * 1024)
-    return f'{mb:.1f} MB'
+    return _format_size_mb(size_bytes)
 
 
 def refresh_ui_after_mod_install(main_window, mod_manager=None):

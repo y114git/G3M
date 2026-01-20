@@ -77,12 +77,7 @@ class InstalledModWidget(BaseModWidget):
         actions_layout.addWidget(self.use_button)
         self.remove_button = QPushButton(tr('buttons.delete'), self.actions_widget)
         self.remove_button.setObjectName('plaqueButton')
-        config = None
-        if self.parent_app:
-            if hasattr(self.parent_app, 'local_config'):
-                config = self.parent_app.local_config
-            elif hasattr(self.parent_app, 'app_state') and hasattr(self.parent_app.app_state, 'local_config'):
-                config = self.parent_app.app_state.local_config
+        config = self._resolve_theme_config()
         text_color = get_theme_color(config, 'text', 'white') if config else 'white'
         self.remove_button.setStyleSheet(f'\n            QPushButton#plaqueButton {{\n                background-color: #F44336;\n                color: {text_color};\n            }}\n            QPushButton#plaqueButton:hover {{\n                background-color: #da190b;\n            }}\n        ')
         self.remove_button.clicked.connect(lambda: self.remove_requested.emit(self.mod_data))
@@ -93,12 +88,7 @@ class InstalledModWidget(BaseModWidget):
 
     def _update_style(self):
         super()._update_style()
-        config = None
-        if self.parent_app:
-            if hasattr(self.parent_app, 'local_config'):
-                config = self.parent_app.local_config
-            elif hasattr(self.parent_app, 'app_state') and hasattr(self.parent_app.app_state, 'local_config'):
-                config = self.parent_app.app_state.local_config
+        config = self._resolve_theme_config()
         if config:
             text_color = get_theme_color(config, 'text', 'white')
             if hasattr(self, 'installed_label_title') and self.installed_label_title:
@@ -135,16 +125,16 @@ class InstalledModWidget(BaseModWidget):
             return
         if self.status == 'in_slot':
             self.use_button.setText(tr('ui.remove_button'))
-            self.use_button.setStyleSheet('\n                QPushButton#plaqueButtonInstall {\n                    background-color: #FF9800;\n                    font-weight: bold;\n                }\n                QPushButton#plaqueButtonInstall:hover {\n                    background-color: #F57C00;\n                }\n            ')
         elif self.status == 'needs_update':
             self.use_button.setText(tr('ui.update_button'))
-            self.use_button.setStyleSheet('\n                QPushButton#plaqueButtonInstall {\n                    background-color: #FF9800;\n                    font-weight: bold;\n                }\n                QPushButton#plaqueButtonInstall:hover {\n                    background-color: #F57C00;\n                }\n            ')
         else:
             self.use_button.setText(tr('ui.use_button'))
+        if self.status in ('in_slot', 'needs_update'):
+            self.use_button.setStyleSheet('\n                QPushButton#plaqueButtonInstall {\n                    background-color: #FF9800;\n                    font-weight: bold;\n                }\n                QPushButton#plaqueButtonInstall:hover {\n                    background-color: #F57C00;\n                }\n            ')
+        else:
             self.use_button.setStyleSheet('\n                QPushButton#plaqueButtonInstall {\n                    background-color: #4CAF50;\n                    font-weight: bold;\n                }\n                QPushButton#plaqueButtonInstall:hover {\n                    background-color: #5cb85c;\n                }\n            ')
 
-    def set_in_slot(self, in_slot):
-        self.is_in_slot = in_slot
+    def _sync_status(self):
         if self.is_in_slot:
             self.status = 'in_slot'
         elif self._mod_needs_update():
@@ -154,6 +144,10 @@ class InstalledModWidget(BaseModWidget):
         self._update_button_from_status()
         self._update_indicator()
         self._update_actions_visibility()
+
+    def set_in_slot(self, in_slot):
+        self.is_in_slot = in_slot
+        self._sync_status()
 
     def _update_actions_visibility(self):
         if not hasattr(self, 'actions_widget') or not hasattr(self, 'checkmark_label'):
@@ -173,15 +167,7 @@ class InstalledModWidget(BaseModWidget):
         self._update_actions_visibility()
 
     def update_status(self):
-        if self.is_in_slot:
-            self.status = 'in_slot'
-        elif self._mod_needs_update():
-            self.status = 'needs_update'
-        else:
-            self.status = 'ready'
-        self._update_button_from_status()
-        self._update_indicator()
-        self._update_actions_visibility()
+        self._sync_status()
 
     def mouseDoubleClickEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton and self.parent_app:

@@ -19,6 +19,10 @@ class FeedbackManager(QObject):
             return not self.app_state.game_is_running
         return True
 
+    @staticmethod
+    def _format_html(text: str) -> str:
+        return text.replace('\\n', '<br>').replace('\n', '<br>')
+
     def show_message(self, message_type: str, message_key: str, details: str = '', **kwargs):
         if not self._should_show_dialog():
             return
@@ -29,10 +33,10 @@ class FeedbackManager(QObject):
         msg_box.setIcon(icon)
         msg_box.setWindowTitle(title)
         if details:
-            details_html = details.replace('\\n', '<br>').replace('\n', '<br>')
+            details_html = self._format_html(details)
             full_message = f'{message}<br><br>{details_html}'
         else:
-            full_message = message.replace('\\n', '<br>').replace('\n', '<br>')
+            full_message = self._format_html(message)
         msg_box.setText(full_message)
         msg_box.exec()
 
@@ -45,11 +49,11 @@ class FeedbackManager(QObject):
         msg_box.setIcon(QMessageBox.Icon.Question)
         msg_box.setWindowTitle(title)
         if details:
-            details_html = details.replace('\\n', '<br>').replace('\n', '<br>')
-            message_html = message.replace('\\n', '<br>').replace('\n', '<br>')
+            details_html = self._format_html(details)
+            message_html = self._format_html(message)
             full_message = f'{message_html}<br><br>{details_html}'
         else:
-            full_message = message.replace('\\n', '<br>').replace('\n', '<br>')
+            full_message = self._format_html(message)
         msg_box.setText(full_message)
         msg_box.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         if default_yes:

@@ -145,14 +145,17 @@ class DeltamodConverter:
             self.modding_xml = None
         return True
 
+    def _collect_patches(self) -> list:
+        if self.modding_xml is None:
+            return []
+        if self.modding_xml.tag == 'patch':
+            return [self.modding_xml]
+        return list(self.modding_xml.findall('patch'))
+
     def _generate_config_json(self) -> Optional[Dict[str, Any]]:
         if not self.deltamod_info or self.modding_xml is None:
             return None
-        patches = []
-        if self.modding_xml.tag == 'patch':
-            patches.append(self.modding_xml)
-        else:
-            patches.extend(self.modding_xml.findall('patch'))
+        patches = self._collect_patches()
         meta = self.deltamod_info.get('metadata', {})
         package_id = meta.get('packageID', '')
         if package_id and package_id != 'und.und.und':
@@ -214,11 +217,7 @@ class DeltamodConverter:
     def _process_files(self, target_mod_dir: str) -> None:
         if self.modding_xml is None:
             return
-        patches = []
-        if self.modding_xml.tag == 'patch':
-            patches.append(self.modding_xml)
-        else:
-            patches.extend(self.modding_xml.findall('patch'))
+        patches = self._collect_patches()
         icon_path = os.path.join(self.source_path, '_icon.png')
         if not os.path.exists(icon_path):
             icon_path = os.path.join(self.source_path, 'icon.png')

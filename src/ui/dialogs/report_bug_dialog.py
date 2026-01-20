@@ -91,7 +91,7 @@ class ReportBugDialog(QDialog):
         if file_path in self.attached_files:
             return
         file_size = os.path.getsize(file_path)
-        current_total = sum((os.path.getsize(f) for f in self.attached_files))
+        current_total = self._get_total_attachment_size()
         if current_total + file_size > self.max_total_size:
             QMessageBox.warning(self, tr('dialogs.report_bug_title'), tr('dialogs.report_bug_file_too_large'))
             return
@@ -111,8 +111,11 @@ class ReportBugDialog(QDialog):
         self.file_list.takeItem(self.file_list.row(current_item))
         self._update_file_size()
 
+    def _get_total_attachment_size(self) -> int:
+        return sum((os.path.getsize(f) for f in self.attached_files))
+
     def _update_file_size(self):
-        total_size = sum((os.path.getsize(f) for f in self.attached_files))
+        total_size = self._get_total_attachment_size()
         size_mb = total_size / (1024 * 1024)
         max_mb = self.max_total_size / (1024 * 1024)
         self.file_size_label.setText(tr('dialogs.report_bug_file_size', size=f'{size_mb:.2f} MB'))
@@ -129,7 +132,7 @@ class ReportBugDialog(QDialog):
             return (False, tr('dialogs.report_bug_text_required'))
         if len(text) > self.max_text_length:
             return (False, tr('dialogs.report_bug_text_too_long'))
-        total_size = sum((os.path.getsize(f) for f in self.attached_files))
+        total_size = self._get_total_attachment_size()
         if total_size > self.max_total_size:
             return (False, tr('dialogs.report_bug_file_too_large'))
         return (True, '')

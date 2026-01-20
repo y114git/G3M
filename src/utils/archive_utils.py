@@ -130,6 +130,17 @@ def _detect_archive_format_by_signature(file_path: str) -> str:
         return 'unknown'
 
 
+def _collect_safe_members(members, name_getter, label: str):
+    targets = []
+    for member in members:
+        name = name_getter(member)
+        if not _is_safe_path(name):
+            logging.warning(f'_extract_archive_raw: Skipping suspicious path in {label}: {name}')
+            continue
+        targets.append(member)
+    return targets
+
+
 def _extract_archive_raw(src_path: str, fname_lower: str, out_dir: str) -> None:
     import rarfile
     try:
@@ -142,12 +153,7 @@ def _extract_archive_raw(src_path: str, fname_lower: str, out_dir: str) -> None:
     detected_format = _detect_archive_format_by_signature(src_path)
     if fname_lower.endswith('.zip') or fname_lower.endswith('.dhtheme') or detected_format == 'zip':
         with zipfile.ZipFile(src_path, 'r') as zf:
-            targets = []
-            for member in zf.namelist():
-                if not _is_safe_path(member):
-                    logging.warning(f'_extract_archive_raw: Skipping suspicious path in ZIP: {member}')
-                    continue
-                targets.append(member)
+            targets = _collect_safe_members(zf.namelist(), lambda member: member, 'ZIP')
             if targets:
                 try:
                     zf.extractall(path=out_dir_abs, members=targets)
@@ -156,12 +162,7 @@ def _extract_archive_raw(src_path: str, fname_lower: str, out_dir: str) -> None:
         return
     if fname_lower.endswith('.tar.gz'):
         with tarfile.open(src_path, 'r:gz') as tf:
-            targets = []
-            for member in tf.getmembers():
-                if not _is_safe_path(member.name):
-                    logging.warning(f'_extract_archive_raw: Skipping suspicious path in TAR: {member.name}')
-                    continue
-                targets.append(member)
+            targets = _collect_safe_members(tf.getmembers(), lambda member: member.name, 'TAR')
             if targets:
                 try:
                     tf.extractall(path=out_dir_abs, members=targets)
@@ -174,12 +175,7 @@ def _extract_archive_raw(src_path: str, fname_lower: str, out_dir: str) -> None:
         except UnrarMissingError:
             raise
         with rarfile.RarFile(src_path, 'r') as rf:
-            targets = []
-            for member in rf.namelist():
-                if not _is_safe_path(member):
-                    logging.warning(f'_extract_archive_raw: Skipping suspicious path in RAR: {member}')
-                    continue
-                targets.append(member)
+            targets = _collect_safe_members(rf.namelist(), lambda member: member, 'RAR')
             if targets:
                 try:
                     rf.extractall(path=out_dir_abs, members=targets)
@@ -188,12 +184,7 @@ def _extract_archive_raw(src_path: str, fname_lower: str, out_dir: str) -> None:
         return
     if (fname_lower.endswith('.7z') or detected_format == '7z') and py7zr is not None:
         with py7zr.SevenZipFile(src_path, mode='r') as zf:
-            targets = []
-            for member in zf.getnames():
-                if not _is_safe_path(member):
-                    logging.warning(f'_extract_archive_raw: Skipping suspicious path in 7Z: {member}')
-                    continue
-                targets.append(member)
+            targets = _collect_safe_members(zf.getnames(), lambda member: member, '7Z')
             if targets:
                 try:
                     zf.extract(path=out_dir_abs, targets=targets)

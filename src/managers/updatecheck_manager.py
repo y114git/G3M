@@ -30,6 +30,7 @@ class UpdateChecker(QObject):
 
     def check_for_updates(self):
         beta_enabled = self.app_state.local_config.get('beta_updates_enabled', False)
+        system = platform.system()
         if beta_enabled:
             self.feedback_manager.update_status(tr('status.beta_updates_enabled'), UI_COLORS['status_warning'])
         try:
@@ -44,7 +45,7 @@ class UpdateChecker(QObject):
                 self.feedback_manager.update_status(tr('status.launcher_version_up_to_date'), UI_COLORS['status_success'])
                 return
             platform_key_map = {'Windows': 'windows', 'Linux': 'linux', 'Darwin': f'macos-{ARCH}'}
-            current_platform_key = platform_key_map.get(platform.system())
+            current_platform_key = platform_key_map.get(system)
             download_url = launcher_files.get('urls', {}).get(current_platform_key)
             update_message = launcher_files.get('message', tr('dialogs.new_version_available_simple'))
             update_message_ru = launcher_files.get('message_ru')
@@ -53,7 +54,7 @@ class UpdateChecker(QObject):
                 self.feedback_manager.update_status(tr('errors.no_build_for_os', platform=current_platform_key), UI_COLORS['status_warning'])
                 return
             update_info = {'version': remote_version, 'url': download_url, 'message': update_message, 'message_ru': update_message_ru, 'message_en': update_message_en}
-            if platform.system() == 'Darwin' and 'AppTranslocation' in sys.executable:
+            if system == 'Darwin' and 'AppTranslocation' in sys.executable:
                 logging.warning(f'UpdateChecker: App Translocation detected: {sys.executable}')
                 self.feedback_manager.update_status(tr('errors.app_translocation_detected'), UI_COLORS['status_error'])
                 return
@@ -142,7 +143,6 @@ class UpdateChecker(QObject):
                     logging.info(f'[UPDATE] Found installer executable: {new_exe_path}')
                     logging.info('[UPDATE] Launching installer with elevated privileges (runas)')
                     import ctypes
-                    import time
                     result = ctypes.windll.shell32.ShellExecuteW(None, 'runas', new_exe_path, None, None, 1)
                     if result > 32:
                         time.sleep(1.0)

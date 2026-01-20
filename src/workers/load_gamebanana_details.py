@@ -84,26 +84,21 @@ class LoadGameBananaDetailsThread(QThread):
 
     def _update_mod_with_details(self, mod: ModInfo, full_details: dict, fallback_downloads: int = 0):
         import re
-        text_field = full_details.get('text')
-        if text_field:
-            if isinstance(text_field, list) and len(text_field) > 0:
-                text_value = text_field[0]
-            elif isinstance(text_field, str):
-                text_value = text_field
-            else:
-                text_value = str(text_field)
-            if text_value and text_value.strip():
-                mod.full_description = text_value
-        desc_field = full_details.get('description')
-        if desc_field:
-            if isinstance(desc_field, list) and len(desc_field) > 0:
-                desc_value = desc_field[0]
-            elif isinstance(desc_field, str):
-                desc_value = desc_field
-            else:
-                desc_value = str(desc_field)
-            if desc_value and desc_value.strip():
-                mod.tagline = desc_value
+
+        def _extract_text_value(field):
+            if not field:
+                return None
+            if isinstance(field, list) and len(field) > 0:
+                return field[0]
+            if isinstance(field, str):
+                return field
+            return str(field)
+        text_value = _extract_text_value(full_details.get('text'))
+        if text_value and text_value.strip():
+            mod.full_description = text_value
+        desc_value = _extract_text_value(full_details.get('description'))
+        if desc_value and desc_value.strip():
+            mod.tagline = desc_value
         if (not hasattr(mod, 'tagline') or not mod.tagline) and hasattr(mod, 'full_description') and mod.full_description:
             tagline_clean = re.sub('<[^>]+>', '', mod.full_description)
             mod.tagline = tagline_clean[:200].strip()

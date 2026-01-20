@@ -6,7 +6,7 @@ import shutil
 import tempfile
 import threading
 from dataclasses import dataclass
-from typing import Dict, Optional, List, Tuple, Set
+from typing import Dict, Optional, List, Tuple, Set, Any
 from PyQt6.QtCore import QObject, pyqtSignal
 from PyQt6.QtWidgets import QApplication, QDialog, QMessageBox
 from managers.localization_manager import tr
@@ -70,17 +70,27 @@ class ModManager(QObject):
         if changes_made:
             self.app_state.save_config()
 
+    def _normalize_mod_cache(self, cache: Dict[str, Any]) -> Dict[str, ModFolderInfo]:
+        normalized_cache: Dict[str, ModFolderInfo] = {}
+        for key, value in cache.items():
+            if isinstance(value, dict):
+                normalized_cache[key] = ModFolderInfo(key=value.get('key') or value.get('mod_key', key), folder_path=value.get('folder_path', ''), folder_name=value.get('folder_name', ''), config_data=value.get('config_data', {}), config_mtime=value.get('config_mtime', 0.0))
+            elif isinstance(value, ModFolderInfo):
+                normalized_cache[key] = value
+        return normalized_cache
+
     def _scan_mods_directory(self, old_cache: Optional[Dict[str, ModFolderInfo]] = None) -> Dict[str, ModFolderInfo]:
         cache: Dict[str, ModFolderInfo] = {}
         if old_cache is None:
             old_cache = {}
-        normalized_old_cache: Dict[str, ModFolderInfo] = {}
-        for key, value in old_cache.items():
-            if isinstance(value, dict):
-                normalized_old_cache[key] = ModFolderInfo(key=value.get('key') or value.get('mod_key', key), folder_path=value.get('folder_path', ''), folder_name=value.get('folder_name', ''), config_data=value.get('config_data', {}), config_mtime=value.get('config_mtime', 0.0))
-            elif isinstance(value, ModFolderInfo):
-                normalized_old_cache[key] = value
-        old_cache = normalized_old_cache
+
+        def record_mod_name(mod_name: str, key_value: str) -> None:
+            if not mod_name:
+                return
+            if not hasattr(self, '_temp_mods_by_name'):
+                self._temp_mods_by_name = {}
+            self._temp_mods_by_name[mod_name.lower()] = key_value
+        old_cache = self._normalize_mod_cache(old_cache)
         if not os.path.exists(self.app_state.mods_dir):
             return cache
         try:
@@ -122,10 +132,7 @@ class ModManager(QObject):
                                 if config_mtime <= old_info.config_mtime:
                                     cache[key] = old_info
                                     mod_name = old_info.config_data.get('name', '')
-                                    if mod_name:
-                                        if not hasattr(self, '_temp_mods_by_name'):
-                                            self._temp_mods_by_name = {}
-                                        self._temp_mods_by_name[mod_name.lower()] = key
+                                    record_mod_name(mod_name, key)
                                 break
                         if key is None or key not in cache:
                             from utils.file_utils import load_json
@@ -148,10 +155,7 @@ class ModManager(QObject):
                             mod_info = ModFolderInfo(key=key, folder_path=folder_path, folder_name=folder_name, config_data=config_data, config_mtime=config_mtime)
                             cache[cache_key] = mod_info
                             mod_name = config_data.get('name', '')
-                            if mod_name:
-                                if not hasattr(self, '_temp_mods_by_name'):
-                                    self._temp_mods_by_name = {}
-                                self._temp_mods_by_name[mod_name.lower()] = key
+                            record_mod_name(mod_name, key)
                     except (OSError, PermissionError) as e:
                         logging.warning(f'_scan_mods_directory: Corrupted config detected (failed to access) in {config_path}: {e}', exc_info=True, extra={'mod_folder': folder_name, 'config_path': config_path})
                         continue
@@ -488,12 +492,7 @@ class ModManager(QObject):
     def _get_mods_cache(self, use_async: bool = False) -> Dict[str, ModFolderInfo]:
         with self._cache_lock:
             if self._mods_cache_valid:
-                normalized_cache: Dict[str, ModFolderInfo] = {}
-                for key, value in self._mods_cache.items():
-                    if isinstance(value, dict):
-                        normalized_cache[key] = ModFolderInfo(key=value.get('key') or value.get('mod_key', key), folder_path=value.get('folder_path', ''), folder_name=value.get('folder_name', ''), config_data=value.get('config_data', {}), config_mtime=value.get('config_mtime', 0.0))
-                    elif isinstance(value, ModFolderInfo):
-                        normalized_cache[key] = value
+                normalized_cache = self._normalize_mod_cache(self._mods_cache)
                 if len(normalized_cache) != len(self._mods_cache) or any((isinstance(v, dict) for v in self._mods_cache.values())):
                     self._mods_cache = normalized_cache
                 return self._mods_cache.copy()
@@ -1270,6 +1269,7 @@ class ModManager(QObject):
                 self.invalidate_mods_cache()
         except Exception as e:
             logging.error(f'delete_mod_files: cleanup failed: {e}', exc_info=True)
+            raise
 
     def get_mod_status(self, mod: mod_models.ModInfo, chapter_id: int) -> str:
         if mod.is_local_mod:

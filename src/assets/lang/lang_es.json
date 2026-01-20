@@ -6,15 +6,15 @@
     "qt_translation": "qtbase_es",
     "version": "1.0.1"
   },
-  "blacklist": {
-    "title": "Gestor de Lista Negra",
+  "blocklist": {
+    "title": "Gestor de Blocklist",
     "select_game": "Seleccionar Juego:",
     "global": "Global",
     "add_entry": "Agregar Entrada",
     "current_entries": "Entradas Actuales",
     "prefix": "Prefijo:",
     "value": "Valor:",
-    "value_placeholder": "Ingrese valor para la lista negra...",
+    "value_placeholder": "Ingrese valor para la blocklist...",
     "add": "Agregar",
     "remove": "Eliminar",
     "prefix_type_id": "ID",
@@ -22,7 +22,7 @@
     "prefix_type_category": "Categoría",
     "empty_value": "Por favor ingrese un valor",
     "confirm_remove": "Confirmar Eliminación",
-    "confirm_remove_text": "¿Está seguro de que desea eliminar esta entrada de la lista negra?"
+    "confirm_remove_text": "¿Está seguro de que desea eliminar esta entrada de la blocklist?"
   },
   "common": {
     "close": "Cerrar",
@@ -127,8 +127,8 @@
     "mods_per_page_tooltip": "Establece el número de mods a mostrar por página (5-1000)",
     "auto_sorting": "Auto-ordenamiento",
     "auto_sorting_tooltip": "Ordenar automáticamente los mods cuando los filtros cambien",
-    "blacklist": "Lista Negra",
-    "blacklist_tooltip": "Gestionar lista negra para ocultar mods específicos",
+    "blocklist": "Blocklist",
+    "blocklist_tooltip": "Gestionar blocklist para ocultar mods específicos",
     "gamebanana_sort_label": "Ordenar GameBanana:",
     "gamebanana_sort_tooltip": "Selecciona cómo se debe ordenar el subfeed de GameBanana (afecta cómo se obtienen los mods de GameBanana)",
     "gamebanana_sort_default": "Predeterminado",

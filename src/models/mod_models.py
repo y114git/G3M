@@ -22,6 +22,7 @@ class ModChapterData:
 
 @dataclass
 class ModInfo:
+    _CHAPTER_MAP = {0: '0', 1: '1', 2: '2', 3: '3', 4: '4', -1: 'demo'}
     key: str
     name: str
     version: str
@@ -57,10 +58,9 @@ class ModInfo:
     has_full_metadata: bool = False
 
     def get_chapter_data(self, chapter_id: int) -> Optional[ModChapterData]:
-        chapter_map = {0: '0', 1: '1', 2: '2', 3: '3', 4: '4', -1: 'demo'}
         if self.game == 'undertale' and chapter_id == 0:
             return self.files.get('undertale')
-        file_key = chapter_map.get(chapter_id)
+        file_key = self._CHAPTER_MAP.get(chapter_id)
         return self.files.get(file_key) if file_key else None
 
     def is_valid_for_demo(self) -> bool:

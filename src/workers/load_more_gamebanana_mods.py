@@ -24,14 +24,23 @@ class LoadMoreGameBananaModsThread(QThread):
     def cancel(self):
         self._cancelled = True
 
+    def _get_app_state(self, use_grandparent: bool = False):
+        try:
+            parent = self.parent()
+            if parent and hasattr(parent, 'app_state'):
+                return parent.app_state
+            if use_grandparent and parent:
+                grandparent = parent.parent() if hasattr(parent, 'parent') else None
+                if grandparent and hasattr(grandparent, 'app_state'):
+                    return getattr(grandparent, 'app_state', None)
+        except Exception:
+            return None
+        return None
+
     def run(self):
         new_mods = []
         try:
-            game_name = None
-            for name, id_val in GAMEBANANA_GAME_IDS.items():
-                if id_val == self.game_id:
-                    game_name = name
-                    break
+            game_name = next((name for name, id_val in GAMEBANANA_GAME_IDS.items() if id_val == self.game_id), None)
             if not game_name:
                 logger.error(f'Unknown game_id: {self.game_id}')
                 self.result.emit([])
@@ -39,13 +48,7 @@ class LoadMoreGameBananaModsThread(QThread):
             for page in range(self.start_page, self.start_page + self.num_pages):
                 if self._cancelled or self.isInterruptionRequested():
                     break
-                app_state = None
-                try:
-                    parent = self.parent()
-                    if parent and hasattr(parent, 'app_state'):
-                        app_state = parent.app_state
-                except Exception:
-                    pass
+                app_state = self._get_app_state()
                 mods_data, mods_needing_metadata = self.api.get_game_mods(self.game_id, page=page, per_page=GAMEBANANA_PER_PAGE, sort=self.sort, metadata_cache=self.metadata_cache, app_state=app_state)
                 if not mods_data or len(mods_data) == 0:
                     break
@@ -62,18 +65,7 @@ class LoadMoreGameBananaModsThread(QThread):
                         break
             if self._mods_needing_metadata:
                 try:
-                    parent = self.parent()
-                    app_state = None
-                    if parent:
-                        if hasattr(parent, 'app_state'):
-                            app_state = getattr(parent, 'app_state', None)
-                        else:
-                            try:
-                                grandparent = parent.parent() if hasattr(parent, 'parent') else None
-                                if grandparent and hasattr(grandparent, 'app_state'):
-                                    app_state = getattr(grandparent, 'app_state', None)
-                            except (AttributeError, RuntimeError) as e:
-                                logger.debug(f'LoadMoreGameBananaModsThread: Error accessing parent hierarchy: {e}')
+                    app_state = self._get_app_state(use_grandparent=True)
                     if app_state and hasattr(app_state, 'gamebanana_mods_needing_metadata'):
                         existing = set(getattr(app_state, 'gamebanana_mods_needing_metadata', []))
                         new_ids = set(self._mods_needing_metadata)

@@ -6,15 +6,15 @@
     "qt_translation": "qtbase_zh_tw",
     "version": "1.0.1"
   },
-  "blacklist": {
-    "title": "黑名單管理器",
+  "blocklist": {
+    "title": "封鎖清單管理器",
     "select_game": "選擇遊戲：",
     "global": "全域",
     "add_entry": "新增條目",
     "current_entries": "目前條目",
     "prefix": "前綴：",
     "value": "值：",
-    "value_placeholder": "輸入要加入黑名單的值...",
+    "value_placeholder": "輸入要加入封鎖清單的值...",
     "add": "新增",
     "remove": "刪除",
     "prefix_type_id": "ID",
@@ -22,7 +22,7 @@
     "prefix_type_category": "類別",
     "empty_value": "請輸入一個值",
     "confirm_remove": "確認刪除",
-    "confirm_remove_text": "您確定要刪除這個黑名單條目嗎？"
+    "confirm_remove_text": "您確定要刪除這個封鎖清單條目嗎？"
   },
   "common": {
     "close": "關閉",
@@ -127,8 +127,8 @@
     "mods_per_page_tooltip": "設定每頁顯示的模組數量（5-1000）",
     "auto_sorting": "自動排序",
     "auto_sorting_tooltip": "篩選器更改時自動排序模組",
-    "blacklist": "黑名單",
-    "blacklist_tooltip": "管理黑名單以隱藏特定模組",
+    "blocklist": "封鎖清單",
+    "blocklist_tooltip": "管理封鎖清單以隱藏特定模組",
     "gamebanana_sort_label": "GameBanana排序：",
     "gamebanana_sort_tooltip": "選擇GameBanana訂閱源的排序方式（影響從GameBanana如何獲取模組）",
     "gamebanana_sort_default": "預設",

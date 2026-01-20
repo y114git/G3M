@@ -6,10 +6,7 @@ from config.constants import GAME_EXECUTABLES
 
 
 def get_launcher_dir() -> str:
-    if getattr(sys, 'frozen', False):
-        return os.path.dirname(sys.executable)
-    else:
-        return os.path.abspath(os.path.dirname(__file__))
+    return os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else os.path.abspath(os.path.dirname(__file__))
 
 
 def get_user_data_root() -> str:

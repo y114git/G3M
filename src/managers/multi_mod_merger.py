@@ -86,6 +86,12 @@ class MultiModMerger(QObject):
         if hasattr(self.utmt_wrapper, 'set_active_processes_list'):
             self.utmt_wrapper.set_active_processes_list(self._active_processes)
 
+    def _ensure_modpack_dir(self, modpack_dir: Optional[str]) -> bool:
+        if modpack_dir is None:
+            self.patching_logger.error('modpack_dir is None but is_modpack is True')
+            return False
+        return True
+
     def process_mod_merge(self, chapter_mods: Dict[int, List[Any]], is_modpack: bool, modpack_dir: Optional[str] = None, fast_merge: bool = False, xdelta_modpack: bool = False) -> bool:
         self.xdelta_modpack = xdelta_modpack
         clear_logs_enabled = self.app_state.local_config.get('clear_logs_on_startup', False)
@@ -116,10 +122,7 @@ class MultiModMerger(QObject):
             total_mods = sum((len(mods_list) for mods_list in chapter_mods.values()))
             current_progress = 0
             try:
-                if is_modpack:
-                    merge_msg = tr('status.preparing_mod_merge', chapters=total_chapters, mods=total_mods)
-                else:
-                    merge_msg = tr('status.preparing_mod_merge', chapters=total_chapters, mods=total_mods)
+                merge_msg = tr('status.preparing_mod_merge', chapters=total_chapters, mods=total_mods)
             except BaseException:
                 if is_modpack:
                     merge_msg = f'Preparing to create modpack with {total_mods} mod(s) for {total_chapters} chapter(s)...'
@@ -140,10 +143,7 @@ class MultiModMerger(QObject):
                 self.status_update.emit(tr('errors.temp_dir_creation_failed'), 'error')
                 return False
             try:
-                if is_modpack:
-                    merge_msg = tr('status.merging_mods', progress=current_progress)
-                else:
-                    merge_msg = tr('status.merging_mods', progress=current_progress)
+                merge_msg = tr('status.merging_mods', progress=current_progress)
             except BaseException:
                 if is_modpack:
                     merge_msg = f'Creating modpack... {current_progress}%'
@@ -891,8 +891,7 @@ class MultiModMerger(QObject):
         if os.path.exists(base_objects_dir):
             self.patching_logger.debug(f'Final Objects directory in base: {base_objects_dir}')
         if is_modpack:
-            if modpack_dir is None:
-                self.patching_logger.error('modpack_dir is None but is_modpack is True')
+            if not self._ensure_modpack_dir(modpack_dir):
                 return False
             system = platform.system()
             if system == 'Darwin':
@@ -918,8 +917,7 @@ class MultiModMerger(QObject):
                 self.backup_manager.restore_backups(chapter_id)
             return False
         if is_modpack:
-            if modpack_dir is None:
-                self.patching_logger.error('modpack_dir is None but is_modpack is True')
+            if not self._ensure_modpack_dir(modpack_dir):
                 return False
             for mod_data in mods_to_apply:
                 mod_source_dir = self._get_mod_source_dir(mod_data, chapter_id)

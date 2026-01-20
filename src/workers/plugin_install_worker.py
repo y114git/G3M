@@ -22,10 +22,7 @@ class PluginInstallWorker(BaseInstallWorker):
     def cancel(self):
         self._cancelled = True
         if self._session:
-            try:
-                self._session.close()
-            except Exception as e:
-                logging.debug(f'PluginInstallWorker: Error closing session: {e}')
+            self._safe_close(self._session, 'session')
 
     def _check_archive_has_plugin_init_py(self, archive_path: str) -> bool:
         from utils.archive_utils import ArchiveExtractor, UnrarMissingError

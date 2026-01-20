@@ -2,20 +2,22 @@ import os
 from typing import Any, Optional
 
 
+def _get_mod_field(mod_data: Any, field: str, default: Any = None) -> Any:
+    if isinstance(mod_data, dict):
+        return mod_data.get(field, default)
+    return getattr(mod_data, field, default)
+
+
 def get_mod_key(mod_data: Any) -> Optional[str]:
     if mod_data is None:
         return None
-    if isinstance(mod_data, dict):
-        return mod_data.get('key') or mod_data.get('mod_key') or mod_data.get('name')
-    return getattr(mod_data, 'key', None) or getattr(mod_data, 'mod_key', None) or getattr(mod_data, 'name', None)
+    return _get_mod_field(mod_data, 'key') or _get_mod_field(mod_data, 'mod_key') or _get_mod_field(mod_data, 'name')
 
 
 def get_mod_name(mod_data: Any, default: str = 'Unknown') -> str:
     if mod_data is None:
         return default
-    if isinstance(mod_data, dict):
-        return mod_data.get('name', default)
-    return getattr(mod_data, 'name', default)
+    return _get_mod_field(mod_data, 'name', default)
 
 
 def resolve_mod_icon(config_data: dict, mod_folder_path: str) -> Optional[str]:

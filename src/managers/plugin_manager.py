@@ -6,6 +6,7 @@ import shutil
 import tempfile
 import zipfile
 import tarfile
+import time
 from datetime import datetime
 from typing import Any, Dict, Optional
 from PyQt6.QtCore import QObject, pyqtSignal
@@ -43,14 +44,17 @@ class PluginManager(QObject):
         except Exception as e:
             logging.error(f'_write_plugins_metadata: failed: {e}', exc_info=True)
 
+    def _default_plugin_metadata(self) -> Dict[str, Any]:
+        return {'enabled': True, 'installed_date': None}
+
     def get_plugin_metadata(self, plugin_name: str) -> Dict[str, Any]:
         metadata = self._read_plugins_metadata()
-        return metadata.get(plugin_name, {'enabled': True, 'installed_date': None})
+        return metadata.get(plugin_name, self._default_plugin_metadata())
 
     def update_plugin_metadata(self, plugin_name: str, updates: Dict[str, Any]):
         metadata = self._read_plugins_metadata()
         if plugin_name not in metadata:
-            metadata[plugin_name] = {'enabled': True, 'installed_date': None}
+            metadata[plugin_name] = self._default_plugin_metadata()
         metadata[plugin_name].update(updates)
         self._write_plugins_metadata(metadata)
 
@@ -402,7 +406,6 @@ class PluginManager(QObject):
         self.load_plugins()
 
     def execute_hooks(self, hook_name: str, app_instance):
-        import time
         result = None
         for plugin in self.app_state.plugins:
             hook_func = plugin.get(hook_name)

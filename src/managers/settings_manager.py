@@ -53,6 +53,17 @@ class SettingsManager(QObject):
         else:
             self.feedback_manager.show_message('error', 'errors.no_write_permission_for', path=directory)
 
+    def _get_audio_paths(self, base_name: str) -> tuple[str, str]:
+        return (os.path.join(self.app_state.config_dir, f'custom_{base_name}.mp3'), os.path.join(self.app_state.config_dir, f'custom_{base_name}.wav'))
+
+    def _remove_files(self, paths) -> None:
+        for file_path in paths:
+            try:
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+            except Exception:
+                pass
+
     def write_local_config(self):
         self.write_json(self.app_state.config_path, self.app_state.local_config)
 
@@ -187,17 +198,11 @@ class SettingsManager(QObject):
         self.theme_changed.emit()
 
     def on_background_music_button_click(self):
-        mp3 = os.path.join(self.app_state.config_dir, 'custom_background_music.mp3')
-        wav = os.path.join(self.app_state.config_dir, 'custom_background_music.wav')
+        mp3, wav = self._get_audio_paths('background_music')
         custom_exists = os.path.exists(mp3) or os.path.exists(wav)
         if custom_exists:
             try:
-                for p in (mp3, wav):
-                    try:
-                        if os.path.exists(p):
-                            os.remove(p)
-                    except Exception:
-                        pass
+                self._remove_files((mp3, wav))
                 self.feedback_manager.show_message('info', 'dialogs.success', tr('dialogs.background_music_removed'))
                 self.theme_changed.emit()
             except Exception:
@@ -210,7 +215,6 @@ class SettingsManager(QObject):
                     self.feedback_manager.show_message('warning', 'errors.error', tr('errors.can_select_only_mp3_wav'))
                     return
                 try:
-                    import logging
                     os.makedirs(self.app_state.config_dir, exist_ok=True)
                     ext = '.mp3' if lower.endswith('.mp3') else '.wav'
                     dest_path = os.path.join(self.app_state.config_dir, f'custom_background_music{ext}')
@@ -220,13 +224,11 @@ class SettingsManager(QObject):
                     self.feedback_manager.show_message('info', 'dialogs.success', tr('dialogs.background_music_selected'))
                     self.theme_changed.emit()
                 except Exception as e:
-                    import logging
                     logging.error(f'[SettingsManager] Failed to copy background music: {e}', exc_info=True)
                     self.feedback_manager.show_message('warning', 'errors.error', tr('errors.copy_background_music_failed'))
 
     def on_startup_sound_button_click(self):
-        mp3 = os.path.join(self.app_state.config_dir, 'custom_startup_sound.mp3')
-        wav = os.path.join(self.app_state.config_dir, 'custom_startup_sound.wav')
+        mp3, wav = self._get_audio_paths('startup_sound')
         existing = ''
         if self.parent_widget and hasattr(self.parent_widget, 'customization_manager'):
             existing = self.parent_widget.customization_manager.get_startup_sound_path()
@@ -236,12 +238,7 @@ class SettingsManager(QObject):
             existing = wav
         if existing:
             try:
-                for p in (mp3, wav):
-                    try:
-                        if os.path.exists(p):
-                            os.remove(p)
-                    except Exception:
-                        pass
+                self._remove_files((mp3, wav))
                 self.feedback_manager.show_message('info', 'dialogs.success', tr('dialogs.startup_sound_removed'))
                 self.theme_changed.emit()
             except Exception:
@@ -416,7 +413,6 @@ class SettingsManager(QObject):
             self.app_state.current_task = worker
             worker.start()
         except Exception as e:
-            import logging
             logging.error(f'SettingsManager: Error installing theme from URL: {e}', exc_info=True)
             self.feedback_manager.show_message('error', 'errors.error', tr('themes.installation_error', error=str(e)))
 
@@ -447,7 +443,6 @@ class SettingsManager(QObject):
             self.feedback_manager.update_status(message, 'green')
             self.feedback_manager.show_message('info', 'dialogs.success', message)
         else:
-            import logging
             logging.warning(f'Theme installation failed: {message}')
             self.feedback_manager.update_status(message or tr('errors.error'), 'red')
             self.feedback_manager.show_message('error', 'errors.error', message)

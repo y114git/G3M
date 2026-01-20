@@ -21,16 +21,18 @@ class OutlinedTextLabel(QLabel):
 
     def setOutlineWidth(self, w: float):
         try:
-            self._outline_width = max(0.0, float(w))
+            width = float(w)
         except Exception:
-            self._outline_width = 0.0
+            width = 0.0
+        self._outline_width = max(0.0, width)
         self.update()
 
     def setOutlineOpacity(self, opacity: float):
         try:
-            self._outline_opacity = min(1.0, max(0.0, float(opacity)))
+            value = float(opacity)
         except Exception:
-            self._outline_opacity = 1.0
+            value = 1.0
+        self._outline_opacity = min(1.0, max(0.0, value))
         self.update()
 
     def setLeftMargin(self, m: int):

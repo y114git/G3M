@@ -2,9 +2,9 @@ from utils.mod_filter_utils import filter_and_sort_mods
 from PyQt6.QtWidgets import QInputDialog, QMessageBox
 from PyQt6.QtCore import QTimer, QObject, pyqtSignal
 from managers.localization_manager import tr
-from managers.blacklist_manager import BlacklistManager
+from managers.blocklist_manager import BlocklistManager
 from ui.dialogs.mod_details import open_mod_details_dialog
-from ui.dialogs.blacklist_dialog import BlacklistDialog
+from ui.dialogs.blocklist_dialog import BlocklistDialog
 from ui.widgets.mod.mod_plaque_widget import ModPlaqueWidget
 from workers.load_more_gamebanana_mods import LoadMoreGameBananaModsThread
 from workers.search_gamebanana_mods import SearchGameBananaModsThread
@@ -32,7 +32,7 @@ class SearchDisplayController(QObject):
         self.mod_manager = mod_manager
         self.mod_ops = mod_ops
         self.app = app_window
-        self.blacklist_manager = BlacklistManager()
+        self.blocklist_manager = BlocklistManager()
         self._load_more_threads = []
         self._current_details_thread = None
         self._last_load_attempt = {'items_needed': 0, 'current_total': 0, 'attempts': 0}
@@ -47,6 +47,47 @@ class SearchDisplayController(QObject):
         self._current_search_text = ''
         self._update_filtered_mods_in_progress = False
         self._pending_filter_update = False
+
+    def _get_mod_key_value(self, mod):
+        return getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
+
+    def _get_gamebanana_key(self, mod):
+        key = self._get_mod_key_value(mod)
+        return key if key and key.startswith('gb_') else None
+
+    def _get_gamebanana_mod_id_str(self, mod):
+        key = self._get_gamebanana_key(mod)
+        if not key:
+            return None
+        mod_id_str = key.replace('gb_', '', 1)
+        return mod_id_str or None
+
+    def _get_metadata_cache(self):
+        if hasattr(self.app_state, 'cache_dir') and self.app_state.cache_dir:
+            try:
+                from utils.gamebanana_cache import GameBananaMetadataCache
+                return GameBananaMetadataCache(self.app_state.cache_dir)
+            except Exception as e:
+                logger.warning(f'SearchDisplayController: Failed to initialize metadata cache: {e}', exc_info=True)
+        return None
+
+    def _cleanup_load_thread(self, thread):
+        try:
+            if thread in self._load_more_threads:
+                self._load_more_threads.remove(thread)
+            if thread.isFinished():
+                thread.deleteLater()
+            else:
+
+                def cleanup_when_really_finished():
+                    try:
+                        if thread and thread.isFinished():
+                            thread.deleteLater()
+                    except Exception:
+                        pass
+                thread.finished.connect(cleanup_when_really_finished)
+        except (RuntimeError, ValueError):
+            pass
 
     def prev_page(self):
         try:
@@ -156,8 +197,8 @@ class SearchDisplayController(QObject):
                 if not hasattr(self.app_state, 'all_mods'):
                     logger.error('SearchDisplayController: app_state.all_mods not available')
                     return
-                existing_keys = {getattr(m, 'key', None) or getattr(m, 'mod_key', None) for m in self.app_state.all_mods if (getattr(m, 'key', None) or getattr(m, 'mod_key', None)) and (getattr(m, 'key', None) or getattr(m, 'mod_key', None)).startswith('gb_')}
-                new_mods_to_add = [m for m in all_new_mods if (getattr(m, 'key', None) or getattr(m, 'mod_key', None)) and (getattr(m, 'key', None) or getattr(m, 'mod_key', None)).startswith('gb_') and ((getattr(m, 'key', None) or getattr(m, 'mod_key', None)) not in existing_keys)]
+                existing_keys = {key for mod in self.app_state.all_mods if (key := self._get_gamebanana_key(mod))}
+                new_mods_to_add = [mod for mod in all_new_mods if (key := self._get_gamebanana_key(mod)) and key not in existing_keys]
                 if new_mods_to_add:
                     self.app_state.extend_all_mods(new_mods_to_add)
                     if hasattr(self, '_last_load_attempt'):
@@ -181,13 +222,7 @@ class SearchDisplayController(QObject):
                     self.update_pagination()
                 except BaseException:
                     pass
-        metadata_cache = None
-        if hasattr(self.app_state, 'cache_dir') and self.app_state.cache_dir:
-            try:
-                from utils.gamebanana_cache import GameBananaMetadataCache
-                metadata_cache = GameBananaMetadataCache(self.app_state.cache_dir)
-            except Exception as e:
-                logger.warning(f'SearchDisplayController: Failed to initialize metadata cache: {e}', exc_info=True)
+        metadata_cache = self._get_metadata_cache()
         for game_name, game_id in games_to_load.items():
             last_page = self.app_state.gamebanana_loaded_pages.get(game_id, 0)
             start_page = last_page + 1
@@ -222,25 +257,7 @@ class SearchDisplayController(QObject):
                         QTimer.singleShot(0, on_all_results_received)
                 return on_result
             load_thread.result.connect(make_on_result(game_id, game_name, last_page, start_page, pages_needed))
-
-            def on_thread_finished(thread=load_thread):
-                try:
-                    if thread in self._load_more_threads:
-                        self._load_more_threads.remove(thread)
-                    if thread.isFinished():
-                        thread.deleteLater()
-                    else:
-
-                        def cleanup_when_really_finished():
-                            try:
-                                if thread and thread.isFinished():
-                                    thread.deleteLater()
-                            except Exception:
-                                pass
-                        thread.finished.connect(cleanup_when_really_finished)
-                except (RuntimeError, ValueError):
-                    pass
-            load_thread.finished.connect(on_thread_finished)
+            load_thread.finished.connect(lambda thread=load_thread: self._cleanup_load_thread(thread))
             self._load_more_threads.append(load_thread)
             load_thread.start()
 
@@ -392,23 +409,6 @@ class SearchDisplayController(QObject):
                         self.update_display()
                 self.update_pagination()
                 return
-                if self.app_state.search_text == search_text and new_mods_to_add:
-                    self.app_state.extend_all_mods(new_mods_to_add)
-                    max_loaded_page = max(pages_needed) if pages_needed else last_page
-                    search_pages[game_id] = max(search_pages.get(game_id, 0), max_loaded_page)
-                    if hasattr(self.app_state, 'gamebanana_mods_needing_metadata') and self.app_state.gamebanana_mods_needing_metadata:
-
-                        def trigger_metadata_loading():
-                            try:
-                                if hasattr(self.app, 'refresh_controller'):
-                                    self.app.refresh_controller._start_metadata_loading()
-                            except Exception:
-                                pass
-                        QTimer.singleShot(200, trigger_metadata_loading)
-                if self.app_state.search_text == search_text:
-                    self.update_filtered_mods(preserve_page=True)
-                    self.update_display()
-                self.update_pagination()
             except Exception as e:
                 logger.error(f'SearchDisplayController: Error in on_all_results_received: {e}', exc_info=True)
                 if self.app_state.search_text == search_text:
@@ -417,13 +417,7 @@ class SearchDisplayController(QObject):
                     self.update_display()
                 self.update_pagination()
         search_timeout_timer.start(10000)
-        metadata_cache = None
-        if hasattr(self.app_state, 'cache_dir') and self.app_state.cache_dir:
-            try:
-                from utils.gamebanana_cache import GameBananaMetadataCache
-                metadata_cache = GameBananaMetadataCache(self.app_state.cache_dir)
-            except Exception as e:
-                logger.warning(f'SearchDisplayController: Failed to initialize metadata cache: {e}', exc_info=True)
+        metadata_cache = self._get_metadata_cache()
         for page in pages_needed:
             search_thread = SearchGameBananaModsThread(game_id=game_id, search_string=search_text, start_page=page, num_pages=1, sort=sort_param, parent=self.app, metadata_cache=metadata_cache)
 
@@ -439,51 +433,33 @@ class SearchDisplayController(QObject):
                         QTimer.singleShot(0, on_all_results_received)
                 return on_result
             search_thread.result.connect(make_on_result(page))
-
-            def on_thread_finished(thread=search_thread):
-                try:
-                    if thread in self._load_more_threads:
-                        self._load_more_threads.remove(thread)
-                    if thread.isFinished():
-                        thread.deleteLater()
-                    else:
-
-                        def cleanup_when_really_finished():
-                            try:
-                                if thread and thread.isFinished():
-                                    thread.deleteLater()
-                            except Exception:
-                                pass
-                        thread.finished.connect(cleanup_when_really_finished)
-                except (RuntimeError, ValueError):
-                    pass
-            search_thread.finished.connect(on_thread_finished)
+            search_thread.finished.connect(lambda thread=search_thread: self._cleanup_load_thread(thread))
             self._load_more_threads.append(search_thread)
             search_thread.start()
 
-    def show_blacklist_dialog(self):
+    def show_blocklist_dialog(self):
         try:
             selected_game = 'deltarune'
             if hasattr(self.app, 'modgame_combo'):
                 selected_game = self.app.modgame_combo.currentData() or 'deltarune'
             all_games = ['deltarune', 'deltarunedemo', 'undertale', 'undertaleyellow', 'pizzatower', 'sugaryspire']
             all_games.append('global')
-            existing_games = self.blacklist_manager.get_all_games()
+            existing_games = self.blocklist_manager.get_all_games()
             for game in existing_games:
                 if game not in all_games:
                     all_games.append(game)
-            dialog = BlacklistDialog(self.blacklist_manager, selected_game, all_games, self.app)
-            dialog.blacklist_changed.connect(self.on_blacklist_changed)
+            dialog = BlocklistDialog(self.blocklist_manager, selected_game, all_games, self.app)
+            dialog.blocklist_changed.connect(self.on_blocklist_changed)
             dialog.exec()
         except Exception as e:
-            logger.error(f'SearchDisplayController: Error in show_blacklist_dialog: {e}', exc_info=True)
+            logger.error(f'SearchDisplayController: Error in show_blocklist_dialog: {e}', exc_info=True)
 
-    def on_blacklist_changed(self):
+    def on_blocklist_changed(self):
         try:
             self.update_filtered_mods(preserve_page=False)
             self.update_display()
         except Exception as e:
-            logger.error(f'SearchDisplayController: Error in on_blacklist_changed: {e}', exc_info=True)
+            logger.error(f'SearchDisplayController: Error in on_blocklist_changed: {e}', exc_info=True)
 
     def show_search_dialog(self):
         if self.app_state.search_text:
@@ -559,7 +535,7 @@ class SearchDisplayController(QObject):
 
                 def async_filter():
                     try:
-                        filtered_result = filter_and_sort_mods(self.app_state.all_mods, filters, sort_config, blacklist_manager=self.blacklist_manager)
+                        filtered_result = filter_and_sort_mods(self.app_state.all_mods, filters, sort_config, blocklist_manager=self.blocklist_manager)
                         self.app_state.filtered_mods = filtered_result
                         if not preserve_page:
                             self.app_state.current_page = 1
@@ -578,31 +554,18 @@ class SearchDisplayController(QObject):
                 QTimer.singleShot(0, async_filter)
                 return
             if preserve_page and (not self.app_state.auto_sorting) and self.app_state.filtered_mods:
-                existing_filtered_keys = set()
-                for mod in self.app_state.filtered_mods:
-                    key = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
-                    if key:
-                        existing_filtered_keys.add(key)
-                    else:
-                        mod_key_attr = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
-                        if mod_key_attr and mod_key_attr.startswith('gb_'):
-                            existing_filtered_keys.add(mod_key_attr)
+                existing_filtered_keys = {key for mod in self.app_state.filtered_mods if (key := self._get_mod_key_value(mod))}
                 new_mods_to_filter = []
                 for mod in self.app_state.all_mods:
-                    key = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
+                    key = self._get_mod_key_value(mod)
                     if key and key in existing_filtered_keys:
                         continue
-                    mod_key_attr = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
-                    if mod_key_attr and mod_key_attr.startswith('gb_'):
-                        gb_key = mod_key_attr
-                        if gb_key in existing_filtered_keys:
-                            continue
                     new_mods_to_filter.append(mod)
                 if new_mods_to_filter:
-                    new_filtered = filter_and_sort_mods(new_mods_to_filter, filters, sort_config=None, blacklist_manager=self.blacklist_manager)
+                    new_filtered = filter_and_sort_mods(new_mods_to_filter, filters, sort_config=None, blocklist_manager=self.blocklist_manager)
                     self.app_state.filtered_mods = (self.app_state.filtered_mods or []) + new_filtered
             else:
-                self.app_state.filtered_mods = filter_and_sort_mods(self.app_state.all_mods, filters, sort_config, blacklist_manager=self.blacklist_manager)
+                self.app_state.filtered_mods = filter_and_sort_mods(self.app_state.all_mods, filters, sort_config, blocklist_manager=self.blocklist_manager)
             if not preserve_page:
                 self.app_state.current_page = 1
             else:
@@ -700,7 +663,7 @@ class SearchDisplayController(QObject):
                         widget.deleteLater()
 
             def get_mod_cache_key(mod):
-                key = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
+                key = self._get_mod_key_value(mod)
                 if key and key.startswith('gb_'):
                     return key
                 if key:
@@ -1004,13 +967,7 @@ class SearchDisplayController(QObject):
         self.app_state.filtered_mods = []
         self.update_display()
         from workers.load_more_gamebanana_mods import LoadMoreGameBananaModsThread
-        from utils.gamebanana_cache import GameBananaMetadataCache
-        metadata_cache = None
-        if hasattr(self.app_state, 'cache_dir') and self.app_state.cache_dir:
-            try:
-                metadata_cache = GameBananaMetadataCache(self.app_state.cache_dir)
-            except Exception as e:
-                logger.warning(f'SearchDisplayController: Failed to initialize metadata cache: {e}', exc_info=True)
+        metadata_cache = self._get_metadata_cache()
         sort_param = getattr(self.app_state, 'gamebanana_sort', 'default')
         load_thread = LoadMoreGameBananaModsThread(game_id, start_page=1, num_pages=3, sort=sort_param, parent=self.app, metadata_cache=metadata_cache)
 
@@ -1026,9 +983,8 @@ class SearchDisplayController(QObject):
                         self.app_state.gamebanana_loaded_pages[game_id] = pages_loaded
                         mods_needing_metadata = []
                         for mod in new_mods_to_add:
-                            key = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
-                            if key and key.startswith('gb_'):
-                                mod_id_str = key.replace('gb_', '', 1) if key else None
+                            mod_id_str = self._get_gamebanana_mod_id_str(mod)
+                            if mod_id_str:
                                 needs_metadata = False
                                 if not hasattr(mod, 'tagline') or not mod.tagline or mod.tagline.strip() == '':
                                     needs_metadata = True
@@ -1105,46 +1061,45 @@ class SearchDisplayController(QObject):
             downloads_changed = False
             if hasattr(self.app_state, 'all_mods') and self.app_state.all_mods:
                 for mod in self.app_state.all_mods:
-                    key = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
-                    if key and key.startswith('gb_'):
-                        mod_id = key.replace('gb_', '', 1) if key else None
-                        if mod_id and mod_id in self._pending_metadata_updates:
-                            update_data = self._pending_metadata_updates[mod_id]
-                            if len(update_data) >= 3:
-                                downloads, tagline, category = update_data
-                            else:
-                                downloads, tagline = (update_data[0], update_data[1])
-                                category = ''
-                            if downloads is not None and downloads >= 0:
-                                old_downloads = getattr(mod, 'downloads', None)
-                                if old_downloads is None:
-                                    old_downloads = 0
-                                else:
-                                    try:
-                                        old_downloads = int(old_downloads)
-                                    except (ValueError, TypeError):
-                                        old_downloads = 0
-                                try:
-                                    downloads_int = int(downloads)
-                                except (ValueError, TypeError):
-                                    downloads_int = 0
-                                if old_downloads != downloads_int:
-                                    mod.downloads = downloads_int
-                                    downloads_changed = True
-                                elif mod.downloads != downloads_int:
-                                    mod.downloads = downloads_int
-                                    downloads_changed = True
-                            if tagline and tagline != 'No description' and (mod.tagline != tagline):
-                                mod.tagline = tagline
-                            if category:
-                                if not hasattr(mod, 'gamebanana_category') or mod.gamebanana_category != category:
-                                    mod.gamebanana_category = category
-                                    needs_refilter = True
+                    mod_id = self._get_gamebanana_mod_id_str(mod)
+                    if not mod_id or mod_id not in self._pending_metadata_updates:
+                        continue
+                    update_data = self._pending_metadata_updates[mod_id]
+                    if len(update_data) >= 3:
+                        downloads, tagline, category = update_data
+                    else:
+                        downloads, tagline = (update_data[0], update_data[1])
+                        category = ''
+                    if downloads is not None and downloads >= 0:
+                        old_downloads = getattr(mod, 'downloads', None)
+                        if old_downloads is None:
+                            old_downloads = 0
+                        else:
                             try:
-                                mod.has_full_metadata = True
-                            except Exception:
-                                pass
-                            updated_mods.append(mod_id)
+                                old_downloads = int(old_downloads)
+                            except (ValueError, TypeError):
+                                old_downloads = 0
+                        try:
+                            downloads_int = int(downloads)
+                        except (ValueError, TypeError):
+                            downloads_int = 0
+                        if old_downloads != downloads_int:
+                            mod.downloads = downloads_int
+                            downloads_changed = True
+                        elif mod.downloads != downloads_int:
+                            mod.downloads = downloads_int
+                            downloads_changed = True
+                    if tagline and tagline != 'No description' and (mod.tagline != tagline):
+                        mod.tagline = tagline
+                    if category:
+                        if not hasattr(mod, 'gamebanana_category') or mod.gamebanana_category != category:
+                            mod.gamebanana_category = category
+                            needs_refilter = True
+                    try:
+                        mod.has_full_metadata = True
+                    except Exception:
+                        pass
+                    updated_mods.append(mod_id)
             self._pending_metadata_updates.clear()
             sort_needs_resort = False
             sort_type = None
@@ -1169,10 +1124,7 @@ class SearchDisplayController(QObject):
             for mod in self.app_state.all_mods:
                 if not hasattr(mod, 'is_gamebanana_mod') or not mod.is_gamebanana_mod():
                     continue
-                key = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
-                if not key or not key.startswith('gb_'):
-                    continue
-                mod_id_str = key.replace('gb_', '', 1) if key else None
+                mod_id_str = self._get_gamebanana_mod_id_str(mod)
                 if not mod_id_str:
                     continue
                 needs_metadata = False

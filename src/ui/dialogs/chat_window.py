@@ -216,6 +216,9 @@ class ChatWindow(QDialog):
             return
         if self._loading_messages or self._refreshing_messages:
             return
+        self._request_refresh_messages()
+
+    def _request_refresh_messages(self):
         if not check_internet_connection():
             return
         self._refreshing_messages = True
@@ -227,13 +230,7 @@ class ChatWindow(QDialog):
     def _refresh_messages_async(self):
         if not self.current_channel or self._loading_messages or self._refreshing_messages:
             return
-        if not check_internet_connection():
-            return
-        self._refreshing_messages = True
-        if self.chat_request_thread.isRunning():
-            self._refreshing_messages = False
-            return
-        self.chat_request_thread.request_messages(self.current_channel)
+        self._request_refresh_messages()
 
     def _on_messages_refreshed(self, channel: str, new_messages: list):
         if self._closed:

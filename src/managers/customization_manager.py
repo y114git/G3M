@@ -1,6 +1,7 @@
 import os
 import time
 import platform
+import logging
 from typing import Optional, Callable
 from PyQt6.QtCore import QObject, QThread, pyqtSignal, Qt
 from PyQt6.QtGui import QPixmap, QColor
@@ -27,7 +28,6 @@ class CustomizationManager(QObject):
         self._current_music_path = None
 
     def get_background_music_path(self) -> str:
-        import logging
         mp3_path = os.path.join(self.app_state.config_dir, 'custom_background_music.mp3')
         wav_path = os.path.join(self.app_state.config_dir, 'custom_background_music.wav')
         logging.debug(f'[CustomizationManager] Checking music paths: mp3={mp3_path} (exists: {os.path.exists(mp3_path)}), wav={wav_path} (exists: {os.path.exists(wav_path)})')
@@ -82,7 +82,6 @@ class CustomizationManager(QObject):
             library_container.setStyleSheet(f'\n            QWidget#library_mods_background {{\n                background-color: {bg_rgba};\n                border-radius: 10px;\n                margin: 5px;\n            }}\n        ')
 
     def start_background_music(self):
-        import logging
         if self._music_starting:
             logging.debug('[CustomizationManager] Music start already in progress, skipping')
             return
@@ -139,7 +138,6 @@ class CustomizationManager(QObject):
             self._music_starting = False
 
     def stop_background_music(self):
-        import logging
         try:
             self._bg_music_running = False
             inst = getattr(self, '_bg_music_instance', None)
@@ -186,7 +184,6 @@ class CustomizationManager(QObject):
             self.music_stopped.emit()
 
     def maybe_start_background_music(self, force=False):
-        import logging
         if self._music_starting:
             logging.debug('[CustomizationManager] maybe_start_background_music: Music start already in progress, skipping')
             return
@@ -234,36 +231,26 @@ class CustomizationManager(QObject):
     def update_mod_plaques_styles(self, mod_list_widget=None, installed_mods_widget=None):
         from ui.widgets.mod.mod_plaque_widget import ModPlaqueWidget
         from ui.widgets.mod.installed_mod_widget import InstalledModWidget
-        if mod_list_widget:
-            layout = mod_list_widget.layout()
-            if layout:
-                for i in range(layout.count() - 1):
-                    item = layout.itemAt(i)
-                    if not item:
-                        continue
-                    widget = item.widget()
-                    if not widget:
-                        continue
-                    if isinstance(widget, ModPlaqueWidget):
-                        try:
-                            widget._update_style()
-                        except Exception:
-                            pass
-        if installed_mods_widget:
-            layout = installed_mods_widget.layout()
-            if layout:
-                for i in range(layout.count() - 1):
-                    item = layout.itemAt(i)
-                    if not item:
-                        continue
-                    widget = item.widget()
-                    if not widget:
-                        continue
-                    if isinstance(widget, InstalledModWidget):
-                        try:
-                            widget._update_style()
-                        except Exception:
-                            pass
+        self._update_layout_widget_styles(mod_list_widget, ModPlaqueWidget)
+        self._update_layout_widget_styles(installed_mods_widget, InstalledModWidget)
+
+    def _update_layout_widget_styles(self, container, widget_type) -> None:
+        if not container:
+            return
+        layout = container.layout()
+        if not layout:
+            return
+        for i in range(layout.count() - 1):
+            item = layout.itemAt(i)
+            if not item:
+                continue
+            widget = item.widget()
+            if not widget or not isinstance(widget, widget_type):
+                continue
+            try:
+                widget._update_style()
+            except Exception:
+                pass
 
     def load_launcher_icon(self, icon_label: QLabel):
         try:

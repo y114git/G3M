@@ -20,6 +20,22 @@ class PluginDisplayController:
         self.app = app_window
         self._plugin_widgets: Dict[str, PluginWidget] = {}
 
+    def _get_plugin_info(self, plugin_name: str):
+        return next((p for p in self.plugin_manager.get_all_plugins_info() if p.get('name') == plugin_name), None)
+
+    def _remove_plugin_widget(self, widget: PluginWidget) -> None:
+        self.app.plugins_layout.removeWidget(widget)
+        widget.setParent(None)
+        widget.deleteLater()
+
+    def _install_plugin(self, source: str, source_label: str) -> None:
+        try:
+            worker = PluginInstallWorker(source, self.app_state.plugins_dir, self.plugin_manager, self.app)
+            self._start_plugin_install(worker)
+        except Exception as e:
+            logging.error(f'PluginDisplayController: Error installing plugin from {source_label}: {e}', exc_info=True)
+            self.feedback_manager.show_message('error', 'errors.error', tr('plugins.installation_error', error=str(e)))
+
     def update_display(self):
         if not hasattr(self.app, 'plugins_layout') or not self.app.plugins_layout:
             return
@@ -29,6 +45,7 @@ class PluginDisplayController:
             self._plugin_widgets.clear()
             show_empty_message_in_layout(self.app.plugins_layout, tr('plugins.no_plugins_installed'), self.app_state.local_config, font_size=16)
             return
+        plugins_by_name = {plugin.get('name', ''): plugin for plugin in all_plugins}
         widgets_to_remove = []
         for i in range(self.app.plugins_layout.count() - 1):
             item = self.app.plugins_layout.itemAt(i)
@@ -37,24 +54,20 @@ class PluginDisplayController:
                 if not isinstance(widget, PluginWidget):
                     widgets_to_remove.append(widget)
         for widget in widgets_to_remove:
-            self.app.plugins_layout.removeWidget(widget)
-            widget.setParent(None)
-            widget.deleteLater()
-        current_plugin_names = {p.get('name', '') for p in all_plugins}
+            self._remove_plugin_widget(widget)
+        current_plugin_names = set(plugins_by_name)
         plugins_to_remove = []
         for plugin_name, widget in list(self._plugin_widgets.items()):
             if plugin_name not in current_plugin_names:
                 plugins_to_remove.append(plugin_name)
             else:
-                plugin_info = next((p for p in all_plugins if p.get('name') == plugin_name), None)
+                plugin_info = plugins_by_name.get(plugin_name)
                 if plugin_info:
                     widget.update_plugin_info(plugin_info)
         for plugin_name in plugins_to_remove:
             widget = self._plugin_widgets.pop(plugin_name, None)
             if widget:
-                self.app.plugins_layout.removeWidget(widget)
-                widget.setParent(None)
-                widget.deleteLater()
+                self._remove_plugin_widget(widget)
         existing_names = set(self._plugin_widgets.keys())
         for plugin_info in all_plugins:
             plugin_name = plugin_info.get('name', '')
@@ -76,7 +89,7 @@ class PluginDisplayController:
 
     def on_plugin_toggle(self, plugin_name: str):
         try:
-            plugin_info = next((p for p in self.plugin_manager.get_all_plugins_info() if p.get('name') == plugin_name), None)
+            plugin_info = self._get_plugin_info(plugin_name)
             if not plugin_info:
                 self.feedback_manager.show_message('error', 'errors.error', tr('plugins.plugin_not_found'))
                 return
@@ -104,7 +117,7 @@ class PluginDisplayController:
             if not os.path.exists(plugin_path):
                 self.feedback_manager.show_message('error', 'errors.error', tr('plugins.plugin_not_found'))
                 return
-            plugin_info = next((p for p in self.plugin_manager.get_all_plugins_info() if p.get('name') == plugin_name), None)
+            plugin_info = self._get_plugin_info(plugin_name)
             name_key = plugin_info.get('name_key') if plugin_info else None
             localized_name = tr(name_key) if name_key else plugin_name
             from PyQt6.QtWidgets import QMessageBox
@@ -143,37 +156,22 @@ class PluginDisplayController:
             elif dialog.import_method == 'url' and dialog.selected_url:
                 self._install_plugin_from_url(dialog.selected_url)
 
+    def _start_plugin_install(self, worker: PluginInstallWorker):
+        worker.status.connect(lambda msg, color: self.feedback_manager.update_status(msg, color))
+        worker.progress.connect(lambda p: setattr(self.app_state, 'progress_bar_value', p))
+        worker.finished.connect(self._on_plugin_install_finished)
+        worker.unrar_needed.connect(self._on_unrar_needed)
+        self.app_state.is_installing = True
+        self.app_state.progress_bar_visible = True
+        self.app_state.progress_bar_value = 0
+        self.app_state.current_task = worker
+        worker.start()
+
     def _install_plugin_from_file(self, file_path: str):
-        try:
-            worker = PluginInstallWorker(file_path, self.app_state.plugins_dir, self.plugin_manager, self.app)
-            worker.status.connect(lambda msg, color: self.feedback_manager.update_status(msg, color))
-            worker.progress.connect(lambda p: setattr(self.app_state, 'progress_bar_value', p))
-            worker.finished.connect(self._on_plugin_install_finished)
-            worker.unrar_needed.connect(self._on_unrar_needed)
-            self.app_state.is_installing = True
-            self.app_state.progress_bar_visible = True
-            self.app_state.progress_bar_value = 0
-            self.app_state.current_task = worker
-            worker.start()
-        except Exception as e:
-            logging.error(f'PluginDisplayController: Error installing plugin from file: {e}', exc_info=True)
-            self.feedback_manager.show_message('error', 'errors.error', tr('plugins.installation_error', error=str(e)))
+        self._install_plugin(file_path, 'file')
 
     def _install_plugin_from_url(self, url: str):
-        try:
-            worker = PluginInstallWorker(url, self.app_state.plugins_dir, self.plugin_manager, self.app)
-            worker.status.connect(lambda msg, color: self.feedback_manager.update_status(msg, color))
-            worker.progress.connect(lambda p: setattr(self.app_state, 'progress_bar_value', p))
-            worker.finished.connect(self._on_plugin_install_finished)
-            worker.unrar_needed.connect(self._on_unrar_needed)
-            self.app_state.is_installing = True
-            self.app_state.progress_bar_visible = True
-            self.app_state.progress_bar_value = 0
-            self.app_state.current_task = worker
-            worker.start()
-        except Exception as e:
-            logging.error(f'PluginDisplayController: Error installing plugin from URL: {e}', exc_info=True)
-            self.feedback_manager.show_message('error', 'errors.error', tr('plugins.installation_error', error=str(e)))
+        self._install_plugin(url, 'URL')
 
     def _on_unrar_needed(self):
         try:

@@ -26,18 +26,13 @@ def cache_lock():
             _IMG_CACHE_LOCK.release()
 
 
-def _trim_cache():
-    if _IMG_CACHE is not None:
-        while len(_IMG_CACHE) > _CACHE_MAX_SIZE:
-            _IMG_CACHE.popitem(last=False)
-
-
 def add_to_cache(key: str, image: QImage) -> None:
     with cache_lock():
         if key in _IMG_CACHE:
             _IMG_CACHE.move_to_end(key)
         _IMG_CACHE[key] = image
-        _trim_cache()
+        while len(_IMG_CACHE) > _CACHE_MAX_SIZE:
+            _IMG_CACHE.popitem(last=False)
 
 
 def get_from_cache(key: str) -> QImage | None:

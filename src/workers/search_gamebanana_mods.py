@@ -34,11 +34,7 @@ class SearchGameBananaModsThread(QThread):
         self._start_time = time.time()
         new_mods: List[ModInfo] = []
         try:
-            game_name = None
-            for name, id_val in GAMEBANANA_GAME_IDS.items():
-                if id_val == self.game_id:
-                    game_name = name
-                    break
+            game_name = next((name for name, id_val in GAMEBANANA_GAME_IDS.items() if id_val == self.game_id), None)
             if not game_name:
                 self.result.emit([])
                 return

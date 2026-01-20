@@ -33,6 +33,23 @@ class ModOperationsController:
             logging.debug(f'{error_msg_prefix}: {e}')
             return default_return
 
+    def _handle_install_start_error(self, error: Exception) -> None:
+        self.app_state.is_installing = False
+        self.set_install_buttons_enabled(True)
+        self.app_state.clear_current_task()
+        self._safe_execute(lambda: self.app.game_launch.update_button_state(), 'Failed to update button state')
+        self.feedback_manager.show_message('error', 'errors.gamebanana_install_failed', error=str(error))
+
+    def _get_mod_key_value(self, mod) -> Optional[str]:
+        return getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
+
+    def _get_gamebanana_mod_id_str(self, mod) -> Optional[str]:
+        key = self._get_mod_key_value(mod)
+        if not key or not key.startswith('gb_'):
+            return None
+        mod_id_str = key.replace('gb_', '', 1)
+        return mod_id_str or None
+
     def handle_url_install(self, url: str):
         from utils.game_utils import is_game_running
         if is_game_running():
@@ -112,11 +129,7 @@ class ModOperationsController:
             self._start_gamebanana_install(mod, force, is_update, selected_file)
         except Exception as e:
             logging.error(f'Error starting GameBanana mod installation: {e}', exc_info=True)
-            self.app_state.is_installing = False
-            self.set_install_buttons_enabled(True)
-            self.app_state.clear_current_task()
-            self._safe_execute(lambda: self.app.game_launch.update_button_state(), 'Failed to update button state')
-            self.feedback_manager.show_message('error', 'errors.gamebanana_install_failed', error=str(e))
+            self._handle_install_start_error(e)
 
     def _start_install_thread(self, install_thread, op_id: int):
         try:
@@ -140,11 +153,7 @@ class ModOperationsController:
             logging.info(f'ModOperationsController: Started {thread_type} mod installation thread (op_id={op_id})')
         except Exception as e:
             logging.error(f'Error starting install thread: {e}', exc_info=True)
-            self.app_state.is_installing = False
-            self.set_install_buttons_enabled(True)
-            self.app_state.clear_current_task()
-            self._safe_execute(lambda: self.app.game_launch.update_button_state(), 'Failed to update button state')
-            self.feedback_manager.show_message('error', 'errors.gamebanana_install_failed', error=str(e))
+            self._handle_install_start_error(e)
 
     def _start_gamebanana_install(self, mod, force=False, is_update=False, selected_file=None):
         try:
@@ -160,11 +169,7 @@ class ModOperationsController:
             self._start_install_thread(install_thread, op_id)
         except Exception as e:
             logging.error(f'Error starting GameBanana mod installation thread: {e}', exc_info=True)
-            self.app_state.is_installing = False
-            self.set_install_buttons_enabled(True)
-            self.app_state.clear_current_task()
-            self._safe_execute(lambda: self.app.game_launch.update_button_state(), 'Failed to update button state')
-            self.feedback_manager.show_message('error', 'errors.gamebanana_install_failed', error=str(e))
+            self._handle_install_start_error(e)
 
     def _show_incompatible_gamebanana_dialog(self, mod=None, mod_url: Optional[str] = None):
         from PyQt6.QtWidgets import QMessageBox
@@ -199,10 +204,7 @@ class ModOperationsController:
         if files:
             self._notify_gamebanana_status_refresh()
             return files
-        key = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
-        if not key or not key.startswith('gb_'):
-            return []
-        mod_id_str = key.replace('gb_', '', 1)
+        mod_id_str = self._get_gamebanana_mod_id_str(mod)
         if not mod_id_str:
             return []
         mod_id = int(mod_id_str)
@@ -223,10 +225,7 @@ class ModOperationsController:
             return []
 
     def _get_all_gamebanana_files(self, mod) -> List[Dict]:
-        key = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
-        if not key or not key.startswith('gb_'):
-            return []
-        mod_id_str = key.replace('gb_', '', 1)
+        mod_id_str = self._get_gamebanana_mod_id_str(mod)
         if not mod_id_str:
             return []
         mod_id = int(mod_id_str)
@@ -265,7 +264,7 @@ class ModOperationsController:
 
     def _get_mod_identifier(self, mod) -> Optional[str]:
         try:
-            key = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
+            key = self._get_mod_key_value(mod)
             if key:
                 if key.startswith('gb_'):
                     mod_id = key.replace('gb_', '', 1)
@@ -623,13 +622,16 @@ class ModOperationsController:
             QTimer.singleShot(10, lambda m=mod: self.uninstall_mod(m))
 
     def uninstall_mod(self, mod):
-        self.mod_manager.uninstall_mod(mod)
-        self.mod_manager.mod_list_updated.emit()
-        self.app.search_display.update_search_plaques()
-        if hasattr(self.app, 'library_display'):
-            self.app.library_display.update_display()
-        if hasattr(self.app, 'search_display'):
-            self.app.search_display.update_filtered_mods(preserve_page=True)
+        try:
+            self.mod_manager.delete_mod_files(mod)
+            self.app.search_display.update_search_plaques()
+            if hasattr(self.app, 'library_display'):
+                self.app.library_display.update_display()
+            if hasattr(self.app, 'search_display'):
+                self.app.search_display.update_filtered_mods(preserve_page=True)
+        except Exception as e:
+            logging.error(f'ModOperationsController: Failed to uninstall mod: {e}', exc_info=True)
+            return
 
     def _start_manual_install_from_gamebanana(self, mod):
         try:

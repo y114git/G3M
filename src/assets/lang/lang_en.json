@@ -6,15 +6,15 @@
     "qt_translation": "qtbase_en",
     "version": "1.0.1"
   },
-  "blacklist": {
-    "title": "Blacklist Manager",
+  "blocklist": {
+    "title": "Blocklist Manager",
     "select_game": "Select Game:",
     "global": "Global",
     "add_entry": "Add Entry",
     "current_entries": "Current Entries",
     "prefix": "Prefix:",
     "value": "Value:",
-    "value_placeholder": "Enter value to blacklist...",
+    "value_placeholder": "Enter value to blocklist...",
     "add": "Add",
     "remove": "Remove",
     "prefix_type_id": "ID",
@@ -22,7 +22,7 @@
     "prefix_type_category": "Category",
     "empty_value": "Please enter a value",
     "confirm_remove": "Confirm Remove",
-    "confirm_remove_text": "Are you sure you want to remove this blacklist entry?"
+    "confirm_remove_text": "Are you sure you want to remove this blocklist entry?"
   },
   "common": {
     "close": "Close",
@@ -127,8 +127,8 @@
     "mods_per_page_tooltip": "Set the number of mods to display per page (5-1000)",
     "auto_sorting": "Auto-sorting",
     "auto_sorting_tooltip": "Automatically sort mods when filters change",
-    "blacklist": "Blacklist",
-    "blacklist_tooltip": "Manage blacklist to hide specific mods",
+    "blocklist": "Blocklist",
+    "blocklist_tooltip": "Manage blocklist to hide specific mods",
     "gamebanana_sort_label": "GameBanana Sort:",
     "gamebanana_sort_tooltip": "Select how GameBanana subfeed should be sorted (affects how mods are fetched from GameBanana)",
     "gamebanana_sort_default": "Default",

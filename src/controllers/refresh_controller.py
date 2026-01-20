@@ -23,6 +23,49 @@ class RefreshController:
         self.metadata_thread = None
         self._current_metadata_batch = []
 
+    def _cleanup_thread_later(self, thread) -> None:
+        try:
+            if thread.isFinished():
+                thread.deleteLater()
+            else:
+
+                def cleanup():
+                    try:
+                        if thread.isFinished():
+                            thread.deleteLater()
+                    except (RuntimeError, AttributeError):
+                        pass
+                try:
+                    thread.finished.connect(cleanup)
+                except (TypeError, RuntimeError, AttributeError):
+                    pass
+        except (RuntimeError, AttributeError):
+            pass
+
+    def _stop_worker_thread(self, thread, *, disconnect_signals=None, check_running=False, error_label='thread') -> None:
+        try:
+            if disconnect_signals:
+                for signal in disconnect_signals:
+                    if signal is None:
+                        continue
+                    try:
+                        signal.disconnect()
+                    except (TypeError, RuntimeError, AttributeError):
+                        pass
+            try:
+                if hasattr(thread, 'cancel'):
+                    thread.cancel()
+            except (RuntimeError, AttributeError):
+                pass
+            try:
+                if not check_running or thread.isRunning():
+                    safe_stop_thread(thread, timeout=2000, blocking=True)
+            except (RuntimeError, AttributeError):
+                pass
+            self._cleanup_thread_later(thread)
+        except Exception as e:
+            logging.debug(f'RefreshController: Error stopping {error_label} (thread may be deleted): {e}')
+
     def refresh_mods_list(self, is_initial=False, language_combo=None, retranslate_callback=None, on_fetch_finished_kwargs=None):
         try:
             if hasattr(self.app_state, '_scan_blocked') and self.app_state._scan_blocked:
@@ -103,107 +146,15 @@ class RefreshController:
         if self.fetch_thread:
             fetch_thread = self.fetch_thread
             self.fetch_thread = None
-            try:
-                try:
-                    if hasattr(fetch_thread, 'cancel'):
-                        fetch_thread.cancel()
-                except (RuntimeError, AttributeError):
-                    pass
-                try:
-                    safe_stop_thread(fetch_thread, timeout=2000, blocking=True)
-                except (RuntimeError, AttributeError):
-                    pass
-                try:
-                    if fetch_thread.isFinished():
-                        fetch_thread.deleteLater()
-                    else:
-
-                        def cleanup_fetch():
-                            try:
-                                if fetch_thread.isFinished():
-                                    fetch_thread.deleteLater()
-                            except (RuntimeError, AttributeError):
-                                pass
-                        try:
-                            fetch_thread.finished.connect(cleanup_fetch)
-                        except (TypeError, RuntimeError, AttributeError):
-                            pass
-                except (RuntimeError, AttributeError):
-                    pass
-            except Exception as e:
-                logging.debug(f'RefreshController: Error stopping fetch thread (thread may be deleted): {e}')
+            self._stop_worker_thread(fetch_thread, error_label='fetch thread')
         if self.details_thread:
             details_thread = self.details_thread
             self.details_thread = None
-            try:
-                try:
-                    details_thread.mod_updated.disconnect()
-                    details_thread.finished.disconnect()
-                    details_thread.progress.disconnect()
-                except (TypeError, RuntimeError, AttributeError):
-                    pass
-                try:
-                    if hasattr(details_thread, 'cancel'):
-                        details_thread.cancel()
-                except (RuntimeError, AttributeError):
-                    pass
-                try:
-                    if details_thread.isRunning():
-                        safe_stop_thread(details_thread, timeout=2000, blocking=True)
-                    if details_thread.isFinished():
-                        details_thread.deleteLater()
-                    else:
-
-                        def cleanup_details():
-                            try:
-                                if details_thread.isFinished():
-                                    details_thread.deleteLater()
-                            except (RuntimeError, AttributeError):
-                                pass
-                        try:
-                            details_thread.finished.connect(cleanup_details)
-                        except (TypeError, RuntimeError, AttributeError):
-                            pass
-                except (RuntimeError, AttributeError):
-                    pass
-            except Exception as e:
-                logging.debug(f'RefreshController: Error stopping details thread (thread may be deleted): {e}')
+            self._stop_worker_thread(details_thread, disconnect_signals=[getattr(details_thread, 'mod_updated', None), getattr(details_thread, 'finished', None), getattr(details_thread, 'progress', None)], check_running=True, error_label='details thread')
         if self.metadata_thread:
             metadata_thread = self.metadata_thread
             self.metadata_thread = None
-            try:
-                try:
-                    metadata_thread.mod_updated.disconnect()
-                    metadata_thread.finished.disconnect()
-                    metadata_thread.progress.disconnect()
-                except (TypeError, RuntimeError, AttributeError):
-                    pass
-                try:
-                    if hasattr(metadata_thread, 'cancel'):
-                        metadata_thread.cancel()
-                except (RuntimeError, AttributeError):
-                    pass
-                try:
-                    if metadata_thread.isRunning():
-                        safe_stop_thread(metadata_thread, timeout=2000, blocking=True)
-                    if metadata_thread.isFinished():
-                        metadata_thread.deleteLater()
-                    else:
-
-                        def cleanup_metadata():
-                            try:
-                                if metadata_thread.isFinished():
-                                    metadata_thread.deleteLater()
-                            except (RuntimeError, AttributeError):
-                                pass
-                        try:
-                            metadata_thread.finished.connect(cleanup_metadata)
-                        except (TypeError, RuntimeError, AttributeError):
-                            pass
-                except (RuntimeError, AttributeError):
-                    pass
-            except Exception as e:
-                logging.debug(f'RefreshController: Error stopping metadata thread (thread may be deleted): {e}')
+            self._stop_worker_thread(metadata_thread, disconnect_signals=[getattr(metadata_thread, 'mod_updated', None), getattr(metadata_thread, 'finished', None), getattr(metadata_thread, 'progress', None)], check_running=True, error_label='metadata thread')
 
     def _on_fetch_finished(self, success: bool, retranslate_callback=None, update_filtered_mods_callback=None, update_installed_mods_callback=None, update_action_button_callback=None, update_plugin_tabs_callback=None, mods_loaded_signal=None, fetch_thread=None):
         if not hasattr(self, '_fetch_finished_in_progress'):

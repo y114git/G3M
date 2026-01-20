@@ -24,6 +24,39 @@ class PluginWidget(QFrame):
         self._init_ui()
         self._update_style()
 
+    def _resolve_plugin_name(self, plugin_info: dict | None = None) -> str:
+        info = plugin_info or self.plugin_info
+        name_key = info.get('name_key')
+        if name_key:
+            name_text = tr(name_key)
+            if name_text.startswith('[') and name_text.endswith(']'):
+                plugin_id = info.get('plugin_id', '')
+                if plugin_id and name_key.startswith(f'{plugin_id}.'):
+                    plugin_name_key = name_key[len(f'{plugin_id}.'):]
+                    plugin_tr = self.parent_app.lang_manager.get_plugin_tr(plugin_id) if self.parent_app and hasattr(self.parent_app, 'lang_manager') else None
+                    if plugin_tr:
+                        name_text = plugin_tr(plugin_name_key)
+                        if name_text.startswith('[') and name_text.endswith(']'):
+                            name_text = plugin_name_key
+                    else:
+                        name_text = plugin_name_key
+                else:
+                    name_text = name_key
+        else:
+            name_text = info.get('plugin_id', self.plugin_name)
+        return name_text
+
+    def _get_description_text(self, plugin_info: dict | None = None) -> str | None:
+        info = plugin_info or self.plugin_info
+        description = info.get('description')
+        if description:
+            description_text = str(description).strip()
+            if description_text:
+                if len(description_text) > 200:
+                    return f'{description_text[:197]}...'
+                return description_text
+        return None
+
     def _init_ui(self):
         main_layout = QHBoxLayout(self)
         main_layout.setContentsMargins(10, 10, 10, 10)
@@ -38,24 +71,7 @@ class PluginWidget(QFrame):
         info_layout = QVBoxLayout()
         info_layout.setSpacing(2)
         title_layout = QHBoxLayout()
-        name_key = self.plugin_info.get('name_key')
-        if name_key:
-            name_text = tr(name_key)
-            if name_text.startswith('[') and name_text.endswith(']'):
-                plugin_id = self.plugin_info.get('plugin_id', '')
-                if plugin_id and name_key.startswith(f'{plugin_id}.'):
-                    plugin_name_key = name_key[len(f'{plugin_id}.'):]
-                    plugin_tr = self.parent_app.lang_manager.get_plugin_tr(plugin_id) if self.parent_app and hasattr(self.parent_app, 'lang_manager') else None
-                    if plugin_tr:
-                        name_text = plugin_tr(plugin_name_key)
-                        if name_text.startswith('[') and name_text.endswith(']'):
-                            name_text = plugin_name_key
-                    else:
-                        name_text = plugin_name_key
-                else:
-                    name_text = name_key
-        else:
-            name_text = self.plugin_info.get('plugin_id', self.plugin_name)
+        name_text = self._resolve_plugin_name()
         self.name_label = QLabel(name_text, self)
         self.name_label.setStyleSheet('font-size: 16px; font-weight: bold;')
         title_layout.addWidget(self.name_label)
@@ -112,15 +128,8 @@ class PluginWidget(QFrame):
             metadata_layout.addWidget(self.installed_container)
         metadata_layout.addStretch()
         info_layout.addLayout(metadata_layout)
-        description = self.plugin_info.get('description')
-        description_text = None
-        if description:
-            description_text = str(description).strip()
-            if not description_text:
-                description_text = None
+        description_text = self._get_description_text()
         if description_text:
-            if len(description_text) > 200:
-                description_text = description_text[:197] + '...'
             self.description_label = QLabel(description_text, self)
             self.description_label.setWordWrap(True)
             self.description_label.setObjectName('secondaryText')
@@ -204,25 +213,7 @@ class PluginWidget(QFrame):
         self._update_status_indicator()
         self._update_toggle_button()
         if hasattr(self, 'name_label'):
-            name_key = self.plugin_info.get('name_key')
-            if name_key:
-                name_text = tr(name_key)
-                if name_text.startswith('[') and name_text.endswith(']'):
-                    plugin_id = self.plugin_info.get('plugin_id', '')
-                    if plugin_id and name_key.startswith(f'{plugin_id}.'):
-                        plugin_name_key = name_key[len(f'{plugin_id}.'):]
-                        plugin_tr = self.parent_app.lang_manager.get_plugin_tr(plugin_id) if self.parent_app and hasattr(self.parent_app, 'lang_manager') else None
-                        if plugin_tr:
-                            name_text = plugin_tr(plugin_name_key)
-                            if name_text.startswith('[') and name_text.endswith(']'):
-                                name_text = plugin_name_key
-                        else:
-                            name_text = plugin_name_key
-                    else:
-                        name_text = name_key
-            else:
-                name_text = self.plugin_info.get('plugin_id', self.plugin_name)
-            self.name_label.setText(name_text)
+            self.name_label.setText(self._resolve_plugin_name())
         version = self.plugin_info.get('version')
         if hasattr(self, 'version_label') and self.version_label:
             if version:
@@ -269,15 +260,8 @@ class PluginWidget(QFrame):
                                 metadata_layout.insertWidget(0, self.author_container)
                             break
         if hasattr(self, 'description_label'):
-            description = self.plugin_info.get('description')
-            description_text = None
-            if description:
-                description_text = str(description).strip()
-                if not description_text:
-                    description_text = None
+            description_text = self._get_description_text()
             if description_text:
-                if len(description_text) > 200:
-                    description_text = description_text[:197] + '...'
                 self.description_label.setText(description_text)
                 self.description_label.setStyleSheet('')
                 self.description_label.setVisible(True)
@@ -290,25 +274,7 @@ class PluginWidget(QFrame):
 
     def retranslate_texts(self):
         if hasattr(self, 'name_label'):
-            name_key = self.plugin_info.get('name_key')
-            if name_key:
-                name_text = tr(name_key)
-                if name_text.startswith('[') and name_text.endswith(']'):
-                    plugin_id = self.plugin_info.get('plugin_id', '')
-                    if plugin_id and name_key.startswith(f'{plugin_id}.'):
-                        plugin_name_key = name_key[len(f'{plugin_id}.'):]
-                        plugin_tr = self.parent_app.lang_manager.get_plugin_tr(plugin_id) if self.parent_app and hasattr(self.parent_app, 'lang_manager') else None
-                        if plugin_tr:
-                            name_text = plugin_tr(plugin_name_key)
-                            if name_text.startswith('[') and name_text.endswith(']'):
-                                name_text = plugin_name_key
-                        else:
-                            name_text = plugin_name_key
-                    else:
-                        name_text = name_key
-            else:
-                name_text = self.plugin_info.get('plugin_id', self.plugin_name)
-            self.name_label.setText(name_text)
+            self.name_label.setText(self._resolve_plugin_name())
         if hasattr(self, 'author_label_title') and self.author_label_title:
             self.author_label_title.setText(tr('ui.author_label'))
         if hasattr(self, 'installed_label_title') and self.installed_label_title:
@@ -318,8 +284,7 @@ class PluginWidget(QFrame):
         self._update_toggle_button()
         self._update_status_indicator()
         if hasattr(self, 'description_label'):
-            description = self.plugin_info.get('description')
-            if not description or not str(description).strip():
+            if not self._get_description_text():
                 self.description_label.setText(tr('ui.no_description'))
 
     def _load_icon(self):

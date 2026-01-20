@@ -1,5 +1,6 @@
 from typing import Dict, Any, List, Optional
 import threading
+import logging
 from PyQt6.QtCore import QObject, QThread, pyqtSignal
 from models.mod_models import ModInfo
 from models.game_modes import GameMode, FullGameMode
@@ -270,7 +271,6 @@ class AppState(QObject):
         self._current_task = None
 
     def cancel_current_operation(self):
-        import logging
         self._operation_cancelled = True
         logging.info('AppState: Cancel button clicked')
         if not self._current_task:

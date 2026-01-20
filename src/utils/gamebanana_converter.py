@@ -18,6 +18,13 @@ class GameBananaConverter:
         self.gamebanana_metadata = gamebanana_metadata or {}
         self.temp_extract_dir = None
 
+    def _cleanup_temp_dir(self) -> None:
+        if self.temp_extract_dir and os.path.exists(self.temp_extract_dir):
+            try:
+                shutil.rmtree(self.temp_extract_dir)
+            except Exception as e:
+                logger.warning(f'Failed to cleanup temp directory: {e}')
+
     def convert(self) -> Optional[str]:
         try:
             self.temp_extract_dir = tempfile.mkdtemp(prefix='gb_convert_')
@@ -41,11 +48,7 @@ class GameBananaConverter:
             logger.error(f'GameBanana conversion failed: {e}', exc_info=True)
             return None
         finally:
-            if self.temp_extract_dir and os.path.exists(self.temp_extract_dir):
-                try:
-                    shutil.rmtree(self.temp_extract_dir)
-                except Exception as e:
-                    logger.warning(f'Failed to cleanup temp directory: {e}')
+            self._cleanup_temp_dir()
 
     def _check_compatibility(self) -> bool:
         try:
