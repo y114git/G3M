@@ -12,7 +12,8 @@ from PyQt6.QtWidgets import QApplication, QDialog, QMessageBox
 from managers.localization_manager import tr
 from models.mod_models import ModChapterData
 import models.mod_models as mod_models
-from workers.background_workers import UrlInstallThread, ModScanThread
+from workers.url_install_worker import UrlInstallThread
+from workers.mod_scan_worker import ModScanThread
 from utils.file_utils import sanitize_filename, has_deltamod_info_file
 from utils.mod_utils import get_mod_key, get_mod_name, resolve_mod_icon
 from config.constants import UI_COLORS, MOD_CONFIG_FILENAME, LEGACY_MOD_CONFIG_FILENAME

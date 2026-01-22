@@ -37,6 +37,15 @@ class GameBananaAPI:
             time.sleep(wait_time)
         self._last_request_time = time.time()
 
+    def _handle_rate_limit_retry(self, status_code: Optional[int], attempt: int, max_retries: int, message: str) -> bool:
+        if status_code != 429 or attempt >= max_retries:
+            return False
+        wait_time = (attempt + 1) * 3
+        self._rate_limit_wait_time = max(self._rate_limit_wait_time, wait_time)
+        logger.warning(message.format(wait_time=wait_time))
+        time.sleep(wait_time)
+        return True
+
     def _handle_request_exception(self, e: Exception, mod_id: Optional[int] = None, operation: str = 'operation') -> None:
         status_code = None
         if hasattr(e, 'response') and e.response is not None:
@@ -173,11 +182,7 @@ class GameBananaAPI:
                 return (mapped_mods, mods_needing_metadata)
             except requests.RequestException as e:
                 status_code = getattr(e.response, 'status_code', None) if hasattr(e, 'response') and e.response else None
-                if status_code == 429 and attempt < max_retries:
-                    wait_time = (attempt + 1) * 3
-                    self._rate_limit_wait_time = max(self._rate_limit_wait_time, wait_time)
-                    logger.warning(f'get_game_mods: Rate limit (429) for game {game_id}, waiting {wait_time} seconds before retry')
-                    time.sleep(wait_time)
+                if self._handle_rate_limit_retry(status_code, attempt, max_retries, f'get_game_mods: Rate limit (429) for game {game_id}, waiting {{wait_time}} seconds before retry'):
                     continue
                 self._handle_request_exception(e, None, f'Error fetching mods for game {game_id}')
                 return (None, [])
@@ -229,11 +234,7 @@ class GameBananaAPI:
                 return field_value
             except requests.RequestException as e:
                 status_code = getattr(e.response, 'status_code', None) if hasattr(e, 'response') and e.response else None
-                if status_code == 429 and attempt < max_retries:
-                    wait_time = (attempt + 1) * 3
-                    self._rate_limit_wait_time = max(self._rate_limit_wait_time, wait_time)
-                    logger.warning(f'_get_item_field: Rate limit (429) for mod {mod_id}, waiting {wait_time} seconds before retry')
-                    time.sleep(wait_time)
+                if self._handle_rate_limit_retry(status_code, attempt, max_retries, f'_get_item_field: Rate limit (429) for mod {mod_id}, waiting {{wait_time}} seconds before retry'):
                     continue
                 self._handle_request_exception(e, mod_id, f'Error fetching {field_name}')
                 return None
@@ -293,6 +294,7 @@ class GameBananaAPI:
         url = f'{self.core_api_base}/Core/Item/Data'
         itemtype = self._get_item_type_from_url(external_url)
         params = {'itemtype': itemtype, 'itemid': mod_id, 'fields': 'text,screenshots'}
+        fields = ('text', 'screenshots')
         for attempt in range(max_retries + 1):
             try:
                 self._wait_for_rate_limit()
@@ -306,17 +308,13 @@ class GameBananaAPI:
                 logger.debug(f"get_mod_text_and_screenshots: Got response for mod {mod_id}, data type: {type(data)}, length: {(len(data) if isinstance(data, (list, dict)) else 'N/A')}")
                 result = {'text': None, 'screenshots': None}
                 if isinstance(data, list) and len(data) >= 2:
-                    result['text'] = data[0] if len(data) > 0 else None
-                    result['screenshots'] = data[1] if len(data) > 1 else None
+                    result = self._map_fields_from_list(data, fields)
                 elif isinstance(data, list) and len(data) > 0:
                     if isinstance(data[0], dict):
                         logger.debug('get_mod_text_and_screenshots: Response is list with dict at index 0')
                         result = data[0]
                     else:
-                        if len(data) > 0:
-                            result['text'] = data[0]
-                        if len(data) > 1:
-                            result['screenshots'] = data[1]
+                        result = self._map_fields_from_list(data, fields)
                 elif isinstance(data, dict):
                     logger.debug(f'get_mod_text_and_screenshots: Response is dict, keys: {list(data.keys())}')
                     result['text'] = data.get('text')
@@ -328,11 +326,7 @@ class GameBananaAPI:
                 return result if result.get('text') or result.get('screenshots') else None
             except requests.RequestException as e:
                 status_code = getattr(e.response, 'status_code', None) if hasattr(e, 'response') and e.response else None
-                if status_code == 429 and attempt < max_retries:
-                    wait_time = (attempt + 1) * 3
-                    self._rate_limit_wait_time = max(self._rate_limit_wait_time, wait_time)
-                    logger.warning(f'get_mod_text_and_screenshots: Rate limit (429) for mod {mod_id}, waiting {wait_time} seconds before retry')
-                    time.sleep(wait_time)
+                if self._handle_rate_limit_retry(status_code, attempt, max_retries, f'get_mod_text_and_screenshots: Rate limit (429) for mod {mod_id}, waiting {{wait_time}} seconds before retry'):
                     continue
                 self._handle_request_exception(e, mod_id, 'Error fetching text and screenshots')
                 return None
@@ -345,6 +339,7 @@ class GameBananaAPI:
         url = f'{self.core_api_base}/Core/Item/Data'
         itemtype = self._get_item_type_from_url(external_url)
         params = {'itemtype': itemtype, 'itemid': mod_id, 'fields': 'text,description,screenshots'}
+        fields = ('text', 'description', 'screenshots')
         for attempt in range(max_retries + 1):
             try:
                 self._wait_for_rate_limit()
@@ -354,50 +349,28 @@ class GameBananaAPI:
                 data = response.json()
                 logger.debug(f"get_mod_full_details_for_display: Got response for mod {mod_id}, data type: {type(data)}, length: {(len(data) if isinstance(data, (list, dict)) else 'N/A')}")
                 if isinstance(data, list) and len(data) >= 3:
-                    result = {'text': data[0] if len(data) > 0 else None, 'description': data[1] if len(data) > 1 else None, 'screenshots': data[2] if len(data) > 2 else None}
+                    result = self._map_fields_from_list(data, fields)
                     logger.debug(f"get_mod_full_details_for_display: Successfully parsed details for mod {mod_id}, has text: {bool(result['text'])}, has description: {bool(result['description'])}, has screenshots: {bool(result['screenshots'])}")
                     return result
                 elif isinstance(data, list) and len(data) > 0:
                     if isinstance(data[0], dict):
                         logger.debug('get_mod_full_details_for_display: Response is list with dict at index 0')
-                        result = {}
-                        if 'text' in data[0]:
-                            result['text'] = data[0].get('text')
-                        if 'description' in data[0]:
-                            result['description'] = data[0].get('description')
-                        if 'screenshots' in data[0]:
-                            result['screenshots'] = data[0].get('screenshots')
+                        result = self._map_fields_from_dict(data[0], fields)
                         return result if result else None
                     else:
                         logger.warning(f"get_mod_full_details_for_display: Response is list but has {len(data)} elements (expected 3), first element type: {(type(data[0]) if len(data) > 0 else 'N/A')}")
-                        result = {}
-                        if len(data) > 0:
-                            result['text'] = data[0]
-                        if len(data) > 1:
-                            result['description'] = data[1]
-                        if len(data) > 2:
-                            result['screenshots'] = data[2]
+                        result = self._map_fields_from_list(data, fields)
                         return result if result else None
                 elif isinstance(data, dict):
                     logger.debug(f'get_mod_full_details_for_display: Response is dict, keys: {list(data.keys())}')
-                    result = {}
-                    if 'text' in data:
-                        result['text'] = data.get('text')
-                    if 'description' in data:
-                        result['description'] = data.get('description')
-                    if 'screenshots' in data:
-                        result['screenshots'] = data.get('screenshots')
+                    result = self._map_fields_from_dict(data, fields)
                     return result if result else None
                 else:
                     logger.warning(f'get_mod_full_details_for_display: Unexpected response format for mod {mod_id}: {type(data)}, value: {str(data)[:200]}')
                     return None
             except requests.RequestException as e:
                 status_code = getattr(e.response, 'status_code', None) if hasattr(e, 'response') and e.response else None
-                if status_code == 429 and attempt < max_retries:
-                    wait_time = (attempt + 1) * 3
-                    self._rate_limit_wait_time = max(self._rate_limit_wait_time, wait_time)
-                    logger.warning(f'get_mod_full_details_for_display: Rate limit (429) for mod {mod_id}, waiting {wait_time} seconds before retry')
-                    time.sleep(wait_time)
+                if self._handle_rate_limit_retry(status_code, attempt, max_retries, f'get_mod_full_details_for_display: Rate limit (429) for mod {mod_id}, waiting {{wait_time}} seconds before retry'):
                     continue
                 self._handle_request_exception(e, mod_id, 'Error fetching full details')
                 return None
@@ -424,11 +397,7 @@ class GameBananaAPI:
                 return data
             except requests.RequestException as e:
                 status_code = getattr(e.response, 'status_code', None) if hasattr(e, 'response') and e.response else None
-                if status_code == 429 and attempt < max_retries:
-                    wait_time = (attempt + 1) * 3
-                    self._rate_limit_wait_time = max(self._rate_limit_wait_time, wait_time)
-                    logger.warning(f'get_mod_details: Rate limit (429) for mod {mod_id}, waiting {wait_time} seconds before retry')
-                    time.sleep(wait_time)
+                if self._handle_rate_limit_retry(status_code, attempt, max_retries, f'get_mod_details: Rate limit (429) for mod {mod_id}, waiting {{wait_time}} seconds before retry'):
                     continue
                 self._handle_request_exception(e, mod_id, 'Error fetching mod details')
                 return None
@@ -461,11 +430,7 @@ class GameBananaAPI:
                 return None
             except requests.RequestException as e:
                 status_code = getattr(e.response, 'status_code', None) if hasattr(e, 'response') and e.response else None
-                if status_code == 429 and attempt < max_retries:
-                    wait_time = (attempt + 1) * 3
-                    self._rate_limit_wait_time = max(self._rate_limit_wait_time, wait_time)
-                    logger.warning(f'get_mod_preview_media: Rate limit (429) for mod {mod_id}, waiting {wait_time} seconds before retry')
-                    time.sleep(wait_time)
+                if self._handle_rate_limit_retry(status_code, attempt, max_retries, f'get_mod_preview_media: Rate limit (429) for mod {mod_id}, waiting {{wait_time}} seconds before retry'):
                     continue
                 self._handle_request_exception(e, mod_id, 'Error fetching preview media')
                 return None
@@ -490,11 +455,7 @@ class GameBananaAPI:
                 return None
             except requests.RequestException as e:
                 status_code = getattr(e.response, 'status_code', None) if hasattr(e, 'response') and e.response else None
-                if status_code == 429 and attempt < max_retries:
-                    wait_time = (attempt + 1) * 3
-                    self._rate_limit_wait_time = max(self._rate_limit_wait_time, wait_time)
-                    logger.warning(f'get_mod_profile_page: Rate limit (429) for mod {mod_id}, waiting {wait_time} seconds before retry')
-                    time.sleep(wait_time)
+                if self._handle_rate_limit_retry(status_code, attempt, max_retries, f'get_mod_profile_page: Rate limit (429) for mod {mod_id}, waiting {{wait_time}} seconds before retry'):
                     continue
                 self._handle_request_exception(e, mod_id, 'Error fetching profile page')
                 return None
@@ -536,11 +497,7 @@ class GameBananaAPI:
                 return None
             except requests.RequestException as e:
                 status_code = getattr(e.response, 'status_code', None) if hasattr(e, 'response') and e.response else None
-                if status_code == 429 and attempt < max_retries:
-                    wait_time = (attempt + 1) * 3
-                    self._rate_limit_wait_time = max(self._rate_limit_wait_time, wait_time)
-                    logger.warning(f'get_mod_files: Rate limit (429) for mod {mod_id}, waiting {wait_time} seconds before retry')
-                    time.sleep(wait_time)
+                if self._handle_rate_limit_retry(status_code, attempt, max_retries, f'get_mod_files: Rate limit (429) for mod {mod_id}, waiting {{wait_time}} seconds before retry'):
                     continue
                 self._handle_request_exception(e, mod_id, 'Error fetching mod files')
                 return None
@@ -617,6 +574,14 @@ class GameBananaAPI:
             return None
 
     @staticmethod
+    def _map_fields_from_list(data: List[Any], fields: Tuple[str, ...]) -> Dict[str, Any]:
+        return {field: data[idx] if len(data) > idx else None for idx, field in enumerate(fields)}
+
+    @staticmethod
+    def _map_fields_from_dict(data: Dict[str, Any], fields: Tuple[str, ...]) -> Dict[str, Any]:
+        return {field: data.get(field) for field in fields if field in data}
+
+    @staticmethod
     def _first_value(entries: List[Optional[Dict[str, Any]]], key: str, default: Any = None) -> Any:
         for entry in entries:
             if not entry:
@@ -673,11 +638,7 @@ class GameBananaAPI:
                 return None
             except requests.RequestException as e:
                 status_code = getattr(e.response, 'status_code', None) if hasattr(e, 'response') and e.response else None
-                if status_code == 429 and attempt < max_retries:
-                    wait_time = (attempt + 1) * 3
-                    self._rate_limit_wait_time = max(self._rate_limit_wait_time, wait_time)
-                    logger.warning(f'get_file_contents: Rate limit (429) for file_id {file_id}, waiting {wait_time} seconds before retry')
-                    time.sleep(wait_time)
+                if self._handle_rate_limit_retry(status_code, attempt, max_retries, f'get_file_contents: Rate limit (429) for file_id {file_id}, waiting {{wait_time}} seconds before retry'):
                     continue
                 logger.error(f'Error fetching file contents for {file_id}: {e}')
                 if hasattr(e, 'response') and e.response is not None:
@@ -784,11 +745,7 @@ class GameBananaAPI:
                     break
                 except requests.RequestException as e:
                     status_code = getattr(e.response, 'status_code', None) if hasattr(e, 'response') and e.response else None
-                    if status_code == 429 and attempt < max_retries:
-                        wait_time = (attempt + 1) * 3
-                        self._rate_limit_wait_time = max(self._rate_limit_wait_time, wait_time)
-                        logger.warning(f'search_mods: Rate limit (429) for {model_type} game {game_id}, waiting {wait_time} seconds before retry')
-                        time.sleep(wait_time)
+                    if self._handle_rate_limit_retry(status_code, attempt, max_retries, f'search_mods: Rate limit (429) for {model_type} game {game_id}, waiting {{wait_time}} seconds before retry'):
                         continue
                     logger.error(f'Error searching {model_type} mods for game {game_id}: {e}')
                     if hasattr(e, 'response') and e.response is not None:

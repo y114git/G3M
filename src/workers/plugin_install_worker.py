@@ -4,8 +4,7 @@ import logging
 import tempfile
 from managers.localization_manager import tr
 from utils.network_utils import get_session, download_file
-from utils.ui_utils import format_size_mb
-from config.constants import NETWORK_TIMEOUT_HEAD, UI_COLORS
+from config.constants import UI_COLORS
 from workers.base_install_worker import BaseInstallWorker
 
 
@@ -47,20 +46,9 @@ class PluginInstallWorker(BaseInstallWorker):
             self.status.emit(tr('plugins.downloading_plugin'), UI_COLORS['status_warning'])
             session = get_session()
             self._session = session
-            total_size = 0
-            try:
-                head_response = session.head(url, allow_redirects=True, timeout=NETWORK_TIMEOUT_HEAD)
-                total_size = int(head_response.headers.get('content-length', 0))
-            except Exception as e:
-                logging.debug(f'PluginInstallWorker: Could not get content-length from HEAD request: {e}')
+            total_size = self._get_content_length(session, url)
             downloaded_ref = [0]
-
-            def progress_callback(progress):
-                self.progress.emit(progress)
-                if total_size > 0:
-                    downloaded_mb = format_size_mb(downloaded_ref[0])
-                    total_mb = format_size_mb(total_size)
-                    self.status.emit(f"{tr('plugins.downloading_plugin')} ({downloaded_mb} / {total_mb})", UI_COLORS['status_warning'])
+            progress_callback = self._make_download_progress_callback(tr('plugins.downloading_plugin'), total_size, downloaded_ref)
             download_file(session, url, target_path, progress_callback=progress_callback, total_size=total_size, downloaded_ref=downloaded_ref, cancel_check=lambda: self._cancelled)
             self.progress.emit(100)
             return True

@@ -949,6 +949,7 @@
     "installing_game_files": "正在安装游戏文件...",
     "installing_mod": "正在安装模组...",
     "downloading_mod": "正在下载模组...",
+    "manual_install_ready": "准备手动安装",
     "launcher_settings": "启动器设置",
     "launcher_version_up_to_date": "您的启动器版本是最新的。",
     "launching_game": "正在启动游戏...",

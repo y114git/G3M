@@ -953,6 +953,7 @@
     "installing_game_files": "Installing game files...",
     "installing_mod": "Installing mod...",
     "downloading_mod": "Downloading mod...",
+    "manual_install_ready": "Ready for manual installation",
     "launcher_settings": "Launcher settings",
     "launcher_version_up_to_date": "Your launcher version is up to date.",
     "launching_game": "Launching game...",

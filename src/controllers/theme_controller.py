@@ -2,7 +2,7 @@ from PyQt6.QtWidgets import QApplication, QMessageBox
 from managers.localization_manager import tr
 from config.constants import THEMES, UI_COLORS
 from utils.path_utils import resource_path
-from workers.background_workers import BgLoader
+from workers.bg_loader import BgLoader
 from ui.styles import build_stylesheet
 from utils.ui_utils import DebounceTimer
 

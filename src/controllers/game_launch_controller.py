@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QVBoxLayout, QFil
 from managers.localization_manager import tr
 from config.constants import UI_COLORS
 from models.game_modes import DemoGameMode, UndertaleYellowGameMode, SugarySpireGameMode
-from workers.background_workers import FullInstallThread
+from workers.full_install_worker import FullInstallThread
 
 
 class GameLaunchController(QObject):

@@ -216,7 +216,7 @@ class ModImportExportController:
 
     def _install_mod_from_url(self, url: str):
         try:
-            from workers.background_workers import UrlInstallThread
+            from workers.url_install_worker import UrlInstallThread
             worker = UrlInstallThread(self.app_window, url)
             worker.status.connect(lambda msg, color: self.app_window.feedback_manager.update_status(msg, color))
             worker.progress.connect(lambda p: setattr(self.app_state, 'progress_bar_value', p))

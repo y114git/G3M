@@ -17,7 +17,8 @@ from config.constants import UI_COLORS, SOCIAL_LINKS, ONLINE_UPDATE_INTERVAL, IN
 from utils.game_utils import is_game_running
 from utils.ui_utils import safe_stop_thread, DebounceTimer
 from utils.path_utils import get_user_data_root, resource_path, get_launcher_dir, get_user_plugins_dir
-from workers.background_workers import PresenceWorker, FetchChangelogWorker
+from workers.presence_worker import PresenceWorker
+from workers.changelog_worker import FetchChangelogWorker
 from controllers.mod_operations_controller import ModOperationsController
 from controllers.library_display_controller import LibraryDisplayController
 from controllers.search_display_controller import SearchDisplayController
@@ -269,7 +270,7 @@ class AppWindow(QWidget):
             self.feedback_manager.show_message('warning', 'dialogs.install_in_progress_title', tr('dialogs.install_in_progress_body'))
             return
         if url.startswith('deltahub://'):
-            from workers.background_workers import UrlInstallThread
+            from workers.url_install_worker import UrlInstallThread
             worker = UrlInstallThread(self, url)
             worker.status.connect(lambda msg, color: self.feedback_manager.update_status(msg, color))
             worker.progress.connect(lambda p: setattr(self.app_state, 'progress_bar_value', p))
@@ -1169,7 +1170,7 @@ class AppWindow(QWidget):
         self.settings_ui.on_toggle_steam_launch()
         self.theme.apply_theme()
         try:
-            from workers.background_workers import ModScanThread
+            from workers.mod_scan_worker import ModScanThread
             from utils.path_utils import get_user_data_root
             cache_dir = os.path.join(get_user_data_root(), 'cache')
             self._mod_scan_thread = ModScanThread(self.app_state.mods_dir, self, cache_dir=cache_dir)

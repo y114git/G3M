@@ -7,7 +7,7 @@ from PyQt6.QtWidgets import QDialog, QMessageBox
 from managers.localization_manager import tr
 from config.constants import UI_COLORS
 from ui.widgets.mod.installed_mod_widget import InstalledModWidget
-from workers.background_workers import InstallModsThread
+from workers.install_mods_worker import InstallModsThread
 from workers.install_gamebanana_mod import InstallGameBananaModThread
 from workers.prepare_gamebanana_manual_install_worker import PrepareGameBananaManualInstallWorker
 from utils.mod_utils import get_mod_key, get_mod_name

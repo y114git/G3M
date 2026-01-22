@@ -2,10 +2,11 @@ import os
 import shutil
 import logging
 import threading
-from typing import Optional
+from typing import Optional, Callable, List
 from PyQt6.QtCore import QThread, pyqtSignal
-from config.constants import UI_COLORS
+from config.constants import UI_COLORS, NETWORK_TIMEOUT_HEAD
 from managers.localization_manager import tr
+from utils.ui_utils import format_size_mb
 logger = logging.getLogger(__name__)
 
 
@@ -69,3 +70,26 @@ class BaseInstallWorker(QThread):
                     logger.debug(f'{self.__class__.__name__}: Error removing archive directory {archive_dir}: {e}')
         except Exception as e:
             logger.debug(f'{self.__class__.__name__}: Error during cleanup: {e}')
+
+    def _get_content_length(self, session, url: str) -> int:
+        try:
+            head_response = session.head(url, allow_redirects=True, timeout=NETWORK_TIMEOUT_HEAD)
+            return int(head_response.headers.get('content-length', 0))
+        except Exception:
+            return 0
+
+    def _make_download_progress_callback(self, status_text: str, total_size: int, downloaded_ref: List[int], status_color: str = None) -> Callable[[int], None]:
+        if status_color is None:
+            status_color = UI_COLORS['status_warning']
+
+        def progress_callback(progress: int):
+            if not self._cancelled:
+                self.progress.emit(progress)
+                if total_size > 0:
+                    downloaded_mb = format_size_mb(downloaded_ref[0])
+                    total_mb = format_size_mb(total_size)
+                    self.status.emit(f'{status_text} ({downloaded_mb} / {total_mb})', status_color)
+        return progress_callback
+
+    def _set_active_response(self, response) -> None:
+        self._active_response = response
