@@ -7,9 +7,7 @@ from typing import Optional, Dict
 from PyQt6.QtCore import pyqtSignal
 from managers.localization_manager import tr
 from utils.network_utils import get_session
-from utils.archive_utils import extract_archive
 from utils.file_utils import sanitize_filename, has_deltamod_info_file
-from utils.deltamod_converter import DeltamodConverter
 from config.constants import UI_COLORS, MOD_CONFIG_FILENAME, LEGACY_MOD_CONFIG_FILENAME
 from workers.base_install_worker import BaseInstallWorker
 
@@ -88,6 +86,7 @@ class ModInstallWorker(BaseInstallWorker):
             files_in_root = os.listdir(content_path)
             if has_deltamod_info_file(files_in_root):
                 self.status.emit(tr('status.deltamod_archive_detected_url'), UI_COLORS['status_warning'])
+                from utils.deltamod_converter import DeltamodConverter
                 converter = DeltamodConverter(content_path, self.mods_dir)
                 new_mod_path = converter.convert()
                 if new_mod_path:
@@ -218,7 +217,7 @@ class ModInstallWorker(BaseInstallWorker):
         self.status.emit(tr('mods.extracting_mod'), UI_COLORS['status_warning'])
         with tempfile.TemporaryDirectory(prefix='dh-mod-extract-') as extract_dir:
             try:
-                from utils.archive_utils import extract_with_unrar_retry
+                from utils.archive_utils import extract_with_unrar_retry, extract_archive
                 extract_with_unrar_retry(archive_path, extract_dir, self, extract_archive)
             except Exception as e:
                 self.finished.emit(False, tr('mods.extract_error', error=str(e)))

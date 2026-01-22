@@ -1,4 +1,5 @@
 from utils.mod_filter_utils import filter_and_sort_mods
+from utils.mod_utils import get_mod_key, get_gamebanana_key, get_gamebanana_mod_id
 from PyQt6.QtWidgets import QInputDialog, QMessageBox
 from PyQt6.QtCore import QTimer, QObject, pyqtSignal
 from managers.localization_manager import tr
@@ -49,18 +50,13 @@ class SearchDisplayController(QObject):
         self._pending_filter_update = False
 
     def _get_mod_key_value(self, mod):
-        return getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
+        return get_mod_key(mod)
 
     def _get_gamebanana_key(self, mod):
-        key = self._get_mod_key_value(mod)
-        return key if key and key.startswith('gb_') else None
+        return get_gamebanana_key(mod)
 
     def _get_gamebanana_mod_id_str(self, mod):
-        key = self._get_gamebanana_key(mod)
-        if not key:
-            return None
-        mod_id_str = key.replace('gb_', '', 1)
-        return mod_id_str or None
+        return get_gamebanana_mod_id(mod)
 
     def _get_metadata_cache(self):
         if hasattr(self.app_state, 'cache_dir') and self.app_state.cache_dir:

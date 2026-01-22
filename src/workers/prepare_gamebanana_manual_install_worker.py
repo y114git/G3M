@@ -6,8 +6,8 @@ from typing import Dict
 from PyQt6.QtCore import pyqtSignal
 from config.constants import UI_COLORS, NETWORK_TIMEOUT_HEAD
 from managers.localization_manager import tr
+from core.exceptions import AppError
 from utils.file_utils import download_file_with_progress
-from utils.archive_utils import extract_archive
 from utils.network_utils import get_session
 from workers.base_install_worker import BaseInstallWorker
 logger = logging.getLogger(__name__)
@@ -29,11 +29,11 @@ class PrepareGameBananaManualInstallWorker(BaseInstallWorker):
             mod_key = getattr(self.mod, 'key', None) or getattr(self.mod, 'mod_key', None)
             mod_id_str = mod_key.replace('gb_', '', 1) if mod_key and mod_key.startswith('gb_') else None
             if not mod_id_str:
-                raise ValueError(tr('errors.invalid_gamebanana_mod_id'))
+                raise AppError('errors.invalid_gamebanana_mod_id')
             mod_id = int(mod_id_str)
             download_url = self.selected_file.get('download_url') or self.selected_file.get('_sDownloadUrl')
             if not download_url:
-                raise ValueError(tr('errors.no_download_url'))
+                raise AppError('errors.no_download_url')
             file_name = self.selected_file.get('name') or self.selected_file.get('_sFile') or self.selected_file.get('_sName') or f'mod_{mod_id}.zip'
             temp_dir = tempfile.mkdtemp(prefix='gb_manual_install_')
             archive_path = os.path.join(temp_dir, file_name)
@@ -69,7 +69,7 @@ class PrepareGameBananaManualInstallWorker(BaseInstallWorker):
             self.status.emit(tr('status.extracting_mod'), UI_COLORS['status_info'])
             extract_dir = os.path.join(temp_dir, 'extracted')
             os.makedirs(extract_dir, exist_ok=True)
-            from utils.archive_utils import extract_with_unrar_retry
+            from utils.archive_utils import extract_with_unrar_retry, extract_archive
             extract_with_unrar_retry(archive_path, extract_dir, extract_func=extract_archive)
             content_path = extract_dir
             contents = os.listdir(extract_dir)

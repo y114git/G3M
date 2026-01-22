@@ -11,6 +11,7 @@ from utils.network_utils import get_session
 from PyQt6.QtCore import QObject, pyqtSignal
 from managers.localization_manager import tr
 from config.constants import LAUNCHER_VERSION, UI_COLORS, ARCH
+from core.exceptions import AppError
 from core.app_state import AppState
 from ui.common.feedback import FeedbackManager
 
@@ -139,7 +140,7 @@ class UpdateChecker(QObject):
                     new_exe_path = next((os.path.join(root, f) for root, _, files in os.walk(extraction_dir) for f in files if f.lower().endswith('.exe')), None)
                     if not new_exe_path:
                         logging.error('[UPDATE] Executable not found in extracted archive')
-                        raise RuntimeError(tr('errors.exe_not_found_in_archive'))
+                        raise AppError('errors.exe_not_found_in_archive')
                     logging.info(f'[UPDATE] Found installer executable: {new_exe_path}')
                     logging.info('[UPDATE] Launching installer with elevated privileges (runas)')
                     import ctypes
@@ -170,14 +171,14 @@ class UpdateChecker(QObject):
                         os._exit(0)
                     else:
                         logging.error(f'[UPDATE] Failed to launch installer (result code: {result})')
-                        raise RuntimeError(tr('errors.installer_launch_failed', code=result))
+                        raise AppError('errors.installer_launch_failed', code=result)
                 current_exe_path = os.path.realpath(sys.executable)
                 if system == 'Darwin':
                     while current_exe_path != '/' and (not current_exe_path.endswith('.app')):
                         current_exe_path = os.path.dirname(current_exe_path)
                     if not current_exe_path.endswith('.app'):
                         logging.error('[UPDATE] Could not find .app bundle in executable path')
-                        raise RuntimeError(tr('errors.app_path_not_found'))
+                        raise AppError('errors.app_path_not_found')
                     replace_target = current_exe_path
                 else:
                     replace_target = current_exe_path
@@ -191,7 +192,7 @@ class UpdateChecker(QObject):
                     new_content_path = next((os.path.join(extraction_dir, d) for d in os.listdir(extraction_dir) if d.endswith('.app')), None)
                     if new_content_path is None:
                         logging.error('[UPDATE] .app bundle not found in extracted archive')
-                        raise RuntimeError(tr('errors.app_not_found_after_unpack'))
+                        raise AppError('errors.app_not_found_after_unpack')
                     logging.info(f'[UPDATE] Found .app bundle: {new_content_path}')
                     from pathlib import Path
                     from utils.file_utils import fix_macos_python_symlink
@@ -223,7 +224,7 @@ class UpdateChecker(QObject):
                         new_content_path = largest_file
                     if new_content_path is None or not os.path.exists(new_content_path):
                         logging.error('[UPDATE] Executable not found in extracted archive')
-                        raise RuntimeError(tr('errors.executable_not_found_after_unpack'))
+                        raise AppError('errors.executable_not_found_after_unpack')
                     logging.info(f'[UPDATE] Found executable: {new_content_path}')
                     os.chmod(new_content_path, 493)
                     logging.info('[UPDATE] Set executable permissions on new launcher')

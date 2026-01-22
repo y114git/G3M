@@ -6,11 +6,12 @@ from PyQt6.QtCore import QTimer
 from PyQt6.QtWidgets import QDialog, QMessageBox
 from managers.localization_manager import tr
 from config.constants import UI_COLORS
+from core.exceptions import AppError
 from ui.widgets.mod.installed_mod_widget import InstalledModWidget
 from workers.install_mods_worker import InstallModsThread
 from workers.install_gamebanana_mod import InstallGameBananaModThread
 from workers.prepare_gamebanana_manual_install_worker import PrepareGameBananaManualInstallWorker
-from utils.mod_utils import get_mod_key, get_mod_name
+from utils.mod_utils import get_mod_key, get_mod_name, get_gamebanana_mod_id
 from ui.dialogs.gamebanana_file_picker_dialog import GameBananaFilePickerDialog
 
 
@@ -41,14 +42,10 @@ class ModOperationsController:
         self.feedback_manager.show_message('error', 'errors.gamebanana_install_failed', error=str(error))
 
     def _get_mod_key_value(self, mod) -> Optional[str]:
-        return getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
+        return get_mod_key(mod)
 
     def _get_gamebanana_mod_id_str(self, mod) -> Optional[str]:
-        key = self._get_mod_key_value(mod)
-        if not key or not key.startswith('gb_'):
-            return None
-        mod_id_str = key.replace('gb_', '', 1)
-        return mod_id_str or None
+        return get_gamebanana_mod_id(mod)
 
     def handle_url_install(self, url: str):
         from utils.game_utils import is_game_running
@@ -711,11 +708,11 @@ class ModOperationsController:
             mod_key = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
             mod_id_str = mod_key.replace('gb_', '', 1) if mod_key and mod_key.startswith('gb_') else None
             if not mod_id_str:
-                raise ValueError(tr('errors.invalid_gamebanana_mod_id'))
+                raise AppError('errors.invalid_gamebanana_mod_id')
             mod_id = int(mod_id_str)
             download_url = selected_file.get('download_url') or selected_file.get('_sDownloadUrl')
             if not download_url:
-                raise ValueError(tr('errors.no_download_url'))
+                raise AppError('errors.no_download_url')
             file_name = selected_file.get('name') or selected_file.get('_sFile') or selected_file.get('_sName') or f'mod_{mod_id}.zip'
             temp_dir = tempfile.mkdtemp(prefix='gb_manual_install_')
             archive_path = os.path.join(temp_dir, file_name)

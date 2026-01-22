@@ -10,9 +10,33 @@ import json
 import threading
 import time
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, Optional, Callable, TypeVar
 from utils.network_utils import download_file, get_filename_from_url, get_session
 from config.constants import MOD_CONFIG_FILENAME, META_JSON_FILENAME, ICON_PNG_FILENAME, LEGACY_MOD_CONFIG_FILENAME, LEGACY_META_JSON_FILENAME
+T = TypeVar('T')
+
+
+def _retry_operation(operation: Callable[[], T], max_retries: int = 5, delay: float = 0.1, op_name: str = 'operation', path: str = '') -> T:
+    last_error = None
+    for attempt in range(max_retries):
+        try:
+            return operation()
+        except (OSError, PermissionError, shutil.Error) as e:
+            last_error = e
+            if attempt < max_retries - 1:
+                logging.debug(f'{op_name}: Attempt {attempt + 1}/{max_retries} failed for {path}: {e}, retrying...')
+                time.sleep(delay * (attempt + 1))
+            else:
+                logging.warning(f'{op_name}: Failed for {path} after {max_retries} attempts: {e}')
+    raise last_error if last_error else RuntimeError(f'{op_name} failed')
+
+
+def _fix_windows_permissions(path: str) -> None:
+    if platform.system() == 'Windows':
+        try:
+            os.chmod(path, stat.S_IWRITE | stat.S_IREAD)
+        except OSError:
+            pass
 
 
 def download_file_with_progress(url: str, target_path: str, progress_callback=None, session=None, cancel_check=None, on_response=None, downloaded_ref=None) -> bool:
@@ -553,7 +577,6 @@ def check_filename_is_deltamod_info(filename: str) -> bool:
 def safe_copy(src: str, dst: str, max_retries: int = 5, delay: float = 0.1) -> bool:
     try:
         if os.path.abspath(src) == os.path.abspath(dst):
-            logging.debug(f'safe_copy: Skipping copy: source and destination are the same file: {src}')
             return True
     except Exception:
         pass
@@ -562,49 +585,27 @@ def safe_copy(src: str, dst: str, max_retries: int = 5, delay: float = 0.1) -> b
         try:
             os.makedirs(dst_dir, exist_ok=True)
         except OSError as e:
-            logging.warning(f'safe_copy: Failed to create destination directory {dst_dir}: {e}')
+            logging.warning(f'safe_copy: Failed to create dest dir {dst_dir}: {e}')
             return False
-    for attempt in range(max_retries):
-        try:
-            shutil.copy2(src, dst)
-            return True
-        except PermissionError as e:
-            if attempt < max_retries - 1:
-                logging.debug(f'safe_copy: Attempt {attempt + 1}/{max_retries} failed for {src} -> {dst}: {e}, retrying...')
-                time.sleep(delay * (attempt + 1))
-            else:
-                logging.error(f'safe_copy: Failed to copy {src} to {dst} after {max_retries} attempts: {e}')
-                return False
-        except OSError as e:
-            if attempt < max_retries - 1:
-                logging.debug(f'safe_copy: Attempt {attempt + 1}/{max_retries} failed for {src} -> {dst}: {e}, retrying...')
-                time.sleep(delay * (attempt + 1))
-            else:
-                logging.error(f'safe_copy: Failed to copy {src} to {dst} after {max_retries} attempts: {e}')
-                return False
-    return False
+    try:
+        _retry_operation(lambda: shutil.copy2(src, dst), max_retries, delay, 'safe_copy', f'{src} -> {dst}')
+        return True
+    except Exception:
+        return False
 
 
 def safe_remove(path: str, max_retries: int = 5, delay: float = 0.1) -> bool:
     if not os.path.exists(path):
         return True
-    for attempt in range(max_retries):
-        try:
-            if platform.system() == 'Windows':
-                try:
-                    os.chmod(path, stat.S_IWRITE | stat.S_IREAD)
-                except OSError:
-                    pass
-            os.remove(path)
-            return True
-        except (OSError, PermissionError) as e:
-            if attempt < max_retries - 1:
-                logging.debug(f'safe_remove: Attempt {attempt + 1}/{max_retries} failed for {path}: {e}, retrying...')
-                time.sleep(delay)
-            else:
-                logging.warning(f'safe_remove: Failed to remove {path} after {max_retries} attempts: {e}')
-                return False
-    return False
+
+    def do_remove():
+        _fix_windows_permissions(path)
+        os.remove(path)
+    try:
+        _retry_operation(do_remove, max_retries, delay, 'safe_remove', path)
+        return True
+    except Exception:
+        return False
 
 
 def safe_move(src: str, dst: str, max_retries: int = 5, delay: float = 0.1) -> bool:
@@ -615,25 +616,27 @@ def safe_move(src: str, dst: str, max_retries: int = 5, delay: float = 0.1) -> b
         try:
             os.makedirs(dst_dir, exist_ok=True)
         except OSError as e:
-            logging.warning(f'safe_move: Failed to create destination directory {dst_dir}: {e}')
+            logging.warning(f'safe_move: Failed to create dest dir {dst_dir}: {e}')
             return False
-    for attempt in range(max_retries):
+
+    def do_move():
+        if os.path.isfile(src):
+            _fix_windows_permissions(src)
+        shutil.move(src, dst)
+    try:
+        _retry_operation(do_move, max_retries, delay, 'safe_move', f'{src} -> {dst}')
+        return True
+    except Exception:
+        return False
+
+
+def _rmtree_error_handler(func, path, exc_info):
+    if platform.system() == 'Windows':
         try:
-            if platform.system() == 'Windows' and os.path.isfile(src):
-                try:
-                    os.chmod(src, stat.S_IWRITE | stat.S_IREAD)
-                except OSError:
-                    pass
-            shutil.move(src, dst)
-            return True
-        except (OSError, PermissionError, shutil.Error) as e:
-            if attempt < max_retries - 1:
-                logging.debug(f'safe_move: Attempt {attempt + 1}/{max_retries} failed for {src} -> {dst}: {e}, retrying...')
-                time.sleep(delay)
-            else:
-                logging.warning(f'safe_move: Failed to move {src} to {dst} after {max_retries} attempts: {e}')
-                return False
-    return False
+            os.chmod(path, stat.S_IWRITE | stat.S_IREAD | stat.S_IEXEC)
+            func(path)
+        except OSError:
+            pass
 
 
 def safe_rmtree(path: str, max_retries: int = 3, delay: float = 0.5) -> bool:
@@ -641,47 +644,20 @@ def safe_rmtree(path: str, max_retries: int = 3, delay: float = 0.5) -> bool:
         return True
     if not os.path.isdir(path):
         return safe_remove(path, max_retries, delay)
-
-    def handle_rmtree_error(func, path, exc_info):
-        if platform.system() == 'Windows':
+    try:
+        _retry_operation(lambda: shutil.rmtree(path, onexc=_rmtree_error_handler), max_retries, delay, 'safe_rmtree', path)
+        return True
+    except Exception:
+        if platform.system() != 'Windows':
             try:
-                os.chmod(path, stat.S_IWRITE | stat.S_IREAD | stat.S_IEXEC)
-            except OSError:
+                renamed = os.path.join(tempfile.gettempdir(), f'deltahub_cleanup_{int(time.time())}')
+                if not os.path.exists(renamed):
+                    os.rename(path, renamed)
+                    threading.Thread(target=lambda: (time.sleep(5), shutil.rmtree(renamed, ignore_errors=True)), daemon=True).start()
+                    return True
+            except Exception:
                 pass
-            try:
-                func(path)
-            except OSError:
-                pass
-    for attempt in range(max_retries):
-        try:
-            shutil.rmtree(path, onexc=handle_rmtree_error)
-            return True
-        except (OSError, PermissionError, shutil.Error) as e:
-            if attempt < max_retries - 1:
-                logging.debug(f'safe_rmtree: Attempt {attempt + 1}/{max_retries} failed for {path}: {e}, retrying...')
-                time.sleep(delay)
-            else:
-                logging.warning(f'safe_rmtree: Failed to remove {path} after {max_retries} attempts: {e}')
-                if platform.system() != 'Windows':
-                    try:
-                        temp_dir = tempfile.gettempdir()
-                        renamed_path = os.path.join(temp_dir, f'deltahub_temp_cleanup_{int(time.time())}')
-                        if not os.path.exists(renamed_path):
-                            os.rename(path, renamed_path)
-                            logging.debug(f'safe_rmtree: Renamed {path} to {renamed_path} for later cleanup')
-
-                            def delayed_cleanup():
-                                time.sleep(5)
-                                try:
-                                    shutil.rmtree(renamed_path, ignore_errors=True)
-                                except Exception:
-                                    pass
-                            threading.Thread(target=delayed_cleanup, daemon=True).start()
-                            return True
-                    except Exception:
-                        pass
-                return False
-    return False
+        return False
 
 
 def migrate_mod_config(mod_dir: str) -> bool:

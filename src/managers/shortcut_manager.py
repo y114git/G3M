@@ -13,6 +13,7 @@ from managers.mod_manager import ModManager
 from models.game_modes import FullGameMode
 from config.constants import LAUNCHER_VERSION, UI_COLORS, SLOT_ID_UNIVERSAL, SLOT_ID_DEMO, SLOT_ID_UNDERTALE, SLOT_ID_SUGARY_SPIRE, SLOT_ID_MENU, SLOT_ID_CHAPTER_1, SLOT_ID_CHAPTER_2, SLOT_ID_CHAPTER_3, SLOT_ID_CHAPTER_4
 from managers.localization_manager import tr
+from core.exceptions import AppError
 from utils.path_utils import resource_path
 from utils.mod_utils import get_mod_key
 from models.game_modes import DemoGameMode, UndertaleGameMode, UndertaleYellowGameMode, PizzaTowerGameMode, SugarySpireGameMode
@@ -255,7 +256,7 @@ class ShortcutManager(QObject):
             if not mods_settings:
                 return
             if not self.parent_widget:
-                raise Exception(tr('errors.parent_widget_not_found'))
+                raise AppError('errors.parent_widget_not_found')
             slot_manager = getattr(self.parent_widget, 'slot_manager', None)
             if not slot_manager:
                 raise Exception('slot_manager not found')
@@ -337,7 +338,7 @@ class ShortcutManager(QObject):
             logging.info('Shortcut mods applied to used_mods_manager')
         except Exception as e:
             logging.error(f'Failed to apply shortcut mods: {e}', exc_info=True)
-            raise Exception(tr('errors.mod_apply_error', error=str(e)))
+            raise AppError('errors.mod_apply_error', error=str(e))
 
     def _get_mods_from_keys(self, mod_keys: list) -> list:
         mods_list = []
@@ -369,7 +370,7 @@ class ShortcutManager(QObject):
     def launch_game_from_shortcut(self, launch_via_steam=False, use_custom_executable=False, custom_exec_path='', demo_custom_exec_path='', undertale_custom_exec_path='', undertaleyellow_custom_exec_path='', pizzatower_custom_exec_path='', sugaryspire_custom_exec_path='', direct_launch_slot_id=-1):
         try:
             if not self.parent_widget:
-                raise Exception(tr('errors.parent_widget_not_found'))
+                raise AppError('errors.parent_widget_not_found')
             game_launcher = getattr(self.parent_widget, 'game_launcher', None)
             if not game_launcher:
                 raise Exception('game_launcher not found')
@@ -415,7 +416,7 @@ class ShortcutManager(QObject):
             game_launcher.launch_game_with_all_mods(execute_plugin_hooks=None, restore_window_callback=None)
         except Exception as e:
             logging.error(f'Failed to launch game from shortcut: {e}', exc_info=True)
-            raise Exception(tr('errors.launch_error_details', error=str(e)))
+            raise AppError('errors.launch_error_details', error=str(e))
 
     def _save_shortcut(self, settings: Dict[str, Any]):
         system = platform.system()

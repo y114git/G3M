@@ -40,7 +40,6 @@ from managers.plugin_manager import PluginManager
 from managers.customization_manager import CustomizationManager
 from managers.used_mods_manager import UsedModsManager
 from managers.shortcut_manager import ShortcutManager
-from ui.dialogs.chat_window import ChatWindow
 from utils.network_utils import check_internet_connection
 _translator = QTranslator()
 _lock_file = None
@@ -2041,6 +2040,7 @@ class AppWindow(QWidget):
         if not check_internet_connection():
             self.feedback_manager.show_message('warning', 'chat.no_internet', tr('chat.no_internet'))
             return
+        from ui.dialogs.chat_window import ChatWindow
         chat_window = ChatWindow(self.app_state, self)
         chat_window.exec()
 

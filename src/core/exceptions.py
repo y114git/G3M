@@ -1,8 +1,56 @@
-from typing import Optional, List
+from typing import Optional, List, Callable, Any
+from functools import wraps
+import logging
+logger = logging.getLogger(__name__)
 
 
 class DELTAHUBError(Exception):
     pass
+
+
+class AppError(DELTAHUBError):
+
+    def __init__(self, key: str, **kwargs):
+        self.key = key
+        self.kwargs = kwargs
+        from managers.localization_manager import tr
+        super().__init__(tr(key, **kwargs))
+
+    def get_message(self) -> str:
+        from managers.localization_manager import tr
+        return tr(self.key, **self.kwargs)
+
+
+def handle_errors(error_key: str = 'errors.operation_failed', log_level: str = 'error', reraise: bool = False, default_return: Any = None):
+
+    def decorator(func: Callable) -> Callable:
+
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            try:
+                return func(*args, **kwargs)
+            except AppError:
+                raise
+            except Exception as e:
+                log_func = getattr(logger, log_level, logger.error)
+                log_func(f'{func.__name__}: {e}', exc_info=True)
+                if reraise:
+                    raise AppError(error_key, error=str(e)) from e
+                return default_return
+        return wrapper
+    return decorator
+
+
+def safe_operation(func: Callable) -> Callable:
+
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except Exception as e:
+            logger.warning(f'{func.__name__}: {e}')
+            return None
+    return wrapper
 
 
 class ModError(DELTAHUBError):

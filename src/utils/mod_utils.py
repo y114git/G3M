@@ -14,6 +14,16 @@ def get_mod_key(mod_data: Any) -> Optional[str]:
     return _get_mod_field(mod_data, 'key') or _get_mod_field(mod_data, 'mod_key') or _get_mod_field(mod_data, 'name')
 
 
+def get_gamebanana_key(mod_data: Any) -> Optional[str]:
+    key = _get_mod_field(mod_data, 'key') or _get_mod_field(mod_data, 'mod_key')
+    return key if key and key.startswith('gb_') else None
+
+
+def get_gamebanana_mod_id(mod_data: Any) -> Optional[str]:
+    key = get_gamebanana_key(mod_data)
+    return key[3:] if key else None
+
+
 def get_mod_name(mod_data: Any, default: str = 'Unknown') -> str:
     if mod_data is None:
         return default

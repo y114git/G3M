@@ -7,9 +7,7 @@ import zipfile
 from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QFileDialog, QMessageBox, QListWidget, QListWidgetItem, QCheckBox
 from PyQt6.QtCore import Qt
 from managers.localization_manager import tr
-from utils.archive_utils import extract_archive
 from utils.file_utils import find_deltamod_info_file
-from utils.deltamod_converter import DeltamodConverter
 from config.constants import MOD_CONFIG_FILENAME, LEGACY_MOD_CONFIG_FILENAME
 
 
@@ -64,6 +62,7 @@ class ModImportExportController:
         try:
             with tempfile.TemporaryDirectory(prefix='deltahub_import_') as temp_dir:
                 logging.info(f'[IMPORT] Extracting archive to temporary directory: {temp_dir}')
+                from utils.archive_utils import extract_archive
                 try:
                     extract_archive(file_path, temp_dir)
                 except Exception as e:
@@ -81,6 +80,7 @@ class ModImportExportController:
                     logging.info(f'[IMPORT] Archive contains single directory, using: {content_path}')
                 if find_deltamod_info_file(content_path):
                     logging.info('[IMPORT] DELTAMOD format detected, converting...')
+                    from utils.deltamod_converter import DeltamodConverter
                     converter = DeltamodConverter(content_path, self.app_state.mods_dir)
                     new_mod_path = converter.convert()
                     if new_mod_path:
@@ -299,6 +299,7 @@ class ModImportExportController:
 
     def _prepare_local_files_for_manual_install(self, file_path: str) -> str:
         temp_dir = tempfile.mkdtemp(prefix='deltahub_manual_install_')
+        from utils.archive_utils import extract_archive
         try:
             try:
                 extract_archive(file_path, temp_dir)

@@ -6,6 +6,7 @@ from typing import Optional, Dict
 from PyQt6.QtCore import pyqtSignal, QTimer
 from config.constants import UI_COLORS, MOD_CONFIG_FILENAME
 from managers.localization_manager import tr
+from core.exceptions import AppError
 from utils.gamebanana_api import GameBananaAPI
 from utils.gamebanana_converter import GameBananaConverter
 from utils.file_utils import normalize_mod_package
@@ -41,7 +42,7 @@ class InstallGameBananaModThread(BaseInstallWorker):
             mod_key = getattr(self.mod_info, 'key', None) or getattr(self.mod_info, 'mod_key', None)
             mod_id_str = self.mod_info.get_gamebanana_mod_id() if hasattr(self.mod_info, 'get_gamebanana_mod_id') else mod_key.replace('gb_', '', 1) if mod_key and mod_key.startswith('gb_') else None
             if not mod_id_str:
-                raise ValueError(tr('errors.invalid_gamebanana_mod_id'))
+                raise AppError('errors.invalid_gamebanana_mod_id')
             mod_id = int(mod_id_str)
             if self._cancelled:
                 self.finished.emit(False, tr('status.operation_cancelled'))
@@ -60,7 +61,7 @@ class InstallGameBananaModThread(BaseInstallWorker):
                 return
             download_url = file_choice.get('download_url') or file_choice.get('_sDownloadUrl')
             if not download_url:
-                raise ValueError(tr('errors.no_download_url'))
+                raise AppError('errors.no_download_url')
             self.status.emit(tr('status.downloading_mod'), UI_COLORS['status_warning'])
             from utils.file_utils import download_file_with_progress
             from config.constants import NETWORK_TIMEOUT_HEAD
@@ -119,13 +120,13 @@ class InstallGameBananaModThread(BaseInstallWorker):
                     self._cleanup_temp_files(archive_path, archive_dir)
                     mod_dir = self._find_installed_mod_dir(mod_id)
                     if not mod_dir:
-                        raise ValueError(tr('errors.gamebanana_installation_failed'))
+                        raise AppError('errors.gamebanana_installation_failed')
                     mod_name = os.path.basename(mod_dir)
                     self.finished.emit(True, tr('status.install_complete_success', mod_name=mod_name))
                 except Exception as e:
                     self._cleanup_temp_files(archive_path, archive_dir)
                     logger.error(f'Error installing DELTAHUB mod from GameBanana: {e}', exc_info=True)
-                    raise ValueError(tr('errors.gamebanana_installation_failed'))
+                    raise AppError('errors.gamebanana_installation_failed')
                 return
             self.status.emit(tr('status.converting_mod'), UI_COLORS['status_info'])
             gb_metadata = self._build_gb_metadata(mod_id)
@@ -133,7 +134,7 @@ class InstallGameBananaModThread(BaseInstallWorker):
             mod_dir = converter.convert()
             self._cleanup_temp_files(archive_path, archive_dir)
             if not mod_dir:
-                raise ValueError(tr('errors.gamebanana_conversion_failed'))
+                raise AppError('errors.gamebanana_conversion_failed')
             mod_name = os.path.basename(mod_dir)
             self.finished.emit(True, tr('status.install_complete_success', mod_name=mod_name))
         except RuntimeError as e:

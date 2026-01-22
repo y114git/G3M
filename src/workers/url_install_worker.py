@@ -5,20 +5,17 @@ import tempfile
 import threading
 import logging
 from typing import Optional
-from PyQt6.QtCore import QThread, pyqtSignal
+from PyQt6.QtCore import pyqtSignal
 from config.constants import UI_COLORS, NETWORK_TIMEOUT_HEAD, MOD_CONFIG_FILENAME, CLOUD_FUNCTIONS_BASE_URL
 from managers.localization_manager import tr
+from core.exceptions import AppError
 from utils.file_utils import has_deltamod_info_file, check_filename_is_deltamod_info
-from utils.deltamod_converter import DeltamodConverter
 from utils.network_utils import get_session, download_file
 from utils.ui_utils import format_size_mb
+from workers.base_install_worker import BaseInstallWorker
 
 
-class UrlInstallThread(QThread):
-    status = pyqtSignal(str, str)
-    progress = pyqtSignal(int)
-    finished = pyqtSignal(bool, str)
-    unrar_needed = pyqtSignal()
+class UrlInstallThread(BaseInstallWorker):
     prompt_required = pyqtSignal(str, str)
     manual_install_required = pyqtSignal(str, str, str)
 
@@ -28,41 +25,6 @@ class UrlInstallThread(QThread):
         self.url = url
         self.prompt_event = threading.Event()
         self.prompt_result = False
-        self._cancelled = False
-        self._session = None
-        self._active_response = None
-        self._unrar_event = threading.Event()
-        self._unrar_installed = False
-
-    def signal_unrar_installed(self, success: bool):
-        self._unrar_installed = success
-        self._unrar_event.set()
-
-    def wait_for_unrar_install(self, timeout: float = 120.0) -> bool:
-        self._unrar_event.clear()
-        self._unrar_installed = False
-        self.unrar_needed.emit()
-        self._unrar_event.wait(timeout=timeout)
-        return self._unrar_installed
-
-    def cancel(self):
-        self._cancelled = True
-        try:
-            if self._session is not None:
-                try:
-                    self._session.close()
-                except Exception:
-                    logging.warning('UrlInstallThread.cancel: session close error', exc_info=True)
-            if self._active_response is not None:
-                try:
-                    self._active_response.close()
-                except Exception:
-                    logging.warning('UrlInstallThread.cancel: response close error', exc_info=True)
-        finally:
-            try:
-                self.status.emit(tr('status.operation_cancelled'), UI_COLORS['status_error'])
-            except Exception as e:
-                logging.warning(f'UrlInstallThread.cancel: emit failed: {e}', exc_info=True)
 
     def run(self):
         try:
@@ -113,17 +75,18 @@ class UrlInstallThread(QThread):
                         mod_name = os.path.basename(mod_dir)
                         self.finished.emit(True, tr('status.install_complete_success', mod_name=mod_name))
                     else:
-                        raise ValueError(tr('errors.mod_installation_failed'))
+                        raise AppError('errors.mod_installation_failed')
                 elif has_deltamod_info_file(files_in_root):
+                    from utils.deltamod_converter import DeltamodConverter
                     converter = DeltamodConverter(content_path, self.main_window.app_state.mods_dir)
                     new_mod_path = converter.convert()
                     if new_mod_path:
                         mod_name = os.path.basename(new_mod_path)
                         self.finished.emit(True, tr('status.install_complete_success', mod_name=mod_name))
                     else:
-                        raise ValueError(tr('errors.deltamod_conversion_failed_url'))
+                        raise AppError('errors.deltamod_conversion_failed_url')
                 else:
-                    raise ValueError(tr('errors.deltamod_archive_invalid_redirect'))
+                    raise AppError('errors.deltamod_archive_invalid_redirect')
 
     def _process_deltamod_archive(self, url: str):
         with tempfile.TemporaryDirectory(prefix='dh-redirect-dl-') as temp_dir:
@@ -141,17 +104,18 @@ class UrlInstallThread(QThread):
                         mod_name = os.path.basename(mod_dir)
                         self.finished.emit(True, tr('status.install_complete_success', mod_name=mod_name))
                     else:
-                        raise ValueError(tr('errors.mod_installation_failed'))
+                        raise AppError('errors.mod_installation_failed')
                 elif has_deltamod_info_file(files_in_root):
+                    from utils.deltamod_converter import DeltamodConverter
                     converter = DeltamodConverter(content_path, self.main_window.app_state.mods_dir)
                     new_mod_path = converter.convert()
                     if new_mod_path:
                         mod_name = os.path.basename(new_mod_path)
                         self.finished.emit(True, tr('status.install_complete_success', mod_name=mod_name))
                     else:
-                        raise ValueError(tr('errors.deltamod_conversion_failed_url'))
+                        raise AppError('errors.deltamod_conversion_failed_url')
                 else:
-                    raise ValueError(tr('errors.deltamod_archive_invalid_redirect'))
+                    raise AppError('errors.deltamod_archive_invalid_redirect')
 
     def _install_deltahub_mod_from_path(self, content_path: str) -> Optional[str]:
         from utils.file_utils import sanitize_filename
@@ -247,6 +211,26 @@ class UrlInstallThread(QThread):
         self.progress.emit(100)
         return archive_path
 
+    @staticmethod
+    def _classify_filename(name: str) -> Optional[str]:
+        n = name.replace('\\', '/').strip('/')
+        if n.lower().endswith('.dhtheme'):
+            return 'theme'
+        if n == 'plugin_init.py' or n.endswith('/plugin_init.py'):
+            return 'plugin'
+        if n == MOD_CONFIG_FILENAME or n.endswith(f'/{MOD_CONFIG_FILENAME}'):
+            return 'mod'
+        if check_filename_is_deltamod_info(n):
+            return 'mod'
+        return None
+
+    def _detect_from_names(self, names) -> Optional[str]:
+        for name in names:
+            result = self._classify_filename(name)
+            if result:
+                return result
+        return None
+
     def _detect_content_type(self, archive_path: str) -> str:
         import zipfile
         import tarfile
@@ -254,94 +238,57 @@ class UrlInstallThread(QThread):
         if archive_lower.endswith('.dhtheme'):
             return 'theme'
         try:
-            if archive_lower.endswith('.zip') or archive_lower.endswith('.dhtheme'):
+            if archive_lower.endswith('.zip'):
                 with zipfile.ZipFile(archive_path, 'r') as zf:
-                    for name in zf.namelist():
-                        normalized = name.replace('\\', '/').strip('/')
-                        if normalized.lower().endswith('.dhtheme'):
-                            return 'theme'
-                        if normalized == 'plugin_init.py' or normalized.endswith('/plugin_init.py'):
-                            return 'plugin'
-                        if normalized == MOD_CONFIG_FILENAME or normalized.endswith(f'/{MOD_CONFIG_FILENAME}'):
-                            return 'mod'
-                        if check_filename_is_deltamod_info(normalized):
-                            return 'mod'
+                    result = self._detect_from_names(zf.namelist())
+                    if result:
+                        return result
             elif archive_lower.endswith('.tar.gz'):
                 with tarfile.open(archive_path, 'r:gz') as tf:
-                    for member in tf.getmembers():
-                        name = member.name.replace('\\', '/').strip('/')
-                        if name.lower().endswith('.dhtheme'):
-                            return 'theme'
-                        if name == 'plugin_init.py' or name.endswith('/plugin_init.py'):
-                            return 'plugin'
-                        if name == MOD_CONFIG_FILENAME or name.endswith(f'/{MOD_CONFIG_FILENAME}'):
-                            return 'mod'
-                        if check_filename_is_deltamod_info(name):
-                            return 'mod'
+                    result = self._detect_from_names((m.name for m in tf.getmembers()))
+                    if result:
+                        return result
             elif archive_lower.endswith('.rar'):
                 try:
                     import rarfile
                     with rarfile.RarFile(archive_path, 'r') as rf:
-                        for name in rf.namelist():
-                            normalized = name.replace('\\', '/').strip('/')
-                            if normalized.lower().endswith('.dhtheme'):
-                                return 'theme'
-                            if normalized == 'plugin_init.py' or normalized.endswith('/plugin_init.py'):
-                                return 'plugin'
-                            if normalized == MOD_CONFIG_FILENAME or normalized.endswith(f'/{MOD_CONFIG_FILENAME}'):
-                                return 'mod'
-                            if check_filename_is_deltamod_info(normalized):
-                                return 'mod'
+                        result = self._detect_from_names(rf.namelist())
+                        if result:
+                            return result
                 except (OSError, ImportError) as e:
-                    logging.debug(f'UrlInstallThread: Could not open RAR archive (rarfile may not be available): {e}')
+                    logging.debug(f'Could not open RAR: {e}')
             elif archive_lower.endswith('.7z'):
                 try:
                     import py7zr
                     with py7zr.SevenZipFile(archive_path, mode='r') as zf:
-                        for name in zf.getnames():
-                            normalized = name.replace('\\', '/').strip('/')
-                            if normalized.lower().endswith('.dhtheme'):
-                                return 'theme'
-                            if normalized == 'plugin_init.py' or normalized.endswith('/plugin_init.py'):
-                                return 'plugin'
-                            if normalized == MOD_CONFIG_FILENAME or normalized.endswith(f'/{MOD_CONFIG_FILENAME}'):
-                                return 'mod'
-                            if check_filename_is_deltamod_info(normalized):
-                                return 'mod'
+                        result = self._detect_from_names(zf.getnames())
+                        if result:
+                            return result
                 except (OSError, ImportError) as e:
-                    logging.debug(f'UrlInstallThread: Could not open 7z archive (py7zr may not be available): {e}')
+                    logging.debug(f'Could not open 7z: {e}')
         except Exception as e:
-            logging.error(f'UrlInstallThread: Error detecting content type: {e}', exc_info=True)
-        result = self._detect_content_type_from_extracted(archive_path)
-        return result if result is not None else ''
+            logging.error(f'Error detecting content type: {e}', exc_info=True)
+        return self._detect_content_type_from_extracted(archive_path) or ''
 
     def _detect_content_type_from_extracted(self, archive_path: str) -> Optional[str]:
         with tempfile.TemporaryDirectory(prefix='dh-detect-type-') as unpack_dir:
             try:
                 from utils.archive_utils import extract_any_archive
                 extract_any_archive(archive_path, unpack_dir)
-                content_path = unpack_dir
-                unpacked_items = os.listdir(unpack_dir)
-                if len(unpacked_items) == 1 and os.path.isdir(os.path.join(unpack_dir, unpacked_items[0])):
-                    content_path = os.path.join(unpack_dir, unpacked_items[0])
-                for root, dirs, files in os.walk(content_path):
-                    for file in files:
-                        if file.lower().endswith('.dhtheme'):
+                items = os.listdir(unpack_dir)
+                content_path = os.path.join(unpack_dir, items[0]) if len(items) == 1 and os.path.isdir(os.path.join(unpack_dir, items[0])) else unpack_dir
+                for root, _, files in os.walk(content_path):
+                    for f in files:
+                        if f.lower().endswith('.dhtheme'):
                             return 'theme'
-                for root, dirs, files in os.walk(content_path):
-                    if 'plugin_init.py' in files:
-                        return 'plugin'
-                for root, dirs, files in os.walk(content_path):
-                    if MOD_CONFIG_FILENAME in files:
-                        return 'mod'
-                files_in_root = os.listdir(content_path)
-                if has_deltamod_info_file(files_in_root):
+                        if f == 'plugin_init.py':
+                            return 'plugin'
+                        if f == MOD_CONFIG_FILENAME or check_filename_is_deltamod_info(f):
+                            return 'mod'
+                if has_deltamod_info_file(os.listdir(content_path)):
                     return 'mod'
-                for root, dirs, files in os.walk(content_path):
-                    if has_deltamod_info_file(files):
-                        return 'mod'
             except Exception as e:
-                logging.error(f'UrlInstallThread: Error detecting content type from extracted: {e}', exc_info=True)
+                logging.error(f'Error detecting from extracted: {e}', exc_info=True)
         return None
 
     def _prepare_for_manual_install(self, archive_path: str):
@@ -447,7 +394,7 @@ class UrlInstallThread(QThread):
                     if theme_file_path:
                         break
                 if not theme_file_path:
-                    raise ValueError(tr('themes.archive_not_found'))
+                    raise AppError('themes.archive_not_found')
                 with tempfile.TemporaryDirectory(prefix='dh-theme-temp-') as theme_temp_dir:
                     temp_theme_path = os.path.join(theme_temp_dir, os.path.basename(theme_file_path))
                     shutil.copy2(theme_file_path, temp_theme_path)
@@ -531,13 +478,13 @@ class UrlInstallThread(QThread):
             if resp.status_code != 200 or not resp.json():
                 resp = session.get(f'{CLOUD_FUNCTIONS_BASE_URL}/getPendingModData?modId={key}', timeout=10)
                 if resp.status_code != 200 or not resp.json():
-                    raise ValueError(tr('errors.mod_not_found'))
+                    raise AppError('errors.mod_not_found')
             mod_data = resp.json()
             mod_data['key'] = key
             fetch_thread = FetchModsThread(self.main_window, force_update=False)
             mod_info = fetch_thread._parse_single_mod(key, mod_data)
             if not mod_info:
-                raise ValueError(tr('errors.mod_not_found'))
+                raise AppError('errors.mod_not_found')
             install_tasks = []
             for chapter_id in [0, 1, 2, 3, 4, -1]:
                 chapter_data = mod_info.get_chapter_data(chapter_id) if chapter_id != -1 else None
@@ -546,7 +493,7 @@ class UrlInstallThread(QThread):
                 elif chapter_data and chapter_data.is_valid():
                     install_tasks.append((mod_info, chapter_id))
             if not install_tasks:
-                raise ValueError(tr('errors.mod_has_no_files'))
+                raise AppError('errors.mod_has_no_files')
             install_thread = InstallModsThread(self.main_window, install_tasks, was_installed_before=False)
             install_thread.progress.connect(lambda p: self.progress.emit(p))
             install_thread.status.connect(lambda msg, color: self.status.emit(msg, color))
@@ -575,6 +522,7 @@ class UrlInstallThread(QThread):
                 files_in_root = os.listdir(content_path)
                 if has_deltamod_info_file(files_in_root):
                     self.status.emit(tr('status.deltamod_archive_detected_url'), UI_COLORS['status_info'])
+                    from utils.deltamod_converter import DeltamodConverter
                     converter = DeltamodConverter(content_path, self.main_window.app_state.mods_dir)
                     new_mod_path = converter.convert()
                     if new_mod_path:
@@ -586,7 +534,7 @@ class UrlInstallThread(QThread):
                             logging.warning(f'UrlInstallThread: Failed to remove mod archive: {e}')
                         self.finished.emit(True, tr('status.install_complete_success', mod_name=mod_name))
                     else:
-                        raise ValueError(tr('errors.deltamod_conversion_failed_url'))
+                        raise AppError('errors.deltamod_conversion_failed_url')
                     return
                 if MOD_CONFIG_FILENAME in files_in_root:
                     self.status.emit(tr('status.installing_mod'), UI_COLORS['status_info'])
@@ -600,9 +548,9 @@ class UrlInstallThread(QThread):
                             logging.warning(f'UrlInstallThread: Failed to remove mod archive: {e}')
                         self.finished.emit(True, tr('status.install_complete_success', mod_name=mod_name))
                     else:
-                        raise ValueError(tr('errors.mod_installation_failed'))
+                        raise AppError('errors.mod_installation_failed')
                 else:
-                    raise ValueError(tr('errors.unsupported_mod_format_url'))
+                    raise AppError('errors.unsupported_mod_format_url')
         except Exception as e:
             logging.error(f'UrlInstallThread: Error installing mod: {e}', exc_info=True)
             self.finished.emit(False, str(e))

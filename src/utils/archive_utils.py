@@ -380,50 +380,34 @@ class ArchiveExtractor:
         return filename_lower.endswith(supported_extensions)
 
     @staticmethod
+    def _matches_target(name: str, target: str) -> bool:
+        n = name.replace('\\', '/').strip('/')
+        return n == target or n.endswith(f'/{target}')
+
+    @staticmethod
     def check_archive_has_file(archive_path: str, target_filename: str) -> bool:
         archive_lower = archive_path.lower()
         detected_format = _detect_archive_format_by_signature(archive_path)
         try:
             if archive_lower.endswith('.zip') or archive_lower.endswith('.dhtheme') or detected_format == 'zip':
                 with zipfile.ZipFile(archive_path, 'r') as zf:
-                    for name in zf.namelist():
-                        normalized = name.replace('\\', '/').strip('/')
-                        if normalized == target_filename or normalized.endswith(f'/{target_filename}'):
-                            return True
+                    return any((ArchiveExtractor._matches_target(n, target_filename) for n in zf.namelist()))
             elif archive_lower.endswith('.tar.gz'):
                 with tarfile.open(archive_path, 'r:gz') as tf:
-                    for member in tf.getmembers():
-                        name = member.name.replace('\\', '/').strip('/')
-                        if name == target_filename or name.endswith(f'/{target_filename}'):
-                            return True
+                    return any((ArchiveExtractor._matches_target(m.name, target_filename) for m in tf.getmembers()))
             elif archive_lower.endswith('.rar') or detected_format == 'rar':
-                try:
-                    _ensure_unrar_available()
-                    import rarfile
-                    with rarfile.RarFile(archive_path, 'r') as rf:
-                        for name in rf.namelist():
-                            normalized = name.replace('\\', '/').strip('/')
-                            if normalized == target_filename or normalized.endswith(f'/{target_filename}'):
-                                return True
-                except UnrarMissingError:
-                    raise
-                except (OSError, ImportError) as e:
-                    raise UnrarMissingError(f'Failed to open RAR archive: {e}')
+                _ensure_unrar_available()
+                import rarfile
+                with rarfile.RarFile(archive_path, 'r') as rf:
+                    return any((ArchiveExtractor._matches_target(n, target_filename) for n in rf.namelist()))
             elif archive_lower.endswith('.7z') or detected_format == '7z':
-                try:
-                    import py7zr
-                    with py7zr.SevenZipFile(archive_path, mode='r') as zf:
-                        for name in zf.getnames():
-                            normalized = name.replace('\\', '/').strip('/')
-                            if normalized == target_filename or normalized.endswith(f'/{target_filename}'):
-                                return True
-                except (OSError, ImportError):
-                    return False
+                import py7zr
+                with py7zr.SevenZipFile(archive_path, mode='r') as zf:
+                    return any((ArchiveExtractor._matches_target(n, target_filename) for n in zf.getnames()))
         except UnrarMissingError:
             raise
         except Exception as e:
-            logging.error(f'ArchiveExtractor.check_archive_has_file: Error checking archive: {e}', exc_info=True)
-            return False
+            logging.error(f'ArchiveExtractor.check_archive_has_file: Error: {e}', exc_info=True)
         return False
 
 

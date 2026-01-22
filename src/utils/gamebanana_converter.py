@@ -5,7 +5,6 @@ import shutil
 import logging
 import tempfile
 from typing import Optional, Dict, Any
-from utils.deltamod_converter import DeltamodConverter
 from utils.file_utils import find_deltamod_info_file, check_filename_is_deltamod_info, normalize_mod_package
 logger = logging.getLogger(__name__)
 
@@ -39,6 +38,7 @@ class GameBananaConverter:
             if target_mod_key:
                 self._update_deltamod_info_mod_key(target_mod_key)
                 self._remove_existing_mod_folder(target_mod_key)
+            from utils.deltamod_converter import DeltamodConverter
             deltamod_converter = DeltamodConverter(self.temp_extract_dir, self.mods_dir)
             result_path = deltamod_converter.convert()
             if result_path:
