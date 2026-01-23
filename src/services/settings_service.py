@@ -99,7 +99,7 @@ class SettingsManager(QObject):
     def migrate_config_if_needed(self):
         """Migrate configuration to current version and set defaults."""
         self.app_state.local_config['cache_format_version'] = LAUNCHER_VERSION
-        defaults = {'game_path': '', 'last_selected': {}, 'use_custom_executable': False, 'demo_game_path': '', 'launch_via_steam': False, 'use_portproton': False, 'portproton_path': '', 'direct_launch_slot_id': SLOT_ID_UNIVERSAL, 'demo_mode_enabled': False, 'chapter_mode_enabled': False, 'custom_background_path': '', 'custom_executable_path': '', 'background_disabled': False, 'custom_color_background': '', 'custom_color_button': '', 'custom_color_border': '', 'custom_color_button_hover': '', 'custom_color_text': '', 'custom_color_version_text': '', 'beta_updates_enabled': False, 'fast_merging_enabled': False, 'pizzatower_game_path': '', 'pizzatower_custom_executable_path': ''}
+        defaults = {'game_path': '', 'last_selected': {}, 'use_custom_executable': False, 'demo_game_path': '', 'launch_via_steam': False, 'use_portproton': False, 'portproton_path': '', 'direct_launch_slot_id': SLOT_ID_UNIVERSAL, 'demo_mode_enabled': False, 'chapter_mode_enabled': False, 'custom_background_path': '', 'custom_executable_path': '', 'background_disabled': False, 'custom_color_background': '', 'custom_color_button': '', 'custom_color_border': '', 'custom_color_button_hover': '', 'custom_color_text': '', 'custom_color_version_text': '', 'beta_updates_enabled': False, 'fast_merging_enabled': False, 'pizzatower_game_path': '', 'pizzatower_custom_executable_path': '', 'skip_patching_warnings': False}
         for key, value in defaults.items():
             self.app_state.local_config.setdefault(key, value)
         if 'disable_splash' not in self.app_state.local_config:
@@ -169,6 +169,11 @@ class SettingsManager(QObject):
     def on_toggle_disable_splash(self, enabled: bool):
         self.app_state.local_config['disable_splash'] = enabled
         self.write_local_config()
+
+    def on_toggle_skip_patching_warnings(self, enabled: bool):
+        self.app_state.local_config['skip_patching_warnings'] = enabled
+        self.write_local_config()
+        self.settings_changed.emit()
 
     def prompt_for_game_path(self, is_initial=False) -> bool:
         from models.game_modes import UndertaleYellowGameMode, PizzaTowerGameMode

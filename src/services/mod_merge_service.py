@@ -68,6 +68,7 @@ class ProgressThrottler(QObject):
 class MultiModMerger(QObject):
     status_update = pyqtSignal(str, str)
     progress_update = pyqtSignal(int, str)
+    warning_confirmation_needed = pyqtSignal(str, str, str)
     _session_manifest_path: Optional[str] = None
 
     def __init__(self, app_state, mod_service, parent=None):
@@ -96,8 +97,35 @@ class MultiModMerger(QObject):
         self._active_processes: List[subprocess.Popen] = []
         self._temp_files_to_cleanup: List[str] = []
         self.xdelta_modpack = False
+        self._warning_callback: Optional[callable] = None
         if hasattr(self.utmt_wrapper, 'set_active_processes_list'):
             self.utmt_wrapper.set_active_processes_list(self._active_processes)
+
+    def set_warning_callback(self, callback: Optional[callable]):
+        """Set callback for warning confirmations.
+
+        The callback should accept (warning_type: str, title: str, message: str)
+        and return True to continue or False to cancel.
+        """
+        self._warning_callback = callback
+
+    def _should_skip_warnings(self) -> bool:
+        """Check if patching warnings should be skipped based on settings."""
+        return self.app_state.local_config.get('skip_patching_warnings', False)
+
+    def _show_patching_warning(self, warning_type: str, title: str, message: str) -> bool:
+        """Show a patching warning and return True to continue, False to cancel.
+
+        If skip_patching_warnings is enabled, always returns True (continue).
+        Otherwise, calls the warning callback to ask the user.
+        """
+        self.patching_logger.warning(f'[PATCHING_WARNING] {warning_type}: {message}')
+        if self._should_skip_warnings():
+            self.patching_logger.info(f'[PATCHING_WARNING] Skipping warning (skip_patching_warnings enabled): {warning_type}')
+            return True
+        if self._warning_callback:
+            return self._warning_callback(warning_type, title, message)
+        return True
 
     def _ensure_modpack_dir(self, modpack_dir: Optional[str]) -> bool:
         if modpack_dir is None:
@@ -321,6 +349,11 @@ class MultiModMerger(QObject):
             return False
         data_win_path = self._find_data_win(target_dir)
         if not data_win_path:
+            expected_path = os.path.join(target_dir, 'data.win')
+            warning_msg = tr('dialogs.patching_warning.data_win_not_found', search_path=expected_path)
+            if not self._show_patching_warning('data_win_not_found', tr('dialogs.patching_warning.title'), warning_msg):
+                self.patching_logger.info(f'[PATCHING_WARNING] User cancelled merge due to missing data.win at: {expected_path}')
+                return False
             return self._apply_file_overrides_only(chapter_id, mods_list, target_dir)
         if not self.backup_service.backup_file(chapter_id, data_win_path):
             return False
@@ -1094,32 +1127,54 @@ class MultiModMerger(QObject):
                 if returncode != 0:
                     error_msg = stderr.strip() if stderr else stdout.strip() if stdout else 'Unknown error'
                     error_msg_lower = error_msg.lower()
+                    patch_name = os.path.basename(patch_path)
+                    error_short = error_msg[:100] if len(error_msg) > 100 else error_msg
                     if 'checksum mismatch' in error_msg_lower or 'XD3_INVALID_INPUT' in error_msg:
-                        detailed_error = f'[XDELTA] Patch "{os.path.basename(patch_path)}" failed: checksum mismatch. This usually means the patch was created for the original data.win, but the file has already been modified by previous mods. The patch cannot be applied to a modified file.\nError details: {error_msg}'
+                        detailed_error = f'[XDELTA] Patch "{patch_name}" failed: checksum mismatch. This usually means the patch was created for the original data.win, but the file has already been modified by previous mods. The patch cannot be applied to a modified file.\nError details: {error_msg}'
                         self.patching_logger.error(detailed_error)
-                        self.status_update.emit(tr('errors.xdelta_patch_checksum_mismatch', patch=os.path.basename(patch_path), error=error_msg[:100]), 'error')
+                        warning_msg = tr('dialogs.patching_warning.xdelta_checksum_mismatch', patch_name=patch_name, patch_path=patch_path, data_win_path=data_win_path, error=error_short)
+                        if not self._show_patching_warning('xdelta_checksum_mismatch', tr('dialogs.patching_warning.title'), warning_msg):
+                            self.patching_logger.info(f'[PATCHING_WARNING] User cancelled merge due to xdelta checksum mismatch: {patch_name}')
+                            self.status_update.emit(tr('errors.xdelta_patch_checksum_mismatch', patch=patch_name, error=error_short), 'error')
+                            return False
+                        self.patching_logger.info(f'[PATCHING_WARNING] User chose to continue despite xdelta checksum mismatch: {patch_name}')
+                        continue
                     elif 'no such file' in error_msg_lower or 'cannot find' in error_msg_lower or 'file not found' in error_msg_lower:
-                        detailed_error = f'[XDELTA] Patch "{os.path.basename(patch_path)}" failed: file not found. {error_msg}'
+                        detailed_error = f'[XDELTA] Patch "{patch_name}" failed: file not found. {error_msg}'
                         self.patching_logger.error(detailed_error)
-                        self.status_update.emit(tr('errors.xdelta_patch_file_not_found', patch=os.path.basename(patch_path)), 'error')
+                        self.status_update.emit(tr('errors.xdelta_patch_file_not_found', patch=patch_name), 'error')
+                        return False
                     elif 'permission denied' in error_msg_lower or 'access denied' in error_msg_lower:
-                        detailed_error = f'[XDELTA] Patch "{os.path.basename(patch_path)}" failed: permission denied. {error_msg}'
+                        detailed_error = f'[XDELTA] Patch "{patch_name}" failed: permission denied. {error_msg}'
                         self.patching_logger.error(detailed_error)
-                        self.status_update.emit(tr('errors.xdelta_patch_permission_denied', patch=os.path.basename(patch_path)), 'error')
+                        self.status_update.emit(tr('errors.xdelta_patch_permission_denied', patch=patch_name), 'error')
+                        return False
                     elif 'XD3_INTERNAL' in error_msg or 'corrupt' in error_msg_lower or 'invalid' in error_msg_lower:
-                        detailed_error = f'[XDELTA] Patch "{os.path.basename(patch_path)}" failed: patch file appears corrupted or invalid. {error_msg}'
+                        detailed_error = f'[XDELTA] Patch "{patch_name}" failed: patch file appears corrupted or invalid. {error_msg}'
                         self.patching_logger.error(detailed_error)
-                        self.status_update.emit(tr('errors.xdelta_patch_corrupted', patch=os.path.basename(patch_path)), 'error')
+                        warning_msg = tr('dialogs.patching_warning.xdelta_patch_failed', patch_name=patch_name, patch_path=patch_path, data_win_path=data_win_path, error=error_short)
+                        if not self._show_patching_warning('xdelta_patch_corrupted', tr('dialogs.patching_warning.title'), warning_msg):
+                            self.patching_logger.info(f'[PATCHING_WARNING] User cancelled merge due to corrupted xdelta patch: {patch_name}')
+                            self.status_update.emit(tr('errors.xdelta_patch_corrupted', patch=patch_name), 'error')
+                            return False
+                        self.patching_logger.info(f'[PATCHING_WARNING] User chose to continue despite corrupted xdelta patch: {patch_name}')
+                        continue
                     elif 'io error' in error_msg_lower or 'input/output' in error_msg_lower or 'disk' in error_msg_lower:
-                        detailed_error = f'[XDELTA] Patch "{os.path.basename(patch_path)}" failed: I/O error. {error_msg}'
+                        detailed_error = f'[XDELTA] Patch "{patch_name}" failed: I/O error. {error_msg}'
                         self.patching_logger.error(detailed_error)
-                        self.status_update.emit(tr('errors.xdelta_patch_io_error', patch=os.path.basename(patch_path)), 'error')
+                        self.status_update.emit(tr('errors.xdelta_patch_io_error', patch=patch_name), 'error')
+                        return False
                     else:
-                        detailed_error = f'[XDELTA] Patch "{os.path.basename(patch_path)}" failed: {error_msg}'
+                        detailed_error = f'[XDELTA] Patch "{patch_name}" failed: {error_msg}'
                         self.patching_logger.error(detailed_error)
                         error_display = error_msg[:200] if len(error_msg) > 200 else error_msg
-                        self.status_update.emit(tr('errors.xdelta_patch_unknown_error', patch=os.path.basename(patch_path), error=error_display), 'error')
-                    return False
+                        warning_msg = tr('dialogs.patching_warning.xdelta_patch_failed', patch_name=patch_name, patch_path=patch_path, data_win_path=data_win_path, error=error_display)
+                        if not self._show_patching_warning('xdelta_patch_failed', tr('dialogs.patching_warning.title'), warning_msg):
+                            self.patching_logger.info(f'[PATCHING_WARNING] User cancelled merge due to xdelta patch failure: {patch_name}')
+                            self.status_update.emit(tr('errors.xdelta_patch_unknown_error', patch=patch_name, error=error_display), 'error')
+                            return False
+                        self.patching_logger.info(f'[PATCHING_WARNING] User chose to continue despite xdelta patch failure: {patch_name}')
+                        continue
                 if not os.path.exists(temp_output):
                     self.patching_logger.error(f'Temp output file was not created: {temp_output}')
                     self.status_update.emit(tr('errors.xdelta_patch_io_error', patch=os.path.basename(patch_path)), 'error')
@@ -1164,8 +1219,14 @@ class MultiModMerger(QObject):
             return True
         if not self.utmt_wrapper.is_available():
             self.patching_logger.error('UTMTCLI not available for executing CSX scripts')
-            self.status_update.emit(tr('errors.utmtcli_not_available', platform=self.utmt_wrapper.get_platform()), 'error')
-            return False
+            platform_name = self.utmt_wrapper.get_platform()
+            warning_msg = tr('dialogs.patching_warning.utmt_not_available', platform=platform_name)
+            if not self._show_patching_warning('utmt_not_available', tr('dialogs.patching_warning.title'), warning_msg):
+                self.patching_logger.info('[PATCHING_WARNING] User cancelled merge due to UTMT not available')
+                self.status_update.emit(tr('errors.utmtcli_not_available', platform=platform_name), 'error')
+                return False
+            self.patching_logger.info('[PATCHING_WARNING] User chose to continue despite UTMT not available')
+            return True
         env = {}
         if self.temp_merge_dir and os.path.exists(os.path.join(self.temp_merge_dir, 'output')):
             env['DELTAHUB_ROOT'] = self.temp_merge_dir
@@ -1173,18 +1234,32 @@ class MultiModMerger(QObject):
             if self._cancelled:
                 return False
             try:
-                self.patching_logger.info(f'Executing CSX script: {os.path.basename(script_path)}')
+                script_name = os.path.basename(script_path)
+                self.patching_logger.info(f'Executing CSX script: {script_name}')
                 returncode, stdout, stderr = self.utmt_wrapper.execute_script(data_win_path, script_path, output_path=data_win_path, cwd=self.temp_merge_dir if self.temp_merge_dir else None, env=env)
                 if self._cancelled:
                     return False
                 if returncode != 0:
-                    self.patching_logger.error(f'CSX script execution failed: {stderr[:500]}')
-                    self.status_update.emit(tr('errors.csx_script_failed', script=os.path.basename(script_path)), 'error')
-                    return False
-                self.patching_logger.info(f'Successfully executed CSX script: {os.path.basename(script_path)}')
+                    error_msg = stderr[:200] if stderr and len(stderr) > 200 else (stderr or 'Unknown error')
+                    self.patching_logger.error(f'CSX script execution failed: {stderr[:500] if stderr else "Unknown error"}')
+                    warning_msg = tr('dialogs.patching_warning.csx_script_failed', script_name=script_name, error=error_msg)
+                    if not self._show_patching_warning('csx_script_failed', tr('dialogs.patching_warning.title'), warning_msg):
+                        self.patching_logger.info(f'[PATCHING_WARNING] User cancelled merge due to CSX script failure: {script_name}')
+                        self.status_update.emit(tr('errors.csx_script_failed', script=script_name), 'error')
+                        return False
+                    self.patching_logger.info(f'[PATCHING_WARNING] User chose to continue despite CSX script failure: {script_name}')
+                    continue
+                self.patching_logger.info(f'Successfully executed CSX script: {script_name}')
             except Exception as e:
+                script_name = os.path.basename(script_path)
+                error_msg = str(e)[:200] if len(str(e)) > 200 else str(e)
                 self.patching_logger.error(f'CSX script error: {e}')
-                return False
+                warning_msg = tr('dialogs.patching_warning.csx_script_failed', script_name=script_name, error=error_msg)
+                if not self._show_patching_warning('csx_script_exception', tr('dialogs.patching_warning.title'), warning_msg):
+                    self.patching_logger.info(f'[PATCHING_WARNING] User cancelled merge due to CSX script exception: {script_name}')
+                    return False
+                self.patching_logger.info(f'[PATCHING_WARNING] User chose to continue despite CSX script exception: {script_name}')
+                continue
         return True
 
     def _handle_ready_data_win(self, base_data_win: str, ready_data_win_files: List[str], mod_dir: Optional[str] = None) -> bool:

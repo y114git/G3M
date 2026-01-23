@@ -123,10 +123,9 @@ class SettingsViewBuilder:
         beta_updates_checkbox = QCheckBox(tr('ui.beta_updates'))
         beta_updates_checkbox.setToolTip(tr('tooltips.beta_updates'))
         left_column.addWidget(beta_updates_checkbox)
-        placeholder_checkbox = QCheckBox(tr('ui.coming_soon_feature'))
-        placeholder_checkbox.setToolTip(tr('tooltips.coming_soon_feature'))
-        placeholder_checkbox.setEnabled(False)
-        right_column.addWidget(placeholder_checkbox)
+        skip_patching_warnings_checkbox = QCheckBox(tr('ui.skip_patching_warnings'))
+        skip_patching_warnings_checkbox.setToolTip(tr('tooltips.skip_patching_warnings'))
+        right_column.addWidget(skip_patching_warnings_checkbox)
         fullscreen_checkbox = QCheckBox(tr('ui.fullscreen'))
         fullscreen_checkbox.setToolTip(tr('tooltips.fullscreen_tooltip'))
         left_column.addWidget(fullscreen_checkbox)
@@ -178,7 +177,7 @@ class SettingsViewBuilder:
         self.widgets['language_label'] = language_label
         self.widgets['language_combo'] = language_combo
         self.widgets['beta_updates_checkbox'] = beta_updates_checkbox
-        self.widgets['placeholder_checkbox'] = placeholder_checkbox
+        self.widgets['skip_patching_warnings_checkbox'] = skip_patching_warnings_checkbox
         self.widgets['fullscreen_checkbox'] = fullscreen_checkbox
         self.widgets['hide_library_filters_checkbox'] = hide_library_filters_checkbox
         self.widgets['launch_via_steam_checkbox'] = launch_via_steam_checkbox

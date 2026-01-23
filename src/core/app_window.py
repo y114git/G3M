@@ -726,7 +726,7 @@ class AppWindow(QWidget):
         self.language_label = settings_widgets['language_label']
         self.language_combo = settings_widgets['language_combo']
         self.beta_updates_checkbox = settings_widgets['beta_updates_checkbox']
-        self.placeholder_checkbox = settings_widgets['placeholder_checkbox']
+        self.skip_patching_warnings_checkbox = settings_widgets['skip_patching_warnings_checkbox']
         self.fullscreen_checkbox = settings_widgets['fullscreen_checkbox']
         self.hide_library_filters_checkbox = settings_widgets['hide_library_filters_checkbox']
         self.launch_via_steam_checkbox = settings_widgets['launch_via_steam_checkbox']
@@ -765,6 +765,7 @@ class AppWindow(QWidget):
         if self.select_portproton_path_button:
             self.select_portproton_path_button.clicked.connect(self._select_portproton_path)
         self.hide_mods_without_files_checkbox.stateChanged.connect(self.settings_ui.on_toggle_hide_mods_without_files)
+        self.skip_patching_warnings_checkbox.stateChanged.connect(self.settings_ui.on_toggle_skip_patching_warnings)
         if self.change_path_button:
             self.change_path_button.clicked.connect(self._prompt_for_game_path)
         if self.custom_executable_button:
@@ -1200,6 +1201,7 @@ class AppWindow(QWidget):
         self._update_change_path_button_text()
         self.theme.update_background_button_state()
         self.hide_mods_without_files_checkbox.setChecked(self.app_state.local_config.get('hide_mods_without_files', False))
+        self.skip_patching_warnings_checkbox.setChecked(self.app_state.local_config.get('skip_patching_warnings', False))
         self.launch_via_steam_checkbox.setChecked(self.app_state.local_config.get('launch_via_steam', False))
         if self.use_portproton_checkbox:
             self.use_portproton_checkbox.setChecked(self.app_state.local_config.get('use_portproton', False))
@@ -1537,8 +1539,8 @@ class AppWindow(QWidget):
         self.settings_title_label.setText(f"<h1>{tr('ui.settings_title')}</h1>")
         self.language_label.setText(tr('ui.language_label'))
         self.beta_updates_checkbox.setText(tr('ui.beta_updates'))
-        self.placeholder_checkbox.setText(tr('ui.coming_soon_feature'))
-        self.placeholder_checkbox.setToolTip(tr('tooltips.coming_soon_feature'))
+        self.skip_patching_warnings_checkbox.setText(tr('ui.skip_patching_warnings'))
+        self.skip_patching_warnings_checkbox.setToolTip(tr('tooltips.skip_patching_warnings'))
         self.fullscreen_checkbox.setText(tr('ui.fullscreen'))
         self.fullscreen_checkbox.setToolTip(tr('tooltips.fullscreen_tooltip'))
         self.launch_via_steam_checkbox.setText(tr('ui.steam_launch'))

@@ -60,6 +60,31 @@ class GameLauncher(QObject):
         self._pending_selections = None
         self._merge_finished_callback = None
 
+    def _on_warning_confirmation_needed(self, warning_type: str, title: str, message: str):
+        """Handle a patching warning signal by showing a dialog and responding to the thread.
+
+        This slot is called from the main thread when the worker thread emits
+        a warning_confirmation_needed signal. It shows a dialog and sends the
+        response back to the worker thread.
+
+        Args:
+            warning_type: Type of warning (e.g., 'xdelta_checksum_mismatch').
+            title: Dialog title.
+            message: Warning message to display.
+        """
+        from PyQt6.QtWidgets import QMessageBox
+        msg_box = QMessageBox()
+        msg_box.setWindowTitle(title)
+        msg_box.setText(message)
+        msg_box.setIcon(QMessageBox.Icon.Warning)
+        continue_btn = msg_box.addButton(tr('dialogs.patching_warning.continue_button'), QMessageBox.ButtonRole.AcceptRole)
+        cancel_btn = msg_box.addButton(tr('dialogs.patching_warning.cancel_button'), QMessageBox.ButtonRole.RejectRole)
+        msg_box.setDefaultButton(cancel_btn)
+        msg_box.exec()
+        result = msg_box.clickedButton() == continue_btn
+        if self._merge_thread:
+            self._merge_thread.set_warning_response(result)
+
     def _stop_monitor_thread(self):
         """Stop the game monitoring thread."""
         if not self.monitor_thread:
@@ -341,6 +366,7 @@ class GameLauncher(QObject):
         self._merge_thread.progress_update.connect(self._on_merge_progress)
         self._merge_thread.status_update.connect(self._on_merge_status)
         self._merge_thread.finished.connect(lambda success: self._on_merge_finished(selections, success))
+        self._merge_thread.warning_confirmation_needed.connect(self._on_warning_confirmation_needed)
         self.app_state.current_task = self._merge_thread
         self._merge_thread.start()
         return True

@@ -98,6 +98,7 @@ class SettingsUiController:
         self.app.full_install_checkbox.setChecked(False)
         self.app.disable_background_checkbox.setChecked(False)
         self.app.disable_splash_checkbox.setChecked(False)
+        self.app.skip_patching_warnings_checkbox.setChecked(False)
         self.app._update_custom_executable_ui()
         self.app._update_checkbox_visibility()
         self.slot_service.used_mods.clear()
@@ -224,6 +225,10 @@ class SettingsUiController:
     def on_toggle_disable_splash(self, state):
         is_disabled = bool(state)
         self.settings_service.on_toggle_disable_splash(is_disabled)
+
+    def on_toggle_skip_patching_warnings(self, state):
+        is_enabled = bool(state)
+        self.settings_service.on_toggle_skip_patching_warnings(is_enabled)
 
     def switch_settings_page(self, page: QWidget):
         if self.app_state.current_settings_page and self.app_state.current_settings_page is not page:
