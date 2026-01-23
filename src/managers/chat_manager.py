@@ -1,3 +1,7 @@
+"""Chat and AI assistant management.
+
+This module handles chat functionality and AI assistant interactions.
+"""
 import logging
 import re
 from typing import Dict, List, Optional, Tuple
@@ -6,6 +10,7 @@ from utils.network_utils import get_session, check_internet_connection
 
 
 class ChatManager:
+    """Manages chat functionality and message handling."""
     MAX_MESSAGES = 100
     MESSAGE_MAX_LENGTH = 100
 
@@ -24,6 +29,14 @@ class ChatManager:
         return None
 
     def get_messages(self, channel: str) -> List[Dict[str, str]]:
+        """Retrieve messages from a chat channel.
+
+        Args:
+            channel: Chat channel identifier.
+
+        Returns:
+            List[Dict[str, str]]: List of message dictionaries.
+        """
         if self._check_ready('get messages'):
             return []
         try:
@@ -68,6 +81,15 @@ class ChatManager:
         return False
 
     def send_message(self, channel: str, message: str) -> Tuple[bool, Optional[str]]:
+        """Send a message to a chat channel.
+
+        Args:
+            channel: Chat channel identifier.
+            message: Message text to send.
+
+        Returns:
+            Tuple[bool, Optional[str]]: (Success status, Error code if failed).
+        """
         ready_error = self._check_ready('send message')
         if ready_error:
             return (False, ready_error)

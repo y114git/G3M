@@ -1,3 +1,8 @@
+"""Archive extraction utilities.
+
+This module provides utilities for extracting various archive formats
+including zip, tar, rar, and 7z files with safety checks.
+"""
 import os
 import shutil
 import tempfile
@@ -12,14 +17,28 @@ from utils.file_utils import safe_move, safe_remove, safe_rmtree, _safe_join, _i
 
 
 def _is_safe_path(path: str) -> bool:
+    """Check if a path is safe (no directory traversal).
+
+    Args:
+        path: Path to check.
+
+    Returns:
+        bool: True if safe.
+    """
     return not ('..' in path or path.startswith('/'))
 
 
 class UnrarMissingError(Exception):
+    """Exception raised when UnRAR utility is not available."""
     pass
 
 
 def _get_unrar_path() -> str:
+    """Get the path to the UnRAR executable.
+
+    Returns:
+        str: Path to UnRAR executable.
+    """
     from utils.path_utils import get_user_data_root
     bin_dir = os.path.join(get_user_data_root(), 'bin')
     if platform.system() == 'Windows':
@@ -29,6 +48,11 @@ def _get_unrar_path() -> str:
 
 
 def _ensure_unrar_available():
+    """Ensure UnRAR utility is available for RAR extraction.
+
+    Raises:
+        UnrarMissingError: If UnRAR is not available.
+    """
     import rarfile
     import subprocess
     if rarfile.UNRAR_TOOL:
@@ -52,6 +76,14 @@ def _ensure_unrar_available():
 
 
 def download_and_setup_unrar(status_callback: Callable[[str], None] = None) -> bool:
+    """Download and set up the UnRAR utility.
+
+    Args:
+        status_callback: Callback for status updates.
+
+    Returns:
+        bool: True if successful.
+    """
     import platform
     import gzip
     try:
@@ -109,12 +141,27 @@ def download_and_setup_unrar(status_callback: Callable[[str], None] = None) -> b
 
 
 def _extract_lzma(tmp_path: str, target_dir: str, fname: str) -> None:
+    """Extract LZMA compressed file.
+
+    Args:
+        tmp_path: Path to LZMA file.
+        target_dir: Directory to extract to.
+        fname: Original filename.
+    """
     output_path = os.path.join(target_dir, os.path.splitext(fname)[0])
     with lzma.open(tmp_path) as f_in, open(output_path, 'wb') as f_out:
         shutil.copyfileobj(f_in, f_out)
 
 
 def _detect_archive_format_by_signature(file_path: str) -> str:
+    """Detect archive format by reading file signature.
+
+    Args:
+        file_path: Path to archive file.
+
+    Returns:
+        str: Archive format ('zip', 'rar', '7z', or 'unknown').
+    """
     try:
         with open(file_path, 'rb') as f:
             header = f.read(10)
@@ -131,6 +178,16 @@ def _detect_archive_format_by_signature(file_path: str) -> str:
 
 
 def _collect_safe_members(members, name_getter, label: str):
+    """Filter archive members to exclude unsafe paths.
+
+    Args:
+        members: Archive member list.
+        name_getter: Function to extract name from member.
+        label: Archive type label for logging.
+
+    Returns:
+        list: Safe members to extract.
+    """
     targets = []
     for member in members:
         name = name_getter(member)
@@ -142,6 +199,16 @@ def _collect_safe_members(members, name_getter, label: str):
 
 
 def _extract_archive_raw(src_path: str, fname_lower: str, out_dir: str) -> None:
+    """Extract archive file to directory with format detection.
+
+    Args:
+        src_path: Path to archive file.
+        fname_lower: Lowercase filename for format detection.
+        out_dir: Output directory.
+
+    Raises:
+        UnrarMissingError: If RAR extraction requires UnRAR utility.
+    """
     import rarfile
     try:
         import py7zr
@@ -198,6 +265,12 @@ def _extract_archive_raw(src_path: str, fname_lower: str, out_dir: str) -> None:
 
 
 def _move_tree_safely(src_root: str, dst_root: str) -> None:
+    """Safely move directory tree with path traversal protection.
+
+    Args:
+        src_root: Source directory.
+        dst_root: Destination directory.
+    """
     import errno
     for root, dirs, files in os.walk(src_root):
         rel_root = os.path.relpath(root, src_root)
@@ -234,6 +307,25 @@ def _move_tree_safely(src_root: str, dst_root: str) -> None:
 
 
 def _cleanup_extracted_archive(target_dir: str, is_game_installation: bool = False) -> None:
+    """Clean up extracted archive contents.
+
+    This function post-processes extracted archive contents to handle
+    common archive structure issues. It flattens nested directories
+    and removes platform-specific chapter directories for game installations.
+
+    Args:
+        target_dir: Directory containing extracted archive contents.
+        is_game_installation: Whether this is a game installation (default: False).
+
+    Cleanup operations:
+    - Flatten nested single-folder structures
+    - Remove platform-specific chapter directories (chapterX_windows/mac)
+    - Handle file conflicts during moves
+    - Safe directory and file removal
+
+    Returns:
+        None, but modifies the target_dir structure in-place.
+    """
     if is_game_installation:
         try:
             entries = list(os.listdir(target_dir))
@@ -412,6 +504,27 @@ class ArchiveExtractor:
 
 
 def prompt_for_unrar_install(parent_widget=None, signal_callback=None) -> bool:
+    """Prompt user to install UnRAR utility for RAR archive extraction.
+
+    This function checks if UnRAR is available, and if not, prompts the
+    user to install it. It can handle both GUI and non-GUI scenarios,
+    with optional callback signaling for asynchronous operations.
+
+    Args:
+        parent_widget: Parent widget for dialog display (optional).
+        signal_callback: Callback to signal UnRAR requirement (optional).
+
+    Returns:
+        bool: True if UnRAR is available or was successfully installed,
+              False if unavailable or installation failed/declined.
+
+    Features:
+    - Automatic UnRAR availability checking
+    - GUI prompt for user installation choice
+    - Automatic download and installation
+    - Fallback handling for missing GUI components
+    - Callback support for async operations
+    """
     try:
         _ensure_unrar_available()
         return True

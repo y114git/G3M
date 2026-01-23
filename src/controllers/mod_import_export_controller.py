@@ -1,3 +1,8 @@
+"""Controller for mod import and export operations.
+
+This module handles importing mods from files or URLs and exporting installed mods
+to archive files for sharing or backup purposes.
+"""
 import os
 import json
 import shutil
@@ -12,24 +17,35 @@ from config.constants import MOD_CONFIG_FILENAME, LEGACY_MOD_CONFIG_FILENAME
 
 
 class ModImportExportController:
+    """Manages mod import and export functionality."""
 
     def __init__(self, app_state, mod_manager, app_window):
+        """Initialize the mod import/export controller.
+
+        Args:
+            app_state: Application state manager.
+            mod_manager: Mod management operations.
+            app_window: Main application window reference.
+        """
         self.app_state = app_state
         self.mod_manager = mod_manager
         self.app_window = app_window
 
     def _reset_install_state(self) -> None:
+        """Reset installation state flags and progress indicators."""
         self.app_state.is_installing = False
         self.app_state.progress_bar_visible = False
         self.app_state.progress_bar_value = 0
         self.app_state.clear_current_task()
 
     def _refresh_mod_list(self) -> None:
+        """Refresh the mod list by invalidating cache and reloading."""
         self.mod_manager.invalidate_mods_cache()
         self.mod_manager.load_local_mods(_skip_conversion=True)
         self.mod_manager.mod_list_updated.emit()
 
     def show_import_export_dialog(self):
+        """Display the import/export selection dialog."""
         dialog = QDialog(self.app_window)
         dialog.setWindowTitle(tr('ui.import_export_mod'))
         dialog.setModal(True)
@@ -48,6 +64,7 @@ class ModImportExportController:
         dialog.exec()
 
     def _show_import_dialog(self):
+        """Display the import dialog for selecting file or URL."""
         from ui.dialogs.import_dialog import ImportDialog
         dialog = ImportDialog(self.app_window, self.app_window.feedback_manager, 'mods')
         if dialog.exec() == QDialog.DialogCode.Accepted:
@@ -57,6 +74,11 @@ class ModImportExportController:
                 self._install_mod_from_url(dialog.selected_url)
 
     def _install_mod_from_file(self, file_path: str):
+        """Install a mod from an archive file.
+
+        Args:
+            file_path: Path to the mod archive file.
+        """
         from utils.file_utils import sanitize_filename, remove_archive_extension
         logging.info(f'[IMPORT] Starting mod import from file: {file_path}')
         try:
@@ -177,6 +199,14 @@ class ModImportExportController:
             self._show_import_error_with_manual_install(file_path, tr('errors.mod_import_failed', error=str(e)))
 
     def _prompt_for_unrar_install(self) -> bool:
+        """Prompt user to install UnRAR utility for archive extraction.
+
+        Returns:
+            bool: True if UnRAR is successfully installed or already available.
+
+        Shows dialog offering automatic UnRAR installation, or provides
+        manual installation instructions with platform-specific guidance.
+        """
         reply = QMessageBox.question(self.app_window, tr('errors.unrar_missing_title'), tr('errors.unrar_missing_text'), QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.Yes)
         if reply == QMessageBox.StandardButton.Yes:
             from utils.archive_utils import download_and_setup_unrar, _get_unrar_path
@@ -215,6 +245,14 @@ class ModImportExportController:
         return False
 
     def _install_mod_from_url(self, url: str):
+        """Install a mod from the given URL.
+
+        Args:
+            url: URL of the mod to install.
+
+        Creates and starts a URL install worker thread to handle
+        the download and installation process.
+        """
         try:
             from workers.url_install_worker import UrlInstallThread
             worker = UrlInstallThread(self.app_window, url)
@@ -233,6 +271,11 @@ class ModImportExportController:
             self.app_window.feedback_manager.show_message('error', 'errors.error', tr('mods.installation_error', error=str(e)))
 
     def _on_unrar_needed(self):
+        """Handle UnRAR requirement from install worker.
+
+        Called when the install worker determines that UnRAR is needed.
+        Prompts for UnRAR installation and signals the result back to the worker.
+        """
         worker = self.app_state.current_task
         success = self._prompt_for_unrar_install()
         if success:
@@ -243,6 +286,15 @@ class ModImportExportController:
             worker.signal_unrar_installed(success)
 
     def _on_manual_install_required(self, prepared_path: str, archive_path: str, temp_dir: str):
+        """Handle manual install requirement from install worker.
+
+        Args:
+            prepared_path: Path where files were prepared.
+            archive_path: Original archive file path.
+            temp_dir: Temporary directory to clean up.
+
+        Opens manual install dialog for user to complete the installation process.
+        """
         try:
             self._reset_install_state()
             from ui.dialogs.manual_mod_install_dialog import ManualModInstallDialog
@@ -265,6 +317,14 @@ class ModImportExportController:
                 pass
 
     def _show_import_error_with_manual_install(self, file_path: str, error_message: str):
+        """Show import error dialog with manual install option.
+
+        Args:
+            file_path: Path of the file that failed to import.
+            error_message: Error message to display.
+
+        Shows error dialog and offers manual installation as fallback option.
+        """
         msg_box = QMessageBox(self.app_window)
         msg_box.setIcon(QMessageBox.Icon.Critical)
         msg_box.setWindowTitle(tr('errors.error'))
@@ -278,6 +338,13 @@ class ModImportExportController:
             self._start_manual_install_from_file(file_path)
 
     def _start_manual_install_from_file(self, file_path: str):
+        """Start manual installation process from a local file.
+
+        Args:
+            file_path: Path to the file to install manually.
+
+        Prepares files, opens manual install dialog, and handles completion.
+        """
         try:
             prepared_path, temp_dir = self._prepare_local_files_for_manual_install(file_path)
             if prepared_path:
@@ -298,6 +365,17 @@ class ModImportExportController:
             QMessageBox.critical(self.app_window, tr('errors.error'), tr('errors.manual_install_failed', error=str(e)))
 
     def _prepare_local_files_for_manual_install(self, file_path: str) -> str:
+        """Prepare local files for manual installation.
+
+        Args:
+            file_path: Path to the archive file to extract.
+
+        Returns:
+            tuple: (content_path, temp_dir) where content_path is the extracted
+                   files path and temp_dir is the temporary directory to clean up.
+
+        Extracts archive files and handles UnRAR requirements.
+        """
         temp_dir = tempfile.mkdtemp(prefix='deltahub_manual_install_')
         from utils.archive_utils import extract_archive
         try:
@@ -325,6 +403,14 @@ class ModImportExportController:
             raise
 
     def _on_mod_install_finished(self, success: bool, message: str):
+        """Handle completion of mod installation process.
+
+        Args:
+            success: Whether installation succeeded.
+            message: Status message to display.
+
+        Resets install state, refreshes mod list, and shows appropriate result.
+        """
         self._reset_install_state()
         if success:
             self._refresh_mod_list()
@@ -336,6 +422,11 @@ class ModImportExportController:
             self.app_window.feedback_manager.show_message('error', 'errors.error', message)
 
     def _show_export_dialog(self):
+        """Show the mod export selection dialog.
+
+        Creates and displays a dialog for selecting which mod to export,
+        with optional filtering by game type.
+        """
         dialog = QDialog(self.app_window)
         dialog.setWindowTitle(tr('ui.export_mod'))
         dialog.setModal(True)
@@ -392,6 +483,14 @@ class ModImportExportController:
         dialog.exec()
 
     def _export_selected_mod(self, mod_list, dialog):
+        """Export the selected mod from the list.
+
+        Args:
+            mod_list: QListWidget containing selectable mods.
+            dialog: Parent dialog to close on successful export.
+
+        Gets selected mod, prompts for export location, and creates ZIP archive.
+        """
         current_item = mod_list.currentItem()
         if not current_item:
             QMessageBox.warning(self.app_window, tr('errors.error'), tr('ui.no_mod_selected'))

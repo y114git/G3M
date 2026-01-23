@@ -1,3 +1,8 @@
+"""Worker thread for multi-mod merging operations.
+
+This module provides a background thread for merging multiple mods,
+coordinating with the MultiModMerger.
+"""
 import logging
 from typing import Dict, List, Any
 from PyQt6.QtCore import QThread, pyqtSignal
@@ -5,11 +10,22 @@ from managers.multi_mod_merger import MultiModMerger
 
 
 class ModMergeThread(QThread):
+    """Background thread for mod merging operations."""
     progress_update = pyqtSignal(int, str)
     status_update = pyqtSignal(str, str)
     finished = pyqtSignal(bool)
 
     def __init__(self, app_state, mod_manager, chapter_mods: Dict[int, List[Any]], session_manifest_path: str, parent=None, fast_merge: bool = False):
+        """Initialize the mod merge thread.
+
+        Args:
+            app_state: Application state manager.
+            mod_manager: Mod management operations.
+            chapter_mods: Mods to merge by chapter.
+            session_manifest_path: Path to session manifest.
+            parent: Parent QObject (optional).
+            fast_merge: Whether to use fast merge mode.
+        """
         super().__init__(parent)
         self.app_state = app_state
         self.mod_manager = mod_manager
@@ -20,6 +36,7 @@ class ModMergeThread(QThread):
         self._cancelled = False
 
     def cancel(self):
+        """Cancel the merge operation."""
         self._cancelled = True
         self.requestInterruption()
         if self.merger:

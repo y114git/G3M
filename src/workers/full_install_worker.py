@@ -1,3 +1,7 @@
+"""Full game installation worker.
+
+This module provides a worker thread for downloading and installing the full game.
+"""
 import logging
 from PyQt6.QtCore import QThread, pyqtSignal
 from config.constants import UI_COLORS, NETWORK_TIMEOUT_MEDIUM

@@ -430,6 +430,19 @@ class AppWindow(QWidget):
         return self.app_state.game_mode.get_game_path(self.app_state.local_config) or ''
 
     def init_ui(self):
+        """Initialize the main user interface components.
+
+        Sets up the complete UI layout including:
+        - Top panel with settings, refresh, and social buttons
+        - Main content area with tab widgets
+        - Bottom panel with status and progress indicators
+        - Launcher icon and branding elements
+        - Full install checkbox for game file installation
+
+        This method creates and configures all UI widgets, sets up
+        layouts, connects signals, and applies styling. It's the main
+        entry point for building the application interface.
+        """
         self.full_install_checkbox = QCheckBox(tr('ui.install_game_files_first'))
         self.full_install_checkbox.stateChanged.connect(self._on_toggle_full_install)
         self.full_install_checkbox.hide()
@@ -888,6 +901,34 @@ class AppWindow(QWidget):
             logging.error(f'Error in _on_auto_sorting_changed: {e}', exc_info=True)
 
     def _on_gamebanana_sort_changed(self, index: int):
+        """Handle GameBanana sort option change.
+
+        This method handles changes to the GameBanana sorting dropdown,
+        updating the sort order and refreshing the mod list. It manages
+        the complex process of stopping ongoing operations and restarting
+        with the new sort criteria.
+
+        Args:
+            index: Index of the selected sort option.
+
+        Operations performed:
+        - Validates sort selection and checks for changes
+        - Stops ongoing fetch and metadata threads
+        - Cancels pending display updates
+        - Clears loaded pages and filtered mods
+        - Resets pagination
+        - Removes GameBanana mods from current list
+        - Restarts mod loading with new sort order
+
+        Features:
+        - Debounced updates to prevent rapid changes
+        - Thread-safe operation cancellation
+        - State cleanup and reset
+        - Progress indication during transition
+
+        Returns:
+            None, but updates the app state and refreshes the mod list.
+        """
         try:
             if not hasattr(self, 'gb_sort_combo'):
                 return
@@ -1417,6 +1458,28 @@ class AppWindow(QWidget):
             btn.setStyleSheet(f'\n                QPushButton#chapter_tab_{i} {{\n                    background-color: {button_color};\n                    border: 2px {border_style} {border_color};\n                    color: {text_color};\n                    font-weight: bold;\n                    font-size: 13px;\n                    border-radius: 0px;\n                    padding: 5px;\n                }}\n                QPushButton#chapter_tab_{i}:checked {{\n                    background-color: {hover_color};\n                    border: 3px {border_style} {border_color};\n                }}\n                QPushButton#chapter_tab_{i}:hover {{\n                    background-color: {hover_color};\n                }}\n            ')
 
     def _retranslate_texts(self):
+        """Update all UI text elements with current language translations.
+
+        This method updates all translatable text elements in the main window
+        when the language is changed. It handles buttons, labels, tooltips,
+        combo boxes, and other UI components to ensure proper localization.
+
+        Updated elements include:
+        - Color configuration values
+        - Navigation buttons (settings, back)
+        - Social media buttons (Telegram, Discord)
+        - Tab labels and search elements
+        - Sort and filter controls
+        - Game selection dropdown
+        - Tag filters and search controls
+        - Pagination controls
+        - GameBanana sorting options
+        - Custom executable controls
+        - Auto-sorting settings
+
+        Returns:
+            None, but updates all UI text in-place.
+        """
         self.color_config = {'background': tr('ui.background_color'), 'button': tr('ui.elements_color'), 'border': tr('ui.border_color'), 'button_hover': tr('ui.hover_color'), 'text': tr('ui.main_text_color'), 'version_text': tr('ui.secondary_text_color')}
         self.settings_button.setText(tr('ui.back_button') if self.app_state.is_settings_view else tr('ui.settings_title'))
         self.online_label.setToolTip(tr('tooltips.online_counter'))
@@ -1647,6 +1710,13 @@ class AppWindow(QWidget):
             self._suppress_tab_handlers = False
 
     def closeEvent(self, event):
+        """Handle application window close event.
+
+        Stops background processes, saves state, and cleans up resources.
+
+        Args:
+            event: Qt close event.
+        """
         self.customization_manager.stop_background_music()
         self._online_timer.stop()
         if self.is_shortcut_launch:

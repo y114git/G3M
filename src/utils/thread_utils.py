@@ -1,8 +1,18 @@
+"""Thread management utilities.
+
+This module provides utilities for safely managing Qt threads.
+"""
 import logging
 from PyQt6.QtCore import QThread
 
 
 def safe_stop_thread(thread, timeout=2000):
+    """Safely stop a Qt thread with timeout and termination fallback.
+
+    Args:
+        thread: QThread instance to stop.
+        timeout: Timeout in milliseconds to wait for thread to stop.
+    """
     if not thread or not isinstance(thread, QThread):
         return
     try:

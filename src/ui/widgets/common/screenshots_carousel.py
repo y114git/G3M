@@ -8,6 +8,24 @@ from workers import WorkerSignals
 
 
 class ScreenshotsCarousel(QWidget):
+    """Widget for displaying and navigating through mod screenshots.
+
+    Shows a carousel of images with navigation controls. Supports loading
+    images from URLs, caching, and smooth navigation between screenshots.
+
+    Features:
+    - Displays up to 10 screenshots from provided URLs
+    - Asynchronous image loading with thread pool
+    - Navigation buttons for previous/next images
+    - Loading indicators and error handling
+    - Responsive sizing and scaling
+    - Cleanup on widget destruction
+
+    Args:
+        urls: List of screenshot URLs to display.
+        parent: Parent widget (optional).
+        app_state: Application state for theming (optional).
+    """
 
     def __init__(self, urls: list[str], parent=None, app_state=None):
         super().__init__(parent)

@@ -1,3 +1,7 @@
+"""Plugin API for extending DELTAHUB functionality.
+
+This module provides the API interface for plugins to interact with the application.
+"""
 import logging
 from typing import Any, List, Optional
 from PyQt6.QtCore import QObject

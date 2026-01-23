@@ -7,6 +7,7 @@ from ui.common.styling import get_theme_color, rgba_from_color, build_tag_checkb
 
 
 class SearchTabBuilder:
+    """Builds the search tab UI for browsing and searching mods."""
 
     def __init__(self, app_state, parent=None):
         self.app_state = app_state
@@ -14,6 +15,11 @@ class SearchTabBuilder:
         self.widgets = {}
 
     def build(self) -> QWidget:
+        """Build and return the search tab widget.
+
+        Returns:
+            QWidget: Configured search tab widget.
+        """
         widget = QWidget()
         layout = QVBoxLayout(widget)
         filters_widget = self._create_filters_widget()
@@ -195,4 +201,9 @@ class SearchTabBuilder:
         return pagination_widget
 
     def get_widgets(self) -> Dict[str, Any]:
+        """Get the dictionary of UI widgets.
+
+        Returns:
+            Dict[str, Any]: Dictionary of widget references.
+        """
         return self.widgets

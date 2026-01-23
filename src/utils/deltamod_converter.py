@@ -1,3 +1,7 @@
+"""Deltamod format conversion utilities.
+
+This module handles converting between deltamod and DELTAHUB mod formats.
+"""
 import os
 import json
 import re
@@ -13,6 +17,7 @@ from utils.file_utils import get_unique_mod_dir, find_deltamod_info_file
 
 
 class DeltamodConverter:
+    """Converts deltamod format mods to DELTAHUB format."""
 
     def __init__(self, source_path: str, mods_dir: str):
         self.source_path = source_path
@@ -21,6 +26,11 @@ class DeltamodConverter:
         self.modding_xml: Optional[ET.Element] = None
 
     def convert(self) -> Optional[str]:
+        """Convert a deltamod to DELTAHUB format.
+
+        Returns:
+            Optional[str]: Path to converted mod directory or None on failure.
+        """
         try:
             if not self._validate_source():
                 return None

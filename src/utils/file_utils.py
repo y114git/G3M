@@ -1,3 +1,8 @@
+"""File operation utilities.
+
+This module provides utilities for file operations including downloading,
+extracting archives, JSON handling, and safe file operations with retries.
+"""
 import os
 import platform
 import re
@@ -17,6 +22,21 @@ T = TypeVar('T')
 
 
 def _retry_operation(operation: Callable[[], T], max_retries: int = 5, delay: float = 0.1, op_name: str = 'operation', path: str = '') -> T:
+    """Retry a file operation with exponential backoff.
+
+    Args:
+        operation: Operation to retry.
+        max_retries: Maximum retry attempts.
+        delay: Initial delay between retries.
+        op_name: Operation name for logging.
+        path: File path for logging.
+
+    Returns:
+        T: Operation result.
+
+    Raises:
+        Last exception if all retries fail.
+    """
     last_error = None
     for attempt in range(max_retries):
         try:
@@ -32,6 +52,11 @@ def _retry_operation(operation: Callable[[], T], max_retries: int = 5, delay: fl
 
 
 def _fix_windows_permissions(path: str) -> None:
+    """Fix Windows file permissions for write access.
+
+    Args:
+        path: Path to fix permissions for.
+    """
     if platform.system() == 'Windows':
         try:
             os.chmod(path, stat.S_IWRITE | stat.S_IREAD)
@@ -40,6 +65,20 @@ def _fix_windows_permissions(path: str) -> None:
 
 
 def download_file_with_progress(url: str, target_path: str, progress_callback=None, session=None, cancel_check=None, on_response=None, downloaded_ref=None) -> bool:
+    """Download file with progress tracking.
+
+    Args:
+        url: URL to download from.
+        target_path: Path to save file.
+        progress_callback: Callback for progress updates.
+        session: Requests session to use.
+        cancel_check: Function to check if cancelled.
+        on_response: Callback for response handling.
+        downloaded_ref: Reference to track downloaded bytes.
+
+    Returns:
+        bool: True if download successful.
+    """
     from config.constants import NETWORK_TIMEOUT_HEAD
     if session is None:
         session = get_session()
@@ -68,6 +107,19 @@ def download_file_with_progress(url: str, target_path: str, progress_callback=No
 
 
 def download_and_extract_archive(url: str, target_dir: str, progress_callback=None, total_size: int = 0, downloaded_ref: list[int] | None = None, session=None, is_game_installation=False, cancel_check=None, on_response=None):
+    """Download and extract an archive file.
+
+    Args:
+        url: URL to download from.
+        target_dir: Directory to extract to.
+        progress_callback: Callback for progress updates.
+        total_size: Total file size in bytes.
+        downloaded_ref: Reference to track downloaded bytes.
+        session: Requests session to use.
+        is_game_installation: Whether this is a game installation.
+        cancel_check: Function to check if cancelled.
+        on_response: Callback for response handling.
+    """
     from utils.archive_utils import extract_archive
     if downloaded_ref is None:
         downloaded_ref = [0]
@@ -84,6 +136,14 @@ def download_and_extract_archive(url: str, target_dir: str, progress_callback=No
 
 
 def _is_symlink(path: str) -> bool:
+    """Check if a path is a symbolic link.
+
+    Args:
+        path: Path to check.
+
+    Returns:
+        bool: True if path is a symlink.
+    """
     try:
         return os.path.islink(path)
     except OSError:
@@ -91,6 +151,18 @@ def _is_symlink(path: str) -> bool:
 
 
 def _safe_join(base: str, *paths: str) -> str:
+    """Safely join paths with directory traversal protection.
+
+    Args:
+        base: Base directory path.
+        *paths: Path components to join.
+
+    Returns:
+        str: Joined absolute path.
+
+    Raises:
+        ValueError: If path traversal is detected.
+    """
     base_abs = os.path.abspath(base)
     final = os.path.abspath(os.path.join(base_abs, *paths))
     if os.path.commonpath([final, base_abs]) != base_abs:
@@ -99,6 +171,22 @@ def _safe_join(base: str, *paths: str) -> str:
 
 
 def normalize_mod_package(mod_root: str, *, rename_legacy: bool = True, check_executables: bool = True, require_mod_config: bool = False, require_manifest: bool = False) -> Dict[str, Optional[str]]:
+    """Normalize a mod package structure and locate key files.
+
+    Args:
+        mod_root: Root directory of the mod package.
+        rename_legacy: Whether to rename legacy files.
+        check_executables: Whether to check for prohibited executables.
+        require_mod_config: Whether mod_config.json is required.
+        require_manifest: Whether manifest file is required.
+
+    Returns:
+        Dict[str, Optional[str]]: Paths to meta, mod_config, and icon files.
+
+    Raises:
+        ValueError: If mod_root is not a directory.
+        FileNotFoundError: If required files are missing.
+    """
     if not os.path.isdir(mod_root):
         raise ValueError('mod_root_not_directory')
     _flatten_single_child_directories(mod_root)
@@ -115,6 +203,11 @@ def normalize_mod_package(mod_root: str, *, rename_legacy: bool = True, check_ex
 
 
 def _flatten_single_child_directories(root: str):
+    """Flatten directory structure by moving up single child directories.
+
+    Args:
+        root: Root directory to flatten.
+    """
     while True:
         try:
             entries = [e for e in os.listdir(root) if e not in ('.', '..') and (not e.startswith('__MACOSX'))]
@@ -141,6 +234,15 @@ def _flatten_single_child_directories(root: str):
 
 
 def _find_file_recursive(root: str, filename: str) -> Optional[str]:
+    """Recursively search for a file by name (case-insensitive).
+
+    Args:
+        root: Root directory to search.
+        filename: Filename to find.
+
+    Returns:
+        Optional[str]: Path to file if found, None otherwise.
+    """
     filename_lower = filename.lower()
     for current_root, _, files in os.walk(root):
         for f in files:
@@ -150,6 +252,14 @@ def _find_file_recursive(root: str, filename: str) -> Optional[str]:
 
 
 def _ensure_no_prohibited_files(root: str):
+    """Check for prohibited file types in directory tree.
+
+    Args:
+        root: Root directory to check.
+
+    Raises:
+        ValueError: If prohibited files are found.
+    """
     prohibited_exts = {'.exe', '.js', '.ts', '.bat', '.cmd'}
     for current_root, _, files in os.walk(root):
         for f in files:
@@ -159,10 +269,23 @@ def _ensure_no_prohibited_files(root: str):
 
 
 def sanitize_filename(name: str) -> str:
+    """Remove invalid characters from filename.
+
+    Args:
+        name: Filename to sanitize.
+
+    Returns:
+        str: Sanitized filename.
+    """
     return re.sub('[\\\\/*?:"<>|]', '', name).strip()
 
 
 def _cleanup_tmp(path: str) -> None:
+    """Clean up temporary file if it exists.
+
+    Args:
+        path: Path to temporary file.
+    """
     try:
         if os.path.exists(path):
             os.remove(path)
@@ -171,10 +294,26 @@ def _cleanup_tmp(path: str) -> None:
 
 
 def atomic_write_json(path: str, data: Dict, indent: int = 2) -> None:
+    """Atomically write JSON data to file.
+
+    Args:
+        path: File path.
+        data: Data to write.
+        indent: JSON indentation level.
+    """
     save_json(path, data, indent=indent)
 
 
 def save_json(path: str, data: Dict, indent: int = 2, max_retries: int = 5, delay: float = 0.1) -> None:
+    """Save JSON data to file with retry logic.
+
+    Args:
+        path: File path.
+        data: Data to save.
+        indent: JSON indentation level.
+        max_retries: Maximum retry attempts.
+        delay: Delay between retries.
+    """
     dir_path = os.path.dirname(path)
     if dir_path:
         os.makedirs(dir_path, exist_ok=True)
@@ -228,6 +367,30 @@ def save_json(path: str, data: Dict, indent: int = 2, max_retries: int = 5, dela
 
 
 def load_json(path: str, migrate_config: bool = True) -> Dict:
+    """Load JSON file with optional config migration.
+
+    This function loads a JSON file from disk and optionally performs
+    migration of legacy configuration formats to the current format.
+    It handles missing files gracefully and supports automatic config updates.
+
+    Args:
+        path: Path to the JSON file to load.
+        migrate_config: Whether to perform config migration (default: True).
+
+    Migration features:
+    - Legacy config.json to mod_config.json migration
+    - Field name updates (mod_key -> key, modgame -> game)
+    - Structure changes (chapters -> files)
+    - Game detection from demo mod flags
+    - Tag normalization (translation -> textedit)
+
+    Returns:
+        Dict: Loaded JSON data, empty dict if file doesn't exist.
+
+    Note:
+        When migration is enabled, the file will be automatically
+        updated with the new format if changes are needed.
+    """
     try:
         if path.endswith('mod_config.json') and (not os.path.exists(path)) and migrate_config:
             legacy_path = path.replace('mod_config.json', 'config.json')
@@ -352,6 +515,27 @@ def ensure_writable(path: str) -> bool:
 
 
 def is_path_in_steam_common(game_path: str, game_name: str) -> bool:
+    """Check if a game path is within a Steam common directory.
+
+    This function determines whether a given game path is located in
+    a Steam installation's common games directory. It checks across
+    multiple platforms and Steam installation locations.
+
+    Args:
+        game_path: Path to the game directory to check.
+        game_name: Name of the game to match against.
+
+    Checks include:
+    - Path analysis for steamapps/common structure
+    - Windows Program Files Steam installations
+    - Linux Steam home directory locations
+    - macOS Steam application support directories
+    - Case-insensitive path matching
+
+    Returns:
+        bool: True if the path is within a Steam common directory,
+              False otherwise.
+    """
     if not game_path or not os.path.isdir(game_path):
         return False
     try:
@@ -404,6 +588,33 @@ def is_path_in_steam_common(game_path: str, game_name: str) -> bool:
 
 
 def autodetect_path(game_name: str) -> str | None:
+    """Autodetect game installation path across multiple platforms.
+
+    This function searches for game installations in common locations
+    including Steam directories, program files, and various mount points.
+    It supports Windows, Linux, and macOS with platform-specific paths.
+
+    Args:
+        game_name: Name of the game to search for.
+
+    Supported games:
+    - Pizza Tower (with multiple name variations)
+    - Other Steam games
+
+    Search locations include:
+    - Steam installation directories
+    - Program Files folders (Windows)
+    - Steam library folders
+    - Mount points and media directories (Linux)
+    - Application Support directories (macOS)
+
+    Returns:
+        str | None: Path to game directory if found, None otherwise.
+
+    Note:
+        Some games like Undertale Yellow and Sugary Spire return None
+        as they require manual path specification.
+    """
     if game_name == 'UNDERTALE YELLOW' or game_name == 'UndertaleYellow' or game_name == 'undertaleyellow':
         return None
     if game_name == 'SUGARY SPIRE' or game_name == 'SugarySpire' or game_name == 'sugaryspire':
@@ -475,6 +686,25 @@ def autodetect_path(game_name: str) -> str | None:
 
 
 def fix_macos_python_symlink(app_dir: Path) -> None:
+    """Fix Python symlink in macOS app bundles.
+
+    This function fixes the Python symlink in macOS app bundles that
+    may be created incorrectly during packaging. It converts a text
+    file containing the symlink target into a proper symbolic link.
+
+    Args:
+        app_dir: Path to the app bundle directory.
+
+    Operations:
+    - Checks if running on macOS
+    - Validates Python framework path
+    - Reads symlink target from text file
+    - Creates proper symbolic link
+    - Sets executable permissions
+
+    Returns:
+        None, but fixes the Python symlink if needed.
+    """
     try:
         if platform.system() != 'Darwin':
             return
@@ -513,6 +743,28 @@ def cleanup_old_updater_files():
 
 
 def version_sort_key(version_string: str):
+    """Generate a sort key for version strings.
+
+    This function parses version strings and creates a tuple that can
+    be used for proper version sorting. It handles semantic versioning
+    formats and various suffixes.
+
+    Args:
+        version_string: Version string to parse (e.g., "1.2.3", "2.0.1-beta").
+
+    Supported formats:
+    - Semantic versioning (major.minor.patch)
+    - Version suffixes (alpha, beta, rc, etc.)
+    - Simple numeric versions
+    - Mixed alphanumeric versions
+
+    Returns:
+        tuple: Sort key in format (major, minor, patch, has_suffix, suffix)
+               for proper version ordering.
+
+    Note:
+        Invalid version strings return (0, 0, 0, 0, '') as fallback.
+    """
     try:
         s = (version_string or '').strip()
         m = re.match('^(?P<major>\\d+)(?:\\.(?P<minor>\\d+))?(?:\\.(?P<patch>\\d+))?(?P<suffix>[A-Za-z0-9][A-Za-z0-9._-]*)?$', s)
@@ -609,6 +861,26 @@ def safe_remove(path: str, max_retries: int = 5, delay: float = 0.1) -> bool:
 
 
 def safe_move(src: str, dst: str, max_retries: int = 5, delay: float = 0.1) -> bool:
+    """Safely move a file or directory with retry mechanism.
+
+    This function moves files or directories with proper error handling,
+    permission fixes, and retry logic for common filesystem issues.
+
+    Args:
+        src: Source path to move from.
+        dst: Destination path to move to.
+        max_retries: Maximum number of retry attempts (default: 5).
+        delay: Delay between retries in seconds (default: 0.1).
+
+    Features:
+    - Automatic destination directory creation
+    - Windows permission fixes for files
+    - Retry mechanism for transient errors
+    - Comprehensive error handling
+
+    Returns:
+        bool: True if move was successful, False otherwise.
+    """
     if not os.path.exists(src):
         return False
     dst_dir = os.path.dirname(dst)
@@ -640,6 +912,26 @@ def _rmtree_error_handler(func, path, exc_info):
 
 
 def safe_rmtree(path: str, max_retries: int = 3, delay: float = 0.5) -> bool:
+    """Safely remove a directory tree with retry mechanism.
+
+    This function removes directory trees with proper error handling,
+    permission fixes, and retry logic. It includes special handling
+    for Windows filesystem issues.
+
+    Args:
+        path: Directory path to remove.
+        max_retries: Maximum number of retry attempts (default: 3).
+        delay: Delay between retries in seconds (default: 0.5).
+
+    Features:
+    - Retry mechanism with custom error handler
+    - Windows-specific permission fixes
+    - Fallback rename-and-delete strategy
+    - Threaded cleanup for stubborn directories
+
+    Returns:
+        bool: True if removal was successful, False otherwise.
+    """
     if not os.path.exists(path):
         return True
     if not os.path.isdir(path):

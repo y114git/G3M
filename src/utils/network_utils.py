@@ -1,3 +1,8 @@
+"""Network utilities for HTTP requests and downloads.
+
+This module provides utilities for making HTTP requests with retries,
+downloading files, and managing request sessions.
+"""
 import os
 import platform
 import re
@@ -14,6 +19,14 @@ _shared_session = None
 
 
 def get_session(app_state=None) -> requests.Session:
+    """Get or create a shared requests session.
+
+    Args:
+        app_state: Application state (optional).
+
+    Returns:
+        requests.Session: Configured session.
+    """
     if app_state and hasattr(app_state, 'network_session') and (app_state.network_session is not None):
         return app_state.network_session
     global _shared_session
@@ -26,6 +39,11 @@ def get_session(app_state=None) -> requests.Session:
 
 
 def _build_session() -> requests.Session:
+    """Build a new requests session with retries and headers.
+
+    Returns:
+        requests.Session: Configured session.
+    """
     from config.constants import LAUNCHER_VERSION, BROWSER_HEADERS
     urllib3_logger = logging.getLogger('urllib3.connectionpool')
     urllib3_logger.setLevel(logging.ERROR)
@@ -43,6 +61,7 @@ def _build_session() -> requests.Session:
 
 
 def close_shared_session() -> None:
+    """Close and reset the shared requests session."""
     global _shared_session
     with _session_lock:
         if _shared_session is not None:
@@ -53,6 +72,15 @@ def close_shared_session() -> None:
 
 
 def get_filename_from_url(session, url):
+    """Extract filename from URL using headers or path.
+
+    Args:
+        session: Requests session to use.
+        url: URL to extract filename from.
+
+    Returns:
+        str: Extracted filename or default.
+    """
     try:
         from urllib.parse import urlparse, unquote
         response = session.head(url, timeout=NETWORK_TIMEOUT_MEDIUM, allow_redirects=True)
@@ -73,6 +101,19 @@ def get_filename_from_url(session, url):
 
 
 def download_file(session, url, tmp_path, progress_callback=None, total_size: int = 0, downloaded_ref: list[int] | None = None, max_retries: int = MAX_DOWNLOAD_RETRIES, cancel_check=None, on_response=None):
+    """Download a file with resume support and progress tracking.
+
+    Args:
+        session: Requests session to use.
+        url: URL to download from.
+        tmp_path: Temporary path to save file.
+        progress_callback: Optional callback for progress updates.
+        total_size: Total expected size in bytes.
+        downloaded_ref: Reference list for tracking downloaded bytes.
+        max_retries: Maximum number of retry attempts.
+        cancel_check: Optional function to check if download should be cancelled.
+        on_response: Optional callback when response is received.
+    """
     if downloaded_ref is None:
         downloaded_ref = [0]
     expected_size = 0
@@ -150,6 +191,14 @@ def download_file(session, url, tmp_path, progress_callback=None, total_size: in
 
 
 def check_internet_connection(max_attempts: int = 2) -> bool:
+    """Check if internet connection is available.
+
+    Args:
+        max_attempts: Maximum number of attempts.
+
+    Returns:
+        bool: True if internet is available.
+    """
     for attempt in range(max_attempts):
         try:
             session = get_session()
@@ -162,6 +211,18 @@ def check_internet_connection(max_attempts: int = 2) -> bool:
 
 
 def safe_request(method: str, url: str, session=None, timeout=None, **kwargs):
+    """Make a safe HTTP request with error handling.
+
+    Args:
+        method: HTTP method (GET, POST, etc.).
+        url: URL to request.
+        session: Optional requests session.
+        timeout: Optional timeout in seconds.
+        **kwargs: Additional arguments for the request.
+
+    Returns:
+        Response object or None on error.
+    """
     if session is None:
         session = get_session()
     if timeout is None:
@@ -174,6 +235,7 @@ def safe_request(method: str, url: str, session=None, timeout=None, **kwargs):
 
 
 def increment_launch_counter() -> None:
+    """Increment the launch counter on the server for analytics."""
     from config.constants import CLOUD_FUNCTIONS_BASE_URL
     os_map = {'Windows': 'windows', 'Linux': 'linux', 'Darwin': 'macos'}
     os_key = os_map.get(platform.system(), 'other')

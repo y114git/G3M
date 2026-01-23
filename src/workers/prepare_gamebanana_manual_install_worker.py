@@ -1,3 +1,7 @@
+"""GameBanana manual installation preparation worker.
+
+This module provides a worker thread for preparing GameBanana mods for manual installation.
+"""
 import os
 import tempfile
 import shutil

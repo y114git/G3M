@@ -1,3 +1,8 @@
+"""Multi-mod merging and patching system.
+
+This module handles merging multiple mods together, applying patches,
+managing conflicts, and coordinating with UTMT for data.win patching.
+"""
 import os
 import shutil
 import tempfile
@@ -21,8 +26,16 @@ from utils.patching_logger import get_patching_logger, get_conflicts_logger, cle
 
 
 class ProgressThrottler(QObject):
+    """Throttles progress updates to avoid overwhelming the UI."""
 
     def __init__(self, callback, throttle_ms: int = 150, parent=None):
+        """Initialize the progress throttler.
+
+        Args:
+            callback: Callback function for progress updates.
+            throttle_ms: Throttle interval in milliseconds.
+            parent: Parent QObject (optional).
+        """
         super().__init__(parent)
         self.callback = callback
         self.throttle_ms = throttle_ms
@@ -317,6 +330,34 @@ class MultiModMerger(QObject):
         return self._perform_chapter_merge(chapter_id, mods_list, data_win_path, target_dir, None, progress_base, total_chapters, is_modpack=False, fast_merge=fast_merge)
 
     def _perform_chapter_merge(self, chapter_id: int, mods_list: List[Any], output_data_win_path: str, target_dir: str, modpack_dir: Optional[str], progress_base: int, total_chapters: int, is_modpack: bool, fast_merge: bool = False) -> bool:
+        """Perform the actual chapter merge operation.
+
+        This is the core method that handles merging multiple mods for a specific chapter.
+        It manages xdelta patches, ready data.win files, CSX scripts, and coordinates
+        with UTMT for the actual patching process.
+
+        Args:
+            chapter_id: ID of the chapter being processed.
+            mods_list: List of mods to merge for this chapter.
+            output_data_win_path: Path where the final data.win should be written.
+            target_dir: Target directory for the chapter.
+            modpack_dir: Directory for modpack operations (if applicable).
+            progress_base: Base progress value for this chapter.
+            total_chapters: Total number of chapters being processed.
+            is_modpack: Whether this is a modpack merge operation.
+            fast_merge: Whether to use fast merge optimizations.
+
+        Returns:
+            bool: True if merge was successful, False otherwise.
+
+        This method handles:
+        - Setting up merge workspace directories
+        - Identifying data-modifying mods
+        - Fast path optimization for single mods with ready data files
+        - Xdelta patch application
+        - CSX script processing
+        - Progress tracking and status updates
+        """
         import platform
         original_data_win = output_data_win_path
         if not mods_list or len(mods_list) == 0:
@@ -970,6 +1011,27 @@ class MultiModMerger(QObject):
         return True
 
     def _apply_xdelta_patches(self, data_win_path: str, data_patches: List[str], progress_callback=None) -> bool:
+        """Apply xdelta patches to data.win file.
+
+        This method applies a series of xdelta patches to the data.win file
+        using the xdelta executable. It handles patch validation, permission
+        checks, and proper cleanup of temporary files.
+
+        Args:
+            data_win_path: Path to the data.win file to patch.
+            data_patches: List of xdelta patch file paths to apply.
+            progress_callback: Optional callback for progress updates.
+
+        Features:
+        - xdelta executable validation and permission setup
+        - Sequential patch application with progress tracking
+        - Temporary file management and cleanup
+        - Error handling for missing files and permission issues
+        - Cross-platform compatibility (Windows/Linux/macOS)
+
+        Returns:
+            bool: True if all patches were applied successfully, False otherwise.
+        """
         import platform
         import stat
         if not self.xdelta_path:
@@ -1554,6 +1616,33 @@ class MultiModMerger(QObject):
             shutil.copytree(source_dir, target_dir, dirs_exist_ok=True)
 
     def _compute_resource_hashes(self, objects_dir: str) -> Dict[str, Dict[str, str]]:
+        """Compute SHA256 hashes for all game resources.
+
+        This method calculates cryptographic hashes for all game resources
+        including code files, sprites, backgrounds, fonts, shaders, sounds,
+        and rooms. These hashes are used for conflict detection and
+        resource change tracking.
+
+        Args:
+            objects_dir: Path to the game objects directory.
+
+        Resource types processed:
+        - Code: GML files in CodeEntries directory
+        - Sprites: PNG files in sprite directories (combined hash)
+        - Backgrounds: PNG files in Backgrounds directory
+        - Fonts: Font files in Fonts directory
+        - Shaders: Shader files in Shaders directory
+        - Sounds: Audio files in Sounds directory
+        - Rooms: Room data files in Rooms directory
+
+        Returns:
+            Dict[str, Dict[str, str]]: Nested dictionary with resource types
+            as keys and resource name -> hash mappings as values.
+
+        Note:
+            Errors during hash computation are logged but don't stop
+            the overall process.
+        """
         hashes = {'code': {}, 'sprites': {}, 'backgrounds': {}, 'fonts': {}, 'shaders': {}, 'sounds': {}, 'rooms': {}}
         code_dir = os.path.join(objects_dir, 'CodeEntries')
         if os.path.exists(code_dir):
@@ -1954,6 +2043,38 @@ class MultiModMerger(QObject):
         return False
 
     def _apply_file_overrides(self, mod_source_dir: str, target_dir: str, used_archive_names: set, is_modpack: bool, chapter_id: Optional[int] = None) -> bool:
+        """Apply file overrides from mod source to target directory.
+
+        This method copies and merges files from a mod's source directory
+        to the target game directory, handling conflicts and tracking
+        modification history. It supports both individual mods and
+        modpack operations.
+
+        Args:
+            mod_source_dir: Source directory containing mod files.
+            target_dir: Target directory to apply overrides to.
+            used_archive_names: Set of archive names already used.
+            is_modpack: Whether this is a modpack operation.
+            chapter_id: Chapter ID for chapter-specific operations.
+
+        Operations performed:
+        - Validates source directory exists
+        - Copies files and directories with conflict handling
+        - Tracks resource modification history
+        - Detects and logs conflicts between mods
+        - Handles special file types (data.win, objects, etc.)
+        - Manages archive name tracking
+
+        Features:
+        - Conflict detection and logging
+        - Resource modification tracking
+        - Special handling for game data files
+        - Archive name deduplication
+        - Error handling and logging
+
+        Returns:
+            bool: True if overrides were applied successfully, False otherwise.
+        """
         if not os.path.isdir(mod_source_dir):
             return True
         if used_archive_names is None:

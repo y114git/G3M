@@ -1,3 +1,8 @@
+"""UI styling utilities and theme management.
+
+This module provides utilities for generating widget styles, managing themes,
+and applying custom colors to UI components.
+"""
 import os
 import logging
 from PyQt6.QtCore import Qt, QThreadPool
@@ -9,12 +14,34 @@ _STYLE_TEMPLATE = 'QFrame#{frame_selector} {{\n    background-color: {bg_color};
 
 
 def generate_widget_style(frame_selector, bg_color, border_color, hover_border_color, text_color, version_text_color, is_selected=False, icon_selector='modIcon'):
+    """Generate stylesheet for a widget with specified colors and selection state.
+
+    Args:
+        frame_selector: CSS selector for the frame.
+        bg_color: Background color.
+        border_color: Border color.
+        hover_border_color: Border color on hover.
+        text_color: Text color.
+        version_text_color: Version text color.
+        is_selected: Whether widget is selected.
+        icon_selector: CSS selector for icon.
+
+    Returns:
+        str: Generated stylesheet.
+    """
     border_width = '3px' if is_selected else '1px'
     current_border_color = hover_border_color if is_selected else border_color
     return _STYLE_TEMPLATE.format(frame_selector=frame_selector, bg_color=bg_color, border_width=border_width, border_color=current_border_color, hover_border_color=hover_border_color, icon_selector=icon_selector, version_text_color=version_text_color, text_color=text_color)
 
 
 def update_mod_widget_style(widget, frame_selector, parent_app=None):
+    """Update widget style based on theme configuration.
+
+    Args:
+        widget: Widget to update.
+        frame_selector: CSS selector for the frame.
+        parent_app: Parent application for theme config.
+    """
     config = None
     if parent_app:
         if hasattr(parent_app, 'local_config'):
@@ -42,6 +69,14 @@ _EMPTY_MESSAGE_STYLE = 'QLabel {{\n    color: {color};\n    font-size: {font_siz
 
 
 def show_empty_message_in_layout(layout, text, local_config=None, font_size=16):
+    """Display an empty state message in a layout.
+
+    Args:
+        layout: Layout to add message to.
+        text: Message text to display.
+        local_config: Optional theme configuration.
+        font_size: Font size for the message.
+    """
     empty_text_color = 'rgba(255, 255, 255, 178)'
     if local_config:
         empty_text_color = get_theme_color(local_config, 'version_text', empty_text_color)
@@ -53,12 +88,32 @@ def show_empty_message_in_layout(layout, text, local_config=None, font_size=16):
 
 
 def get_theme_color(config, color_key, default_color):
+    """Get a theme color from configuration.
+
+    Args:
+        config: Configuration dictionary.
+        color_key: Key for the color.
+        default_color: Default color if not found.
+
+    Returns:
+        str: Color value.
+    """
     if config and hasattr(config, 'get'):
         return config.get(f'custom_color_{color_key}') or default_color
     return default_color
 
 
 def rgba_from_color(color: str, alpha: int = 128, fallback: str = 'rgba(0, 0, 0, 128)') -> str:
+    """Convert hex color to RGBA format with specified alpha.
+
+    Args:
+        color: Hex color string.
+        alpha: Alpha value (0-255).
+        fallback: Fallback RGBA string.
+
+    Returns:
+        str: RGBA color string.
+    """
     if isinstance(color, str) and color.startswith('#') and (len(color) >= 7):
         try:
             r = int(color[1:3], 16)
@@ -71,10 +126,28 @@ def rgba_from_color(color: str, alpha: int = 128, fallback: str = 'rgba(0, 0, 0,
 
 
 def build_tag_checkbox_style(text_color: str, font_size: int = 12, indicator_size: int = 16, spacing: int = 5) -> str:
+    """Build stylesheet for tag checkboxes.
+
+    Args:
+        text_color: Text color.
+        font_size: Font size in pixels.
+        indicator_size: Checkbox indicator size.
+        spacing: Spacing between checkbox and text.
+
+    Returns:
+        str: Checkbox stylesheet.
+    """
     return f'\n            QCheckBox {{\n                color: {text_color};\n                font-size: {font_size}px;\n                spacing: {spacing}px;\n            }}\n            QCheckBox::indicator {{\n                width: {indicator_size}px;\n                height: {indicator_size}px;\n            }}\n        '
 
 
 def clear_layout_widgets(layout, keep_last_n=1, hide_instead_of_delete=False):
+    """Clear widgets from a layout.
+
+    Args:
+        layout: Layout to clear.
+        keep_last_n: Number of widgets to keep at the end.
+        hide_instead_of_delete: Whether to hide instead of delete.
+    """
     if not layout:
         return
     end_index = layout.count() - keep_last_n
@@ -101,6 +174,33 @@ def clear_layout_widgets(layout, keep_last_n=1, hide_instead_of_delete=False):
 
 
 def load_mod_icon_universal(icon_label, mod_data, size=80):
+    """Load and display a mod icon with universal support for various sources.
+
+    This function handles loading mod icons from multiple sources including
+    local files, URLs, and default fallback icons. It supports various image
+    formats and provides proper scaling and cropping for consistent display.
+
+    Args:
+        icon_label: QLabel widget to display the icon on.
+        mod_data: Mod object containing icon information.
+        size: Target size for the icon (default: 80).
+
+    Icon loading priority:
+    1. Local icon file from mod folder
+    2. Remote icon URL (downloaded asynchronously)
+    3. Default application icon
+    4. Fallback colored square
+
+    Features:
+    - Automatic image cropping and scaling
+    - Asynchronous loading for remote URLs
+    - Error handling and fallback mechanisms
+    - Support for various image formats
+    - Proper memory management
+
+    Returns:
+        None, but updates the icon_label with the loaded icon.
+    """
     from utils.path_utils import resource_path
 
     def _crop_and_scale_pixmap(pixmap, allow_empty=False):
@@ -171,6 +271,25 @@ def load_mod_icon_universal(icon_label, mod_data, size=80):
                 label_ref = weakref.ref(icon_label)
 
                 def _on_loaded_image(img):
+                    """Handle successful image loading callback.
+
+                    This callback function handles the result of asynchronous
+                    image loading, updating the icon label with the loaded image
+                    after proper validation and processing.
+
+                    Args:
+                        img: Loaded QImage object or None if loading failed.
+
+                    Features:
+                    - Widget lifecycle validation
+                    - Image validation and processing
+                    - Pixmap creation and scaling
+                    - Error handling for deleted widgets
+                    - Thread-safe operations
+
+                    Returns:
+                        None, but updates the icon label with the loaded image.
+                    """
                     try:
                         lbl = label_ref()
                         if not lbl:

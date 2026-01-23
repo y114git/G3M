@@ -1,3 +1,7 @@
+"""GameBanana API client.
+
+This module provides a client for interacting with the GameBanana API to fetch mod data.
+"""
 import requests
 import logging
 import json
@@ -15,6 +19,7 @@ logger = logging.getLogger(__name__)
 class GameBananaAPI:
 
     def __init__(self):
+        """Initialize the GameBanana API client."""
         self.base_url = GAMEBANANA_API_BASE
         self.core_api_base = 'https://api.gamebanana.com'
         self.session = get_session()
@@ -24,6 +29,7 @@ class GameBananaAPI:
         self._rate_limit_wait_time = 0.0
 
     def _wait_for_rate_limit(self):
+        """Wait for rate limit cooldown before making next request."""
         current_time = time.time()
         time_since_last = current_time - self._last_request_time
         if self._rate_limit_wait_time > 0:
@@ -38,6 +44,17 @@ class GameBananaAPI:
         self._last_request_time = time.time()
 
     def _handle_rate_limit_retry(self, status_code: Optional[int], attempt: int, max_retries: int, message: str) -> bool:
+        """Handle rate limit retry logic.
+
+        Args:
+            status_code: HTTP status code.
+            attempt: Current attempt number.
+            max_retries: Maximum retry attempts.
+            message: Log message template.
+
+        Returns:
+            bool: True if should retry, False otherwise.
+        """
         if status_code != 429 or attempt >= max_retries:
             return False
         wait_time = (attempt + 1) * 3
@@ -47,6 +64,13 @@ class GameBananaAPI:
         return True
 
     def _handle_request_exception(self, e: Exception, mod_id: Optional[int] = None, operation: str = 'operation') -> None:
+        """Handle and log request exceptions.
+
+        Args:
+            e: Exception that occurred.
+            mod_id: Optional mod ID for context.
+            operation: Operation description for logging.
+        """
         status_code = getattr(getattr(e, 'response', None), 'status_code', None)
         ctx = f' for mod {mod_id}' if mod_id else ''
         if status_code == 400:
@@ -60,6 +84,19 @@ class GameBananaAPI:
             logger.warning(f'{operation}{ctx}: {e}')
 
     def _api_request(self, url: str, params: Dict = None, timeout: int = None, max_retries: int = 2, operation: str = 'API request', mod_id: Optional[int] = None) -> Optional[Any]:
+        """Make an API request with retry logic and rate limiting.
+
+        Args:
+            url: API endpoint URL.
+            params: Query parameters.
+            timeout: Request timeout in seconds.
+            max_retries: Maximum retry attempts.
+            operation: Operation description for logging.
+            mod_id: Optional mod ID for context.
+
+        Returns:
+            Optional[Any]: JSON response data or None on error.
+        """
         if timeout is None:
             timeout = NETWORK_TIMEOUT_MEDIUM
         for attempt in range(max_retries + 1):
@@ -80,6 +117,20 @@ class GameBananaAPI:
         return None
 
     def get_game_mods(self, game_id: int, page: int = 1, per_page: int = 20, sort: str = 'default', metadata_cache=None, max_retries: int = 2, app_state=None) -> Tuple[Optional[List[ModInfo]], List[str]]:
+        """Fetch mods for a specific game from GameBanana.
+
+        Args:
+            game_id: GameBanana game ID.
+            page: Page number to fetch.
+            per_page: Number of mods per page.
+            sort: Sort order (default, new, updated).
+            metadata_cache: Optional metadata cache.
+            max_retries: Maximum retry attempts.
+            app_state: Optional application state.
+
+        Returns:
+            Tuple[Optional[List[ModInfo]], List[str]]: List of mods and list of mod IDs needing metadata.
+        """
         valid_sorts = ['default', 'new', 'updated']
         effective_sort = sort if sort in valid_sorts else 'default'
         url = f'{self.base_url}/Game/{game_id}/Subfeed'
@@ -198,11 +249,32 @@ class GameBananaAPI:
         return (None, [])
 
     def _get_item_type_from_url(self, external_url: Optional[str] = None) -> str:
+        """Determine GameBanana item type from URL.
+
+        Args:
+            external_url: Optional external URL.
+
+        Returns:
+            str: 'Wip' or 'Mod'.
+        """
         if external_url and '/wips/' in external_url:
             return 'Wip'
         return 'Mod'
 
     def _get_item_field(self, mod_id: int, field_name: str, extractor_func=None, itemtype: Optional[str] = None, external_url: Optional[str] = None, max_retries: int = 2) -> Optional[Any]:
+        """Get a specific field from a GameBanana item.
+
+        Args:
+            mod_id: GameBanana mod ID.
+            field_name: Name of field to retrieve.
+            extractor_func: Optional function to extract/transform the value.
+            itemtype: Item type (Mod or Wip).
+            external_url: Optional external URL.
+            max_retries: Maximum retry attempts.
+
+        Returns:
+            Optional[Any]: Field value or None.
+        """
         url = f'{self.core_api_base}/Core/Item/Data'
         if not itemtype:
             itemtype = self._get_item_type_from_url(external_url)
@@ -250,6 +322,15 @@ class GameBananaAPI:
         return None
 
     def get_mod_downloads_only(self, mod_id: int, external_url: Optional[str] = None) -> Optional[int]:
+        """Get only the download count for a mod.
+
+        Args:
+            mod_id: GameBanana mod ID.
+            external_url: Optional external URL.
+
+        Returns:
+            Optional[int]: Download count or None.
+        """
 
         def extract_downloads(value):
             if isinstance(value, (int, float)):
@@ -268,6 +349,15 @@ class GameBananaAPI:
         return result
 
     def get_mod_description_only(self, mod_id: int, external_url: Optional[str] = None) -> Optional[str]:
+        """Get only the description for a mod.
+
+        Args:
+            mod_id: GameBanana mod ID.
+            external_url: Optional external URL.
+
+        Returns:
+            Optional[str]: Description text or None.
+        """
 
         def extract_description(value):
             if isinstance(value, str):
@@ -283,6 +373,15 @@ class GameBananaAPI:
         return result
 
     def get_mod_category_only(self, mod_id: int, external_url: Optional[str] = None) -> Optional[str]:
+        """Get only the category for a mod.
+
+        Args:
+            mod_id: GameBanana mod ID.
+            external_url: Optional external URL.
+
+        Returns:
+            Optional[str]: Category name or None.
+        """
 
         def extract_category(value):
             if isinstance(value, str):
@@ -297,6 +396,16 @@ class GameBananaAPI:
         return self._get_item_field(mod_id, 'Category().name', extract_category, external_url=external_url)
 
     def get_mod_text_and_screenshots(self, mod_id: int, external_url: Optional[str] = None, max_retries: int = 2) -> Optional[Dict]:
+        """Get text description and screenshots for a mod.
+
+        Args:
+            mod_id: GameBanana mod ID.
+            external_url: Optional external URL.
+            max_retries: Maximum retry attempts.
+
+        Returns:
+            Optional[Dict]: Dictionary with 'text' and 'screenshots' keys or None.
+        """
         url = f'{self.core_api_base}/Core/Item/Data'
         itemtype = self._get_item_type_from_url(external_url)
         params = {'itemtype': itemtype, 'itemid': mod_id, 'fields': 'text,screenshots'}
@@ -342,6 +451,16 @@ class GameBananaAPI:
         return None
 
     def get_mod_full_details_for_display(self, mod_id: int, external_url: Optional[str] = None, max_retries: int = 2) -> Optional[Dict]:
+        """Get full details for displaying a mod (text, description, screenshots).
+
+        Args:
+            mod_id: GameBanana mod ID.
+            external_url: Optional external URL.
+            max_retries: Maximum retry attempts.
+
+        Returns:
+            Optional[Dict]: Dictionary with mod details or None.
+        """
         url = f'{self.core_api_base}/Core/Item/Data'
         itemtype = self._get_item_type_from_url(external_url)
         params = {'itemtype': itemtype, 'itemid': mod_id, 'fields': 'text,description,screenshots'}
@@ -386,15 +505,44 @@ class GameBananaAPI:
         return None
 
     def _get_mod_full_details(self, mod_id: int, external_url: Optional[str] = None) -> Optional[Dict]:
+        """Internal method to get full mod details.
+
+        Args:
+            mod_id: GameBanana mod ID.
+            external_url: Optional external URL.
+
+        Returns:
+            Optional[Dict]: Dictionary with mod details or None.
+        """
         return self.get_mod_full_details_for_display(mod_id, external_url=external_url)
 
     def get_mod_details(self, mod_id: int, external_url: Optional[str] = None, max_retries: int = 2) -> Optional[Dict]:
+        """Get basic mod details from GameBanana.
+
+        Args:
+            mod_id: GameBanana mod ID.
+            external_url: Optional external URL.
+            max_retries: Maximum retry attempts.
+
+        Returns:
+            Optional[Dict]: Mod details dictionary or None.
+        """
         itemtype = self._get_item_type_from_url(external_url)
         url = f'{self.base_url}/{itemtype}/{mod_id}'
         data = self._api_request(url, max_retries=max_retries, operation='get_mod_details', mod_id=mod_id)
         return data if isinstance(data, dict) else None
 
     def get_mod_preview_media(self, mod_id: int, external_url: Optional[str] = None, max_retries: int = 2) -> Optional[Dict]:
+        """Get preview media for a mod.
+
+        Args:
+            mod_id: GameBanana mod ID.
+            external_url: Optional external URL.
+            max_retries: Maximum retry attempts.
+
+        Returns:
+            Optional[Dict]: Preview media data or None.
+        """
         itemtype = self._get_item_type_from_url(external_url)
         params = {'itemtype': itemtype, 'itemid': mod_id, 'fields': 'Preview().aPreviewMedia()'}
         data = self._api_request(f'{self.core_api_base}/Core/Item/Data', params, max_retries=max_retries, operation='get_mod_preview_media', mod_id=mod_id)
@@ -403,12 +551,32 @@ class GameBananaAPI:
         return data if isinstance(data, dict) else None
 
     def get_mod_profile_page(self, mod_id: int, external_url: Optional[str] = None, max_retries: int = 2) -> Optional[Dict]:
+        """Get mod profile page data.
+
+        Args:
+            mod_id: GameBanana mod ID.
+            external_url: Optional external URL.
+            max_retries: Maximum retry attempts.
+
+        Returns:
+            Optional[Dict]: Profile page data or None.
+        """
         itemtype = self._get_item_type_from_url(external_url)
         url = f'{self.base_url}/{itemtype}/{mod_id}/ProfilePage'
         data = self._api_request(url, max_retries=max_retries, operation='get_mod_profile_page', mod_id=mod_id)
         return data if isinstance(data, dict) else None
 
     def get_mod_files(self, mod_id: int, external_url: Optional[str] = None, max_retries: int = 2) -> Optional[List[Dict]]:
+        """Get list of files available for a mod.
+
+        Args:
+            mod_id: GameBanana mod ID.
+            external_url: Optional external URL.
+            max_retries: Maximum retry attempts.
+
+        Returns:
+            Optional[List[Dict]]: List of file data dictionaries or None.
+        """
         itemtype = self._get_item_type_from_url(external_url)
         params = {'itemtype': itemtype, 'itemid': mod_id, 'fields': 'Files().aFiles()'}
         data = self._api_request(f'{self.core_api_base}/Core/Item/Data', params, max_retries=max_retries, operation='get_mod_files', mod_id=mod_id)
@@ -417,6 +585,15 @@ class GameBananaAPI:
         return None
 
     def _get_mod_file_compatibility(self, mod_id: int, external_url: Optional[str] = None) -> Dict[str, Any]:
+        """Check mod file compatibility with DELTAHUB/DELTAMOD.
+
+        Args:
+            mod_id: GameBanana mod ID.
+            external_url: Optional external URL.
+
+        Returns:
+            Dict[str, Any]: Compatibility information dictionary.
+        """
         cached = self._compatibility_cache.get(mod_id)
         if cached:
             return cached

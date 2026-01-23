@@ -1,3 +1,7 @@
+"""Background image loading worker.
+
+This module provides a worker thread for loading background images asynchronously.
+"""
 from PyQt6.QtCore import QThread, pyqtSignal
 from PyQt6.QtGui import QImage
 

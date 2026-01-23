@@ -1,3 +1,7 @@
+"""GameBanana mod search worker.
+
+This module provides a worker thread for searching GameBanana mods.
+"""
 import logging
 import time
 from PyQt6.QtCore import QThread, pyqtSignal

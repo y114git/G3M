@@ -1,3 +1,7 @@
+"""Wrapper for UndertaleModTool (UTMT) operations.
+
+This module provides a wrapper for executing UTMT operations for data.win patching.
+"""
 import os
 from typing import Optional, Tuple, List, Dict
 from managers.utmtcli_manager import UTMTCLIManager

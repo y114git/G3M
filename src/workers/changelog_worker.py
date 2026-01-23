@@ -1,3 +1,7 @@
+"""Changelog fetching worker.
+
+This module provides a worker for fetching and displaying changelog data.
+"""
 import os
 import time
 from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot

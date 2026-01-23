@@ -1,3 +1,8 @@
+"""Worker thread for fetching mod lists from remote sources.
+
+This module handles fetching mods from the cloud database and GameBanana API,
+including metadata caching and pagination.
+"""
 import json
 import os
 import re
@@ -14,10 +19,18 @@ _GAME_MAPPING = {'deltarune': 'deltarune', 'deltarunedemo': 'deltarune', 'undert
 
 
 class FetchModsThread(QThread):
+    """Background thread for fetching mod lists from remote sources."""
     result = pyqtSignal(bool)
     status = pyqtSignal(str, str)
 
     def __init__(self, main_window_or_context, force_update=False, parent=None):
+        """Initialize the fetch mods thread.
+
+        Args:
+            main_window_or_context: Main window or context object.
+            force_update: Whether to force update cache.
+            parent: Parent QObject (optional).
+        """
         super().__init__(parent)
         if hasattr(main_window_or_context, 'app_state'):
             self.main_window = main_window_or_context
@@ -26,6 +39,7 @@ class FetchModsThread(QThread):
         self.force_update = force_update
 
     def run(self):
+        """Run the fetch operation in background thread."""
         try:
             import requests
             logger.info('FetchModsThread: Starting mod fetch')

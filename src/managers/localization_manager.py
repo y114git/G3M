@@ -1,3 +1,8 @@
+"""Localization and translation management.
+
+This module handles loading, merging, and managing language files for the application,
+including translation lookups and language switching.
+"""
 import json
 import locale
 import logging
@@ -10,8 +15,10 @@ from PyQt6.QtGui import QFontDatabase
 
 
 class LocalizationManager:
+    """Manages application localization and translations."""
 
     def __init__(self):
+        """Initialize the localization manager and sync language files."""
         self.internal_lang_dir = resource_path('assets/lang')
         self.external_lang_dir = get_user_lang_dir()
         os.makedirs(self.external_lang_dir, exist_ok=True)
@@ -22,6 +29,7 @@ class LocalizationManager:
         self._load_available_languages()
 
     def _sync_internal_languages(self):
+        """Sync internal language files to external user directory."""
         if not os.path.exists(self.internal_lang_dir):
             return
         for filename in os.listdir(self.internal_lang_dir):
@@ -48,6 +56,12 @@ class LocalizationManager:
                     logging.error(f"Could not copy internal file '{filename}' to external directory: {e}")
 
     def _merge_lang_files(self, internal_path: str, external_path: str):
+        """Merge internal language file updates into external user file.
+
+        Args:
+            internal_path: Path to internal language file.
+            external_path: Path to external user language file.
+        """
         with open(internal_path, 'r', encoding='utf-8') as f:
             internal_data = json.load(f)
         with open(external_path, 'r', encoding='utf-8') as f:
@@ -89,9 +103,11 @@ class LocalizationManager:
                 json.dump(external_data, f, ensure_ascii=False, indent=2)
 
     def _load_available_languages(self):
+        """Load list of available languages from external directory."""
         self.available_languages = self._scan_lang_dir(self.external_lang_dir)
 
     def rescan_languages(self):
+        """Rescan and reload available languages."""
         self.available_languages.clear()
         self._sync_internal_languages()
         self._load_available_languages()
@@ -299,6 +315,27 @@ localization_manager = LocalizationManager()
 
 
 def _fallback_tr(key: str, **kwargs) -> str:
+    """Fallback translation function using English language file.
+
+    This function provides a fallback translation mechanism when the
+    main localization manager fails to find a translation. It loads
+    the English language file and attempts to find the requested key.
+
+    Args:
+        key: Translation key to look up (supports dot notation).
+        **kwargs: Format arguments for string formatting.
+
+    Search order:
+    1. External English language file
+    2. Internal English language file
+
+    Returns:
+        str: Translated text with formatting applied, or [key] if not found.
+
+    Note:
+        This is a last-resort fallback when the main localization
+        system cannot provide a translation.
+    """
     try:
         en_path = os.path.join(localization_manager.external_lang_dir, 'lang_en.json')
         if not os.path.exists(en_path):

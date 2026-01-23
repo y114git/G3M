@@ -1,3 +1,7 @@
+"""Plugin installation worker.
+
+This module provides a worker thread for installing plugins from files or URLs.
+"""
 import os
 import shutil
 import logging

@@ -1,9 +1,15 @@
+"""Data models for mod information and metadata.
+
+This module defines dataclasses for representing mod data, chapter-specific data,
+and extra files associated with mods.
+"""
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 
 @dataclass
 class ModExtraFile:
+    """Represents an extra file associated with a mod."""
     key: str
     version: str
     url: str
@@ -11,17 +17,24 @@ class ModExtraFile:
 
 @dataclass
 class ModChapterData:
+    """Represents chapter-specific data for a mod."""
     description: Optional[str] = None
     data_file_url: Optional[str] = None
     data_file_version: Optional[str] = None
     extra_files: List[ModExtraFile] = field(default_factory=list)
 
     def is_valid(self) -> bool:
+        """Check if chapter data is valid (has data file or extra files).
+
+        Returns:
+            bool: True if valid.
+        """
         return bool(self.data_file_url or self.extra_files)
 
 
 @dataclass
 class ModInfo:
+    """Complete information about a mod including metadata and files."""
     _CHAPTER_MAP = {0: '0', 1: '1', 2: '2', 3: '3', 4: '4', -1: 'demo'}
     key: str
     name: str
@@ -58,12 +71,25 @@ class ModInfo:
     has_full_metadata: bool = False
 
     def get_chapter_data(self, chapter_id: int) -> Optional[ModChapterData]:
+        """Get chapter-specific data for a given chapter ID.
+
+        Args:
+            chapter_id: Chapter identifier.
+
+        Returns:
+            Optional[ModChapterData]: Chapter data or None.
+        """
         if self.game == 'undertale' and chapter_id == 0:
             return self.files.get('undertale')
         file_key = self._CHAPTER_MAP.get(chapter_id)
         return self.files.get(file_key) if file_key else None
 
     def is_valid_for_demo(self) -> bool:
+        """Check if mod is valid for the Deltarune demo.
+
+        Returns:
+            bool: True if valid for demo.
+        """
         if self.game != 'deltarunedemo':
             return False
         if self.is_local_mod:
@@ -72,18 +98,41 @@ class ModInfo:
 
     @property
     def is_local(self) -> bool:
+        """Check if mod is a local mod (not from online source).
+
+        Returns:
+            bool: True if local mod.
+        """
         return not self.key or (isinstance(self.key, str) and self.key.startswith('local_'))
 
     def is_gamebanana_mod(self) -> bool:
+        """Check if mod is from GameBanana.
+
+        Returns:
+            bool: True if GameBanana mod.
+        """
         return bool(self.key and isinstance(self.key, str) and self.key.startswith('gb_'))
 
     def get_gamebanana_mod_id(self) -> Optional[str]:
+        """Get the GameBanana mod ID if this is a GameBanana mod.
+
+        Returns:
+            Optional[str]: Mod ID or None.
+        """
         if not self.is_gamebanana_mod():
             return None
         return self.key.replace('gb_', '', 1) if self.key else None
 
     @classmethod
     def from_dict(cls, data_dict: Dict[str, Any]) -> 'ModInfo':
+        """Create ModInfo instance from dictionary.
+
+        Args:
+            data_dict: Dictionary containing mod data.
+
+        Returns:
+            ModInfo: New ModInfo instance.
+        """
         from managers.localization_manager import tr
         files_dict = {}
         if 'files' in data_dict and isinstance(data_dict['files'], dict):

@@ -1,3 +1,8 @@
+"""Controller for settings UI management.
+
+This module handles the settings view toggle, settings page navigation,
+and settings-related UI operations.
+"""
 from PyQt6.QtCore import QTimer
 from PyQt6.QtWidgets import QWidget
 from managers.localization_manager import tr
@@ -6,8 +11,19 @@ from models.game_modes import DemoGameMode, UndertaleGameMode, UndertaleYellowGa
 
 
 class SettingsUiController:
+    """Manages settings UI display and interaction."""
 
     def __init__(self, app_state, feedback_manager, settings_manager, slot_manager, customization_manager, app_window):
+        """Initialize the settings UI controller.
+
+        Args:
+            app_state: Application state manager.
+            feedback_manager: User feedback and dialog manager.
+            settings_manager: Application settings manager.
+            slot_manager: Slot and chapter management.
+            customization_manager: UI customization manager.
+            app_window: Main application window reference.
+        """
         self.app_state = app_state
         self.feedback_manager = feedback_manager
         self.settings_manager = settings_manager
@@ -16,6 +32,11 @@ class SettingsUiController:
         self.app = app_window
 
     def toggle_settings_view(self, show_changelog=False):
+        """Toggle between settings view and main view.
+
+        Args:
+            show_changelog: Whether to show changelog instead of settings.
+        """
         if show_changelog:
             self.app_state.is_changelog_view = not self.app_state.is_changelog_view
         else:
@@ -48,17 +69,20 @@ class SettingsUiController:
             QTimer.singleShot(0, apply_theme_and_enable_updates)
 
     def show_report_bug_dialog(self):
+        """Display the bug report dialog."""
         from ui.dialogs.report_bug_dialog import ReportBugDialog
         dialog = ReportBugDialog(self.app, self.app_state)
         dialog.exec()
 
     def update_settings_page_visibility(self):
+        """Update visibility of settings pages and changelog."""
         is_changelog = self.app_state.is_changelog_view
         self.app.settings_pages_container.setVisible(not is_changelog)
         self.app.changelog_widget.setVisible(is_changelog)
         self.app.changelog_button.setText(tr('buttons.close') if is_changelog else tr('buttons.changelog'))
 
     def reset_settings(self):
+        """Reset all settings to default values."""
         self.customization_manager.stop_background_music()
         callbacks = {'migrate_config': lambda: (self.app._load_local_data(), self.settings_manager.migrate_config_if_needed())}
         self.settings_manager.on_reset_settings_click(callbacks)

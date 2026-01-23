@@ -1,3 +1,7 @@
+"""UTMT CLI execution and management.
+
+This module handles executing the UndertaleModTool CLI for patching operations.
+"""
 import os
 import platform
 import subprocess
@@ -7,6 +11,7 @@ from utils.path_utils import resource_path
 
 
 class UTMTCLIManager:
+    """Manages UndertaleModTool CLI execution for patching operations."""
 
     def __init__(self):
         self.platform = self._detect_platform()
@@ -50,9 +55,19 @@ class UTMTCLIManager:
                 return
 
     def is_available(self) -> bool:
+        """Check if UTMTCLI is available for use.
+
+        Returns:
+            bool: True if UTMTCLI is available.
+        """
         return self.utmtcli_path is not None and self.utmtcli_exe is not None
 
     def set_active_processes_list(self, proc_list):
+        """Set the reference to the active processes list.
+
+        Args:
+            proc_list: List to track active processes.
+        """
         self._active_processes_ref = proc_list
 
     def _remove_active_process(self, process) -> None:
@@ -60,6 +75,14 @@ class UTMTCLIManager:
             self._active_processes_ref.remove(process)
 
     def get_script_path(self, script_name: str) -> Optional[str]:
+        """Get the full path to a script file.
+
+        Args:
+            script_name: Name of the script file.
+
+        Returns:
+            Optional[str]: Full path to script or None if not found.
+        """
         scripts_path = resource_path('assets/scripts')
         if not script_name.endswith('.csx'):
             script_name = f'{script_name}.csx'
@@ -70,6 +93,17 @@ class UTMTCLIManager:
         return None
 
     def execute_command(self, args: list, cwd: Optional[str] = None, timeout: Optional[int] = None, env: Optional[dict] = None) -> tuple[int, str, str]:
+        """Execute a UTMTCLI command.
+
+        Args:
+            args: Command arguments.
+            cwd: Working directory for execution.
+            timeout: Timeout in seconds.
+            env: Environment variables.
+
+        Returns:
+            tuple[int, str, str]: (Return code, stdout, stderr).
+        """
         if not self.is_available():
             logging.error('UTMTCLI is not available for command execution')
             raise RuntimeError('UTMTCLI is not available')
@@ -136,6 +170,19 @@ class UTMTCLIManager:
             return (-1, '', str(e))
 
     def execute_with_scripts(self, data_win_path: str, scripts: list[str], output_path: Optional[str] = None, additional_args: Optional[list[str]] = None, cwd: Optional[str] = None, env: Optional[dict] = None) -> tuple[int, str, str]:
+        """Execute UTMTCLI with scripts to patch a data.win file.
+
+        Args:
+            data_win_path: Path to data.win file.
+            scripts: List of script names or paths.
+            output_path: Optional output path.
+            additional_args: Additional command arguments.
+            cwd: Working directory.
+            env: Environment variables.
+
+        Returns:
+            tuple[int, str, str]: (Return code, stdout, stderr).
+        """
         args = ['load', data_win_path]
         for script in scripts:
             script_path = self.get_script_path(script)
@@ -153,6 +200,11 @@ class UTMTCLIManager:
         return self.execute_command(args, cwd=cwd, env=env)
 
     def get_utmtcli_path(self) -> Optional[str]:
+        """Get the UTMTCLI installation path.
+
+        Returns:
+            Optional[str]: Path to UTMTCLI directory or None.
+        """
         return self.utmtcli_path
 
     def get_platform(self) -> str:

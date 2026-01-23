@@ -1,3 +1,7 @@
+"""Bug report submission worker.
+
+This module provides a worker for collecting and submitting bug reports with logs.
+"""
 import os
 import sys
 import shutil

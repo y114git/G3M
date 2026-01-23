@@ -1,3 +1,7 @@
+"""Game process monitoring worker.
+
+This module provides a worker for monitoring game processes and detecting when they exit.
+"""
 import logging
 import time
 from PyQt6.QtCore import QObject, QThread, pyqtSignal, pyqtSlot

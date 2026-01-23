@@ -1,3 +1,7 @@
+"""User presence tracking worker.
+
+This module provides a worker for tracking and reporting user presence.
+"""
 import logging
 from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
 from config.constants import CLOUD_FUNCTIONS_BASE_URL, NETWORK_TIMEOUT_MEDIUM

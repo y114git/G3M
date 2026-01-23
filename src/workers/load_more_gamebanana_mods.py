@@ -1,3 +1,7 @@
+"""Load more GameBanana mods worker.
+
+This module provides a worker thread for loading additional pages of GameBanana mods.
+"""
 import logging
 from PyQt6.QtCore import QThread, pyqtSignal
 from config.constants import GAMEBANANA_GAME_IDS, GAMEBANANA_PER_PAGE, UI_COLORS

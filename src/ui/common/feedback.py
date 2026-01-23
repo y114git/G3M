@@ -1,3 +1,8 @@
+"""User feedback and dialog management.
+
+This module provides utilities for displaying messages, dialogs, and status updates
+to the user through the UI.
+"""
 from typing import TYPE_CHECKING, Optional
 from PyQt6.QtWidgets import QMessageBox
 from PyQt6.QtCore import QObject, pyqtSignal
@@ -7,23 +12,50 @@ if TYPE_CHECKING:
 
 
 class FeedbackManager(QObject):
+    """Manages user feedback through dialogs and status messages."""
     status_updated = pyqtSignal(str, str)
 
     def __init__(self, parent_widget=None):
+        """Initialize the feedback manager.
+
+        Args:
+            parent_widget: Parent widget for dialogs.
+        """
         super().__init__()
         self.parent_widget = parent_widget
         self.app_state: Optional['AppState'] = None
 
     def _should_show_dialog(self):
+        """Check if dialogs should be shown based on game state.
+
+        Returns:
+            bool: True if dialogs can be shown.
+        """
         if self.app_state and hasattr(self.app_state, 'game_is_running'):
             return not self.app_state.game_is_running
         return True
 
     @staticmethod
     def _format_html(text: str) -> str:
+        """Format text for HTML display in dialogs.
+
+        Args:
+            text: Text to format.
+
+        Returns:
+            str: HTML - formatted text.
+        """
         return text.replace('\\n', '<br>').replace('\n', '<br>')
 
     def show_message(self, message_type: str, message_key: str, details: str = '', **kwargs):
+        """Show a message dialog to the user.
+
+        Args:
+            message_type: Type of message(error, warning, info, success).
+            message_key: Localization key for the message.
+            details: Additional details to display.
+            **kwargs: Additional parameters for message formatting.
+        """
         if not self._should_show_dialog():
             return
         type_map = {'error': (QMessageBox.Icon.Critical, tr('errors.error')), 'warning': (QMessageBox.Icon.Warning, 'Warning'), 'info': (QMessageBox.Icon.Information, tr('dialogs.success')), 'success': (QMessageBox.Icon.Information, tr('dialogs.success'))}
@@ -41,6 +73,18 @@ class FeedbackManager(QObject):
         msg_box.exec()
 
     def ask_question(self, title_key: str, message_key: str, details: str = '', default_yes: bool = False, **kwargs) -> bool:
+        """Ask the user a yes / no question.
+
+        Args:
+            title_key: Localization key for dialog title.
+            message_key: Localization key for the message.
+            details: Additional details to display.
+            default_yes: Whether Yes is the default button.
+            **kwargs: Additional parameters for message formatting.
+
+        Returns:
+            bool: True if user clicked Yes.
+        """
         if not self._should_show_dialog():
             return False
         title = tr(title_key, **kwargs)
@@ -64,6 +108,19 @@ class FeedbackManager(QObject):
         return reply == QMessageBox.StandardButton.Yes
 
     def ask_custom_question(self, icon: QMessageBox.Icon, title_key: str, message_key: str, buttons: list[tuple[str, QMessageBox.ButtonRole, str]], default_button_key: str | None = None, **kwargs) -> str | None:
+        """Ask the user a question with custom buttons.
+
+        Args:
+            icon: Dialog icon.
+            title_key: Localization key for dialog title.
+            message_key: Localization key for the message.
+            buttons: List of(text_key, role, return_key) tuples.
+            default_button_key: Key of the default button.
+            **kwargs: Additional parameters for message formatting.
+
+        Returns:
+            str | None: Return key of clicked button or None.
+        """
         if not self._should_show_dialog():
             return None
         title = tr(title_key)
@@ -86,4 +143,10 @@ class FeedbackManager(QObject):
         return button_map.get(clicked_button)
 
     def update_status(self, message: str, color: str = ''):
+        """Update the status bar message.
+
+        Args:
+            message: Status message to display.
+            color: Optional color for the message.
+        """
         self.status_updated.emit(message, color)

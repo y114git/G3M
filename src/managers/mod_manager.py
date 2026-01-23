@@ -1,3 +1,8 @@
+"""Mod management and installation.
+
+This module handles mod scanning, caching, installation, uninstallation,
+and mod list management.
+"""
 import os
 import json
 import logging
@@ -24,6 +29,7 @@ from core.exceptions import ModUninstallationError
 
 @dataclass
 class ModFolderInfo:
+    """Information about a mod folder and its configuration."""
     key: str
     folder_path: str
     folder_name: str
@@ -32,6 +38,7 @@ class ModFolderInfo:
 
 
 class ModManager(QObject):
+    """Manages mod operations including scanning, installation, and caching."""
     progress_updated = pyqtSignal(int)
     status_changed = pyqtSignal(str, str)
     mod_list_updated = pyqtSignal()
@@ -39,6 +46,14 @@ class ModManager(QObject):
     url_prompt_required = pyqtSignal(str, str)
 
     def __init__(self, app_state, feedback_manager, settings_manager=None, parent=None):
+        """Initialize the mod manager.
+
+        Args:
+            app_state: Application state manager.
+            feedback_manager: User feedback manager.
+            settings_manager: Settings manager (optional).
+            parent: Parent QObject (optional).
+        """
         super().__init__(parent)
         self.app_state = app_state
         self.feedback_manager = feedback_manager
@@ -53,6 +68,7 @@ class ModManager(QObject):
         self._installed_mods_cache_valid: bool = False
 
     def cleanup_stale_used_mods(self):
+        """Remove references to mods that no longer exist from used_mods lists."""
         if not self._mods_cache:
             return
         valid_mod_keys = set(self._mods_cache.keys())
@@ -72,6 +88,14 @@ class ModManager(QObject):
             self.app_state.save_config()
 
     def _normalize_mod_cache(self, cache: Dict[str, Any]) -> Dict[str, ModFolderInfo]:
+        """Normalize mod cache entries to ModFolderInfo instances.
+
+        Args:
+            cache: Cache dictionary to normalize.
+
+        Returns:
+            Dict[str, ModFolderInfo]: Normalized cache.
+        """
         normalized_cache: Dict[str, ModFolderInfo] = {}
         for key, value in cache.items():
             if isinstance(value, dict):
@@ -81,6 +105,14 @@ class ModManager(QObject):
         return normalized_cache
 
     def _scan_mods_directory(self, old_cache: Optional[Dict[str, ModFolderInfo]] = None) -> Dict[str, ModFolderInfo]:
+        """Scan mods directory and build cache of mod information.
+
+        Args:
+            old_cache: Previous cache to check for changes.
+
+        Returns:
+            Dict[str, ModFolderInfo]: New mod cache.
+        """
         cache: Dict[str, ModFolderInfo] = {}
         if old_cache is None:
             old_cache = {}
@@ -607,6 +639,28 @@ class ModManager(QObject):
             return False
 
     def load_local_mods(self, _skip_conversion=False):
+        """Load all locally installed mods from disk and cache.
+
+        Scans the mods directory, loads mod configurations from cache,
+        handles legacy mod conversion, and updates the application state
+        with all available local mods.
+
+        Args:
+            _skip_conversion: If True, skip legacy mod conversion process.
+                              Used internally when recursing after conversion.
+
+        This method handles:
+        - Creating mods directory if it doesn't exist
+        - Cleaning up corrupted or incomplete mods
+        - Converting legacy mod formats to new format
+        - Loading mod configurations from cache
+        - Updating app_state.all_mods with local mod data
+        - Handling GameBanana mods specially
+        - Updating mod metadata and installation status
+
+        Returns:
+            bool: True if mods were loaded successfully, False otherwise.
+        """
         if not os.path.exists(self.app_state.mods_dir):
             os.makedirs(self.app_state.mods_dir, exist_ok=True)
             return False

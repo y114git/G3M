@@ -1,3 +1,8 @@
+"""Controller for game launch operations and installation management.
+
+This module handles game launching, installation processes, full game installations,
+and manages the state of action buttons and progress indicators.
+"""
 import os
 import logging
 from typing import Any, cast
@@ -10,6 +15,7 @@ from workers.full_install_worker import FullInstallThread
 
 
 class GameLaunchController(QObject):
+    """Manages game launch operations, installations, and related UI state."""
     window_hide_requested = pyqtSignal()
     window_restore_requested = pyqtSignal()
     full_install_checkbox_state_checked = pyqtSignal()
@@ -21,6 +27,19 @@ class GameLaunchController(QObject):
     pending_updates_changed = pyqtSignal(list)
 
     def __init__(self, app_state, feedback_manager, mod_manager, slot_manager, settings_manager, game_launcher, customization_manager, plugin_manager, app_window):
+        """Initialize the game launch controller with required managers and state.
+
+        Args:
+            app_state: Application state manager.
+            feedback_manager: User feedback and dialog manager.
+            mod_manager: Mod management operations.
+            slot_manager: Slot and chapter management.
+            settings_manager: Application settings manager.
+            game_launcher: Game launching operations.
+            customization_manager: UI customization manager.
+            plugin_manager: Plugin management operations.
+            app_window: Main application window reference.
+        """
         super().__init__()
         self.app_state = app_state
         self.feedback_manager = feedback_manager
@@ -34,12 +53,23 @@ class GameLaunchController(QObject):
         self._full_install_checkbox_is_checked = False
 
     def set_full_install_checkbox_state(self, checked: bool):
+        """Update the full install checkbox state.
+
+        Args:
+            checked: Whether the checkbox is checked.
+        """
         self._full_install_checkbox_is_checked = checked
 
     def _is_full_install_enabled(self) -> bool:
+        """Check if full installation mode is enabled.
+
+        Returns:
+            bool: True if full install is enabled for the current game mode.
+        """
         return isinstance(self.app_state.game_mode, (DemoGameMode, UndertaleYellowGameMode, SugarySpireGameMode)) and self._full_install_checkbox_is_checked
 
     def update_button_state(self):
+        """Update the action button text and enabled state based on current operations."""
         if self.app_state.is_installing and (not self.app_state.operation_cancelled) or self.app_state.is_merging:
             self.app_state.action_button_text = tr('ui.cancel_button')
             self.app_state.action_button_enabled = True
@@ -53,6 +83,7 @@ class GameLaunchController(QObject):
         self.app_state.action_button_enabled = True
 
     def _reset_progress_bar(self):
+        """Reset the progress bar to initial state."""
         try:
             self.app_state.progress_bar_value = 0
             self.app_state.progress_bar_visible = False
@@ -60,6 +91,7 @@ class GameLaunchController(QObject):
             pass
 
     def _cancel_merge_operation(self):
+        """Cancel ongoing merge operation and clean up resources."""
         library_display = getattr(self.app, 'library_display', None)
         is_modpack_creation = library_display and hasattr(library_display, '_modpack_thread') and (library_display._modpack_thread == self.app_state.current_task)
         modpack_dir = getattr(library_display, '_modpack_dir', None) if is_modpack_creation else None
@@ -94,6 +126,11 @@ class GameLaunchController(QObject):
         self.app_state.action_button_text = None
 
     def _cancel_operation(self, operation_type: str):
+        """Cancel the specified operation type.
+
+        Args:
+            operation_type: Type of operation to cancel ('install' or 'merge').
+        """
         if operation_type == 'install':
             logging.info('GameLaunchController: Cancel button clicked during installation')
             self.app_state.cancel_current_operation()
@@ -104,6 +141,15 @@ class GameLaunchController(QObject):
         self.update_button_state()
 
     def on_action_button_click(self):
+        """Handle action button click based on current application state.
+
+        Determines the appropriate action based on current state:
+        - Cancels installation if installation is in progress
+        - Cancels merge operation if merge is in progress
+        - Performs full install if full install mode is enabled
+        - Updates mods if updates are needed
+        - Launches game if no other operations are pending
+        """
         if self.app_state.is_installing:
             self._cancel_operation('install')
             return
@@ -125,9 +171,19 @@ class GameLaunchController(QObject):
         self.launch_game()
 
     def launch_game(self):
+        """Launch the game with all currently selected mods.
+
+        Initiates game launch through the game launcher with plugin hooks
+        and window restoration callback configured.
+        """
         self.game_launcher.launch_game_with_all_mods(execute_plugin_hooks=lambda hook_name: self.plugin_manager.execute_hooks(hook_name, self.app), restore_window_callback=self.app.restore_window_signal.emit)
 
     def hide_window(self):
+        """Hide the application window during game launch.
+
+        Stops background music, saves window geometry, sets game running state,
+        and emits window hide request signal.
+        """
         try:
             self.customization_manager.stop_background_music()
         except Exception:
@@ -137,6 +193,11 @@ class GameLaunchController(QObject):
         self.window_hide_requested.emit()
 
     def restore_window(self):
+        """Restore the application window after game exit.
+
+        Resets game running state, updates UI components, restarts background music,
+        and executes post-game exit plugin hooks.
+        """
         self.app_state.game_is_running = False
         self.window_restore_requested.emit()
         self.app_state.progress_bar_visible = False
@@ -149,6 +210,12 @@ class GameLaunchController(QObject):
         self.plugin_manager.execute_hooks('on_after_game_exit', self.app)
 
     def perform_full_install(self):
+        """Perform full game installation with all required files.
+
+        Shows installation dialog, prompts for installation location,
+        creates target directory, and starts full installation thread.
+        Handles different game modes (Demo, Undertale Yellow, Sugary Spire).
+        """
         if self.app_state.is_installing or (self.app_state.current_task and self.app_state.current_task.isRunning()):
             return
         self.app_state.action_button_enabled = False
@@ -195,6 +262,15 @@ class GameLaunchController(QObject):
         full_install_thread.start()
 
     def on_full_install_finished(self, success, target_dir):
+        """Handle completion of full installation process.
+
+        Args:
+            success: Boolean indicating if installation succeeded.
+            target_dir: Directory where game was installed.
+
+        Updates game path configuration, shows status message,
+        and resets UI state after installation completion.
+        """
         self.app_state.clear_current_task()
         self._reset_progress_bar()
         self.app._set_checkbox_checked_silently(self.app.full_install_checkbox, False)
@@ -214,6 +290,11 @@ class GameLaunchController(QObject):
         self.update_button_state()
 
     def update_mods_in_use(self):
+        """Update all mods currently in use with latest versions.
+
+        Collects mods needing updates, emits pending updates signal,
+        and starts update process for the first mod in the list.
+        """
         mods_to_update = self.slot_manager.collect_mods_needing_update()
         if mods_to_update:
             self.pending_updates_changed.emit(mods_to_update[1:] if len(mods_to_update) > 1 else [])
@@ -223,6 +304,12 @@ class GameLaunchController(QObject):
             self.mod_manager.update_mod(mods_to_update[0])
 
     def refresh_mods_in_use(self):
+        """Refresh mod objects for all mods currently in use.
+
+        Updates the slot manager's used_mods with fresh mod objects
+        from the current all_mods list or creates new mod objects
+        from configuration if needed.
+        """
         if not self.app_state.all_mods:
             return
         for chapter_id, mod_data in list(self.slot_manager.used_mods.items()):

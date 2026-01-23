@@ -1,3 +1,7 @@
+"""Chat request worker thread.
+
+This module provides a background thread for handling chat requests.
+"""
 import logging
 from PyQt6.QtCore import QThread, pyqtSignal
 from managers.chat_manager import ChatManager

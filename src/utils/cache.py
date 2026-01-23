@@ -1,3 +1,7 @@
+"""Image and data caching utilities.
+
+This module provides caching for images and other data to improve performance.
+"""
 import contextlib
 import logging
 import threading
@@ -17,6 +21,11 @@ except Exception as e:
 
 @contextlib.contextmanager
 def cache_lock():
+    """Context manager for thread-safe cache access.
+
+    Yields:
+        None: Lock is held during context.
+    """
     if _IMG_CACHE_LOCK is not None:
         _IMG_CACHE_LOCK.acquire()
     try:
@@ -27,6 +36,12 @@ def cache_lock():
 
 
 def add_to_cache(key: str, image: QImage) -> None:
+    """Add an image to the cache with LRU eviction.
+
+    Args:
+        key: Cache key.
+        image: Image to cache.
+    """
     with cache_lock():
         if key in _IMG_CACHE:
             _IMG_CACHE.move_to_end(key)
@@ -36,6 +51,14 @@ def add_to_cache(key: str, image: QImage) -> None:
 
 
 def get_from_cache(key: str) -> QImage | None:
+    """Retrieve an image from the cache.
+
+    Args:
+        key: Cache key.
+
+    Returns:
+        QImage | None: Cached image or None if not found.
+    """
     with cache_lock():
         if key in _IMG_CACHE:
             _IMG_CACHE.move_to_end(key)

@@ -1,3 +1,7 @@
+"""Theme installation worker.
+
+This module provides a worker thread for installing custom themes.
+"""
 import os
 import shutil
 import logging

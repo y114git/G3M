@@ -1,3 +1,7 @@
+"""Asynchronous image loading.
+
+This module provides utilities for loading images asynchronously with caching.
+"""
 from __future__ import annotations
 from PyQt6.QtCore import QRunnable
 from PyQt6.QtGui import QImage

@@ -1,3 +1,8 @@
+"""Game launch and mod merging management.
+
+This module handles launching games with mods, multi-mod merging,
+game monitoring, and cleanup operations.
+"""
 import os
 import sys
 import platform
@@ -21,6 +26,7 @@ from config.constants import UI_COLORS, SLOT_ID_UNIVERSAL
 
 
 class GameLauncher(QObject):
+    """Manages game launching, mod merging, and game monitoring."""
     status_changed = pyqtSignal(str, str)
     progress_updated = pyqtSignal(int)
     game_launch_started = pyqtSignal()
@@ -28,6 +34,14 @@ class GameLauncher(QObject):
     multi_mod_merge_finished = pyqtSignal(bool)
 
     def __init__(self, app_state, feedback_manager, mod_manager, parent=None):
+        """Initialize the game launcher.
+
+        Args:
+            app_state: Application state manager.
+            feedback_manager: User feedback manager.
+            mod_manager: Mod management operations.
+            parent: Parent QObject (optional).
+        """
         super().__init__(parent)
         self.app_state = app_state
         self.feedback_manager = feedback_manager
@@ -47,6 +61,7 @@ class GameLauncher(QObject):
         self._merge_finished_callback = None
 
     def _stop_monitor_thread(self):
+        """Stop the game monitoring thread."""
         if not self.monitor_thread:
             return
         try:

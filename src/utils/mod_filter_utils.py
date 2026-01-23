@@ -1,3 +1,7 @@
+"""Mod filtering and sorting utilities.
+
+This module provides utilities for filtering and sorting mod lists based on various criteria.
+"""
 from typing import List, Dict, Any, Optional, Callable
 from managers.mod_manager import parse_mod_date
 from managers.blocklist_manager import BlocklistManager
@@ -6,17 +10,45 @@ _TRUE_VALUES = (True, 'true', 'True', 1)
 
 
 def _get_mod_attr(mod: Any, attr: str, default: Any = None) -> Any:
+    """Get an attribute from a mod (dict or object).
+
+    Args:
+        mod: Mod data (dict or object).
+        attr: Attribute name to retrieve.
+        default: Default value if attribute not found.
+
+    Returns:
+        Any: Attribute value or default.
+    """
     if isinstance(mod, dict):
         return mod.get(attr, default)
     return getattr(mod, attr, default)
 
 
 def _get_mod_bool_attr(mod: Any, attr: str, default: bool = False) -> bool:
+    """Get a boolean attribute from a mod.
+
+    Args:
+        mod: Mod data (dict or object).
+        attr: Attribute name to retrieve.
+        default: Default value if attribute not found.
+
+    Returns:
+        bool: Boolean value of the attribute.
+    """
     value = _get_mod_attr(mod, attr, default)
     return value in _TRUE_VALUES if value else False
 
 
 def _date_tuple_to_sortable(date_tuple) -> int:
+    """Convert a date tuple to a sortable integer.
+
+    Args:
+        date_tuple: Tuple of (year, month, day, hour, minute).
+
+    Returns:
+        int: Sortable integer representation of the date.
+    """
     if not date_tuple or date_tuple == (0, 0, 0, 0, 0):
         return 0
     try:
@@ -27,6 +59,18 @@ def _date_tuple_to_sortable(date_tuple) -> int:
 
 
 def filter_and_sort_mods(mods_list: List[Any], filters: Dict[str, Any], sort_config: Optional[Dict[str, Any]] = None, mod_accessor: Optional[Callable] = None, blocklist_manager: Optional[BlocklistManager] = None) -> List[Any]:
+    """Filter and sort a list of mods based on criteria.
+
+    Args:
+        mods_list: List of mods to filter and sort.
+        filters: Dictionary of filter criteria (tags, game, search_text, etc.).
+        sort_config: Optional sorting configuration (sort_type, reverse).
+        mod_accessor: Optional function to extract mod from list items.
+        blocklist_manager: Optional blocklist manager for filtering.
+
+    Returns:
+        List[Any]: Filtered and sorted list of mods.
+    """
     if not mods_list:
         return []
     selected_tags = filters.get('tags', [])
@@ -97,6 +141,23 @@ def filter_and_sort_mods(mods_list: List[Any], filters: Dict[str, Any], sort_con
         reverse = sort_config.get('reverse', False)
 
         def get_sort_key(item):
+            """Generate sort key for mod items based on sort configuration.
+
+            This inner function creates a sort key for mod items based on the
+            configured sort type (downloads, last updated, or created date).
+
+            Args:
+                item: Mod item to generate sort key for.
+
+            Sort types:
+            - 0: Downloads count (numeric)
+            - 1: Last updated date
+            - 2: Created/installed date
+
+            Returns:
+                Sortable value appropriate for the selected sort type.
+                Returns 0 as fallback for invalid data.
+            """
             mod = mod_accessor(item) if mod_accessor else item
             if sort_type == 0:
                 downloads = _get_mod_attr(mod, 'downloads', None)

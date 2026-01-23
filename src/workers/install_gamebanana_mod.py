@@ -1,3 +1,8 @@
+"""Worker thread for installing mods from GameBanana.
+
+This module handles downloading and installing mods from GameBanana,
+including file selection and metadata handling.
+"""
 import os
 import tempfile
 import shutil
@@ -16,9 +21,18 @@ logger = logging.getLogger(__name__)
 
 
 class InstallGameBananaModThread(BaseInstallWorker):
+    """Background thread for installing mods from GameBanana."""
     file_selection_required = pyqtSignal(list, str)
 
     def __init__(self, main_window, mod_info, selected_file=None, parent=None):
+        """Initialize the GameBanana mod installer.
+
+        Args:
+            main_window: Main window reference.
+            mod_info: Mod information object.
+            selected_file: Pre-selected file (optional).
+            parent: Parent QObject (optional).
+        """
         super().__init__(parent)
         self.main_window = main_window
         self.mod_info = mod_info
@@ -28,14 +42,28 @@ class InstallGameBananaModThread(BaseInstallWorker):
         self.selected_file = selected_file
 
     def _build_gb_metadata(self, mod_id: int) -> Dict:
+        """Build GameBanana metadata dictionary.
+
+        Args:
+            mod_id: GameBanana mod ID.
+
+        Returns:
+            Dict: Metadata dictionary.
+        """
         return {'mod_id': mod_id, 'profile_url': self.mod_info.external_url, 'icon_url': self.mod_info.icon_url, 'tags': self.mod_info.tags if hasattr(self.mod_info, 'tags') and self.mod_info.tags else [], 'category': self.mod_info.gamebanana_category if hasattr(self.mod_info, 'gamebanana_category') else None}
 
     def set_selected_file(self, file_index: int):
+        """Set the selected file index for installation.
+
+        Args:
+            file_index: Index of file to install.
+        """
         self._selected_file_index = file_index
         if self._file_selection_event:
             self._file_selection_event.set()
 
     def run(self):
+        """Run the GameBanana mod installation in background thread."""
         archive_path = None
         archive_dir = None
         try:

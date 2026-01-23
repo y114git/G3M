@@ -1,3 +1,8 @@
+"""Game detection and validation utilities.
+
+This module provides utilities for detecting running game processes,
+validating game paths, and checking game installations.
+"""
 import os
 import platform
 import psutil
@@ -9,6 +14,14 @@ if TYPE_CHECKING:
 
 
 def is_game_running(pid: Optional[int] = None):
+    """Check if a game process is currently running.
+
+    Args:
+        pid: Specific process ID to check (optional).
+
+    Returns:
+        bool: True if game is running.
+    """
     if pid is not None:
         try:
             return psutil.pid_exists(pid)
@@ -18,6 +31,16 @@ def is_game_running(pid: Optional[int] = None):
 
 
 def is_valid_mac_game_path(path: str, skip_data_check: bool, game_type: str) -> bool:
+    """Validate a macOS game path.
+
+    Args:
+        path: Path to validate.
+        skip_data_check: Whether to skip data file checks.
+        game_type: Type of game to validate.
+
+    Returns:
+        bool: True if valid.
+    """
     app_path = Path(path)
     if not path.endswith('.app'):
         if game_type == 'undertale' or game_type == 'undertaleyellow':
@@ -47,6 +70,16 @@ def is_valid_mac_game_path(path: str, skip_data_check: bool, game_type: str) -> 
 
 
 def is_valid_game_path(path: str, skip_data_check: bool = False, game_type: str = 'deltarune') -> bool:
+    """Validate a game installation path.
+
+    Args:
+        path: Path to validate.
+        skip_data_check: Whether to skip data file checks.
+        game_type: Type of game to validate.
+
+    Returns:
+        bool: True if valid.
+    """
     if not path or not os.path.isdir(path):
         return False
     if platform.system() == 'Darwin':
@@ -62,6 +95,14 @@ def is_valid_game_path(path: str, skip_data_check: bool = False, game_type: str 
 
 
 def get_chapter_id_for_game_mode(game_mode: 'GameMode') -> int:
+    """Get the chapter/slot ID for a given game mode.
+
+    Args:
+        game_mode: Game mode instance.
+
+    Returns:
+        int: Chapter/slot ID for the game mode.
+    """
     from models.game_modes import DemoGameMode, UndertaleGameMode, UndertaleYellowGameMode, PizzaTowerGameMode, SugarySpireGameMode
     from config.constants import SLOT_ID_DEMO, SLOT_ID_UNDERTALE, SLOT_ID_UNDERTALE_YELLOW, SLOT_ID_PIZZA_TOWER, SLOT_ID_SUGARY_SPIRE, SLOT_ID_UNIVERSAL
     if isinstance(game_mode, DemoGameMode):
@@ -79,6 +120,14 @@ def get_chapter_id_for_game_mode(game_mode: 'GameMode') -> int:
 
 
 def get_game_type_string(game_mode: 'GameMode') -> str:
+    """Get the game type string identifier for a game mode.
+
+    Args:
+        game_mode: Game mode instance.
+
+    Returns:
+        str: Game type string (deltarune, undertale, etc.).
+    """
     from models.game_modes import DemoGameMode, UndertaleGameMode, UndertaleYellowGameMode, PizzaTowerGameMode, SugarySpireGameMode
     mode_map = {DemoGameMode: 'deltarune', UndertaleGameMode: 'undertale', UndertaleYellowGameMode: 'undertaleyellow', PizzaTowerGameMode: 'pizzatower', SugarySpireGameMode: 'sugaryspire'}
     for mode_class, value in mode_map.items():
@@ -88,6 +137,14 @@ def get_game_type_string(game_mode: 'GameMode') -> str:
 
 
 def get_game_name_string(game_mode: 'GameMode') -> str:
+    """Get the display name for a game mode.
+
+    Args:
+        game_mode: Game mode instance.
+
+    Returns:
+        str: Display name of the game.
+    """
     from models.game_modes import DemoGameMode, UndertaleGameMode, UndertaleYellowGameMode, PizzaTowerGameMode, SugarySpireGameMode
     mode_map = {DemoGameMode: 'DELTARUNEdemo', UndertaleGameMode: 'UNDERTALE', UndertaleYellowGameMode: 'UNDERTALE Yellow', PizzaTowerGameMode: 'Pizza Tower', SugarySpireGameMode: 'Sugary Spire'}
     for mode_class, value in mode_map.items():
@@ -97,6 +154,15 @@ def get_game_name_string(game_mode: 'GameMode') -> str:
 
 
 def get_executable_name_for_game(game_type: str, os_type: str = None) -> Optional[str]:
+    """Get the executable name for a specific game and OS.
+
+    Args:
+        game_type: Type of game (deltarune, undertale, etc.).
+        os_type: OS type (windows, linux, mac). Auto-detected if None.
+
+    Returns:
+        Optional[str]: Executable name or None if not found.
+    """
     if os_type is None:
         system = platform.system()
         os_type = 'windows' if system == 'Windows' else 'mac' if system == 'Darwin' else 'linux'

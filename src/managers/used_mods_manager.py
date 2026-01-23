@@ -1,3 +1,7 @@
+"""Used mods tracking and slot management.
+
+This module manages which mods are selected for each chapter/slot and handles mod priorities.
+"""
 import logging
 from PyQt6.QtCore import QObject, pyqtSignal, QTimer
 from typing import Dict, Optional, Any, List, TYPE_CHECKING
@@ -232,6 +236,34 @@ class UsedModsManager(QObject):
         logging.info(f'save_used_mods_state: Saved {len(used_mods_data)} chapter(s) with mods')
 
     def load_used_mods_state(self, mode=None):
+        """Load the used mods state from configuration.
+
+        This method loads the saved state of which mods are used for each
+        chapter from the local configuration. It handles both chapter mode
+        and universal mode, validates chapter IDs, and migrates old data
+        formats to the new list-based format.
+
+        Args:
+            mode: Optional mode override (defaults to current app state mode).
+
+        Operations performed:
+        - Loads used mods data from local config
+        - Validates chapter IDs based on game mode
+        - Migrates old string format to list format
+        - Validates mod keys against available mods
+        - Handles missing mods and cleanup
+        - Emits update signals when complete
+
+        Features:
+        - Chapter mode vs universal mode handling
+        - Data format migration
+        - Missing mod detection
+        - Configuration validation
+        - State cleanup and consistency
+
+        Returns:
+            None, but updates the used_mods state and emits signals.
+        """
         logging.info('Loading used mods state')
         is_chapter_mode = self.app_state.current_mode == 'chapter'
         config_key = self.get_used_mods_config_key(self.app_state.game_mode, is_chapter_mode)

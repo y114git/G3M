@@ -1,3 +1,7 @@
+"""GameBanana metadata loading worker.
+
+This module provides a worker thread for loading mod metadata from GameBanana in batches.
+"""
 import logging
 from typing import List, Optional
 from PyQt6.QtCore import QThread, pyqtSignal

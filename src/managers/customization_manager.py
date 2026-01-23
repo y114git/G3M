@@ -1,3 +1,8 @@
+"""UI customization and audio management.
+
+This module handles custom backgrounds, themes, background music,
+startup sounds, and logo customization.
+"""
 import os
 import time
 import platform
@@ -13,10 +18,17 @@ from managers.localization_manager import tr
 
 
 class CustomizationManager(QObject):
+    """Manages UI customization including themes, audio, and backgrounds."""
     music_started = pyqtSignal()
     music_stopped = pyqtSignal()
 
     def __init__(self, app_state, parent=None):
+        """Initialize the customization manager.
+
+        Args:
+            app_state: Application state manager.
+            parent: Parent QObject (optional).
+        """
         super().__init__(parent)
         self.app_state = app_state
         self.parent_widget = parent
@@ -28,6 +40,11 @@ class CustomizationManager(QObject):
         self._current_music_path = None
 
     def get_background_music_path(self) -> str:
+        """Get path to custom background music file.
+
+        Returns:
+            str: Path to music file or empty string.
+        """
         mp3_path = os.path.join(self.app_state.config_dir, 'custom_background_music.mp3')
         wav_path = os.path.join(self.app_state.config_dir, 'custom_background_music.wav')
         logging.debug(f'[CustomizationManager] Checking music paths: mp3={mp3_path} (exists: {os.path.exists(mp3_path)}), wav={wav_path} (exists: {os.path.exists(wav_path)})')
@@ -38,6 +55,11 @@ class CustomizationManager(QObject):
         return ''
 
     def get_startup_sound_path(self) -> str:
+        """Get path to custom startup sound file.
+
+        Returns:
+            str: Path to sound file or empty string.
+        """
         mp3 = os.path.join(self.app_state.config_dir, 'custom_startup_sound.mp3')
         wav = os.path.join(self.app_state.config_dir, 'custom_startup_sound.wav')
         if os.path.exists(mp3):
@@ -47,12 +69,22 @@ class CustomizationManager(QObject):
         return ''
 
     def get_background_music_button_text(self) -> str:
+        """Get button text for background music (select or remove).
+
+        Returns:
+            str: Localized button text.
+        """
         mp3 = os.path.join(self.app_state.config_dir, 'custom_background_music.mp3')
         wav = os.path.join(self.app_state.config_dir, 'custom_background_music.wav')
         has_file = os.path.exists(mp3) or os.path.exists(wav)
         return tr('buttons.remove_background_music') if has_file else tr('buttons.select_background_music')
 
     def get_startup_sound_button_text(self) -> str:
+        """Get button text for startup sound (select or remove).
+
+        Returns:
+            str: Localized button text.
+        """
         path = self.get_startup_sound_path()
         return tr('buttons.remove_startup_sound') if path else tr('buttons.select_startup_sound')
 

@@ -1,3 +1,8 @@
+"""Path resolution and platform-specific utilities.
+
+This module provides utilities for resolving paths to user data directories,
+game installations, and application resources.
+"""
 import logging
 import os
 import platform
@@ -6,10 +11,20 @@ from config.constants import GAME_EXECUTABLES
 
 
 def get_launcher_dir() -> str:
+    """Get the launcher installation directory.
+
+    Returns:
+        str: Launcher directory path.
+    """
     return os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else os.path.abspath(os.path.dirname(__file__))
 
 
 def get_user_data_root() -> str:
+    """Get the user data root directory.
+
+    Returns:
+        str: User data directory path.
+    """
     system = platform.system()
     if system == 'Windows':
         root = os.getenv('LOCALAPPDATA') or os.getenv('APPDATA')
@@ -21,18 +36,41 @@ def get_user_data_root() -> str:
 
 
 def get_user_mods_dir() -> str:
+    """Get the user mods directory.
+
+    Returns:
+        str: Mods directory path.
+    """
     return os.path.join(get_user_data_root(), 'mods')
 
 
 def get_user_lang_dir() -> str:
+    """Get the user language files directory.
+
+    Returns:
+        str: Language directory path.
+    """
     return os.path.join(get_user_data_root(), 'lang')
 
 
 def get_user_plugins_dir() -> str:
+    """Get the user plugins directory.
+
+    Returns:
+        str: Plugins directory path.
+    """
     return os.path.join(get_user_data_root(), 'plugins')
 
 
 def resource_path(relative_path: str) -> str:
+    """Get the absolute path to a resource file.
+
+    Args:
+        relative_path: Relative path to the resource.
+
+    Returns:
+        str: Absolute path to the resource.
+    """
     if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
         base_path = os.path.join(getattr(sys, '_MEIPASS'), 'src')
     else:
@@ -41,6 +79,11 @@ def resource_path(relative_path: str) -> str:
 
 
 def get_xdelta_path():
+    """Get the path to the xdelta3 executable for the current platform.
+
+    Returns:
+        str | None: Path to xdelta3 executable or None if not found.
+    """
     system = platform.system()
     if system == 'Windows':
         exe_names = ['xdelta3.exe', 'xdelta.exe']
@@ -61,6 +104,16 @@ def get_xdelta_path():
 
 
 def resolve_game_executable(base_dir: str, is_undertale: bool = False, game_type: str = None) -> str | None:
+    """Resolve the game executable path from a base directory.
+
+    Args:
+        base_dir: Base directory to search.
+        is_undertale: Whether to search for Undertale executables.
+        game_type: Specific game type to search for.
+
+    Returns:
+        str | None: Path to game executable or None if not found.
+    """
     try:
         if not base_dir or not os.path.isdir(base_dir):
             return None
@@ -109,6 +162,15 @@ def resolve_game_executable(base_dir: str, is_undertale: bool = False, game_type
 
 
 def find_chapter_resource_dir(base_dir: str, chapter_id: int) -> str | None:
+    """Find the resource directory for a specific chapter.
+
+    Args:
+        base_dir: Base game directory.
+        chapter_id: Chapter ID to find resources for.
+
+    Returns:
+        str | None: Path to chapter resource directory or None if not found.
+    """
     try:
         if not base_dir:
             return None

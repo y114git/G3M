@@ -9,6 +9,28 @@ import webbrowser
 
 
 class LoadModDetailsThread(QThread):
+    """Worker thread for loading mod details asynchronously.
+
+    This thread handles the loading of detailed mod information from
+    GameBanana API and local cache. It supports cancellation and
+    provides progress updates through signals.
+
+    Signals:
+        details_loaded: Emitted when details are loaded with dict result.
+
+    Features:
+    - Asynchronous loading to prevent UI blocking
+    - Cache integration for faster loading
+    - Cancellation support
+    - GameBanana API integration
+    - Error handling and logging
+    - Screenshot URL processing
+
+    Args:
+        mod_data: Mod object containing basic mod information.
+        cache_dir: Directory for metadata cache (optional).
+        parent: Parent QObject (optional).
+    """
     details_loaded = pyqtSignal(dict)
 
     def __init__(self, mod_data, cache_dir=None, parent=None):
@@ -120,6 +142,24 @@ class LoadModDetailsThread(QThread):
 
 
 def open_mod_details_dialog(parent, mod_data):
+    """Open a detailed mod information dialog.
+
+    Creates and displays a comprehensive dialog showing all available
+    information about a mod including metadata, screenshots, description,
+    dependencies, and installation options.
+
+    Args:
+        parent: Parent widget for the dialog.
+        mod_data: Mod object containing all mod information.
+
+    The dialog includes:
+    - Mod icon and basic metadata (author, version, downloads, etc.)
+    - Screenshots carousel if available
+    - Full description with HTML formatting
+    - Dependencies and compatibility information
+    - Installation/update buttons
+    - Links to external resources
+    """
     dialog = QDialog(parent)
     dialog.setWindowTitle(tr('ui.mod_details_title', mod_name=mod_data.name))
     dialog.setMinimumSize(700, 700)
@@ -295,6 +335,29 @@ def open_mod_details_dialog(parent, mod_data):
     dialog_closed = False
 
     def update_ui_with_details(details_dict):
+        """Update the mod details dialog with loaded information.
+
+        This function updates the dialog UI with mod details that were
+        loaded asynchronously, including description text, screenshots,
+        and other metadata. It handles dialog lifecycle management and
+        error cases where the dialog might be closed during loading.
+
+        Args:
+            details_dict: Dictionary containing mod details including:
+                - text: HTML description text
+                - screenshots: List of screenshot URLs
+                - Other mod metadata
+
+        Features:
+        - Safe dialog state checking before updates
+        - HTML and plain text fallback for descriptions
+        - Screenshot carousel updates
+        - Widget deletion detection
+        - Error handling for race conditions
+
+        Returns:
+            None, but updates the dialog UI with loaded details.
+        """
         nonlocal dialog_closed
         try:
             if dialog_closed:
@@ -397,6 +460,22 @@ def open_mod_details_dialog(parent, mod_data):
         load_thread.start()
 
     def cleanup_thread():
+        """Clean up the mod details loading thread.
+
+        This function safely stops and cleans up the thread that loads
+        mod details asynchronously. It handles signal disconnection,
+        thread interruption, and proper cleanup to prevent memory leaks.
+
+        Features:
+        - Signal blocking and disconnection
+        - Thread interruption and termination
+        - Timeout handling for thread stopping
+        - Delayed cleanup for stubborn threads
+        - Error handling for all cleanup operations
+
+        Returns:
+            None, but cleans up the load_thread and sets dialog_closed.
+        """
         nonlocal load_thread, dialog_closed
         dialog_closed = True
         if load_thread is not None:

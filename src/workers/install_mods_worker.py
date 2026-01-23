@@ -183,6 +183,31 @@ class InstallModsThread(QThread):
         return progress_callback
 
     def run(self):
+        """Execute the mod installation process.
+
+        This is the main method that handles downloading and installing
+        multiple mods. It manages the complete installation workflow
+        including download coordination, file extraction, mod validation,
+        and progress reporting.
+
+        The process includes:
+        - Setting up temporary directories
+        - Creating installation tasks for each mod component
+        - Determining which components need updating
+        - Managing download queues with progress tracking
+        - Handling file extraction and validation
+        - Updating mod configurations and metadata
+        - Managing installation state and cleanup
+
+        Supports installation of:
+        - Full mod packages
+        - Individual chapter data
+        - Demo versions
+        - Extra files and components
+
+        Emits progress updates and status messages throughout
+        the installation process.
+        """
         import requests
         try:
             self.temp_root = tempfile.mkdtemp(prefix='deltahub-install-')

@@ -1,3 +1,7 @@
+"""Patching operation logging.
+
+This module provides specialized logging for mod patching and conflict tracking.
+"""
 import os
 import logging
 from logging.handlers import RotatingFileHandler
@@ -8,6 +12,17 @@ _conflicts_logger: Optional[logging.Logger] = None
 
 
 def _init_logger(name: str, log_path: str, level: int, fmt: logging.Formatter) -> logging.Logger:
+    """Initialize a rotating file logger.
+
+    Args:
+        name: Logger name.
+        log_path: Path to log file.
+        level: Logging level.
+        fmt: Log formatter.
+
+    Returns:
+        logging.Logger: Configured logger instance.
+    """
     logger = logging.getLogger(name)
     logger.setLevel(level)
     logger.handlers.clear()
@@ -20,6 +35,11 @@ def _init_logger(name: str, log_path: str, level: int, fmt: logging.Formatter) -
 
 
 def get_patching_logger() -> logging.Logger:
+    """Get or create the patching operations logger.
+
+    Returns:
+        logging.Logger: Patching logger instance.
+    """
     global _patching_logger
     if _patching_logger is not None:
         return _patching_logger
@@ -31,6 +51,11 @@ def get_patching_logger() -> logging.Logger:
 
 
 def get_conflicts_logger() -> logging.Logger:
+    """Get or create the merge conflicts logger.
+
+    Returns:
+        logging.Logger: Conflicts logger instance.
+    """
     global _conflicts_logger
     if _conflicts_logger is not None:
         return _conflicts_logger
@@ -42,6 +67,7 @@ def get_conflicts_logger() -> logging.Logger:
 
 
 def clear_patching_logs():
+    """Clear all patching and conflict log files."""
     user_root = get_user_data_root()
     patching_log_path = os.path.join(user_root, 'patching.log')
     conflicts_log_path = os.path.join(user_root, 'merge_conflicts.log')
@@ -58,6 +84,7 @@ def clear_patching_logs():
 
 
 def clear_conflicts_log():
+    """Clear the merge conflicts log file."""
     user_root = get_user_data_root()
     conflicts_log_path = os.path.join(user_root, 'merge_conflicts.log')
     if os.path.exists(conflicts_log_path):

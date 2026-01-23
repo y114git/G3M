@@ -1,3 +1,8 @@
+"""Mod blocklist management.
+
+This module handles blocking mods by ID, name, or category,
+with persistent storage of blocklist data.
+"""
 import json
 import logging
 from typing import Dict, List, Optional
@@ -8,11 +13,17 @@ logger = logging.getLogger(__name__)
 
 
 class BlocklistManager:
+    """Manages mod blocklist for filtering unwanted mods."""
     PREFIX_TYPE_ID = 'id'
     PREFIX_TYPE_NAME = 'name'
     PREFIX_TYPE_CATEGORY = 'category'
 
     def __init__(self, config_path: Optional[Path] = None):
+        """Initialize the blocklist manager.
+
+        Args:
+            config_path: Path to blocklist config file (optional).
+        """
         if config_path:
             self.config_path = config_path
         else:
@@ -24,9 +35,11 @@ class BlocklistManager:
         self._load_blocklist()
 
     def _set_default_blocklist(self) -> None:
+        """Set default empty blocklist."""
         self._blocklist_data = {'global': []}
 
     def _load_blocklist(self):
+        """Load blocklist from disk."""
         try:
             if self.config_path.exists():
                 with open(self.config_path, 'r', encoding='utf-8') as f:

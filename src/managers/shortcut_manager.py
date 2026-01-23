@@ -1,3 +1,7 @@
+"""Desktop shortcut creation and management.
+
+This module handles creating desktop shortcuts for launching games with specific mod configurations.
+"""
 import os
 import sys
 import json

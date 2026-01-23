@@ -1,3 +1,8 @@
+"""Application settings management.
+
+This module handles reading, writing, and managing application settings,
+including configuration migration and user preferences.
+"""
 import json
 import logging
 import os
@@ -16,6 +21,7 @@ from utils.file_utils import get_file_filter
 
 
 class SettingsManager(QObject):
+    """Manages application settings and configuration."""
     settings_changed = pyqtSignal()
     language_changed = pyqtSignal(str)
     theme_changed = pyqtSignal()
@@ -23,6 +29,14 @@ class SettingsManager(QObject):
     status_changed = pyqtSignal(str, str)
 
     def __init__(self, app_state, feedback_manager, localization_manager: LocalizationManager, parent=None):
+        """Initialize the settings manager.
+
+        Args:
+            app_state: Application state manager.
+            feedback_manager: User feedback manager.
+            localization_manager: Localization manager.
+            parent: Parent QObject (optional).
+        """
         super().__init__(parent)
         self.app_state = app_state
         self.feedback_manager = feedback_manager
@@ -30,6 +44,14 @@ class SettingsManager(QObject):
         self.parent_widget = parent
 
     def read_json(self, path: str):
+        """Read JSON file with error handling.
+
+        Args:
+            path: Path to JSON file.
+
+        Returns:
+            Parsed JSON data or empty dict.
+        """
         from utils.file_utils import load_json
         data = load_json(path, migrate_config=True)
         if not data and os.path.exists(path):
@@ -39,6 +61,12 @@ class SettingsManager(QObject):
         return data
 
     def write_json(self, path: str, data):
+        """Write data to JSON file with error handling.
+
+        Args:
+            path: Path to JSON file.
+            data: Data to write.
+        """
         try:
             from utils.file_utils import save_json
             save_json(path, data, indent=2)
@@ -65,9 +93,11 @@ class SettingsManager(QObject):
                 pass
 
     def write_local_config(self):
+        """Write local configuration to disk."""
         self.write_json(self.app_state.config_path, self.app_state.local_config)
 
     def migrate_config_if_needed(self):
+        """Migrate configuration to current version and set defaults."""
         self.app_state.local_config['cache_format_version'] = LAUNCHER_VERSION
         defaults = {'game_path': '', 'last_selected': {}, 'use_custom_executable': False, 'demo_game_path': '', 'launch_via_steam': False, 'use_portproton': False, 'portproton_path': '', 'direct_launch_slot_id': SLOT_ID_UNIVERSAL, 'demo_mode_enabled': False, 'chapter_mode_enabled': False, 'custom_background_path': '', 'custom_executable_path': '', 'background_disabled': False, 'custom_color_background': '', 'custom_color_button': '', 'custom_color_border': '', 'custom_color_button_hover': '', 'custom_color_text': '', 'custom_color_version_text': '', 'beta_updates_enabled': False, 'clear_logs_on_startup': False, 'fast_merging_enabled': False, 'pizzatower_game_path': '', 'pizzatower_custom_executable_path': ''}
         for key, value in defaults.items():
@@ -79,6 +109,11 @@ class SettingsManager(QObject):
         self.write_local_config()
 
     def on_language_changed(self, language_code: str):
+        """Handle language change event.
+
+        Args:
+            language_code: New language code.
+        """
         current_language = self.app_state.local_config.get('language', 'en')
         if language_code == current_language:
             return

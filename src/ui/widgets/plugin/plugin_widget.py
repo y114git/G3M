@@ -7,6 +7,17 @@ from ui.common.styling import get_theme_color
 
 
 class PluginWidget(QFrame):
+    """Widget for displaying and managing a single plugin.
+
+    Shows plugin information including name, description, version, and status.
+    Provides UI elements for enabling/disabling plugins, viewing details,
+    and deleting plugins. Emits signals for user interactions.
+
+    Signals:
+        toggle_requested: Emitted when user wants to toggle plugin state.
+        delete_requested: Emitted when user wants to delete the plugin.
+        clicked: Emitted when widget is clicked.
+    """
     toggle_requested = pyqtSignal(str)
     delete_requested = pyqtSignal(str)
     clicked = pyqtSignal(str)
@@ -58,6 +69,31 @@ class PluginWidget(QFrame):
         return None
 
     def _init_ui(self):
+        """Initialize the plugin widget UI components.
+
+        This method creates and arranges all UI elements for displaying
+        plugin information including icon, name, version, status indicator,
+        author, and action buttons. It sets up proper styling and
+        layout constraints.
+
+        UI Components created:
+        - Plugin icon display (80x80)
+        - Plugin name label with styling
+        - Version label with status indicator
+        - Author information display
+        - Action buttons (toggle, delete)
+        - Hover and selection styling
+
+        Features:
+        - Dynamic icon loading
+        - Status indicator with color coding
+        - Responsive layout with proper spacing
+        - Theme-aware styling
+        - Click handling and selection state
+
+        Returns:
+            None, but creates and arranges all UI elements.
+        """
         main_layout = QHBoxLayout(self)
         main_layout.setContentsMargins(10, 10, 10, 10)
         main_layout.setSpacing(15)

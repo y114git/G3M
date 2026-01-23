@@ -1,3 +1,10 @@
+"""
+Application-wide constants and configuration values.
+
+This module defines all constant values used throughout the DELTAHUB application,
+including version information, network timeouts, game identifiers, UI themes,
+and various configuration parameters.
+"""
 import platform
 from .loader import get_config_value
 LAUNCHER_VERSION = '2.4.7stable'

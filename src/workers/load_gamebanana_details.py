@@ -1,3 +1,7 @@
+"""GameBanana mod details loading worker.
+
+This module provides a worker thread for loading detailed mod information from GameBanana.
+"""
 import logging
 import json
 from typing import List

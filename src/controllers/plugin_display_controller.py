@@ -1,3 +1,8 @@
+"""Controller for plugin display and management.
+
+This module handles the display of installed plugins, plugin installation,
+and plugin lifecycle operations.
+"""
 import os
 import shutil
 import logging
@@ -12,8 +17,17 @@ from workers.plugin_install_worker import PluginInstallWorker
 
 
 class PluginDisplayController:
+    """Manages plugin display and interaction in the UI."""
 
     def __init__(self, app_state, feedback_manager, plugin_manager, app_window):
+        """Initialize the plugin display controller.
+
+        Args:
+            app_state: Application state manager.
+            feedback_manager: User feedback and dialog manager.
+            plugin_manager: Plugin management operations.
+            app_window: Main application window reference.
+        """
         self.app_state = app_state
         self.feedback_manager = feedback_manager
         self.plugin_manager = plugin_manager
@@ -21,14 +35,33 @@ class PluginDisplayController:
         self._plugin_widgets: Dict[str, PluginWidget] = {}
 
     def _get_plugin_info(self, plugin_name: str):
+        """Get plugin information by name.
+
+        Args:
+            plugin_name: Name of the plugin.
+
+        Returns:
+            Plugin info dictionary or None if not found.
+        """
         return next((p for p in self.plugin_manager.get_all_plugins_info() if p.get('name') == plugin_name), None)
 
     def _remove_plugin_widget(self, widget: PluginWidget) -> None:
+        """Remove a plugin widget from the layout.
+
+        Args:
+            widget: Plugin widget to remove.
+        """
         self.app.plugins_layout.removeWidget(widget)
         widget.setParent(None)
         widget.deleteLater()
 
     def _install_plugin(self, source: str, source_label: str) -> None:
+        """Install a plugin from a source.
+
+        Args:
+            source: Plugin source path or URL.
+            source_label: Label describing the source for error messages.
+        """
         try:
             worker = PluginInstallWorker(source, self.app_state.plugins_dir, self.plugin_manager, self.app)
             self._start_plugin_install(worker)
@@ -37,6 +70,7 @@ class PluginDisplayController:
             self.feedback_manager.show_message('error', 'errors.error', tr('plugins.installation_error', error=str(e)))
 
     def update_display(self):
+        """Update the plugin display with current plugin list."""
         if not hasattr(self.app, 'plugins_layout') or not self.app.plugins_layout:
             return
         all_plugins = self.plugin_manager.get_all_plugins_info()
@@ -81,6 +115,13 @@ class PluginDisplayController:
         logging.info(f'PluginDisplayController: Updated display with {len(all_plugins)} plugins')
 
     def _on_plugin_clicked(self, plugin_name: str):
+        """Handle plugin widget click event.
+
+        Args:
+            plugin_name: Name of the plugin that was clicked.
+
+        Toggles selection state of the clicked plugin and deselects others.
+        """
         for name, widget in self._plugin_widgets.items():
             if name == plugin_name:
                 widget.set_selected(not widget.is_selected)
@@ -88,6 +129,13 @@ class PluginDisplayController:
                 widget.set_selected(False)
 
     def on_plugin_toggle(self, plugin_name: str):
+        """Toggle plugin enabled/disabled state.
+
+        Args:
+            plugin_name: Name of the plugin to toggle.
+
+        Enables or disables the plugin and updates the display.
+        """
         try:
             plugin_info = self._get_plugin_info(plugin_name)
             if not plugin_info:
@@ -112,6 +160,13 @@ class PluginDisplayController:
             self.feedback_manager.show_message('error', 'errors.error', tr('plugins.toggle_error', error=error_msg))
 
     def on_plugin_delete(self, plugin_name: str):
+        """Delete a plugin from the system.
+
+        Args:
+            plugin_name: Name of the plugin to delete.
+
+        Shows confirmation dialog, removes plugin files and metadata.
+        """
         try:
             plugin_path = os.path.join(self.app_state.plugins_dir, plugin_name)
             if not os.path.exists(plugin_path):
@@ -141,6 +196,10 @@ class PluginDisplayController:
             self.feedback_manager.show_message('error', 'errors.error', tr('plugins.delete_error', error=error_msg))
 
     def on_search_plugins(self):
+        """Open the plugins documentation page in web browser.
+
+        Opens the GitHub plugins page for users to find available plugins.
+        """
         try:
             webbrowser.open('https://github.com/y114git/ylauncherdata/blob/main/PLUGINS.md')
         except Exception as e:
@@ -148,6 +207,10 @@ class PluginDisplayController:
             self.feedback_manager.show_message('error', 'errors.error', tr('plugins.open_page_error'))
 
     def on_import_plugin(self):
+        """Show plugin import dialog.
+
+        Opens dialog for importing plugins from file or URL.
+        """
         from ui.dialogs.import_dialog import ImportDialog
         dialog = ImportDialog(self.app, self.feedback_manager, 'plugins')
         if dialog.exec() == QDialog.DialogCode.Accepted:
@@ -157,6 +220,13 @@ class PluginDisplayController:
                 self._install_plugin_from_url(dialog.selected_url)
 
     def _start_plugin_install(self, worker: PluginInstallWorker):
+        """Start plugin installation worker.
+
+        Args:
+            worker: PluginInstallWorker to start.
+
+        Connects signals and starts the plugin installation process.
+        """
         worker.status.connect(lambda msg, color: self.feedback_manager.update_status(msg, color))
         worker.progress.connect(lambda p: setattr(self.app_state, 'progress_bar_value', p))
         worker.finished.connect(self._on_plugin_install_finished)
@@ -168,12 +238,26 @@ class PluginDisplayController:
         worker.start()
 
     def _install_plugin_from_file(self, file_path: str):
+        """Install plugin from local file.
+
+        Args:
+            file_path: Path to the plugin file to install.
+        """
         self._install_plugin(file_path, 'file')
 
     def _install_plugin_from_url(self, url: str):
+        """Install plugin from URL.
+
+        Args:
+            url: URL of the plugin to install.
+        """
         self._install_plugin(url, 'URL')
 
     def _on_unrar_needed(self):
+        """Handle UnRAR requirement from plugin install worker.
+
+        Prompts for UnRAR installation and signals result back to worker.
+        """
         try:
             from utils.archive_utils import prompt_for_unrar_install
             worker = self.app_state.current_task
@@ -190,6 +274,14 @@ class PluginDisplayController:
                 self.app_state.current_task.signal_unrar_installed(False)
 
     def _on_plugin_install_finished(self, success: bool, message: str):
+        """Handle completion of plugin installation.
+
+        Args:
+            success: Whether installation succeeded.
+            message: Status message to display.
+
+        Resets UI state and updates plugin list on success.
+        """
         self.app_state.is_installing = False
         self.app_state.progress_bar_visible = False
         self.app_state.progress_bar_value = 0
@@ -206,6 +298,11 @@ class PluginDisplayController:
             self.feedback_manager.show_message('error', 'errors.error', message)
 
     def retranslate_plugin_widgets(self):
+        """Update text for all plugin widgets for localization.
+
+        Calls retranslate_texts on all plugin widgets to update
+        their text to the current language.
+        """
         for plugin_name, widget in self._plugin_widgets.items():
             if hasattr(widget, 'retranslate_texts'):
                 widget.retranslate_texts()

@@ -1,3 +1,8 @@
+"""Application startup and initialization.
+
+This module handles application startup, single instance checking, logging setup,
+and command-line argument parsing.
+"""
 import argparse
 import logging
 import os
@@ -21,6 +26,7 @@ if platform.system() == 'Windows':
 
 
 class ShortcutLaunchError(Exception):
+    """Exception raised when shortcut launch fails."""
     pass
 
 
@@ -30,6 +36,11 @@ _splash_start_time = None
 
 
 def check_game_processes():
+    """Check if any game processes are currently running.
+
+    Returns:
+        str or None: Name of running game process, or None if none found.
+    """
     game_processes = {'DELTARUNE.exe', 'UNDERTALE.exe', 'DELTARUNEdemo.exe', 'DELTARUNE', 'UNDERTALE', 'DELTARUNEdemo'}
     for proc in psutil.process_iter(['name']):
         try:
@@ -41,6 +52,16 @@ def check_game_processes():
 
 
 def configure_logging(app_name: str, user_data_root: str, clear_logs: bool = False) -> str:
+    """Configure application logging with file and console handlers.
+
+    Args:
+        app_name: Name of the application.
+        user_data_root: Root directory for user data.
+        clear_logs: Whether to clear existing log file.
+
+    Returns:
+        str: Path to the log file.
+    """
     log_path = os.path.join(user_data_root, f'{app_name.lower()}.log')
     root = logging.getLogger()
     if not root.handlers:
@@ -67,6 +88,11 @@ def configure_logging(app_name: str, user_data_root: str, clear_logs: bool = Fal
 
 
 def install_excepthook(show_message_callback=None):
+    """Install global exception hook for uncaught exceptions.
+
+    Args:
+        show_message_callback: Callback to show error messages to user.
+    """
 
     def _hook(exctype, value, tb):
         try:
@@ -89,6 +115,11 @@ def install_excepthook(show_message_callback=None):
 
 
 def register_url_protocol():
+    """Register the deltahub:// URL protocol handler for the operating system.
+
+    Configures the system to open deltahub:// URLs with this application.
+    Supports Windows and Linux platforms.
+    """
     if getattr(sys, 'frozen', False):
         executable_path = f'"{sys.executable}"'
     else:
@@ -118,18 +149,34 @@ def register_url_protocol():
 
 
 class SingleInstanceServer(QLocalServer):
+    """Local server for single instance application management.
+
+    Handles communication between multiple launch attempts to ensure
+    only one instance of the application runs at a time.
+    """
 
     def __init__(self, app_instance):
+        """Initialize the single instance server.
+
+        Args:
+            app_instance: The main application window instance.
+        """
         super().__init__()
         self.app_instance = app_instance
         self.newConnection.connect(self.handle_new_connection)
 
     def handle_new_connection(self):
+        """Handle new connection from another application instance."""
         socket = self.nextPendingConnection()
         if socket:
             socket.readyRead.connect(lambda: self.read_socket_data(socket))
 
     def read_socket_data(self, socket):
+        """Read and process data from the socket connection.
+
+        Args:
+            socket: The socket connection to read from.
+        """
         data = socket.readAll().data()
         if data:
             url = data.decode('utf-8')
@@ -139,6 +186,11 @@ class SingleInstanceServer(QLocalServer):
 
 
 def setup_app():
+    """Set up and configure the Qt application instance.
+
+    Returns:
+        QApplication: Configured Qt application instance.
+    """
     language_code = localization_manager.detect_system_language()
     localization_manager.load_language(language_code)
     os.environ['QT_LOGGING_RULES'] = ';'.join(['qt.qpa.screen.warning=false', 'qt.qpa.window.warning=false', 'qt.multimedia.ffmpeg=false', 'qt.multimedia=false'])
@@ -158,6 +210,10 @@ def setup_app():
 
 
 def cleanup_old_temp_directories():
+    """Clean up temporary directories from previous application sessions.
+
+    Removes temporary directories older than 1 hour that match known patterns.
+    """
     import tempfile
     import glob
     from utils.file_utils import safe_rmtree
@@ -183,6 +239,11 @@ def cleanup_old_temp_directories():
 
 
 def _load_config_file() -> dict:
+    """Load the application configuration file.
+
+    Returns:
+        dict: Configuration dictionary, or empty dict if loading fails.
+    """
     user_root = get_user_data_root()
     settings_path = os.path.join(user_root, 'settings', 'settings.json')
     old_config_path = os.path.join(user_root, 'settings', 'config.json')
@@ -230,6 +291,11 @@ def _load_config_file() -> dict:
 
 
 def run_app():
+    """Main application entry point.
+
+    Initializes logging, handles command-line arguments, manages single instance,
+    shows splash screen, and starts the main application window.
+    """
     try:
         user_root = get_user_data_root()
         config = _load_config_file()
@@ -284,6 +350,29 @@ def run_app():
     show_animated_splash = not splash_disabled_by_user
 
     def create_launcher_and_show_splash(app, initial_url, show_animation: bool):
+        """Create the launcher window and show splash screen.
+
+        This function handles the application startup sequence, including
+        creating and displaying the splash screen (either animated GIF or
+        static PNG), managing the launcher window display, and coordinating
+        the transition from splash to main application window.
+
+        Args:
+            app: The QApplication instance.
+            initial_url: Initial URL to handle on startup.
+            show_animation: Whether to show animated splash screen.
+
+        This function manages:
+        - Splash screen creation and display (PNG or animated GIF)
+        - Audio playback for splash screen
+        - Launcher window initialization and showing
+        - Minimum splash duration enforcement
+        - Proper cleanup and transition handling
+        - Error handling for window display issues
+
+        Returns:
+            None, but sets up the application state and shows windows.
+        """
         global _splash_start_time
         launcher_app = {}
         window_shown_flag = {'shown': False}
@@ -361,6 +450,25 @@ def run_app():
         QTimer.singleShot(SPLASH_WATCHDOG_TIMEOUT, watchdog_callback)
 
         def create_launcher():
+            """Create and initialize the main application launcher window.
+
+            This function creates the AppWindow instance, sets up the
+            single-instance server, and configures the startup sequence.
+            It handles the transition from splash screen to main window
+            and manages various timing and fallback scenarios.
+
+            Features:
+            - AppWindow creation and initialization
+            - Single instance server setup
+            - Post-show initialization
+            - Mods display ready handling
+            - Fallback window showing with timeouts
+            - Splash screen coordination
+            - Error handling and cleanup
+
+            Returns:
+                None, but creates the launcher_app['instance'] with the AppWindow.
+            """
             try:
                 from core.app_window import AppWindow
                 launcher_app['instance'] = AppWindow(parent_for_dialogs=splash, initial_url=initial_url)

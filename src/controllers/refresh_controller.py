@@ -23,6 +23,13 @@ class RefreshController:
         self.metadata_thread = None
         self._current_metadata_batch = []
 
+    def cleanup(self):
+        """Clean up all active threads and resources.
+
+        Stops fetch, details, and metadata threads and clears references.
+        """
+        self._stop_fetch_thread()
+
     def _cleanup_thread_later(self, thread) -> None:
         try:
             if thread.isFinished():
@@ -126,8 +133,20 @@ class RefreshController:
             QTimer.singleShot(3000, self.update_checker.check_for_updates)
 
             class FetchContext:
+                """Context object for mod fetching operations.
+
+                Contains references to required managers and state
+                for mod fetching threads.
+                """
 
                 def __init__(self, app_state, mod_manager, settings_manager):
+                    """Initialize fetch context.
+
+                    Args:
+                        app_state: Application state manager.
+                        mod_manager: Mod management operations.
+                        settings_manager: Settings management.
+                    """
                     self.app_state = app_state
                     self.mod_manager = mod_manager
                     self.settings_manager = settings_manager
@@ -157,6 +176,39 @@ class RefreshController:
             self._stop_worker_thread(metadata_thread, disconnect_signals=[getattr(metadata_thread, 'mod_updated', None), getattr(metadata_thread, 'finished', None), getattr(metadata_thread, 'progress', None)], check_running=True, error_label='metadata thread')
 
     def _on_fetch_finished(self, success: bool, retranslate_callback=None, update_filtered_mods_callback=None, update_installed_mods_callback=None, update_action_button_callback=None, update_plugin_tabs_callback=None, mods_loaded_signal=None, fetch_thread=None):
+        """Handle completion of mod list fetch operation.
+
+        This method processes the results of a mod list fetch, updates local
+        mod cache, restores cached metadata, and triggers UI updates. It handles
+        the complex coordination between fetch completion and UI state updates.
+
+        Args:
+            success: Whether the fetch was successful.
+            retranslate_callback: Callback to retranslate UI elements.
+            update_filtered_mods_callback: Callback to update filtered mods.
+            update_installed_mods_callback: Callback to update installed mods.
+            update_action_button_callback: Callback to update action button.
+            update_plugin_tabs_callback: Callback to update plugin tabs.
+            mods_loaded_signal: Signal to emit when mods are loaded.
+            fetch_thread: The fetch thread that completed.
+
+        Operations performed:
+        - Invalidates and reloads mod cache
+        - Restores GameBanana metadata from cache
+        - Updates UI components through callbacks
+        - Emits status updates and progress signals
+        - Handles fetch thread cleanup
+        - Starts metadata loading for GameBanana mods
+
+        Features:
+        - Concurrent operation protection
+        - Metadata cache restoration
+        - UI update coordination
+        - Error handling and logging
+
+        Returns:
+            None, but updates app state and triggers UI refreshes.
+        """
         if not hasattr(self, '_fetch_finished_in_progress'):
             self._fetch_finished_in_progress = False
         if self._fetch_finished_in_progress:
@@ -399,6 +451,10 @@ class RefreshController:
             if self.app_window and hasattr(self.app_window, 'search_display') and self.app_window.search_display:
 
                 def ensure_sorted():
+                    """Ensure mods are properly sorted after operations.
+
+                    Updates the filtered mods display to maintain proper sorting.
+                    """
                     try:
                         app_window = self.app_window
                         if app_window and hasattr(app_window, 'search_display') and app_window.search_display:

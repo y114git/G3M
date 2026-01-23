@@ -7,6 +7,7 @@ from ui.common.styling import get_theme_color, rgba_from_color
 
 
 class PluginTabBuilder:
+    """Builds the plugin tab UI for displaying installed plugins."""
 
     def __init__(self, app_state, parent=None):
         self.app_state = app_state
@@ -14,6 +15,11 @@ class PluginTabBuilder:
         self.widgets = {}
 
     def build(self) -> QWidget:
+        """Build and return the plugin tab widget.
+
+        Returns:
+            QWidget: Configured plugin tab widget.
+        """
         widget = QWidget()
         widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         layout = QVBoxLayout(widget)
@@ -79,4 +85,9 @@ class PluginTabBuilder:
         return widget
 
     def get_widgets(self) -> Dict[str, Any]:
+        """Get the dictionary of UI widgets.
+
+        Returns:
+            Dict[str, Any]: Dictionary of widget references.
+        """
         return self.widgets

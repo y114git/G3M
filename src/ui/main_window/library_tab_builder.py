@@ -7,6 +7,7 @@ from ui.common.styling import get_theme_color, rgba_from_color, build_tag_checkb
 
 
 class LibraryTabBuilder:
+    """Builds the library tab UI for displaying installed mods."""
 
     def __init__(self, app_state, parent=None):
         self.app_state = app_state
@@ -14,6 +15,11 @@ class LibraryTabBuilder:
         self.widgets = {}
 
     def build(self) -> QWidget:
+        """Build and return the library tab widget.
+
+        Returns:
+            QWidget: Configured library tab widget.
+        """
         widget = QWidget()
         widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         layout = QVBoxLayout(widget)
@@ -233,6 +239,7 @@ class LibraryTabBuilder:
         button.setStyleSheet(f'\n            QPushButton#{button_obj_name} {{\n                background-color: {button_color};\n                border: 2px solid {border_color};\n                color: {text_color};\n                font-weight: bold;\n                font-size: 13px;\n                border-radius: 0px;\n                padding: 5px;\n            }}\n            QPushButton#{button_obj_name}:hover {{\n                background-color: {hover_color};\n            }}\n        ')
 
     def update_priority_button_style(self):
+        """Update the style of priority buttons based on the current theme."""
         border_color = get_theme_color(self.app_state.local_config, 'border', 'white')
         button_color = get_theme_color(self.app_state.local_config, 'button', 'black')
         hover_color = get_theme_color(self.app_state.local_config, 'button_hover', '#333')

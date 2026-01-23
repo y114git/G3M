@@ -1,3 +1,8 @@
+"""Controller for mod installation and operation management.
+
+This module handles mod installation from various sources including GameBanana,
+URL installations, and manages the installation workflow and state.
+"""
 import os
 import shutil
 import logging
@@ -16,8 +21,17 @@ from ui.dialogs.gamebanana_file_picker_dialog import GameBananaFilePickerDialog
 
 
 class ModOperationsController:
+    """Manages mod installation operations and related workflows."""
 
     def __init__(self, app_state, feedback_manager, mod_manager, app_window):
+        """Initialize the mod operations controller.
+
+        Args:
+            app_state: Application state manager.
+            feedback_manager: User feedback and dialog manager.
+            mod_manager: Mod management operations.
+            app_window: Main application window reference.
+        """
         self.app_state = app_state
         self.feedback_manager = feedback_manager
         self.mod_manager = mod_manager
@@ -25,6 +39,16 @@ class ModOperationsController:
         self._last_gamebanana_progress = -1
 
     def _safe_execute(self, func, error_msg_prefix='', default_return=None):
+        """Safely execute a function with error handling.
+
+        Args:
+            func: Function to execute.
+            error_msg_prefix: Prefix for error messages.
+            default_return: Default value to return on error.
+
+        Returns:
+            Function result or default_return on error.
+        """
         try:
             return func()
         except (AttributeError, RuntimeError) as e:
@@ -35,6 +59,11 @@ class ModOperationsController:
             return default_return
 
     def _handle_install_start_error(self, error: Exception) -> None:
+        """Handle errors that occur when starting an installation.
+
+        Args:
+            error: The exception that occurred.
+        """
         self.app_state.is_installing = False
         self.set_install_buttons_enabled(True)
         self.app_state.clear_current_task()
@@ -42,12 +71,33 @@ class ModOperationsController:
         self.feedback_manager.show_message('error', 'errors.gamebanana_install_failed', error=str(error))
 
     def _get_mod_key_value(self, mod) -> Optional[str]:
+        """Get the key value for a mod.
+
+        Args:
+            mod: Mod object.
+
+        Returns:
+            Optional[str]: Mod key or None.
+        """
         return get_mod_key(mod)
 
     def _get_gamebanana_mod_id_str(self, mod) -> Optional[str]:
+        """Get the GameBanana mod ID as a string.
+
+        Args:
+            mod: Mod object.
+
+        Returns:
+            Optional[str]: GameBanana mod ID or None.
+        """
         return get_gamebanana_mod_id(mod)
 
     def handle_url_install(self, url: str):
+        """Handle mod installation from a URL.
+
+        Args:
+            url: URL to install mod from.
+        """
         from utils.game_utils import is_game_running
         if is_game_running():
             return
@@ -59,6 +109,11 @@ class ModOperationsController:
         self.mod_manager.install_from_url(url)
 
     def on_mod_install_requested(self, mod):
+        """Handle mod installation request.
+
+        Args:
+            mod: Mod object to install.
+        """
         if self.app_state.is_installing:
             logging.debug('ModOperationsController: Installation already in progress, ignoring request')
             return
@@ -68,6 +123,14 @@ class ModOperationsController:
         self.install_mod(mod)
 
     def _install_gamebanana_mod(self, mod, force=False, is_update=False, selected_file=None):
+        """Install a mod from GameBanana.
+
+        Args:
+            mod: Mod object to install.
+            force: Force installation even if already installed.
+            is_update: Whether this is an update operation.
+            selected_file: Specific file to install from mod.
+        """
         try:
             self._safe_execute(lambda: setattr(self.app_state, 'operation_cancelled', False), 'Failed to set operation_cancelled')
             if self.app_state.current_task and self.app_state.current_task.isRunning():
@@ -100,6 +163,10 @@ class ModOperationsController:
                 self.app_state.clear_current_task()
 
                 def on_previous_task_finished():
+                    """Handle completion of previous task before starting new installation.
+
+                    Cleans up the previous task and starts the GameBanana install.
+                    """
                     logging.info('ModOperationsController: Previous task finished, starting new installation')
                     try:
                         if previous_task.isFinished():
@@ -129,6 +196,15 @@ class ModOperationsController:
             self._handle_install_start_error(e)
 
     def _start_install_thread(self, install_thread, op_id: int):
+        """Start an installation thread with proper setup and monitoring.
+
+        Args:
+            install_thread: The installation thread to start.
+            op_id: Operation ID for tracking this installation.
+
+        Configures the thread, connects signals, updates UI state,
+        and starts the installation process.
+        """
         try:
             self.app_state.is_installing = True
             self.app_state._scan_blocked = True
@@ -153,6 +229,16 @@ class ModOperationsController:
             self._handle_install_start_error(e)
 
     def _start_gamebanana_install(self, mod, force=False, is_update=False, selected_file=None):
+        """Start GameBanana mod installation process.
+
+        Args:
+            mod: Mod object to install.
+            force: Whether to force installation.
+            is_update: Whether this is an update operation.
+            selected_file: Specific file to install if multiple available.
+
+        Creates and starts GameBanana install thread with proper tracking.
+        """
         try:
             self.app._install_op_id += 1
             op_id = self.app._install_op_id
@@ -169,6 +255,14 @@ class ModOperationsController:
             self._handle_install_start_error(e)
 
     def _show_incompatible_gamebanana_dialog(self, mod=None, mod_url: Optional[str] = None):
+        """Show dialog for incompatible GameBanana mods.
+
+        Args:
+            mod: Mod object that is incompatible.
+            mod_url: Direct URL to open for the mod.
+
+        Shows warning dialog and offers to open mod in web browser.
+        """
         from PyQt6.QtWidgets import QMessageBox
         import webbrowser
         url_to_open = mod_url
@@ -197,6 +291,16 @@ class ModOperationsController:
             webbrowser.open(url_to_open)
 
     def _get_available_gamebanana_files(self, mod) -> List[Dict]:
+        """Get available GameBanana files for a mod.
+
+        Args:
+            mod: Mod object to get files for.
+
+        Returns:
+            List of available file dictionaries for the mod.
+
+        Retrieves cached files or fetches from GameBanana API if needed.
+        """
         files = getattr(mod, 'gamebanana_supported_files', []) or []
         if files:
             self._notify_gamebanana_status_refresh()
@@ -222,6 +326,16 @@ class ModOperationsController:
             return []
 
     def _get_all_gamebanana_files(self, mod) -> List[Dict]:
+        """Get all GameBanana files for a mod.
+
+        Args:
+            mod: Mod object to get files for.
+
+        Returns:
+            List of all file dictionaries for the mod.
+
+        Fetches complete file list from GameBanana API and formats them.
+        """
         mod_id_str = self._get_gamebanana_mod_id_str(mod)
         if not mod_id_str:
             return []
@@ -260,6 +374,15 @@ class ModOperationsController:
             return []
 
     def _get_mod_identifier(self, mod) -> Optional[str]:
+        """Get unique identifier for a mod.
+
+        Args:
+            mod: Mod object to identify.
+
+        Returns:
+            String identifier in format 'gb::<id>' for GameBanana mods
+            or 'key::<key>' for other mods.
+        """
         try:
             key = self._get_mod_key_value(mod)
             if key:
@@ -273,6 +396,10 @@ class ModOperationsController:
         return None
 
     def _notify_gamebanana_status_refresh(self):
+        """Notify that GameBanana status should be refreshed.
+
+        Triggers search plaque update to reflect current GameBanana status.
+        """
         try:
             if hasattr(self.app, 'search_display'):
                 QTimer.singleShot(0, self.app.search_display.update_search_plaques)
@@ -280,6 +407,15 @@ class ModOperationsController:
             pass
 
     def _on_gamebanana_install_finished(self, success: bool, message: str, op_id: int):
+        """Handle completion of GameBanana mod installation.
+
+        Args:
+            success: Whether installation succeeded.
+            message: Status message.
+            op_id: Operation ID for tracking.
+
+        Updates UI state and shows appropriate result message.
+        """
         current_op_id = getattr(self.app, '_install_op_id', 0)
         if current_op_id != op_id:
             logging.debug(f'ModOperationsController: Ignoring finished signal for old operation {op_id}, current is {current_op_id}')
@@ -297,6 +433,15 @@ class ModOperationsController:
         self._on_install_complete(success, message, was_installed_before=False)
 
     def install_mod(self, mod, force=False, is_update=False):
+        """Install a mod with proper validation and setup.
+
+        Args:
+            mod: Mod object to install.
+            force: Whether to force installation.
+            is_update: Whether this is an update operation.
+
+        Handles GameBanana and regular mods with appropriate validation.
+        """
         try:
             if self.app_state.is_installing and (not force):
                 return
@@ -371,6 +516,14 @@ class ModOperationsController:
             raise ModInstallationError(f'Unexpected error during installation: {e}', key=key, mod_name=mod_name, reason='unknown') from e
 
     def on_install_progress_token(self, value: int, op_id: int):
+        """Handle installation progress updates.
+
+        Args:
+            value: Progress percentage (0-100).
+            op_id: Operation ID for tracking.
+
+        Updates progress bar and search plaques for GameBanana installs.
+        """
         current_op_id = getattr(self.app, '_install_op_id', 0)
         if current_op_id == op_id and self.app_state.is_installing:
             self.app.progress_bar.setValue(value)
@@ -381,11 +534,28 @@ class ModOperationsController:
                     self._safe_execute(lambda: self.app.search_display.update_search_plaques(), 'Failed to refresh plaques for progress')
 
     def on_install_status_token(self, message: str, color: str, op_id: int):
+        """Handle installation status updates.
+
+        Args:
+            message: Status message to display.
+            color: Color for the status message.
+            op_id: Operation ID for tracking.
+
+        Updates status display if operation is current.
+        """
         current_op_id = getattr(self.app, '_install_op_id', 0)
         if current_op_id == op_id and self.app_state.is_installing:
             self.app._update_status(message, color)
 
     def _on_install_task_finished(self, success: bool, op_id: int):
+        """Handle completion of installation task.
+
+        Args:
+            success: Whether installation succeeded.
+            op_id: Operation ID for tracking.
+
+        Delegates to install completion handler with proper state tracking.
+        """
         current_op_id = getattr(self.app, '_install_op_id', 0)
         if current_op_id != op_id:
             return
@@ -395,6 +565,15 @@ class ModOperationsController:
         self._on_install_complete(success, '', was_installed_before)
 
     def _on_install_complete(self, success: bool, message: str = '', was_installed_before: bool = False):
+        """Handle completion of installation process.
+
+        Args:
+            success: Whether installation succeeded.
+            message: Status message.
+            was_installed_before: Whether mod was previously installed.
+
+        Resets UI state, cleans up resources, and updates mod list.
+        """
         current_task = self.app_state.current_task
         installed_mod_info = None
         if current_task and hasattr(current_task, 'mod_info'):
