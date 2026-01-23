@@ -1,7 +1,7 @@
 from PyQt6.QtCore import pyqtSignal, QUrl
 from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QTextBrowser
 from PyQt6.QtGui import QDesktopServices
-from managers.localization_manager import tr
+from services.localization_service import tr
 import logging
 
 

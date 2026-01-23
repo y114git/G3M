@@ -18,7 +18,7 @@ def tr(key: str) -> str:
     Returns:
         str: Translated string.
     """
-    from managers.localization_manager import tr as _tr
+    from services.localization_service import tr as _tr
     return _tr(key)
 
 

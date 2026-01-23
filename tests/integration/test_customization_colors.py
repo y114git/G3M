@@ -131,10 +131,10 @@ class TestThemeApplication:
     def test_theme_applies_customization(self, app_state):
         from controllers.theme_controller import ThemeController
         from unittest.mock import Mock
-        feedback_manager = Mock()
-        settings_manager = Mock()
-        settings_manager.is_valid_hex_color = lambda x: bool(x and x.startswith('#'))
-        customization_manager = Mock()
+        feedback_service = Mock()
+        settings_service = Mock()
+        settings_service.is_valid_hex_color = lambda x: bool(x and x.startswith('#'))
+        customization_service = Mock()
         app_window = Mock()
         app_window.background_movie = None
         app_window.background_pixmap = None
@@ -161,14 +161,14 @@ class TestThemeApplication:
         app_window.search_display = None
         app_state.local_config = {'custom_color_text': '#FF0000', 'custom_color_background': '#00FF00', 'custom_color_button': '#0000FF', 'custom_color_border': '#FFFF00'}
         with patch('controllers.theme_controller.THEMES', {'default': {'colors': {'text': '#FFFFFF', 'background': '#000000', 'button': '#333333', 'border': '#444444', 'button_hover': '#555555'}, 'font_family': 'Arial', 'font_size_main': 12, 'font_size_small': 10}}), patch('controllers.theme_controller.BgLoader'):
-            theme_controller = ThemeController(app_state, feedback_manager, settings_manager, customization_manager, app_window)
+            theme_controller = ThemeController(app_state, feedback_service, settings_service, customization_service, app_window)
             from PyQt6.QtWidgets import QApplication as RealQApplication
             with patch.object(RealQApplication, 'instance', return_value=None), patch('controllers.theme_controller.QApplication', RealQApplication):
                 app_window.setStyleSheet = Mock()
                 theme_controller.apply_theme()
                 assert app_window.setStyleSheet.called
-                assert customization_manager.update_mod_plaques_styles.called or True
-                assert customization_manager.update_translucent_backgrounds.called or True
+                assert customization_service.update_mod_plaques_styles.called or True
+                assert customization_service.update_translucent_backgrounds.called or True
                 assert app_window.setStyleSheet.called
-                assert customization_manager.update_mod_plaques_styles.called or True
-                assert customization_manager.update_translucent_backgrounds.called or True
+                assert customization_service.update_mod_plaques_styles.called or True
+                assert customization_service.update_translucent_backgrounds.called or True

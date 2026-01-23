@@ -4,20 +4,20 @@ import tempfile
 import pytest
 from pathlib import Path
 from unittest.mock import Mock
-from managers.backup_manager import BackupManager
-from managers.multi_mod_merger import MultiModMerger
-from utils.patching_logger import get_patching_logger
+from services.backup_service import BackupManager
+from services.mod_merge_service import MultiModMerger
+from services.patching_log_service import get_patching_logger
 
 
 class TestBackupRestoration:
 
-    def test_complete_backup_restoration_flow(self, temp_dir, app_state, feedback_manager):
-        from managers.mod_manager import ModManager
-        mod_manager = ModManager(app_state, feedback_manager)
-        merger = MultiModMerger(app_state, mod_manager)
+    def test_complete_backup_restoration_flow(self, temp_dir, app_state, feedback_service):
+        from services.mod_service import ModManager
+        mod_service = ModManager(app_state, feedback_service)
+        merger = MultiModMerger(app_state, mod_service)
         backup_dir = os.path.join(temp_dir, 'backups')
         os.makedirs(backup_dir, exist_ok=True)
-        merger.backup_manager = BackupManager(backup_dir, patching_logger=merger.patching_logger)
+        merger.backup_service = BackupManager(backup_dir, patching_logger=merger.patching_logger)
         chapter_id = 1
         game_dir = os.path.join(temp_dir, 'game')
         os.makedirs(game_dir, exist_ok=True)
@@ -29,13 +29,13 @@ class TestBackupRestoration:
             f.write(b'ORIGINAL_DATA_WIN')
         with open(bank_file, 'wb') as f:
             f.write(b'ORIGINAL_BANK_FILE')
-        merger.backup_manager.backup_file(chapter_id, data_win)
-        merger.backup_manager.backup_file(chapter_id, bank_file)
+        merger.backup_service.backup_file(chapter_id, data_win)
+        merger.backup_service.backup_file(chapter_id, bank_file)
         with open(data_win, 'wb') as f:
             f.write(b'MODIFIED_DATA_WIN')
         with open(bank_file, 'wb') as f:
             f.write(b'MODIFIED_BANK_FILE')
-        merger.backup_manager.restore_all_backups()
+        merger.backup_service.restore_all_backups()
         with open(data_win, 'rb') as f:
             assert f.read() == b'ORIGINAL_DATA_WIN'
         with open(bank_file, 'rb') as f:
@@ -43,17 +43,17 @@ class TestBackupRestoration:
 
     def test_file_integrity_after_restoration(self, temp_dir):
         backup_dir = os.path.join(temp_dir, 'backups')
-        backup_manager = BackupManager(backup_dir, patching_logger=get_patching_logger())
+        backup_service = BackupManager(backup_dir, patching_logger=get_patching_logger())
         chapter_id = 1
         test_file = os.path.join(temp_dir, 'test.txt')
         original_content = 'A' * 1000
         with open(test_file, 'w') as f:
             f.write(original_content)
         original_size = os.path.getsize(test_file)
-        backup_manager.backup_file(chapter_id, test_file)
+        backup_service.backup_file(chapter_id, test_file)
         with open(test_file, 'w') as f:
             f.write('B' * 500)
-        backup_manager.restore_backups(chapter_id)
+        backup_service.restore_backups(chapter_id)
         assert os.path.exists(test_file)
         restored_size = os.path.getsize(test_file)
         assert restored_size == original_size
@@ -63,7 +63,7 @@ class TestBackupRestoration:
 
     def test_restoration_order(self, temp_dir):
         backup_dir = os.path.join(temp_dir, 'backups')
-        backup_manager = BackupManager(backup_dir, patching_logger=get_patching_logger())
+        backup_service = BackupManager(backup_dir, patching_logger=get_patching_logger())
         chapter_id = 1
         test_dir = os.path.join(temp_dir, 'test')
         os.makedirs(test_dir, exist_ok=True)
@@ -73,11 +73,11 @@ class TestBackupRestoration:
             with open(file_path, 'w') as f:
                 f.write(f'original{i}')
             files.append(file_path)
-            backup_manager.backup_file(chapter_id, file_path)
+            backup_service.backup_file(chapter_id, file_path)
         for file_path in files:
             with open(file_path, 'w') as f:
                 f.write('modified')
-        backup_manager.restore_backups(chapter_id)
+        backup_service.restore_backups(chapter_id)
         for i, file_path in enumerate(files):
             with open(file_path, 'r') as f:
                 content = f.read()
@@ -85,7 +85,7 @@ class TestBackupRestoration:
 
     def test_sound_file_restoration(self, temp_dir):
         backup_dir = os.path.join(temp_dir, 'backups')
-        backup_manager = BackupManager(backup_dir, patching_logger=get_patching_logger())
+        backup_service = BackupManager(backup_dir, patching_logger=get_patching_logger())
         chapter_id = 1
         sound_dir = os.path.join(temp_dir, 'game', 'sound', 'Desktop')
         os.makedirs(sound_dir, exist_ok=True)
@@ -96,11 +96,11 @@ class TestBackupRestoration:
             with open(bank_file, 'wb') as f:
                 f.write(original_content)
             bank_files.append((bank_file, original_content))
-            backup_manager.backup_file(chapter_id, bank_file)
+            backup_service.backup_file(chapter_id, bank_file)
         for bank_file, _ in bank_files:
             with open(bank_file, 'wb') as f:
                 f.write(b'MODIFIED')
-        backup_manager.restore_backups(chapter_id)
+        backup_service.restore_backups(chapter_id)
         for bank_file, original_content in bank_files:
             assert os.path.exists(bank_file)
             with open(bank_file, 'rb') as f:

@@ -2,17 +2,17 @@ from typing import List
 from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QListWidget, QListWidgetItem, QComboBox, QLineEdit, QGroupBox, QSplitter, QWidget, QMessageBox, QSizePolicy
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont
-from managers.localization_manager import tr
-from managers.blocklist_manager import BlocklistManager
+from services.localization_service import tr
+from services.blocklist_service import BlocklistManager
 from ui.common.styling import get_theme_color
 
 
 class BlocklistDialog(QDialog):
     blocklist_changed = pyqtSignal()
 
-    def __init__(self, blocklist_manager: BlocklistManager, current_game: str, available_games: List[str], parent=None):
+    def __init__(self, blocklist_service: BlocklistManager, current_game: str, available_games: List[str], parent=None):
         super().__init__(parent)
-        self.blocklist_manager = blocklist_manager
+        self.blocklist_service = blocklist_service
         self.current_game = current_game
         self.available_games = available_games
         self.setup_ui()
@@ -122,11 +122,11 @@ class BlocklistDialog(QDialog):
         current_game = self.game_combo.currentData()
         if not current_game:
             return
-        entries = self.blocklist_manager.get_blocklist_for_game(current_game)
+        entries = self.blocklist_service.get_blocklist_for_game(current_game)
         for entry in entries:
             prefix_type = entry['prefix_type']
             value = entry['value']
-            prefix_display = self.blocklist_manager.get_prefix_type_display_name(prefix_type)
+            prefix_display = self.blocklist_service.get_prefix_type_display_name(prefix_type)
             item_text = f'[{prefix_display}] {value}'
             item = QListWidgetItem(item_text)
             item.setData(Qt.ItemDataRole.UserRole, entry)
@@ -147,7 +147,7 @@ class BlocklistDialog(QDialog):
             return
         current_game = self.game_combo.currentData()
         if current_game:
-            self.blocklist_manager.add_blocklist_entry(current_game, prefix_type, value)
+            self.blocklist_service.add_blocklist_entry(current_game, prefix_type, value)
             self.value_edit.clear()
             self.update_blocklist_display()
             self.blocklist_changed.emit()
@@ -163,7 +163,7 @@ class BlocklistDialog(QDialog):
         entry = item.data(Qt.ItemDataRole.UserRole)
         reply = QMessageBox.question(self, tr('blocklist.confirm_remove'), tr('blocklist.confirm_remove_text'), QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         if reply == QMessageBox.StandardButton.Yes:
-            success = self.blocklist_manager.remove_blocklist_entry(current_game, entry['prefix_type'], entry['value'])
+            success = self.blocklist_service.remove_blocklist_entry(current_game, entry['prefix_type'], entry['value'])
             if success:
                 self.update_blocklist_display()
                 self.blocklist_changed.emit()

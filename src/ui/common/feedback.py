@@ -6,7 +6,7 @@ to the user through the UI.
 from typing import TYPE_CHECKING, Optional
 from PyQt6.QtWidgets import QMessageBox
 from PyQt6.QtCore import QObject, pyqtSignal
-from managers.localization_manager import tr
+from services.localization_service import tr
 if TYPE_CHECKING:
     from core.app_state import AppState
 

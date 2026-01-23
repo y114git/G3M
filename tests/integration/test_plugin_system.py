@@ -4,26 +4,26 @@ import json
 
 class TestPluginManager:
 
-    def test_load_plugin(self, app_state, feedback_manager, temp_plugins_dir):
-        from managers.plugin_manager import PluginManager
-        _ = PluginManager(app_state, settings_manager=None)
+    def test_load_plugin(self, app_state, feedback_service, temp_plugins_dir):
+        from services.plugin_service import PluginManager
+        _ = PluginManager(app_state, settings_service=None)
         plugin_folder = os.path.join(temp_plugins_dir, 'test_plugin')
         os.makedirs(plugin_folder, exist_ok=True)
         plugin_init = os.path.join(plugin_folder, 'plugin_init.py')
         with open(plugin_init, 'w', encoding='utf-8') as f:
-            f.write("\ndef init_plugin(app_state, feedback_manager):\n    return {'name': 'Test Plugin', 'version': '1.0.0'}\n")
+            f.write("\ndef init_plugin(app_state, feedback_service):\n    return {'name': 'Test Plugin', 'version': '1.0.0'}\n")
         assert os.path.exists(plugin_init)
 
-    def test_enable_disable_plugin(self, app_state, feedback_manager):
-        from managers.plugin_manager import PluginManager
-        plugin_manager = PluginManager(app_state, settings_manager=None)
-        assert plugin_manager is not None
+    def test_enable_disable_plugin(self, app_state, feedback_service):
+        from services.plugin_service import PluginManager
+        plugin_service = PluginManager(app_state, settings_service=None)
+        assert plugin_service is not None
 
 
 class TestPluginAPI:
 
-    def test_plugin_api_initialization(self, app_state, feedback_manager):
-        from managers.plugin_api import PluginAPI
+    def test_plugin_api_initialization(self, app_state, feedback_service):
+        from models.plugin_api import PluginAPI
         from unittest.mock import Mock
         mock_app_window = Mock()
         plugin_api = PluginAPI(app_state, mock_app_window, plugin_id='test_plugin')
@@ -33,7 +33,7 @@ class TestPluginAPI:
 
 class TestPluginInstallation:
 
-    def test_install_plugin_from_archive(self, app_state, feedback_manager, temp_plugins_dir):
+    def test_install_plugin_from_archive(self, app_state, feedback_service, temp_plugins_dir):
         import tempfile
         import zipfile
         with tempfile.NamedTemporaryFile(suffix='.zip', delete=False) as tmp_archive:

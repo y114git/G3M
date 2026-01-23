@@ -1,22 +1,22 @@
 import logging
 from PyQt6.QtCore import QTimer
-from managers.localization_manager import localization_manager, tr
-from workers.fetch_mods import FetchModsThread
+from services.localization_service import localization_service, tr
+from workers.fetch_mods_worker import FetchModsThread
 from config.constants import UI_COLORS
-from utils.game_utils import is_game_running
-from utils.ui_utils import safe_stop_thread
+from services.game_detection_service import is_game_running
+from ui.utils.ui_utils import safe_stop_thread
 
 
 class RefreshController:
 
-    def __init__(self, app_state, feedback_manager, mod_manager, slot_manager, game_launch_controller, update_checker, settings_manager=None, app_window=None):
+    def __init__(self, app_state, feedback_service, mod_service, slot_service, game_launch_controller, update_checker, settings_service=None, app_window=None):
         self.app_state = app_state
-        self.feedback_manager = feedback_manager
-        self.mod_manager = mod_manager
-        self.slot_manager = slot_manager
+        self.feedback_service = feedback_service
+        self.mod_service = mod_service
+        self.slot_service = slot_service
         self.game_launch_controller = game_launch_controller
         self.update_checker = update_checker
-        self.settings_manager = settings_manager
+        self.settings_service = settings_service
         self.app_window = app_window
         self.fetch_thread = None
         self.details_thread = None
@@ -81,7 +81,7 @@ class RefreshController:
                 return
             if hasattr(self.app_state, 'cache_dir') and self.app_state.cache_dir:
                 try:
-                    from utils.gamebanana_cache import GameBananaMetadataCache
+                    from adapters.gamebanana_cache import GameBananaMetadataCache
                     metadata_cache = GameBananaMetadataCache(self.app_state.cache_dir)
                     if hasattr(self.app_state, 'all_mods') and self.app_state.all_mods:
                         for mod in self.app_state.all_mods:
@@ -100,12 +100,12 @@ class RefreshController:
                 except Exception as e:
                     logging.warning(f'RefreshController: Error saving metadata to cache: {e}', exc_info=True)
             if language_combo is not None:
-                current_lang_code = localization_manager.get_current_language()
-                localization_manager.rescan_languages()
+                current_lang_code = localization_service.get_current_language()
+                localization_service.rescan_languages()
                 language_combo.blockSignals(True)
                 try:
                     language_combo.clear()
-                    for code, name in localization_manager.get_available_languages().items():
+                    for code, name in localization_service.get_available_languages().items():
                         language_combo.addItem(name, code)
                     index = language_combo.findData(current_lang_code)
                     if index != -1:
@@ -115,7 +115,7 @@ class RefreshController:
             if not is_initial and retranslate_callback:
                 retranslate_callback()
             if is_game_running():
-                self.feedback_manager.update_status(tr('status.cant_update_while_running'), UI_COLORS['status_warning'])
+                self.feedback_service.update_status(tr('status.cant_update_while_running'), UI_COLORS['status_warning'])
                 return
             self._stop_fetch_thread()
             try:
@@ -139,27 +139,27 @@ class RefreshController:
                 for mod fetching threads.
                 """
 
-                def __init__(self, app_state, mod_manager, settings_manager):
+                def __init__(self, app_state, mod_service, settings_service):
                     """Initialize fetch context.
 
                     Args:
                         app_state: Application state manager.
-                        mod_manager: Mod management operations.
-                        settings_manager: Settings management.
+                        mod_service: Mod management operations.
+                        settings_service: Settings management.
                     """
                     self.app_state = app_state
-                    self.mod_manager = mod_manager
-                    self.settings_manager = settings_manager
-            fetch_context = FetchContext(self.app_state, self.mod_manager, self.settings_manager)
+                    self.mod_service = mod_service
+                    self.settings_service = settings_service
+            fetch_context = FetchContext(self.app_state, self.mod_service, self.settings_service)
             self.fetch_thread = FetchModsThread(fetch_context, force_update=True, parent=None)
-            self.fetch_thread.status.connect(self.feedback_manager.update_status)
+            self.fetch_thread.status.connect(self.feedback_service.update_status)
             finished_kwargs = on_fetch_finished_kwargs or {}
             self.fetch_thread.result.connect(lambda success: self._on_fetch_finished(success, retranslate_callback=retranslate_callback, **finished_kwargs))
             self.fetch_thread.start()
         except Exception as e:
             error_msg = f'Failed to refresh mods list: {e}'
             logging.error(f'RefreshController.refresh_mods_list: {error_msg}', exc_info=True)
-            self.feedback_manager.update_status(f"{tr('errors.update_list_failed')}: {str(e)}", UI_COLORS['status_error'])
+            self.feedback_service.update_status(f"{tr('errors.update_list_failed')}: {str(e)}", UI_COLORS['status_error'])
 
     def _stop_fetch_thread(self):
         if self.fetch_thread:
@@ -216,8 +216,8 @@ class RefreshController:
             return
         self._fetch_finished_in_progress = True
         try:
-            self.mod_manager.invalidate_mods_cache()
-            QTimer.singleShot(0, self.mod_manager.load_local_mods)
+            self.mod_service.invalidate_mods_cache()
+            QTimer.singleShot(0, self.mod_service.load_local_mods)
             if hasattr(self.app_state, 'all_mods') and self.app_state.all_mods:
                 installed_gb_mods = []
                 for mod in self.app_state.all_mods:
@@ -230,7 +230,7 @@ class RefreshController:
                     logging.debug(f'RefreshController: GameBanana mod in all_mods: {mod_info}')
             if hasattr(self.app_state, 'cache_dir') and self.app_state.cache_dir:
                 try:
-                    from utils.gamebanana_cache import GameBananaMetadataCache
+                    from adapters.gamebanana_cache import GameBananaMetadataCache
                     metadata_cache = GameBananaMetadataCache(self.app_state.cache_dir)
                     restored_count = 0
                     downloads_restored = False
@@ -291,15 +291,15 @@ class RefreshController:
             if update_action_button_callback:
                 update_action_button_callback()
             if success:
-                self.feedback_manager.update_status(tr('status.mod_list_updated'), UI_COLORS['status_success'])
+                self.feedback_service.update_status(tr('status.mod_list_updated'), UI_COLORS['status_success'])
             else:
                 fallback_msg = tr('ui.network_fallback_message') if self.app_state.all_mods else tr('ui.network_update_failed')
-                self.feedback_manager.update_status(fallback_msg, UI_COLORS['status_error'])
-            self.slot_manager.load_used_mods_state()
+                self.feedback_service.update_status(fallback_msg, UI_COLORS['status_error'])
+            self.slot_service.load_used_mods_state()
         except Exception as e:
             error_msg = f'Error processing mod list: {e}'
             logging.error(f'RefreshController._on_fetch_finished: {error_msg}', exc_info=True)
-            self.feedback_manager.update_status(tr('errors.mod_list_processing_error', error=str(e)), UI_COLORS['status_error'])
+            self.feedback_service.update_status(tr('errors.mod_list_processing_error', error=str(e)), UI_COLORS['status_error'])
         finally:
             self._fetch_finished_in_progress = False
             fetch_thread_to_cleanup = fetch_thread if fetch_thread else self.fetch_thread
@@ -330,7 +330,7 @@ class RefreshController:
         try:
             if not hasattr(self.app_state, 'cache_dir') or not self.app_state.cache_dir:
                 return
-            from utils.gamebanana_cache import GameBananaMetadataCache
+            from adapters.gamebanana_cache import GameBananaMetadataCache
             metadata_cache = GameBananaMetadataCache(self.app_state.cache_dir)
             stale_count = metadata_cache.clear_stale()
             if stale_count > 0:
@@ -386,7 +386,7 @@ class RefreshController:
                 except Exception as e:
                     logging.warning(f'RefreshController: Error cleaning up old metadata thread: {e}')
             try:
-                from utils.gamebanana_cache import GameBananaMetadataCache
+                from adapters.gamebanana_cache import GameBananaMetadataCache
                 if not hasattr(self.app_state, 'cache_dir') or not self.app_state.cache_dir:
                     logging.warning('RefreshController: cache_dir not available, cannot load metadata')
                     return
@@ -401,7 +401,7 @@ class RefreshController:
                 self._current_metadata_batch = list(mod_ids_to_load)
                 self.app_state.gamebanana_mods_needing_metadata = remaining_mod_ids
                 logging.info(f'RefreshController: Starting metadata loading for batch of {len(mod_ids_to_load)} mods ({len(remaining_mod_ids)} remaining in queue, {len(mod_ids_to_load)} will be processed)')
-                from workers.load_gamebanana_metadata import LoadGameBananaMetadataThread
+                from workers.gamebanana.load_metadata_worker import LoadGameBananaMetadataThread
                 self.metadata_thread = LoadGameBananaMetadataThread(mod_ids_to_load, metadata_cache, parent=self.app_window, app_state=self.app_state)
                 if self.app_window and hasattr(self.app_window, 'search_display'):
                     self.metadata_thread.mod_updated.connect(self.app_window.search_display.on_metadata_updated)

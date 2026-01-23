@@ -51,15 +51,15 @@ class TestModStructure:
 
 class TestModManagerIntegration:
 
-    def test_mod_scanning(self, app_state, feedback_manager, mods_dir):
-        from managers.mod_manager import ModManager
+    def test_mod_scanning(self, app_state, feedback_service, mods_dir):
+        from services.mod_service import ModManager
         app_state.mods_dir = mods_dir
-        mod_manager = ModManager(app_state, feedback_manager)
-        cache = mod_manager._get_mods_cache(use_async=False)
+        mod_service = ModManager(app_state, feedback_service)
+        cache = mod_service._get_mods_cache(use_async=False)
         assert isinstance(cache, dict)
 
-    def test_mod_scanning_all_types(self, app_state, feedback_manager, all_test_mods_dirs):
-        from managers.mod_manager import ModManager
+    def test_mod_scanning_all_types(self, app_state, feedback_service, all_test_mods_dirs):
+        from services.mod_service import ModManager
         import tempfile
         import shutil
         temp_mods_dir = tempfile.mkdtemp()
@@ -71,14 +71,14 @@ class TestModManagerIntegration:
                         target_path = os.path.join(temp_mods_dir, os.path.basename(mod_path))
                         shutil.copytree(mod_path, target_path, dirs_exist_ok=True)
             app_state.mods_dir = temp_mods_dir
-            mod_manager = ModManager(app_state, feedback_manager)
-            cache = mod_manager._get_mods_cache(use_async=False)
+            mod_service = ModManager(app_state, feedback_service)
+            cache = mod_service._get_mods_cache(use_async=False)
             assert isinstance(cache, dict)
         finally:
             shutil.rmtree(temp_mods_dir, ignore_errors=True)
 
-    def test_mod_loading(self, app_state, feedback_manager, full_mod_structure_dir):
-        from managers.mod_manager import ModManager
+    def test_mod_loading(self, app_state, feedback_service, full_mod_structure_dir):
+        from services.mod_service import ModManager
         import shutil
         import tempfile
         temp_mods_dir = tempfile.mkdtemp()
@@ -88,8 +88,8 @@ class TestModManagerIntegration:
             if os.path.exists(full_mod_structure_dir):
                 shutil.copytree(full_mod_structure_dir, target_mod_dir)
                 app_state.mods_dir = temp_mods_dir
-                mod_manager = ModManager(app_state, feedback_manager)
-                cache = mod_manager._get_mods_cache(use_async=False)
+                mod_service = ModManager(app_state, feedback_service)
+                cache = mod_service._get_mods_cache(use_async=False)
                 config_path = os.path.join(target_mod_dir, 'mod_config.json')
                 if os.path.exists(config_path):
                     with open(config_path, 'r', encoding='utf-8') as f:
@@ -103,9 +103,9 @@ class TestModManagerIntegration:
 
 class TestModInstallation:
 
-    def test_mod_installation_structure(self, app_state, feedback_manager, full_mod_structure_dir):
-        from managers.mod_manager import ModManager
-        _ = ModManager(app_state, feedback_manager)
+    def test_mod_installation_structure(self, app_state, feedback_service, full_mod_structure_dir):
+        from services.mod_service import ModManager
+        _ = ModManager(app_state, feedback_service)
         mod_path = Path(full_mod_structure_dir)
         config_path = mod_path / 'mod_config.json'
         if config_path.exists():
@@ -157,55 +157,55 @@ class TestModProcessing:
 
 class TestModMergingWithStructure:
 
-    def test_multiple_mods_merging(self, app_state, feedback_manager, mods_dir):
-        from managers.multi_mod_merger import MultiModMerger
+    def test_multiple_mods_merging(self, app_state, feedback_service, mods_dir):
+        from services.mod_merge_service import MultiModMerger
         from unittest.mock import Mock
-        mod_manager = Mock()
-        merger = MultiModMerger(app_state, mod_manager)
+        mod_service = Mock()
+        merger = MultiModMerger(app_state, mod_service)
         assert merger is not None
         assert hasattr(merger, 'utmt_wrapper')
         assert hasattr(merger, 'xdelta_path')
 
-    def test_mod_priority_with_structure(self, app_state, feedback_manager):
-        from managers.multi_mod_merger import MultiModMerger
+    def test_mod_priority_with_structure(self, app_state, feedback_service):
+        from services.mod_merge_service import MultiModMerger
         from unittest.mock import Mock
-        mod_manager = Mock()
-        merger = MultiModMerger(app_state, mod_manager)
+        mod_service = Mock()
+        merger = MultiModMerger(app_state, mod_service)
         assert merger is not None
 
 
 class TestModMetadata:
 
-    def test_metadata_read_write(self, app_state, feedback_manager):
-        from managers.mod_manager import ModManager
+    def test_metadata_read_write(self, app_state, feedback_service):
+        from services.mod_service import ModManager
         import time
-        mod_manager = ModManager(app_state, feedback_manager)
-        metadata = mod_manager._read_metadata()
+        mod_service = ModManager(app_state, feedback_service)
+        metadata = mod_service._read_metadata()
         assert isinstance(metadata, dict), "_read_metadata should return a dict, even if file doesn't exist"
         if not os.path.exists(app_state.mods_metadata_path):
             assert metadata == {}, 'Empty metadata should return empty dict'
         test_metadata = {'test_mod_001': {'installed_date': time.strftime('%Y-%m-%d %H:%M:%S'), 'is_available_on_server': True}, 'test_mod_002': {'installed_date': '2024-01-01 00:00:00', 'is_available_on_server': False}}
-        mod_manager._write_metadata(test_metadata)
+        mod_service._write_metadata(test_metadata)
         assert os.path.exists(app_state.mods_metadata_path), 'Metadata file should be created after write'
-        written_metadata = mod_manager._read_metadata()
+        written_metadata = mod_service._read_metadata()
         assert isinstance(written_metadata, dict), 'Should read metadata as dict'
         assert 'test_mod_001' in written_metadata, 'Written mod should be in read metadata'
         assert 'test_mod_002' in written_metadata, 'All written mods should be in read metadata'
         assert written_metadata['test_mod_001']['is_available_on_server'], 'Metadata values should be preserved'
         assert written_metadata['test_mod_002']['is_available_on_server'] is False, 'All metadata values should be preserved'
         assert written_metadata['test_mod_002']['installed_date'] == '2024-01-01 00:00:00', 'Dates should be preserved'
-        mod_manager._write_metadata({})
+        mod_service._write_metadata({})
 
-    def test_metadata_file_creation(self, app_state, feedback_manager):
-        from managers.mod_manager import ModManager
+    def test_metadata_file_creation(self, app_state, feedback_service):
+        from services.mod_service import ModManager
         import os
         import json
-        mod_manager = ModManager(app_state, feedback_manager)
+        mod_service = ModManager(app_state, feedback_service)
         if os.path.exists(app_state.mods_metadata_path):
             os.remove(app_state.mods_metadata_path)
         assert not os.path.exists(app_state.mods_metadata_path), 'Metadata file should not exist initially'
         test_metadata = {'test_mod': {'installed_date': '2024-01-01 00:00:00'}}
-        mod_manager._write_metadata(test_metadata)
+        mod_service._write_metadata(test_metadata)
         assert os.path.exists(app_state.mods_metadata_path), 'Metadata file should be created after write'
         with open(app_state.mods_metadata_path, 'r', encoding='utf-8') as f:
             file_content = json.load(f)
@@ -215,8 +215,8 @@ class TestModMetadata:
         if os.path.exists(app_state.mods_metadata_path):
             os.remove(app_state.mods_metadata_path)
 
-    def test_metadata_with_installed_mods(self, app_state, feedback_manager, full_mod_structure_dir):
-        from managers.mod_manager import ModManager
+    def test_metadata_with_installed_mods(self, app_state, feedback_service, full_mod_structure_dir):
+        from services.mod_service import ModManager
         import shutil
         import tempfile
         import json
@@ -227,9 +227,9 @@ class TestModMetadata:
             if os.path.exists(full_mod_structure_dir):
                 shutil.copytree(full_mod_structure_dir, target_mod_dir)
                 app_state.mods_dir = temp_mods_dir
-                mod_manager = ModManager(app_state, feedback_manager)
-                _ = mod_manager._get_mods_cache(use_async=False)
-                installed_mods = mod_manager.get_installed_mods_list()
+                mod_service = ModManager(app_state, feedback_service)
+                _ = mod_service._get_mods_cache(use_async=False)
+                installed_mods = mod_service.get_installed_mods_list()
                 assert isinstance(installed_mods, list)
                 config_path = os.path.join(target_mod_dir, 'mod_config.json')
                 if os.path.exists(config_path):
@@ -237,7 +237,7 @@ class TestModMetadata:
                         config = json.load(f)
                     key = config.get('key') or config.get('mod_key')
                     if key:
-                        metadata = mod_manager._read_metadata()
+                        metadata = mod_service._read_metadata()
                         assert isinstance(metadata, dict)
         finally:
             shutil.rmtree(temp_mods_dir, ignore_errors=True)

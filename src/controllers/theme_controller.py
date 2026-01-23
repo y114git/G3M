@@ -4,31 +4,31 @@ This module handles theme application, background management, color customizatio
 and dynamic UI element styling throughout the application.
 """
 from PyQt6.QtWidgets import QApplication, QMessageBox
-from managers.localization_manager import tr
+from services.localization_service import tr
 from config.constants import THEMES, UI_COLORS
 from utils.path_utils import resource_path
-from workers.bg_loader import BgLoader
+from workers.background_loader_worker import BgLoader
 from ui.styles import build_stylesheet
-from utils.ui_utils import DebounceTimer
+from ui.utils.ui_utils import DebounceTimer
 
 
 class ThemeController:
     """Manages theme application and UI customization operations."""
 
-    def __init__(self, app_state, feedback_manager, settings_manager, customization_manager, app_window):
+    def __init__(self, app_state, feedback_service, settings_service, customization_service, app_window):
         """Initialize the theme controller.
 
         Args:
             app_state: Application state manager.
-            feedback_manager: User feedback and dialog manager.
-            settings_manager: Application settings manager.
-            customization_manager: UI customization manager.
+            feedback_service: User feedback and dialog manager.
+            settings_service: Application settings manager.
+            customization_service: UI customization manager.
             app_window: Main application window reference.
         """
         self.app_state = app_state
-        self.feedback_manager = feedback_manager
-        self.settings_manager = settings_manager
-        self.customization_manager = customization_manager
+        self.feedback_service = feedback_service
+        self.settings_service = settings_service
+        self.customization_service = customization_service
         self.app = app_window
         self._debounce_timer = DebounceTimer(delay_ms=400)
 
@@ -56,7 +56,7 @@ class ThemeController:
             self.app._current_background_path = new_background_path
             self.app._background_was_disabled = background_disabled
         user_bg_hex = self.app_state.local_config.get('custom_color_background')
-        if user_bg_hex and self.settings_manager.is_valid_hex_color(user_bg_hex):
+        if user_bg_hex and self.settings_service.is_valid_hex_color(user_bg_hex):
             frame_bg_color = f"#C0{user_bg_hex.lstrip('#')}"
         else:
             frame_bg_color = 'rgba(0, 0, 0, 150)'
@@ -119,7 +119,7 @@ class ThemeController:
                     cb.setStyleSheet(checkbox_style)
         search_container = getattr(self.app, 'search_container', None)
         library_container = getattr(self.app, 'installed_mods_container', None)
-        self.customization_manager.update_translucent_backgrounds(search_container, library_container)
+        self.customization_service.update_translucent_backgrounds(search_container, library_container)
         if hasattr(self.app, '_update_chapter_tabs_style'):
             self.app._update_chapter_tabs_style()
         if hasattr(self.app, 'library_tab_builder'):
@@ -151,38 +151,38 @@ class ThemeController:
 
     def on_theme_button_click(self):
         """Handle theme management button click (import/export)."""
-        result = self.feedback_manager.ask_custom_question(QMessageBox.Icon.Information, 'buttons.theme_management', 'dialogs.theme_choice', [('buttons.import', QMessageBox.ButtonRole.AcceptRole, 'import'), ('buttons.export', QMessageBox.ButtonRole.AcceptRole, 'export')])
+        result = self.feedback_service.ask_custom_question(QMessageBox.Icon.Information, 'buttons.theme_management', 'dialogs.theme_choice', [('buttons.import', QMessageBox.ButtonRole.AcceptRole, 'import'), ('buttons.export', QMessageBox.ButtonRole.AcceptRole, 'export')])
         if result == 'import':
-            self.settings_manager.import_theme()
+            self.settings_service.import_theme()
         elif result == 'export':
-            self.settings_manager.export_theme()
+            self.settings_service.export_theme()
 
-    def on_theme_changed_by_manager(self):
+    def on_theme_changed_by_service(self):
         """Handle theme change triggered by settings manager."""
-        self.customization_manager.load_custom_style_settings(self.app.color_widgets, self.apply_theme)
+        self.customization_service.load_custom_style_settings(self.app.color_widgets, self.apply_theme)
         self.app.disable_background_checkbox.setChecked(self.app_state.local_config.get('background_disabled', False))
         self.app.disable_splash_checkbox.setChecked(self.app_state.local_config.get('disable_splash', False))
-        self.app.background_music_button.setText(self.customization_manager.get_background_music_button_text())
-        self.app.startup_sound_button.setText(self.customization_manager.get_startup_sound_button_text())
+        self.app.background_music_button.setText(self.customization_service.get_background_music_button_text())
+        self.app.startup_sound_button.setText(self.customization_service.get_startup_sound_button_text())
         self.update_logo_button_state()
         if hasattr(self.app, 'launcher_icon_label'):
-            self.customization_manager.load_launcher_icon(self.app.launcher_icon_label)
-        current_music_path = self.customization_manager.get_background_music_path()
+            self.customization_service.load_launcher_icon(self.app.launcher_icon_label)
+        current_music_path = self.customization_service.get_background_music_path()
         if not current_music_path:
-            self.customization_manager.stop_background_music()
+            self.customization_service.stop_background_music()
         else:
             should_restart = True
-            if hasattr(self.customization_manager, '_current_music_path'):
-                if self.customization_manager._current_music_path == current_music_path:
-                    if hasattr(self.customization_manager, '_bg_music_thread') and self.customization_manager._bg_music_thread is not None and self.customization_manager._bg_music_thread.isRunning():
+            if hasattr(self.customization_service, '_current_music_path'):
+                if self.customization_service._current_music_path == current_music_path:
+                    if hasattr(self.customization_service, '_bg_music_thread') and self.customization_service._bg_music_thread is not None and self.customization_service._bg_music_thread.isRunning():
                         should_restart = False
             if should_restart:
-                self.customization_manager.stop_background_music()
-                self.customization_manager.maybe_start_background_music(force=True)
+                self.customization_service.stop_background_music()
+                self.customization_service.maybe_start_background_music(force=True)
 
     def on_custom_style_edited(self):
         """Handle custom style edits with debounced theme application."""
-        self.settings_manager.on_custom_style_edited(self.app.color_widgets)
+        self.settings_service.on_custom_style_edited(self.app.color_widgets)
         self._debounce_timer.call(self.apply_theme)
 
     def update_dynamic_elements(self):
@@ -204,13 +204,13 @@ class ThemeController:
                         filters.setStyleSheet(f'QFrame#filters {{ background-color: {filter_bg_color}; border: 2px solid {filter_border_color}; padding: 8px; }}')
         mod_list = getattr(self.app, 'mod_list_widget', None)
         installed_mods = getattr(self.app, 'installed_mods_widget', None)
-        self.customization_manager.update_mod_plaques_styles(mod_list, installed_mods)
+        self.customization_service.update_mod_plaques_styles(mod_list, installed_mods)
         if hasattr(self.app, 'library_tab_builder'):
             self.app.library_tab_builder.update_priority_button_style()
 
     def on_background_button_click(self):
         """Handle background change button click."""
-        self.settings_manager.on_background_button_click()
+        self.settings_service.on_background_button_click()
         self.update_background_button_state()
 
     def update_background_button_state(self):
@@ -221,24 +221,24 @@ class ThemeController:
 
     def on_background_music_button_click(self):
         """Handle background music change button click."""
-        self.customization_manager.stop_background_music()
-        self.settings_manager.on_background_music_button_click()
-        self.app.background_music_button.setText(self.customization_manager.get_background_music_button_text())
-        self.customization_manager.maybe_start_background_music(force=True)
+        self.customization_service.stop_background_music()
+        self.settings_service.on_background_music_button_click()
+        self.app.background_music_button.setText(self.customization_service.get_background_music_button_text())
+        self.customization_service.maybe_start_background_music(force=True)
 
     def on_startup_sound_button_click(self):
         """Handle startup sound change button click."""
-        self.settings_manager.on_startup_sound_button_click()
-        self.app.startup_sound_button.setText(self.customization_manager.get_startup_sound_button_text())
+        self.settings_service.on_startup_sound_button_click()
+        self.app.startup_sound_button.setText(self.customization_service.get_startup_sound_button_text())
 
     def on_logo_button_click(self):
         """Handle logo change button click."""
-        self.settings_manager.on_logo_button_click()
+        self.settings_service.on_logo_button_click()
         self.update_logo_button_state()
         if hasattr(self.app, 'launcher_icon_label'):
-            self.customization_manager.load_launcher_icon(self.app.launcher_icon_label)
+            self.customization_service.load_launcher_icon(self.app.launcher_icon_label)
 
     def update_logo_button_state(self):
         """Update logo button text based on current state."""
         if hasattr(self.app, 'change_logo_button'):
-            self.app.change_logo_button.setText(self.customization_manager.get_logo_button_text())
+            self.app.change_logo_button.setText(self.customization_service.get_logo_button_text())

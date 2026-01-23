@@ -11,7 +11,7 @@ import logging
 import zipfile
 from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QFileDialog, QMessageBox, QListWidget, QListWidgetItem, QCheckBox
 from PyQt6.QtCore import Qt
-from managers.localization_manager import tr
+from services.localization_service import tr
 from utils.file_utils import find_deltamod_info_file
 from config.constants import MOD_CONFIG_FILENAME, LEGACY_MOD_CONFIG_FILENAME
 
@@ -19,16 +19,16 @@ from config.constants import MOD_CONFIG_FILENAME, LEGACY_MOD_CONFIG_FILENAME
 class ModImportExportController:
     """Manages mod import and export functionality."""
 
-    def __init__(self, app_state, mod_manager, app_window):
+    def __init__(self, app_state, mod_service, app_window):
         """Initialize the mod import/export controller.
 
         Args:
             app_state: Application state manager.
-            mod_manager: Mod management operations.
+            mod_service: Mod management operations.
             app_window: Main application window reference.
         """
         self.app_state = app_state
-        self.mod_manager = mod_manager
+        self.mod_service = mod_service
         self.app_window = app_window
 
     def _reset_install_state(self) -> None:
@@ -40,9 +40,9 @@ class ModImportExportController:
 
     def _refresh_mod_list(self) -> None:
         """Refresh the mod list by invalidating cache and reloading."""
-        self.mod_manager.invalidate_mods_cache()
-        self.mod_manager.load_local_mods(_skip_conversion=True)
-        self.mod_manager.mod_list_updated.emit()
+        self.mod_service.invalidate_mods_cache()
+        self.mod_service.load_local_mods(_skip_conversion=True)
+        self.mod_service.mod_list_updated.emit()
 
     def show_import_export_dialog(self):
         """Display the import/export selection dialog."""
@@ -66,7 +66,7 @@ class ModImportExportController:
     def _show_import_dialog(self):
         """Display the import dialog for selecting file or URL."""
         from ui.dialogs.import_dialog import ImportDialog
-        dialog = ImportDialog(self.app_window, self.app_window.feedback_manager, 'mods')
+        dialog = ImportDialog(self.app_window, self.app_window.feedback_service, 'mods')
         if dialog.exec() == QDialog.DialogCode.Accepted:
             if dialog.import_method == 'file' and dialog.selected_file:
                 self._install_mod_from_file(dialog.selected_file)
@@ -102,7 +102,7 @@ class ModImportExportController:
                     logging.info(f'[IMPORT] Archive contains single directory, using: {content_path}')
                 if find_deltamod_info_file(content_path):
                     logging.info('[IMPORT] DELTAMOD format detected, converting...')
-                    from utils.deltamod_converter import DeltamodConverter
+                    from adapters.deltamod_adapter import DeltamodConverter
                     converter = DeltamodConverter(content_path, self.app_state.mods_dir)
                     new_mod_path = converter.convert()
                     if new_mod_path:
@@ -210,9 +210,9 @@ class ModImportExportController:
         reply = QMessageBox.question(self.app_window, tr('errors.unrar_missing_title'), tr('errors.unrar_missing_text'), QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.Yes)
         if reply == QMessageBox.StandardButton.Yes:
             from utils.archive_utils import download_and_setup_unrar, _get_unrar_path
-            success = download_and_setup_unrar(status_callback=lambda msg: self.app_window.feedback_manager.update_status(msg, 'blue'))
+            success = download_and_setup_unrar(status_callback=lambda msg: self.app_window.feedback_service.update_status(msg, 'blue'))
             if success:
-                self.app_window.feedback_manager.update_status(tr('status.ready'), 'green')
+                self.app_window.feedback_service.update_status(tr('status.ready'), 'green')
                 return True
             else:
                 from PyQt6.QtGui import QDesktopServices
@@ -254,9 +254,9 @@ class ModImportExportController:
         the download and installation process.
         """
         try:
-            from workers.url_install_worker import UrlInstallThread
+            from workers.install.url_install_worker import UrlInstallThread
             worker = UrlInstallThread(self.app_window, url)
-            worker.status.connect(lambda msg, color: self.app_window.feedback_manager.update_status(msg, color))
+            worker.status.connect(lambda msg, color: self.app_window.feedback_service.update_status(msg, color))
             worker.progress.connect(lambda p: setattr(self.app_state, 'progress_bar_value', p))
             worker.finished.connect(self._on_mod_install_finished)
             worker.unrar_needed.connect(self._on_unrar_needed)
@@ -268,7 +268,7 @@ class ModImportExportController:
             worker.start()
         except Exception as e:
             logging.error(f'ModImportExportController: Error installing mod from URL: {e}', exc_info=True)
-            self.app_window.feedback_manager.show_message('error', 'errors.error', tr('mods.installation_error', error=str(e)))
+            self.app_window.feedback_service.show_message('error', 'errors.error', tr('mods.installation_error', error=str(e)))
 
     def _on_unrar_needed(self):
         """Handle UnRAR requirement from install worker.
@@ -297,20 +297,20 @@ class ModImportExportController:
         """
         try:
             self._reset_install_state()
-            from ui.dialogs.manual_mod_install_dialog import ManualModInstallDialog
-            from utils.game_utils import get_game_type_string
+            from ui.dialogs.manual_install_dialog import ManualModInstallDialog
+            from services.game_detection_service import get_game_type_string
             initial_game_type = None
             if self.app_state and hasattr(self.app_state, 'game_mode'):
                 initial_game_type = get_game_type_string(self.app_state.game_mode)
             dialog = ManualModInstallDialog(self.app_window, prepared_path, gamebanana_metadata=None, source_file_path=archive_path, initial_game_type=initial_game_type)
             dialog.temp_dir_to_cleanup = temp_dir
             if dialog.exec() == QDialog.DialogCode.Accepted:
-                from utils.ui_utils import refresh_ui_after_mod_install
-                refresh_ui_after_mod_install(self.app_window, self.mod_manager)
+                from ui.utils.ui_utils import refresh_ui_after_mod_install
+                refresh_ui_after_mod_install(self.app_window, self.mod_service)
                 QMessageBox.information(self.app_window, tr('dialogs.success'), tr('dialogs.mod_created_successfully'))
         except Exception as e:
             logging.error(f'Failed to open manual install dialog from URL: {e}', exc_info=True)
-            self.app_window.feedback_manager.show_message('error', tr('errors.error'), tr('errors.manual_install_failed', error=str(e)))
+            self.app_window.feedback_service.show_message('error', tr('errors.error'), tr('errors.manual_install_failed', error=str(e)))
             try:
                 shutil.rmtree(temp_dir, ignore_errors=True)
             except Exception:
@@ -348,17 +348,17 @@ class ModImportExportController:
         try:
             prepared_path, temp_dir = self._prepare_local_files_for_manual_install(file_path)
             if prepared_path:
-                from ui.dialogs.manual_mod_install_dialog import ManualModInstallDialog
-                from utils.game_utils import get_game_type_string
+                from ui.dialogs.manual_install_dialog import ManualModInstallDialog
+                from services.game_detection_service import get_game_type_string
                 initial_game_type = None
                 if self.app_state and hasattr(self.app_state, 'game_mode'):
                     initial_game_type = get_game_type_string(self.app_state.game_mode)
                 dialog = ManualModInstallDialog(self.app_window, prepared_path, gamebanana_metadata=None, source_file_path=file_path, initial_game_type=initial_game_type)
                 dialog.temp_dir_to_cleanup = temp_dir
                 if dialog.exec() == QDialog.DialogCode.Accepted:
-                    self.mod_manager.invalidate_mods_cache()
-                    self.mod_manager.load_local_mods(_skip_conversion=True)
-                    self.mod_manager.mod_list_updated.emit()
+                    self.mod_service.invalidate_mods_cache()
+                    self.mod_service.load_local_mods(_skip_conversion=True)
+                    self.mod_service.mod_list_updated.emit()
                     QMessageBox.information(self.app_window, tr('dialogs.success'), tr('dialogs.mod_created_successfully'))
         except Exception as e:
             logging.error(f'Manual install from file failed: {e}', exc_info=True)
@@ -414,12 +414,12 @@ class ModImportExportController:
         self._reset_install_state()
         if success:
             self._refresh_mod_list()
-            self.app_window.feedback_manager.update_status(message, 'green')
+            self.app_window.feedback_service.update_status(message, 'green')
             QMessageBox.information(self.app_window, tr('dialogs.success'), message)
         else:
             logging.warning(f'Mod installation failed: {message}')
-            self.app_window.feedback_manager.update_status(message or tr('errors.error'), 'red')
-            self.app_window.feedback_manager.show_message('error', 'errors.error', message)
+            self.app_window.feedback_service.update_status(message or tr('errors.error'), 'red')
+            self.app_window.feedback_service.show_message('error', 'errors.error', message)
 
     def _show_export_dialog(self):
         """Show the mod export selection dialog.
@@ -445,7 +445,7 @@ class ModImportExportController:
 
         def update_mod_list():
             mod_list.clear()
-            installed_mods = self.mod_manager.get_installed_mods_list()
+            installed_mods = self.mod_service.get_installed_mods_list()
             for mod_info in installed_mods:
                 game = mod_info.get('game') or mod_info.get('modgame', 'deltarune')
                 if filter_checkbox.isChecked() and current_game:
@@ -454,7 +454,7 @@ class ModImportExportController:
                 key = mod_info.get('key') or mod_info.get('mod_key')
                 if not key:
                     continue
-                mod_folder_path = self.mod_manager.get_mod_folder_path(key)
+                mod_folder_path = self.mod_service.get_mod_folder_path(key)
                 if not mod_folder_path or not os.path.exists(mod_folder_path):
                     continue
                 mod_data = None
@@ -465,7 +465,7 @@ class ModImportExportController:
                             mod_data = mod
                             break
                 if not mod_data:
-                    mod_data = self.mod_manager.create_mod_object_from_info(mod_info, self.app_state.all_mods if hasattr(self.app_state, 'all_mods') else None)
+                    mod_data = self.mod_service.create_mod_object_from_info(mod_info, self.app_state.all_mods if hasattr(self.app_state, 'all_mods') else None)
                 mod_name = mod_info.get('name', key)
                 item = QListWidgetItem(mod_name)
                 item.setData(Qt.ItemDataRole.UserRole, mod_data)
@@ -502,9 +502,9 @@ class ModImportExportController:
         if not export_path:
             return
         try:
-            self.mod_manager.invalidate_mods_cache()
+            self.mod_service.invalidate_mods_cache()
             key = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
-            mod_dir = self.mod_manager.get_mod_folder_path(key)
+            mod_dir = self.mod_service.get_mod_folder_path(key)
             if not mod_dir or not os.path.exists(mod_dir):
                 mod_dir = None
                 if os.path.exists(self.app_state.mods_dir):

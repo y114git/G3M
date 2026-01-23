@@ -5,33 +5,33 @@ installed mods in both normal and chapter mode views.
 """
 import logging
 from PyQt6.QtCore import QThread, QTimer
-from managers.localization_manager import tr
+from services.localization_service import tr
 from ui.common.styling import clear_layout_widgets, show_empty_message_in_layout
 from ui.widgets.mod.installed_mod_widget import InstalledModWidget
 from ui.dialogs.mod_priority_dialog import ModPriorityDialog
 from config.constants import SLOT_ID_UNIVERSAL, SLOT_ID_DEMO, SLOT_ID_UNDERTALE, SLOT_ID_UNDERTALE_YELLOW, SLOT_ID_SUGARY_SPIRE, SLOT_ID_MENU, SLOT_ID_CHAPTER_1, SLOT_ID_CHAPTER_2, SLOT_ID_CHAPTER_3, SLOT_ID_CHAPTER_4
-from utils.mod_filter_utils import filter_and_sort_mods
+from services.mod_filter_service import filter_and_sort_mods
 from utils.mod_utils import get_mod_key
-from utils.game_utils import get_chapter_id_for_game_mode
+from services.game_detection_service import get_chapter_id_for_game_mode
 
 
 class LibraryDisplayController:
     """Manages the display and interaction of installed mods in the library."""
 
-    def __init__(self, app_state, feedback_manager, mod_manager, slot_manager, app_window):
+    def __init__(self, app_state, feedback_service, mod_service, slot_service, app_window):
         """Initialize the library display controller.
 
         Args:
             app_state: Application state manager.
-            feedback_manager: User feedback and dialog manager.
-            mod_manager: Mod management operations.
-            slot_manager: Slot and chapter management.
+            feedback_service: User feedback and dialog manager.
+            mod_service: Mod management operations.
+            slot_service: Slot and chapter management.
             app_window: Main application window reference.
         """
         self.app_state = app_state
-        self.feedback_manager = feedback_manager
-        self.mod_manager = mod_manager
-        self.slot_manager = slot_manager
+        self.feedback_service = feedback_service
+        self.mod_service = mod_service
+        self.slot_service = slot_service
         self.app = app_window
         self._updating_display = False
 
@@ -114,7 +114,7 @@ class LibraryDisplayController:
             return
         self.app._updating_chapter_mods = True
         clear_layout_widgets(self.app.installed_mods_layout, keep_last_n=1)
-        installed_mods = self.mod_manager.get_installed_mods_list()
+        installed_mods = self.mod_service.get_installed_mods_list()
         filters, sort_config = self._build_library_filters_and_sort()
         filtered_mods = filter_and_sort_mods(installed_mods, filters, sort_config)
         if hasattr(self.app, 'library_sort_combo'):
@@ -123,8 +123,8 @@ class LibraryDisplayController:
                 reverse = not self.app.library_sort_ascending
                 filtered_mods.sort(key=lambda mod: mod.get('name', '').lower(), reverse=reverse)
         for mod_info in filtered_mods:
-            mod_data = self.mod_manager.create_mod_object_from_info(mod_info, getattr(self.app_state, 'all_mods', None))
-            if not mod_data or not self.mod_manager.mod_has_files_for_chapter(mod_data, selected_chapter_id):
+            mod_data = self.mod_service.create_mod_object_from_info(mod_info, getattr(self.app_state, 'all_mods', None))
+            if not mod_data or not self.mod_service.mod_has_files_for_chapter(mod_data, selected_chapter_id):
                 continue
             is_local, is_available = self._get_mod_availability(mod_data, mod_info)
             if mod_data:
@@ -132,7 +132,7 @@ class LibraryDisplayController:
                 mod_widget.clicked.connect(self.on_mod_clicked)
                 mod_widget.remove_requested.connect(self.on_mod_remove)
                 mod_widget.use_requested.connect(lambda mod_data=mod_data: self._handle_mod_use(mod_data, selected_chapter_id))
-                is_used = self.slot_manager.is_mod_used_for_chapter(mod_data, selected_chapter_id)
+                is_used = self.slot_service.is_mod_used_for_chapter(mod_data, selected_chapter_id)
                 mod_widget.set_in_slot(is_used)
                 self.app.installed_mods_layout.insertWidget(self.app.installed_mods_layout.count() - 1, mod_widget)
                 mod_widget.show()
@@ -180,7 +180,7 @@ class LibraryDisplayController:
                 on the main thread when complete.
                 """
                 try:
-                    mods = self.outer.mod_manager.get_installed_mods_list()
+                    mods = self.outer.mod_service.get_installed_mods_list()
                 except Exception:
                     mods = []
                 QTimer.singleShot(0, lambda: self.outer.update_display_from_list(mods))
@@ -193,7 +193,7 @@ class LibraryDisplayController:
             self.app._installed_scan_thread = _Scan(self)
             self.app._installed_scan_thread.start()
         except Exception:
-            mods = self.mod_manager.get_installed_mods_list()
+            mods = self.mod_service.get_installed_mods_list()
             self.update_display_from_list(mods)
 
     def update_display_from_list(self, installed_mods):
@@ -220,7 +220,7 @@ class LibraryDisplayController:
                     return
             clear_layout_widgets(self.app.installed_mods_layout, keep_last_n=1)
             self.cleanup_missing_mods(installed_mods)
-            existing_mods = [mod_info for mod_info in installed_mods if self.mod_manager.check_mod_exists(mod_info)]
+            existing_mods = [mod_info for mod_info in installed_mods if self.mod_service.check_mod_exists(mod_info)]
             filters, sort_config = self._build_library_filters_and_sort()
             filtered_mods = filter_and_sort_mods(existing_mods, filters, sort_config)
             if hasattr(self.app, 'library_sort_combo'):
@@ -247,7 +247,7 @@ class LibraryDisplayController:
                     end = min(start + batch_size, len(mods))
                     for idx in range(start, end):
                         mod_info = mods[idx]
-                        mod_data = self.mod_manager.create_mod_object_from_info(mod_info, getattr(self.app_state, 'all_mods', None))
+                        mod_data = self.mod_service.create_mod_object_from_info(mod_info, getattr(self.app_state, 'all_mods', None))
                         if not mod_data:
                             continue
                         is_local, is_available = self._get_mod_availability(mod_data, mod_info)
@@ -256,7 +256,7 @@ class LibraryDisplayController:
                             mod_key_attr = getattr(mod_data, 'key', None) or getattr(mod_data, 'mod_key', None)
                             public_mod = next((mod for mod in self.app_state.all_mods if (getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)) == mod_key_attr), None)
                             if public_mod:
-                                has_update = any((self.mod_manager.mod_has_files_for_chapter(public_mod, i) and self.mod_manager.get_mod_status(public_mod, i) == 'update' for i in range(5)))
+                                has_update = any((self.mod_service.mod_has_files_for_chapter(public_mod, i) and self.mod_service.get_mod_status(public_mod, i) == 'update' for i in range(5)))
                         mod_widget = InstalledModWidget(mod_data, is_local, is_available, has_update, parent=self.app)
                         mod_widget.clicked.connect(self.on_mod_clicked)
                         mod_widget.remove_requested.connect(self.on_mod_remove)
@@ -295,7 +295,7 @@ class LibraryDisplayController:
         files when mods are no longer present on disk.
         """
         installed_mod_keys = {mod.get('key') or mod.get('mod_key') for mod in installed_mods if mod.get('key') or mod.get('mod_key')}
-        mods_metadata = self.mod_manager._read_metadata()
+        mods_metadata = self.mod_service._read_metadata()
         metadata_updated = False
         orphaned_keys = set(mods_metadata.keys()) - installed_mod_keys
         if orphaned_keys:
@@ -303,12 +303,12 @@ class LibraryDisplayController:
                 del mods_metadata[key]
             metadata_updated = True
         if metadata_updated:
-            self.mod_manager._write_metadata(mods_metadata)
+            self.mod_service._write_metadata(mods_metadata)
         for orphaned_key in orphaned_keys:
-            dummy_mod_data = self.mod_manager.create_mod_object_from_info({'key': orphaned_key, 'name': 'Orphaned Mod'}, getattr(self.app_state, 'all_mods', None))
+            dummy_mod_data = self.mod_service.create_mod_object_from_info({'key': orphaned_key, 'name': 'Orphaned Mod'}, getattr(self.app_state, 'all_mods', None))
             if not dummy_mod_data:
                 continue
-            self.slot_manager.remove_mod_from_all_chapters(dummy_mod_data)
+            self.slot_service.remove_mod_from_all_chapters(dummy_mod_data)
             config_keys = ['used_mods_deltarune', 'used_mods_deltarune_chapter', 'used_mods_deltarunedemo', 'used_mods_undertale', 'used_mods_undertaleyellow', 'used_mods_pizzatower']
             for config_key in list(self.app_state.local_config.keys()):
                 if config_key.startswith('used_mods_') and config_key not in config_keys:
@@ -337,7 +337,7 @@ class LibraryDisplayController:
                     del used_mods_data[chapter_id_str]
                 if config_updated:
                     self.app_state.local_config[config_key] = used_mods_data
-                    self.app.settings_manager.write_local_config()
+                    self.app.settings_service.write_local_config()
 
     def update_mod_widgets_slot_status(self):
         """Update the slot status indicators for all mod widgets.
@@ -355,10 +355,10 @@ class LibraryDisplayController:
                 widget = item.widget()
                 if isinstance(widget, InstalledModWidget):
                     if selected_chapter_id is not None:
-                        is_used = self.slot_manager.is_mod_used_for_chapter(widget.mod_data, selected_chapter_id)
+                        is_used = self.slot_service.is_mod_used_for_chapter(widget.mod_data, selected_chapter_id)
                     else:
                         check_chapter_id = get_chapter_id_for_game_mode(self.app_state.game_mode)
-                        is_used = self.slot_manager.is_mod_used_for_chapter(widget.mod_data, check_chapter_id)
+                        is_used = self.slot_service.is_mod_used_for_chapter(widget.mod_data, check_chapter_id)
                     widget.set_in_slot(is_used)
 
     def on_mod_clicked(self, mod_data):
@@ -397,44 +397,44 @@ class LibraryDisplayController:
             from utils.mod_utils import get_mod_key, get_mod_name
             key = get_mod_key(mod_data)
             mod_name = get_mod_name(mod_data)
-            if self.feedback_manager.ask_question('dialogs.delete_confirmation', 'dialogs.delete_mod_confirmation', '', False, mod_name=mod_name):
-                self.mod_manager.delete_mod_files(mod_data)
+            if self.feedback_service.ask_question('dialogs.delete_confirmation', 'dialogs.delete_mod_confirmation', '', False, mod_name=mod_name):
+                self.mod_service.delete_mod_files(mod_data)
                 if key:
                     minimal_mod_data = {'key': key}
                     if mod_name:
                         minimal_mod_data['name'] = mod_name
                     try:
-                        self.slot_manager.remove_mod_from_all_chapters(minimal_mod_data)
+                        self.slot_service.remove_mod_from_all_chapters(minimal_mod_data)
                     except Exception as e:
                         import logging
                         logging.warning(f'Failed to remove mod from chapters after deletion: {e}', exc_info=True)
                 else:
                     try:
-                        self.slot_manager.remove_mod_from_all_chapters(mod_data)
+                        self.slot_service.remove_mod_from_all_chapters(mod_data)
                     except Exception as e:
                         import logging
                         logging.warning(f'Failed to remove mod from chapters after deletion: {e}', exc_info=True)
                 try:
-                    self.mod_manager.invalidate_mods_cache()
-                    self.mod_manager.load_local_mods()
-                    self.mod_manager.mod_list_updated.emit()
+                    self.mod_service.invalidate_mods_cache()
+                    self.mod_service.load_local_mods()
+                    self.mod_service.mod_list_updated.emit()
                     QTimer.singleShot(100, lambda: self._safe_update_after_mod_deletion())
                 except Exception as e:
                     import logging
                     logging.error(f'Failed to reload mods after deletion: {e}', exc_info=True)
                     try:
-                        self.mod_manager.mod_list_updated.emit()
+                        self.mod_service.mod_list_updated.emit()
                         QTimer.singleShot(100, lambda: self._safe_update_after_mod_deletion())
                     except Exception as e2:
                         logging.error(f'Failed to update display after mod deletion: {e2}', exc_info=True)
         except (OSError, IOError, PermissionError) as e:
             import logging
             logging.error(f'File operation failed during mod removal: {e}', exc_info=True)
-            self.feedback_manager.show_message('error', 'errors.mod_removal_failed', error=str(e))
+            self.feedback_service.show_message('error', 'errors.mod_removal_failed', error=str(e))
         except Exception as e:
             import logging
             logging.error(f'Unexpected error during mod removal: {e}', exc_info=True)
-            self.feedback_manager.show_message('error', 'errors.mod_removal_failed', error=str(e))
+            self.feedback_service.show_message('error', 'errors.mod_removal_failed', error=str(e))
 
     def _safe_update_after_mod_deletion(self):
         """Safely update the display after mod deletion.
@@ -490,9 +490,9 @@ class LibraryDisplayController:
                             break
         status = getattr(mod_widget, 'status', 'ready') if mod_widget else 'ready'
         if status == 'needs_update':
-            self.mod_manager.update_mod(mod_data)
+            self.mod_service.update_mod(mod_data)
             return
-        self.slot_manager.set_used_mod(chapter_id, mod_data)
+        self.slot_service.set_used_mod(chapter_id, mod_data)
         self.update_mod_widgets_slot_status()
         self._update_priority_button_visibility(chapter_id)
         if mod_widget:
@@ -542,13 +542,13 @@ class LibraryDisplayController:
             Returns:
                 True if slot has at least min_count mods.
             """
-            mods_list = self.slot_manager.get_used_mods_list(slot_id)
+            mods_list = self.slot_service.get_used_mods_list(slot_id)
             count = len(mods_list) if mods_list else 0
             if count >= min_count:
                 logging.info(f'_get_current_chapter_id: Found {count} mod(s) for slot {slot_id}')
                 return True
             return False
-        mods_universal = self.slot_manager.get_used_mods_list(SLOT_ID_UNIVERSAL)
+        mods_universal = self.slot_service.get_used_mods_list(SLOT_ID_UNIVERSAL)
         logging.info(f'_get_current_chapter_id: SLOT_ID_UNIVERSAL={SLOT_ID_UNIVERSAL} has {(len(mods_universal) if mods_universal else 0)} mods')
         if _check_slot_for_mods(SLOT_ID_UNIVERSAL):
             return SLOT_ID_UNIVERSAL
@@ -561,9 +561,9 @@ class LibraryDisplayController:
         if mods_universal and len(mods_universal) > 0:
             logging.info(f'_get_current_chapter_id: Found {len(mods_universal)} mod(s) for SLOT_ID_UNIVERSAL (less than 2, but returning anyway)')
             return SLOT_ID_UNIVERSAL
-        if self.slot_manager.used_mods:
-            logging.debug(f'_get_current_chapter_id: All used_mods keys: {list(self.slot_manager.used_mods.keys())}')
-            for key, mods_list in self.slot_manager.used_mods.items():
+        if self.slot_service.used_mods:
+            logging.debug(f'_get_current_chapter_id: All used_mods keys: {list(self.slot_service.used_mods.keys())}')
+            for key, mods_list in self.slot_service.used_mods.items():
                 logging.debug(f'_get_current_chapter_id: used_mods[{key}] = {(len(mods_list) if mods_list else 0)} mod(s)')
         logging.debug('_get_current_chapter_id: No chapter with mods found, returning SLOT_ID_UNIVERSAL as fallback')
         return SLOT_ID_UNIVERSAL
@@ -588,7 +588,7 @@ class LibraryDisplayController:
             if hasattr(self.app, 'library_tab_builder') and 'priority_button_layout' in self.app.library_tab_builder.widgets:
                 self.app.library_tab_builder.widgets['priority_button_layout'].setContentsMargins(0, 0, 0, 0)
             return
-        mods_list = self.slot_manager.get_used_mods_list(chapter_id)
+        mods_list = self.slot_service.get_used_mods_list(chapter_id)
         mod_count = len(mods_list) if mods_list else 0
         should_show = mod_count >= 2
         if should_show:
@@ -623,7 +623,7 @@ class LibraryDisplayController:
         chapter_id = self._get_current_chapter_id()
         if chapter_id is None:
             return
-        mods_list = self.slot_manager.get_used_mods_list(chapter_id)
+        mods_list = self.slot_service.get_used_mods_list(chapter_id)
         if not mods_list or len(mods_list) < 2:
             return
         from PyQt6.QtWidgets import QDialog
@@ -632,7 +632,7 @@ class LibraryDisplayController:
             if dialog.exec() == QDialog.DialogCode.Accepted:
                 new_order = dialog.get_result()
                 if new_order:
-                    self.slot_manager.set_mods_list(chapter_id, new_order)
+                    self.slot_service.set_mods_list(chapter_id, new_order)
                     if self.app_state.current_mode == 'chapter':
                         self.update_for_chapter_mode(chapter_id)
                     else:
@@ -651,7 +651,7 @@ class LibraryDisplayController:
         if not hasattr(self.app, 'create_modpack_button'):
             return
         import logging
-        from ui.dialogs.create_modpack_dialog import CreateModpackDialog
+        from ui.dialogs.modpack_create_dialog import CreateModpackDialog
         from PyQt6.QtWidgets import QDialog
         from utils.file_utils import get_unique_mod_dir
         import os
@@ -661,13 +661,13 @@ class LibraryDisplayController:
             chapter_id = self._get_current_chapter_id()
             if chapter_id is None:
                 return
-            mods_list = self.slot_manager.get_used_mods_list(chapter_id)
+            mods_list = self.slot_service.get_used_mods_list(chapter_id)
             if not mods_list or len(mods_list) < 2:
                 return
             chapter_mods = {chapter_id: mods_list}
         else:
             chapter_id = get_chapter_id_for_game_mode(self.app_state.game_mode)
-            mods_list = self.slot_manager.get_used_mods_list(chapter_id)
+            mods_list = self.slot_service.get_used_mods_list(chapter_id)
             if mods_list and len(mods_list) >= 2:
                 if chapter_id == SLOT_ID_UNIVERSAL:
                     for ch_id in range(5):
@@ -680,7 +680,7 @@ class LibraryDisplayController:
                 else:
                     chapter_mods = {chapter_id: mods_list}
             else:
-                mods_list = self.slot_manager.get_used_mods_list(SLOT_ID_UNIVERSAL)
+                mods_list = self.slot_service.get_used_mods_list(SLOT_ID_UNIVERSAL)
                 if mods_list and len(mods_list) >= 2:
                     for chapter_id in range(5):
                         chapter_mods_for_chapter = []
@@ -702,8 +702,8 @@ class LibraryDisplayController:
             unique_mod_folder = get_unique_mod_dir(self.app_state.mods_dir, modpack_name)
             modpack_dir = os.path.join(self.app_state.mods_dir, unique_mod_folder)
             fast_merge = getattr(self.app, 'fast_merging_checkbox', None) and self.app.fast_merging_checkbox.isChecked()
-            from workers.create_modpack_thread import CreateModpackThread
-            thread = CreateModpackThread(chapter_mods, modpack_name, modpack_dir, self.app_state, self.mod_manager, self.app, fast_merge=fast_merge, xdelta_modpack=xdelta_modpack)
+            from workers.modpack_create_worker import CreateModpackThread
+            thread = CreateModpackThread(chapter_mods, modpack_name, modpack_dir, self.app_state, self.mod_service, self.app, fast_merge=fast_merge, xdelta_modpack=xdelta_modpack)
             thread.progress_update.connect(self._on_modpack_progress)
             thread.status_update.connect(self._on_modpack_status)
             thread.finished.connect(lambda success: self._on_modpack_finished(success, modpack_dir))
@@ -718,7 +718,7 @@ class LibraryDisplayController:
             thread.start()
         except Exception as e:
             logging.error(f'Error creating modpack: {e}', exc_info=True)
-            self.feedback_manager.show_message('error', 'errors.error', str(e))
+            self.feedback_service.show_message('error', 'errors.error', str(e))
 
     def _on_modpack_progress(self, progress: int, message: str):
         """Handle modpack creation progress updates.
@@ -732,7 +732,7 @@ class LibraryDisplayController:
         self.app_state.progress_bar_value = progress
         if message:
             from config.constants import UI_COLORS
-            self.feedback_manager.update_status(message, UI_COLORS['status_info'])
+            self.feedback_service.update_status(message, UI_COLORS['status_info'])
 
     def _on_modpack_status(self, message: str, status_type: str):
         """Handle modpack creation status updates.
@@ -745,7 +745,7 @@ class LibraryDisplayController:
         """
         from config.constants import UI_COLORS
         color = UI_COLORS.get(f'status_{status_type}', UI_COLORS['status_error'])
-        self.feedback_manager.update_status(message, color)
+        self.feedback_service.update_status(message, color)
 
     def _safe_update_after_modpack_creation(self, modpack_dir: str):
         """Safely update UI after successful modpack creation.
@@ -761,7 +761,7 @@ class LibraryDisplayController:
                 self.app.search_display.update_filtered_mods(preserve_page=True)
                 self.app.search_display.update_search_plaques()
             QTimer.singleShot(300, self.refresh_async)
-            self.feedback_manager.show_message('success', 'dialogs.modpack_created_title', tr('dialogs.modpack_created_message', modpack_dir=modpack_dir))
+            self.feedback_service.show_message('success', 'dialogs.modpack_created_title', tr('dialogs.modpack_created_message', modpack_dir=modpack_dir))
         except Exception as e:
             import logging
             logging.error(f'Error updating UI after modpack creation: {e}', exc_info=True)
@@ -783,9 +783,9 @@ class LibraryDisplayController:
         self.app_state.action_button_enabled = True
         self.app_state.clear_current_task()
         if success:
-            self.mod_manager.invalidate_mods_cache()
-            self.mod_manager.load_local_mods()
-            self.mod_manager.mod_list_updated.emit()
+            self.mod_service.invalidate_mods_cache()
+            self.mod_service.load_local_mods()
+            self.mod_service.mod_list_updated.emit()
             QTimer.singleShot(100, lambda: self._safe_update_after_modpack_creation(modpack_dir))
         else:
             if os.path.exists(modpack_dir):
@@ -794,4 +794,4 @@ class LibraryDisplayController:
                     shutil.rmtree(modpack_dir, ignore_errors=True)
                 except Exception as e:
                     logging.warning(f'Failed to remove modpack directory {modpack_dir}: {e}')
-            self.feedback_manager.show_message('error', 'errors.error', tr('errors.modpack_creation_failed'))
+            self.feedback_service.show_message('error', 'errors.error', tr('errors.modpack_creation_failed'))

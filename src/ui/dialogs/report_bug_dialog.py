@@ -2,7 +2,7 @@ from typing import List, Tuple
 import os
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QTextEdit, QListWidget, QListWidgetItem, QCheckBox, QProgressBar, QMessageBox, QFileDialog
-from managers.localization_manager import tr
+from services.localization_service import tr
 
 
 class ReportBugDialog(QDialog):

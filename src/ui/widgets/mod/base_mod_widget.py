@@ -1,7 +1,7 @@
 from PyQt6.QtCore import pyqtSignal, Qt
 from PyQt6.QtWidgets import QFrame, QHBoxLayout, QVBoxLayout, QLabel, QWidget
 from ui.common.styling import load_mod_icon_universal, update_mod_widget_style, get_theme_color
-from managers.localization_manager import tr
+from services.localization_service import tr
 
 
 class BaseModWidget(QFrame):

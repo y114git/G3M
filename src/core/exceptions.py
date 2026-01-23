@@ -26,7 +26,7 @@ class AppError(DELTAHUBError):
         """
         self.key = key
         self.kwargs = kwargs
-        from managers.localization_manager import tr
+        from services.localization_service import tr
         super().__init__(tr(key, **kwargs))
 
     def get_message(self) -> str:
@@ -35,7 +35,7 @@ class AppError(DELTAHUBError):
         Returns:
             str: Localized error message.
         """
-        from managers.localization_manager import tr
+        from services.localization_service import tr
         return tr(self.key, **self.kwargs)
 
 

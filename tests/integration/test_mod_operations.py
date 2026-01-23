@@ -7,9 +7,9 @@ from unittest.mock import Mock, patch
 
 class TestModInstallation:
 
-    def test_install_mod_from_archive(self, app_state, feedback_manager, temp_mods_dir):
-        from managers.mod_manager import ModManager
-        _ = ModManager(app_state, feedback_manager)
+    def test_install_mod_from_archive(self, app_state, feedback_service, temp_mods_dir):
+        from services.mod_service import ModManager
+        _ = ModManager(app_state, feedback_service)
         with tempfile.NamedTemporaryFile(suffix='.zip', delete=False) as tmp_archive:
             archive_path = tmp_archive.name
             with zipfile.ZipFile(archive_path, 'w') as zf:
@@ -24,9 +24,9 @@ class TestModInstallation:
         finally:
             os.unlink(archive_path)
 
-    def test_install_mod_with_files(self, app_state, feedback_manager, temp_mods_dir):
-        from managers.mod_manager import ModManager
-        _ = ModManager(app_state, feedback_manager)
+    def test_install_mod_with_files(self, app_state, feedback_service, temp_mods_dir):
+        from services.mod_service import ModManager
+        _ = ModManager(app_state, feedback_service)
         key = 'test_mod_files'
         mod_folder = os.path.join(temp_mods_dir, key)
         os.makedirs(mod_folder, exist_ok=True)
@@ -44,18 +44,18 @@ class TestModInstallation:
 
 class TestModRemoval:
 
-    def test_remove_mod(self, app_state, feedback_manager, sample_mod_folder):
-        from managers.mod_manager import ModManager
-        mod_manager = ModManager(app_state, feedback_manager)
-        cache = mod_manager._get_mods_cache(use_async=False)
+    def test_remove_mod(self, app_state, feedback_service, sample_mod_folder):
+        from services.mod_service import ModManager
+        mod_service = ModManager(app_state, feedback_service)
+        cache = mod_service._get_mods_cache(use_async=False)
         assert 'test_mod_001' in cache
         assert os.path.exists(sample_mod_folder)
 
 
 class TestModMerge:
 
-    def test_merge_multiple_mods(self, app_state, feedback_manager, temp_mods_dir):
-        from managers.multi_mod_merger import MultiModMerger
+    def test_merge_multiple_mods(self, app_state, feedback_service, temp_mods_dir):
+        from services.mod_merge_service import MultiModMerger
         mods = []
         for i in range(3):
             key = f'test_merge_mod_{i}'
@@ -66,37 +66,37 @@ class TestModMerge:
             with open(config_path, 'w', encoding='utf-8') as f:
                 json.dump(mod_config, f)
             mods.append(key)
-        from managers.mod_manager import ModManager
-        mod_manager = ModManager(app_state, feedback_manager)
-        merger = MultiModMerger(app_state, mod_manager)
+        from services.mod_service import ModManager
+        mod_service = ModManager(app_state, feedback_service)
+        merger = MultiModMerger(app_state, mod_service)
         assert merger is not None
 
 
 class TestModImportExport:
 
-    def test_export_mod(self, app_state, feedback_manager, sample_mod_folder):
+    def test_export_mod(self, app_state, feedback_service, sample_mod_folder):
         from controllers.mod_import_export_controller import ModImportExportController
-        from managers.mod_manager import ModManager
+        from services.mod_service import ModManager
         from unittest.mock import Mock
-        mod_manager = ModManager(app_state, feedback_manager)
+        mod_service = ModManager(app_state, feedback_service)
         mock_app_window = Mock()
-        controller = ModImportExportController(app_state=app_state, mod_manager=mod_manager, app_window=mock_app_window)
+        controller = ModImportExportController(app_state=app_state, mod_service=mod_service, app_window=mock_app_window)
         assert controller is not None
 
-    def test_import_mod_from_url(self, app_state, feedback_manager):
+    def test_import_mod_from_url(self, app_state, feedback_service):
         from controllers.mod_import_export_controller import ModImportExportController
-        from managers.mod_manager import ModManager
+        from services.mod_service import ModManager
         from unittest.mock import Mock
-        mod_manager = ModManager(app_state, feedback_manager)
+        mod_service = ModManager(app_state, feedback_service)
         mock_app_window = Mock()
-        controller = ModImportExportController(app_state=app_state, mod_manager=mod_manager, app_window=mock_app_window)
+        controller = ModImportExportController(app_state=app_state, mod_service=mod_service, app_window=mock_app_window)
         assert controller is not None
 
 
 class TestManualInstall:
 
     def test_prepare_gamebanana_manual_install_worker_initialization(self):
-        from workers.prepare_gamebanana_manual_install_worker import PrepareGameBananaManualInstallWorker
+        from workers.gamebanana.prepare_gamebanana_manual_install_worker import PrepareGameBananaManualInstallWorker
         from unittest.mock import Mock
         mock_mod = Mock()
         mock_mod.key = 'gb_12345'
@@ -107,13 +107,13 @@ class TestManualInstall:
         assert worker.mod == mock_mod
         assert worker.selected_file == selected_file
 
-    def test_mod_operations_controller_manual_install_methods(self, app_state, feedback_manager):
+    def test_mod_operations_controller_manual_install_methods(self, app_state, feedback_service):
         from controllers.mod_operations_controller import ModOperationsController
-        from managers.mod_manager import ModManager
+        from services.mod_service import ModManager
         from unittest.mock import Mock
-        mod_manager = ModManager(app_state, feedback_manager)
+        mod_service = ModManager(app_state, feedback_service)
         mock_app_window = Mock()
-        controller = ModOperationsController(app_state=app_state, feedback_manager=feedback_manager, mod_manager=mod_manager, app_window=mock_app_window)
+        controller = ModOperationsController(app_state=app_state, feedback_service=feedback_service, mod_service=mod_service, app_window=mock_app_window)
         assert hasattr(controller, '_start_manual_install_from_gamebanana')
         assert hasattr(controller, '_start_prepare_worker')
         assert hasattr(controller, '_prepare_gamebanana_files_for_manual_install')

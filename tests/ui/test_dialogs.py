@@ -15,9 +15,9 @@ class TestModDetailsDialog:
 
 class TestImportDialog:
 
-    def test_import_dialog_creation(self, qapp, feedback_manager):
+    def test_import_dialog_creation(self, qapp, feedback_service):
         from ui.dialogs.import_dialog import ImportDialog
-        dialog = ImportDialog(None, feedback_manager, 'mods')
+        dialog = ImportDialog(None, feedback_service, 'mods')
         assert dialog is not None
         assert isinstance(dialog, QDialog)
 
@@ -25,7 +25,7 @@ class TestImportDialog:
 class TestGameBananaFilePickerDialog:
 
     def test_file_picker_dialog_creation(self, qapp):
-        from ui.dialogs.gamebanana_file_picker_dialog import GameBananaFilePickerDialog
+        from ui.dialogs.file_picker_dialog import GameBananaFilePickerDialog
         dialog = GameBananaFilePickerDialog(None, [], 'Test Mod')
         assert dialog is not None
         assert isinstance(dialog, QDialog)
@@ -34,7 +34,7 @@ class TestGameBananaFilePickerDialog:
 class TestCreateModpackDialog:
 
     def test_create_modpack_dialog_creation(self, qapp, app_state):
-        from ui.dialogs.create_modpack_dialog import CreateModpackDialog
+        from ui.dialogs.modpack_create_dialog import CreateModpackDialog
         dialog = CreateModpackDialog(app_state, None)
         assert dialog is not None
         assert isinstance(dialog, QDialog)

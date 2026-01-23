@@ -14,11 +14,10 @@ import psutil
 from PyQt6.QtCore import QLibraryInfo, QTranslator, QTimer
 from PyQt6.QtNetwork import QLocalServer, QLocalSocket
 from PyQt6.QtWidgets import QApplication, QMessageBox
-from managers.localization_manager import localization_manager, tr
-from utils.audio_utils import _audio_manager
+from services.localization_service import localization_service, tr
+from ui.utils.audio_utils import _audio_service
 from core.splash import create_png_splash
 from utils.path_utils import resource_path, get_user_data_root, get_launcher_dir
-from logging.handlers import RotatingFileHandler
 from config.constants import SPLASH_MIN_DURATION, LAUNCHER_FALLBACK_TIMEOUT, SPLASH_RETRY_DELAY, SPLASH_WATCHDOG_TIMEOUT
 import traceback
 if platform.system() == 'Windows':
@@ -51,29 +50,38 @@ def check_game_processes():
     return None
 
 
-def configure_logging(app_name: str, user_data_root: str, clear_logs: bool = False) -> str:
+def configure_logging(app_name: str, user_data_root: str) -> str:
     """Configure application logging with file and console handlers.
+
+    Logs are stored in DELTAHUB/logs/deltahub.log.
+    On app start, old log is archived to logs/deltahub/ with timestamp.
 
     Args:
         app_name: Name of the application.
         user_data_root: Root directory for user data.
-        clear_logs: Whether to clear existing log file.
 
     Returns:
         str: Path to the log file.
     """
-    log_path = os.path.join(user_data_root, f'{app_name.lower()}.log')
+    logs_dir = os.path.join(user_data_root, 'logs')
+    os.makedirs(logs_dir, exist_ok=True)
+    log_path = os.path.join(logs_dir, f'{app_name.lower()}.log')
+    archive_dir = os.path.join(logs_dir, 'deltahub')
+    os.makedirs(archive_dir, exist_ok=True)
+    if os.path.exists(log_path) and os.path.getsize(log_path) > 0:
+        try:
+            from datetime import datetime
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            archive_path = os.path.join(archive_dir, f'deltahub_{timestamp}.log')
+            import shutil
+            shutil.copy2(log_path, archive_path)
+        except Exception:
+            pass
     root = logging.getLogger()
     if not root.handlers:
         root.setLevel(logging.INFO)
         fmt = logging.Formatter('%(asctime)s %(levelname)s %(name)s: %(message)s')
-        if clear_logs and os.path.exists(log_path):
-            try:
-                with open(log_path, 'w', encoding='utf-8'):
-                    pass
-            except Exception as e:
-                logging.warning(f'Failed to clear log file: {e}')
-        file_handler = RotatingFileHandler(log_path, maxBytes=10000000, backupCount=3, encoding='utf-8')
+        file_handler = logging.FileHandler(log_path, mode='w', encoding='utf-8')
         file_handler.setFormatter(fmt)
         root.addHandler(file_handler)
         console = logging.StreamHandler()
@@ -191,13 +199,13 @@ def setup_app():
     Returns:
         QApplication: Configured Qt application instance.
     """
-    language_code = localization_manager.detect_system_language()
-    localization_manager.load_language(language_code)
+    language_code = localization_service.detect_system_language()
+    localization_service.load_language(language_code)
     os.environ['QT_LOGGING_RULES'] = ';'.join(['qt.qpa.screen.warning=false', 'qt.qpa.window.warning=false', 'qt.multimedia.ffmpeg=false', 'qt.multimedia=false'])
     if not getattr(sys, 'frozen', False):
         os.environ.setdefault('QT_MEDIA_BACKEND', 'ffmpeg')
     app = QApplication(sys.argv)
-    qt_translation_file = localization_manager.get_qt_translation_name(language_code)
+    qt_translation_file = localization_service.get_qt_translation_name(language_code)
     if qt_translation_file:
         path = QLibraryInfo.path(QLibraryInfo.LibraryPath.TranslationsPath)
         if _translator.load(qt_translation_file, path):
@@ -298,9 +306,7 @@ def run_app():
     """
     try:
         user_root = get_user_data_root()
-        config = _load_config_file()
-        clear_logs = config.get('clear_logs_on_startup', False)
-        configure_logging('DELTAHUB', user_root, clear_logs=clear_logs)
+        configure_logging('DELTAHUB', user_root)
         install_excepthook()
         cleanup_old_temp_directories()
     except Exception as e:
@@ -386,9 +392,9 @@ def run_app():
                 gif_splash = CustomSplashScreen(gif_path=gif_path)
                 if hasattr(gif_splash, 'movie') and gif_splash.movie.isValid():
                     splash = gif_splash
-                    splash.start_gif_animation(sound_start_callback=_audio_manager.play_deltahub_sound)
+                    splash.start_gif_animation(sound_start_callback=_audio_service.play_deltahub_sound)
             else:
-                _audio_manager.play_deltahub_sound()
+                _audio_service.play_deltahub_sound()
         splash.show()
         app.processEvents()
 

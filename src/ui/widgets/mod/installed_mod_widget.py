@@ -3,7 +3,7 @@ from PyQt6.QtCore import pyqtSignal, Qt, QUrl
 from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtWidgets import QLabel, QPushButton, QHBoxLayout, QVBoxLayout, QFrame, QWidget
 from .base_mod_widget import BaseModWidget
-from managers.localization_manager import tr
+from services.localization_service import tr
 from ui.common.styling import get_theme_color
 from utils.mod_utils import get_mod_key
 
@@ -118,7 +118,7 @@ class InstalledModWidget(BaseModWidget):
     def _mod_needs_update(self):
         if not self.parent_app or self.is_local:
             return False
-        return self.parent_app.mod_manager.mod_has_update_available(self.mod_data)
+        return self.parent_app.mod_service.mod_has_update_available(self.mod_data)
 
     def _update_button_from_status(self):
         if not self.use_button:
@@ -172,8 +172,8 @@ class InstalledModWidget(BaseModWidget):
     def mouseDoubleClickEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton and self.parent_app:
             key = get_mod_key(self.mod_data)
-            if key and hasattr(self.parent_app, 'mod_manager'):
-                mod_folder_path = self.parent_app.mod_manager.get_mod_folder_path(key)
+            if key and hasattr(self.parent_app, 'mod_service'):
+                mod_folder_path = self.parent_app.mod_service.get_mod_folder_path(key)
                 if mod_folder_path and os.path.exists(mod_folder_path):
                     QDesktopServices.openUrl(QUrl.fromLocalFile(mod_folder_path))
         super().mouseDoubleClickEvent(event)

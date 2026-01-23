@@ -7,7 +7,7 @@ class TestGameBananaAPI:
 
     @patch('requests.Session')
     def test_fetch_game_mods(self, mock_session_class):
-        from utils.gamebanana_api import GameBananaAPI
+        from adapters.gamebanana_adapter import GameBananaAPI
         mock_session = MagicMock()
         mock_response = Mock()
         mock_response.status_code = 200
@@ -22,7 +22,7 @@ class TestGameBananaAPI:
 
     @patch('requests.Session')
     def test_get_mod_details(self, mock_session_class):
-        from utils.gamebanana_api import GameBananaAPI
+        from adapters.gamebanana_adapter import GameBananaAPI
         mock_session = MagicMock()
         mock_response = Mock()
         mock_response.status_code = 200
@@ -36,7 +36,7 @@ class TestGameBananaAPI:
 
     @patch('requests.Session')
     def test_get_supported_files(self, mock_session_class):
-        from utils.gamebanana_api import GameBananaAPI
+        from adapters.gamebanana_adapter import GameBananaAPI
         mock_session = MagicMock()
         mock_response = Mock()
         mock_response.status_code = 200
@@ -63,7 +63,7 @@ class TestGameBananaAPI:
 
     @patch('requests.Session')
     def test_get_supported_files_with_external_url(self, mock_session_class):
-        from utils.gamebanana_api import GameBananaAPI
+        from adapters.gamebanana_adapter import GameBananaAPI
         mock_session = MagicMock()
         mock_response = Mock()
         mock_response.status_code = 200
@@ -83,7 +83,7 @@ class TestGameBananaAPI:
 class TestGameBananaConverter:
 
     def test_convert_gamebanana_mod(self, temp_mods_dir):
-        from utils.gamebanana_converter import GameBananaConverter
+        from adapters.gamebanana_converter import GameBananaConverter
         import tempfile
         import zipfile
         with tempfile.NamedTemporaryFile(suffix='.zip', delete=False) as tmp_archive:
@@ -100,12 +100,12 @@ class TestGameBananaConverter:
 
 class TestGameBananaUpdateManager:
 
-    def test_update_manager_initialization(self, app_state, feedback_manager):
+    def test_update_service_initialization(self, app_state, feedback_service):
         try:
-            from managers.gamebanana_update_manager import GameBananaUpdateManager
-            update_manager = GameBananaUpdateManager(mods_dir=app_state.mods_dir)
-            assert update_manager is not None
-            assert update_manager.mods_dir == app_state.mods_dir
+            from services.gamebanana_update_service import GameBananaUpdateManager
+            update_service = GameBananaUpdateManager(mods_dir=app_state.mods_dir)
+            assert update_service is not None
+            assert update_service.mods_dir == app_state.mods_dir
         except ImportError:
             import pytest
             pytest.skip('GameBananaUpdateManager not available in this version')

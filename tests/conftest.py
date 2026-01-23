@@ -19,7 +19,7 @@ def qapp():
     yield app
     import time
     from PyQt6.QtCore import QThreadPool, QThread
-    from utils.ui_utils import safe_stop_thread
+    from ui.utils.ui_utils import safe_stop_thread
     app.processEvents()
     time.sleep(0.2)
     app.processEvents()
@@ -119,7 +119,7 @@ def app_state(temp_dir, temp_mods_dir, temp_config_dir, temp_plugins_dir):
 
 
 @pytest.fixture
-def feedback_manager(qapp):
+def feedback_service(qapp):
     parent = QObject()
     manager = FeedbackManager(parent)
     return manager
@@ -127,7 +127,7 @@ def feedback_manager(qapp):
 
 @pytest.fixture
 def mock_gamebanana_api():
-    with patch('src.utils.gamebanana_api.GameBananaAPI') as mock_api_class:
+    with patch('src.adapters.gamebanana_adapter.GameBananaAPI') as mock_api_class:
         mock_api = MagicMock()
         mock_api_class.return_value = mock_api
         mock_api.get_game_mods.return_value = ([], [])
@@ -189,7 +189,7 @@ def sample_mod_folder(temp_mods_dir, sample_mod_config):
 
 @pytest.fixture
 def mock_localization():
-    with patch('src.managers.localization_manager.localization_manager') as mock_loc:
+    with patch('src.services.localization_service.localization_service') as mock_loc:
         mock_loc.tr = lambda key, **kwargs: key
         mock_loc.detect_system_language.return_value = 'en'
         mock_loc.load_language.return_value = True

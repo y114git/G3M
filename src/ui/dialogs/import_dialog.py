@@ -1,13 +1,13 @@
 from typing import Optional
 from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QLineEdit, QFileDialog, QDialogButtonBox
-from managers.localization_manager import tr
+from services.localization_service import tr
 
 
 class ImportDialog(QDialog):
 
-    def __init__(self, parent, feedback_manager, import_type: str, file_filter: Optional[str] = None):
+    def __init__(self, parent, feedback_service, import_type: str, file_filter: Optional[str] = None):
         super().__init__(parent)
-        self.feedback_manager = feedback_manager
+        self.feedback_service = feedback_service
         self.import_type = import_type
         self.file_filter = file_filter
         self.selected_file = None
@@ -77,7 +77,7 @@ class ImportDialog(QDialog):
     def _import_from_url(self):
         url = self.url_input.text().strip()
         if not url:
-            self.feedback_manager.show_message('warning', 'errors.error', tr(self.url_required_key))
+            self.feedback_service.show_message('warning', 'errors.error', tr(self.url_required_key))
             return
         self.selected_url = url
         self.import_method = 'url'

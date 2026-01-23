@@ -10,8 +10,8 @@ import threading
 from typing import Optional, Callable, List
 from PyQt6.QtCore import QThread, pyqtSignal
 from config.constants import UI_COLORS, NETWORK_TIMEOUT_HEAD
-from managers.localization_manager import tr
-from utils.ui_utils import format_size_mb
+from services.localization_service import tr
+from ui.utils.ui_utils import format_size_mb
 logger = logging.getLogger(__name__)
 
 

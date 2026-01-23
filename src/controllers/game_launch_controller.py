@@ -8,10 +8,10 @@ import logging
 from typing import Any, cast
 from PyQt6.QtCore import QObject, pyqtSignal
 from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QVBoxLayout, QFileDialog, QWidget
-from managers.localization_manager import tr
+from services.localization_service import tr
 from config.constants import UI_COLORS
 from models.game_modes import DemoGameMode, UndertaleYellowGameMode, SugarySpireGameMode
-from workers.full_install_worker import FullInstallThread
+from workers.install.full_install_worker import FullInstallThread
 
 
 class GameLaunchController(QObject):
@@ -26,29 +26,29 @@ class GameLaunchController(QObject):
     show_pending_dialogs_requested = pyqtSignal()
     pending_updates_changed = pyqtSignal(list)
 
-    def __init__(self, app_state, feedback_manager, mod_manager, slot_manager, settings_manager, game_launcher, customization_manager, plugin_manager, app_window):
+    def __init__(self, app_state, feedback_service, mod_service, slot_service, settings_service, game_launcher, customization_service, plugin_service, app_window):
         """Initialize the game launch controller with required managers and state.
 
         Args:
             app_state: Application state manager.
-            feedback_manager: User feedback and dialog manager.
-            mod_manager: Mod management operations.
-            slot_manager: Slot and chapter management.
-            settings_manager: Application settings manager.
+            feedback_service: User feedback and dialog manager.
+            mod_service: Mod management operations.
+            slot_service: Slot and chapter management.
+            settings_service: Application settings manager.
             game_launcher: Game launching operations.
-            customization_manager: UI customization manager.
-            plugin_manager: Plugin management operations.
+            customization_service: UI customization manager.
+            plugin_service: Plugin management operations.
             app_window: Main application window reference.
         """
         super().__init__()
         self.app_state = app_state
-        self.feedback_manager = feedback_manager
-        self.mod_manager = mod_manager
-        self.slot_manager = slot_manager
-        self.settings_manager = settings_manager
+        self.feedback_service = feedback_service
+        self.mod_service = mod_service
+        self.slot_service = slot_service
+        self.settings_service = settings_service
         self.game_launcher = game_launcher
-        self.customization_manager = customization_manager
-        self.plugin_manager = plugin_manager
+        self.customization_service = customization_service
+        self.plugin_service = plugin_service
         self.app = app_window
         self._full_install_checkbox_is_checked = False
 
@@ -78,7 +78,7 @@ class GameLaunchController(QObject):
             self.app_state.action_button_text = tr('status.please_wait')
             self.app_state.action_button_enabled = False
             return
-        action_text = tr('buttons.install') if self._is_full_install_enabled() else tr('ui.update_button') if self.slot_manager.check_used_mods_need_updates() else tr('ui.launch_button')
+        action_text = tr('buttons.install') if self._is_full_install_enabled() else tr('ui.update_button') if self.slot_service.check_used_mods_need_updates() else tr('ui.launch_button')
         self.app_state.action_button_text = action_text
         self.app_state.action_button_enabled = True
 
@@ -100,9 +100,9 @@ class GameLaunchController(QObject):
             merge_thread.cancel()
             try:
                 if merge_thread.merger:
-                    if merge_thread.merger.backup_manager and merge_thread.chapter_mods:
+                    if merge_thread.merger.backup_service and merge_thread.chapter_mods:
                         for chapter_id in merge_thread.chapter_mods.keys():
-                            merge_thread.merger.backup_manager.restore_backups(chapter_id)
+                            merge_thread.merger.backup_service.restore_backups(chapter_id)
                     merge_thread.merger.cleanup(force=True)
                 if not merge_thread.isRunning():
                     merge_thread.deleteLater()
@@ -136,7 +136,7 @@ class GameLaunchController(QObject):
             self.app_state.cancel_current_operation()
         elif operation_type == 'merge':
             self._cancel_merge_operation()
-        self.feedback_manager.update_status(tr('status.operation_cancelled'), UI_COLORS['status_error'])
+        self.feedback_service.update_status(tr('status.operation_cancelled'), UI_COLORS['status_error'])
         self._reset_progress_bar()
         self.update_button_state()
 
@@ -160,7 +160,7 @@ class GameLaunchController(QObject):
         if self._is_full_install_enabled():
             self.perform_full_install()
             return
-        if self.slot_manager.check_used_mods_need_updates():
+        if self.slot_service.check_used_mods_need_updates():
             self.update_mods_in_use()
             return
         if self.app_state.operation_cancelled:
@@ -176,7 +176,7 @@ class GameLaunchController(QObject):
         Initiates game launch through the game launcher with plugin hooks
         and window restoration callback configured.
         """
-        self.game_launcher.launch_game_with_all_mods(execute_plugin_hooks=lambda hook_name: self.plugin_manager.execute_hooks(hook_name, self.app), restore_window_callback=self.app.restore_window_signal.emit)
+        self.game_launcher.launch_game_with_all_mods(execute_plugin_hooks=lambda hook_name: self.plugin_service.execute_hooks(hook_name, self.app), restore_window_callback=self.app.restore_window_signal.emit)
 
     def hide_window(self):
         """Hide the application window during game launch.
@@ -185,10 +185,10 @@ class GameLaunchController(QObject):
         and emits window hide request signal.
         """
         try:
-            self.customization_manager.stop_background_music()
+            self.customization_service.stop_background_music()
         except Exception:
             pass
-        self.settings_manager.save_window_geometry(self.app)
+        self.settings_service.save_window_geometry(self.app)
         self.app_state.game_is_running = True
         self.window_hide_requested.emit()
 
@@ -205,9 +205,9 @@ class GameLaunchController(QObject):
         self.update_geometry_requested.emit()
         self.library_display_update_requested.emit()
         self.search_display_update_requested.emit()
-        self.customization_manager.maybe_start_background_music()
+        self.customization_service.maybe_start_background_music()
         self.show_pending_dialogs_requested.emit()
-        self.plugin_manager.execute_hooks('on_after_game_exit', self.app)
+        self.plugin_service.execute_hooks('on_after_game_exit', self.app)
 
     def perform_full_install(self):
         """Perform full game installation with all required files.
@@ -249,7 +249,7 @@ class GameLaunchController(QObject):
         try:
             os.makedirs(target_dir, exist_ok=True)
         except (OSError, PermissionError) as e:
-            self.feedback_manager.show_message('error', 'errors.error', tr('errors.folder_creation_failed', error=str(e)))
+            self.feedback_service.show_message('error', 'errors.error', tr('errors.folder_creation_failed', error=str(e)))
             self.app_state.action_button_enabled = True
             return
         self.app_state.progress_bar_visible = True
@@ -283,10 +283,10 @@ class GameLaunchController(QObject):
                 self.app_state.game_mode.set_game_path(self.app_state.local_config, target_dir)
             else:
                 self.app_state.game_path = self.app_state.local_config['game_path'] = target_dir
-            self.feedback_manager.update_status(tr('status.game_files_install_complete'), UI_COLORS['status_success'])
+            self.feedback_service.update_status(tr('status.game_files_install_complete'), UI_COLORS['status_success'])
         else:
-            self.feedback_manager.update_status(tr('status.game_files_install_failed'), UI_COLORS['status_error'])
-        self.settings_manager.write_local_config()
+            self.feedback_service.update_status(tr('status.game_files_install_failed'), UI_COLORS['status_error'])
+        self.settings_service.write_local_config()
         self.update_button_state()
 
     def update_mods_in_use(self):
@@ -295,13 +295,13 @@ class GameLaunchController(QObject):
         Collects mods needing updates, emits pending updates signal,
         and starts update process for the first mod in the list.
         """
-        mods_to_update = self.slot_manager.collect_mods_needing_update()
+        mods_to_update = self.slot_service.collect_mods_needing_update()
         if mods_to_update:
             self.pending_updates_changed.emit(mods_to_update[1:] if len(mods_to_update) > 1 else [])
             self.app_state.operation_cancelled = False
             self.app_state.progress_bar_visible = True
             self.app_state.progress_bar_value = 0
-            self.mod_manager.update_mod(mods_to_update[0])
+            self.mod_service.update_mod(mods_to_update[0])
 
     def refresh_mods_in_use(self):
         """Refresh mod objects for all mods currently in use.
@@ -312,7 +312,7 @@ class GameLaunchController(QObject):
         """
         if not self.app_state.all_mods:
             return
-        for chapter_id, mod_data in list(self.slot_manager.used_mods.items()):
+        for chapter_id, mod_data in list(self.slot_service.used_mods.items()):
             if not mod_data:
                 continue
             key = getattr(mod_data, 'key', None) or getattr(mod_data, 'mod_key', None)
@@ -320,8 +320,8 @@ class GameLaunchController(QObject):
                 continue
             updated_mod = next((mod for mod in self.app_state.all_mods if (getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)) == key), None)
             if not updated_mod:
-                mod_config = self.mod_manager.get_mod_config(key)
+                mod_config = self.mod_service.get_mod_config(key)
                 if mod_config:
-                    updated_mod = self.mod_manager.create_mod_object_from_info(mod_config, self.app_state.all_mods)
+                    updated_mod = self.mod_service.create_mod_object_from_info(mod_config, self.app_state.all_mods)
             if updated_mod:
-                self.slot_manager.used_mods[chapter_id] = updated_mod
+                self.slot_service.used_mods[chapter_id] = updated_mod

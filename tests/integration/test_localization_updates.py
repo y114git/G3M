@@ -7,19 +7,19 @@ from unittest.mock import Mock, patch
 class TestLocalizationSystem:
 
     def test_buttons_update_on_language_change(self):
-        from managers.localization_manager import LocalizationManager
-        loc_manager = LocalizationManager()
-        initial_lang = loc_manager.get_current_language()
-        if 'ru' in loc_manager.available_languages:
-            loc_manager.load_language('ru')
-            assert loc_manager.get_current_language() == 'ru'
-            loc_manager.load_language(initial_lang)
-            assert loc_manager.get_current_language() == initial_lang
+        from services.localization_service import LocalizationManager
+        loc_service = LocalizationManager()
+        initial_lang = loc_service.get_current_language()
+        if 'ru' in loc_service.available_languages:
+            loc_service.load_language('ru')
+            assert loc_service.get_current_language() == 'ru'
+            loc_service.load_language(initial_lang)
+            assert loc_service.get_current_language() == initial_lang
 
-    def test_localization_manager_has_rescan(self):
-        from managers.localization_manager import LocalizationManager
-        loc_manager = LocalizationManager()
-        assert hasattr(loc_manager, 'rescan_languages')
+    def test_localization_service_has_rescan(self):
+        from services.localization_service import LocalizationManager
+        loc_service = LocalizationManager()
+        assert hasattr(loc_service, 'rescan_languages')
 
 
 class TestUIElementsUseTrFunction:
@@ -76,16 +76,16 @@ class TestLocalizationRefresh:
     def test_language_combo_updates_on_refresh(self, app_state):
         from controllers.refresh_controller import RefreshController
         from PyQt6.QtWidgets import QComboBox
-        feedback_manager = Mock()
-        mod_manager = Mock()
-        slot_manager = Mock()
+        feedback_service = Mock()
+        mod_service = Mock()
+        slot_service = Mock()
         game_launch_controller = Mock()
         update_checker = Mock()
         app_window = Mock()
         language_combo = QComboBox()
         language_combo.addItem('English', 'en')
-        refresh_controller = RefreshController(app_state, feedback_manager, mod_manager, slot_manager, game_launch_controller, update_checker, app_window=app_window)
-        with patch('controllers.refresh_controller.localization_manager') as mock_loc:
+        refresh_controller = RefreshController(app_state, feedback_service, mod_service, slot_service, game_launch_controller, update_checker, app_window=app_window)
+        with patch('controllers.refresh_controller.localization_service') as mock_loc:
             mock_loc.get_current_language.return_value = 'en'
             mock_loc.get_available_languages.return_value = {'en': 'English', 'ru': 'Russian', 'es': 'Spanish'}
             mock_loc.rescan_languages = Mock()

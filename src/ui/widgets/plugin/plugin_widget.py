@@ -2,7 +2,7 @@ import os
 from PyQt6.QtCore import pyqtSignal, Qt
 from PyQt6.QtWidgets import QLabel, QPushButton, QHBoxLayout, QVBoxLayout, QFrame, QWidget
 from PyQt6.QtGui import QPixmap, QColor
-from managers.localization_manager import tr
+from services.localization_service import tr
 from ui.common.styling import get_theme_color
 
 
@@ -44,7 +44,7 @@ class PluginWidget(QFrame):
                 plugin_id = info.get('plugin_id', '')
                 if plugin_id and name_key.startswith(f'{plugin_id}.'):
                     plugin_name_key = name_key[len(f'{plugin_id}.'):]
-                    plugin_tr = self.parent_app.lang_manager.get_plugin_tr(plugin_id) if self.parent_app and hasattr(self.parent_app, 'lang_manager') else None
+                    plugin_tr = self.parent_app.lang_service.get_plugin_tr(plugin_id) if self.parent_app and hasattr(self.parent_app, 'lang_service') else None
                     if plugin_tr:
                         name_text = plugin_tr(plugin_name_key)
                         if name_text.startswith('[') and name_text.endswith(']'):

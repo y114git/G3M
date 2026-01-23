@@ -11,35 +11,35 @@ import logging
 from PyQt6.QtCore import QTranslator, Qt, QEvent, QThread, QTimer, pyqtSignal, QUrl
 from PyQt6.QtGui import QColor, QIcon, QPainter, QPixmap, QDesktopServices
 from PyQt6.QtWidgets import QApplication, QCheckBox, QFrame, QLabel, QProgressBar, QPushButton, QTabWidget, QVBoxLayout, QWidget, QHBoxLayout, QSizePolicy, QColorDialog, QDialog, QMessageBox
-from managers.localization_manager import localization_manager, tr
+from services.localization_service import localization_service, tr
 from models.game_modes import FullGameMode, DemoGameMode, UndertaleGameMode, UndertaleYellowGameMode, PizzaTowerGameMode, SugarySpireGameMode
 from config.constants import UI_COLORS, SOCIAL_LINKS, ONLINE_UPDATE_INTERVAL, INITIALIZATION_TIMEOUT, THREAD_WAIT_TIMEOUT, SLOT_ID_UNIVERSAL
-from utils.game_utils import is_game_running
-from utils.ui_utils import safe_stop_thread, DebounceTimer
+from services.game_detection_service import is_game_running
+from ui.utils.ui_utils import safe_stop_thread, DebounceTimer
 from utils.path_utils import get_user_data_root, resource_path, get_launcher_dir, get_user_plugins_dir
 from workers.presence_worker import PresenceWorker
 from workers.changelog_worker import FetchChangelogWorker
 from controllers.mod_operations_controller import ModOperationsController
 from controllers.library_display_controller import LibraryDisplayController
 from controllers.search_display_controller import SearchDisplayController
-from controllers.settings_ui_controller import SettingsUiController
+from controllers.settings_controller import SettingsUiController
 from controllers.theme_controller import ThemeController
 from controllers.game_launch_controller import GameLaunchController
 from ui.common.feedback import FeedbackManager
 from core.startup import SingleInstanceServer, ShortcutLaunchError
 from core.app_state import AppState
-from managers.mod_manager import ModManager
-from managers.launch_manager import GameLauncher
-from managers.updatecheck_manager import UpdateChecker
-from managers.settings_manager import SettingsManager
-from ui.main_window.search_tab_builder import SearchTabBuilder
-from ui.main_window.library_tab_builder import LibraryTabBuilder
-from ui.main_window.plugin_tab_builder import PluginTabBuilder
-from ui.main_window.settings_view_builder import SettingsViewBuilder
-from managers.plugin_manager import PluginManager
-from managers.customization_manager import CustomizationManager
-from managers.used_mods_manager import UsedModsManager
-from managers.shortcut_manager import ShortcutManager
+from services.mod_service import ModManager
+from services.launch_service import GameLauncher
+from services.updatecheck_service import UpdateChecker
+from services.settings_service import SettingsManager
+from ui.builders.search_tab_builder import SearchTabBuilder
+from ui.builders.library_tab_builder import LibraryTabBuilder
+from ui.builders.plugin_tab_builder import PluginTabBuilder
+from ui.builders.settings_view_builder import SettingsViewBuilder
+from services.plugin_service import PluginManager
+from services.customization_service import CustomizationManager
+from services.used_mods_service import UsedModsManager
+from services.shortcut_service import ShortcutManager
 from utils.network_utils import check_internet_connection
 _translator = QTranslator()
 _lock_file = None
@@ -77,12 +77,12 @@ class AppWindow(QWidget):
         os.makedirs(self.app_state.cache_dir, exist_ok=True)
         os.makedirs(self.app_state.mods_dir, exist_ok=True)
         os.makedirs(self.app_state.plugins_dir, exist_ok=True)
-        self.lang_manager = localization_manager
+        self.lang_service = localization_service
         self.app_state.config_path = os.path.join(self.app_state.config_dir, 'settings.json')
         self._migrate_settings_config_file()
-        self.feedback_manager = FeedbackManager(self)
-        self.feedback_manager.app_state = self.app_state
-        self.settings_manager = SettingsManager(self.app_state, self.feedback_manager, self.lang_manager, parent=self)
+        self.feedback_service = FeedbackManager(self)
+        self.feedback_service.app_state = self.app_state
+        self.settings_service = SettingsManager(self.app_state, self.feedback_service, self.lang_service, parent=self)
         self._pending_install_url = initial_url
         self.dialog_parent = parent_for_dialogs or self
         self.session_id = uuid.uuid4().hex
@@ -98,10 +98,10 @@ class AppWindow(QWidget):
         self.setWindowTitle('DELTAHUB')
         self._supports_volume = platform.system() == 'Windows'
         self._initial_size = None
-        self.app_state.local_config = self.settings_manager.read_json(self.app_state.config_path) or {}
+        self.app_state.local_config = self.settings_service.read_json(self.app_state.config_path) or {}
         self._init_localization()
         self._splash_was_shown = False
-        self.settings_manager.migrate_config_if_needed()
+        self.settings_service.migrate_config_if_needed()
         is_first_launch = not self.app_state.local_config.get('first_launch_splash_shown', False)
         self.resize(875, 750)
         self._initial_size = self.size()
@@ -120,56 +120,56 @@ class AppWindow(QWidget):
         self._install_op_id = 0
         self.pending_updates = []
         self._mods_display_ready_emitted = False
-        self.feedback_manager.status_updated.connect(self.update_status_signal.emit)
-        self.settings_manager.language_changed.connect(lambda _: self._retranslate_ui())
-        self.settings_manager.restart_required.connect(lambda msg: self.feedback_manager.show_message('info', 'dialogs.restart_required', msg))
-        self.settings_manager.status_changed.connect(self.update_status_signal.emit)
-        self.mod_manager = ModManager(self.app_state, self.feedback_manager, self.settings_manager, self)
-        self.mod_manager.progress_updated.connect(self.set_progress_signal.emit)
-        self.mod_manager.status_changed.connect(self.update_status_signal.emit)
-        self.mod_manager.url_prompt_required.connect(self._handle_url_install_prompt)
-        self.game_launcher = GameLauncher(self.app_state, self.feedback_manager, self.mod_manager, self)
+        self.feedback_service.status_updated.connect(self.update_status_signal.emit)
+        self.settings_service.language_changed.connect(lambda _: self._retranslate_ui())
+        self.settings_service.restart_required.connect(lambda msg: self.feedback_service.show_message('info', 'dialogs.restart_required', msg))
+        self.settings_service.status_changed.connect(self.update_status_signal.emit)
+        self.mod_service = ModManager(self.app_state, self.feedback_service, self.settings_service, self)
+        self.mod_service.progress_updated.connect(self.set_progress_signal.emit)
+        self.mod_service.status_changed.connect(self.update_status_signal.emit)
+        self.mod_service.url_prompt_required.connect(self._handle_url_install_prompt)
+        self.game_launcher = GameLauncher(self.app_state, self.feedback_service, self.mod_service, self)
         self.game_launcher.status_changed.connect(self.update_status_signal.emit)
         self.game_launcher.progress_updated.connect(self.set_progress_signal.emit)
         self.game_launcher.game_launch_started.connect(self.hide_window_signal.emit)
         self.game_launcher.game_launch_finished.connect(self.restore_window_signal.emit)
         self.game_launcher.recover_previous_session()
-        self.update_checker = UpdateChecker(self.app_state, self.feedback_manager, self)
+        self.update_checker = UpdateChecker(self.app_state, self.feedback_service, self)
         self.update_checker.update_available.connect(self._handle_update_info)
         self.update_checker.status_changed.connect(self.update_status_signal.emit)
         self.update_checker.progress_updated.connect(self.set_progress_signal.emit)
         self.update_checker.update_finished.connect(self._on_update_cleanup)
-        self.update_checker.update_error.connect(lambda msg: self.feedback_manager.show_message('error', 'errors.error', msg))
+        self.update_checker.update_error.connect(lambda msg: self.feedback_service.show_message('error', 'errors.error', msg))
         self.update_checker.quit_requested.connect(QApplication.quit)
-        self.plugin_manager = PluginManager(self.app_state, self.settings_manager, self)
-        self.plugin_manager.app_window = self
-        self.customization_manager = CustomizationManager(self.app_state, self)
-        self.slot_manager = UsedModsManager(self.app_state, self.mod_manager, self.feedback_manager, self.settings_manager, self)
-        self.slot_manager.used_mods_updated.connect(self._on_slot_manager_used_mods_updated)
+        self.plugin_service = PluginManager(self.app_state, self.settings_service, self)
+        self.plugin_service.app_window = self
+        self.customization_service = CustomizationManager(self.app_state, self)
+        self.slot_service = UsedModsManager(self.app_state, self.mod_service, self.feedback_service, self.settings_service, self)
+        self.slot_service.used_mods_updated.connect(self._on_slot_service_used_mods_updated)
         self._load_used_mods_debounce = DebounceTimer(delay_ms=200)
-        self.shortcut_manager = ShortcutManager(self.app_state, self.feedback_manager, self.mod_manager, self)
-        self.shortcut_manager.shortcut_created.connect(lambda path: self.feedback_manager.update_status(tr('status.shortcut_created', path=path), UI_COLORS['status_success']))
-        self.shortcut_manager.status_changed.connect(self.feedback_manager.update_status)
-        self.mod_ops = ModOperationsController(self.app_state, self.feedback_manager, self.mod_manager, self)
-        self.library_display = LibraryDisplayController(self.app_state, self.feedback_manager, self.mod_manager, self.slot_manager, self)
-        self.search_display = SearchDisplayController(self.app_state, self.feedback_manager, self.mod_manager, self.mod_ops, self)
+        self.shortcut_service = ShortcutManager(self.app_state, self.feedback_service, self.mod_service, self)
+        self.shortcut_service.shortcut_created.connect(lambda path: self.feedback_service.update_status(tr('status.shortcut_created', path=path), UI_COLORS['status_success']))
+        self.shortcut_service.status_changed.connect(self.feedback_service.update_status)
+        self.mod_ops = ModOperationsController(self.app_state, self.feedback_service, self.mod_service, self)
+        self.library_display = LibraryDisplayController(self.app_state, self.feedback_service, self.mod_service, self.slot_service, self)
+        self.search_display = SearchDisplayController(self.app_state, self.feedback_service, self.mod_service, self.mod_ops, self)
         self.search_display.ui_button_text_update.connect(self._on_search_ui_button_text_update)
         self.search_display.ui_button_tooltip_update.connect(self._on_search_ui_button_tooltip_update)
         self.search_display.ui_button_enabled_update.connect(self._on_search_ui_button_enabled_update)
         self.search_display.ui_label_text_update.connect(self._on_search_ui_label_text_update)
         self.search_display.ui_widget_updates_enabled.connect(self._on_search_ui_widget_updates_enabled)
-        self.settings_ui = SettingsUiController(self.app_state, self.feedback_manager, self.settings_manager, self.slot_manager, self.customization_manager, self)
-        self.theme = ThemeController(self.app_state, self.feedback_manager, self.settings_manager, self.customization_manager, self)
-        self.game_launch = GameLaunchController(self.app_state, self.feedback_manager, self.mod_manager, self.slot_manager, self.settings_manager, self.game_launcher, self.customization_manager, self.plugin_manager, self)
+        self.settings_ui = SettingsUiController(self.app_state, self.feedback_service, self.settings_service, self.slot_service, self.customization_service, self)
+        self.theme = ThemeController(self.app_state, self.feedback_service, self.settings_service, self.customization_service, self)
+        self.game_launch = GameLaunchController(self.app_state, self.feedback_service, self.mod_service, self.slot_service, self.settings_service, self.game_launcher, self.customization_service, self.plugin_service, self)
         from controllers.refresh_controller import RefreshController
-        self.refresh_controller = RefreshController(self.app_state, self.feedback_manager, self.mod_manager, self.slot_manager, self.game_launch, self.update_checker, self.settings_manager, app_window=self)
-        self.mod_manager.mod_list_updated.connect(self.library_display.update_display)
-        self.mod_manager.mod_list_updated.connect(self.slot_manager._retry_load_missing_mods)
-        self.mod_manager.mod_list_updated.connect(lambda: self._load_used_mods_debounce.call(self.slot_manager.load_used_mods_state))
-        self.slot_manager.used_mod_changed.connect(lambda chapter_id: self.game_launch.update_button_state())
-        self.slot_manager.used_mod_changed.connect(lambda chapter_id: self.library_display._update_priority_button_visibility(chapter_id) if hasattr(self.library_display, '_update_priority_button_visibility') else None)
-        self.slot_manager.action_button_update_needed.connect(self.game_launch.update_button_state)
-        self.slot_manager.mod_widgets_update_needed.connect(self.library_display.update_mod_widgets_slot_status)
+        self.refresh_controller = RefreshController(self.app_state, self.feedback_service, self.mod_service, self.slot_service, self.game_launch, self.update_checker, self.settings_service, app_window=self)
+        self.mod_service.mod_list_updated.connect(self.library_display.update_display)
+        self.mod_service.mod_list_updated.connect(self.slot_service._retry_load_missing_mods)
+        self.mod_service.mod_list_updated.connect(lambda: self._load_used_mods_debounce.call(self.slot_service.load_used_mods_state))
+        self.slot_service.used_mod_changed.connect(lambda chapter_id: self.game_launch.update_button_state())
+        self.slot_service.used_mod_changed.connect(lambda chapter_id: self.library_display._update_priority_button_visibility(chapter_id) if hasattr(self.library_display, '_update_priority_button_visibility') else None)
+        self.slot_service.action_button_update_needed.connect(self.game_launch.update_button_state)
+        self.slot_service.mod_widgets_update_needed.connect(self.library_display.update_mod_widgets_slot_status)
         self.game_launch.window_hide_requested.connect(self.hide)
         self.game_launch.window_restore_requested.connect(self._on_window_restore_requested)
         self.game_launch.library_display_update_requested.connect(lambda: self.library_display.update_display())
@@ -177,8 +177,8 @@ class AppWindow(QWidget):
         self.game_launch.update_geometry_requested.connect(self.updateGeometry)
         self.game_launch.show_pending_dialogs_requested.connect(self._show_pending_dialogs)
         self.game_launch.pending_updates_changed.connect(lambda updates: setattr(self, 'pending_updates', updates))
-        self.settings_manager.theme_changed.connect(self.theme.apply_theme)
-        self.settings_manager.theme_changed.connect(self._on_theme_changed_by_manager)
+        self.settings_service.theme_changed.connect(self.theme.apply_theme)
+        self.settings_service.theme_changed.connect(self._on_theme_changed_by_service)
         self.initialization_finished.connect(self.game_launch.update_button_state)
         self.initialization_finished.connect(self._try_start_background_music)
         if is_first_launch:
@@ -187,7 +187,7 @@ class AppWindow(QWidget):
             self._shortcut_launch(args)
             return
         self.init_ui()
-        self.custom_font_family = localization_manager.load_font()
+        self.custom_font_family = localization_service.load_font()
         QTimer.singleShot(0, lambda: self.ui_ready.emit())
         self.update_status_signal.connect(self._update_status)
         self.hide_window_signal.connect(self.game_launch.hide_window)
@@ -203,7 +203,7 @@ class AppWindow(QWidget):
         self.initialization_timer.setSingleShot(True)
         self.initialization_timer.timeout.connect(self._force_finish_initialization)
         self.initialization_timer.start(INITIALIZATION_TIMEOUT)
-        self.settings_manager.load_window_geometry(self)
+        self.settings_service.load_window_geometry(self)
 
     def _handle_first_launch_settings(self):
         if self.app_state.local_config.get('first_launch_splash_shown', False):
@@ -215,7 +215,7 @@ class AppWindow(QWidget):
         self.app_state.local_config['first_launch_splash_shown'] = True
         if 'disable_splash' not in self.app_state.local_config or self.app_state.local_config.get('disable_splash') is False:
             self.app_state.local_config['disable_splash'] = True
-        self.settings_manager.write_local_config()
+        self.settings_service.write_local_config()
         try:
             self.initialization_finished.disconnect(self._handle_first_launch_settings)
         except TypeError:
@@ -227,7 +227,7 @@ class AppWindow(QWidget):
             self._pending_install_url = None
 
     def _on_window_restore_requested(self):
-        geometry_restored = self.settings_manager.load_window_geometry(self)
+        geometry_restored = self.settings_service.load_window_geometry(self)
         if geometry_restored:
             self.show()
         else:
@@ -242,23 +242,23 @@ class AppWindow(QWidget):
         self.app_state.clear_current_task()
 
     def _refresh_after_install(self) -> None:
-        if self.plugin_manager:
-            self.plugin_manager.convert_plugin_archives()
-            self.plugin_manager.load_plugins()
+        if self.plugin_service:
+            self.plugin_service.convert_plugin_archives()
+            self.plugin_service.load_plugins()
         if hasattr(self, '_update_plugin_tabs'):
             self._update_plugin_tabs()
         if hasattr(self, 'plugin_display'):
             self.plugin_display.update_display()
-        if self.mod_manager:
-            self.mod_manager.invalidate_mods_cache()
-            QTimer.singleShot(0, lambda: (self.mod_manager.load_local_mods(_skip_conversion=True), self.mod_manager.mod_list_updated.emit()))
+        if self.mod_service:
+            self.mod_service.invalidate_mods_cache()
+            QTimer.singleShot(0, lambda: (self.mod_service.load_local_mods(_skip_conversion=True), self.mod_service.mod_list_updated.emit()))
         if hasattr(self, 'library_display'):
             self.library_display.update_display()
         if hasattr(self, 'search_display'):
             self.search_display.update_search_plaques()
             self.search_display.update_filtered_mods(preserve_page=True)
-        if hasattr(self, 'settings_manager'):
-            self.settings_manager.theme_changed.emit()
+        if hasattr(self, 'settings_service'):
+            self.settings_service.theme_changed.emit()
 
     def handle_one_click_install(self, url: str):
         if is_game_running():
@@ -266,19 +266,19 @@ class AppWindow(QWidget):
         self.activateWindow()
         self.raise_()
         if self.app_state.is_installing:
-            self.feedback_manager.show_message('warning', 'dialogs.install_in_progress_title', tr('dialogs.install_in_progress_body'))
+            self.feedback_service.show_message('warning', 'dialogs.install_in_progress_title', tr('dialogs.install_in_progress_body'))
             return
         if url.startswith('deltahub://'):
-            from workers.url_install_worker import UrlInstallThread
+            from workers.install.url_install_worker import UrlInstallThread
             worker = UrlInstallThread(self, url)
-            worker.status.connect(lambda msg, color: self.feedback_manager.update_status(msg, color))
+            worker.status.connect(lambda msg, color: self.feedback_service.update_status(msg, color))
             worker.progress.connect(lambda p: setattr(self.app_state, 'progress_bar_value', p))
 
             def on_manual_install_required(prepared_path, archive_path, temp_dir):
                 self._reset_install_state()
                 try:
-                    from ui.dialogs.manual_mod_install_dialog import ManualModInstallDialog
-                    from utils.game_utils import get_game_type_string
+                    from ui.dialogs.manual_install_dialog import ManualModInstallDialog
+                    from services.game_detection_service import get_game_type_string
                     initial_game_type = None
                     if self.app_state and hasattr(self.app_state, 'game_mode'):
                         initial_game_type = get_game_type_string(self.app_state.game_mode)
@@ -286,12 +286,12 @@ class AppWindow(QWidget):
                     dialog.temp_dir_to_cleanup = temp_dir
                     if dialog.exec() == QDialog.DialogCode.Accepted:
                         self._refresh_after_install()
-                        self.feedback_manager.update_status(tr('dialogs.mod_created_successfully'), UI_COLORS['status_success'])
+                        self.feedback_service.update_status(tr('dialogs.mod_created_successfully'), UI_COLORS['status_success'])
                         QMessageBox.information(self, tr('dialogs.success'), tr('dialogs.mod_created_successfully'))
                         QTimer.singleShot(1000, lambda: self._on_refresh_clicked(is_initial=False))
                 except Exception as e:
                     logging.error(f'Failed to open manual install dialog: {e}', exc_info=True)
-                    self.feedback_manager.show_message('error', tr('errors.error'), tr('errors.manual_install_failed', error=str(e)))
+                    self.feedback_service.show_message('error', tr('errors.error'), tr('errors.manual_install_failed', error=str(e)))
                     try:
                         shutil.rmtree(temp_dir, ignore_errors=True)
                     except Exception:
@@ -301,11 +301,11 @@ class AppWindow(QWidget):
                 self._reset_install_state()
                 if success:
                     self._refresh_after_install()
-                    self.feedback_manager.update_status(message, UI_COLORS['status_success'])
+                    self.feedback_service.update_status(message, UI_COLORS['status_success'])
                     QTimer.singleShot(1000, lambda: self._on_refresh_clicked(is_initial=False))
                 else:
                     logging.warning(f'Installation failed for deltahub:// URL: {message}')
-                    self.feedback_manager.update_status(message or tr('errors.error'), UI_COLORS['status_error'])
+                    self.feedback_service.update_status(message or tr('errors.error'), UI_COLORS['status_error'])
 
             def on_unrar_needed():
                 try:
@@ -325,7 +325,7 @@ class AppWindow(QWidget):
             self.app_state.current_task = worker
             worker.start()
         else:
-            self.mod_manager.install_from_url(url)
+            self.mod_service.install_from_url(url)
 
     def _on_url_install_finished(self, success: bool, message: str):
         self.app_state.is_installing = False
@@ -340,8 +340,8 @@ class AppWindow(QWidget):
         self._update_status(message, status_color)
 
     def _handle_url_install_prompt(self, title, message):
-        reply = self.feedback_manager.ask_question(title, message)
-        self.mod_manager.handle_url_prompt_response(reply)
+        reply = self.feedback_service.ask_question(title, message)
+        self.mod_service.handle_url_prompt_response(reply)
 
     def _shortcut_launch(self, args):
         try:
@@ -357,7 +357,7 @@ class AppWindow(QWidget):
             logging.error(f'Shortcut settings read error: {e}')
             raise ShortcutLaunchError('Failed to read shortcut settings')
         self._load_local_data()
-        QTimer.singleShot(0, self.mod_manager.load_local_mods)
+        QTimer.singleShot(0, self.mod_service.load_local_mods)
         try:
             if settings.get('is_undertaleyellow_mode', False):
                 self.app_state.game_mode = UndertaleYellowGameMode()
@@ -411,8 +411,8 @@ class AppWindow(QWidget):
             mods_settings = settings.get('mods', {})
             if not mods_settings:
                 mods_settings = settings.get('selections', {})
-            self.shortcut_manager.apply_shortcut_mods(mods_settings, is_chapter_mode=is_chapter_mode)
-            self.shortcut_manager.launch_game_from_shortcut(launch_via_steam=launch_via_steam, use_custom_executable=use_custom_executable, custom_exec_path=custom_exec_path, demo_custom_exec_path=demo_custom_exec_path, undertale_custom_exec_path=undertale_custom_exec_path, undertaleyellow_custom_exec_path=undertaleyellow_custom_exec_path, pizzatower_custom_exec_path=pizzatower_custom_exec_path, sugaryspire_custom_exec_path=sugaryspire_custom_exec_path, direct_launch_slot_id=direct_launch_slot_id)
+            self.shortcut_service.apply_shortcut_mods(mods_settings, is_chapter_mode=is_chapter_mode)
+            self.shortcut_service.launch_game_from_shortcut(launch_via_steam=launch_via_steam, use_custom_executable=use_custom_executable, custom_exec_path=custom_exec_path, demo_custom_exec_path=demo_custom_exec_path, undertale_custom_exec_path=undertale_custom_exec_path, undertaleyellow_custom_exec_path=undertaleyellow_custom_exec_path, pizzatower_custom_exec_path=pizzatower_custom_exec_path, sugaryspire_custom_exec_path=sugaryspire_custom_exec_path, direct_launch_slot_id=direct_launch_slot_id)
         except (OSError, FileNotFoundError) as e:
             logging.error(f'Launch error (file system): {e}')
             raise ShortcutLaunchError(f'File system error: {e}')
@@ -424,7 +424,7 @@ class AppWindow(QWidget):
             raise ShortcutLaunchError(str(e) or 'Shortcut launch failed')
 
     def _handle_permission_error(self, path: str):
-        self.feedback_manager.show_message('error', 'errors.access_denied', path=path)
+        self.feedback_service.show_message('error', 'errors.access_denied', path=path)
 
     def _get_current_game_path(self) -> str:
         return self.app_state.game_mode.get_game_path(self.app_state.local_config) or ''
@@ -482,7 +482,7 @@ class AppWindow(QWidget):
         self.launcher_icon_label = QLabel(self.top_panel_widget)
         self.launcher_icon_label.setFixedSize(250, 80)
         self.launcher_icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.customization_manager.load_launcher_icon(self.launcher_icon_label)
+        self.customization_service.load_launcher_icon(self.launcher_icon_label)
         self.bottom_widget = QFrame()
         self.bottom_widget.setObjectName('bottom_widget')
         self.bottom_frame = QVBoxLayout(self.bottom_widget)
@@ -493,7 +493,7 @@ class AppWindow(QWidget):
         self.progress_bar.setVisible(False)
         self.action_frame = QHBoxLayout()
         self.shortcut_button = QPushButton(tr('buttons.shortcut'))
-        self.shortcut_button.clicked.connect(self.shortcut_manager.create_shortcut_flow)
+        self.shortcut_button.clicked.connect(self.shortcut_service.create_shortcut_flow)
         self.action_button = QPushButton(tr('status.please_wait'))
         self.action_button.setEnabled(False)
         self.action_button.setMinimumWidth(200)
@@ -560,12 +560,12 @@ class AppWindow(QWidget):
         if 'selected_search_game' not in self.app_state.local_config:
             default_game = self.modgame_combo.currentData() or 'deltarune'
             self.app_state.local_config['selected_search_game'] = default_game
-            self.settings_manager.write_local_config()
+            self.settings_service.write_local_config()
 
         def on_modgame_changed():
             selected_game = self.modgame_combo.currentData() or 'deltarune'
             self.app_state.local_config['selected_search_game'] = selected_game
-            self.settings_manager.write_local_config()
+            self.settings_service.write_local_config()
             self.app_state.current_page = 1
             self.search_display.load_mods_for_selected_game()
         self.modgame_combo.currentIndexChanged.connect(on_modgame_changed)
@@ -622,7 +622,7 @@ class AppWindow(QWidget):
         self.plugins_widget = plugin_widgets['plugins_widget']
         self.plugins_layout = plugin_widgets['plugins_layout']
         from controllers.plugin_display_controller import PluginDisplayController
-        self.plugin_display = PluginDisplayController(self.app_state, self.feedback_manager, self.plugin_manager, self)
+        self.plugin_display = PluginDisplayController(self.app_state, self.feedback_service, self.plugin_service, self)
         self.plugins_search_button.clicked.connect(self.plugin_display.on_search_plugins)
         self.plugins_import_button.clicked.connect(self.plugin_display.on_import_plugin)
         self.library_sort_combo = library_widgets['library_sort_combo']
@@ -637,7 +637,7 @@ class AppWindow(QWidget):
         self.library_search_button = library_widgets['library_search_button']
         if self.import_export_button:
             from controllers.mod_import_export_controller import ModImportExportController
-            self.mod_import_export_controller = ModImportExportController(self.app_state, self.mod_manager, self)
+            self.mod_import_export_controller = ModImportExportController(self.app_state, self.mod_service, self)
             self.import_export_button.clicked.connect(self.mod_import_export_controller.show_import_export_dialog)
         self.game_type_combo.currentIndexChanged.connect(self.settings_ui.on_game_type_changed)
         self.chapter_mode_checkbox.stateChanged.connect(self.settings_ui.on_chapter_mode_changed)
@@ -726,7 +726,7 @@ class AppWindow(QWidget):
         self.language_label = settings_widgets['language_label']
         self.language_combo = settings_widgets['language_combo']
         self.beta_updates_checkbox = settings_widgets['beta_updates_checkbox']
-        self.clear_logs_checkbox = settings_widgets['clear_logs_checkbox']
+        self.placeholder_checkbox = settings_widgets['placeholder_checkbox']
         self.fullscreen_checkbox = settings_widgets['fullscreen_checkbox']
         self.hide_library_filters_checkbox = settings_widgets['hide_library_filters_checkbox']
         self.launch_via_steam_checkbox = settings_widgets['launch_via_steam_checkbox']
@@ -756,7 +756,6 @@ class AppWindow(QWidget):
         self.report_bug_button = settings_widgets['report_bug_button']
         self.language_combo.currentTextChanged.connect(lambda: self.settings_ui.on_language_changed(self.language_combo.currentData()))
         self.beta_updates_checkbox.stateChanged.connect(self.settings_ui.on_toggle_beta_updates)
-        self.clear_logs_checkbox.stateChanged.connect(self.settings_ui.on_toggle_clear_logs)
         self.fullscreen_checkbox.stateChanged.connect(self.settings_ui.on_toggle_fullscreen)
         self.hide_library_filters_checkbox.stateChanged.connect(self.settings_ui.on_toggle_hide_library_filters)
         self.launch_via_steam_checkbox.stateChanged.connect(self.settings_ui.on_toggle_steam_launch)
@@ -779,11 +778,11 @@ class AppWindow(QWidget):
         self.disable_splash_checkbox.stateChanged.connect(self.settings_ui.on_toggle_disable_splash)
         self.back_button_cust.clicked.connect(self._go_back_to_settings_menu)
         self.change_background_button.clicked.connect(self.theme.on_background_button_click)
-        self.change_logo_button.setText(self.customization_manager.get_logo_button_text())
+        self.change_logo_button.setText(self.customization_service.get_logo_button_text())
         self.change_logo_button.clicked.connect(self.theme.on_logo_button_click)
-        self.background_music_button.setText(self.customization_manager.get_background_music_button_text())
+        self.background_music_button.setText(self.customization_service.get_background_music_button_text())
         self.background_music_button.clicked.connect(self.theme.on_background_music_button_click)
-        self.startup_sound_button.setText(self.customization_manager.get_startup_sound_button_text())
+        self.startup_sound_button.setText(self.customization_service.get_startup_sound_button_text())
         self.startup_sound_button.clicked.connect(self.theme.on_startup_sound_button_click)
         self.theme_button.clicked.connect(self.theme.on_theme_button_click)
 
@@ -826,12 +825,12 @@ class AppWindow(QWidget):
 
     def _try_start_background_music(self):
         if getattr(self, 'is_shown_to_user', False) and self.isVisible():
-            self.customization_manager.maybe_start_background_music(force=True)
+            self.customization_service.maybe_start_background_music(force=True)
 
     def _on_fast_merging_changed(self, state):
         fast_merging_enabled = state == Qt.CheckState.Checked or state == 2
         self.app_state.local_config['fast_merging_enabled'] = fast_merging_enabled
-        self.settings_manager.write_local_config()
+        self.settings_service.write_local_config()
         logging.debug(f'Fast merging setting changed: {fast_merging_enabled}')
 
     def _on_library_filter_changed(self):
@@ -843,7 +842,7 @@ class AppWindow(QWidget):
         if hasattr(self, 'sort_combo'):
             sort_index = self.sort_combo.currentIndex()
             self.app_state.local_config['search_sort_index'] = sort_index
-            self.settings_manager.write_local_config()
+            self.settings_service.write_local_config()
         self.search_display.update_filtered_mods()
 
     def _on_sort_refresh_complete(self):
@@ -881,7 +880,7 @@ class AppWindow(QWidget):
         try:
             self.app_state.mods_per_page = value
             self.app_state.local_config['mods_per_page'] = value
-            self.settings_manager.write_local_config()
+            self.settings_service.write_local_config()
             self.app_state.current_page = 1
             self.search_display.update_filtered_mods()
             logging.info(f'Mods per page changed to {value}')
@@ -893,7 +892,7 @@ class AppWindow(QWidget):
             is_checked = state == Qt.CheckState.Checked.value
             self.app_state.auto_sorting = is_checked
             self.app_state.local_config['auto_sorting'] = is_checked
-            self.settings_manager.write_local_config()
+            self.settings_service.write_local_config()
             if is_checked:
                 self.search_display.update_filtered_mods(preserve_page=True)
             logging.info(f'Auto-sorting changed to {is_checked}')
@@ -1068,7 +1067,7 @@ class AppWindow(QWidget):
                 if getattr(self.app_state, 'current_mode', 'normal') != 'normal':
                     self.app_state.current_mode = 'normal'
                 self.game_type_combo.setEnabled(True)
-            self.slot_manager.load_used_mods_state()
+            self.slot_service.load_used_mods_state()
             self.library_display.update_display()
             self._update_change_path_button_text()
         except Exception:
@@ -1108,7 +1107,7 @@ class AppWindow(QWidget):
         if ev.type() == QEvent.Type.MouseButtonDblClick and hasattr(obj, '_chapter_id'):
             chapter_id = getattr(obj, '_chapter_id', None)
             if chapter_id is not None:
-                self.slot_manager.toggle_direct_launch_for_chapter(chapter_id)
+                self.slot_service.toggle_direct_launch_for_chapter(chapter_id)
                 return True
         return super().eventFilter(obj, ev)
 
@@ -1142,7 +1141,7 @@ class AppWindow(QWidget):
         if is_first_launch and getattr(self, '_splash_was_shown', False):
             self.app_state.local_config['first_launch_splash_shown'] = True
             self.app_state.local_config['disable_splash'] = True
-            self.settings_manager.write_local_config()
+            self.settings_service.write_local_config()
         self.app_state.has_internet = check_internet_connection()
         if not self.app_state.has_internet:
             logging.info('No internet connection detected, running in offline mode')
@@ -1157,11 +1156,11 @@ class AppWindow(QWidget):
                 if response.status_code == 200:
                     self.app_state.global_settings = response.json() or {}
             except requests.RequestException:
-                self.feedback_manager.update_status(tr('status.global_settings_load_failed'), UI_COLORS['status_warning'])
+                self.feedback_service.update_status(tr('status.global_settings_load_failed'), UI_COLORS['status_warning'])
                 self.app_state.has_internet = False
         if not self.is_shortcut_launch and self.app_state.has_internet:
             self.app_state.pending_announce_check = True
-        if localization_manager.get_current_language() == 'ru':
+        if localization_service.get_current_language() == 'ru':
             changelog_url = self.app_state.global_settings.get('changelog_ru_url', self.app_state.global_settings.get('changelog_url'))
         else:
             changelog_url = self.app_state.global_settings.get('changelog_en_url', self.app_state.global_settings.get('changelog_url'))
@@ -1175,7 +1174,7 @@ class AppWindow(QWidget):
         else:
             self.changelog_text_edit.setMarkdown(tr('status.changelog_load_failed'))
         if is_game_running():
-            self.feedback_manager.update_status(tr('status.deltarune_already_running'), UI_COLORS['status_error'])
+            self.feedback_service.update_status(tr('status.deltarune_already_running'), UI_COLORS['status_error'])
             return
         self._load_local_data()
         self.app_state.game_path = self.app_state.local_config.get('game_path', '')
@@ -1195,7 +1194,6 @@ class AppWindow(QWidget):
         self._set_checkbox_checked_silently(self.disable_background_checkbox, self.app_state.local_config.get('background_disabled', False))
         self._set_checkbox_checked_silently(self.disable_splash_checkbox, self.app_state.local_config.get('disable_splash', False))
         self.beta_updates_checkbox.setChecked(self.app_state.local_config.get('beta_updates_enabled', False))
-        self.clear_logs_checkbox.setChecked(self.app_state.local_config.get('clear_logs_on_startup', False))
         self.fullscreen_checkbox.setChecked(self.app_state.local_config.get('fullscreen_enabled', False))
         if hasattr(self, 'hide_library_filters_checkbox'):
             self.hide_library_filters_checkbox.setChecked(self.app_state.local_config.get('hide_library_filters', False))
@@ -1219,7 +1217,7 @@ class AppWindow(QWidget):
             self.status_label.setText(tr('status.scanning_mods'))
         except Exception as e:
             logging.error(f'AppWindow: Failed to start mod scan thread: {e}', exc_info=True)
-            self.feedback_manager.update_status(tr('status.mod_scan_init_error', details=str(e)), UI_COLORS['status_error'])
+            self.feedback_service.update_status(tr('status.mod_scan_init_error', details=str(e)), UI_COLORS['status_error'])
             try:
                 self._on_mod_scan_finished({})
             except Exception as scan_error:
@@ -1229,18 +1227,18 @@ class AppWindow(QWidget):
 
     def _on_mod_scan_finished(self, scan_cache: dict):
         try:
-            if hasattr(self.mod_manager, '_mods_cache') and hasattr(self.mod_manager, '_cache_lock'):
-                with self.mod_manager._cache_lock:
-                    self.mod_manager._mods_cache = scan_cache
-                    self.mod_manager._mods_cache_valid = True
-            QTimer.singleShot(0, self.mod_manager.load_local_mods)
+            if hasattr(self.mod_service, '_mods_cache') and hasattr(self.mod_service, '_cache_lock'):
+                with self.mod_service._cache_lock:
+                    self.mod_service._mods_cache = scan_cache
+                    self.mod_service._mods_cache_valid = True
+            QTimer.singleShot(0, self.mod_service.load_local_mods)
             saved_chapter_mode = self.app_state.local_config.get('chapter_mode_enabled', False)
             self.setEnabled(False)
             QTimer.singleShot(500, lambda: (self._load_mods_and_build_list_synchronously(saved_chapter_mode), self.setEnabled(True)))
-            self._load_used_mods_debounce.call(self.slot_manager.load_used_mods_state)
+            self._load_used_mods_debounce.call(self.slot_service.load_used_mods_state)
         except Exception as e:
             logging.error(f'AppWindow: Error in _on_mod_scan_finished: {e}', exc_info=True)
-            self.feedback_manager.update_status(tr('status.mod_scan_error', details=str(e)), UI_COLORS['status_error'])
+            self.feedback_service.update_status(tr('status.mod_scan_error', details=str(e)), UI_COLORS['status_error'])
             self.setEnabled(True)
 
     def _load_mods_and_build_list_synchronously(self, saved_chapter_mode=False):
@@ -1370,15 +1368,15 @@ class AppWindow(QWidget):
         if filepath:
             config_key = self.app_state.game_mode.get_custom_exec_config_key()
             self.app_state.local_config[config_key] = filepath
-            self.settings_manager.write_local_config()
-            self.settings_manager.settings_changed.emit()
+            self.settings_service.write_local_config()
+            self.settings_service.settings_changed.emit()
             self._update_custom_executable_ui()
 
     def _reset_custom_executable(self):
         config_key = self.app_state.game_mode.get_custom_exec_config_key()
         self.app_state.local_config[config_key] = ''
-        self.settings_manager.write_local_config()
-        self.settings_manager.settings_changed.emit()
+        self.settings_service.write_local_config()
+        self.settings_service.settings_changed.emit()
         self._update_custom_executable_ui()
 
     def _update_custom_executable_ui(self):
@@ -1393,7 +1391,7 @@ class AppWindow(QWidget):
     def _select_portproton_path(self):
         if not self.select_portproton_path_button:
             return
-        filepath = self.settings_manager.select_portproton_path()
+        filepath = self.settings_service.select_portproton_path()
         if filepath:
             self._update_portproton_ui()
 
@@ -1409,7 +1407,7 @@ class AppWindow(QWidget):
             else:
                 self.portproton_path_label.setText(tr('ui.file_not_selected') + ' (using PATH)')
 
-    def _on_slot_manager_used_mods_updated(self):
+    def _on_slot_service_used_mods_updated(self):
         logging.debug('Used mods updated, refreshing UI')
         if hasattr(self, 'library_display'):
             self.library_display.update_mod_widgets_slot_status()
@@ -1539,8 +1537,8 @@ class AppWindow(QWidget):
         self.settings_title_label.setText(f"<h1>{tr('ui.settings_title')}</h1>")
         self.language_label.setText(tr('ui.language_label'))
         self.beta_updates_checkbox.setText(tr('ui.beta_updates'))
-        self.clear_logs_checkbox.setText(tr('ui.clear_logs_on_startup'))
-        self.clear_logs_checkbox.setToolTip(tr('tooltips.clear_logs_on_startup'))
+        self.placeholder_checkbox.setText(tr('ui.coming_soon_feature'))
+        self.placeholder_checkbox.setToolTip(tr('tooltips.coming_soon_feature'))
         self.fullscreen_checkbox.setText(tr('ui.fullscreen'))
         self.fullscreen_checkbox.setToolTip(tr('tooltips.fullscreen_tooltip'))
         self.launch_via_steam_checkbox.setText(tr('ui.steam_launch'))
@@ -1558,8 +1556,8 @@ class AppWindow(QWidget):
         self.reset_button.setText(tr('buttons.reset_settings'))
         self.back_button_cust.setText(tr('ui.back_button'))
         self.theme.update_background_button_state()
-        self.background_music_button.setText(self.customization_manager.get_background_music_button_text())
-        self.startup_sound_button.setText(self.customization_manager.get_startup_sound_button_text())
+        self.background_music_button.setText(self.customization_service.get_background_music_button_text())
+        self.startup_sound_button.setText(self.customization_service.get_startup_sound_button_text())
         self.disable_background_checkbox.setText(tr('checkboxes.disable_background'))
         if hasattr(self, 'priority_button') and self.priority_button:
             self.priority_button.setText(tr('ui.priority'))
@@ -1618,9 +1616,9 @@ class AppWindow(QWidget):
             except Exception:
                 pass
             language_code = self.app_state.local_config.get('language', 'en')
-            localization_manager.load_language(language_code)
+            localization_service.load_language(language_code)
             self._update_qt_translations(language_code)
-            self.custom_font_family = localization_manager.load_font()
+            self.custom_font_family = localization_service.load_font()
             self._update_plugin_tabs()
             try:
                 if hasattr(self, 'main_tab_widget') and current_index >= 0 and (current_index < self.main_tab_widget.count()):
@@ -1717,7 +1715,7 @@ class AppWindow(QWidget):
         Args:
             event: Qt close event.
         """
-        self.customization_manager.stop_background_music()
+        self.customization_service.stop_background_music()
         self._online_timer.stop()
         if self.is_shortcut_launch:
             super().closeEvent(event)
@@ -1765,7 +1763,7 @@ class AppWindow(QWidget):
                         pass
             except Exception as e:
                 logging.debug(f'Error cleaning up child processes: {e}')
-            self.settings_manager.save_window_geometry(self)
+            self.settings_service.save_window_geometry(self)
             QApplication.processEvents()
             self.hide()
         except Exception as e:
@@ -1782,37 +1780,37 @@ class AppWindow(QWidget):
             panel_height = self.top_panel_widget.height()
             y = max(0, (panel_height - logo_height) // 2)
             self.launcher_icon_label.move((panel_width - logo_width) // 2, y)
-        self.settings_manager.schedule_geometry_save(self)
+        self.settings_service.schedule_geometry_save(self)
 
     def moveEvent(self, event):
         super().moveEvent(event)
-        self.settings_manager.schedule_geometry_save(self)
+        self.settings_service.schedule_geometry_save(self)
 
     def _load_local_data(self):
         protected_first_launch_splash_shown = self.app_state.local_config.get('first_launch_splash_shown')
         protected_disable_splash = self.app_state.local_config.get('disable_splash')
-        self.app_state.local_config = self.settings_manager.read_json(self.app_state.config_path) or {}
+        self.app_state.local_config = self.settings_service.read_json(self.app_state.config_path) or {}
         if protected_first_launch_splash_shown is not None:
             self.app_state.local_config['first_launch_splash_shown'] = protected_first_launch_splash_shown
         if protected_disable_splash is not None:
             self.app_state.local_config['disable_splash'] = protected_disable_splash
         try:
-            self.mod_manager.migrate_metadata_from_local_configs()
+            self.mod_service.migrate_metadata_from_local_configs()
         except Exception as e:
             logging.warning(f'Metadata migration failed: {e}')
         self.app_state.local_config['metadata_migrated_v2'] = True
-        self.settings_manager.write_local_config()
+        self.settings_service.write_local_config()
 
     def _init_localization(self):
         if not hasattr(self, '_qt_translator_holder'):
             self._qt_translator_holder = {}
-        saved_language = localization_manager.initialize_localization(self.app_state.local_config, self.app_state.config_path, self.settings_manager.write_local_config, self.settings_manager.write_json)
-        localization_manager.update_qt_translations(saved_language, self._qt_translator_holder)
+        saved_language = localization_service.initialize_localization(self.app_state.local_config, self.app_state.config_path, self.settings_service.write_local_config, self.settings_service.write_json)
+        localization_service.update_qt_translations(saved_language, self._qt_translator_holder)
 
     def _update_qt_translations(self, language_code):
         if not hasattr(self, '_qt_translator_holder'):
             self._qt_translator_holder = {}
-        localization_manager.update_qt_translations(language_code, self._qt_translator_holder)
+        localization_service.update_qt_translations(language_code, self._qt_translator_holder)
 
     def _init_session(self):
         if not self.app_state.has_internet:
@@ -1824,8 +1822,8 @@ class AppWindow(QWidget):
         except Exception:
             self.app_state.has_internet = False
 
-    def _on_theme_changed_by_manager(self):
-        self.theme.on_theme_changed_by_manager()
+    def _on_theme_changed_by_service(self):
+        self.theme.on_theme_changed_by_service()
 
     def _show_library_search_dialog(self):
         self.app_state.library_search_text = ''
@@ -1840,11 +1838,11 @@ class AppWindow(QWidget):
         self.settings_ui.go_back_to_settings_menu()
 
     def _prompt_for_game_path(self, is_initial=False):
-        result = self.settings_manager.prompt_for_game_path(is_initial)
+        result = self.settings_service.prompt_for_game_path(is_initial)
         if result:
             self.game_launch.update_button_state()
         if is_initial and (not result):
-            self.customization_manager.start_background_music()
+            self.customization_service.start_background_music()
         return result
 
     def _open_deltahub_folder(self):
@@ -1883,7 +1881,7 @@ class AppWindow(QWidget):
         if hasattr(self, 'game_launch'):
             self.game_launch.set_full_install_checkbox_state(bool(state))
         if platform.system() == 'Darwin' and self.app_state.is_full_install:
-            self.feedback_manager.show_message('info', 'dialogs.unavailable', tr('dialogs.macos_install_unavailable'))
+            self.feedback_service.show_message('info', 'dialogs.unavailable', tr('dialogs.macos_install_unavailable'))
             self._set_checkbox_checked_silently(self.full_install_checkbox, False)
             return
         self.game_launch.update_button_state()
@@ -1908,13 +1906,13 @@ class AppWindow(QWidget):
         self.refresh_controller.refresh_mods_list(is_initial=is_initial, language_combo=self.language_combo, retranslate_callback=self._retranslate_ui, on_fetch_finished_kwargs={'update_filtered_mods_callback': lambda: self.search_display.update_filtered_mods(preserve_page=False), 'update_installed_mods_callback': update_installed_mods_callback, 'update_action_button_callback': lambda: self.game_launch.update_button_state(), 'update_plugin_tabs_callback': self._update_plugin_tabs, 'mods_loaded_signal': self.mods_loaded_signal})
 
     def _update_plugin_tabs(self):
-        if not hasattr(self, 'plugin_manager') or not hasattr(self, 'main_tab_widget'):
+        if not hasattr(self, 'plugin_service') or not hasattr(self, 'main_tab_widget'):
             return
         if self._handling_plugin_tab:
             return
         self._handling_plugin_tab = True
-        self.plugin_manager.load_plugins()
-        self._plugin_tab_map = self.plugin_manager.update_plugin_tabs(self.main_tab_widget, num_original_tabs=3)
+        self.plugin_service.load_plugins()
+        self._plugin_tab_map = self.plugin_service.update_plugin_tabs(self.main_tab_widget, num_original_tabs=3)
         if hasattr(self, 'plugin_display'):
             self.plugin_display.update_display()
         self._handling_plugin_tab = False
@@ -1977,7 +1975,7 @@ class AppWindow(QWidget):
                             self.main_tab_widget.setCurrentIndex(self.previous_tab_index)
                     except Exception as e:
                         logging.error(f"Error running plugin '{plugin['name_key']}': {e}")
-                        self.feedback_manager.show_message('error', 'errors.error', f"Failed to run plugin '{tr(plugin['name_key'])}':\n{e}")
+                        self.feedback_service.show_message('error', 'errors.error', f"Failed to run plugin '{tr(plugin['name_key'])}':\n{e}")
                         self.main_tab_widget.setCurrentIndex(self.previous_tab_index)
                         if hasattr(self, 'plugin_api'):
                             delattr(self, 'plugin_api')
@@ -2043,7 +2041,7 @@ class AppWindow(QWidget):
                 logging.info('_check_and_show_announce: User has disabled announcements (version -1)')
                 return
             if announce_version != saved_version:
-                if localization_manager.get_current_language() == 'ru':
+                if localization_service.get_current_language() == 'ru':
                     announce_message = announce.get('message_ru', '')
                 else:
                     announce_message = announce.get('message_en', '')
@@ -2071,7 +2069,7 @@ class AppWindow(QWidget):
 
     def _save_announce(self, version: int):
         self.app_state.local_config['announce_version'] = version
-        self.settings_manager.write_local_config()
+        self.settings_service.write_local_config()
         logging.info(f'_save_announce: Saved announce version {version} to config')
 
     def _prompt_for_update(self, update_info):
@@ -2088,13 +2086,13 @@ class AppWindow(QWidget):
         self.app_state.update_in_progress = True
         update_message = f"<b>{tr('dialogs.new_version_banner', version=update_info['version']).replace('<br>', '')}</b><br>"
         update_message += tr('dialogs.current_version_banner', current_version=LAUNCHER_VERSION).replace('<br><br>', '') + '<br><br>'
-        if localization_manager.get_current_language() == 'ru':
+        if localization_service.get_current_language() == 'ru':
             message_text = update_info.get('message_ru') or update_info.get('message', '')
         else:
             message_text = update_info.get('message_en') or update_info.get('message', '')
         update_message += f"<b>{tr('dialogs.whats_new')}</b><br>{message_text}<br><br>"
         update_message += tr('dialogs.want_download_install_now') + tr('dialogs.app_will_restart')
-        if self.feedback_manager.ask_question('status.update_available', 'status.update_available', update_message, True):
+        if self.feedback_service.ask_question('status.update_available', 'status.update_available', update_message, True):
             logging.info('_prompt_for_update: User accepted update')
             if hasattr(self, '_perform_update_ui_prep'):
                 self._perform_update_ui_prep()
@@ -2102,15 +2100,15 @@ class AppWindow(QWidget):
         else:
             logging.info('_prompt_for_update: User rejected update')
             self.app_state.update_in_progress = False
-            self.feedback_manager.update_status(tr('status.update_rejected'), UI_COLORS['status_info'])
+            self.feedback_service.update_status(tr('status.update_rejected'), UI_COLORS['status_info'])
             if hasattr(self.app_state, 'pending_announce_check') and self.app_state.pending_announce_check:
                 QTimer.singleShot(500, self._check_and_show_announce)
 
     def _open_chat(self):
         if not check_internet_connection():
-            self.feedback_manager.show_message('warning', 'chat.no_internet', tr('chat.no_internet'))
+            self.feedback_service.show_message('warning', 'chat.no_internet', tr('chat.no_internet'))
             return
-        from ui.dialogs.chat_window import ChatWindow
+        from ui.dialogs.chat_dialog import ChatWindow
         chat_window = ChatWindow(self.app_state, self)
         chat_window.exec()
 

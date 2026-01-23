@@ -34,7 +34,7 @@ class TestModWidgets:
         from ui.widgets.mod.mod_plaque_widget import ModPlaqueWidget
         from models.mod_models import ModInfo
         from unittest.mock import patch
-        from utils.ui_utils import safe_stop_thread
+        from ui.utils.ui_utils import safe_stop_thread
         mod_data = ModInfo(key='test_mod', name='Test Mod', version='1.0.0', author='Test Author', tagline='Test tagline', game_version='', description_url='', downloads=0, game='deltarune', is_verified=False)
         mod_data.is_gamebanana_mod = False
         with patch('ui.widgets.mod.base_mod_widget.load_mod_icon_universal'):
@@ -80,7 +80,7 @@ class TestPluginWidgets:
 class TestCommonWidgets:
 
     def test_custom_controls_creation(self, qapp):
-        from ui.widgets.common.custom_controls import NoScrollComboBox
+        from ui.widgets.shared.custom_controls import NoScrollComboBox
         combo = NoScrollComboBox()
         assert combo is not None
         assert isinstance(combo, QWidget)
@@ -90,7 +90,7 @@ class TestCommonWidgets:
             time.sleep(0.05)
 
     def test_outlined_label_creation(self, qapp):
-        from ui.widgets.common.outlined_label import OutlinedTextLabel
+        from ui.widgets.shared.outlined_label import OutlinedTextLabel
         label = OutlinedTextLabel('Test', None)
         assert label is not None
         assert isinstance(label, QWidget)
@@ -100,7 +100,7 @@ class TestCommonWidgets:
             time.sleep(0.05)
 
     def test_screenshots_carousel_creation(self, qapp):
-        from ui.widgets.common.screenshots_carousel import ScreenshotsCarousel
+        from ui.widgets.shared.screenshots_carousel import ScreenshotsCarousel
         urls = []
         carousel = ScreenshotsCarousel(urls, parent=None)
         assert carousel is not None

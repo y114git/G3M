@@ -3,42 +3,42 @@ from unittest.mock import Mock
 
 class TestModOperationsController:
 
-    def test_mod_operations_controller_initialization(self, app_state, feedback_manager):
-        from managers.mod_manager import ModManager
+    def test_mod_operations_controller_initialization(self, app_state, feedback_service):
+        from services.mod_service import ModManager
         from controllers.mod_operations_controller import ModOperationsController
-        mod_manager = ModManager(app_state, feedback_manager)
+        mod_service = ModManager(app_state, feedback_service)
         app_window = Mock()
-        controller = ModOperationsController(app_state=app_state, feedback_manager=feedback_manager, mod_manager=mod_manager, app_window=app_window)
+        controller = ModOperationsController(app_state=app_state, feedback_service=feedback_service, mod_service=mod_service, app_window=app_window)
         assert controller is not None
         assert controller.app_state == app_state
-        assert controller.mod_manager == mod_manager
+        assert controller.mod_service == mod_service
 
 
 class TestLibraryDisplayController:
 
-    def test_library_display_controller_initialization(self, app_state, feedback_manager):
+    def test_library_display_controller_initialization(self, app_state, feedback_service):
         from controllers.library_display_controller import LibraryDisplayController
-        from managers.mod_manager import ModManager
-        from managers.used_mods_manager import UsedModsManager
-        from managers.settings_manager import SettingsManager
-        from managers.localization_manager import localization_manager
-        mod_manager = ModManager(app_state, feedback_manager)
-        settings_manager = SettingsManager(app_state=app_state, feedback_manager=feedback_manager, localization_manager=localization_manager, parent=None)
-        slot_manager = UsedModsManager(app_state, mod_manager, feedback_manager, settings_manager, None)
+        from services.mod_service import ModManager
+        from services.used_mods_service import UsedModsManager
+        from services.settings_service import SettingsManager
+        from services.localization_service import localization_service
+        mod_service = ModManager(app_state, feedback_service)
+        settings_service = SettingsManager(app_state=app_state, feedback_service=feedback_service, localization_service=localization_service, parent=None)
+        slot_service = UsedModsManager(app_state, mod_service, feedback_service, settings_service, None)
         app_window = Mock()
-        controller = LibraryDisplayController(app_state=app_state, feedback_manager=feedback_manager, mod_manager=mod_manager, slot_manager=slot_manager, app_window=app_window)
+        controller = LibraryDisplayController(app_state=app_state, feedback_service=feedback_service, mod_service=mod_service, slot_service=slot_service, app_window=app_window)
         assert controller is not None
         assert controller.app_state == app_state
 
 
 class TestSearchDisplayController:
 
-    def test_search_display_controller_initialization(self, app_state, feedback_manager):
+    def test_search_display_controller_initialization(self, app_state, feedback_service):
         from controllers.search_display_controller import SearchDisplayController
-        from managers.mod_manager import ModManager
+        from services.mod_service import ModManager
         from controllers.mod_operations_controller import ModOperationsController
-        mod_manager = ModManager(app_state, feedback_manager)
-        mod_ops = ModOperationsController(app_state=app_state, feedback_manager=feedback_manager, mod_manager=mod_manager, app_window=Mock())
+        mod_service = ModManager(app_state, feedback_service)
+        mod_ops = ModOperationsController(app_state=app_state, feedback_service=feedback_service, mod_service=mod_service, app_window=Mock())
         app_window = Mock()
         app_window.mod_list_layout = Mock()
         app_window.mod_list_widget = Mock()
@@ -51,7 +51,7 @@ class TestSearchDisplayController:
         app_window.prev_page_btn = Mock()
         app_window.next_page_btn = Mock()
 
-        controller = SearchDisplayController(app_state=app_state, feedback_manager=feedback_manager, mod_manager=mod_manager, mod_ops=mod_ops, app_window=app_window)
+        controller = SearchDisplayController(app_state=app_state, feedback_service=feedback_service, mod_service=mod_service, mod_ops=mod_ops, app_window=app_window)
         assert controller is not None
         assert controller.app_state == app_state
         assert hasattr(controller, 'plaque_widget_cache')
@@ -60,56 +60,56 @@ class TestSearchDisplayController:
 
 class TestSettingsUiController:
 
-    def test_settings_ui_controller_initialization(self, app_state, feedback_manager, qapp):
-        from managers.settings_manager import SettingsManager
-        from managers.localization_manager import localization_manager
-        from controllers.settings_ui_controller import SettingsUiController
-        settings_manager = SettingsManager(app_state=app_state, feedback_manager=feedback_manager, localization_manager=localization_manager, parent=qapp)
-        from managers.used_mods_manager import UsedModsManager
-        from managers.customization_manager import CustomizationManager
-        from managers.mod_manager import ModManager
-        mod_manager = ModManager(app_state, feedback_manager)
-        slot_manager = UsedModsManager(app_state, mod_manager, feedback_manager, settings_manager, None)
-        customization_manager = CustomizationManager(app_state)
+    def test_settings_ui_controller_initialization(self, app_state, feedback_service, qapp):
+        from services.settings_service import SettingsManager
+        from services.localization_service import localization_service
+        from controllers.settings_controller import SettingsUiController
+        settings_service = SettingsManager(app_state=app_state, feedback_service=feedback_service, localization_service=localization_service, parent=qapp)
+        from services.used_mods_service import UsedModsManager
+        from services.customization_service import CustomizationManager
+        from services.mod_service import ModManager
+        mod_service = ModManager(app_state, feedback_service)
+        slot_service = UsedModsManager(app_state, mod_service, feedback_service, settings_service, None)
+        customization_service = CustomizationManager(app_state)
         app_window = Mock()
-        controller = SettingsUiController(app_state=app_state, feedback_manager=feedback_manager, settings_manager=settings_manager, slot_manager=slot_manager, customization_manager=customization_manager, app_window=app_window)
+        controller = SettingsUiController(app_state=app_state, feedback_service=feedback_service, settings_service=settings_service, slot_service=slot_service, customization_service=customization_service, app_window=app_window)
         assert controller is not None
         assert controller.app_state == app_state
 
 
 class TestThemeController:
 
-    def test_theme_controller_initialization(self, app_state, feedback_manager, qapp):
+    def test_theme_controller_initialization(self, app_state, feedback_service, qapp):
         from controllers.theme_controller import ThemeController
-        from managers.settings_manager import SettingsManager
-        from managers.localization_manager import localization_manager
-        from managers.customization_manager import CustomizationManager
-        settings_manager = SettingsManager(app_state=app_state, feedback_manager=feedback_manager, localization_manager=localization_manager, parent=qapp)
-        customization_manager = CustomizationManager(app_state)
+        from services.settings_service import SettingsManager
+        from services.localization_service import localization_service
+        from services.customization_service import CustomizationManager
+        settings_service = SettingsManager(app_state=app_state, feedback_service=feedback_service, localization_service=localization_service, parent=qapp)
+        customization_service = CustomizationManager(app_state)
         app_window = Mock()
-        controller = ThemeController(app_state=app_state, feedback_manager=feedback_manager, settings_manager=settings_manager, customization_manager=customization_manager, app_window=app_window)
+        controller = ThemeController(app_state=app_state, feedback_service=feedback_service, settings_service=settings_service, customization_service=customization_service, app_window=app_window)
         assert controller is not None
         assert controller.app_state == app_state
 
 
 class TestGameLaunchController:
 
-    def test_game_launch_controller_initialization(self, app_state, feedback_manager, qapp):
+    def test_game_launch_controller_initialization(self, app_state, feedback_service, qapp):
         from controllers.game_launch_controller import GameLaunchController
-        from managers.mod_manager import ModManager
-        from managers.used_mods_manager import UsedModsManager
-        from managers.settings_manager import SettingsManager
-        from managers.localization_manager import localization_manager
-        from managers.launch_manager import GameLauncher
-        from managers.customization_manager import CustomizationManager
-        from managers.plugin_manager import PluginManager
-        mod_manager = ModManager(app_state, feedback_manager)
-        settings_manager = SettingsManager(app_state=app_state, feedback_manager=feedback_manager, localization_manager=localization_manager, parent=qapp)
-        slot_manager = UsedModsManager(app_state, mod_manager, feedback_manager, settings_manager, None)
-        game_launcher = GameLauncher(app_state, feedback_manager, mod_manager)
-        customization_manager = CustomizationManager(app_state)
-        plugin_manager = PluginManager(app_state, settings_manager)
+        from services.mod_service import ModManager
+        from services.used_mods_service import UsedModsManager
+        from services.settings_service import SettingsManager
+        from services.localization_service import localization_service
+        from services.launch_service import GameLauncher
+        from services.customization_service import CustomizationManager
+        from services.plugin_service import PluginManager
+        mod_service = ModManager(app_state, feedback_service)
+        settings_service = SettingsManager(app_state=app_state, feedback_service=feedback_service, localization_service=localization_service, parent=qapp)
+        slot_service = UsedModsManager(app_state, mod_service, feedback_service, settings_service, None)
+        game_launcher = GameLauncher(app_state, feedback_service, mod_service)
+        customization_service = CustomizationManager(app_state)
+        plugin_service = PluginManager(app_state, settings_service)
         app_window = Mock()
-        controller = GameLaunchController(app_state=app_state, feedback_manager=feedback_manager, mod_manager=mod_manager, slot_manager=slot_manager, settings_manager=settings_manager, game_launcher=game_launcher, customization_manager=customization_manager, plugin_manager=plugin_manager, app_window=app_window)
+        controller = GameLaunchController(app_state=app_state, feedback_service=feedback_service, mod_service=mod_service, slot_service=slot_service, settings_service=settings_service, game_launcher=game_launcher, customization_service=customization_service, plugin_service=plugin_service, app_window=app_window)
         assert controller is not None
         assert controller.app_state == app_state

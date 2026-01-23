@@ -1,5 +1,5 @@
 import pytest
-from utils.mod_filter_utils import filter_and_sort_mods
+from services.mod_filter_service import filter_and_sort_mods
 
 
 class TestModFilterUtils:

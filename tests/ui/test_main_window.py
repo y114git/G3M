@@ -22,22 +22,22 @@ class TestAppWindow:
 
 class TestTabBuilders:
 
-    def test_library_tab_builder_creation(self, qapp, app_state, feedback_manager):
-        from ui.main_window.library_tab_builder import LibraryTabBuilder
+    def test_library_tab_builder_creation(self, qapp, app_state, feedback_service):
+        from ui.builders.library_tab_builder import LibraryTabBuilder
         builder = LibraryTabBuilder(app_state, None)
         assert builder is not None
 
-    def test_search_tab_builder_creation(self, qapp, app_state, feedback_manager):
-        from ui.main_window.search_tab_builder import SearchTabBuilder
+    def test_search_tab_builder_creation(self, qapp, app_state, feedback_service):
+        from ui.builders.search_tab_builder import SearchTabBuilder
         builder = SearchTabBuilder(app_state, None)
         assert builder is not None
 
-    def test_plugin_tab_builder_creation(self, qapp, app_state, feedback_manager):
-        from ui.main_window.plugin_tab_builder import PluginTabBuilder
+    def test_plugin_tab_builder_creation(self, qapp, app_state, feedback_service):
+        from ui.builders.plugin_tab_builder import PluginTabBuilder
         builder = PluginTabBuilder(app_state, None)
         assert builder is not None
 
-    def test_settings_view_builder_creation(self, qapp, app_state, feedback_manager):
-        from ui.main_window.settings_view_builder import SettingsViewBuilder
+    def test_settings_view_builder_creation(self, qapp, app_state, feedback_service):
+        from ui.builders.settings_view_builder import SettingsViewBuilder
         builder = SettingsViewBuilder(app_state, None)
         assert builder is not None

@@ -2,7 +2,7 @@ from typing import Optional
 from PyQt6.QtCore import pyqtSignal, Qt, QThread
 from PyQt6.QtWidgets import QLabel, QPushButton, QHBoxLayout, QVBoxLayout, QFrame, QWidget
 from .base_mod_widget import BaseModWidget
-from managers.localization_manager import tr
+from services.localization_service import tr
 from ui.common.styling import get_theme_color
 import logging
 
@@ -24,7 +24,7 @@ class CompatibilityCheckThread(QThread):
             mod_id = key.replace('gb_', '', 1)
             if not mod_id:
                 return
-            from utils.gamebanana_api import GameBananaAPI
+            from adapters.gamebanana_adapter import GameBananaAPI
             api = GameBananaAPI()
             if self.isInterruptionRequested():
                 return
@@ -50,7 +50,7 @@ class ModPlaqueWidget(BaseModWidget):
         elif parent:
             current = parent
             while current:
-                if hasattr(current, 'mod_manager') or hasattr(current, 'app_state'):
+                if hasattr(current, 'mod_service') or hasattr(current, 'app_state'):
                     self.parent_app = current
                     break
                 current = current.parent() if hasattr(current, 'parent') else None
@@ -304,17 +304,17 @@ class ModPlaqueWidget(BaseModWidget):
             self.actions_widget.setVisible(False)
 
     def _check_installation_status(self):
-        if self.parent_app and hasattr(self.parent_app, 'mod_manager'):
+        if self.parent_app and hasattr(self.parent_app, 'mod_service'):
             key = getattr(self.mod_data, 'key', None) or getattr(self.mod_data, 'mod_key', '')
             try:
-                self.is_installed = self.parent_app.mod_manager.is_mod_installed(key)
+                self.is_installed = self.parent_app.mod_service.is_mod_installed(key)
             except Exception as e:
                 import logging
                 logging.error(f'ModPlaqueWidget: Error checking installation by key {key}: {e}', exc_info=True)
                 self.is_installed = False
             if not self.is_installed and key and key.startswith('gb_'):
                 try:
-                    cache = self.parent_app.mod_manager._get_mods_cache()
+                    cache = self.parent_app.mod_service._get_mods_cache()
                     for cached_key, mod_info in cache.items():
                         if cached_key == key:
                             self.is_installed = True
@@ -324,7 +324,7 @@ class ModPlaqueWidget(BaseModWidget):
                     logging.warning(f'ModPlaqueWidget: Error checking cache for key {key}: {e}', exc_info=True)
             if not self.is_installed:
                 try:
-                    self.is_installed = self.parent_app.mod_manager.is_mod_installed(key)
+                    self.is_installed = self.parent_app.mod_service.is_mod_installed(key)
                 except Exception as e:
                     import logging
                     logging.error(f'ModPlaqueWidget: Error checking installation for mod (key={key}): {e}', exc_info=True)

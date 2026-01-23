@@ -3,19 +3,19 @@
 This module manages the search interface, mod filtering, sorting, pagination,
 and interaction with mod plaques in the search results.
 """
-from utils.mod_filter_utils import filter_and_sort_mods
+from services.mod_filter_service import filter_and_sort_mods
 from utils.mod_utils import get_mod_key, get_gamebanana_key, get_gamebanana_mod_id
 from PyQt6.QtWidgets import QInputDialog, QMessageBox
 from PyQt6.QtCore import QTimer, QObject, pyqtSignal
-from managers.localization_manager import tr
-from managers.blocklist_manager import BlocklistManager
-from ui.dialogs.mod_details import open_mod_details_dialog
+from services.localization_service import tr
+from services.blocklist_service import BlocklistManager
+from ui.dialogs.mod_details_dialog import open_mod_details_dialog
 from ui.dialogs.blocklist_dialog import BlocklistDialog
 from ui.widgets.mod.mod_plaque_widget import ModPlaqueWidget
-from workers.load_more_gamebanana_mods import LoadMoreGameBananaModsThread
-from workers.search_gamebanana_mods import SearchGameBananaModsThread
+from workers.gamebanana.load_more_worker import LoadMoreGameBananaModsThread
+from workers.gamebanana.search_worker import SearchGameBananaModsThread
 from config.constants import GAMEBANANA_GAME_IDS, GAMEBANANA_PER_PAGE
-from utils.ui_utils import DebounceTimer
+from ui.utils.ui_utils import DebounceTimer
 import logging
 logger = logging.getLogger(__name__)
 
@@ -32,23 +32,23 @@ class SearchDisplayController(QObject):
     ui_layout_clear_requested = pyqtSignal(str)
     ui_widget_updates_enabled = pyqtSignal(str, bool)
 
-    def __init__(self, app_state, feedback_manager, mod_manager, mod_ops, app_window):
+    def __init__(self, app_state, feedback_service, mod_service, mod_ops, app_window):
         """Initialize the search display controller.
 
         Args:
             app_state: Application state manager.
-            feedback_manager: User feedback and dialog manager.
-            mod_manager: Mod management operations.
+            feedback_service: User feedback and dialog manager.
+            mod_service: Mod management operations.
             mod_ops: Mod operations controller.
             app_window: Main application window reference.
         """
         super().__init__()
         self.app_state = app_state
-        self.feedback_manager = feedback_manager
-        self.mod_manager = mod_manager
+        self.feedback_service = feedback_service
+        self.mod_service = mod_service
         self.mod_ops = mod_ops
         self.app = app_window
-        self.blocklist_manager = BlocklistManager()
+        self.blocklist_service = BlocklistManager()
         self._load_more_threads = []
         self._current_details_thread = None
         self._last_load_attempt = {'items_needed': 0, 'current_total': 0, 'attempts': 0}
@@ -105,7 +105,7 @@ class SearchDisplayController(QObject):
         """
         if hasattr(self.app_state, 'cache_dir') and self.app_state.cache_dir:
             try:
-                from utils.gamebanana_cache import GameBananaMetadataCache
+                from adapters.gamebanana_cache import GameBananaMetadataCache
                 return GameBananaMetadataCache(self.app_state.cache_dir)
             except Exception as e:
                 logger.warning(f'SearchDisplayController: Failed to initialize metadata cache: {e}', exc_info=True)
@@ -489,11 +489,11 @@ class SearchDisplayController(QObject):
                 selected_game = self.app.modgame_combo.currentData() or 'deltarune'
             all_games = ['deltarune', 'deltarunedemo', 'undertale', 'undertaleyellow', 'pizzatower', 'sugaryspire']
             all_games.append('global')
-            existing_games = self.blocklist_manager.get_all_games()
+            existing_games = self.blocklist_service.get_all_games()
             for game in existing_games:
                 if game not in all_games:
                     all_games.append(game)
-            dialog = BlocklistDialog(self.blocklist_manager, selected_game, all_games, self.app)
+            dialog = BlocklistDialog(self.blocklist_service, selected_game, all_games, self.app)
             dialog.blocklist_changed.connect(self.on_blocklist_changed)
             dialog.exec()
         except Exception as e:
@@ -580,7 +580,7 @@ class SearchDisplayController(QObject):
 
                 def async_filter():
                     try:
-                        filtered_result = filter_and_sort_mods(self.app_state.all_mods, filters, sort_config, blocklist_manager=self.blocklist_manager)
+                        filtered_result = filter_and_sort_mods(self.app_state.all_mods, filters, sort_config, blocklist_service=self.blocklist_service)
                         self.app_state.filtered_mods = filtered_result
                         if not preserve_page:
                             self.app_state.current_page = 1
@@ -607,10 +607,10 @@ class SearchDisplayController(QObject):
                         continue
                     new_mods_to_filter.append(mod)
                 if new_mods_to_filter:
-                    new_filtered = filter_and_sort_mods(new_mods_to_filter, filters, sort_config=None, blocklist_manager=self.blocklist_manager)
+                    new_filtered = filter_and_sort_mods(new_mods_to_filter, filters, sort_config=None, blocklist_service=self.blocklist_service)
                     self.app_state.filtered_mods = (self.app_state.filtered_mods or []) + new_filtered
             else:
-                self.app_state.filtered_mods = filter_and_sort_mods(self.app_state.all_mods, filters, sort_config, blocklist_manager=self.blocklist_manager)
+                self.app_state.filtered_mods = filter_and_sort_mods(self.app_state.all_mods, filters, sort_config, blocklist_service=self.blocklist_service)
             if not preserve_page:
                 self.app_state.current_page = 1
             else:
@@ -1030,7 +1030,7 @@ class SearchDisplayController(QObject):
         self.app_state.gamebanana_loading = True
         self.app_state.filtered_mods = []
         self.update_display()
-        from workers.load_more_gamebanana_mods import LoadMoreGameBananaModsThread
+        from workers.gamebanana.load_more_worker import LoadMoreGameBananaModsThread
         metadata_cache = self._get_metadata_cache()
         sort_param = getattr(self.app_state, 'gamebanana_sort', 'default')
         load_thread = LoadMoreGameBananaModsThread(game_id, start_page=1, num_pages=3, sort=sort_param, parent=self.app, metadata_cache=metadata_cache)

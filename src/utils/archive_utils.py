@@ -535,7 +535,7 @@ def prompt_for_unrar_install(parent_widget=None, signal_callback=None) -> bool:
         return False
     try:
         from PyQt6.QtWidgets import QMessageBox
-        from managers.localization_manager import tr
+        from services.localization_service import tr
         if parent_widget is None:
             try:
                 from core.app_state import app_state

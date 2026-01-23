@@ -135,7 +135,7 @@ class TestGameUtils:
 
     @patch('psutil.process_iter')
     def test_is_game_running(self, mock_process_iter):
-        from utils.game_utils import is_game_running
+        from services.game_detection_service import is_game_running
         mock_process = Mock()
         mock_process.info = {'name': 'DELTARUNE.exe'}
         mock_process_iter.return_value = [mock_process]
@@ -194,7 +194,7 @@ class TestCache:
 
     def test_cache_basic_operations(self, qapp):
         try:
-            from utils.cache import add_to_cache, get_from_cache
+            from utils.cache_utils import add_to_cache, get_from_cache
             from PyQt6.QtGui import QImage
             test_image = QImage(10, 10, QImage.Format.Format_RGB32)
             test_image.fill(16711680)

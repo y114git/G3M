@@ -15,7 +15,7 @@ from PyQt6.QtCore import QObject, pyqtSignal, PYQT_VERSION_STR
 from config.constants import CLOUD_FUNCTIONS_BASE_URL, NETWORK_TIMEOUT_LONG, LAUNCHER_VERSION
 from utils.network_utils import get_session
 from utils.path_utils import get_user_data_root
-from managers.localization_manager import tr
+from services.localization_service import tr
 
 
 class ReportBugWorker(QObject):

@@ -265,7 +265,7 @@ def load_mod_icon_universal(icon_label, mod_data, size=80):
         if icon_url and isinstance(icon_url, str) and icon_url.startswith(('http://', 'https://')):
             try:
                 from workers import WorkerSignals
-                from utils.image_loader import ImageLoaderRunnable
+                from ui.utils.image_loader import ImageLoaderRunnable
                 pool = QThreadPool.globalInstance()
                 signals = WorkerSignals(icon_label)
                 label_ref = weakref.ref(icon_label)

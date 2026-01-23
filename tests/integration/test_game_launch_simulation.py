@@ -2,7 +2,7 @@ import os
 import platform
 import pytest
 from unittest.mock import patch, MagicMock
-from utils.game_utils import is_game_running, get_game_type_string, get_game_name_string
+from services.game_detection_service import is_game_running, get_game_type_string, get_game_name_string
 from utils.path_utils import find_chapter_resource_dir, resolve_game_executable
 
 
@@ -68,7 +68,7 @@ class TestGameLaunchSimulation:
         assert resource_dir is not None
         assert os.path.exists(resource_dir)
 
-    @patch('utils.game_utils.psutil.process_iter')
+    @patch('services.game_detection_service.psutil.process_iter')
     def test_is_game_running_simulation(self, mock_process_iter):
         mock_process_iter.return_value = []
         assert not is_game_running()
@@ -224,7 +224,7 @@ class TestGameExecutableSimulation:
             assert f'chapter{chapter_id}' in resource_dir.lower()
 
     def test_pizzatower_path_validation(self, temp_dir):
-        from utils.game_utils import is_valid_game_path
+        from services.game_detection_service import is_valid_game_path
         game_dir = os.path.join(temp_dir, 'game')
         os.makedirs(game_dir, exist_ok=True)
         system = platform.system()
@@ -256,7 +256,7 @@ class TestGameExecutableSimulation:
         assert is_valid is True
 
     def test_pizzatower_custom_executable_validation(self, temp_dir):
-        from utils.game_utils import is_valid_game_path
+        from services.game_detection_service import is_valid_game_path
         game_dir = os.path.join(temp_dir, 'game')
         os.makedirs(game_dir, exist_ok=True)
         system = platform.system()
@@ -288,7 +288,7 @@ class TestGameExecutableSimulation:
         assert is_valid is True
 
     def test_sugaryspire_path_validation(self, temp_dir):
-        from utils.game_utils import is_valid_game_path
+        from services.game_detection_service import is_valid_game_path
         game_dir = os.path.join(temp_dir, 'game')
         os.makedirs(game_dir, exist_ok=True)
         system = platform.system()

@@ -133,7 +133,7 @@ class ModInfo:
         Returns:
             ModInfo: New ModInfo instance.
         """
-        from managers.localization_manager import tr
+        from services.localization_service import tr
         files_dict = {}
         if 'files' in data_dict and isinstance(data_dict['files'], dict):
             for key, value in data_dict['files'].items():

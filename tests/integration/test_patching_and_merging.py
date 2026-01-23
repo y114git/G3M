@@ -4,12 +4,12 @@ import tempfile
 import pytest
 from pathlib import Path
 from unittest.mock import Mock
-from managers.multi_mod_merger import MultiModMerger
+from services.mod_merge_service import MultiModMerger
 
 
 class TestPatching:
 
-    def test_xdelta_patch_application(self, game_data_dir, patches_game_dirs, deltarune_chapter_dirs, app_state, feedback_manager):
+    def test_xdelta_patch_application(self, game_data_dir, patches_game_dirs, deltarune_chapter_dirs, app_state, feedback_service):
         chapter1_dir = deltarune_chapter_dirs['chapter1']
         data_win_path = Path(chapter1_dir) / 'data.win'
         if not data_win_path.exists():
@@ -29,8 +29,8 @@ class TestPatching:
             temp_data_win = os.path.join(temp_dir, 'data.win')
             shutil.copy2(data_win_path, temp_data_win)
             original_size = os.path.getsize(temp_data_win)
-            mod_manager = Mock()
-            merger = MultiModMerger(app_state, mod_manager)
+            mod_service = Mock()
+            merger = MultiModMerger(app_state, mod_service)
             if merger.xdelta_path is None:
                 pytest.fail('xdelta executable not found: merger.xdelta_path is None')
             if not os.path.exists(merger.xdelta_path):
@@ -136,7 +136,7 @@ class TestPatching:
 
 class TestMerging:
 
-    def test_merge_multiple_mods(self, patches_game_dirs, deltarune_chapter_dirs, app_state, feedback_manager):
+    def test_merge_multiple_mods(self, patches_game_dirs, deltarune_chapter_dirs, app_state, feedback_service):
         chapter1_dir = deltarune_chapter_dirs['chapter1']
         if not Path(chapter1_dir).exists():
             pytest.skip('Chapter directory not found.')
@@ -148,14 +148,14 @@ class TestMerging:
                 data_win_files = list(patch_path.glob('*.win'))
         if len(data_win_files) < 2:
             pytest.skip('Need at least 2 modified data.win files for merging test. Please add test files to patches/deltarune/chapter1_/')
-        mod_manager = Mock()
-        merger = MultiModMerger(app_state, mod_manager)
+        mod_service = Mock()
+        merger = MultiModMerger(app_state, mod_service)
         assert merger is not None
         assert hasattr(merger, 'utmt_wrapper')
         assert hasattr(merger, 'xdelta_path')
 
-    def test_progress_throttler_initialization(self, app_state, feedback_manager, qapp):
-        from managers.multi_mod_merger import ProgressThrottler
+    def test_progress_throttler_initialization(self, app_state, feedback_service, qapp):
+        from services.mod_merge_service import ProgressThrottler
         from PyQt6.QtCore import QTimer
         callback_calls = []
 
@@ -251,23 +251,23 @@ class TestRestoreOriginal:
     def test_restore_after_merge(self, game_data_dir):
         assert True
 
-    def test_backup_manifest_tracking(self, temp_dir, app_state, feedback_manager):
-        from managers.multi_mod_merger import MultiModMerger
-        from managers.mod_manager import ModManager
-        from managers.backup_manager import BackupManager
+    def test_backup_manifest_tracking(self, temp_dir, app_state, feedback_service):
+        from services.mod_merge_service import MultiModMerger
+        from services.mod_service import ModManager
+        from services.backup_service import BackupManager
         import json
-        mod_manager = ModManager(app_state, feedback_manager)
-        merger = MultiModMerger(app_state, mod_manager)
+        mod_service = ModManager(app_state, feedback_service)
+        merger = MultiModMerger(app_state, mod_service)
         backup_dir = os.path.join(temp_dir, 'backups')
         os.makedirs(backup_dir, exist_ok=True)
-        merger.backup_manager = BackupManager(backup_dir, patching_logger=merger.patching_logger)
+        merger.backup_service = BackupManager(backup_dir, patching_logger=merger.patching_logger)
         chapter_id = 1
         test_file = os.path.join(temp_dir, 'test.txt')
         with open(test_file, 'w') as f:
             f.write('test')
-        merger.backup_manager.backup_file(chapter_id, test_file)
+        merger.backup_service.backup_file(chapter_id, test_file)
         manifest_path = os.path.join(temp_dir, 'manifest.json')
-        merger.backup_manager.save_backups_to_manifest(manifest_path)
+        merger.backup_service.save_backups_to_manifest(manifest_path)
         with open(manifest_path, 'r') as f:
             manifest_data = json.load(f)
         assert 'modification_order' in manifest_data

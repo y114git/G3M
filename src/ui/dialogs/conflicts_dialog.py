@@ -3,7 +3,7 @@ from typing import Dict, Any
 from PyQt6.QtWidgets import QDialog, QVBoxLayout, QLabel, QPushButton, QTextEdit, QHBoxLayout, QMessageBox
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
-from managers.localization_manager import tr
+from services.localization_service import tr
 from utils.path_utils import get_user_data_root
 
 

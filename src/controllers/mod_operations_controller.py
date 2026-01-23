@@ -9,32 +9,32 @@ import logging
 from typing import Dict, List, Optional
 from PyQt6.QtCore import QTimer
 from PyQt6.QtWidgets import QDialog, QMessageBox
-from managers.localization_manager import tr
+from services.localization_service import tr
 from config.constants import UI_COLORS
 from core.exceptions import AppError
 from ui.widgets.mod.installed_mod_widget import InstalledModWidget
-from workers.install_mods_worker import InstallModsThread
-from workers.install_gamebanana_mod import InstallGameBananaModThread
-from workers.prepare_gamebanana_manual_install_worker import PrepareGameBananaManualInstallWorker
+from workers.install.batch_install_worker import InstallModsThread
+from workers.install.gamebanana_install_worker import InstallGameBananaModThread
+from workers.gamebanana.prepare_gamebanana_manual_install_worker import PrepareGameBananaManualInstallWorker
 from utils.mod_utils import get_mod_key, get_mod_name, get_gamebanana_mod_id
-from ui.dialogs.gamebanana_file_picker_dialog import GameBananaFilePickerDialog
+from ui.dialogs.file_picker_dialog import GameBananaFilePickerDialog
 
 
 class ModOperationsController:
     """Manages mod installation operations and related workflows."""
 
-    def __init__(self, app_state, feedback_manager, mod_manager, app_window):
+    def __init__(self, app_state, feedback_service, mod_service, app_window):
         """Initialize the mod operations controller.
 
         Args:
             app_state: Application state manager.
-            feedback_manager: User feedback and dialog manager.
-            mod_manager: Mod management operations.
+            feedback_service: User feedback and dialog manager.
+            mod_service: Mod management operations.
             app_window: Main application window reference.
         """
         self.app_state = app_state
-        self.feedback_manager = feedback_manager
-        self.mod_manager = mod_manager
+        self.feedback_service = feedback_service
+        self.mod_service = mod_service
         self.app = app_window
         self._last_gamebanana_progress = -1
 
@@ -68,7 +68,7 @@ class ModOperationsController:
         self.set_install_buttons_enabled(True)
         self.app_state.clear_current_task()
         self._safe_execute(lambda: self.app.game_launch.update_button_state(), 'Failed to update button state')
-        self.feedback_manager.show_message('error', 'errors.gamebanana_install_failed', error=str(error))
+        self.feedback_service.show_message('error', 'errors.gamebanana_install_failed', error=str(error))
 
     def _get_mod_key_value(self, mod) -> Optional[str]:
         """Get the key value for a mod.
@@ -98,15 +98,15 @@ class ModOperationsController:
         Args:
             url: URL to install mod from.
         """
-        from utils.game_utils import is_game_running
+        from services.game_detection_service import is_game_running
         if is_game_running():
             return
         self.app.activateWindow()
         self.app.raise_()
         if self.app_state.is_installing:
-            self.feedback_manager.show_message('warning', 'dialogs.install_in_progress_title', tr('dialogs.install_in_progress_body'))
+            self.feedback_service.show_message('warning', 'dialogs.install_in_progress_title', tr('dialogs.install_in_progress_body'))
             return
-        self.mod_manager.install_from_url(url)
+        self.mod_service.install_from_url(url)
 
     def on_mod_install_requested(self, mod):
         """Handle mod installation request.
@@ -218,7 +218,7 @@ class ModOperationsController:
                 install_thread.finished.connect(lambda ok, oid=op_id: self._on_install_task_finished(ok, oid))
             self.app.progress_bar.setVisible(True)
             self.app.progress_bar.setValue(0)
-            self._safe_execute(lambda: self.feedback_manager.update_status(tr('status.preparing_download'), UI_COLORS['status_warning']), 'Feedback manager update failed')
+            self._safe_execute(lambda: self.feedback_service.update_status(tr('status.preparing_download'), UI_COLORS['status_warning']), 'Feedback manager update failed')
             self.app_state.current_task = install_thread
             self.app.game_launch.update_button_state()
             install_thread.start()
@@ -310,7 +310,7 @@ class ModOperationsController:
             return []
         mod_id = int(mod_id_str)
         try:
-            from utils.gamebanana_api import GameBananaAPI
+            from adapters.gamebanana_adapter import GameBananaAPI
             api = GameBananaAPI()
             external_url = getattr(mod, 'external_url', None)
             compat = api.get_supported_files_for_mod(int(mod_id), external_url=external_url)
@@ -341,7 +341,7 @@ class ModOperationsController:
             return []
         mod_id = int(mod_id_str)
         try:
-            from utils.gamebanana_api import GameBananaAPI
+            from adapters.gamebanana_adapter import GameBananaAPI
             api = GameBananaAPI()
             external_url = getattr(mod, 'external_url', None)
             all_files = api.get_mod_files(mod_id, external_url=external_url)
@@ -460,7 +460,7 @@ class ModOperationsController:
                     dialog = GameBananaFilePickerDialog(self.app, available_files, mod.name, getattr(mod, 'external_url', None))
                     result = dialog.exec()
                     if result != QDialog.DialogCode.Accepted:
-                        self.feedback_manager.update_status(tr('status.operation_cancelled'), UI_COLORS['status_warning'])
+                        self.feedback_service.update_status(tr('status.operation_cancelled'), UI_COLORS['status_warning'])
                         return
                     selection = dialog.get_selected_file()
                     if selection:
@@ -480,9 +480,9 @@ class ModOperationsController:
                     if chapter_data:
                         available_chapters.append(chapter_id)
             if not available_chapters:
-                self.feedback_manager.show_message('warning', 'errors.mod_no_files', mod_name=mod.name)
+                self.feedback_service.show_message('warning', 'errors.mod_no_files', mod_name=mod.name)
                 return
-            was_installed_before = self.mod_manager.is_mod_installed(mod.key) or is_update
+            was_installed_before = self.mod_service.is_mod_installed(mod.key) or is_update
             install_tasks = [(mod, chapter_id) for chapter_id in available_chapters]
             self._safe_execute(lambda: setattr(self.app_state, 'operation_cancelled', False), 'Failed to set operation_cancelled')
             if self.app_state.current_task:
@@ -593,9 +593,9 @@ class ModOperationsController:
             if is_cancelled:
                 logging.info('ModOperationsController: Installation was cancelled')
                 self._safe_execute(lambda: setattr(self.app_state, 'operation_cancelled', False), 'Failed to set operation_cancelled')
-                self.feedback_manager.update_status(tr('status.operation_cancelled'), UI_COLORS['status_warning'])
+                self.feedback_service.update_status(tr('status.operation_cancelled'), UI_COLORS['status_warning'])
             else:
-                self.feedback_manager.update_status(tr('status.mod_install_error'), UI_COLORS['status_error'])
+                self.feedback_service.update_status(tr('status.mod_install_error'), UI_COLORS['status_error'])
             try:
                 if current_task:
                     temp_root = getattr(current_task, 'temp_root', None)
@@ -608,11 +608,11 @@ class ModOperationsController:
             return
         logging.info('ModOperationsController: Installation complete, invalidating mods cache and reloading local mods')
         self.app_state._scan_blocked = False
-        self._safe_execute(lambda: self.mod_manager.invalidate_mods_cache(), 'invalidate_mods_cache failed', default_return=None)
+        self._safe_execute(lambda: self.mod_service.invalidate_mods_cache(), 'invalidate_mods_cache failed', default_return=None)
         try:
-            self.mod_manager.load_local_mods()
+            self.mod_service.load_local_mods()
             logging.info('ModOperationsController: Local mods reloaded after installation')
-            self.mod_manager.mod_list_updated.emit()
+            self.mod_service.mod_list_updated.emit()
             QTimer.singleShot(100, lambda: self._safe_execute(lambda: self.app.search_display.update_search_plaques() if hasattr(self.app, 'search_display') else None, 'Failed to update search plaques'))
             self._safe_execute(lambda: self.app.search_display.update_search_plaques(), 'Failed to refresh plaques after cache reload')
             if installed_mod_info and hasattr(self.app_state, 'all_mods'):
@@ -625,10 +625,10 @@ class ModOperationsController:
                 is_gamebanana_mod = key and key.startswith('gb_')
                 if not mod_already_in_all_mods:
                     try:
-                        cache = self.mod_manager._get_mods_cache()
+                        cache = self.mod_service._get_mods_cache()
                         mod_to_add = None
                         if key and key in cache:
-                            mod_to_add = self.mod_manager.create_mod_object_from_info(cache[key].config_data, self.app_state.all_mods)
+                            mod_to_add = self.mod_service.create_mod_object_from_info(cache[key].config_data, self.app_state.all_mods)
                         if mod_to_add:
                             self.app_state.append_mod(mod_to_add)
                             logging.info(f'''ModOperationsController: Added installed mod "{mod_to_add.name}" (key: {getattr(mod_to_add, 'key', None) or getattr(mod_to_add, 'mod_key', 'N/A')}) to all_mods''')
@@ -645,11 +645,11 @@ class ModOperationsController:
                                 existing_mod = m
                                 break
                         if existing_mod:
-                            cache = self.mod_manager._get_mods_cache()
+                            cache = self.mod_service._get_mods_cache()
                             if key and key in cache:
                                 config_data = cache[key].config_data
                                 if config_data.get('files') and (not hasattr(existing_mod, 'files') or not existing_mod.files):
-                                    temp_mod = self.mod_manager.create_mod_object_from_info(config_data, self.app_state.all_mods)
+                                    temp_mod = self.mod_service.create_mod_object_from_info(config_data, self.app_state.all_mods)
                                     if hasattr(temp_mod, 'files') and temp_mod.files:
                                         existing_mod.files = temp_mod.files
                     except Exception as e:
@@ -712,7 +712,7 @@ class ModOperationsController:
 
         def check_cache_and_update():
             try:
-                cache = self.mod_manager._get_mods_cache()
+                cache = self.mod_service._get_mods_cache()
                 logging.info(f'ModOperationsController: Cache after reload has {len(cache)} mods')
                 for key, mod_info in list(cache.items())[:5]:
                     if key and key.startswith('gb_'):
@@ -723,9 +723,9 @@ class ModOperationsController:
         def update_plaques_with_retry():
             try:
                 logging.info('ModOperationsController: Updating search plaques')
-                self.mod_manager.invalidate_mods_cache()
+                self.mod_service.invalidate_mods_cache()
                 logging.info('ModOperationsController: Mods cache invalidated before updating plaques')
-                cache = self.mod_manager._get_mods_cache()
+                cache = self.mod_service._get_mods_cache()
                 logging.info(f'ModOperationsController: Reloaded mods cache, found {len(cache)} installed mods')
                 for key, mod_info in cache.items():
                     if key and key.startswith('gb_'):
@@ -743,7 +743,7 @@ class ModOperationsController:
                     logging.info('ModOperationsController: Library display updated')
             except Exception as e:
                 logging.warning(f'ModOperationsController: Failed to update library display: {e}', exc_info=True)
-        from utils.ui_utils import DebounceTimer
+        from ui.utils.ui_utils import DebounceTimer
         if not hasattr(self, '_update_debounce_short'):
             self._update_debounce_short = DebounceTimer(delay_ms=200)
         if not hasattr(self, '_update_debounce_long'):
@@ -757,14 +757,14 @@ class ModOperationsController:
         self._update_debounce_long.call(update_plaques_with_retry)
         self._update_debounce_long.call(update_library_with_retry)
         if message:
-            self.feedback_manager.update_status(message, UI_COLORS['status_success'])
+            self.feedback_service.update_status(message, UI_COLORS['status_success'])
         else:
-            self.feedback_manager.update_status(tr('status.mod_installed_success'), UI_COLORS['status_success'])
+            self.feedback_service.update_status(tr('status.mod_installed_success'), UI_COLORS['status_success'])
         if not was_installed_before:
-            self._safe_execute(lambda: QTimer.singleShot(0, lambda: self.feedback_manager.show_message('info', 'dialogs.mod_installed_apply_info')), 'Failed to show mod installed info')
+            self._safe_execute(lambda: QTimer.singleShot(0, lambda: self.feedback_service.show_message('info', 'dialogs.mod_installed_apply_info')), 'Failed to show mod installed info')
         if getattr(self.app, 'pending_updates', None):
             next_mod = self.app.pending_updates.pop(0)
-            QTimer.singleShot(0, lambda: self.mod_manager.update_mod(next_mod))
+            QTimer.singleShot(0, lambda: self.mod_service.update_mod(next_mod))
         self.app.game_launch.update_button_state()
 
     def refresh_specific_mod_widget_after_update(self, mod_info=None):
@@ -794,12 +794,12 @@ class ModOperationsController:
     def on_mod_uninstall_requested(self, mod):
         if self.app_state.is_installing:
             return
-        if self.feedback_manager.ask_question('dialogs.delete_confirmation', 'dialogs.delete_mod_confirmation', '', False, mod_name=mod.name):
+        if self.feedback_service.ask_question('dialogs.delete_confirmation', 'dialogs.delete_mod_confirmation', '', False, mod_name=mod.name):
             QTimer.singleShot(10, lambda m=mod: self.uninstall_mod(m))
 
     def uninstall_mod(self, mod):
         try:
-            self.mod_manager.delete_mod_files(mod)
+            self.mod_service.delete_mod_files(mod)
             self.app.search_display.update_search_plaques()
             if hasattr(self.app, 'library_display'):
                 self.app.library_display.update_display()
@@ -813,14 +813,14 @@ class ModOperationsController:
         try:
             available_files = self._get_all_gamebanana_files(mod)
             if not available_files:
-                self.feedback_manager.show_message('error', tr('errors.error'), tr('errors.no_gamebanana_files_for_manual_install'))
+                self.feedback_service.show_message('error', tr('errors.error'), tr('errors.no_gamebanana_files_for_manual_install'))
                 return
             selected_file = available_files[0]
             if len(available_files) > 1:
                 dialog = GameBananaFilePickerDialog(self.app, available_files, mod.name, getattr(mod, 'external_url', None))
                 result = dialog.exec()
                 if result != QDialog.DialogCode.Accepted:
-                    self.feedback_manager.update_status(tr('status.operation_cancelled'), UI_COLORS['status_warning'])
+                    self.feedback_service.update_status(tr('status.operation_cancelled'), UI_COLORS['status_warning'])
                     return
                 selection = dialog.get_selected_file()
                 if selection:
@@ -828,7 +828,7 @@ class ModOperationsController:
             self._start_prepare_worker(mod, selected_file)
         except Exception as e:
             logging.error(f'Manual install from GameBanana failed: {e}', exc_info=True)
-            self.feedback_manager.show_message('error', tr('errors.error'), tr('errors.manual_install_failed', error=str(e)))
+            self.feedback_service.show_message('error', tr('errors.error'), tr('errors.manual_install_failed', error=str(e)))
 
     def _start_prepare_worker(self, mod, selected_file: Dict):
         worker = PrepareGameBananaManualInstallWorker(mod, selected_file, parent=self.app)
@@ -848,29 +848,29 @@ class ModOperationsController:
             if success and isinstance(result, tuple):
                 prepared_path, gb_metadata, temp_dir = result
                 try:
-                    from ui.dialogs.manual_mod_install_dialog import ManualModInstallDialog
-                    from utils.game_utils import get_game_type_string
+                    from ui.dialogs.manual_install_dialog import ManualModInstallDialog
+                    from services.game_detection_service import get_game_type_string
                     initial_game_type = getattr(mod, 'game', None)
                     if not initial_game_type and self.app_state and hasattr(self.app_state, 'game_mode'):
                         initial_game_type = get_game_type_string(self.app_state.game_mode)
                     dialog = ManualModInstallDialog(self.app, prepared_path, gamebanana_metadata=gb_metadata, source_file_path=None, initial_game_type=initial_game_type)
                     dialog.temp_dir_to_cleanup = temp_dir
                     if dialog.exec() == QDialog.DialogCode.Accepted:
-                        self.mod_manager.invalidate_mods_cache()
-                        self.mod_manager.load_local_mods(_skip_conversion=True)
-                        self.mod_manager.mod_list_updated.emit()
+                        self.mod_service.invalidate_mods_cache()
+                        self.mod_service.load_local_mods(_skip_conversion=True)
+                        self.mod_service.mod_list_updated.emit()
                         if hasattr(self.app, 'search_display'):
                             self.app.search_display.update_search_plaques()
                         QMessageBox.information(self.app, tr('dialogs.success'), tr('dialogs.mod_created_successfully'))
                 except Exception as e:
                     logging.error(f'Failed to open manual install dialog: {e}', exc_info=True)
-                    self.feedback_manager.show_message('error', tr('errors.error'), tr('errors.manual_install_failed', error=str(e)))
+                    self.feedback_service.show_message('error', tr('errors.error'), tr('errors.manual_install_failed', error=str(e)))
             else:
                 error_msg = result if isinstance(result, str) else tr('errors.manual_install_failed', error='Unknown error')
-                self.feedback_manager.show_message('error', tr('errors.error'), error_msg)
+                self.feedback_service.show_message('error', tr('errors.error'), error_msg)
         worker.finished_with_result.connect(on_finished)
         worker.progress.connect(lambda p: setattr(self.app_state, 'progress_bar_value', p))
-        worker.status.connect(lambda s, c: self.feedback_manager.update_status(s, c))
+        worker.status.connect(lambda s, c: self.feedback_service.update_status(s, c))
         self.app_state.progress_bar_visible = True
         self.app_state.progress_bar_value = 0
         self.app_state.current_task = worker

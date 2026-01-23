@@ -1,7 +1,7 @@
 from typing import List, Any
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QListWidget, QListWidgetItem, QAbstractItemView
-from managers.localization_manager import tr
+from services.localization_service import tr
 from ui.common.styling import get_theme_color
 
 

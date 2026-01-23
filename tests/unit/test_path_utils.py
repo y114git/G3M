@@ -186,7 +186,7 @@ class TestPathUtils:
         assert os.path.exists(test_file)
 
     def test_pizzatower_path_validation_with_custom_executable(self, temp_dir):
-        from utils.game_utils import is_valid_game_path
+        from services.game_detection_service import is_valid_game_path
         game_dir = os.path.join(temp_dir, 'game')
         os.makedirs(game_dir, exist_ok=True)
         system = platform.system()

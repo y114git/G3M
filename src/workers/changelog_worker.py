@@ -6,7 +6,7 @@ import os
 import time
 from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
 from config.constants import NETWORK_TIMEOUT_MEDIUM
-from managers.localization_manager import tr
+from services.localization_service import tr
 from utils.network_utils import get_session
 
 

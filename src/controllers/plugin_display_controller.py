@@ -9,28 +9,28 @@ import logging
 import webbrowser
 from typing import Dict
 from PyQt6.QtWidgets import QDialog
-from managers.localization_manager import tr
+from services.localization_service import tr
 from config.constants import UI_COLORS
 from ui.widgets.plugin.plugin_widget import PluginWidget
 from ui.common.styling import clear_layout_widgets, show_empty_message_in_layout
-from workers.plugin_install_worker import PluginInstallWorker
+from workers.install.plugin_install_worker import PluginInstallWorker
 
 
 class PluginDisplayController:
     """Manages plugin display and interaction in the UI."""
 
-    def __init__(self, app_state, feedback_manager, plugin_manager, app_window):
+    def __init__(self, app_state, feedback_service, plugin_service, app_window):
         """Initialize the plugin display controller.
 
         Args:
             app_state: Application state manager.
-            feedback_manager: User feedback and dialog manager.
-            plugin_manager: Plugin management operations.
+            feedback_service: User feedback and dialog manager.
+            plugin_service: Plugin management operations.
             app_window: Main application window reference.
         """
         self.app_state = app_state
-        self.feedback_manager = feedback_manager
-        self.plugin_manager = plugin_manager
+        self.feedback_service = feedback_service
+        self.plugin_service = plugin_service
         self.app = app_window
         self._plugin_widgets: Dict[str, PluginWidget] = {}
 
@@ -43,7 +43,7 @@ class PluginDisplayController:
         Returns:
             Plugin info dictionary or None if not found.
         """
-        return next((p for p in self.plugin_manager.get_all_plugins_info() if p.get('name') == plugin_name), None)
+        return next((p for p in self.plugin_service.get_all_plugins_info() if p.get('name') == plugin_name), None)
 
     def _remove_plugin_widget(self, widget: PluginWidget) -> None:
         """Remove a plugin widget from the layout.
@@ -63,17 +63,17 @@ class PluginDisplayController:
             source_label: Label describing the source for error messages.
         """
         try:
-            worker = PluginInstallWorker(source, self.app_state.plugins_dir, self.plugin_manager, self.app)
+            worker = PluginInstallWorker(source, self.app_state.plugins_dir, self.plugin_service, self.app)
             self._start_plugin_install(worker)
         except Exception as e:
             logging.error(f'PluginDisplayController: Error installing plugin from {source_label}: {e}', exc_info=True)
-            self.feedback_manager.show_message('error', 'errors.error', tr('plugins.installation_error', error=str(e)))
+            self.feedback_service.show_message('error', 'errors.error', tr('plugins.installation_error', error=str(e)))
 
     def update_display(self):
         """Update the plugin display with current plugin list."""
         if not hasattr(self.app, 'plugins_layout') or not self.app.plugins_layout:
             return
-        all_plugins = self.plugin_manager.get_all_plugins_info()
+        all_plugins = self.plugin_service.get_all_plugins_info()
         if not all_plugins:
             clear_layout_widgets(self.app.plugins_layout)
             self._plugin_widgets.clear()
@@ -139,25 +139,25 @@ class PluginDisplayController:
         try:
             plugin_info = self._get_plugin_info(plugin_name)
             if not plugin_info:
-                self.feedback_manager.show_message('error', 'errors.error', tr('plugins.plugin_not_found'))
+                self.feedback_service.show_message('error', 'errors.error', tr('plugins.plugin_not_found'))
                 return
             name_key = plugin_info.get('name_key')
             localized_name = tr(name_key) if name_key else plugin_name
             status = plugin_info.get('status', 'enabled')
             if status == 'enabled':
-                self.plugin_manager.disable_plugin(plugin_name)
-                self.feedback_manager.update_status(tr('plugins.plugin_disabled', name=localized_name), UI_COLORS['status_info'])
+                self.plugin_service.disable_plugin(plugin_name)
+                self.feedback_service.update_status(tr('plugins.plugin_disabled', name=localized_name), UI_COLORS['status_info'])
             else:
-                self.plugin_manager.enable_plugin(plugin_name)
-                self.feedback_manager.update_status(tr('plugins.plugin_enabled', name=localized_name), UI_COLORS['status_success'])
-            self.plugin_manager.reload_plugin(plugin_name)
+                self.plugin_service.enable_plugin(plugin_name)
+                self.feedback_service.update_status(tr('plugins.plugin_enabled', name=localized_name), UI_COLORS['status_success'])
+            self.plugin_service.reload_plugin(plugin_name)
             if hasattr(self.app, '_update_plugin_tabs'):
                 self.app._update_plugin_tabs()
             self.update_display()
         except Exception as e:
             error_msg = str(e)
             logging.error(f'PluginDisplayController: Error toggling plugin {plugin_name}: {error_msg}', exc_info=True)
-            self.feedback_manager.show_message('error', 'errors.error', tr('plugins.toggle_error', error=error_msg))
+            self.feedback_service.show_message('error', 'errors.error', tr('plugins.toggle_error', error=error_msg))
 
     def on_plugin_delete(self, plugin_name: str):
         """Delete a plugin from the system.
@@ -170,7 +170,7 @@ class PluginDisplayController:
         try:
             plugin_path = os.path.join(self.app_state.plugins_dir, plugin_name)
             if not os.path.exists(plugin_path):
-                self.feedback_manager.show_message('error', 'errors.error', tr('plugins.plugin_not_found'))
+                self.feedback_service.show_message('error', 'errors.error', tr('plugins.plugin_not_found'))
                 return
             plugin_info = self._get_plugin_info(plugin_name)
             name_key = plugin_info.get('name_key') if plugin_info else None
@@ -179,21 +179,21 @@ class PluginDisplayController:
             reply = QMessageBox.question(self.app, tr('plugins.delete_plugin_title'), tr('plugins.delete_plugin_message', name=localized_name), QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No)
             if reply != QMessageBox.StandardButton.Yes:
                 return
-            metadata = self.plugin_manager._read_plugins_metadata()
+            metadata = self.plugin_service._read_plugins_metadata()
             if plugin_name in metadata:
                 del metadata[plugin_name]
-                self.plugin_manager._write_plugins_metadata(metadata)
+                self.plugin_service._write_plugins_metadata(metadata)
             if os.path.exists(plugin_path):
                 shutil.rmtree(plugin_path)
-            self.plugin_manager.load_plugins()
+            self.plugin_service.load_plugins()
             if hasattr(self.app, '_update_plugin_tabs'):
                 self.app._update_plugin_tabs()
             self.update_display()
-            self.feedback_manager.update_status(tr('plugins.plugin_deleted', name=localized_name), UI_COLORS['status_success'])
+            self.feedback_service.update_status(tr('plugins.plugin_deleted', name=localized_name), UI_COLORS['status_success'])
         except Exception as e:
             error_msg = str(e)
             logging.error(f'PluginDisplayController: Error deleting plugin {plugin_name}: {error_msg}', exc_info=True)
-            self.feedback_manager.show_message('error', 'errors.error', tr('plugins.delete_error', error=error_msg))
+            self.feedback_service.show_message('error', 'errors.error', tr('plugins.delete_error', error=error_msg))
 
     def on_search_plugins(self):
         """Open the plugins documentation page in web browser.
@@ -204,7 +204,7 @@ class PluginDisplayController:
             webbrowser.open('https://github.com/y114git/ylauncherdata/blob/main/PLUGINS.md')
         except Exception as e:
             logging.error(f'PluginDisplayController: Error opening plugins page: {e}', exc_info=True)
-            self.feedback_manager.show_message('error', 'errors.error', tr('plugins.open_page_error'))
+            self.feedback_service.show_message('error', 'errors.error', tr('plugins.open_page_error'))
 
     def on_import_plugin(self):
         """Show plugin import dialog.
@@ -212,7 +212,7 @@ class PluginDisplayController:
         Opens dialog for importing plugins from file or URL.
         """
         from ui.dialogs.import_dialog import ImportDialog
-        dialog = ImportDialog(self.app, self.feedback_manager, 'plugins')
+        dialog = ImportDialog(self.app, self.feedback_service, 'plugins')
         if dialog.exec() == QDialog.DialogCode.Accepted:
             if dialog.import_method == 'file' and dialog.selected_file:
                 self._install_plugin_from_file(dialog.selected_file)
@@ -227,7 +227,7 @@ class PluginDisplayController:
 
         Connects signals and starts the plugin installation process.
         """
-        worker.status.connect(lambda msg, color: self.feedback_manager.update_status(msg, color))
+        worker.status.connect(lambda msg, color: self.feedback_service.update_status(msg, color))
         worker.progress.connect(lambda p: setattr(self.app_state, 'progress_bar_value', p))
         worker.finished.connect(self._on_plugin_install_finished)
         worker.unrar_needed.connect(self._on_unrar_needed)
@@ -287,15 +287,15 @@ class PluginDisplayController:
         self.app_state.progress_bar_value = 0
         self.app_state.clear_current_task()
         if success:
-            if self.plugin_manager:
-                self.plugin_manager.convert_plugin_archives()
-                self.plugin_manager.load_plugins()
-            self.feedback_manager.update_status(message, UI_COLORS['status_success'])
+            if self.plugin_service:
+                self.plugin_service.convert_plugin_archives()
+                self.plugin_service.load_plugins()
+            self.feedback_service.update_status(message, UI_COLORS['status_success'])
             if hasattr(self.app, '_update_plugin_tabs'):
                 self.app._update_plugin_tabs()
             self.update_display()
         else:
-            self.feedback_manager.show_message('error', 'errors.error', message)
+            self.feedback_service.show_message('error', 'errors.error', message)
 
     def retranslate_plugin_widgets(self):
         """Update text for all plugin widgets for localization.
