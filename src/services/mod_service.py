@@ -1635,11 +1635,13 @@ class ModManager(QObject):
                 key = config_data.get('key') or config_data.get('mod_key')
                 if not key:
                     continue
-                if 'installed_date' in config_data or 'is_available_on_server' in config_data:
+                if 'installed_date' in config_data or 'added_date' in config_data or 'is_available_on_server' in config_data:
                     if key not in mods_metadata:
                         mods_metadata[key] = {}
                     if 'installed_date' in config_data:
-                        mods_metadata[key]['installed_date'] = config_data.pop('installed_date')
+                        mods_metadata[key]['added_date'] = config_data.pop('installed_date')
+                    elif 'added_date' in config_data:
+                        mods_metadata[key]['added_date'] = config_data.pop('added_date')
                     if 'is_available_on_server' in config_data:
                         mods_metadata[key]['is_available_on_server'] = config_data.pop('is_available_on_server')
                     from utils.file_utils import atomic_write_json
@@ -1673,7 +1675,7 @@ class ModManager(QObject):
             found_mod_keys.add(key)
             mod_meta = mods_metadata.get(key)
             if not mod_meta:
-                mods_metadata[key] = {'installed_date': time.strftime('%Y-%m-%d %H:%M:%S'), 'is_available_on_server': not config_data.get('is_local_mod', False)}
+                mods_metadata[key] = {'added_date': time.strftime('%Y-%m-%d %H:%M:%S'), 'is_available_on_server': not config_data.get('is_local_mod', False)}
                 metadata_updated = True
                 mod_meta = mods_metadata[key]
             cfg = dict(config_data)
@@ -1683,7 +1685,7 @@ class ModManager(QObject):
                 cfg['game'] = 'deltarune'
             if 'key' not in cfg and 'mod_key' in cfg:
                 cfg['key'] = cfg.pop('mod_key')
-            cfg['installed_date'] = mod_meta.get('installed_date')
+            cfg['added_date'] = mod_meta.get('added_date')
             cfg['is_available_on_server'] = mod_meta.get('is_available_on_server', False)
             cfg['is_local_mod'] = cfg.get('is_local_mod', False)
             cfg['folder_name'] = folder_name

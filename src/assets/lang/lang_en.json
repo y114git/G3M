@@ -95,6 +95,7 @@
     "icon_preview": "Preview",
     "initialization": "Initializing...",
     "install_game_files_first": "Install game files first",
+    "added_label": "Added:",
     "installed_label": "Installed:",
     "installed_mods_label": "Installed Mods:",
     "language_label": "Language:",

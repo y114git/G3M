@@ -128,7 +128,8 @@ class LibraryDisplayController:
                 continue
             is_local, is_available = self._get_mod_availability(mod_data, mod_info)
             if mod_data:
-                mod_widget = InstalledModWidget(mod_data, is_local, is_available, parent=self.app)
+                added_date = mod_info.get('added_date')
+                mod_widget = InstalledModWidget(mod_data, is_local, is_available, parent=self.app, installed_date=added_date)
                 mod_widget.clicked.connect(self.on_mod_clicked)
                 mod_widget.remove_requested.connect(self.on_mod_remove)
                 mod_widget.use_requested.connect(lambda mod_data=mod_data: self._handle_mod_use(mod_data, selected_chapter_id))
@@ -257,7 +258,8 @@ class LibraryDisplayController:
                             public_mod = next((mod for mod in self.app_state.all_mods if (getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)) == mod_key_attr), None)
                             if public_mod:
                                 has_update = any((self.mod_service.mod_has_files_for_chapter(public_mod, i) and self.mod_service.get_mod_status(public_mod, i) == 'update' for i in range(5)))
-                        mod_widget = InstalledModWidget(mod_data, is_local, is_available, has_update, parent=self.app)
+                        added_date = mod_info.get('added_date')
+                        mod_widget = InstalledModWidget(mod_data, is_local, is_available, has_update, parent=self.app, installed_date=added_date)
                         mod_widget.clicked.connect(self.on_mod_clicked)
                         mod_widget.remove_requested.connect(self.on_mod_remove)
                         mod_widget.use_requested.connect(self.on_mod_use)

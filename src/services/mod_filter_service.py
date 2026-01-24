@@ -173,7 +173,7 @@ def filter_and_sort_mods(mods_list: List[Any], filters: Dict[str, Any], sort_con
                 date_tuple = parse_mod_date(date_str)
                 return _date_tuple_to_sortable(date_tuple)
             elif sort_type == 2:
-                date_str = _get_mod_attr(mod, 'created_date') or _get_mod_attr(mod, 'installed_date') or '0'
+                date_str = _get_mod_attr(mod, 'created_date') or _get_mod_attr(mod, 'added_date') or '0'
                 date_tuple = parse_mod_date(date_str)
                 return _date_tuple_to_sortable(date_tuple)
             return 0

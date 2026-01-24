@@ -18,7 +18,7 @@ class InstalledModWidget(BaseModWidget):
         self.use_button = None
         self.is_local = is_local
         self.is_available = is_available
-        self.installed_date = installed_date
+        self.added_date = installed_date
         self.has_update = has_update
         self.is_in_slot = False
         self.status = 'ready'
@@ -40,19 +40,19 @@ class InstalledModWidget(BaseModWidget):
         self._update_indicator()
         self.title_layout.addWidget(self.status_indicator)
         self.title_layout.addStretch()
-        installed_date_text = self.installed_date or self.mod_data.created_date or 'N/A'
-        date_label_text = tr('ui.created_label') if self.is_local else tr('ui.installed_label')
+        added_date_text = self.added_date or 'N/A'
+        date_label_text = tr('ui.added_label')
         installed_container = QWidget(self)
         installed_container_layout = QHBoxLayout(installed_container)
         installed_container_layout.setContentsMargins(0, 0, 0, 0)
         installed_container_layout.setSpacing(0)
-        self.installed_label_title = QLabel(date_label_text, installed_container)
-        self.installed_label_title.setObjectName('primaryText')
-        installed_label_value = QLabel(f' {installed_date_text}', installed_container)
-        installed_label_value.setObjectName('secondaryText')
-        installed_container_layout.addWidget(self.installed_label_title)
-        installed_container_layout.addWidget(installed_label_value)
-        containers = [self.author_container, self.game_version_container, installed_container]
+        self.added_label_title = QLabel(date_label_text, installed_container)
+        self.added_label_title.setObjectName('primaryText')
+        added_label_value = QLabel(f' {added_date_text}', installed_container)
+        added_label_value.setObjectName('secondaryText')
+        installed_container_layout.addWidget(self.added_label_title)
+        installed_container_layout.addWidget(added_label_value)
+        containers = [self.author_container, self.category_container, installed_container]
         for i, container in enumerate(containers):
             self.metadata_layout.addWidget(container)
             if i < len(containers) - 1:
@@ -91,8 +91,8 @@ class InstalledModWidget(BaseModWidget):
         config = self._resolve_theme_config()
         if config:
             text_color = get_theme_color(config, 'text', 'white')
-            if hasattr(self, 'installed_label_title') and self.installed_label_title:
-                self.installed_label_title.setStyleSheet(f'color: {text_color};')
+            if hasattr(self, 'added_label_title') and self.added_label_title:
+                self.added_label_title.setStyleSheet(f'color: {text_color};')
 
     def _update_indicator(self):
         style = 'font-size: 14px; font-weight: bold; margin-left: 5px;'

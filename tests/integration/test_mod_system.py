@@ -184,7 +184,7 @@ class TestModMetadata:
         assert isinstance(metadata, dict), "_read_metadata should return a dict, even if file doesn't exist"
         if not os.path.exists(app_state.mods_metadata_path):
             assert metadata == {}, 'Empty metadata should return empty dict'
-        test_metadata = {'test_mod_001': {'installed_date': time.strftime('%Y-%m-%d %H:%M:%S'), 'is_available_on_server': True}, 'test_mod_002': {'installed_date': '2024-01-01 00:00:00', 'is_available_on_server': False}}
+        test_metadata = {'test_mod_001': {'added_date': time.strftime('%Y-%m-%d %H:%M:%S'), 'is_available_on_server': True}, 'test_mod_002': {'added_date': '2024-01-01 00:00:00', 'is_available_on_server': False}}
         mod_service._write_metadata(test_metadata)
         assert os.path.exists(app_state.mods_metadata_path), 'Metadata file should be created after write'
         written_metadata = mod_service._read_metadata()
@@ -193,7 +193,7 @@ class TestModMetadata:
         assert 'test_mod_002' in written_metadata, 'All written mods should be in read metadata'
         assert written_metadata['test_mod_001']['is_available_on_server'], 'Metadata values should be preserved'
         assert written_metadata['test_mod_002']['is_available_on_server'] is False, 'All metadata values should be preserved'
-        assert written_metadata['test_mod_002']['installed_date'] == '2024-01-01 00:00:00', 'Dates should be preserved'
+        assert written_metadata['test_mod_002']['added_date'] == '2024-01-01 00:00:00', 'Dates should be preserved'
         mod_service._write_metadata({})
 
     def test_metadata_file_creation(self, app_state, feedback_service):
@@ -204,14 +204,14 @@ class TestModMetadata:
         if os.path.exists(app_state.mods_metadata_path):
             os.remove(app_state.mods_metadata_path)
         assert not os.path.exists(app_state.mods_metadata_path), 'Metadata file should not exist initially'
-        test_metadata = {'test_mod': {'installed_date': '2024-01-01 00:00:00'}}
+        test_metadata = {'test_mod': {'added_date': '2024-01-01 00:00:00'}}
         mod_service._write_metadata(test_metadata)
         assert os.path.exists(app_state.mods_metadata_path), 'Metadata file should be created after write'
         with open(app_state.mods_metadata_path, 'r', encoding='utf-8') as f:
             file_content = json.load(f)
         assert isinstance(file_content, dict), 'Metadata file should contain valid JSON dict'
         assert 'test_mod' in file_content, 'Written mod should be in file'
-        assert file_content['test_mod']['installed_date'] == '2024-01-01 00:00:00', 'Data in file should match written data'
+        assert file_content['test_mod']['added_date'] == '2024-01-01 00:00:00', 'Data in file should match written data'
         if os.path.exists(app_state.mods_metadata_path):
             os.remove(app_state.mods_metadata_path)
 

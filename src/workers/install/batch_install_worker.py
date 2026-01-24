@@ -433,7 +433,7 @@ class InstallModsThread(QThread):
                 self.main_window.settings_service.write_json(config_path, config_data)
             metadata = self.main_window.mod_service._read_metadata()
             for key in installed_mods.keys():
-                metadata[key] = {'installed_date': time.strftime('%Y-%m-%d %H:%M:%S'), 'is_available_on_server': True}
+                metadata[key] = {'added_date': time.strftime('%Y-%m-%d %H:%M:%S'), 'is_available_on_server': True}
             self.main_window.mod_service._write_metadata(metadata)
             self._increment_downloads_for_installed_mods(installed_mods.keys())
             if self._cancelled:

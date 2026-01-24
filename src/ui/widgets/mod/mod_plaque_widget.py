@@ -271,7 +271,7 @@ class ModPlaqueWidget(BaseModWidget):
         updated_container_layout.addWidget(updated_label_value)
         self.updated_container = updated_container
         self.updated_label_title = updated_label_title
-        containers = [self.author_container, self.game_version_container, updated_container, created_container]
+        containers = [self.author_container, self.category_container, updated_container, created_container]
         for i, container in enumerate(containers):
             self.metadata_layout.addWidget(container)
             if i < len(containers) - 1:

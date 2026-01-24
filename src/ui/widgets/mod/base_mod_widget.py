@@ -55,19 +55,19 @@ class BaseModWidget(QFrame):
         author_label_value.setObjectName('secondaryText')
         author_container_layout.addWidget(self.author_label_title)
         author_container_layout.addWidget(author_label_value)
-        game_version_text = self.mod_data.game_version or 'N/A'
-        game_version_container = QWidget(self)
-        game_version_container_layout = QHBoxLayout(game_version_container)
-        game_version_container_layout.setContentsMargins(0, 0, 0, 0)
-        game_version_container_layout.setSpacing(0)
-        self.game_version_label_title = QLabel(tr('ui.game_version_label'), game_version_container)
-        self.game_version_label_title.setObjectName('primaryText')
-        game_version_label_value = QLabel(f' {game_version_text}', game_version_container)
-        game_version_label_value.setObjectName('secondaryText')
-        game_version_container_layout.addWidget(self.game_version_label_title)
-        game_version_container_layout.addWidget(game_version_label_value)
+        category_text = getattr(self.mod_data, 'gamebanana_category', None) or 'N/A'
+        category_container = QWidget(self)
+        category_container_layout = QHBoxLayout(category_container)
+        category_container_layout.setContentsMargins(0, 0, 0, 0)
+        category_container_layout.setSpacing(0)
+        self.category_label_title = QLabel(tr('ui.category_label'), category_container)
+        self.category_label_title.setObjectName('primaryText')
+        category_label_value = QLabel(f' {category_text}', category_container)
+        category_label_value.setObjectName('secondaryText')
+        category_container_layout.addWidget(self.category_label_title)
+        category_container_layout.addWidget(category_label_value)
         self.author_container = author_container
-        self.game_version_container = game_version_container
+        self.category_container = category_container
         self.metadata_layout = metadata_layout
         info_layout.addLayout(metadata_layout)
         tagline_text = self.mod_data.tagline or tr('ui.no_description')
@@ -115,14 +115,14 @@ class BaseModWidget(QFrame):
                 self.name_label.setStyleSheet(f'font-size: 16px; font-weight: bold; color: {text_color};')
             if hasattr(self, 'author_label_title') and self.author_label_title:
                 self.author_label_title.setStyleSheet(f'color: {text_color};')
-            if hasattr(self, 'game_version_label_title') and self.game_version_label_title:
-                self.game_version_label_title.setStyleSheet(f'color: {text_color};')
+            if hasattr(self, 'category_label_title') and self.category_label_title:
+                self.category_label_title.setStyleSheet(f'color: {text_color};')
 
     def update_labels_text(self):
         if hasattr(self, 'author_label_title') and self.author_label_title:
             self.author_label_title.setText(tr('ui.author_label'))
-        if hasattr(self, 'game_version_label_title') and self.game_version_label_title:
-            self.game_version_label_title.setText(tr('ui.game_version_label'))
+        if hasattr(self, 'category_label_title') and self.category_label_title:
+            self.category_label_title.setText(tr('ui.category_label'))
 
     def set_selected(self, selected):
         self.is_selected = selected
