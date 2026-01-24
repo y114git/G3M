@@ -22,7 +22,7 @@ from utils.file_utils import ensure_writable, sanitize_filename, safe_remove, sa
 from config.constants import DATA_WIN_FILENAME
 from services.localization_service import tr
 from utils.mod_utils import get_mod_key, get_mod_name
-from services.patching_log_service import get_patching_logger, get_conflicts_logger
+from services.patching_log_service import get_patching_logger, get_conflicts_logger, rotate_conflicts_log
 
 
 class ProgressThrottler(QObject):
@@ -76,6 +76,7 @@ class MultiModMerger(QObject):
         self.patching_logger = get_patching_logger()
         self.conflicts_logger = get_conflicts_logger()
         self.detected_conflicts: List[Dict[str, Any]] = []
+        self._conflicts_log_rotated_this_session: bool = False
         self._mod_exported_code_files: Dict[int, set] = {}
         self.app_state = app_state
         self.mod_service = mod_service
@@ -108,6 +109,13 @@ class MultiModMerger(QObject):
         and return True to continue or False to cancel.
         """
         self._warning_callback = callback
+
+    def _rotate_conflicts_log_if_needed(self):
+        """Rotate conflicts log on first conflict detection of this session."""
+        if not self._conflicts_log_rotated_this_session:
+            rotate_conflicts_log()
+            self._conflicts_log_rotated_this_session = True
+            self.conflicts_logger = get_conflicts_logger()
 
     def _should_skip_warnings(self) -> bool:
         """Check if patching warnings should be skipped based on settings."""
@@ -281,6 +289,8 @@ class MultiModMerger(QObject):
                     self.patching_logger.info(f'Successfully processed mods for chapter {chapter_id}')
                 else:
                     self.patching_logger.info(f'Successfully merged mods for chapter {chapter_id}')
+                    if self.backup_service and self._session_manifest_path:
+                        self.backup_service.save_backups_to_manifest(self._session_manifest_path)
             try:
                 completed_msg = tr('status.merge_completed')
             except BaseException:
@@ -521,18 +531,17 @@ class MultiModMerger(QObject):
                 f.write(chapter_str)
             with open(mod_file, 'w', encoding='utf-8') as f:
                 f.write('0')
-            vanilla_scripts = []
-            if self.utmt_wrapper.get_script_path('ExportAllAssets'):
-                vanilla_scripts.append('ExportAllAssets')
+            vanilla_scripts = self._get_export_scripts()
+            if vanilla_scripts:
                 returncode, stdout, stderr = self.utmt_wrapper.execute_scripts(vanilla_data_win, vanilla_scripts, output_path=vanilla_data_win, cwd=merge_root)
                 if self._cancelled:
                     return False
                 if returncode != 0:
-                    self.patching_logger.warning(f'Vanilla ExportAllAssets failed: {stderr[:500]}')
+                    self.patching_logger.warning(f'Vanilla export failed: {stderr[:500]}')
                 else:
-                    self.patching_logger.info('Successfully exported vanilla assets using ExportAllAssets')
+                    self.patching_logger.info('Successfully exported vanilla assets')
             else:
-                self.patching_logger.error('ExportAllAssets script not found! This is required for optimized export.')
+                self.patching_logger.error('No export scripts found! At least one export script is required.')
                 return False
         else:
             self.patching_logger.info('Vanilla mod (mod 0) already exported, skipping')
@@ -1348,12 +1357,14 @@ class MultiModMerger(QObject):
                             if len(history) > 1:
                                 prev_mods = [h['mod'] for h in history[:-1]]
                                 prev_mods_filtered = [m for m in prev_mods if m not in ['0', 'vanilla', 'unknown_mod', 'merged_mods', mod_name_for_tracking]]
-                                if prev_mods_filtered:
-                                    conflict_msg = f'''{resource_type.capitalize()} "{resource_name}" was modified by: {', '.join(prev_mods_filtered)} before "{mod_name_for_tracking}". Higher priority mod ({mod_name_for_tracking}) will be used.'''
+                                prev_mods_unique = list(dict.fromkeys(prev_mods_filtered))
+                                if prev_mods_unique:
+                                    conflict_msg = f'''{resource_type.capitalize()} "{resource_name}" was modified by: {', '.join(prev_mods_unique)} before "{mod_name_for_tracking}". Higher priority mod ({mod_name_for_tracking}) will be used.'''
                                     self.patching_logger.warning(f'[CONFLICT] {conflict_msg}')
-                                    self.conflicts_logger.info(f'''Resource: {resource_type.capitalize()} "{resource_name}" | Conflict between: {', '.join(prev_mods_filtered)} vs "{mod_name_for_tracking}" | Resolution: Using "{mod_name_for_tracking}" (higher priority)''')
-                                    self.detected_conflicts.append({'resource_type': resource_type, 'resource_name': resource_name, 'mods': prev_mods_filtered + [mod_name_for_tracking], 'resolution': mod_name_for_tracking})
-                                    history[-1]['conflicts_with'] = prev_mods_filtered
+                                    self._rotate_conflicts_log_if_needed()
+                                    self.conflicts_logger.info(f'''Resource: {resource_type.capitalize()} "{resource_name}" | Conflict between: {', '.join(prev_mods_unique)} vs "{mod_name_for_tracking}" | Resolution: Using "{mod_name_for_tracking}" (higher priority)''')
+                                    self.detected_conflicts.append({'resource_type': resource_type, 'resource_name': resource_name, 'mods': prev_mods_unique + [mod_name_for_tracking], 'resolution': mod_name_for_tracking})
+                                    history[-1]['conflicts_with'] = prev_mods_unique
         else:
             if mod_name_for_tracking not in ['0', 'vanilla', 'unknown_mod', 'merged_mods']:
                 for resource_name in resource_names:
@@ -1362,12 +1373,14 @@ class MultiModMerger(QObject):
                         if len(history) > 1:
                             prev_mods = [h['mod'] for h in history[:-1]]
                             prev_mods_filtered = [m for m in prev_mods if m not in ['0', 'vanilla', 'unknown_mod', 'merged_mods', mod_name_for_tracking]]
-                            if prev_mods_filtered:
-                                conflict_msg = f'''{resource_type.capitalize()} "{resource_name}" was modified by: {', '.join(prev_mods_filtered)} before "{mod_name_for_tracking}". Higher priority mod ({mod_name_for_tracking}) will be used.'''
+                            prev_mods_unique = list(dict.fromkeys(prev_mods_filtered))
+                            if prev_mods_unique:
+                                conflict_msg = f'''{resource_type.capitalize()} "{resource_name}" was modified by: {', '.join(prev_mods_unique)} before "{mod_name_for_tracking}". Higher priority mod ({mod_name_for_tracking}) will be used.'''
                                 self.patching_logger.warning(f'[CONFLICT] {conflict_msg}')
-                                self.conflicts_logger.info(f'''Resource: {resource_type.capitalize()} "{resource_name}" | Conflict between: {', '.join(prev_mods_filtered)} vs "{mod_name_for_tracking}" | Resolution: Using "{mod_name_for_tracking}" (higher priority)''')
-                                self.detected_conflicts.append({'resource_type': resource_type, 'resource_name': resource_name, 'mods': prev_mods_filtered + [mod_name_for_tracking], 'resolution': mod_name_for_tracking})
-                                history[-1]['conflicts_with'] = prev_mods_filtered
+                                self._rotate_conflicts_log_if_needed()
+                                self.conflicts_logger.info(f'''Resource: {resource_type.capitalize()} "{resource_name}" | Conflict between: {', '.join(prev_mods_unique)} vs "{mod_name_for_tracking}" | Resolution: Using "{mod_name_for_tracking}" (higher priority)''')
+                                self.detected_conflicts.append({'resource_type': resource_type, 'resource_name': resource_name, 'mods': prev_mods_unique + [mod_name_for_tracking], 'resolution': mod_name_for_tracking})
+                                history[-1]['conflicts_with'] = prev_mods_unique
             self.patching_logger.info(f'Successfully imported {resource_type} from Objects directory')
         return returncode == 0
 
@@ -1508,7 +1521,7 @@ class MultiModMerger(QObject):
             if not (has_graphics or has_gml or has_shaders or has_tilesets or has_fonts or has_sounds or has_rooms or has_audio_groups or has_paths or has_timelines or has_extensions):
                 self.patching_logger.debug(f'Objects directory has no assets to import: {objects_dir}')
                 return True
-            asset_configs = [{'script_name': 'ImportGraphics', 'has_assets': has_graphics, 'step_number': '1/17', 'resource_type': 'sprite', 'resource_action': 'imported', 'get_resources_func': get_sprite_resources}, {'script_name': 'ImportShaders', 'has_assets': has_shaders, 'step_number': '2/17', 'resource_type': 'shader', 'resource_action': 'imported', 'get_resources_func': get_shader_resources}, {'script_name': 'ImportFonts', 'has_assets': has_fonts, 'step_number': '3/17', 'resource_type': 'font', 'resource_action': 'modified', 'get_resources_func': get_font_resources}, {'script_name': 'ImportSounds', 'has_assets': has_sounds, 'step_number': '4/17', 'resource_type': 'sound', 'resource_action': 'modified', 'get_resources_func': get_sound_resources}, {'script_name': 'ImportRooms', 'has_assets': has_rooms, 'step_number': '5/17', 'resource_type': 'room', 'resource_action': 'modified', 'get_resources_func': get_room_resources, 'check_dir_func': lambda obj_dir: os.path.exists(os.path.join(obj_dir, 'Rooms'))}, {'script_name': 'ImportAudioGroups', 'has_assets': has_audio_groups, 'step_number': '6/17', 'resource_type': 'audiogroup', 'resource_action': 'modified', 'get_resources_func': get_audiogroup_resources}, {'script_name': 'ImportPaths', 'has_assets': has_paths, 'step_number': '7/17', 'resource_type': 'path', 'resource_action': 'modified', 'get_resources_func': get_path_resources}, {'script_name': 'ImportTimelines', 'has_assets': has_timelines, 'step_number': '8/17', 'resource_type': 'timeline', 'resource_action': 'modified', 'get_resources_func': get_timeline_resources}, {'script_name': 'ImportExtensions', 'has_assets': has_extensions, 'step_number': '9/17', 'resource_type': 'extension', 'resource_action': 'modified', 'get_resources_func': get_extension_resources}, {'script_name': 'ImportTilesets', 'has_assets': has_tilesets, 'step_number': '10/17', 'resource_type': 'tileset', 'resource_action': 'imported', 'get_resources_func': get_tileset_resources, 'extra_resources_func': get_tileset_config_resource}, {'script_name': 'ImportGML', 'has_assets': has_gml, 'step_number': '11/17', 'resource_type': 'code', 'resource_action': 'modified', 'get_resources_func': get_gml_resources, 'analyze_errors': True}]
+            asset_configs = [{'script_name': 'ImportSprites', 'has_assets': has_graphics, 'step_number': '1/17', 'resource_type': 'sprite', 'resource_action': 'imported', 'get_resources_func': get_sprite_resources}, {'script_name': 'ImportShaders', 'has_assets': has_shaders, 'step_number': '2/17', 'resource_type': 'shader', 'resource_action': 'imported', 'get_resources_func': get_shader_resources}, {'script_name': 'ImportFonts', 'has_assets': has_fonts, 'step_number': '3/17', 'resource_type': 'font', 'resource_action': 'modified', 'get_resources_func': get_font_resources}, {'script_name': 'ImportSounds', 'has_assets': has_sounds, 'step_number': '4/17', 'resource_type': 'sound', 'resource_action': 'modified', 'get_resources_func': get_sound_resources}, {'script_name': 'ImportRooms', 'has_assets': has_rooms, 'step_number': '5/17', 'resource_type': 'room', 'resource_action': 'modified', 'get_resources_func': get_room_resources, 'check_dir_func': lambda obj_dir: os.path.exists(os.path.join(obj_dir, 'Rooms'))}, {'script_name': 'ImportAudioGroups', 'has_assets': has_audio_groups, 'step_number': '6/17', 'resource_type': 'audiogroup', 'resource_action': 'modified', 'get_resources_func': get_audiogroup_resources}, {'script_name': 'ImportPaths', 'has_assets': has_paths, 'step_number': '7/17', 'resource_type': 'path', 'resource_action': 'modified', 'get_resources_func': get_path_resources}, {'script_name': 'ImportTimelines', 'has_assets': has_timelines, 'step_number': '8/17', 'resource_type': 'timeline', 'resource_action': 'modified', 'get_resources_func': get_timeline_resources}, {'script_name': 'ImportExtensions', 'has_assets': has_extensions, 'step_number': '9/17', 'resource_type': 'extension', 'resource_action': 'modified', 'get_resources_func': get_extension_resources}, {'script_name': 'ImportTilesets', 'has_assets': has_tilesets, 'step_number': '10/17', 'resource_type': 'tileset', 'resource_action': 'imported', 'get_resources_func': get_tileset_resources, 'extra_resources_func': get_tileset_config_resource}, {'script_name': 'ImportCodeEntries', 'has_assets': has_gml, 'step_number': '11/17', 'resource_type': 'code', 'resource_action': 'modified', 'get_resources_func': get_gml_resources, 'analyze_errors': True}]
             for asset_config in asset_configs:
                 self._import_asset_type(asset_config, data_win_path, data_win_dir, objects_dir, mod_name_for_tracking)
             if 'DeltahubMergeWorkspace' in data_win_dir:
@@ -1545,6 +1558,7 @@ class MultiModMerger(QObject):
                 if os.path.exists(target_path):
                     conflicts.append(rel_path)
                     self.patching_logger.warning(f'[CONFLICT] File override conflict detected: {rel_path} from mod {mod_name}')
+                    self._rotate_conflicts_log_if_needed()
                     self.conflicts_logger.info(f'Resource: File "{rel_path}" | Conflict: File already exists | Resolution: Using file from "{mod_name}" (higher priority)')
                     self.detected_conflicts.append({'resource_type': 'file', 'resource_name': rel_path, 'mods': [mod_name], 'resolution': mod_name})
         return conflicts
@@ -1563,6 +1577,7 @@ class MultiModMerger(QObject):
                     if prev_mod != mod_name:
                         conflicts.append(code_name)
                         self.patching_logger.warning(f'[CONFLICT] Code conflict detected: {code_name} from mod {mod_name} (already modified by {prev_mod})')
+                        self._rotate_conflicts_log_if_needed()
                         self.conflicts_logger.info(f'Resource: GML Code "{code_name}" | Conflict between: "{prev_mod}" vs "{mod_name}" | Resolution: Using "{mod_name}" (higher priority)')
                         self.detected_conflicts.append({'resource_type': 'code', 'resource_name': code_name, 'mods': [prev_mod, mod_name], 'resolution': mod_name})
         return conflicts
@@ -1587,6 +1602,7 @@ class MultiModMerger(QObject):
                 if prev_mod != mod_name:
                     conflicts.append(resource_name)
                     self.patching_logger.warning(f'[CONFLICT] {resource_type.capitalize()} conflict detected: {resource_name} from mod {mod_name}')
+                    self._rotate_conflicts_log_if_needed()
                     self.conflicts_logger.info(f'Resource: {resource_type.capitalize()} "{resource_name}" | Conflict between: "{prev_mod}" vs "{mod_name}" | Resolution: Using "{mod_name}" (higher priority)')
                     self.detected_conflicts.append({'resource_type': resource_type.rstrip('s'), 'resource_name': resource_name, 'mods': [prev_mod, mod_name], 'resolution': mod_name})
         return conflicts
@@ -1622,6 +1638,7 @@ class MultiModMerger(QObject):
                     error_desc += f' (variable: {variable_name})'
                 if object_name:
                     error_desc += f' (object: {object_name})'
+                self._rotate_conflicts_log_if_needed()
                 self.conflicts_logger.info(f'Resource: GML Code | Error Type: {error_desc} | Script: {script_name} | Mod: {mod_name} | Error: {error_context[:200]}')
                 self.detected_conflicts.append({'resource_type': 'code_error', 'resource_name': variable_name or object_name or 'unknown', 'mods': [mod_name], 'error_type': error_type, 'error_message': error_context[:300], 'script': script_name})
         return errors_found
@@ -1654,6 +1671,8 @@ class MultiModMerger(QObject):
         if not os.path.exists(source_dir):
             return
         if os.path.exists(target_dir):
+            conflicts_logged_this_call: set = set()
+            history_added_this_call: set = set()
             for root, dirs, files in os.walk(source_dir):
                 rel_path = os.path.relpath(root, source_dir)
                 target_path = os.path.join(target_dir, rel_path)
@@ -1661,6 +1680,7 @@ class MultiModMerger(QObject):
                 for file in files:
                     src_file = os.path.join(root, file)
                     dst_file = os.path.join(target_path, file)
+                    resource_name = rel_path if rel_path != '.' else os.path.splitext(file)[0]
                     if os.path.exists(dst_file) and track_history:
                         is_identical = False
                         try:
@@ -1668,22 +1688,27 @@ class MultiModMerger(QObject):
                                 is_identical = True
                         except Exception:
                             pass
-                        if not is_identical:
-                            resource_name = rel_path if rel_path != '.' else os.path.splitext(file)[0]
+                        if not is_identical and resource_name not in conflicts_logged_this_call:
                             if resource_name in self.resource_modification_history:
                                 prev_mods = [h['mod'] for h in self.resource_modification_history[resource_name]]
                                 prev_mods_filtered = [m for m in prev_mods if m not in ['0', 'vanilla', 'unknown_mod', 'merged_mods']]
-                                if prev_mods_filtered and source_mod_name not in prev_mods_filtered:
-                                    self.patching_logger.info(f"[CONFLICT] {resource_type} '{resource_name}': mod {prev_mods_filtered[0]} vs mod {source_mod_name}, using mod {source_mod_name}")
-                                    self.conflicts_logger.info(f'''Resource: {resource_type.capitalize()} "{resource_name}" | Conflict between: {', '.join(prev_mods_filtered)} vs "{source_mod_name}" | Resolution: Using "{source_mod_name}" (higher priority)''')
-                                    self.detected_conflicts.append({'resource_type': resource_type, 'resource_name': resource_name, 'mods': prev_mods_filtered + [source_mod_name], 'resolution': source_mod_name})
+                                prev_mods_unique = list(dict.fromkeys(prev_mods_filtered))
+                                if prev_mods_unique and source_mod_name not in prev_mods_unique:
+                                    self.patching_logger.info(f"[CONFLICT] {resource_type} '{resource_name}': mod {prev_mods_unique[0]} vs mod {source_mod_name}, using mod {source_mod_name}")
+                                    self._rotate_conflicts_log_if_needed()
+                                    self.conflicts_logger.info(f'''Resource: {resource_type.capitalize()} "{resource_name}" | Conflict between: {', '.join(prev_mods_unique)} vs "{source_mod_name}" | Resolution: Using "{source_mod_name}" (higher priority)''')
+                                    self.detected_conflicts.append({'resource_type': resource_type, 'resource_name': resource_name, 'mods': prev_mods_unique + [source_mod_name], 'resolution': source_mod_name})
+                                    conflicts_logged_this_call.add(resource_name)
                     safe_copy(src_file, dst_file)
                     if track_history:
                         if source_mod_name != '0' and source_mod_name != 'vanilla' and (source_mod_name != 'unknown_mod'):
-                            resource_name = rel_path if rel_path != '.' else os.path.splitext(file)[0]
-                            if resource_name not in self.resource_modification_history:
-                                self.resource_modification_history[resource_name] = []
-                            self.resource_modification_history[resource_name].append({'type': resource_type, 'mod': source_mod_name, 'action': 'merged', 'timestamp': time.time()})
+                            if resource_name not in history_added_this_call:
+                                if resource_name not in self.resource_modification_history:
+                                    self.resource_modification_history[resource_name] = []
+                                existing_mods = [h['mod'] for h in self.resource_modification_history[resource_name]]
+                                if source_mod_name not in existing_mods:
+                                    self.resource_modification_history[resource_name].append({'type': resource_type, 'mod': source_mod_name, 'action': 'merged', 'timestamp': time.time()})
+                                history_added_this_call.add(resource_name)
         else:
             shutil.copytree(source_dir, target_dir, dirs_exist_ok=True)
 
@@ -1775,19 +1800,19 @@ class MultiModMerger(QObject):
                 if file.endswith('.png'):
                     font_name = file[:-4]
                     font_names.add(font_name)
-                elif file.startswith('glyphs_') and file.endswith('.csv'):
-                    font_name = file[7:-4]
+                elif file.endswith('.json'):
+                    font_name = file[:-5]
                     font_names.add(font_name)
             for font_name in font_names:
                 combined_hash = hashlib.sha256()
                 png_file = os.path.join(fonts_dir, f'{font_name}.png')
-                csv_file = os.path.join(fonts_dir, f'glyphs_{font_name}.csv')
+                json_file = os.path.join(fonts_dir, f'{font_name}.json')
                 try:
                     if os.path.exists(png_file):
                         with open(png_file, 'rb') as f:
                             combined_hash.update(f.read())
-                    if os.path.exists(csv_file):
-                        with open(csv_file, 'rb') as f:
+                    if os.path.exists(json_file):
+                        with open(json_file, 'rb') as f:
                             combined_hash.update(f.read())
                     hashes['fonts'][font_name] = combined_hash.hexdigest()
                 except Exception as e:
@@ -1932,11 +1957,11 @@ class MultiModMerger(QObject):
             target_dir = os.path.join(target_objects_dir, 'Fonts')
             os.makedirs(target_dir, exist_ok=True)
             png_file = os.path.join(source_objects_dir, 'Fonts', f'{resource_name}.png')
-            csv_file = os.path.join(source_objects_dir, 'Fonts', f'glyphs_{resource_name}.csv')
+            json_file = os.path.join(source_objects_dir, 'Fonts', f'{resource_name}.json')
             if os.path.exists(png_file):
                 safe_copy(png_file, os.path.join(target_dir, f'{resource_name}.png'))
-            if os.path.exists(csv_file):
-                safe_copy(csv_file, os.path.join(target_dir, f'glyphs_{resource_name}.csv'))
+            if os.path.exists(json_file):
+                safe_copy(json_file, os.path.join(target_dir, f'{resource_name}.json'))
         elif resource_type == 'shaders':
             source_dir = os.path.join(source_objects_dir, 'Shaders', resource_name)
             target_dir = os.path.join(target_objects_dir, 'Shaders', resource_name)
@@ -1986,11 +2011,13 @@ class MultiModMerger(QObject):
                         if code_name in self.resource_modification_history:
                             prev_mods = [h['mod'] for h in self.resource_modification_history[code_name]]
                             prev_mods_filtered = [m for m in prev_mods if m not in ['0', 'vanilla', 'unknown_mod', 'merged_mods']]
-                            if prev_mods_filtered and source_mod_name not in prev_mods_filtered:
-                                conflict_msg = f'''Code "{code_name}" was modified by: {', '.join(prev_mods_filtered)} before "{source_mod_name}". Higher priority mod ({source_mod_name}) will overwrite.'''
+                            prev_mods_unique = list(dict.fromkeys(prev_mods_filtered))
+                            if prev_mods_unique and source_mod_name not in prev_mods_unique:
+                                conflict_msg = f'''Code "{code_name}" was modified by: {', '.join(prev_mods_unique)} before "{source_mod_name}". Higher priority mod ({source_mod_name}) will overwrite.'''
                                 self.patching_logger.warning(f'[CONFLICT] {conflict_msg}')
-                                self.conflicts_logger.info(f'''Resource: GML Code "{code_name}" | Conflict between: {', '.join(prev_mods_filtered)} vs "{source_mod_name}" | Resolution: Using "{source_mod_name}" (higher priority)''')
-                                self.detected_conflicts.append({'resource_type': 'code', 'resource_name': code_name, 'mods': prev_mods_filtered + [source_mod_name], 'resolution': source_mod_name})
+                                self._rotate_conflicts_log_if_needed()
+                                self.conflicts_logger.info(f'''Resource: GML Code "{code_name}" | Conflict between: {', '.join(prev_mods_unique)} vs "{source_mod_name}" | Resolution: Using "{source_mod_name}" (higher priority)''')
+                                self.detected_conflicts.append({'resource_type': 'code', 'resource_name': code_name, 'mods': prev_mods_unique + [source_mod_name], 'resolution': source_mod_name})
                     safe_copy(src_file, dst_file)
                     if source_mod_name != '0' and source_mod_name != 'vanilla' and (source_mod_name != 'unknown_mod'):
                         code_name = os.path.splitext(file)[0]
@@ -2038,11 +2065,9 @@ class MultiModMerger(QObject):
                 with open(mod_file, 'w', encoding='utf-8') as f:
                     f.write(str(mod_number))
                 self.patching_logger.debug(f'Set mod number cache: chapter={chapter_str}, mod={mod_number} for export from ready data.win')
-            export_scripts = []
-            if self.utmt_wrapper.get_script_path('ExportAllAssets'):
-                export_scripts.append('ExportAllAssets')
-            else:
-                self.patching_logger.error('ExportAllAssets script not found! This is required for optimized export.')
+            export_scripts = self._get_export_scripts()
+            if not export_scripts:
+                self.patching_logger.error('No export scripts found! At least one export script is required.')
                 return False
             if export_scripts:
                 export_temp = os.path.join(merge_temp_dir, 'other_export')
@@ -2076,20 +2101,7 @@ class MultiModMerger(QObject):
                                 shutil.copytree(export_objects_dir, mod_objects_dir)
                             self.patching_logger.info(f'Copied exported objects from export_temp to {mod_objects_dir} for later import')
                     scripts_to_run = []
-                    if self.utmt_wrapper.get_script_path('ImportGraphics'):
-                        scripts_to_run.append('ImportGraphics')
-                    if self.utmt_wrapper.get_script_path('ImportShaders'):
-                        scripts_to_run.append('ImportShaders')
-                    if self.utmt_wrapper.get_script_path('ImportGML'):
-                        scripts_to_run.append('ImportGML')
-                    if self.utmt_wrapper.get_script_path('ImportTilesets'):
-                        scripts_to_run.append('ImportTilesets')
-                    if self.utmt_wrapper.get_script_path('ImportFonts'):
-                        scripts_to_run.append('ImportFonts')
-                    if self.utmt_wrapper.get_script_path('ImportSounds'):
-                        scripts_to_run.append('ImportSounds')
-                    if self.utmt_wrapper.get_script_path('ImportRooms'):
-                        scripts_to_run.append('ImportRooms')
+                    scripts_to_run = self._get_import_scripts()
                     if scripts_to_run:
                         returncode, stdout, stderr = self.utmt_wrapper.execute_scripts(base_file, scripts_to_run, output_path=base_file, cwd=export_temp)
                         if returncode == 0:
@@ -2241,12 +2253,8 @@ class MultiModMerger(QObject):
                     if not is_new_file:
                         if chapter_id is not None and self.backup_service:
                             self.backup_service.backup_file(chapter_id, target_path)
-                            if self._session_manifest_path:
-                                self.backup_service.save_backups_to_manifest(self._session_manifest_path)
                     elif chapter_id is not None and self.backup_service:
                         self.backup_service.mark_file_added(chapter_id, target_path)
-                        if self._session_manifest_path:
-                            self.backup_service.save_backups_to_manifest(self._session_manifest_path)
                 os.makedirs(os.path.dirname(target_path), exist_ok=True)
                 try:
                     shutil.copy2(source_path, target_path)
@@ -2283,8 +2291,6 @@ class MultiModMerger(QObject):
                                     if chapter_id is not None and self.backup_service:
                                         if os.path.exists(patch_target_file):
                                             self.backup_service.backup_file(chapter_id, patch_target_file)
-                                            if self._session_manifest_path:
-                                                self.backup_service.save_backups_to_manifest(self._session_manifest_path)
                                     if self._apply_xdelta_to_file(patch_target_file, source_file):
                                         self.patching_logger.info(f'Applied xdelta patch {file} from archive to {os.path.relpath(patch_target_file, target_dir)}')
                                         patch_applied = True
@@ -2296,12 +2302,8 @@ class MultiModMerger(QObject):
                                     if not is_new_file:
                                         if chapter_id is not None and self.backup_service:
                                             self.backup_service.backup_file(chapter_id, target_file)
-                                            if self._session_manifest_path:
-                                                self.backup_service.save_backups_to_manifest(self._session_manifest_path)
                                     elif chapter_id is not None and self.backup_service:
                                         self.backup_service.mark_file_added(chapter_id, target_file)
-                                        if self._session_manifest_path:
-                                            self.backup_service.save_backups_to_manifest(self._session_manifest_path)
                                     shutil.copy2(source_file, target_file)
                             else:
                                 self.patching_logger.debug(f'No target files found for xdelta patch {file} from archive, copying as regular file (expected filename: {os.path.splitext(file)[0]})')
@@ -2309,24 +2311,16 @@ class MultiModMerger(QObject):
                                 if not is_new_file:
                                     if chapter_id is not None and self.backup_service:
                                         self.backup_service.backup_file(chapter_id, target_file)
-                                        if self._session_manifest_path:
-                                            self.backup_service.save_backups_to_manifest(self._session_manifest_path)
                                 elif chapter_id is not None and self.backup_service:
                                     self.backup_service.mark_file_added(chapter_id, target_file)
-                                    if self._session_manifest_path:
-                                        self.backup_service.save_backups_to_manifest(self._session_manifest_path)
                                 shutil.copy2(source_file, target_file)
                             continue
                         is_new_file = not os.path.exists(target_file)
                         if not is_new_file:
                             if chapter_id is not None and self.backup_service:
                                 self.backup_service.backup_file(chapter_id, target_file)
-                                if self._session_manifest_path:
-                                    self.backup_service.save_backups_to_manifest(self._session_manifest_path)
                         elif chapter_id is not None and self.backup_service:
                             self.backup_service.mark_file_added(chapter_id, target_file)
-                            if self._session_manifest_path:
-                                self.backup_service.save_backups_to_manifest(self._session_manifest_path)
                         shutil.copy2(source_file, target_file)
             self.patching_logger.debug(f'Extracted archive: {archive_path}')
             return True
@@ -2387,6 +2381,52 @@ class MultiModMerger(QObject):
 
     def _find_csx_scripts(self, mod_source_dir: str) -> List[str]:
         return self._find_files_by_extension(mod_source_dir, ['.csx'])
+
+    def _get_export_scripts(self) -> List[str]:
+        """Get list of available export scripts."""
+        export_script_names = [
+            'ExportSprites',
+            'ExportSounds',
+            'ExportCodeEntries',
+            'ExportFonts',
+            'ExportShaders',
+            'ExportBackgrounds',
+            'ExportTilesets',
+            'ExportRooms',
+            'ExportGameObjects',
+            'ExportPaths',
+            'ExportTimelines',
+            'ExportAudioGroups',
+            'ExportExtensions',
+        ]
+        available_scripts = []
+        for script_name in export_script_names:
+            if self.utmt_wrapper.get_script_path(script_name):
+                available_scripts.append(script_name)
+        return available_scripts
+
+    def _get_import_scripts(self) -> List[str]:
+        """Get list of available import scripts."""
+        import_script_names = [
+            'ImportSprites',
+            'ImportSounds',
+            'ImportCodeEntries',
+            'ImportFonts',
+            'ImportShaders',
+            'ImportBackgrounds',
+            'ImportTilesets',
+            'ImportRooms',
+            'ImportGameObjects',
+            'ImportPaths',
+            'ImportTimelines',
+            'ImportAudioGroups',
+            'ImportExtensions',
+        ]
+        available_scripts = []
+        for script_name in import_script_names:
+            if self.utmt_wrapper.get_script_path(script_name):
+                available_scripts.append(script_name)
+        return available_scripts
 
     def _detect_mod_type(self, mod_source_dir: str) -> Dict[str, bool]:
         mod_type = {'has_xdelta_patch': False, 'has_ready_data_win': False, 'has_csx_scripts': False, 'has_file_overrides': False}
@@ -2492,10 +2532,11 @@ class MultiModMerger(QObject):
             return ([], None)
         has_any_assets = any([mod_asset_types.get('has_code', False), mod_asset_types.get('has_textures', False), mod_asset_types.get('has_shaders', False), mod_asset_types.get('has_tilesets', False), mod_asset_types.get('has_fonts', False), mod_asset_types.get('has_sounds', False)])
         if has_any_assets or mod_type.get('has_xdelta_patch') or mod_type.get('has_csx_scripts'):
-            if not self.utmt_wrapper.get_script_path('ExportAllAssets'):
-                self.patching_logger.error('ExportAllAssets script not found! This is required for optimized export.')
+            export_scripts = self._get_export_scripts()
+            if not export_scripts:
+                self.patching_logger.error('No export scripts found! At least one export script is required.')
                 return ([], None)
-            scripts.append('ExportAllAssets')
+            scripts.extend(export_scripts)
         comparison_file = None
         return (scripts, comparison_file)
 

@@ -1,4 +1,6 @@
-#load "SharedPaths.csx"
+
+
+
 
 using System;
 using System.IO;
@@ -8,26 +10,38 @@ using System.Text.Json;
 using System.Reflection;
 using UndertaleModLib;
 using UndertaleModLib.Models;
+using UndertaleModLib.Util;
+
+
+
+
+string InputDirectory = "";
+
+
+
 
 void PrintLine(string s) => Console.WriteLine(s);
 
-var ctx = PrepareImportContext();
-string inputRoot = ctx.InputRoot;
-string tilesetsIn = Path.Combine(inputRoot, "Tilesets");
-
-if (!Directory.Exists(tilesetsIn))
+string ResolveInputDirectory()
 {
-    PrintLine("[ImportTilesets] No Tilesets directory found, skipping.");
-    return;
+    if (!string.IsNullOrEmpty(InputDirectory) && Directory.Exists(InputDirectory))
+        return InputDirectory;
+
+    if (string.IsNullOrEmpty(FilePath))
+        throw new ScriptException("No data.win file loaded. Please load a game data file first.");
+
+    string dataWinDir = Path.GetDirectoryName(FilePath);
+    string tilesetsDir = Path.Combine(dataWinDir, "Objects", "Tilesets");
+    
+    if (Directory.Exists(tilesetsDir))
+        return tilesetsDir;
+
+    throw new ScriptException($"Tilesets directory not found at: {tilesetsDir}\nPlease specify InputDirectory or place tilesets in an 'Objects/Tilesets' folder next to data.win.");
 }
 
-int tilesetsImported = 0;
-
-
-T GetJsonValue<T>(JsonElement root, string camelCaseName, string snakeCaseName, T defaultValue)
+T GetJsonValue<T>(JsonElement root, string propertyName, T defaultValue)
 {
-    
-    if (root.TryGetProperty(camelCaseName, out JsonElement elm))
+    if (root.TryGetProperty(propertyName, out JsonElement elm))
     {
         try
         {
@@ -46,154 +60,177 @@ T GetJsonValue<T>(JsonElement root, string camelCaseName, string snakeCaseName, 
         }
         catch { }
     }
-
-    
-    if (!string.IsNullOrEmpty(snakeCaseName) && root.TryGetProperty(snakeCaseName, out JsonElement snakeElm))
-    {
-        try
-        {
-            if (typeof(T) == typeof(uint))
-                return (T)(object)(uint)snakeElm.GetInt64();
-            if (typeof(T) == typeof(int))
-                return (T)(object)snakeElm.GetInt32();
-            if (typeof(T) == typeof(long))
-                return (T)(object)snakeElm.GetInt64();
-            if (typeof(T) == typeof(bool))
-                return (T)(object)snakeElm.GetBoolean();
-            if (typeof(T) == typeof(float))
-                return (T)(object)(float)snakeElm.GetDouble();
-            if (typeof(T) == typeof(string))
-                return (T)(object)(snakeElm.GetString() ?? "");
-        }
-        catch { }
-    }
-
     return defaultValue;
 }
 
-void ImportTilesetFromJson(string jsonPath)
+
+
+
+EnsureDataLoaded();
+
+if (!Data.IsGameMaker2())
 {
-    try
+    PrintLine("[ImportTilesets] GMS1 detected - tilesets are handled as backgrounds. Use ImportBackgrounds.csx instead.");
+    return;
+}
+
+string tilesetsIn = ResolveInputDirectory();
+PrintLine($"[ImportTilesets] Importing from: {tilesetsIn}");
+
+
+var tilesetFilesSet = new HashSet<string>();
+foreach (var pngFile in Directory.GetFiles(tilesetsIn, "*.png"))
+    tilesetFilesSet.Add(Path.GetFileNameWithoutExtension(pngFile));
+foreach (var jsonFile in Directory.GetFiles(tilesetsIn, "*.json"))
+{
+    string name = Path.GetFileNameWithoutExtension(jsonFile);
+    if (!name.Equals("config", StringComparison.OrdinalIgnoreCase))
+        tilesetFilesSet.Add(name);
+}
+
+if (tilesetFilesSet.Count == 0)
+{
+    PrintLine("[ImportTilesets] No tileset files found - nothing to import.");
+    return;
+}
+
+PrintLine($"[ImportTilesets] Found {tilesetFilesSet.Count} tileset(s) to process.");
+
+int imported = 0;
+int created = 0;
+
+using (TextureWorker worker = new TextureWorker())
+{
+    foreach (string tsName in tilesetFilesSet)
     {
-        string jsonContent = File.ReadAllText(jsonPath, Encoding.UTF8);
-        if (string.IsNullOrEmpty(jsonContent))
+        string pngPath = Path.Combine(tilesetsIn, tsName + ".png");
+        string jsonPath = Path.Combine(tilesetsIn, tsName + ".json");
+
+        if (!File.Exists(pngPath) && !File.Exists(jsonPath))
+            continue;
+
+        try
         {
-            PrintLine($"[ImportTilesets] ERROR: Failed to read {jsonPath}");
-            return;
-        }
+            UndertaleBackground ts = Data.Backgrounds.ByName(tsName);
+            bool isNew = false;
 
-        string tilesetName = Path.GetFileNameWithoutExtension(jsonPath);
-        UndertaleBackground bg = Data.Backgrounds.ByName(tilesetName);
-
-        if (bg == null)
-        {
-            PrintLine($"[ImportTilesets] WARNING: Background '{tilesetName}' not found, skipping properties import");
-            return;
-        }
-
-        JsonDocument jsonDoc = JsonDocument.Parse(jsonContent);
-        JsonElement root = jsonDoc.RootElement;
-
-        
-        bg.Transparent = GetJsonValue<bool>(root, "transparent", "transparent", bg.Transparent);
-        bg.Smooth = GetJsonValue<bool>(root, "smooth", "smooth", bg.Smooth);
-        bg.Preload = GetJsonValue<bool>(root, "preload", "preload", bg.Preload);
-
-        
-        if (Data.IsGameMaker2())
-        {
-            
-            if (root.TryGetProperty("gms2UnknownAlways2", out _))
+            if (ts == null)
             {
-                bg.GMS2UnknownAlways2 = GetJsonValue<uint>(root, "gms2UnknownAlways2", null, bg.GMS2UnknownAlways2);
+                ts = new UndertaleBackground();
+                ts.Name = Data.Strings.MakeString(tsName);
+                ts.Transparent = false;
+                ts.Smooth = false;
+                ts.Preload = false;
+                isNew = true;
+                created++;
+                PrintLine($"[ImportTilesets] Creating new tileset: {tsName}");
             }
 
             
-            bg.GMS2TileWidth = GetJsonValue<uint>(root, "gms2TileWidth", "tile_width", bg.GMS2TileWidth);
-            bg.GMS2TileHeight = GetJsonValue<uint>(root, "gms2TileHeight", "tile_height", bg.GMS2TileHeight);
-
-            
-            bg.GMS2OutputBorderX = GetJsonValue<uint>(root, "gms2OutputBorderX", "border_x", bg.GMS2OutputBorderX);
-            bg.GMS2OutputBorderY = GetJsonValue<uint>(root, "gms2OutputBorderY", "border_y", bg.GMS2OutputBorderY);
-
-            
-            bg.GMS2TileColumns = GetJsonValue<uint>(root, "gms2TileColumns", "tile_column", bg.GMS2TileColumns);
-            bg.GMS2ItemsPerTileCount = GetJsonValue<uint>(root, "gms2ItemsPerTileCount", "item_per_tile", bg.GMS2ItemsPerTileCount);
-            bg.GMS2TileCount = GetJsonValue<uint>(root, "gms2TileCount", "tile_count", bg.GMS2TileCount);
-
-            
-            if (root.TryGetProperty("gms2ExportedSpriteIndex", out _))
+            if (File.Exists(pngPath))
             {
-                bg.GMS2ExportedSpriteIndex = GetJsonValue<int>(root, "gms2ExportedSpriteIndex", null, bg.GMS2ExportedSpriteIndex);
-            }
-
-            
-            bg.GMS2FrameLength = GetJsonValue<long>(root, "gms2FrameLength", "frametime", bg.GMS2FrameLength);
-
-            
-            if (Data.IsVersionAtLeast(2024, 14, 1))
-            {
-                if (root.TryGetProperty("gms2TileSeparationX", out _))
+                using (var img = TextureWorker.ReadBGRAImageFromFile(pngPath))
                 {
-                    bg.GMS2TileSeparationX = GetJsonValue<uint>(root, "gms2TileSeparationX", null, bg.GMS2TileSeparationX);
-                }
-                if (root.TryGetProperty("gms2TileSeparationY", out _))
-                {
-                    bg.GMS2TileSeparationY = GetJsonValue<uint>(root, "gms2TileSeparationY", null, bg.GMS2TileSeparationY);
+                    int lastTextPage = Data.EmbeddedTextures.Count - 1;
+                    int lastTextPageItem = Data.TexturePageItems.Count - 1;
+
+                    UndertaleEmbeddedTexture newEmbeddedTexture = new UndertaleEmbeddedTexture();
+                    newEmbeddedTexture.Name = new UndertaleString($"Texture {++lastTextPage}");
+                    newEmbeddedTexture.TextureData.Image = GMImage.FromMagickImage(img).ConvertToPng();
+                    Data.EmbeddedTextures.Add(newEmbeddedTexture);
+
+                    UndertaleTexturePageItem newTexturePageItem = new UndertaleTexturePageItem();
+                    newTexturePageItem.Name = new UndertaleString($"PageItem {++lastTextPageItem}");
+                    newTexturePageItem.SourceX = 0;
+                    newTexturePageItem.SourceY = 0;
+                    newTexturePageItem.SourceWidth = (ushort)img.Width;
+                    newTexturePageItem.SourceHeight = (ushort)img.Height;
+                    newTexturePageItem.TargetX = 0;
+                    newTexturePageItem.TargetY = 0;
+                    newTexturePageItem.TargetWidth = (ushort)img.Width;
+                    newTexturePageItem.TargetHeight = (ushort)img.Height;
+                    newTexturePageItem.BoundingWidth = (ushort)img.Width;
+                    newTexturePageItem.BoundingHeight = (ushort)img.Height;
+                    newTexturePageItem.TexturePage = newEmbeddedTexture;
+                    Data.TexturePageItems.Add(newTexturePageItem);
+
+                    ts.Texture = newTexturePageItem;
                 }
             }
 
             
-            if (root.TryGetProperty("gms2TileIds", out JsonElement tileIdsElm) && tileIdsElm.ValueKind == JsonValueKind.Array)
+            if (File.Exists(jsonPath))
             {
-                int expectedCount = (int)(bg.GMS2TileCount * bg.GMS2ItemsPerTileCount);
-                var tileIdsList = tileIdsElm.EnumerateArray().ToList();
+                string jsonContent = File.ReadAllText(jsonPath, Encoding.UTF8);
+                JsonDocument jsonDoc = JsonDocument.Parse(jsonContent);
+                JsonElement root = jsonDoc.RootElement;
+
+                ts.Transparent = GetJsonValue<bool>(root, "transparent", ts.Transparent);
+                ts.Smooth = GetJsonValue<bool>(root, "smooth", ts.Smooth);
+                ts.Preload = GetJsonValue<bool>(root, "preload", ts.Preload);
+
                 
-                
-                if (tileIdsList.Count == expectedCount)
+                if (root.TryGetProperty("gms2UnknownAlways2", out _))
+                    ts.GMS2UnknownAlways2 = GetJsonValue<uint>(root, "gms2UnknownAlways2", ts.GMS2UnknownAlways2);
+
+                ts.GMS2TileWidth = GetJsonValue<uint>(root, "gms2TileWidth", ts.GMS2TileWidth);
+                ts.GMS2TileHeight = GetJsonValue<uint>(root, "gms2TileHeight", ts.GMS2TileHeight);
+                ts.GMS2OutputBorderX = GetJsonValue<uint>(root, "gms2OutputBorderX", ts.GMS2OutputBorderX);
+                ts.GMS2OutputBorderY = GetJsonValue<uint>(root, "gms2OutputBorderY", ts.GMS2OutputBorderY);
+                ts.GMS2TileColumns = GetJsonValue<uint>(root, "gms2TileColumns", ts.GMS2TileColumns);
+                ts.GMS2ItemsPerTileCount = GetJsonValue<uint>(root, "gms2ItemsPerTileCount", ts.GMS2ItemsPerTileCount);
+                ts.GMS2TileCount = GetJsonValue<uint>(root, "gms2TileCount", ts.GMS2TileCount);
+
+                if (root.TryGetProperty("gms2ExportedSpriteIndex", out _))
+                    ts.GMS2ExportedSpriteIndex = GetJsonValue<int>(root, "gms2ExportedSpriteIndex", ts.GMS2ExportedSpriteIndex);
+
+                ts.GMS2FrameLength = GetJsonValue<long>(root, "gms2FrameLength", ts.GMS2FrameLength);
+
+                if (Data.IsVersionAtLeast(2024, 14, 1))
                 {
-                    bg.GMS2TileIds.Clear();
-                    foreach (var idElm in tileIdsList)
+                    if (root.TryGetProperty("gms2TileSeparationX", out _))
+                        ts.GMS2TileSeparationX = GetJsonValue<uint>(root, "gms2TileSeparationX", ts.GMS2TileSeparationX);
+                    if (root.TryGetProperty("gms2TileSeparationY", out _))
+                        ts.GMS2TileSeparationY = GetJsonValue<uint>(root, "gms2TileSeparationY", ts.GMS2TileSeparationY);
+                }
+
+                if (root.TryGetProperty("gms2TileIds", out JsonElement tileIdsElm) && tileIdsElm.ValueKind == JsonValueKind.Array)
+                {
+                    int expectedCount = (int)(ts.GMS2TileCount * ts.GMS2ItemsPerTileCount);
+                    var tileIdsList = tileIdsElm.EnumerateArray().ToList();
+                    
+                    if (tileIdsList.Count == expectedCount)
                     {
-                        var tileId = new UndertaleBackground.TileID();
-                        tileId.ID = (uint)idElm.GetInt64();
-                        bg.GMS2TileIds.Add(tileId);
+                        ts.GMS2TileIds.Clear();
+                        foreach (var idElm in tileIdsList)
+                        {
+                            var tileId = new UndertaleBackground.TileID();
+                            tileId.ID = (uint)idElm.GetInt64();
+                            ts.GMS2TileIds.Add(tileId);
+                        }
+                    }
+                    else if (tileIdsList.Count > 0)
+                    {
+                        PrintLine($"[ImportTilesets] WARNING: Tile IDs count mismatch for '{tsName}' (expected {expectedCount}, got {tileIdsList.Count}), skipping tile IDs import");
                     }
                 }
-                else if (tileIdsList.Count > 0)
-                {
-                    PrintLine($"[ImportTilesets] WARNING: Tile IDs count mismatch for '{tilesetName}' (expected {expectedCount}, got {tileIdsList.Count}), skipping tile IDs import");
-                }
+
+                jsonDoc.Dispose();
             }
+
+            if (isNew)
+            {
+                Data.Backgrounds.Add(ts);
+            }
+
+            PrintLine($"[ImportTilesets] {(isNew ? "Created" : "Updated")} tileset: {tsName}");
+            imported++;
         }
-
-        jsonDoc.Dispose();
-        tilesetsImported++;
-        PrintLine($"[ImportTilesets] Updated tileset properties for: {tilesetName}");
-    }
-    catch (Exception e)
-    {
-        PrintLine($"[ImportTilesets] ERROR: Failed to import {jsonPath}: {e.Message}");
+        catch (Exception ex)
+        {
+            PrintLine($"[ImportTilesets] Failed to import {tsName}: {ex.Message}");
+        }
     }
 }
 
-
-string configFile = Path.Combine(tilesetsIn, "config.json");
-if (File.Exists(configFile))
-{
-    PrintLine("[ImportTilesets] Found config.json, but it uses legacy format - please use individual JSON files instead.");
-}
-
-
-var tilesetFiles = Directory.GetFiles(tilesetsIn, "*.json")
-    .Where(f => !f.EndsWith("config.json", StringComparison.OrdinalIgnoreCase))
-    .ToArray();
-
-foreach (var tilesetFile in tilesetFiles)
-{
-    ImportTilesetFromJson(tilesetFile);
-}
-
-PrintLine($"\n[ImportTilesets] Summary for Mod {ctx.ModNo ?? "N/A"}:");
-PrintLine($"  Tilesets - Updated: {tilesetsImported}");
-PrintLine("[ImportTilesets] Done.");
+PrintLine($"[ImportTilesets] Import complete. {imported} tilesets processed ({created} new).");

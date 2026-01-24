@@ -1,4 +1,5 @@
-#load "SharedPaths.csx"
+
+
 
 using System;
 using System.IO;
@@ -8,16 +9,40 @@ using System.Text.Json;
 using UndertaleModLib;
 using UndertaleModLib.Models;
 
+
+
+
+string InputDirectory = "";
+
+
+
+
+void PrintLine(string s) => Console.WriteLine(s);
+
+string ResolveInputDirectory()
+{
+    if (!string.IsNullOrEmpty(InputDirectory) && Directory.Exists(InputDirectory))
+        return InputDirectory;
+
+    if (string.IsNullOrEmpty(FilePath))
+        throw new ScriptException("No data.win file loaded. Please load a game data file first.");
+
+    string dataWinDir = Path.GetDirectoryName(FilePath);
+    string gameObjectsDir = Path.Combine(dataWinDir, "Objects", "GameObjects");
+    
+    if (Directory.Exists(gameObjectsDir))
+        return gameObjectsDir;
+
+    throw new ScriptException($"GameObjects directory not found at: {gameObjectsDir}\nPlease specify InputDirectory or place game objects in an 'Objects/GameObjects' folder next to data.win.");
+}
+
+
+
+
 EnsureDataLoaded();
 
-ImportContext ctx = PrepareImportContext();
-string gameObjectsIn = Path.Combine(ctx.ObjectsFolder, "GameObjects");
-
-if (!Directory.Exists(gameObjectsIn))
-{
-    ScriptMessage($"[ImportGameObjects] No GameObjects folder found at {gameObjectsIn}");
-    return;
-}
+string gameObjectsIn = ResolveInputDirectory();
+PrintLine($"[ImportGameObjects] Importing from: {gameObjectsIn}");
 
 int gameObjectsImported = 0;
 int gameObjectsCreated = 0;

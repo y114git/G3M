@@ -1,4 +1,5 @@
-#load "SharedPaths.csx"
+
+
 
 using System;
 using System.IO;
@@ -9,19 +10,40 @@ using System.Text.Json;
 using UndertaleModLib;
 using UndertaleModLib.Models;
 
-EnsureDataLoaded();
+
+
+
+string InputDirectory = "";
+
+
+
 
 void PrintLine(string s) => Console.WriteLine(s);
 
-var ctx = PrepareImportContext();
-string inputRoot = ctx.InputRoot;
-string timelinesIn = Path.Combine(inputRoot, "Timelines");
-
-if (!Directory.Exists(timelinesIn))
+string ResolveInputDirectory()
 {
-    PrintLine("[ImportTimelines] No Timelines directory found, skipping import.");
-    return;
+    if (!string.IsNullOrEmpty(InputDirectory) && Directory.Exists(InputDirectory))
+        return InputDirectory;
+
+    if (string.IsNullOrEmpty(FilePath))
+        throw new ScriptException("No data.win file loaded. Please load a game data file first.");
+
+    string dataWinDir = Path.GetDirectoryName(FilePath);
+    string timelinesDir = Path.Combine(dataWinDir, "Objects", "Timelines");
+    
+    if (Directory.Exists(timelinesDir))
+        return timelinesDir;
+
+    throw new ScriptException($"Timelines directory not found at: {timelinesDir}\nPlease specify InputDirectory or place timelines in an 'Objects/Timelines' folder next to data.win.");
 }
+
+
+
+
+EnsureDataLoaded();
+
+string timelinesIn = ResolveInputDirectory();
+PrintLine($"[ImportTimelines] Importing from: {timelinesIn}");
 
 string[] timelineFiles = Directory.GetFiles(timelinesIn, "*.json");
 if (timelineFiles.Length == 0)

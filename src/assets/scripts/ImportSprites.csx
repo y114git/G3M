@@ -9,36 +9,76 @@ using System.Linq;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using UndertaleModLib.Util;
+using UndertaleModLib;
 using UndertaleModLib.Models;
+using UndertaleModLib.Util;
 using ImageMagick;
+
+
+
+
+
+
+string InputDirectory = "";
+
+
+
+
+void PrintLine(string s) => Console.WriteLine(s);
+
+string ResolveInputDirectory()
+{
+    if (!string.IsNullOrEmpty(InputDirectory) && Directory.Exists(InputDirectory))
+        return InputDirectory;
+
+    if (string.IsNullOrEmpty(FilePath))
+        throw new ScriptException("No data.win file loaded. Please load a game data file first.");
+
+    string dataWinDir = Path.GetDirectoryName(FilePath);
+    string spritesDir = Path.Combine(dataWinDir, "Objects", "Sprites");
+    
+    if (Directory.Exists(spritesDir))
+        return spritesDir;
+
+    throw new ScriptException($"Sprites directory not found at: {spritesDir}\nPlease specify InputDirectory or place sprites in an 'Objects/Sprites' folder next to data.win.");
+}
+
+
+
 
 EnsureDataLoaded();
 
 static List<MagickImage> imagesToCleanup = new();
-bool importAsSprite = true;
-
-
-
-
-
 Regex sprFrameRegex = new(@"^(.+?)(?:_(\d+))$", RegexOptions.Compiled);
-string importFolder = CheckValidity();
-
 bool noMasksForBasicRectangles = Data.IsVersionAtLeast(2022, 9);
+
+string spritesPath = ResolveInputDirectory();
+PrintLine($"[ImportSprites] Importing from: {spritesPath}");
+
+var pngFiles = Directory.GetFiles(spritesPath, "*.png", SearchOption.AllDirectories);
+if (pngFiles.Length == 0)
+{
+    PrintLine("[ImportSprites] No PNG files found - nothing to import.");
+    return;
+}
+
+PrintLine($"[ImportSprites] Found {pngFiles.Length} PNG files to process.");
 
 
 Dictionary<string, JsonElement?> spriteMetadataCache = new();
-
+Dictionary<string, List<Dictionary<string, object>>> textureFrameCache = new();
 
 JsonElement? TryLoadSpriteMetadata(string spritesFolder, string spriteName)
 {
     if (spriteMetadataCache.TryGetValue(spriteName, out JsonElement? cached))
         return cached;
 
-    
     string spriteFolder = Path.Combine(spritesFolder, spriteName);
-    string metaFile = Path.Combine(spriteFolder, "sprite_meta.json");
+    string metaFile = Path.Combine(spriteFolder, $"{spriteName}.json");
+    
+    
+    if (!File.Exists(metaFile))
+        metaFile = Path.Combine(spriteFolder, "sprite_meta.json");
     
     if (!File.Exists(metaFile))
     {
@@ -60,16 +100,13 @@ JsonElement? TryLoadSpriteMetadata(string spritesFolder, string spriteName)
     }
 }
 
-
 void ApplySpriteMetadata(UndertaleSprite sprite, JsonElement meta)
 {
-    
     if (meta.TryGetProperty("originX", out JsonElement originX))
         sprite.OriginX = originX.GetInt32();
     if (meta.TryGetProperty("originY", out JsonElement originY))
         sprite.OriginY = originY.GetInt32();
 
-    
     if (meta.TryGetProperty("marginLeft", out JsonElement marginLeft))
         sprite.MarginLeft = marginLeft.GetInt32();
     if (meta.TryGetProperty("marginRight", out JsonElement marginRight))
@@ -79,7 +116,6 @@ void ApplySpriteMetadata(UndertaleSprite sprite, JsonElement meta)
     if (meta.TryGetProperty("marginBottom", out JsonElement marginBottom))
         sprite.MarginBottom = marginBottom.GetInt32();
 
-    
     if (meta.TryGetProperty("transparent", out JsonElement transparent))
         sprite.Transparent = transparent.GetBoolean();
     if (meta.TryGetProperty("smooth", out JsonElement smooth))
@@ -87,13 +123,11 @@ void ApplySpriteMetadata(UndertaleSprite sprite, JsonElement meta)
     if (meta.TryGetProperty("preload", out JsonElement preload))
         sprite.Preload = preload.GetBoolean();
 
-    
     if (meta.TryGetProperty("bboxMode", out JsonElement bboxMode))
         sprite.BBoxMode = (uint)bboxMode.GetInt64();
     if (meta.TryGetProperty("sepMasks", out JsonElement sepMasks))
         sprite.SepMasks = (UndertaleSprite.SepMaskType)sepMasks.GetInt32();
 
-    
     if (Data.IsGameMaker2())
     {
         if (meta.TryGetProperty("gms2PlaybackSpeed", out JsonElement playbackSpeed))
@@ -102,7 +136,6 @@ void ApplySpriteMetadata(UndertaleSprite sprite, JsonElement meta)
             sprite.GMS2PlaybackSpeedType = (AnimSpeedType)playbackSpeedType.GetInt32();
     }
 
-    
     if (meta.TryGetProperty("collisionMasks", out JsonElement masksElm) && masksElm.ValueKind == JsonValueKind.Array)
     {
         sprite.CollisionMasks.Clear();
@@ -121,7 +154,6 @@ void ApplySpriteMetadata(UndertaleSprite sprite, JsonElement meta)
         }
     }
 
-    
     if (meta.TryGetProperty("nineSlice", out JsonElement nineSlice) && Data.IsVersionAtLeast(2, 3, 2))
     {
         if (sprite.V3NineSlice == null)
@@ -138,21 +170,14 @@ void ApplySpriteMetadata(UndertaleSprite sprite, JsonElement meta)
         if (nineSlice.TryGetProperty("enabled", out JsonElement nsEnabled))
             sprite.V3NineSlice.Enabled = nsEnabled.GetBoolean();
         
-        
         if (nineSlice.TryGetProperty("tileModes", out JsonElement tileModes) && tileModes.ValueKind == JsonValueKind.Array)
         {
             var modesArray = tileModes.EnumerateArray().ToArray();
             for (int i = 0; i < Math.Min(5, modesArray.Length); i++)
-            {
                 sprite.V3NineSlice.TileModes[i] = (UndertaleSprite.NineSlice.TileMode)modesArray[i].GetInt32();
-            }
         }
     }
 }
-
-
-Dictionary<string, List<Dictionary<string, object>>> textureFrameCache = new();
-
 
 List<Dictionary<string, object>> TryGetTextureFrameData(string spritesFolder, string spriteName)
 {
@@ -192,10 +217,6 @@ List<Dictionary<string, object>> TryGetTextureFrameData(string spritesFolder, st
     return null;
 }
 
-
-
-
-
 void ApplyTextureFrameProperties(UndertaleTexturePageItem tpi, string spriteName, int frameIndex, List<Dictionary<string, object>> frameData)
 {
     if (frameData == null || frameIndex >= frameData.Count)
@@ -205,73 +226,30 @@ void ApplyTextureFrameProperties(UndertaleTexturePageItem tpi, string spriteName
     if (frame.ContainsKey("isNull") && (bool)frame["isNull"])
         return;
     
-    
     if (frame.ContainsKey("targetX"))
         tpi.TargetX = (ushort)frame["targetX"];
     if (frame.ContainsKey("targetY"))
         tpi.TargetY = (ushort)frame["targetY"];
-    
-    
     if (frame.ContainsKey("targetWidth"))
         tpi.TargetWidth = (ushort)frame["targetWidth"];
     if (frame.ContainsKey("targetHeight"))
         tpi.TargetHeight = (ushort)frame["targetHeight"];
-
-    
-    
-    
-    
-    
-    
-    
-    
 }
 
 try
 {
     
-    
-    
     string dataWinDir = Path.GetDirectoryName(FilePath);
     string packDir = Path.Combine(dataWinDir, "Packager");
-    
-    
-    
-    if (!dataWinDir.Contains("DeltahubMergeWorkspace"))
-    {
-        
-        
-        throw new ScriptException($"Packager cannot be created in game directory. Expected temporary folder (DeltahubMergeWorkspace), but got: {dataWinDir}");
-    }
     Directory.CreateDirectory(packDir);
 
-
-    string spritesPath = Path.Combine(importFolder, "Sprites");
-    if (!Directory.Exists(spritesPath))
-    {
-        ScriptMessage("No Sprites folder found in Objects - no sprites to import");
-        return;
-    }
-
-
-    var pngFiles = Directory.GetFiles(spritesPath, "*.png", SearchOption.AllDirectories);
-    if (pngFiles.Length == 0)
-    {
-        ScriptMessage("No PNG files found in Sprites folder - nothing to import");
-        return;
-    }
-
-    ScriptMessage($"Found {pngFiles.Length} PNG files to pack in {spritesPath}");
-
-    string sourcePath = spritesPath;
-    string searchPattern = "*.png";
     string outName = Path.Combine(packDir, "atlas.txt");
     int textureSize = 2048;
     int PaddingValue = 2;
     bool debug = false;
 
     Packer packer = new Packer();
-    packer.Process(sourcePath, searchPattern, textureSize, PaddingValue, debug);
+    packer.Process(spritesPath, "*.png", textureSize, PaddingValue, debug);
     packer.SaveAtlasses(outName);
 
     int lastTextPage = Data.EmbeddedTextures.Count - 1;
@@ -279,7 +257,6 @@ try
 
     bool bboxMasks = Data.IsVersionAtLeast(2024, 6);
     Dictionary<UndertaleSprite, Node> maskNodes = new();
-
 
     string prefix = outName.Replace(Path.GetExtension(outName), "");
     int atlasCount = 0;
@@ -298,7 +275,6 @@ try
         {
             if (n.Texture != null)
             {
-
                 UndertaleTexturePageItem texturePageItem = new();
                 texturePageItem.Name = new UndertaleString($"PageItem {++lastTextPageItem}");
                 texturePageItem.SourceX = (ushort)n.Bounds.X;
@@ -313,221 +289,155 @@ try
                 texturePageItem.BoundingHeight = (ushort)n.Texture.BoundingHeight;
                 texturePageItem.TexturePage = texture;
 
-
                 Data.TexturePageItems.Add(texturePageItem);
-
 
                 string sourceFileName = Path.GetFileName(n.Texture.Source);
                 string stripped = Path.GetFileNameWithoutExtension(sourceFileName);
 
-                SpriteType spriteType = GetSpriteType(n.Texture.Source);
-                if (importAsSprite)
+                
+                string spriteName;
+                int frame = 0;
+                try
                 {
-                    if (spriteType == SpriteType.Unknown || spriteType == SpriteType.Font)
-                    {
-                        spriteType = SpriteType.Sprite;
-                    }
+                    var spriteParts = sprFrameRegex.Match(stripped);
+                    spriteName = spriteParts.Groups[1].Value;
+                    Int32.TryParse(spriteParts.Groups[2].Value, out frame);
+                }
+                catch (Exception e)
+                {
+                    PrintLine($"[ImportSprites] Error: Image {stripped} has an invalid name. Skipping...");
+                    continue;
                 }
 
-                if (spriteType == SpriteType.Background)
-                {
-                    UndertaleBackground background = Data.Backgrounds.ByName(stripped);
-                    if (background != null)
-                    {
-                        background.Texture = texturePageItem;
-                    }
-                    else
-                    {
+                UndertaleSprite.TextureEntry texentry = new();
+                texentry.Texture = texturePageItem;
 
-                        UndertaleString backgroundUTString = Data.Strings.MakeString(stripped);
-                        UndertaleBackground newBackground = new();
-                        newBackground.Name = backgroundUTString;
-                        newBackground.Transparent = false;
-                        newBackground.Preload = false;
-                        newBackground.Texture = texturePageItem;
-                        Data.Backgrounds.Add(newBackground);
+                var frameData = TryGetTextureFrameData(spritesPath, spriteName);
+                if (frameData != null)
+                    ApplyTextureFrameProperties(texturePageItem, spriteName, frame, frameData);
+
+                UndertaleSprite sprite = Data.Sprites.ByName(spriteName);
+                if (sprite is null)
+                {
+                    UndertaleString spriteUTString = Data.Strings.MakeString(spriteName);
+                    UndertaleSprite newSprite = new();
+                    newSprite.Name = spriteUTString;
+                    newSprite.Width = (uint)n.Texture.BoundingWidth;
+                    newSprite.Height = (uint)n.Texture.BoundingHeight;
+                    newSprite.MarginLeft = n.Texture.TargetX;
+                    newSprite.MarginRight = n.Texture.TargetX + n.Bounds.Width - 1;
+                    newSprite.MarginTop = n.Texture.TargetY;
+                    newSprite.MarginBottom = n.Texture.TargetY + n.Bounds.Height - 1;
+                    newSprite.OriginX = 0;
+                    newSprite.OriginY = 0;
+
+                    JsonElement? spriteMeta = TryLoadSpriteMetadata(spritesPath, spriteName);
+                    if (spriteMeta.HasValue)
+                        ApplySpriteMetadata(newSprite, spriteMeta.Value);
+
+                    if (frame > 0)
+                    {
+                        for (int i = 0; i < frame; i++)
+                            newSprite.Textures.Add(null);
                     }
+
+                    if (!noMasksForBasicRectangles ||
+                        newSprite.SepMasks is not (UndertaleSprite.SepMaskType.AxisAlignedRect or UndertaleSprite.SepMaskType.RotatedRect))
+                    {
+                        if (newSprite.CollisionMasks.Count == 0)
+                            maskNodes.Add(newSprite, n);
+                    }
+
+                    newSprite.Textures.Add(texentry);
+                    Data.Sprites.Add(newSprite);
+                    continue;
                 }
-                else if (spriteType == SpriteType.Sprite)
+
+                
+                if (frame >= sprite.Textures.Count)
                 {
+                    while (frame >= sprite.Textures.Count)
+                        sprite.Textures.Add(null);
+                }
 
-                    string spriteName;
-                    int frame = 0;
-                    try
-                    {
-                        var spriteParts = sprFrameRegex.Match(stripped);
-                        spriteName = spriteParts.Groups[1].Value;
-                        Int32.TryParse(spriteParts.Groups[2].Value, out frame);
-                    }
-                    catch (Exception e)
-                    {
-                        ScriptMessage($"Error: Image {stripped} has an invalid name. Skipping...");
-                        continue;
-                    }
+                UndertaleTexturePageItem oldTex =
+                    (sprite.Textures[frame]?.Texture)
+                    ?? sprite.Textures.FirstOrDefault(te => te != null)?.Texture;
 
+                if (oldTex != null)
+                {
+                    texturePageItem.TargetX = oldTex.TargetX;
+                    texturePageItem.TargetY = oldTex.TargetY;
+                    texturePageItem.TargetWidth = oldTex.TargetWidth;
+                    texturePageItem.TargetHeight = oldTex.TargetHeight;
+                    texturePageItem.BoundingWidth = oldTex.BoundingWidth;
+                    texturePageItem.BoundingHeight = oldTex.BoundingHeight;
+                }
 
-                    UndertaleSprite.TextureEntry texentry = new();
-                    texentry.Texture = texturePageItem;
+                if (frameData != null)
+                    ApplyTextureFrameProperties(texturePageItem, spriteName, frame, frameData);
 
-                    
-                    var frameData = TryGetTextureFrameData(spritesPath, spriteName);
-                    if (frameData != null)
-                    {
-                        ApplyTextureFrameProperties(texturePageItem, spriteName, frame, frameData);
-                    }
+                JsonElement? existingSpriteMeta = TryLoadSpriteMetadata(spritesPath, spriteName);
+                if (existingSpriteMeta.HasValue)
+                    ApplySpriteMetadata(sprite, existingSpriteMeta.Value);
 
+                sprite.Textures[frame] = texentry;
 
-					UndertaleSprite sprite = Data.Sprites.ByName(spriteName);
-					if (sprite is null)
-					{
-						UndertaleString spriteUTString = Data.Strings.MakeString(spriteName);
-						UndertaleSprite newSprite = new();
-						newSprite.Name        = spriteUTString;
-						newSprite.Width       = (uint)n.Texture.BoundingWidth;
-						newSprite.Height      = (uint)n.Texture.BoundingHeight;
-						newSprite.MarginLeft  = n.Texture.TargetX;
-						newSprite.MarginRight = n.Texture.TargetX + n.Bounds.Width - 1;
-						newSprite.MarginTop   = n.Texture.TargetY;
-						newSprite.MarginBottom= n.Texture.TargetY + n.Bounds.Height - 1;
-						newSprite.OriginX = 0;
-						newSprite.OriginY = 0;
+                bool needMaskInit =
+                    sprite.SepMasks is UndertaleSprite.SepMaskType.Precise &&
+                    sprite.CollisionMasks.Count == 0;
 
-						
-						JsonElement? spriteMeta = TryLoadSpriteMetadata(spritesPath, spriteName);
-						if (spriteMeta.HasValue)
-						{
-							ApplySpriteMetadata(newSprite, spriteMeta.Value);
-						}
-
-						if (frame > 0)
-						{
-							for (int i = 0; i < frame; i++)
-								newSprite.Textures.Add(null);
-						}
-
-
-						if (!noMasksForBasicRectangles ||
-							newSprite.SepMasks is not (UndertaleSprite.SepMaskType.AxisAlignedRect or UndertaleSprite.SepMaskType.RotatedRect))
-						{
-							
-							if (newSprite.CollisionMasks.Count == 0)
-							{
-								maskNodes.Add(newSprite, n);
-							}
-						}
-
-						newSprite.Textures.Add(texentry);
-						Data.Sprites.Add(newSprite);
-						continue;
-					}
-
-
-
-
-
-
-					if (frame >= sprite.Textures.Count)
-					{
-						while (frame >= sprite.Textures.Count)
-							sprite.Textures.Add(null);
-					}
-
-
-					UndertaleTexturePageItem oldTex =
-						(sprite.Textures[frame]?.Texture)
-						?? sprite.Textures.FirstOrDefault(te => te != null)?.Texture;
-
-
-
-					if (oldTex != null)
-					{
-						texturePageItem.TargetX        = oldTex.TargetX;
-						texturePageItem.TargetY        = oldTex.TargetY;
-						texturePageItem.TargetWidth    = oldTex.TargetWidth;
-						texturePageItem.TargetHeight   = oldTex.TargetHeight;
-						texturePageItem.BoundingWidth  = oldTex.BoundingWidth;
-						texturePageItem.BoundingHeight = oldTex.BoundingHeight;
-					}
-
-					
-					
-					if (frameData != null)
-					{
-						ApplyTextureFrameProperties(texturePageItem, spriteName, frame, frameData);
-					}
-
-					
-					
-					JsonElement? existingSpriteMeta = TryLoadSpriteMetadata(spritesPath, spriteName);
-					if (existingSpriteMeta.HasValue)
-					{
-						ApplySpriteMetadata(sprite, existingSpriteMeta.Value);
-					}
-
-					sprite.Textures[frame] = texentry;
-
-
-
-
-
-
-					bool needMaskInit =
-						sprite.SepMasks is UndertaleSprite.SepMaskType.Precise &&
-						sprite.CollisionMasks.Count == 0;
-
-					if (needMaskInit)
-					{
-						maskNodes[sprite] = n;
-					}
-				}
-		   }
+                if (needMaskInit)
+                    maskNodes[sprite] = n;
+            }
         }
 
+        
+        foreach ((UndertaleSprite maskSpr, Node maskNode) in maskNodes)
+        {
+            maskSpr.CollisionMasks.Clear();
+            maskSpr.CollisionMasks.Add(maskSpr.NewMaskEntry(Data));
+            (int maskWidth, int maskHeight) = maskSpr.CalculateMaskDimensions(Data);
+            int maskStride = ((maskWidth + 7) / 8) * 8;
 
-            foreach ((UndertaleSprite maskSpr, Node maskNode) in maskNodes)
+            BitArray maskingBitArray = new BitArray(maskStride * maskHeight);
+            for (int y = 0; y < maskHeight && y < maskNode.Bounds.Height; y++)
             {
-                maskSpr.CollisionMasks.Clear();
-                maskSpr.CollisionMasks.Add(maskSpr.NewMaskEntry(Data));
-                (int maskWidth, int maskHeight) = maskSpr.CalculateMaskDimensions(Data);
-                int maskStride = ((maskWidth + 7) / 8) * 8;
-
-                BitArray maskingBitArray = new BitArray(maskStride * maskHeight);
-                for (int y = 0; y < maskHeight && y < maskNode.Bounds.Height; y++)
+                for (int x = 0; x < maskWidth && x < maskNode.Bounds.Width; x++)
                 {
-                    for (int x = 0; x < maskWidth && x < maskNode.Bounds.Width; x++)
-                    {
-                        IMagickColor<byte> pixelColor = atlasPixels.GetPixel(x + maskNode.Bounds.X, y + maskNode.Bounds.Y).ToColor();
-                        if (bboxMasks)
-                            maskingBitArray[(y * maskStride) + x] = (pixelColor.A > 0);
-                        else
-                            maskingBitArray[((y + maskNode.Texture.TargetY) * maskStride) + x + maskNode.Texture.TargetX] = (pixelColor.A > 0);
-                    }
+                    IMagickColor<byte> pixelColor = atlasPixels.GetPixel(x + maskNode.Bounds.X, y + maskNode.Bounds.Y).ToColor();
+                    if (bboxMasks)
+                        maskingBitArray[(y * maskStride) + x] = (pixelColor.A > 0);
+                    else
+                        maskingBitArray[((y + maskNode.Texture.TargetY) * maskStride) + x + maskNode.Texture.TargetX] = (pixelColor.A > 0);
                 }
-                BitArray tempBitArray = new BitArray(maskingBitArray.Length);
-                for (int i = 0; i < maskingBitArray.Length; i += 8)
-                    for (int j = 0; j < 8; j++)
-                        tempBitArray[j + i] = maskingBitArray[-(j - 7) + i];
-
-                int numBytes = maskingBitArray.Length / 8;
-                byte[] bytes = new byte[numBytes];
-                tempBitArray.CopyTo(bytes, 0);
-                for (int i = 0; i < bytes.Length; i++)
-                    maskSpr.CollisionMasks[0].Data[i] = bytes[i];
             }
-            maskNodes.Clear();
+            BitArray tempBitArray = new BitArray(maskingBitArray.Length);
+            for (int i = 0; i < maskingBitArray.Length; i += 8)
+                for (int j = 0; j < 8; j++)
+                    tempBitArray[j + i] = maskingBitArray[-(j - 7) + i];
 
+            int numBytes = maskingBitArray.Length / 8;
+            byte[] bytes = new byte[numBytes];
+            tempBitArray.CopyTo(bytes, 0);
+            for (int i = 0; i < bytes.Length; i++)
+                maskSpr.CollisionMasks[0].Data[i] = bytes[i];
+        }
+        maskNodes.Clear();
 
-            atlasCount++;
+        atlasCount++;
     }
 
-        HideProgressBar();
-        ScriptMessage("Import Complete!");
+    PrintLine($"[ImportSprites] Import complete! Processed {pngFiles.Length} PNG files.");
 }
 finally
 {
     foreach (MagickImage img in imagesToCleanup)
         img.Dispose();
 }
+
+
+
 
 public class TextureInfo
 {
@@ -541,26 +451,8 @@ public class TextureInfo
     public MagickImage Image;
 }
 
-public enum SpriteType
-{
-    Sprite,
-    Background,
-    Font,
-    Unknown
-}
-
-
-public enum SplitType
-{
-    Horizontal,
-    Vertical,
-}
-
-public enum BestFitHeuristic
-{
-    Area,
-    MaxOneAxis,
-}
+public enum SplitType { Horizontal, Vertical }
+public enum BestFitHeuristic { Area, MaxOneAxis }
 
 public struct Rect
 {
@@ -609,8 +501,7 @@ public class Packer
         DebugMode = _DebugMode;
 
         ScanForTextures(_SourceDir, _Pattern);
-        List<TextureInfo> textures = new List<TextureInfo>();
-        textures = SourceTextures.ToList();
+        List<TextureInfo> textures = SourceTextures.ToList();
 
         Atlasses = new List<Atlas>();
         while (textures.Count > 0)
@@ -621,7 +512,6 @@ public class Packer
             List<TextureInfo> leftovers = LayoutAtlas(textures, atlas);
             if (leftovers.Count == 0)
             {
-
                 while (leftovers.Count == 0)
                 {
                     atlas.Width /= 2;
@@ -629,23 +519,8 @@ public class Packer
                     leftovers = LayoutAtlas(textures, atlas);
                 }
 
-
-                if (atlas.Width == 0)
-                {
-                    atlas.Width = 1;
-                }
-                else
-                {
-                    atlas.Width *= 2;
-                }
-                if (atlas.Height == 0)
-                {
-                    atlas.Height = 1;
-                }
-                else
-                {
-                    atlas.Height *= 2;
-                }
+                atlas.Width = atlas.Width == 0 ? 1 : atlas.Width * 2;
+                atlas.Height = atlas.Height == 0 ? 1 : atlas.Height * 2;
                 leftovers = LayoutAtlas(textures, atlas);
             }
             Atlasses.Add(atlas);
@@ -657,7 +532,6 @@ public class Packer
     {
         int atlasCount = 0;
         string prefix = _Destination.Replace(Path.GetExtension(_Destination), "");
-        string descFile = _Destination;
 
         StreamWriter tw = new StreamWriter(_Destination);
         tw.WriteLine("source_tex, atlas_tex, x, y, width, height");
@@ -665,10 +539,8 @@ public class Packer
         {
             string atlasName = $"{prefix}{atlasCount:000}.png";
 
-
             using (MagickImage img = CreateAtlasImage(atlas))
                 TextureWorker.SaveImageToFile(img, atlasName);
-
 
             foreach (Node n in atlas.Nodes)
             {
@@ -706,11 +578,6 @@ public class Packer
             if (width <= AtlasSize && height <= AtlasSize)
             {
                 TextureInfo ti = new();
-
-                MagickReadSettings settings = new()
-                {
-                    ColorSpace = ColorSpace.sRGB,
-                };
                 MagickImage img = new(fi.FullName);
                 imagesToCleanup.Add(img);
 
@@ -718,43 +585,37 @@ public class Packer
                 ti.BoundingWidth = (int)img.Width;
                 ti.BoundingHeight = (int)img.Height;
 
-
                 ti.TargetX = 0;
                 ti.TargetY = 0;
-                if (GetSpriteType(ti.Source) != SpriteType.Background)
+                
+                img.BorderColor = MagickColors.Transparent;
+                img.BackgroundColor = MagickColors.Transparent;
+                img.Border(1);
+                IMagickGeometry? bbox = img.BoundingBox;
+                if (bbox is not null)
                 {
-                    img.BorderColor = MagickColors.Transparent;
-                    img.BackgroundColor = MagickColors.Transparent;
-                    img.Border(1);
-                    IMagickGeometry? bbox = img.BoundingBox;
-                    if (bbox is not null)
-                    {
-                        ti.TargetX = bbox.X - 1;
-                        ti.TargetY = bbox.Y - 1;
-
-
-                        img.Trim();
-                    }
-                    else
-                    {
-
-                        ti.TargetX = 0;
-                        ti.TargetY = 0;
-                        img.Crop(1, 1);
-                    }
-                    img.ResetPage();
+                    ti.TargetX = bbox.X - 1;
+                    ti.TargetY = bbox.Y - 1;
+                    img.Trim();
                 }
+                else
+                {
+                    ti.TargetX = 0;
+                    ti.TargetY = 0;
+                    img.Crop(1, 1);
+                }
+                img.ResetPage();
+
                 ti.Width = (int)img.Width;
                 ti.Height = (int)img.Height;
                 ti.Image = img;
 
                 SourceTextures.Add(ti);
-
                 Log.WriteLine($"Added {fi.FullName}");
             }
             else
             {
-                Error.WriteLine($"{fi.FullName} is too large to fix in the atlas. Skipping!");
+                Error.WriteLine($"{fi.FullName} is too large to fit in the atlas. Skipping!");
             }
         }
     }
@@ -808,7 +669,6 @@ public class Packer
         {
             switch (FitHeuristic)
             {
-
                 case BestFitHeuristic.MaxOneAxis:
                     if (ti.Width <= _Node.Bounds.Width && ti.Height <= _Node.Bounds.Height)
                     {
@@ -843,9 +703,8 @@ public class Packer
     private List<TextureInfo> LayoutAtlas(List<TextureInfo> _Textures, Atlas _Atlas)
     {
         List<Node> freeList = new List<Node>();
-        List<TextureInfo> textures = new List<TextureInfo>();
+        List<TextureInfo> textures = _Textures.ToList();
         _Atlas.Nodes = new List<Node>();
-        textures = _Textures.ToList();
         Node root = new Node();
         root.Bounds.Width = _Atlas.Width;
         root.Bounds.Height = _Atlas.Height;
@@ -859,13 +718,9 @@ public class Packer
             if (bestFit != null)
             {
                 if (node.SplitType == SplitType.Horizontal)
-                {
                     HorizontalSplit(node, bestFit.Width, bestFit.Height, freeList);
-                }
                 else
-                {
                     VerticalSplit(node, bestFit.Width, bestFit.Height, freeList);
-                }
                 node.Texture = bestFit;
                 node.Bounds.Width = bestFit.Width;
                 node.Bounds.Height = bestFit.Height;
@@ -892,67 +747,4 @@ public class Packer
 
         return img;
     }
-}
-
-public static SpriteType GetSpriteType(string path)
-{
-    string folderPath = Path.GetDirectoryName(path);
-    string folderName = new DirectoryInfo(folderPath).Name;
-    string lowerName = folderName.ToLower();
-
-    if (lowerName == "backgrounds" || lowerName == "background")
-    {
-        return SpriteType.Background;
-    }
-    else if (lowerName == "fonts" || lowerName == "font")
-    {
-        return SpriteType.Font;
-    }
-    else if (lowerName == "sprites" || lowerName == "sprite")
-    {
-        return SpriteType.Sprite;
-    }
-    return SpriteType.Unknown;
-}
-
-string CheckValidity()
-{
-    string importFolder = null;
-
-
-
-    string dataWinDir = Path.GetDirectoryName(FilePath);
-
-
-    if (dataWinDir.Contains("DeltahubMergeWorkspace"))
-    {
-
-        string objectsPath = Path.Combine(dataWinDir, "Objects");
-        if (Directory.Exists(objectsPath))
-        {
-            importFolder = objectsPath;
-            ScriptMessage($"Detected DELTAHUB context: {importFolder}");
-            return importFolder;
-        }
-    }
-
-
-    string objectsRelative = Path.Combine(dataWinDir, "Objects");
-    if (Directory.Exists(objectsRelative))
-    {
-        importFolder = objectsRelative;
-        ScriptMessage($"Found Objects folder relative to data.win: {importFolder}");
-        return importFolder;
-    }
-
-
-    ScriptMessage("Could not automatically detect DELTAHUB Objects folder.");
-    ScriptMessage("Please select the Objects folder containing sprites to import");
-    importFolder = PromptChooseDirectory();
-
-    if (string.IsNullOrWhiteSpace(importFolder))
-        throw new ScriptException("No folder selected. Import cancelled.");
-
-    ScriptMessage($"Using import folder: {importFolder}");
-    return importFolder;
 }

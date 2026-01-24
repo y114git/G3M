@@ -1,4 +1,5 @@
-#load "SharedPaths.csx"
+
+
 
 using System;
 using System.IO;
@@ -8,19 +9,40 @@ using System.Text.Json;
 using UndertaleModLib;
 using UndertaleModLib.Models;
 
-EnsureDataLoaded();
+
+
+
+string InputDirectory = "";
+
+
+
 
 void PrintLine(string s) => Console.WriteLine(s);
 
-var ctx = PrepareImportContext();
-string inputRoot = ctx.InputRoot;
-string extensionsIn = Path.Combine(inputRoot, "Extensions");
-
-if (!Directory.Exists(extensionsIn))
+string ResolveInputDirectory()
 {
-    PrintLine("[ImportExtensions] No Extensions directory found, skipping import.");
-    return;
+    if (!string.IsNullOrEmpty(InputDirectory) && Directory.Exists(InputDirectory))
+        return InputDirectory;
+
+    if (string.IsNullOrEmpty(FilePath))
+        throw new ScriptException("No data.win file loaded. Please load a game data file first.");
+
+    string dataWinDir = Path.GetDirectoryName(FilePath);
+    string extensionsDir = Path.Combine(dataWinDir, "Objects", "Extensions");
+    
+    if (Directory.Exists(extensionsDir))
+        return extensionsDir;
+
+    throw new ScriptException($"Extensions directory not found at: {extensionsDir}\nPlease specify InputDirectory or place extensions in an 'Objects/Extensions' folder next to data.win.");
 }
+
+
+
+
+EnsureDataLoaded();
+
+string extensionsIn = ResolveInputDirectory();
+PrintLine($"[ImportExtensions] Importing from: {extensionsIn}");
 
 string[] extensionFiles = Directory.GetFiles(extensionsIn, "*.json");
 if (extensionFiles.Length == 0)

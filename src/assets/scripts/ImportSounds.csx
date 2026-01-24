@@ -1,4 +1,5 @@
-#load "SharedPaths.csx"
+
+
 
 using System;
 using System.IO;
@@ -11,17 +12,40 @@ using UndertaleModLib.Models;
 using static UndertaleModLib.Models.UndertaleSound;
 using static UndertaleModLib.UndertaleData;
 
+
+
+
+string InputDirectory = "";
+
+
+
+
 void PrintLine(string s) => Console.WriteLine(s);
 
-var ctx = PrepareImportContext();
-string inputRoot = ctx.InputRoot;
-string soundsIn = Path.Combine(inputRoot, "Sounds");
-
-if (!Directory.Exists(soundsIn))
+string ResolveInputDirectory()
 {
-    PrintLine("[ImportSounds] No Sounds directory found, skipping.");
-    return;
+    if (!string.IsNullOrEmpty(InputDirectory) && Directory.Exists(InputDirectory))
+        return InputDirectory;
+
+    if (string.IsNullOrEmpty(FilePath))
+        throw new ScriptException("No data.win file loaded. Please load a game data file first.");
+
+    string dataWinDir = Path.GetDirectoryName(FilePath);
+    string soundsDir = Path.Combine(dataWinDir, "Objects", "Sounds");
+    
+    if (Directory.Exists(soundsDir))
+        return soundsDir;
+
+    throw new ScriptException($"Sounds directory not found at: {soundsDir}\nPlease specify InputDirectory or place sounds in an 'Objects/Sounds' folder next to data.win.");
 }
+
+
+
+
+EnsureDataLoaded();
+
+string soundsIn = ResolveInputDirectory();
+PrintLine($"[ImportSounds] Importing from: {soundsIn}");
 
 int imported = 0;
 int created = 0;

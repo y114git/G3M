@@ -1,4 +1,5 @@
-#load "SharedPaths.csx"
+
+
 
 using System;
 using System.IO;
@@ -6,17 +7,40 @@ using System.Linq;
 using UndertaleModLib;
 using UndertaleModLib.Models;
 
+
+
+
+string InputDirectory = "";
+
+
+
+
 void PrintLine(string s) => Console.WriteLine(s);
 
-var ctx = PrepareImportContext();
-string inputRoot = ctx.InputRoot;
-string shadersIn = Path.Combine(inputRoot, "Shaders");
-
-if (!Directory.Exists(shadersIn))
+string ResolveInputDirectory()
 {
-    PrintLine("[ImportShaders] No Shaders directory found, skipping.");
-    return;
+    if (!string.IsNullOrEmpty(InputDirectory) && Directory.Exists(InputDirectory))
+        return InputDirectory;
+
+    if (string.IsNullOrEmpty(FilePath))
+        throw new ScriptException("No data.win file loaded. Please load a game data file first.");
+
+    string dataWinDir = Path.GetDirectoryName(FilePath);
+    string shadersDir = Path.Combine(dataWinDir, "Objects", "Shaders");
+    
+    if (Directory.Exists(shadersDir))
+        return shadersDir;
+
+    throw new ScriptException($"Shaders directory not found at: {shadersDir}\nPlease specify InputDirectory or place shaders in an 'Objects/Shaders' folder next to data.win.");
 }
+
+
+
+
+EnsureDataLoaded();
+
+string shadersIn = ResolveInputDirectory();
+PrintLine($"[ImportShaders] Importing from: {shadersIn}");
 
 void ImportShader(string shaderDir)
 {
@@ -236,6 +260,4 @@ foreach (var shaderDir in shaderDirs)
     }
 }
 
-PrintLine($"\n[ImportShaders] Summary for Mod {ctx.ModNo ?? "N/A"}:");
-PrintLine($"  Shaders - Imported: {shadersImported}, Updated: {shadersUpdated}");
-PrintLine("[ImportShaders] Done.");
+PrintLine($"[ImportShaders] Import complete. {shadersImported} new, {shadersUpdated} updated.");

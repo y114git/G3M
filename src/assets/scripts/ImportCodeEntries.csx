@@ -1,4 +1,5 @@
-#load "SharedPaths.csx"
+
+
 
 using System;
 using System.IO;
@@ -6,10 +7,35 @@ using System.Threading.Tasks;
 using System.Linq;
 using System.Collections.Generic;
 using System.Text;
+using UndertaleModLib;
 using UndertaleModLib.Util;
 
-EnsureDataLoaded();
 
+
+
+string InputDirectory = "";
+
+
+
+
+void PrintLine(string s) => Console.WriteLine(s);
+
+string ResolveInputDirectory()
+{
+    if (!string.IsNullOrEmpty(InputDirectory) && Directory.Exists(InputDirectory))
+        return InputDirectory;
+
+    if (string.IsNullOrEmpty(FilePath))
+        throw new ScriptException("No data.win file loaded. Please load a game data file first.");
+
+    string dataWinDir = Path.GetDirectoryName(FilePath);
+    string codeDir = Path.Combine(dataWinDir, "Objects", "CodeEntries");
+    
+    if (Directory.Exists(codeDir))
+        return codeDir;
+
+    throw new ScriptException($"CodeEntries directory not found at: {codeDir}\nPlease specify InputDirectory or place code files in an 'Objects/CodeEntries' folder next to data.win.");
+}
 
 string CorrectCodeEntryName(string filename)
 {
@@ -25,24 +51,22 @@ string CorrectCodeEntryName(string filename)
     return corrected;
 }
 
-var ctx = PrepareImportContext();
-string objectsRoot = ctx.InputRoot;
-string importFolder = Path.Combine(objectsRoot, "CodeEntries");
 
-if (importFolder == null || !Directory.Exists(importFolder))
-{
-    Console.WriteLine("[ImportGML] No CodeEntries directory found, skipping.");
-    return;
-}
+
+
+EnsureDataLoaded();
+
+string importFolder = ResolveInputDirectory();
+PrintLine($"[ImportCodeEntries] Importing from: {importFolder}");
 
 string[] dirFiles = Directory.GetFiles(importFolder, "*.gml");
 if (dirFiles.Length == 0)
 {
-    Console.WriteLine("[ImportGML] No GML files found in CodeEntries, skipping.");
+    PrintLine("[ImportCodeEntries] No GML files found - nothing to import.");
     return;
 }
 
-Console.WriteLine($"[ImportGML] Found {dirFiles.Length} GML file(s) to import");
+PrintLine($"[ImportCodeEntries] Found {dirFiles.Length} GML file(s) to import.");
 
 SetProgressBar(null, "Importing GML", 0, dirFiles.Length);
 StartProgressBarUpdater();
@@ -61,7 +85,6 @@ await Task.Run(() =>
         string originalCodeName = Path.GetFileNameWithoutExtension(file);
         string correctedCodeName = CorrectCodeEntryName(originalCodeName);
         
-        
         var exactMatch = Data.Code.ByName(correctedCodeName);
         if (exactMatch == null)
             exactMatch = Data.Code.ByName(originalCodeName);
@@ -78,7 +101,7 @@ await Task.Run(() =>
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"[ImportGML] ERROR: QueueReplace failed for '{targetName}': {ex.Message}");
+            PrintLine($"[ImportCodeEntries] ERROR: QueueReplace failed for '{targetName}': {ex.Message}");
             throw;
         }
     }
@@ -91,4 +114,4 @@ DisableAllSyncBindings();
 await StopProgressBarUpdater();
 HideProgressBar();
 
-Console.WriteLine($"[ImportGML] Successfully imported {dirFiles.Length} code entries.");
+PrintLine($"[ImportCodeEntries] Successfully imported {dirFiles.Length} code entries.");

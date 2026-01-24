@@ -19,7 +19,7 @@ from services.game_detection_service import is_game_running, get_game_name_strin
 from models.game_modes import UndertaleGameMode, UndertaleYellowGameMode, PizzaTowerGameMode, SugarySpireGameMode, FullGameMode
 from utils.path_utils import find_chapter_resource_dir, resolve_game_executable
 from utils.mod_utils import get_mod_key
-from services.patching_log_service import rotate_patching_log, rotate_conflicts_log
+from services.patching_log_service import rotate_patching_log
 from workers.game_monitor_worker import GameMonitorWorker
 from services.mod_merge_service import MultiModMerger
 from config.constants import UI_COLORS, SLOT_ID_UNIVERSAL
@@ -145,8 +145,6 @@ class GameLauncher(QObject):
         has_list_format = any((isinstance(mods_list, list) for mods_list in selections.values()))
         needs_multi_mod = has_list_format and any((len(mods_list) > 0 for mods_list in selections.values() if isinstance(mods_list, list)))
         logging.info(f'Multi-mod check: needs_multi_mod={needs_multi_mod} (has_list_format={has_list_format})')
-        if needs_multi_mod:
-            rotate_conflicts_log()
         if needs_multi_mod:
             logging.info('Using multi-mod merger for game launch')
             self.app_state.progress_bar_visible = True

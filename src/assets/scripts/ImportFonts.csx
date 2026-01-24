@@ -1,4 +1,5 @@
-#load "SharedPaths.csx"
+
+
 
 using System;
 using System.IO;
@@ -10,6 +11,14 @@ using UndertaleModLib;
 using UndertaleModLib.Models;
 using UndertaleModLib.Util;
 
+
+
+
+string InputDirectory = "";
+
+
+
+
 void PrintLine(string s) => Console.WriteLine(s);
 
 string SafeName(string name)
@@ -20,88 +29,61 @@ string SafeName(string name)
     return sb.ToString();
 }
 
-var ctx = PrepareImportContext();
-string inputRoot = ctx.InputRoot;
-string fontsIn = Path.Combine(inputRoot, "Fonts");
-
-if (!Directory.Exists(fontsIn))
+string ResolveInputDirectory()
 {
-    PrintLine("[ImportFonts] No Fonts directory found, skipping.");
-    return;
+    if (!string.IsNullOrEmpty(InputDirectory) && Directory.Exists(InputDirectory))
+        return InputDirectory;
+
+    if (string.IsNullOrEmpty(FilePath))
+        throw new ScriptException("No data.win file loaded. Please load a game data file first.");
+
+    string dataWinDir = Path.GetDirectoryName(FilePath);
+    string fontsDir = Path.Combine(dataWinDir, "Objects", "Fonts");
+    
+    if (Directory.Exists(fontsDir))
+        return fontsDir;
+
+    throw new ScriptException($"Fonts directory not found at: {fontsDir}\nPlease specify InputDirectory or place fonts in an 'Objects/Fonts' folder next to data.win.");
 }
+
+
+
+
+EnsureDataLoaded();
+
+string fontsIn = ResolveInputDirectory();
+PrintLine($"[ImportFonts] Importing from: {fontsIn}");
 
 int imported = 0;
 int created = 0;
 int skipped = 0;
 
 
-var fontFilesSet = new HashSet<string>();
+var jsonFiles = Directory.GetFiles(fontsIn, "*.json");
+PrintLine($"[ImportFonts] Found {jsonFiles.Length} font JSON file(s) to process");
 
-
-foreach (var jsonFile in Directory.GetFiles(fontsIn, "*.json"))
+foreach (string jsonPath in jsonFiles)
 {
-    string baseName = Path.GetFileNameWithoutExtension(jsonFile);
-    fontFilesSet.Add(baseName);
-}
-
-
-foreach (var pngFile in Directory.GetFiles(fontsIn, "*.png"))
-{
-    string baseName = Path.GetFileNameWithoutExtension(pngFile);
-    fontFilesSet.Add(baseName);
-}
-
-
-foreach (var csvFile in Directory.GetFiles(fontsIn, "glyphs_*.csv"))
-{
-    string baseName = Path.GetFileName(csvFile);
-    if (baseName.StartsWith("glyphs_") && baseName.EndsWith(".csv"))
+    string safeName = Path.GetFileNameWithoutExtension(jsonPath);
+    string pngPath = Path.Combine(fontsIn, safeName + ".png");
+    
+    string fontName = safeName;
+    try
     {
-        baseName = baseName.Substring(7, baseName.Length - 11); 
-        fontFilesSet.Add(baseName);
-    }
-}
-
-PrintLine($"[ImportFonts] Found {fontFilesSet.Count} font(s) to process in import folder");
-
-using (var worker = new TextureWorker())
-{
-    foreach (string safeName in fontFilesSet)
-    {
-        string pngPath = Path.Combine(fontsIn, safeName + ".png");
-        string csvPath = Path.Combine(fontsIn, $"glyphs_{safeName}.csv");
-        string jsonPath = Path.Combine(fontsIn, safeName + ".json");
-
-        if (!File.Exists(pngPath) && !File.Exists(csvPath) && !File.Exists(jsonPath))
+        string jsonContent = File.ReadAllText(jsonPath, Encoding.UTF8);
+        JsonDocument jsonDoc = JsonDocument.Parse(jsonContent);
+        JsonElement root = jsonDoc.RootElement;
+        
+        if (root.TryGetProperty("name", out JsonElement nameElm))
         {
-            skipped++;
-            continue;
+            fontName = nameElm.GetString() ?? safeName;
         }
 
-        
-        string fontName = safeName;
-        if (File.Exists(jsonPath))
-        {
-            try
-            {
-                string jsonContent = File.ReadAllText(jsonPath, Encoding.UTF8);
-                JsonDocument jsonDoc = JsonDocument.Parse(jsonContent);
-                if (jsonDoc.RootElement.TryGetProperty("name", out JsonElement nameElm))
-                {
-                    fontName = nameElm.GetString() ?? safeName;
-                }
-                jsonDoc.Dispose();
-            }
-            catch { }
-        }
-
-        
         UndertaleFont font = Data.Fonts.ByName(fontName);
         bool isNew = false;
 
         if (font == null)
         {
-            
             font = new UndertaleFont();
             font.Name = Data.Strings.MakeString(fontName);
             font.DisplayName = Data.Strings.MakeString(fontName);
@@ -120,215 +102,144 @@ using (var worker = new TextureWorker())
             PrintLine($"[ImportFonts] Creating new font: {fontName}");
         }
 
-        try
+        
+        if (File.Exists(pngPath))
         {
-            
-            if (File.Exists(pngPath))
+            using (var img = TextureWorker.ReadBGRAImageFromFile(pngPath))
             {
-                using (var img = TextureWorker.ReadBGRAImageFromFile(pngPath))
-                {
-                    int lastTextPage = Data.EmbeddedTextures.Count - 1;
-                    int lastTextPageItem = Data.TexturePageItems.Count - 1;
+                int lastTextPage = Data.EmbeddedTextures.Count - 1;
+                int lastTextPageItem = Data.TexturePageItems.Count - 1;
 
-                    UndertaleEmbeddedTexture newEmbeddedTexture = new UndertaleEmbeddedTexture();
-                    newEmbeddedTexture.Name = new UndertaleString($"Texture {++lastTextPage}");
-                    newEmbeddedTexture.TextureData.Image = GMImage.FromMagickImage(img).ConvertToPng();
-                    Data.EmbeddedTextures.Add(newEmbeddedTexture);
+                UndertaleEmbeddedTexture newEmbeddedTexture = new UndertaleEmbeddedTexture();
+                newEmbeddedTexture.Name = new UndertaleString($"Texture {++lastTextPage}");
+                newEmbeddedTexture.TextureData.Image = GMImage.FromMagickImage(img).ConvertToPng();
+                Data.EmbeddedTextures.Add(newEmbeddedTexture);
 
-                    ushort originalTargetX = font.Texture?.TargetX ?? 0;
-                    ushort originalTargetY = font.Texture?.TargetY ?? 0;
-                    ushort originalBoundingWidth = font.Texture?.BoundingWidth ?? (ushort)img.Width;
-                    ushort originalBoundingHeight = font.Texture?.BoundingHeight ?? (ushort)img.Height;
+                ushort originalTargetX = font.Texture?.TargetX ?? 0;
+                ushort originalTargetY = font.Texture?.TargetY ?? 0;
+                ushort originalBoundingWidth = font.Texture?.BoundingWidth ?? (ushort)img.Width;
+                ushort originalBoundingHeight = font.Texture?.BoundingHeight ?? (ushort)img.Height;
 
-                    UndertaleTexturePageItem newTexturePageItem = new UndertaleTexturePageItem();
-                    newTexturePageItem.Name = new UndertaleString($"PageItem {++lastTextPageItem}");
-                    newTexturePageItem.SourceX = 0;
-                    newTexturePageItem.SourceY = 0;
-                    newTexturePageItem.SourceWidth = (ushort)img.Width;
-                    newTexturePageItem.SourceHeight = (ushort)img.Height;
-                    newTexturePageItem.TargetX = originalTargetX;
-                    newTexturePageItem.TargetY = originalTargetY;
-                    newTexturePageItem.TargetWidth = (ushort)img.Width;
-                    newTexturePageItem.TargetHeight = (ushort)img.Height;
-                    newTexturePageItem.BoundingWidth = originalBoundingWidth;
-                    newTexturePageItem.BoundingHeight = originalBoundingHeight;
-                    newTexturePageItem.TexturePage = newEmbeddedTexture;
-                    Data.TexturePageItems.Add(newTexturePageItem);
+                UndertaleTexturePageItem newTexturePageItem = new UndertaleTexturePageItem();
+                newTexturePageItem.Name = new UndertaleString($"PageItem {++lastTextPageItem}");
+                newTexturePageItem.SourceX = 0;
+                newTexturePageItem.SourceY = 0;
+                newTexturePageItem.SourceWidth = (ushort)img.Width;
+                newTexturePageItem.SourceHeight = (ushort)img.Height;
+                newTexturePageItem.TargetX = originalTargetX;
+                newTexturePageItem.TargetY = originalTargetY;
+                newTexturePageItem.TargetWidth = (ushort)img.Width;
+                newTexturePageItem.TargetHeight = (ushort)img.Height;
+                newTexturePageItem.BoundingWidth = originalBoundingWidth;
+                newTexturePageItem.BoundingHeight = originalBoundingHeight;
+                newTexturePageItem.TexturePage = newEmbeddedTexture;
+                Data.TexturePageItems.Add(newTexturePageItem);
 
-                    font.Texture = newTexturePageItem;
-                    PrintLine($"[Font] {fontName}: texture imported");
-                }
+                font.Texture = newTexturePageItem;
+                PrintLine($"[Font] {fontName}: texture imported");
             }
+        }
 
-            
-            if (File.Exists(jsonPath))
+        
+        if (root.TryGetProperty("displayName", out JsonElement displayNameElm))
+        {
+            string displayName = displayNameElm.GetString();
+            if (!string.IsNullOrEmpty(displayName))
+                font.DisplayName = Data.Strings.MakeString(displayName);
+        }
+
+        
+        if (root.TryGetProperty("emSize", out JsonElement emSizeElm))
+            font.EmSize = (float)emSizeElm.GetDouble();
+        if (root.TryGetProperty("emSizeIsFloat", out JsonElement emSizeIsFloatElm))
+            font.EmSizeIsFloat = emSizeIsFloatElm.GetBoolean();
+        if (root.TryGetProperty("bold", out JsonElement boldElm))
+            font.Bold = boldElm.GetBoolean();
+        if (root.TryGetProperty("italic", out JsonElement italicElm))
+            font.Italic = italicElm.GetBoolean();
+        if (root.TryGetProperty("rangeStart", out JsonElement rangeStartElm))
+            font.RangeStart = (ushort)rangeStartElm.GetInt32();
+        if (root.TryGetProperty("rangeEnd", out JsonElement rangeEndElm))
+            font.RangeEnd = (uint)rangeEndElm.GetInt64();
+        if (root.TryGetProperty("charset", out JsonElement charsetElm))
+            font.Charset = (byte)charsetElm.GetInt32();
+        if (root.TryGetProperty("antiAliasing", out JsonElement antiAliasingElm))
+            font.AntiAliasing = (byte)antiAliasingElm.GetInt32();
+        if (root.TryGetProperty("scaleX", out JsonElement scaleXElm))
+            font.ScaleX = (float)scaleXElm.GetDouble();
+        if (root.TryGetProperty("scaleY", out JsonElement scaleYElm))
+            font.ScaleY = (float)scaleYElm.GetDouble();
+
+        
+        if (Data.GeneralInfo?.BytecodeVersion >= 17 && root.TryGetProperty("ascenderOffset", out JsonElement ascenderOffsetElm))
+            font.AscenderOffset = ascenderOffsetElm.GetInt32();
+
+        if (Data.IsVersionAtLeast(2022, 2) && root.TryGetProperty("ascender", out JsonElement ascenderElm))
+            font.Ascender = (uint)ascenderElm.GetInt64();
+
+        if (Data.IsVersionAtLeast(2023, 2) && root.TryGetProperty("sdfSpread", out JsonElement sdfSpreadElm))
+            font.SDFSpread = (uint)sdfSpreadElm.GetInt64();
+
+        if (Data.IsVersionAtLeast(2023, 6) && root.TryGetProperty("lineHeight", out JsonElement lineHeightElm))
+            font.LineHeight = (uint)lineHeightElm.GetInt64();
+
+        
+        if (root.TryGetProperty("glyphs", out JsonElement glyphsElm) && glyphsElm.ValueKind == JsonValueKind.Array)
+        {
+            font.Glyphs.Clear();
+            foreach (JsonElement glyphElm in glyphsElm.EnumerateArray())
             {
-                string jsonContent = File.ReadAllText(jsonPath, Encoding.UTF8);
-                JsonDocument jsonDoc = JsonDocument.Parse(jsonContent);
-                JsonElement root = jsonDoc.RootElement;
+                var glyph = new UndertaleFont.Glyph();
 
-                if (root.TryGetProperty("displayName", out JsonElement displayNameElm))
+                if (glyphElm.TryGetProperty("character", out JsonElement charElm))
+                    glyph.Character = (ushort)charElm.GetInt32();
+                if (glyphElm.TryGetProperty("sourceX", out JsonElement sxElm))
+                    glyph.SourceX = (ushort)sxElm.GetInt32();
+                if (glyphElm.TryGetProperty("sourceY", out JsonElement syElm))
+                    glyph.SourceY = (ushort)syElm.GetInt32();
+                if (glyphElm.TryGetProperty("sourceWidth", out JsonElement swElm))
+                    glyph.SourceWidth = (ushort)swElm.GetInt32();
+                if (glyphElm.TryGetProperty("sourceHeight", out JsonElement shElm))
+                    glyph.SourceHeight = (ushort)shElm.GetInt32();
+                if (glyphElm.TryGetProperty("shift", out JsonElement shiftElm))
+                    glyph.Shift = (short)shiftElm.GetInt32();
+                if (glyphElm.TryGetProperty("offset", out JsonElement offsetElm))
+                    glyph.Offset = (short)offsetElm.GetInt32();
+
+                
+                if (glyphElm.TryGetProperty("kerning", out JsonElement kerningElm) && kerningElm.ValueKind == JsonValueKind.Array)
                 {
-                    string displayName = displayNameElm.GetString();
-                    if (!string.IsNullOrEmpty(displayName))
-                        font.DisplayName = Data.Strings.MakeString(displayName);
-                }
-
-                if (root.TryGetProperty("emSize", out JsonElement emSizeElm))
-                    font.EmSize = (float)emSizeElm.GetDouble();
-                if (root.TryGetProperty("emSizeIsFloat", out JsonElement emSizeIsFloatElm))
-                    font.EmSizeIsFloat = emSizeIsFloatElm.GetBoolean();
-                if (root.TryGetProperty("bold", out JsonElement boldElm))
-                    font.Bold = boldElm.GetBoolean();
-                if (root.TryGetProperty("italic", out JsonElement italicElm))
-                    font.Italic = italicElm.GetBoolean();
-                if (root.TryGetProperty("rangeStart", out JsonElement rangeStartElm))
-                    font.RangeStart = (ushort)rangeStartElm.GetInt32();
-                if (root.TryGetProperty("rangeEnd", out JsonElement rangeEndElm))
-                    font.RangeEnd = (uint)rangeEndElm.GetInt64();
-                if (root.TryGetProperty("charset", out JsonElement charsetElm))
-                    font.Charset = (byte)charsetElm.GetInt32();
-                if (root.TryGetProperty("antiAliasing", out JsonElement antiAliasingElm))
-                    font.AntiAliasing = (byte)antiAliasingElm.GetInt32();
-                if (root.TryGetProperty("scaleX", out JsonElement scaleXElm))
-                    font.ScaleX = (float)scaleXElm.GetDouble();
-                if (root.TryGetProperty("scaleY", out JsonElement scaleYElm))
-                    font.ScaleY = (float)scaleYElm.GetDouble();
-
-                if (Data.GeneralInfo?.BytecodeVersion >= 17 && root.TryGetProperty("ascenderOffset", out JsonElement ascenderOffsetElm))
-                    font.AscenderOffset = ascenderOffsetElm.GetInt32();
-
-                if (Data.IsVersionAtLeast(2022, 2) && root.TryGetProperty("ascender", out JsonElement ascenderElm))
-                    font.Ascender = (uint)ascenderElm.GetInt64();
-
-                if (Data.IsVersionAtLeast(2023, 2) && root.TryGetProperty("sdfSpread", out JsonElement sdfSpreadElm))
-                    font.SDFSpread = (uint)sdfSpreadElm.GetInt64();
-
-                if (Data.IsVersionAtLeast(2023, 6) && root.TryGetProperty("lineHeight", out JsonElement lineHeightElm))
-                    font.LineHeight = (uint)lineHeightElm.GetInt64();
-
-                if (root.TryGetProperty("glyphs", out JsonElement glyphsElm) && glyphsElm.ValueKind == JsonValueKind.Array)
-                {
-                    font.Glyphs.Clear();
-                    foreach (JsonElement glyphElm in glyphsElm.EnumerateArray())
+                    glyph.Kerning = new UndertaleSimpleListShort<UndertaleFont.Glyph.GlyphKerning>();
+                    foreach (JsonElement kernElm in kerningElm.EnumerateArray())
                     {
-                        var glyph = new UndertaleFont.Glyph();
-
-                        if (glyphElm.TryGetProperty("character", out JsonElement charElm))
-                            glyph.Character = (ushort)charElm.GetInt32();
-                        if (glyphElm.TryGetProperty("sourceX", out JsonElement sxElm))
-                            glyph.SourceX = (ushort)sxElm.GetInt32();
-                        if (glyphElm.TryGetProperty("sourceY", out JsonElement syElm))
-                            glyph.SourceY = (ushort)syElm.GetInt32();
-                        if (glyphElm.TryGetProperty("sourceWidth", out JsonElement swElm))
-                            glyph.SourceWidth = (ushort)swElm.GetInt32();
-                        if (glyphElm.TryGetProperty("sourceHeight", out JsonElement shElm))
-                            glyph.SourceHeight = (ushort)shElm.GetInt32();
-                        if (glyphElm.TryGetProperty("shift", out JsonElement shiftElm))
-                            glyph.Shift = (short)shiftElm.GetInt32();
-                        if (glyphElm.TryGetProperty("offset", out JsonElement offsetElm))
-                            glyph.Offset = (short)offsetElm.GetInt32();
-
-                        if (glyphElm.TryGetProperty("kerning", out JsonElement kerningElm) && kerningElm.ValueKind == JsonValueKind.Array)
-                        {
-                            glyph.Kerning = new UndertaleSimpleListShort<UndertaleFont.Glyph.GlyphKerning>();
-                            foreach (JsonElement kernElm in kerningElm.EnumerateArray())
-                            {
-                                var kern = new UndertaleFont.Glyph.GlyphKerning();
-                                if (kernElm.TryGetProperty("character", out JsonElement kCharElm))
-                                    kern.Character = (short)kCharElm.GetInt32();
-                                if (kernElm.TryGetProperty("shiftModifier", out JsonElement kShiftElm))
-                                    kern.ShiftModifier = (short)kShiftElm.GetInt32();
-                                glyph.Kerning.Add(kern);
-                            }
-                        }
-
-                        font.Glyphs.Add(glyph);
+                        var kern = new UndertaleFont.Glyph.GlyphKerning();
+                        if (kernElm.TryGetProperty("character", out JsonElement kCharElm))
+                            kern.Character = (short)kCharElm.GetInt32();
+                        if (kernElm.TryGetProperty("shiftModifier", out JsonElement kShiftElm))
+                            kern.ShiftModifier = (short)kShiftElm.GetInt32();
+                        glyph.Kerning.Add(kern);
                     }
                 }
 
-                PrintLine($"[Font] {fontName}: imported from JSON ({font.Glyphs.Count} glyphs)");
-                jsonDoc.Dispose();
+                font.Glyphs.Add(glyph);
             }
-            else if (File.Exists(csvPath))
-            {
-                font.Glyphs.Clear();
-                bool hadError = false;
-                using (var reader = new StreamReader(csvPath, Encoding.UTF8))
-                {
-                    string line;
-                    int head = 0;
-                    while ((line = reader.ReadLine()) != null)
-                    {
-                        if (string.IsNullOrWhiteSpace(line)) continue;
-                        string[] parts = line.Split(';');
-                        if (parts.All(x => x.Length == 0)) continue;
-
-                        try
-                        {
-                            if (head == 1)
-                            {
-                                font.RangeStart = UInt16.Parse(parts[0]);
-                                head++;
-                            }
-
-                            if (head == 0)
-                            {
-                                String namae = parts[0].Replace("\"", "");
-                                font.DisplayName = Data.Strings.MakeString(namae);
-                                font.EmSize = UInt16.Parse(parts[1]);
-                                font.Bold = Boolean.Parse(parts[2]);
-                                font.Italic = Boolean.Parse(parts[3]);
-                                font.Charset = Byte.Parse(parts[4]);
-                                font.AntiAliasing = Byte.Parse(parts[5]);
-                                font.ScaleX = UInt16.Parse(parts[6]);
-                                font.ScaleY = UInt16.Parse(parts[7]);
-                                head++;
-                            }
-
-                            if (head > 1)
-                            {
-                                font.Glyphs.Add(new UndertaleFont.Glyph()
-                                {
-                                    Character = UInt16.Parse(parts[0]),
-                                    SourceX = UInt16.Parse(parts[1]),
-                                    SourceY = UInt16.Parse(parts[2]),
-                                    SourceWidth = UInt16.Parse(parts[3]),
-                                    SourceHeight = UInt16.Parse(parts[4]),
-                                    Shift = Int16.Parse(parts[5]),
-                                    Offset = Int16.Parse(parts[6]),
-                                });
-                                font.RangeEnd = UInt32.Parse(parts[0]);
-                            }
-                        }
-                        catch
-                        {
-                            hadError = true;
-                        }
-                    }
-                }
-                if (hadError)
-                {
-                    ScriptError($"File \"glyphs_{fontName}.csv\" contained some invalid data.", "Format error", false);
-                }
-                PrintLine($"[Font] {fontName}: imported from CSV ({font.Glyphs.Count} glyphs)");
-            }
-
-            
-            if (isNew)
-            {
-                Data.Fonts.Add(font);
-                PrintLine($"[Font] {fontName}: Added to Data.Fonts");
-            }
-
-            PrintLine($"[Font] {fontName}: {(isNew ? "CREATED" : "UPDATED")}");
-            imported++;
         }
-        catch (Exception ex)
+
+        jsonDoc.Dispose();
+
+        if (isNew)
         {
-            PrintLine($"[ImportFonts] Failed to import {fontName}: {ex.Message}");
-            skipped++;
+            Data.Fonts.Add(font);
+            PrintLine($"[Font] {fontName}: Added to Data.Fonts");
         }
+
+        PrintLine($"[Font] {fontName}: {(isNew ? "CREATED" : "UPDATED")} ({font.Glyphs.Count} glyphs)");
+        imported++;
+    }
+    catch (Exception ex)
+    {
+        PrintLine($"[ImportFonts] Failed to import {fontName}: {ex.Message}");
+        skipped++;
     }
 }
 

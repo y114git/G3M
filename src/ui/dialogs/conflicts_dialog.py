@@ -4,7 +4,7 @@ from PyQt6.QtWidgets import QDialog, QVBoxLayout, QLabel, QPushButton, QTextEdit
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
 from services.localization_service import tr
-from utils.path_utils import get_user_data_root
+from services.patching_log_service import get_conflicts_log_path
 
 
 class ConflictsDialog(QDialog):
@@ -13,7 +13,6 @@ class ConflictsDialog(QDialog):
         super().__init__(parent)
         self.conflicts_summary = conflicts_summary
         self.config_dir = config_dir
-        self.user_data_root = get_user_data_root()
         self.setWindowTitle(tr('dialogs.conflicts.title'))
         self.setMinimumWidth(600)
         self.setMinimumHeight(400)
@@ -63,7 +62,7 @@ class ConflictsDialog(QDialog):
         layout.addLayout(button_layout)
 
     def _open_logs_and_launch(self):
-        merge_conflicts_log = os.path.join(self.user_data_root, 'merge_conflicts.log')
+        merge_conflicts_log = get_conflicts_log_path()
         opened = False
         if os.path.exists(merge_conflicts_log):
             try:

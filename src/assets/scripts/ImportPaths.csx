@@ -1,4 +1,5 @@
-#load "SharedPaths.csx"
+
+
 
 using System;
 using System.IO;
@@ -8,19 +9,40 @@ using System.Text.Json;
 using UndertaleModLib;
 using UndertaleModLib.Models;
 
-EnsureDataLoaded();
+
+
+
+string InputDirectory = "";
+
+
+
 
 void PrintLine(string s) => Console.WriteLine(s);
 
-var ctx = PrepareImportContext();
-string inputRoot = ctx.InputRoot;
-string pathsIn = Path.Combine(inputRoot, "Paths");
-
-if (!Directory.Exists(pathsIn))
+string ResolveInputDirectory()
 {
-    PrintLine("[ImportPaths] No Paths directory found, skipping import.");
-    return;
+    if (!string.IsNullOrEmpty(InputDirectory) && Directory.Exists(InputDirectory))
+        return InputDirectory;
+
+    if (string.IsNullOrEmpty(FilePath))
+        throw new ScriptException("No data.win file loaded. Please load a game data file first.");
+
+    string dataWinDir = Path.GetDirectoryName(FilePath);
+    string pathsDir = Path.Combine(dataWinDir, "Objects", "Paths");
+    
+    if (Directory.Exists(pathsDir))
+        return pathsDir;
+
+    throw new ScriptException($"Paths directory not found at: {pathsDir}\nPlease specify InputDirectory or place paths in an 'Objects/Paths' folder next to data.win.");
 }
+
+
+
+
+EnsureDataLoaded();
+
+string pathsIn = ResolveInputDirectory();
+PrintLine($"[ImportPaths] Importing from: {pathsIn}");
 
 string[] pathFiles = Directory.GetFiles(pathsIn, "*.json");
 if (pathFiles.Length == 0)
