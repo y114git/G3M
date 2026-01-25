@@ -346,6 +346,8 @@ class LibraryDisplayController:
 
         Clears all selections and selects the clicked mod widget.
         """
+        target_widget = None
+        mod_data_key = get_mod_key(mod_data)
         for i in range(self.app.installed_mods_layout.count() - 1):
             try:
                 item = self.app.installed_mods_layout.itemAt(i)
@@ -353,13 +355,14 @@ class LibraryDisplayController:
                     widget = item.widget()
                     if isinstance(widget, InstalledModWidget):
                         widget_mod_key = get_mod_key(widget.mod_data)
-                        mod_data_key = get_mod_key(mod_data)
                         if widget_mod_key == mod_data_key:
-                            self.clear_all_selections()
-                            widget.set_selected(True)
+                            target_widget = widget
                             break
             except Exception:
                 continue
+        if target_widget:
+            self.clear_all_selections()
+            target_widget.set_selected(True)
 
     def on_mod_remove(self, mod_data):
         """Handle mod removal request.
@@ -558,6 +561,10 @@ class LibraryDisplayController:
             self.app.priority_button.setVisible(False)
             if hasattr(self.app, 'create_modpack_button'):
                 self.app.create_modpack_button.setVisible(False)
+            if hasattr(self.app, 'fast_merging_checkbox'):
+                self.app.fast_merging_checkbox.setVisible(False)
+            if hasattr(self.app, 'fast_merging_label'):
+                self.app.fast_merging_label.setVisible(False)
             if hasattr(self.app, 'library_tab_builder') and 'priority_button_layout' in self.app.library_tab_builder.widgets:
                 self.app.library_tab_builder.widgets['priority_button_layout'].setContentsMargins(0, 0, 0, 0)
             return
@@ -568,6 +575,10 @@ class LibraryDisplayController:
             self.app.priority_button.setVisible(True)
             if hasattr(self.app, 'create_modpack_button'):
                 self.app.create_modpack_button.setVisible(True)
+            if hasattr(self.app, 'fast_merging_checkbox'):
+                self.app.fast_merging_checkbox.setVisible(True)
+            if hasattr(self.app, 'fast_merging_label'):
+                self.app.fast_merging_label.setVisible(True)
             if hasattr(self.app, 'library_tab_builder'):
                 widgets = self.app.library_tab_builder.widgets
                 if 'priority_button_container' in widgets:
@@ -578,6 +589,10 @@ class LibraryDisplayController:
             self.app.priority_button.setVisible(False)
             if hasattr(self.app, 'create_modpack_button'):
                 self.app.create_modpack_button.setVisible(False)
+            if hasattr(self.app, 'fast_merging_checkbox'):
+                self.app.fast_merging_checkbox.setVisible(False)
+            if hasattr(self.app, 'fast_merging_label'):
+                self.app.fast_merging_label.setVisible(False)
             if hasattr(self.app, 'library_tab_builder'):
                 widgets = self.app.library_tab_builder.widgets
                 if 'priority_button_container' in widgets:

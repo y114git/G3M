@@ -315,7 +315,21 @@ class GameLauncher(QObject):
                 exe_name = get_executable_name_for_game(game_type) or 'DELTARUNE.exe'
                 target_exe = os.path.join(chapter_folder, exe_name)
             shutil.copy2(source_exe, target_exe)
-            self._direct_launch_cleanup_info = {'target_exe': target_exe, 'source_exe': source_exe, 'chapter_folder': chapter_folder, 'use_custom_exe': use_custom_exe}
+            game_root = self._get_current_game_path()
+            mus_folders_copied = []
+            if game_root and os.path.isdir(game_root):
+                for entry in os.listdir(game_root):
+                    entry_path = os.path.join(game_root, entry)
+                    if os.path.isdir(entry_path) and entry.startswith('mus'):
+                        target_mus_path = os.path.join(chapter_folder, entry)
+                        if not os.path.exists(target_mus_path):
+                            try:
+                                shutil.copytree(entry_path, target_mus_path)
+                                mus_folders_copied.append(target_mus_path)
+                                logging.info(f'[DIRECT_LAUNCH] Copied music folder: {entry} -> {target_mus_path}')
+                            except Exception as e:
+                                logging.warning(f'[DIRECT_LAUNCH] Failed to copy music folder {entry}: {e}')
+            self._direct_launch_cleanup_info = {'target_exe': target_exe, 'source_exe': source_exe, 'chapter_folder': chapter_folder, 'use_custom_exe': use_custom_exe, 'mus_folders': mus_folders_copied}
             return {'target': target_exe, 'cwd': chapter_folder, 'type': 'subprocess'}
         except PermissionError:
             self.status_changed.emit(tr('errors.permission_denied'), UI_COLORS['status_error'])
@@ -523,6 +537,17 @@ class GameLauncher(QObject):
                     restore_errors.append(error_msg)
             cleanup_info = self._direct_launch_cleanup_info
             if cleanup_info:
+                if 'mus_folders' in cleanup_info and cleanup_info['mus_folders']:
+                    for mus_folder_path in cleanup_info['mus_folders']:
+                        if os.path.exists(mus_folder_path) and os.path.isdir(mus_folder_path):
+                            try:
+                                logging.info(f'[CLEANUP] Removing copied music folder: {mus_folder_path}')
+                                shutil.rmtree(mus_folder_path)
+                                logging.info(f'[CLEANUP] Successfully removed music folder: {mus_folder_path}')
+                            except Exception as e:
+                                error_msg = f'Failed to remove music folder {mus_folder_path}: {e}'
+                                logging.error(f'[CLEANUP] {error_msg}', exc_info=True)
+                                restore_errors.append(error_msg)
                 if 'target_exe' in cleanup_info and os.path.exists(cleanup_info['target_exe']):
                     try:
                         logging.info(f"[CLEANUP] Removing direct launch executable: {cleanup_info['target_exe']}")

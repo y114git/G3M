@@ -161,6 +161,20 @@ class SettingsUiController:
             self.app.chapter_tabs_widget.setVisible(is_chapter)
         self.app_state.selected_chapter_id = None
         if is_chapter:
+            if hasattr(self.app, 'priority_button'):
+                self.app.priority_button.setVisible(False)
+            if hasattr(self.app, 'create_modpack_button'):
+                self.app.create_modpack_button.setVisible(False)
+            if hasattr(self.app, 'fast_merging_checkbox'):
+                self.app.fast_merging_checkbox.setVisible(False)
+            if hasattr(self.app, 'fast_merging_label'):
+                self.app.fast_merging_label.setVisible(False)
+            if hasattr(self.app, 'library_tab_builder'):
+                widgets = self.app.library_tab_builder.widgets
+                if 'priority_button_container' in widgets:
+                    widgets['priority_button_container'].setFixedHeight(0)
+                if 'priority_button_layout' in widgets:
+                    widgets['priority_button_layout'].setContentsMargins(0, 0, 0, 0)
             if hasattr(self.app, '_show_chapter_mode_instruction'):
                 self.app._show_chapter_mode_instruction()
         elif hasattr(self.app, 'library_display'):

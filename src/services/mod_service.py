@@ -1529,34 +1529,6 @@ class ModManager(QObject):
             mod_info['files'] = normalized_files
         return mod_models.ModInfo.from_dict(mod_info)
 
-    def fetch_mod_data_by_secret(self, secret_key: str) -> Tuple[Optional[dict], Optional[str], bool]:
-        from utils.crypto_utils import possible_secret_hashes
-        candidate_hashes = possible_secret_hashes(secret_key.strip())
-        mod_data: Optional[dict] = None
-        import requests
-        found_in_pending = False
-        found_hash: Optional[str] = None
-        for h in candidate_hashes:
-            try:
-                from utils.network_utils import get_session
-                session = get_session()
-                resp = session.get(f'{CLOUD_FUNCTIONS_BASE_URL}/getModData?modId={h}', timeout=10)
-                if resp.status_code == 200 and resp.json():
-                    mod_data = resp.json()
-                    found_hash = h
-                    break
-                resp = session.get(f'{CLOUD_FUNCTIONS_BASE_URL}/getPendingModData?modId={h}', timeout=10)
-                if resp.status_code == 200 and resp.json():
-                    mod_data = resp.json()
-                    found_hash = h
-                    found_in_pending = True
-                    break
-            except requests.RequestException:
-                raise
-        if mod_data and found_hash:
-            mod_data['key'] = found_hash
-        return (mod_data, found_hash, found_in_pending)
-
     def has_pending_changes(self, hashed_key: str) -> bool:
         import requests
         try:

@@ -112,17 +112,32 @@ class BaseModWidget(QFrame):
         if config:
             text_color = get_theme_color(config, 'text', 'white')
             if hasattr(self, 'name_label') and self.name_label:
-                self.name_label.setStyleSheet(f'font-size: 16px; font-weight: bold; color: {text_color};')
+                try:
+                    self.name_label.setStyleSheet(f'font-size: 16px; font-weight: bold; color: {text_color};')
+                except RuntimeError:
+                    pass
             if hasattr(self, 'author_label_title') and self.author_label_title:
-                self.author_label_title.setStyleSheet(f'color: {text_color};')
+                try:
+                    self.author_label_title.setStyleSheet(f'color: {text_color};')
+                except RuntimeError:
+                    pass
             if hasattr(self, 'category_label_title') and self.category_label_title:
-                self.category_label_title.setStyleSheet(f'color: {text_color};')
+                try:
+                    self.category_label_title.setStyleSheet(f'color: {text_color};')
+                except RuntimeError:
+                    pass
 
     def update_labels_text(self):
         if hasattr(self, 'author_label_title') and self.author_label_title:
-            self.author_label_title.setText(tr('ui.author_label'))
+            try:
+                self.author_label_title.setText(tr('ui.author_label'))
+            except RuntimeError:
+                pass
         if hasattr(self, 'category_label_title') and self.category_label_title:
-            self.category_label_title.setText(tr('ui.category_label'))
+            try:
+                self.category_label_title.setText(tr('ui.category_label'))
+            except RuntimeError:
+                pass
 
     def set_selected(self, selected):
         self.is_selected = selected
