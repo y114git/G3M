@@ -171,7 +171,6 @@ class ModInstallWorker(BaseInstallWorker):
             target_config_path = os.path.join(target_mod_dir, MOD_CONFIG_FILENAME)
             config_updated = False
             if self.gamebanana_metadata:
-                config_data['is_local_mod'] = False
                 if 'mod_id' in self.gamebanana_metadata:
                     mod_id = self.gamebanana_metadata['mod_id']
                     expected_mod_key = f'gb_{mod_id}'
@@ -204,8 +203,6 @@ class ModInstallWorker(BaseInstallWorker):
                         if tag and tag not in existing_tags:
                             existing_tags.append(tag)
                     config_data['tags'] = existing_tags
-            else:
-                config_data['is_local_mod'] = True
             game = config_data.get('game') or config_data.get('modgame', 'deltarune')
             if 'files' in config_data:
                 for chapter_key, chapter_data in config_data['files'].items():

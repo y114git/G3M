@@ -284,7 +284,7 @@ class CreateModpackThread(QThread):
                     files_data[chapter_key] = file_info
             key = f'local_{uuid.uuid4().hex[:12]}'
             detected_game = self._determine_primary_game_type(detected_games)
-            config_data = {'is_local_mod': True, 'key': key, 'name': self.modpack_name, 'author': tr('defaults.multiple_authors'), 'version': '1.0.0', 'tagline': tr('defaults.no_short_description'), 'game_version': tr('defaults.not_specified'), 'game': detected_game, 'files': files_data, 'tags': [], 'created_date': time.strftime('%d.%m.%y %H:%M'), 'is_available_on_server': False}
+            config_data = {'key': key, 'name': self.modpack_name, 'author': tr('defaults.multiple_authors'), 'version': '1.0.0', 'tagline': tr('defaults.no_short_description'), 'game_version': tr('defaults.not_specified'), 'game': detected_game, 'files': files_data, 'tags': [], 'created_date': time.strftime('%d.%m.%y %H:%M')}
             config_path = os.path.join(self.modpack_dir, 'mod_config.json')
             with open(config_path, 'w', encoding='utf-8') as f:
                 json.dump(config_data, f, indent=4, ensure_ascii=False)

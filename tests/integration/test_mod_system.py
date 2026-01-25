@@ -184,15 +184,15 @@ class TestModMetadata:
         assert isinstance(metadata, dict), "_read_metadata should return a dict, even if file doesn't exist"
         if not os.path.exists(app_state.mods_metadata_path):
             assert metadata == {}, 'Empty metadata should return empty dict'
-        test_metadata = {'test_mod_001': {'added_date': time.strftime('%Y-%m-%d %H:%M:%S'), 'is_available_on_server': True}, 'test_mod_002': {'added_date': '2024-01-01 00:00:00', 'is_available_on_server': False}}
+        test_metadata = {'test_mod_001': {'added_date': time.strftime('%Y-%m-%d %H:%M:%S'), 'is_gamebanana': True}, 'test_mod_002': {'added_date': '2024-01-01 00:00:00', 'is_gamebanana': False}}
         mod_service._write_metadata(test_metadata)
         assert os.path.exists(app_state.mods_metadata_path), 'Metadata file should be created after write'
         written_metadata = mod_service._read_metadata()
         assert isinstance(written_metadata, dict), 'Should read metadata as dict'
         assert 'test_mod_001' in written_metadata, 'Written mod should be in read metadata'
         assert 'test_mod_002' in written_metadata, 'All written mods should be in read metadata'
-        assert written_metadata['test_mod_001']['is_available_on_server'], 'Metadata values should be preserved'
-        assert written_metadata['test_mod_002']['is_available_on_server'] is False, 'All metadata values should be preserved'
+        assert written_metadata['test_mod_001']['is_gamebanana'], 'Metadata values should be preserved'
+        assert written_metadata['test_mod_002']['is_gamebanana'] is False, 'All metadata values should be preserved'
         assert written_metadata['test_mod_002']['added_date'] == '2024-01-01 00:00:00', 'Dates should be preserved'
         mod_service._write_metadata({})
 

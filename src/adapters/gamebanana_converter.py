@@ -146,7 +146,6 @@ class GameBananaConverter:
             if not isinstance(config_data, dict):
                 logger.warning(f'GameBananaConverter: Config data is not a dict at {config_path}')
                 return mod_dir
-            config_data['is_local_mod'] = False
             if self.gamebanana_metadata.get('mod_id'):
                 mod_id = str(self.gamebanana_metadata['mod_id'])
                 expected_mod_key = f'gb_{mod_id}'

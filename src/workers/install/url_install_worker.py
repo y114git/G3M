@@ -162,7 +162,6 @@ class UrlInstallThread(BaseInstallWorker):
                 shutil.copytree(src_path, dst_path)
             else:
                 shutil.copy2(src_path, dst_path)
-        config_data['is_local_mod'] = True
         target_config_path = os.path.join(target_mod_dir, MOD_CONFIG_FILENAME)
         try:
             with open(target_config_path, 'w', encoding='utf-8') as f:

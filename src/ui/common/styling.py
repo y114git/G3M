@@ -233,8 +233,9 @@ def load_mod_icon_universal(icon_label, mod_data, size=80):
             if os.path.isabs(icon_url):
                 local_icon_to_load = icon_url
             else:
-                is_local_mod = getattr(mod_data, 'is_local_mod', False)
-                if is_local_mod:
+                key = getattr(mod_data, 'key', None) or getattr(mod_data, 'mod_key', None)
+                is_local_key = key and isinstance(key, str) and key.startswith('local_')
+                if is_local_key:
                     mod_folder_path = None
                     try:
                         if hasattr(mod_data, 'folder_path'):

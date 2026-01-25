@@ -449,8 +449,9 @@ class UsedModsManager(QObject):
     def check_used_mods_need_updates(self) -> bool:
         for mods_list in self.used_mods.values():
             for mod_data in mods_list:
-                is_local_mod = getattr(mod_data, 'is_local_mod', False)
-                if is_local_mod:
+                key = getattr(mod_data, 'key', None) or getattr(mod_data, 'mod_key', None)
+                is_local_key = key and isinstance(key, str) and key.startswith('local_')
+                if is_local_key:
                     continue
                 if self.mod_service.mod_has_update_available(mod_data):
                     return True
@@ -469,7 +470,9 @@ class UsedModsManager(QObject):
         for chapter_id in active_chapter_ids:
             mods_list = self.used_mods.get(chapter_id, [])
             for mod_data in mods_list:
-                if getattr(mod_data, 'is_local_mod', False):
+                key = getattr(mod_data, 'key', None) or getattr(mod_data, 'mod_key', None)
+                is_local_key = key and isinstance(key, str) and key.startswith('local_')
+                if is_local_key:
                     continue
                 needs_update = self.mod_service.mod_has_update_available(mod_data)
                 if needs_update and mod_data not in mods_to_update:

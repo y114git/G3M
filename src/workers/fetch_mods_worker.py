@@ -198,9 +198,10 @@ class FetchModsThread(QThread):
                         existing_mods_with_files[key] = mod
             all_mods_filtered = []
             for mod in all_mods:
-                if hasattr(mod, 'is_local_mod') and mod.is_local_mod:
-                    continue
                 key = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
+                is_local_key = key and isinstance(key, str) and key.startswith('local_')
+                if is_local_key:
+                    continue
                 is_gamebanana_mod = key and key.startswith('gb_')
                 if is_gamebanana_mod and (key in existing_mods_with_files or key in installed_mods_with_files):
                     if key in existing_mods_with_files:
@@ -387,7 +388,9 @@ class FetchModsThread(QThread):
         app_state = getattr(self.main_window, 'app_state', None)
         if app_state and hasattr(app_state, 'all_mods'):
             for mod in app_state.all_mods:
-                if hasattr(mod, 'is_local_mod') and mod.is_local_mod:
+                key = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
+                is_local_key = key and isinstance(key, str) and key.startswith('local_')
+                if is_local_key:
                     local_mods.append(mod)
             logger.debug(f'_get_local_mods: Found {len(local_mods)} local mods in app_state')
         return local_mods
@@ -451,7 +454,8 @@ class FetchModsThread(QThread):
                     if not config_data:
                         continue
                     key = config_data.get('key') or config_data.get('mod_key')
-                    if not key or config_data.get('is_local_mod', False):
+                    is_local_key = key and isinstance(key, str) and key.startswith('local_')
+                    if not key or is_local_key:
                         continue
                     is_available_now = key in remote_mod_keys
                     mod_meta = mods_metadata.get(key, {})

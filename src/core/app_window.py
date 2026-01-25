@@ -632,7 +632,7 @@ class AppWindow(QWidget):
         self.library_tag_customization = library_widgets['library_tag_customization']
         self.library_tag_gameplay = library_widgets['library_tag_gameplay']
         self.library_tag_other = library_widgets['library_tag_other']
-        self.library_tag_local = library_widgets['library_tag_local']
+        self.library_tag_gamebanana = library_widgets['library_tag_gamebanana']
         self.library_tag_widgets = library_widgets['library_tag_widgets']
         self.library_search_button = library_widgets['library_search_button']
         if self.import_export_button:
@@ -1581,8 +1581,8 @@ class AppWindow(QWidget):
             self.library_tag_gameplay.setText(tr('tags.gameplay'))
         if hasattr(self, 'library_tag_other') and self.library_tag_other:
             self.library_tag_other.setText(tr('tags.other'))
-        if hasattr(self, 'library_tag_local') and self.library_tag_local:
-            self.library_tag_local.setText(tr('tags.local'))
+        if hasattr(self, 'library_tag_gamebanana') and self.library_tag_gamebanana:
+            self.library_tag_gamebanana.setText(tr('ui.only_gamebanana'))
         if hasattr(self, 'library_search_button') and self.library_search_button:
             self.library_search_button.setToolTip(tr('ui.search_placeholder'))
         if hasattr(self, 'chapter_tab_buttons') and self.chapter_tab_buttons:

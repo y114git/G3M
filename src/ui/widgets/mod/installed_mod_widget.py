@@ -1,7 +1,8 @@
 import os
 from PyQt6.QtCore import pyqtSignal, Qt, QUrl
-from PyQt6.QtGui import QDesktopServices
+from PyQt6.QtGui import QDesktopServices, QPixmap
 from PyQt6.QtWidgets import QLabel, QPushButton, QHBoxLayout, QVBoxLayout, QFrame, QWidget
+from utils.path_utils import resource_path
 from .base_mod_widget import BaseModWidget
 from services.localization_service import tr
 from ui.common.styling import get_theme_color
@@ -12,18 +13,13 @@ class InstalledModWidget(BaseModWidget):
     remove_requested = pyqtSignal(object)
     use_requested = pyqtSignal(object)
 
-    def __init__(self, mod_data, is_local=False, is_available=True, has_update=False, parent=None, installed_date=None):
+    def __init__(self, mod_data, parent=None, installed_date=None):
         super().__init__(mod_data, parent)
         self.hide()
         self.use_button = None
-        self.is_local = is_local
-        self.is_available = is_available
         self.added_date = installed_date
-        self.has_update = has_update
         self.is_in_slot = False
         self.status = 'ready'
-        if has_update:
-            self.status = 'needs_update'
         self.frame_selector = 'installedMod'
         self.setObjectName('installedMod')
         self.setFrameShape(QFrame.Shape.StyledPanel)
@@ -33,6 +29,10 @@ class InstalledModWidget(BaseModWidget):
 
     def _init_ui(self):
         super()._init_ui()
+        if hasattr(self, 'category_container') and self.category_container:
+            self.category_container.setParent(None)
+            self.category_container.deleteLater()
+            self.category_container = None
         self.title_layout.takeAt(self.title_layout.count() - 1)
         self.status_indicator = QLabel('●', self)
         self.status_indicator.setFixedSize(16, 16)
@@ -52,7 +52,18 @@ class InstalledModWidget(BaseModWidget):
         added_label_value.setObjectName('secondaryText')
         installed_container_layout.addWidget(self.added_label_title)
         installed_container_layout.addWidget(added_label_value)
-        containers = [self.author_container, self.category_container, installed_container]
+        game_version_text = getattr(self.mod_data, 'game_version', None) or tr('defaults.not_specified')
+        game_version_container = QWidget(self)
+        game_version_container_layout = QHBoxLayout(game_version_container)
+        game_version_container_layout.setContentsMargins(0, 0, 0, 0)
+        game_version_container_layout.setSpacing(0)
+        self.game_version_label_title = QLabel(tr('ui.game_version_label'), game_version_container)
+        self.game_version_label_title.setObjectName('primaryText')
+        game_version_label_value = QLabel(f' {game_version_text}', game_version_container)
+        game_version_label_value.setObjectName('secondaryText')
+        game_version_container_layout.addWidget(self.game_version_label_title)
+        game_version_container_layout.addWidget(game_version_label_value)
+        containers = [self.author_container, game_version_container, installed_container]
         for i, container in enumerate(containers):
             self.metadata_layout.addWidget(container)
             if i < len(containers) - 1:
@@ -93,52 +104,99 @@ class InstalledModWidget(BaseModWidget):
             text_color = get_theme_color(config, 'text', 'white')
             if hasattr(self, 'added_label_title') and self.added_label_title:
                 self.added_label_title.setStyleSheet(f'color: {text_color};')
+            if hasattr(self, 'game_version_label_title') and self.game_version_label_title:
+                self.game_version_label_title.setStyleSheet(f'color: {text_color};')
 
     def _update_indicator(self):
-        style = 'font-size: 14px; font-weight: bold; margin-left: 5px;'
-        if self.is_local:
-            self.status_indicator.setStyleSheet(f'color: #FFD700; {style}')
-            self.status_indicator.setToolTip(tr('defaults.local_mod'))
-            return
-        has_update_now = False
-        try:
-            has_update_now = self.has_update or self._mod_needs_update()
-        except Exception:
-            has_update_now = self.has_update
-        if self.is_available and has_update_now:
-            self.status_indicator.setStyleSheet(f'color: #FFA500; {style}')
-            self.status_indicator.setToolTip(tr('tooltips.public_mod_update_available'))
-        elif self.is_available:
-            self.status_indicator.setStyleSheet(f'color: #4CAF50; {style}')
-            self.status_indicator.setToolTip(tr('tooltips.public_mod_available'))
-        else:
-            self.status_indicator.setStyleSheet(f'color: #F44336; {style}')
-            self.status_indicator.setToolTip(tr('tooltips.public_mod_unavailable'))
+        """Update status indicator based on mod integrity and GameBanana linkage.
 
-    def _mod_needs_update(self):
-        if not self.parent_app or self.is_local:
+        3-state system:
+        - GREEN dot: Mod is valid and complete
+        - GB icon: GameBanana linked mod (gb_ key)
+        - RED dot: Mod is broken/incomplete
+        """
+        style = 'font-size: 14px; font-weight: bold; margin-left: 5px;'
+
+        if self._is_mod_broken():
+            self.status_indicator.setStyleSheet(f'color: #F44336; {style}')
+            self.status_indicator.setToolTip(tr('tooltips.mod_broken'))
+            return
+
+        if self._is_gamebanana_linked():
+            gb_icon_path = resource_path('assets/icons/gbicon.png')
+            if os.path.exists(gb_icon_path):
+                pixmap = QPixmap(gb_icon_path).scaled(14, 14, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                self.status_indicator.setPixmap(pixmap)
+                self.status_indicator.setText('')
+            else:
+                self.status_indicator.setStyleSheet(f'color: #FFD700; {style}')
+            self.status_indicator.setToolTip(tr('tooltips.gamebanana_linked'))
+            return
+
+        self.status_indicator.setStyleSheet(f'color: #4CAF50; {style}')
+        self.status_indicator.setToolTip(tr('tooltips.mod_valid'))
+
+    def _is_mod_broken(self) -> bool:
+        """Check if mod config is corrupted or files are missing."""
+        try:
+            if not self.mod_data:
+                return True
+            key = get_mod_key(self.mod_data)
+            if not key:
+                return True
+            if not self.parent_app or not hasattr(self.parent_app, 'mod_service'):
+                return False
+            mod_folder = self.parent_app.mod_service.get_mod_folder_path(key)
+            if not mod_folder or not os.path.exists(mod_folder):
+                return True
+            files = getattr(self.mod_data, 'files', None)
+            if not files or not isinstance(files, dict):
+                return True
+            from utils.file_utils import get_chapter_folder_name
+            for chapter_key, chapter_data in files.items():
+                if chapter_data is None:
+                    continue
+                if isinstance(chapter_data, dict):
+                    data_file = chapter_data.get('data_file_url')
+                else:
+                    data_file = getattr(chapter_data, 'data_file_url', None)
+                if not data_file:
+                    continue
+                if chapter_key in ['demo', 'undertale', 'undertaleyellow', 'pizzatower', 'sugaryspire']:
+                    chapter_folder = os.path.join(mod_folder, chapter_key)
+                else:
+                    try:
+                        chapter_id = int(chapter_key)
+                        chapter_folder = os.path.join(mod_folder, get_chapter_folder_name(chapter_id))
+                    except (ValueError, TypeError):
+                        chapter_folder = os.path.join(mod_folder, chapter_key)
+                data_file_path = os.path.join(chapter_folder, data_file)
+                if not os.path.exists(data_file_path):
+                    return True
             return False
-        return self.parent_app.mod_service.mod_has_update_available(self.mod_data)
+        except Exception:
+            return True
+
+    def _is_gamebanana_linked(self) -> bool:
+        """Check if mod is linked to GameBanana via gb_ key."""
+        key = get_mod_key(self.mod_data)
+        if not key:
+            return False
+        return isinstance(key, str) and key.startswith('gb_')
 
     def _update_button_from_status(self):
         if not self.use_button:
             return
         if self.status == 'in_slot':
             self.use_button.setText(tr('ui.remove_button'))
-        elif self.status == 'needs_update':
-            self.use_button.setText(tr('ui.update_button'))
-        else:
-            self.use_button.setText(tr('ui.use_button'))
-        if self.status in ('in_slot', 'needs_update'):
             self.use_button.setStyleSheet('\n                QPushButton#plaqueButtonInstall {\n                    background-color: #FF9800;\n                    font-weight: bold;\n                }\n                QPushButton#plaqueButtonInstall:hover {\n                    background-color: #F57C00;\n                }\n            ')
         else:
+            self.use_button.setText(tr('ui.use_button'))
             self.use_button.setStyleSheet('\n                QPushButton#plaqueButtonInstall {\n                    background-color: #4CAF50;\n                    font-weight: bold;\n                }\n                QPushButton#plaqueButtonInstall:hover {\n                    background-color: #5cb85c;\n                }\n            ')
 
     def _sync_status(self):
         if self.is_in_slot:
             self.status = 'in_slot'
-        elif self._mod_needs_update():
-            self.status = 'needs_update'
         else:
             self.status = 'ready'
         self._update_button_from_status()

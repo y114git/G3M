@@ -730,7 +730,8 @@ class ModManager(QObject):
             logging.debug(f'load_local_mods: Updated {updated_count} existing GameBanana mods in all_mods')
             existing_keys = {getattr(mod, 'key', None) or getattr(mod, 'mod_key', None) for mod in self.app_state.all_mods}
             for key, config_data in list(installed_mods.items()):
-                if config_data.get('is_local_mod'):
+                is_local_key = key and isinstance(key, str) and key.startswith('local_')
+                if is_local_key:
                     continue
                 if key and key.startswith('gb_'):
                     gb_id_str = key.replace('gb_', '', 1)
@@ -812,7 +813,7 @@ class ModManager(QObject):
                     tags = config_data.get('tags', [])
                     if not isinstance(tags, list):
                         tags = [tags] if tags else []
-                    safe_mod_info = {'key': key, 'name': config_data.get('name', 'Installed Mod'), 'version': config_data.get('version', '1.0.0'), 'author': config_data.get('author', tr('defaults.unknown')), 'tagline': config_data.get('tagline', tr('defaults.no_description')), 'game_version': config_data.get('game_version', tr('defaults.not_specified')), 'description_url': '', 'downloads': 0, 'game': config_data.get('game') or config_data.get('modgame', 'deltarune'), 'is_verified': False, 'icon_url': icon_url, 'tags': tags, 'hide_mod': False, 'is_local_mod': False, 'ban_status': False, 'demo_url': None, 'demo_version': '1.0.0', 'created_date': config_data.get('created_date', 'N/A'), 'last_updated': config_data.get('created_date', 'N/A'), 'external_url': config_data.get('external_url')}
+                    safe_mod_info = {'key': key, 'name': config_data.get('name', 'Installed Mod'), 'version': config_data.get('version', '1.0.0'), 'author': config_data.get('author', tr('defaults.unknown')), 'tagline': config_data.get('tagline', tr('defaults.no_description')), 'game_version': config_data.get('game_version', tr('defaults.not_specified')), 'description_url': '', 'downloads': 0, 'game': config_data.get('game') or config_data.get('modgame', 'deltarune'), 'is_verified': False, 'icon_url': icon_url, 'tags': tags, 'hide_mod': False, 'ban_status': False, 'demo_url': None, 'demo_version': '1.0.0', 'created_date': config_data.get('created_date', 'N/A'), 'last_updated': config_data.get('created_date', 'N/A'), 'external_url': config_data.get('external_url')}
                     mod = mod_models.ModInfo(**safe_mod_info)
                     files_data = config_data.get('files', {})
                     if not isinstance(files_data, dict):
@@ -858,9 +859,6 @@ class ModManager(QObject):
                     logging.warning(f'Failed to create ModInfo for installed mod {key}: {e}', exc_info=True)
             all_mods_filtered = []
             for mod in self.app_state.all_mods:
-                if hasattr(mod, 'is_local_mod') and mod.is_local_mod:
-                    if hasattr(mod, 'tags') and 'local' in mod.tags:
-                        continue
                 all_mods_filtered.append(mod)
             self.app_state.all_mods = all_mods_filtered
             existing_gamebanana_ids = set()
@@ -878,7 +876,8 @@ class ModManager(QObject):
                         if gb_id_str in existing_gamebanana_ids:
                             continue
                     continue
-                if not config_data.get('is_local_mod'):
+                is_local_key = key and isinstance(key, str) and key.startswith('local_')
+                if not is_local_key:
                     continue
                 if key in existing_keys:
                     logging.debug(f'load_local_mods: Skipping local mod {key} - already in all_mods')
@@ -903,7 +902,7 @@ class ModManager(QObject):
                         resolved_icon = resolve_mod_icon(config_data, mod_folder_for_icon)
                         if resolved_icon:
                             icon_url = resolved_icon
-                    safe_mod_info = {'key': key, 'name': config_data.get('name', tr('defaults.local_mod')), 'version': config_data.get('version', '1.0.0'), 'author': config_data.get('author', tr('defaults.unknown')), 'tagline': config_data.get('tagline', tr('defaults.no_description')), 'game_version': config_data.get('game_version', tr('defaults.not_specified')), 'description_url': '', 'downloads': 0, 'game': config_data.get('game') or config_data.get('modgame', 'deltarune'), 'is_verified': False, 'icon_url': icon_url, 'tags': ['local'], 'hide_mod': False, 'is_local_mod': config_data.get('is_local_mod', True), 'ban_status': False, 'demo_url': None, 'demo_version': '1.0.0', 'created_date': config_data.get('created_date', 'N/A'), 'last_updated': config_data.get('created_date', 'N/A'), 'external_url': config_data.get('external_url')}
+                    safe_mod_info = {'key': key, 'name': config_data.get('name', tr('defaults.local_mod')), 'version': config_data.get('version', '1.0.0'), 'author': config_data.get('author', tr('defaults.unknown')), 'tagline': config_data.get('tagline', tr('defaults.no_description')), 'game_version': config_data.get('game_version', tr('defaults.not_specified')), 'description_url': '', 'downloads': 0, 'game': config_data.get('game') or config_data.get('modgame', 'deltarune'), 'is_verified': False, 'icon_url': icon_url, 'tags': ['local'], 'hide_mod': False, 'ban_status': False, 'demo_url': None, 'demo_version': '1.0.0', 'created_date': config_data.get('created_date', 'N/A'), 'last_updated': config_data.get('created_date', 'N/A'), 'external_url': config_data.get('external_url')}
                     mod = mod_models.ModInfo(**safe_mod_info)
                     files_data = config_data.get('files', {})
                     if not isinstance(files_data, dict):
@@ -1327,8 +1326,6 @@ class ModManager(QObject):
             raise
 
     def get_mod_status(self, mod: mod_models.ModInfo, chapter_id: int) -> str:
-        if mod.is_local_mod:
-            return 'ready'
         if mod.is_gamebanana_mod():
             return 'ready'
 
@@ -1604,8 +1601,7 @@ class ModManager(QObject):
                 config_data = load_json(config_path, migrate_config=True)
                 if config_data:
                     key = config_data.get('key') or config_data.get('mod_key', '')
-                    is_local_mod = config_data.get('is_local_mod', False)
-                    is_local = is_local_mod or (key and isinstance(key, str) and key.startswith('local_'))
+                    is_local = key and isinstance(key, str) and key.startswith('local_')
                     if is_local:
                         local_mods.append({'key': key, 'name': config_data.get('name', 'Unknown mod'), 'data': config_data, 'folder_path': folder_path})
             except Exception as e:
@@ -1675,7 +1671,8 @@ class ModManager(QObject):
             found_mod_keys.add(key)
             mod_meta = mods_metadata.get(key)
             if not mod_meta:
-                mods_metadata[key] = {'added_date': time.strftime('%Y-%m-%d %H:%M:%S'), 'is_available_on_server': not config_data.get('is_local_mod', False)}
+                is_gamebanana = key and isinstance(key, str) and key.startswith('gb_')
+                mods_metadata[key] = {'added_date': time.strftime('%Y-%m-%d %H:%M:%S'), 'is_gamebanana': is_gamebanana}
                 metadata_updated = True
                 mod_meta = mods_metadata[key]
             cfg = dict(config_data)
@@ -1686,8 +1683,6 @@ class ModManager(QObject):
             if 'key' not in cfg and 'mod_key' in cfg:
                 cfg['key'] = cfg.pop('mod_key')
             cfg['added_date'] = mod_meta.get('added_date')
-            cfg['is_available_on_server'] = mod_meta.get('is_available_on_server', False)
-            cfg['is_local_mod'] = cfg.get('is_local_mod', False)
             cfg['folder_name'] = folder_name
             installed_mods.append(cfg)
         if cache_snapshot is not None:

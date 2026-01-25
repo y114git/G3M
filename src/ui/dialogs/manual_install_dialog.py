@@ -658,11 +658,9 @@ class ManualModInstallDialog(QDialog):
             raise ValueError('app_state or mod_service not available')
         if self.gamebanana_metadata.get('mod_id'):
             mod_key = f"gb_{self.gamebanana_metadata['mod_id']}"
-            is_local_mod = False
         else:
             import time
             mod_key = f'local_manual_{int(time.time())}'
-            is_local_mod = True
         if self.gamebanana_metadata.get('name'):
             mod_name = self.gamebanana_metadata['name']
         elif self.source_file_path:
@@ -853,7 +851,7 @@ class ManualModInstallDialog(QDialog):
                 logging.error(f'Failed to create extra_file archive {archive_path}: {e}', exc_info=True)
                 raise
             files_structure[chapter_key]['extra_files'][archive_key].append(archive_name)
-        config_data = {'key': mod_key, 'name': mod_name, 'game': game, 'is_local_mod': is_local_mod, 'files': files_structure}
+        config_data = {'key': mod_key, 'name': mod_name, 'game': game, 'files': files_structure}
         if self.gamebanana_metadata:
             if self.gamebanana_metadata.get('author'):
                 config_data['author'] = self.gamebanana_metadata['author']

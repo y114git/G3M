@@ -393,7 +393,7 @@ class InstallModsThread(QThread):
                         else:
                             file_key = str(chapter_id)
                         files_data[file_key] = file_info
-                config_data = {'is_local_mod': False, 'key': mod.key, 'name': mod.name, 'author': mod.author, 'version': mod.version, 'game_version': mod.game_version, 'game': mod.game, 'files': files_data, 'tags': mod.tags}
+                config_data = {'key': mod.key, 'name': mod.name, 'author': mod.author, 'version': mod.version, 'game_version': mod.game_version, 'game': mod.game, 'files': files_data, 'tags': mod.tags}
                 if hasattr(mod, 'icon_url') and mod.icon_url:
                     config_data['icon_url'] = mod.icon_url
                 mod_configs[mod.key] = {'folder_name': mod_folder_name, 'config': config_data}

@@ -252,7 +252,6 @@ class InstallGameBananaModThread(BaseInstallWorker):
                     shutil.copytree(src_path, dst_path)
                 else:
                     shutil.copy2(src_path, dst_path)
-            config_data['is_local_mod'] = False
             if not config_data.get('external_url') and self.mod_info.external_url:
                 config_data['external_url'] = self.mod_info.external_url
             if self.mod_info.icon_url:

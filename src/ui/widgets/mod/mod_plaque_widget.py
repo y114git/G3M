@@ -161,10 +161,6 @@ class ModPlaqueWidget(BaseModWidget):
             tags_layout.addWidget(verified_label)
         key = getattr(self.mod_data, 'key', None) or getattr(self.mod_data, 'mod_key', None)
         if key and key.startswith('gb_'):
-            gb_label = QLabel('GameBanana 🍌', self)
-            gb_label.setStyleSheet('color: yellow; font-size: 14px;')
-            gb_label.setToolTip(tr('ui.gamebanana_mod_tooltip'))
-            tags_layout.addWidget(gb_label)
             self.gb_status_label = QLabel(self)
             self.gb_status_label.setObjectName('gbStatusLabel')
             tags_layout.addWidget(self.gb_status_label)

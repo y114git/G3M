@@ -207,10 +207,10 @@ class LibraryTabBuilder:
         library_tag_customization = QCheckBox(tr('tags.customization'))
         library_tag_gameplay = QCheckBox(tr('tags.gameplay'))
         library_tag_other = QCheckBox(tr('tags.other'))
-        library_tag_local = QCheckBox(tr('tags.local'))
+        library_tag_gamebanana = QCheckBox(tr('ui.only_gamebanana'))
         text_color = get_theme_color(self.app_state.local_config, 'text', 'white')
         tag_style = build_tag_checkbox_style(text_color)
-        library_tag_widgets = [library_tag_textedit, library_tag_customization, library_tag_gameplay, library_tag_other, library_tag_local]
+        library_tag_widgets = [library_tag_textedit, library_tag_customization, library_tag_gameplay, library_tag_other, library_tag_gamebanana]
         for tag in library_tag_widgets:
             tag.setStyleSheet(tag_style)
             filters_layout.addWidget(tag)
@@ -228,7 +228,7 @@ class LibraryTabBuilder:
         self.widgets['library_tag_customization'] = library_tag_customization
         self.widgets['library_tag_gameplay'] = library_tag_gameplay
         self.widgets['library_tag_other'] = library_tag_other
-        self.widgets['library_tag_local'] = library_tag_local
+        self.widgets['library_tag_gamebanana'] = library_tag_gamebanana
         self.widgets['library_tag_widgets'] = library_tag_widgets
         self.widgets['library_search_button'] = library_search_button
         return filters_widget

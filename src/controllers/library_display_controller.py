@@ -43,26 +43,6 @@ class LibraryDisplayController:
             self.app._show_chapter_mode_instruction()
             self.app.installed_mods_container.setUpdatesEnabled(True)
 
-    def _get_mod_availability(self, mod_data, mod_info):
-        """Determine if a mod is local and available on the server.
-
-        Args:
-            mod_data: Mod data object.
-            mod_info: Mod information dictionary.
-
-        Returns:
-            tuple: (is_local, is_available) boolean flags.
-        """
-        is_local = getattr(mod_data, 'is_local_mod', False) or mod_data.is_local
-        is_available = not is_local
-        if not is_available and hasattr(self.app_state, 'all_mods') and self.app_state.all_mods:
-            key = mod_info.get('key') or mod_info.get('mod_key', '')
-            if key and key.startswith('gb_'):
-                is_available = any((mod for mod in self.app_state.all_mods if (getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)) == key))
-            if not is_available:
-                is_available = mod_info.get('is_available_on_server', False)
-        return (is_local, is_available)
-
     def update_display(self):
         """Update the library display based on current mode and filters."""
         if not hasattr(self.app, 'installed_mods_layout'):
@@ -80,16 +60,19 @@ class LibraryDisplayController:
             tuple: (filters dict, sort_config dict or None).
         """
         selected_tags = []
+        only_gamebanana = False
         if hasattr(self.app, 'library_tag_widgets'):
-            tag_map = {self.app.library_tag_textedit: 'textedit', self.app.library_tag_customization: 'customization', self.app.library_tag_gameplay: 'gameplay', self.app.library_tag_other: 'other', self.app.library_tag_local: 'local'}
+            tag_map = {self.app.library_tag_textedit: 'textedit', self.app.library_tag_customization: 'customization', self.app.library_tag_gameplay: 'gameplay', self.app.library_tag_other: 'other'}
             for checkbox, tag in tag_map.items():
                 if checkbox.isChecked():
                     selected_tags.append(tag)
+            if hasattr(self.app, 'library_tag_gamebanana') and self.app.library_tag_gamebanana.isChecked():
+                only_gamebanana = True
         search_text = getattr(self.app, 'library_search_text', '').lower()
         current_game_type = 'deltarune'
         if hasattr(self.app, 'game_type_combo'):
             current_game_type = self.app.game_type_combo.currentData() or 'deltarune'
-        filters = {'tags': selected_tags, 'game': current_game_type, 'search_text': search_text, 'hide_banned': False, 'hide_local': False, 'show_only_local': False, 'status_filter': ['approved', 'pending', 'unknown']}
+        filters = {'tags': selected_tags, 'game': current_game_type, 'search_text': search_text, 'hide_banned': False, 'only_gamebanana': only_gamebanana, 'status_filter': ['approved', 'pending', 'unknown']}
         sort_config = None
         if hasattr(self.app, 'library_sort_combo'):
             sort_type = self.app.library_sort_combo.currentIndex()
@@ -126,10 +109,9 @@ class LibraryDisplayController:
             mod_data = self.mod_service.create_mod_object_from_info(mod_info, getattr(self.app_state, 'all_mods', None))
             if not mod_data or not self.mod_service.mod_has_files_for_chapter(mod_data, selected_chapter_id):
                 continue
-            is_local, is_available = self._get_mod_availability(mod_data, mod_info)
             if mod_data:
                 added_date = mod_info.get('added_date')
-                mod_widget = InstalledModWidget(mod_data, is_local, is_available, parent=self.app, installed_date=added_date)
+                mod_widget = InstalledModWidget(mod_data, parent=self.app, installed_date=added_date)
                 mod_widget.clicked.connect(self.on_mod_clicked)
                 mod_widget.remove_requested.connect(self.on_mod_remove)
                 mod_widget.use_requested.connect(lambda mod_data=mod_data: self._handle_mod_use(mod_data, selected_chapter_id))
@@ -251,15 +233,8 @@ class LibraryDisplayController:
                         mod_data = self.mod_service.create_mod_object_from_info(mod_info, getattr(self.app_state, 'all_mods', None))
                         if not mod_data:
                             continue
-                        is_local, is_available = self._get_mod_availability(mod_data, mod_info)
-                        has_update = False
-                        if not is_local and is_available and hasattr(self.app_state, 'all_mods') and self.app_state.all_mods:
-                            mod_key_attr = getattr(mod_data, 'key', None) or getattr(mod_data, 'mod_key', None)
-                            public_mod = next((mod for mod in self.app_state.all_mods if (getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)) == mod_key_attr), None)
-                            if public_mod:
-                                has_update = any((self.mod_service.mod_has_files_for_chapter(public_mod, i) and self.mod_service.get_mod_status(public_mod, i) == 'update' for i in range(5)))
                         added_date = mod_info.get('added_date')
-                        mod_widget = InstalledModWidget(mod_data, is_local, is_available, has_update, parent=self.app, installed_date=added_date)
+                        mod_widget = InstalledModWidget(mod_data, parent=self.app, installed_date=added_date)
                         mod_widget.clicked.connect(self.on_mod_clicked)
                         mod_widget.remove_requested.connect(self.on_mod_remove)
                         mod_widget.use_requested.connect(self.on_mod_use)
@@ -490,10 +465,6 @@ class LibraryDisplayController:
                         if widget_mod_key == current_mod_key:
                             mod_widget = widget
                             break
-        status = getattr(mod_widget, 'status', 'ready') if mod_widget else 'ready'
-        if status == 'needs_update':
-            self.mod_service.update_mod(mod_data)
-            return
         self.slot_service.set_used_mod(chapter_id, mod_data)
         self.update_mod_widgets_slot_status()
         self._update_priority_button_visibility(chapter_id)

@@ -58,7 +58,7 @@ def _date_tuple_to_sortable(date_tuple) -> int:
         return 0
 
 
-def filter_and_sort_mods(mods_list: List[Any], filters: Dict[str, Any], sort_config: Optional[Dict[str, Any]] = None, mod_accessor: Optional[Callable] = None, blocklist_service: Optional[BlocklistManager] = None) -> List[Any]:
+def filter_and_sort_mods(mods_list: List[Any], filters: Dict[str, Any], sort_config: Optional[Dict[str, Any]] = None, mod_accessor: Optional[Callable] = None, blocklist_service: Optional[BlocklistManager] = None, installed_mod_keys: Optional[set] = None) -> List[Any]:
     """Filter and sort a list of mods based on criteria.
 
     Args:
@@ -67,6 +67,7 @@ def filter_and_sort_mods(mods_list: List[Any], filters: Dict[str, Any], sort_con
         sort_config: Optional sorting configuration (sort_type, reverse).
         mod_accessor: Optional function to extract mod from list items.
         blocklist_service: Optional blocklist manager for filtering.
+        installed_mod_keys: Optional set of installed mod keys to exclude from results.
 
     Returns:
         List[Any]: Filtered and sorted list of mods.
@@ -77,26 +78,25 @@ def filter_and_sort_mods(mods_list: List[Any], filters: Dict[str, Any], sort_con
     selected_game = filters.get('game') or filters.get('modgame', '')
     search_text = filters.get('search_text', '')
     hide_banned = filters.get('hide_banned', True)
-    hide_local = filters.get('hide_local', False)
-    show_only_local = filters.get('show_only_local', False)
+    only_gamebanana = filters.get('only_gamebanana', False)
     status_filter = filters.get('status_filter', ['approved', 'pending'])
+    exclude_installed = filters.get('exclude_installed', False)
     filtered_list = []
     for item in mods_list:
         mod = mod_accessor(item) if mod_accessor else item
         if hide_banned and _get_mod_bool_attr(mod, 'ban_status'):
             continue
         if isinstance(mod, dict):
-            if hide_local and _get_mod_attr(mod, 'is_local_mod', False):
-                continue
-            if show_only_local and (not _get_mod_attr(mod, 'is_local_mod', False)):
-                continue
+            pass
         else:
             if _get_mod_bool_attr(mod, 'hide_mod'):
                 continue
-            if hide_local and _get_mod_attr(mod, 'is_local_mod', False):
-                continue
-            if show_only_local and (not _get_mod_attr(mod, 'is_local_mod', False)):
-                continue
+        key = _get_mod_attr(mod, 'key', None) or _get_mod_attr(mod, 'mod_key', None)
+        is_gamebanana_mod = bool(key and isinstance(key, str) and key.startswith('gb_'))
+        if only_gamebanana and not is_gamebanana_mod:
+            continue
+        if exclude_installed and installed_mod_keys and key and key in installed_mod_keys:
+            continue
         mod_status = _get_mod_attr(mod, 'status', 'approved')
         if mod_status not in status_filter:
             continue
@@ -107,9 +107,6 @@ def filter_and_sort_mods(mods_list: List[Any], filters: Dict[str, Any], sort_con
             mod_tags = _get_mod_attr(mod, 'tags', []) or []
             if not isinstance(mod_tags, list):
                 mod_tags = []
-            if isinstance(mod, dict) and _get_mod_attr(mod, 'is_local_mod') and ('local' not in mod_tags):
-                mod_tags = mod_tags.copy() if isinstance(mod_tags, list) else []
-                mod_tags.append('local')
             key = _get_mod_attr(mod, 'key', None) or _get_mod_attr(mod, 'mod_key', None)
             is_gamebanana_mod = bool(key and isinstance(key, str) and key.startswith('gb_'))
             if is_gamebanana_mod:

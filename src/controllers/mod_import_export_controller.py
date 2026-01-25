@@ -134,7 +134,6 @@ class ModImportExportController:
                         config['key'] = key
                         if 'mod_key' in config:
                             del config['mod_key']
-                        config['is_local_mod'] = True
                         save_json(config_path_to_read, config, indent=2)
                         mod_key_generated = True
                         logging.info(f'[IMPORT] Generated key: {key}')

@@ -111,6 +111,24 @@ class SearchDisplayController(QObject):
                 logger.warning(f'SearchDisplayController: Failed to initialize metadata cache: {e}', exc_info=True)
         return None
 
+    def _get_installed_mod_keys(self) -> set:
+        """Get set of installed mod keys for filtering.
+
+        Returns:
+            Set of mod keys that are installed in the library.
+        """
+        installed_keys = set()
+        try:
+            if hasattr(self, 'mod_service') and self.mod_service:
+                installed_mods = self.mod_service.get_installed_mods_list()
+                for mod_info in installed_mods:
+                    key = mod_info.get('key') or mod_info.get('mod_key')
+                    if key:
+                        installed_keys.add(key)
+        except Exception as e:
+            logger.warning(f'SearchDisplayController: Error getting installed mod keys: {e}', exc_info=True)
+        return installed_keys
+
     def _cleanup_load_thread(self, thread):
         """Clean up a load more thread.
 
@@ -549,7 +567,7 @@ class SearchDisplayController(QObject):
         selected_game = 'deltarune'
         if hasattr(self.app, 'modgame_combo'):
             selected_game = self.app.modgame_combo.currentData() or 'deltarune'
-        filters = {'tags': selected_tags, 'game': selected_game, 'search_text': self.app_state.search_text, 'hide_banned': True, 'hide_local': True, 'hide_mods_without_files': hide_mods_without_files, 'status_filter': ['approved', 'pending']}
+        filters = {'tags': selected_tags, 'game': selected_game, 'search_text': self.app_state.search_text, 'hide_banned': True, 'hide_local': True, 'hide_mods_without_files': hide_mods_without_files, 'status_filter': ['approved', 'pending'], 'exclude_installed': True}
         sort_config = None
         if hasattr(self.app, 'sort_combo'):
             sort_type = self.app.sort_combo.currentIndex()
@@ -574,13 +592,14 @@ class SearchDisplayController(QObject):
                 self._check_installed_mods_for_metadata()
                 self._checked_installed_mods_metadata = True
             filters, sort_config = self._build_filters_and_sort()
+            installed_keys = self._get_installed_mod_keys()
             total_mods_count = len(self.app_state.all_mods) if self.app_state.all_mods else 0
             use_async = total_mods_count > 1000
             if use_async:
 
                 def async_filter():
                     try:
-                        filtered_result = filter_and_sort_mods(self.app_state.all_mods, filters, sort_config, blocklist_service=self.blocklist_service)
+                        filtered_result = filter_and_sort_mods(self.app_state.all_mods, filters, sort_config, blocklist_service=self.blocklist_service, installed_mod_keys=installed_keys)
                         self.app_state.filtered_mods = filtered_result
                         if not preserve_page:
                             self.app_state.current_page = 1
@@ -607,10 +626,10 @@ class SearchDisplayController(QObject):
                         continue
                     new_mods_to_filter.append(mod)
                 if new_mods_to_filter:
-                    new_filtered = filter_and_sort_mods(new_mods_to_filter, filters, sort_config=None, blocklist_service=self.blocklist_service)
+                    new_filtered = filter_and_sort_mods(new_mods_to_filter, filters, sort_config=None, blocklist_service=self.blocklist_service, installed_mod_keys=installed_keys)
                     self.app_state.filtered_mods = (self.app_state.filtered_mods or []) + new_filtered
             else:
-                self.app_state.filtered_mods = filter_and_sort_mods(self.app_state.all_mods, filters, sort_config, blocklist_service=self.blocklist_service)
+                self.app_state.filtered_mods = filter_and_sort_mods(self.app_state.all_mods, filters, sort_config, blocklist_service=self.blocklist_service, installed_mod_keys=installed_keys)
             if not preserve_page:
                 self.app_state.current_page = 1
             else:

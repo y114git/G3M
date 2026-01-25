@@ -1003,7 +1003,6 @@ class GameBananaAPI:
             if 'game' not in data_dict and 'modgame' not in data_dict:
                 data_dict['game'] = game_name
             data_dict['hide_mod'] = False
-            data_dict['is_local_mod'] = False
             data_dict['ban_status'] = False
             data_dict['files'] = {}
             if 'has_full_metadata' not in data_dict:

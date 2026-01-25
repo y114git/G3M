@@ -674,7 +674,7 @@ class ModOperationsController:
                                     if (getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)) == key:
                                         installed_mod_found = True
                                         installed_mod_page = idx // self.app_state.mods_per_page + 1
-                                        logging.info(f'''ModOperationsController: Found installed mod "{mod.name}" (key: {key}) at index {idx}, page {installed_mod_page}, is_local={getattr(mod, 'is_local_mod', False)}''')
+                                        logging.info(f'''ModOperationsController: Found installed mod "{mod.name}" (key: {key}) at index {idx}, page {installed_mod_page}''')
                                         break
                                 if not installed_mod_found:
                                     logging.warning(f'ModOperationsController: Installed mod with key {key} NOT FOUND in filtered_mods! Checking all_mods...')
@@ -682,12 +682,12 @@ class ModOperationsController:
                                         for mod in self.app_state.all_mods:
                                             if (getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)) == key:
                                                 mod_key_attr = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
-                                                logging.warning(f'''ModOperationsController: Mod "{mod.name}" (key: {key}) found in all_mods but NOT in filtered_mods! Key: {mod_key_attr}, is_local: {getattr(mod, 'is_local_mod', False)}, status: {getattr(mod, 'status', 'N/A')}''')
+                                                logging.warning(f'''ModOperationsController: Mod "{mod.name}" (key: {key}) found in all_mods but NOT in filtered_mods! Key: {mod_key_attr}, status: {getattr(mod, 'status', 'N/A')}''')
                                                 break
                                     for idx, mod in enumerate(self.app_state.filtered_mods[:10]):
                                         mod_key_attr = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
                                         if mod_key_attr and mod_key_attr.startswith('gb_'):
-                                            logging.info(f'''ModOperationsController: Filtered mod {idx}: "{mod.name}" (key: {mod_key_attr}, is_local: {getattr(mod, 'is_local_mod', False)})''')
+                                            logging.info(f'''ModOperationsController: Filtered mod {idx}: "{mod.name}" (key: {mod_key_attr})''')
                             else:
                                 key = getattr(installed_mod_info, 'key', None) or getattr(installed_mod_info, 'mod_key', None)
                                 logging.info(f'ModOperationsController: Searching for installed mod with key {key} in {len(self.app_state.filtered_mods)} filtered mods')
