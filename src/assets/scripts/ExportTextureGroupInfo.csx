@@ -98,8 +98,9 @@ void ExportTextureGroup(UndertaleTextureGroupInfo textureGroup, string outputDir
             writer.WriteStartArray("texturePages");
             if (textureGroup.TexturePages != null)
             {
-                foreach (var texPage in textureGroup.TexturePages)
+                foreach (var texPageRef in textureGroup.TexturePages)
                 {
+                    var texPage = texPageRef.Resource;
                     if (texPage?.Name?.Content != null)
                         writer.WriteStringValue(texPage.Name.Content);
                 }
@@ -109,8 +110,9 @@ void ExportTextureGroup(UndertaleTextureGroupInfo textureGroup, string outputDir
             writer.WriteStartArray("sprites");
             if (textureGroup.Sprites != null)
             {
-                foreach (var sprite in textureGroup.Sprites)
+                foreach (var spriteRef in textureGroup.Sprites)
                 {
+                    var sprite = spriteRef.Resource;
                     if (sprite?.Name?.Content != null)
                         writer.WriteStringValue(sprite.Name.Content);
                 }
@@ -122,8 +124,9 @@ void ExportTextureGroup(UndertaleTextureGroupInfo textureGroup, string outputDir
                 writer.WriteStartArray("spineSprites");
                 if (textureGroup.SpineSprites != null)
                 {
-                    foreach (var spineSprite in textureGroup.SpineSprites)
+                    foreach (var spineSpriteRef in textureGroup.SpineSprites)
                     {
+                        var spineSprite = spineSpriteRef.Resource;
                         if (spineSprite?.Name?.Content != null)
                             writer.WriteStringValue(spineSprite.Name.Content);
                     }
@@ -134,8 +137,9 @@ void ExportTextureGroup(UndertaleTextureGroupInfo textureGroup, string outputDir
             writer.WriteStartArray("fonts");
             if (textureGroup.Fonts != null)
             {
-                foreach (var font in textureGroup.Fonts)
+                foreach (var fontRef in textureGroup.Fonts)
                 {
+                    var font = fontRef.Resource;
                     if (font?.Name?.Content != null)
                         writer.WriteStringValue(font.Name.Content);
                 }
@@ -145,8 +149,9 @@ void ExportTextureGroup(UndertaleTextureGroupInfo textureGroup, string outputDir
             writer.WriteStartArray("tilesets");
             if (textureGroup.Tilesets != null)
             {
-                foreach (var tileset in textureGroup.Tilesets)
+                foreach (var tilesetRef in textureGroup.Tilesets)
                 {
+                    var tileset = tilesetRef.Resource;
                     if (tileset?.Name?.Content != null)
                         writer.WriteStringValue(tileset.Name.Content);
                 }
