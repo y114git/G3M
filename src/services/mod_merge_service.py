@@ -537,7 +537,14 @@ class MultiModMerger(QObject):
                 if self._cancelled:
                     return False
                 if returncode != 0:
+                    failed_script = self._identify_failed_script(stderr, vanilla_scripts)
+                    resource_type = self._get_resource_type_from_script(failed_script)
                     self.patching_logger.warning(f'Vanilla export failed: {stderr[:500]}')
+                    warning_msg = tr('dialogs.patching_warning.export_failed', operation=tr('dialogs.patching_warning.export'), resource=resource_type)
+                    if not self._show_patching_warning('vanilla_export_failed', tr('dialogs.patching_warning.title'), warning_msg):
+                        self.patching_logger.info('[PATCHING_WARNING] User cancelled merge due to vanilla export failure')
+                        return False
+                    self.patching_logger.info('[PATCHING_WARNING] User chose to continue despite vanilla export failure')
                 else:
                     self.patching_logger.info('Successfully exported vanilla assets')
             else:
@@ -2081,6 +2088,16 @@ class MultiModMerger(QObject):
                 except RuntimeError:
                     self.patching_logger.error('Merge process aborted due to critical error in export scripts for other files')
                     raise
+                if returncode != 0:
+                    failed_script = self._identify_failed_script(stderr, export_scripts)
+                    resource_type = self._get_resource_type_from_script(failed_script)
+                    self.patching_logger.error(f'Export scripts failed for ready data.win merge: {stderr[:500]}')
+                    warning_msg = tr('dialogs.patching_warning.export_failed', operation=tr('dialogs.patching_warning.export'), resource=resource_type)
+                    if not self._show_patching_warning('ready_datawin_export_failed', tr('dialogs.patching_warning.title'), warning_msg):
+                        self.patching_logger.info('[PATCHING_WARNING] User cancelled merge due to ready data.win export failure')
+                        return False
+                    self.patching_logger.info('[PATCHING_WARNING] User chose to continue despite ready data.win export failure')
+                    return False
                 if returncode == 0:
                     if mod_dir:
                         mod_objects_dir = os.path.join(mod_dir, 'Objects')
@@ -2107,6 +2124,16 @@ class MultiModMerger(QObject):
                         if returncode == 0:
                             self.patching_logger.info('Successfully merged two data.win files using UTMTCLI scripts')
                             return True
+                        else:
+                            failed_script = self._identify_failed_script(stderr, scripts_to_run)
+                            resource_type = self._get_resource_type_from_script(failed_script)
+                            self.patching_logger.error(f'Import scripts failed for ready data.win merge: {stderr[:500]}')
+                            warning_msg = tr('dialogs.patching_warning.import_failed', operation=tr('dialogs.patching_warning.import_op'), resource=resource_type)
+                            if not self._show_patching_warning('ready_datawin_import_failed', tr('dialogs.patching_warning.title'), warning_msg):
+                                self.patching_logger.info('[PATCHING_WARNING] User cancelled merge due to ready data.win import failure')
+                                return False
+                            self.patching_logger.info('[PATCHING_WARNING] User chose to continue despite ready data.win import failure')
+                            return False
             self.patching_logger.error('UTMTCLI merge failed: Cannot merge data.win files')
             self.patching_logger.error('Fallback copy would overwrite base_file and lose previous mod changes')
             self.patching_logger.error('This mod cannot be merged and will be skipped to prevent data loss')
@@ -2382,6 +2409,44 @@ class MultiModMerger(QObject):
     def _find_csx_scripts(self, mod_source_dir: str) -> List[str]:
         return self._find_files_by_extension(mod_source_dir, ['.csx'])
 
+    def _identify_failed_script(self, stderr: str, scripts: List[str]) -> str:
+        """Identify which script failed from stderr output."""
+        if not stderr or not scripts:
+            return 'Unknown'
+        stderr_lower = stderr.lower()
+        for script in scripts:
+            if script.lower() in stderr_lower:
+                return script
+        return scripts[0] if scripts else 'Unknown'
+
+    def _get_resource_type_from_script(self, script_name: str) -> str:
+        """Extract resource type from script name for user-friendly error messages."""
+        if not script_name or script_name == 'Unknown':
+            return tr('dialogs.patching_warning.resources_generic')
+
+        script_lower = script_name.lower()
+        resource_map = {
+            'sprite': tr('dialogs.patching_warning.resource_sprites'),
+            'sound': tr('dialogs.patching_warning.resource_sounds'),
+            'code': tr('dialogs.patching_warning.resource_code'),
+            'font': tr('dialogs.patching_warning.resource_fonts'),
+            'shader': tr('dialogs.patching_warning.resource_shaders'),
+            'background': tr('dialogs.patching_warning.resource_backgrounds'),
+            'tileset': tr('dialogs.patching_warning.resource_tilesets'),
+            'room': tr('dialogs.patching_warning.resource_rooms'),
+            'gameobject': tr('dialogs.patching_warning.resource_objects'),
+            'path': tr('dialogs.patching_warning.resource_paths'),
+            'timeline': tr('dialogs.patching_warning.resource_timelines'),
+            'audiogroup': tr('dialogs.patching_warning.resource_audiogroups'),
+            'extension': tr('dialogs.patching_warning.resource_extensions'),
+        }
+
+        for key, value in resource_map.items():
+            if key in script_lower:
+                return value
+
+        return tr('dialogs.patching_warning.resources_generic')
+
     def _get_export_scripts(self) -> List[str]:
         """Get list of available export scripts."""
         export_script_names = [
@@ -2611,7 +2676,14 @@ class MultiModMerger(QObject):
                         self.patching_logger.error(f'Merge process aborted due to critical error in {script} for mod {mod_number}')
                         raise
                 if returncode != 0:
+                    failed_script = self._identify_failed_script(stderr, scripts)
+                    resource_type = self._get_resource_type_from_script(failed_script)
                     self.patching_logger.warning(f'Export scripts failed for mod {mod_number}: {stderr[:500]}')
+                    warning_msg = tr('dialogs.patching_warning.export_failed', operation=tr('dialogs.patching_warning.export'), resource=resource_type)
+                    if not self._show_patching_warning('export_failed', tr('dialogs.patching_warning.title'), warning_msg):
+                        self.patching_logger.info(f'[PATCHING_WARNING] User cancelled merge due to export failure for mod {mod_number}')
+                        return False
+                    self.patching_logger.info(f'[PATCHING_WARNING] User chose to continue despite export failure for mod {mod_number}')
                     return False
                 self.patching_logger.info(f'Successfully exported assets from mod {mod_number} using {scripts}')
                 if os.path.exists(objects_dir):
