@@ -2462,6 +2462,7 @@ class MultiModMerger(QObject):
             'ExportPaths',
             'ExportTimelines',
             'ExportAudioGroups',
+            'ExportTextureGroupInfo',
             'ExportExtensions',
         ]
         available_scripts = []
@@ -2485,6 +2486,7 @@ class MultiModMerger(QObject):
             'ImportPaths',
             'ImportTimelines',
             'ImportAudioGroups',
+            'ImportTextureGroupInfo',
             'ImportExtensions',
         ]
         available_scripts = []
