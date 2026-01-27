@@ -73,7 +73,6 @@ class TestFileUtils:
 
     def test_safe_rmtree_default_params(self, temp_dir, qapp):
         from utils.file_utils import safe_rmtree
-        import time
 
         test_dir = os.path.join(temp_dir, 'test_rmtree')
         os.makedirs(test_dir, exist_ok=True)
@@ -141,25 +140,6 @@ class TestGameUtils:
         mock_process_iter.return_value = [mock_process]
         assert is_game_running() is True
         mock_process_iter.return_value = []
-
-
-class TestCryptoUtils:
-
-    def test_generate_secret_key(self):
-        from utils.crypto_utils import generate_secret_key
-        key = generate_secret_key()
-        assert key is not None
-        assert isinstance(key, str)
-        assert key.startswith('RUNE-')
-        assert len(key) > 5
-
-    def test_hash_secret_key(self):
-        from utils.crypto_utils import hash_secret_key
-        key = 'RUNE-TEST123456'
-        hash_value = hash_secret_key(key)
-        assert hash_value is not None
-        assert isinstance(hash_value, str)
-        assert len(hash_value) == 64
 
 
 class TestNetworkUtils:

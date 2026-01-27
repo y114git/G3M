@@ -495,7 +495,21 @@ class SearchDisplayController(QObject):
                         search_timeout_timer.stop()
                         QTimer.singleShot(0, on_all_results_received)
                 return on_result
+
+            def on_priority_metadata_added(count):
+                try:
+                    logger.info(f'SearchDisplayController: {count} priority search result mods added to metadata queue, restarting metadata loading')
+                    if hasattr(self.app, 'refresh_controller') and self.app.refresh_controller:
+                        if hasattr(self.app.refresh_controller, 'metadata_thread') and self.app.refresh_controller.metadata_thread:
+                            if self.app.refresh_controller.metadata_thread.isRunning():
+                                logger.info('SearchDisplayController: Cancelling current metadata batch to prioritize search results')
+                                self.app.refresh_controller.metadata_thread.cancel()
+                        QTimer.singleShot(100, lambda: self.app.refresh_controller._start_metadata_loading())
+                except Exception as e:
+                    logger.error(f'SearchDisplayController: Error in on_priority_metadata_added: {e}', exc_info=True)
+
             search_thread.result.connect(make_on_result(page))
+            search_thread.priority_metadata_added.connect(on_priority_metadata_added)
             search_thread.finished.connect(lambda thread=search_thread: self._cleanup_load_thread(thread))
             self._load_more_threads.append(search_thread)
             search_thread.start()

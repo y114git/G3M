@@ -17,6 +17,7 @@ SEARCH_TIMEOUT_SECONDS = 10
 class SearchGameBananaModsThread(QThread):
     result = pyqtSignal(list)
     status = pyqtSignal(str, str)
+    priority_metadata_added = pyqtSignal(int)
 
     def __init__(self, game_id: int, search_string: str, start_page: int = 1, num_pages: int = 1, sort: str = 'best_match', parent=None, metadata_cache=None):
         super().__init__(parent)
@@ -164,9 +165,14 @@ class SearchGameBananaModsThread(QThread):
                             except (AttributeError, RuntimeError):
                                 pass
                     if app_state and hasattr(app_state, 'gamebanana_mods_needing_metadata'):
-                        existing = set(getattr(app_state, 'gamebanana_mods_needing_metadata', []))
-                        new_ids = set(self._mods_needing_metadata)
-                        app_state.gamebanana_mods_needing_metadata = list(existing | new_ids)
+                        existing = getattr(app_state, 'gamebanana_mods_needing_metadata', [])
+                        new_ids = list(self._mods_needing_metadata)
+                        existing_set = set(existing)
+                        new_unique = [mod_id for mod_id in new_ids if mod_id not in existing_set]
+                        app_state.gamebanana_mods_needing_metadata = new_unique + existing
+                        if new_unique:
+                            logger.info(f'SearchGameBananaModsThread: Prioritized {len(new_unique)} search result mods at front of metadata queue')
+                            self.priority_metadata_added.emit(len(new_unique))
                 except (AttributeError, RuntimeError, TypeError):
                     pass
             self.result.emit(new_mods)

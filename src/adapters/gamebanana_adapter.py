@@ -104,7 +104,15 @@ class GameBananaAPI:
                 self._wait_for_rate_limit()
                 response = self.session.get(url, params=params, timeout=timeout)
                 response.raise_for_status()
+                if not response.text or not response.text.strip():
+                    ctx = f' for mod {mod_id}' if mod_id else ''
+                    logger.warning(f'{operation}{ctx}: Empty response from API')
+                    return None
                 return response.json()
+            except json.JSONDecodeError as e:
+                ctx = f' for mod {mod_id}' if mod_id else ''
+                logger.warning(f'{operation}{ctx}: {e}')
+                return None
             except requests.RequestException as e:
                 status_code = getattr(getattr(e, 'response', None), 'status_code', None)
                 if self._handle_rate_limit_retry(status_code, attempt, max_retries, f'{operation}: Rate limit, waiting {{wait_time}}s'):
@@ -282,9 +290,12 @@ class GameBananaAPI:
         for attempt in range(max_retries + 1):
             try:
                 self._wait_for_rate_limit()
-                logger.debug(f'_get_item_field: Fetching {field_name} for mod {mod_id}')
+                logger.debug(f'_get_item_field: Fetching {field_name} for mod {mod_id} (type: {itemtype})')
                 response = self.session.get(url, params=params, timeout=NETWORK_TIMEOUT_MEDIUM)
                 response.raise_for_status()
+                if not response.text or not response.text.strip():
+                    logger.warning(f'_get_item_field: Empty response for mod {mod_id}, field {field_name} (type: {itemtype})')
+                    return None
                 data = response.json()
                 logger.debug(f'_get_item_field: Got response for mod {mod_id}, field {field_name}, data type: {type(data)}')
                 field_value = None
@@ -310,6 +321,9 @@ class GameBananaAPI:
                         logger.warning(f'_get_item_field: Extractor function failed for {field_name}: {e}')
                         return None
                 return field_value
+            except json.JSONDecodeError as e:
+                logger.warning(f'Error fetching {field_name} for mod {mod_id}: {e}')
+                return None
             except requests.RequestException as e:
                 status_code = getattr(e.response, 'status_code', None) if hasattr(e, 'response') and e.response else None
                 if self._handle_rate_limit_retry(status_code, attempt, max_retries, f'_get_item_field: Rate limit (429) for mod {mod_id}, waiting {{wait_time}} seconds before retry'):
@@ -413,9 +427,12 @@ class GameBananaAPI:
         for attempt in range(max_retries + 1):
             try:
                 self._wait_for_rate_limit()
-                logger.debug(f'get_mod_text_and_screenshots: Fetching text and screenshots for mod {mod_id}')
+                logger.debug(f'get_mod_text_and_screenshots: Fetching text and screenshots for mod {mod_id} (type: {itemtype})')
                 response = self.session.get(url, params=params, timeout=NETWORK_TIMEOUT_SHORT)
                 response.raise_for_status()
+                if not response.text or not response.text.strip():
+                    logger.warning(f'get_mod_text_and_screenshots: Empty response for mod {mod_id} (type: {itemtype})')
+                    return None
                 data = response.json()
                 if not data:
                     logger.debug(f'get_mod_text_and_screenshots: Empty response for mod {mod_id}')
@@ -438,7 +455,10 @@ class GameBananaAPI:
                     logger.warning(f'get_mod_text_and_screenshots: Unexpected response format for mod {mod_id}: {type(data)}, value: {str(data)[:200]}')
                     return None
                 logger.debug(f"get_mod_text_and_screenshots: Successfully parsed details for mod {mod_id}, has text: {bool(result.get('text'))}, has screenshots: {result.get('screenshots') is not None}")
-                return result if result.get('text') or result.get('screenshots') else None
+                return result
+            except json.JSONDecodeError as e:
+                logger.warning(f'Error fetching text and screenshots for mod {mod_id}: {e}')
+                return None
             except requests.RequestException as e:
                 status_code = getattr(e.response, 'status_code', None) if hasattr(e, 'response') and e.response else None
                 if self._handle_rate_limit_retry(status_code, attempt, max_retries, f'get_mod_text_and_screenshots: Rate limit (429) for mod {mod_id}, waiting {{wait_time}} seconds before retry'):
@@ -468,9 +488,12 @@ class GameBananaAPI:
         for attempt in range(max_retries + 1):
             try:
                 self._wait_for_rate_limit()
-                logger.debug(f'get_mod_full_details_for_display: Fetching details for mod {mod_id}')
+                logger.debug(f'get_mod_full_details_for_display: Fetching details for mod {mod_id} (type: {itemtype})')
                 response = self.session.get(url, params=params, timeout=NETWORK_TIMEOUT_MEDIUM)
                 response.raise_for_status()
+                if not response.text or not response.text.strip():
+                    logger.warning(f'get_mod_full_details_for_display: Empty response for mod {mod_id} (type: {itemtype})')
+                    return None
                 data = response.json()
                 logger.debug(f"get_mod_full_details_for_display: Got response for mod {mod_id}, data type: {type(data)}, length: {(len(data) if isinstance(data, (list, dict)) else 'N/A')}")
                 if isinstance(data, list) and len(data) >= 3:
@@ -493,6 +516,9 @@ class GameBananaAPI:
                 else:
                     logger.warning(f'get_mod_full_details_for_display: Unexpected response format for mod {mod_id}: {type(data)}, value: {str(data)[:200]}')
                     return None
+            except json.JSONDecodeError as e:
+                logger.warning(f'Error fetching full details for mod {mod_id}: {e}')
+                return None
             except requests.RequestException as e:
                 status_code = getattr(e.response, 'status_code', None) if hasattr(e, 'response') and e.response else None
                 if self._handle_rate_limit_retry(status_code, attempt, max_retries, f'get_mod_full_details_for_display: Rate limit (429) for mod {mod_id}, waiting {{wait_time}} seconds before retry'):
