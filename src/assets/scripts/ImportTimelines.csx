@@ -13,28 +13,16 @@ using UndertaleModLib.Models;
 
 
 
-string InputDirectory = "";
-
-
-
-
 void PrintLine(string s) => Console.WriteLine(s);
 
-string ResolveInputDirectory()
+string GetInputDirectory()
 {
-    if (!string.IsNullOrEmpty(InputDirectory) && Directory.Exists(InputDirectory))
-        return InputDirectory;
-
-    if (string.IsNullOrEmpty(FilePath))
-        throw new ScriptException("No data.win file loaded. Please load a game data file first.");
-
-    string dataWinDir = Path.GetDirectoryName(FilePath);
-    string timelinesDir = Path.Combine(dataWinDir, "Objects", "Timelines");
-    
-    if (Directory.Exists(timelinesDir))
-        return timelinesDir;
-
-    throw new ScriptException($"Timelines directory not found at: {timelinesDir}\nPlease specify InputDirectory or place timelines in an 'Objects/Timelines' folder next to data.win.");
+    string inputDir = Environment.GetEnvironmentVariable("INPUT_DIR");
+    if (string.IsNullOrEmpty(inputDir))
+        throw new ScriptException("INPUT_DIR environment variable is not set.");
+    if (!Directory.Exists(inputDir))
+        throw new ScriptException($"INPUT_DIR directory does not exist: {inputDir}");
+    return inputDir;
 }
 
 
@@ -42,7 +30,7 @@ string ResolveInputDirectory()
 
 EnsureDataLoaded();
 
-string timelinesIn = ResolveInputDirectory();
+string timelinesIn = GetInputDirectory();
 PrintLine($"[ImportTimelines] Importing from: {timelinesIn}");
 
 string[] timelineFiles = Directory.GetFiles(timelinesIn, "*.json");

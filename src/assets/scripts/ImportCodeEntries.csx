@@ -13,28 +13,16 @@ using UndertaleModLib.Util;
 
 
 
-string InputDirectory = "";
-
-
-
-
 void PrintLine(string s) => Console.WriteLine(s);
 
-string ResolveInputDirectory()
+string GetInputDirectory()
 {
-    if (!string.IsNullOrEmpty(InputDirectory) && Directory.Exists(InputDirectory))
-        return InputDirectory;
-
-    if (string.IsNullOrEmpty(FilePath))
-        throw new ScriptException("No data.win file loaded. Please load a game data file first.");
-
-    string dataWinDir = Path.GetDirectoryName(FilePath);
-    string codeDir = Path.Combine(dataWinDir, "Objects", "CodeEntries");
-    
-    if (Directory.Exists(codeDir))
-        return codeDir;
-
-    throw new ScriptException($"CodeEntries directory not found at: {codeDir}\nPlease specify InputDirectory or place code files in an 'Objects/CodeEntries' folder next to data.win.");
+    string inputDir = Environment.GetEnvironmentVariable("INPUT_DIR");
+    if (string.IsNullOrEmpty(inputDir))
+        throw new ScriptException("INPUT_DIR environment variable is not set.");
+    if (!Directory.Exists(inputDir))
+        throw new ScriptException($"INPUT_DIR directory does not exist: {inputDir}");
+    return inputDir;
 }
 
 string CorrectCodeEntryName(string filename)
@@ -56,7 +44,7 @@ string CorrectCodeEntryName(string filename)
 
 EnsureDataLoaded();
 
-string importFolder = ResolveInputDirectory();
+string importFolder = GetInputDirectory();
 PrintLine($"[ImportCodeEntries] Importing from: {importFolder}");
 
 string[] dirFiles = Directory.GetFiles(importFolder, "*.gml");

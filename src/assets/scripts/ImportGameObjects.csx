@@ -12,28 +12,16 @@ using UndertaleModLib.Models;
 
 
 
-string InputDirectory = "";
-
-
-
-
 void PrintLine(string s) => Console.WriteLine(s);
 
-string ResolveInputDirectory()
+string GetInputDirectory()
 {
-    if (!string.IsNullOrEmpty(InputDirectory) && Directory.Exists(InputDirectory))
-        return InputDirectory;
-
-    if (string.IsNullOrEmpty(FilePath))
-        throw new ScriptException("No data.win file loaded. Please load a game data file first.");
-
-    string dataWinDir = Path.GetDirectoryName(FilePath);
-    string gameObjectsDir = Path.Combine(dataWinDir, "Objects", "GameObjects");
-    
-    if (Directory.Exists(gameObjectsDir))
-        return gameObjectsDir;
-
-    throw new ScriptException($"GameObjects directory not found at: {gameObjectsDir}\nPlease specify InputDirectory or place game objects in an 'Objects/GameObjects' folder next to data.win.");
+    string inputDir = Environment.GetEnvironmentVariable("INPUT_DIR");
+    if (string.IsNullOrEmpty(inputDir))
+        throw new ScriptException("INPUT_DIR environment variable is not set.");
+    if (!Directory.Exists(inputDir))
+        throw new ScriptException($"INPUT_DIR directory does not exist: {inputDir}");
+    return inputDir;
 }
 
 
@@ -41,7 +29,7 @@ string ResolveInputDirectory()
 
 EnsureDataLoaded();
 
-string gameObjectsIn = ResolveInputDirectory();
+string gameObjectsIn = GetInputDirectory();
 PrintLine($"[ImportGameObjects] Importing from: {gameObjectsIn}");
 
 int gameObjectsImported = 0;

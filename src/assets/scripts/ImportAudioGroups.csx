@@ -12,28 +12,16 @@ using UndertaleModLib.Models;
 
 
 
-string InputDirectory = "";
-
-
-
-
 void PrintLine(string s) => Console.WriteLine(s);
 
-string ResolveInputDirectory()
+string GetInputDirectory()
 {
-    if (!string.IsNullOrEmpty(InputDirectory) && Directory.Exists(InputDirectory))
-        return InputDirectory;
-
-    if (string.IsNullOrEmpty(FilePath))
-        throw new ScriptException("No data.win file loaded. Please load a game data file first.");
-
-    string dataWinDir = Path.GetDirectoryName(FilePath);
-    string audioGroupsDir = Path.Combine(dataWinDir, "Objects", "AudioGroups");
-    
-    if (Directory.Exists(audioGroupsDir))
-        return audioGroupsDir;
-
-    throw new ScriptException($"AudioGroups directory not found at: {audioGroupsDir}\nPlease specify InputDirectory or place audio groups in an 'Objects/AudioGroups' folder next to data.win.");
+    string inputDir = Environment.GetEnvironmentVariable("INPUT_DIR");
+    if (string.IsNullOrEmpty(inputDir))
+        throw new ScriptException("INPUT_DIR environment variable is not set.");
+    if (!Directory.Exists(inputDir))
+        throw new ScriptException($"INPUT_DIR directory does not exist: {inputDir}");
+    return inputDir;
 }
 
 
@@ -41,7 +29,7 @@ string ResolveInputDirectory()
 
 EnsureDataLoaded();
 
-string audioGroupsIn = ResolveInputDirectory();
+string audioGroupsIn = GetInputDirectory();
 PrintLine($"[ImportAudioGroups] Importing from: {audioGroupsIn}");
 
 string[] audioGroupFiles = Directory.GetFiles(audioGroupsIn, "*.json");

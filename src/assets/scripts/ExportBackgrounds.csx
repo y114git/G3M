@@ -16,11 +16,6 @@ using UndertaleModLib.Util;
 
 
 
-string OutputDirectory = "";
-
-
-
-
 void PrintLine(string s) => Console.WriteLine(s);
 
 string SafeName(string name)
@@ -31,17 +26,13 @@ string SafeName(string name)
     return sb.ToString();
 }
 
-string ResolveOutputDirectory()
+string GetOutputDirectory()
 {
-    if (!string.IsNullOrEmpty(OutputDirectory) && Directory.Exists(OutputDirectory))
-        return OutputDirectory;
-
-    if (string.IsNullOrEmpty(FilePath))
-        throw new ScriptException("No data.win file loaded. Please load a game data file first.");
-
-    string dataWinDir = Path.GetDirectoryName(FilePath);
-    string outputDir = Path.Combine(dataWinDir, "Objects", "Backgrounds");
-    Directory.CreateDirectory(outputDir);
+    string outputDir = Environment.GetEnvironmentVariable("OUTPUT_DIR");
+    if (string.IsNullOrEmpty(outputDir))
+        throw new ScriptException("OUTPUT_DIR environment variable is not set.");
+    if (!Directory.Exists(outputDir))
+        Directory.CreateDirectory(outputDir);
     return outputDir;
 }
 
@@ -50,7 +41,7 @@ string ResolveOutputDirectory()
 
 EnsureDataLoaded();
 
-string bgOut = ResolveOutputDirectory();
+string bgOut = GetOutputDirectory();
 PrintLine($"[ExportBackgrounds] Exporting to: {bgOut}");
 
 

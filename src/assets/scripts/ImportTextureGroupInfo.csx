@@ -13,28 +13,16 @@ using UndertaleModLib.Models;
 
 
 
-string InputDirectory = "";
-
-
-
-
 void PrintLine(string s) => Console.WriteLine(s);
 
-string ResolveInputDirectory()
+string GetInputDirectory()
 {
-    if (!string.IsNullOrEmpty(InputDirectory) && Directory.Exists(InputDirectory))
-        return InputDirectory;
-
-    if (string.IsNullOrEmpty(FilePath))
-        throw new ScriptException("No data.win file loaded. Please load a game data file first.");
-
-    string dataWinDir = Path.GetDirectoryName(FilePath);
-    string textureGroupsDir = Path.Combine(dataWinDir, "Objects", "TextureGroups");
-    
-    if (Directory.Exists(textureGroupsDir))
-        return textureGroupsDir;
-
-    throw new ScriptException($"TextureGroups directory not found at: {textureGroupsDir}\nPlease specify InputDirectory or place texture groups in an 'Objects/TextureGroups' folder next to data.win.");
+    string inputDir = Environment.GetEnvironmentVariable("INPUT_DIR");
+    if (string.IsNullOrEmpty(inputDir))
+        throw new ScriptException("INPUT_DIR environment variable is not set.");
+    if (!Directory.Exists(inputDir))
+        throw new ScriptException($"INPUT_DIR directory does not exist: {inputDir}");
+    return inputDir;
 }
 
 
@@ -48,7 +36,7 @@ if (Data.TextureGroupInfo == null)
     return;
 }
 
-string textureGroupsDir = ResolveInputDirectory();
+string textureGroupsDir = GetInputDirectory();
 PrintLine($"[ImportTextureGroupInfo] Importing from: {textureGroupsDir}");
 
 string[] textureGroupFiles = Directory.GetFiles(textureGroupsDir, "*.json");

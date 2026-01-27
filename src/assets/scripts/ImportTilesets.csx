@@ -15,28 +15,16 @@ using UndertaleModLib.Util;
 
 
 
-string InputDirectory = "";
-
-
-
-
 void PrintLine(string s) => Console.WriteLine(s);
 
-string ResolveInputDirectory()
+string GetInputDirectory()
 {
-    if (!string.IsNullOrEmpty(InputDirectory) && Directory.Exists(InputDirectory))
-        return InputDirectory;
-
-    if (string.IsNullOrEmpty(FilePath))
-        throw new ScriptException("No data.win file loaded. Please load a game data file first.");
-
-    string dataWinDir = Path.GetDirectoryName(FilePath);
-    string tilesetsDir = Path.Combine(dataWinDir, "Objects", "Tilesets");
-    
-    if (Directory.Exists(tilesetsDir))
-        return tilesetsDir;
-
-    throw new ScriptException($"Tilesets directory not found at: {tilesetsDir}\nPlease specify InputDirectory or place tilesets in an 'Objects/Tilesets' folder next to data.win.");
+    string inputDir = Environment.GetEnvironmentVariable("INPUT_DIR");
+    if (string.IsNullOrEmpty(inputDir))
+        throw new ScriptException("INPUT_DIR environment variable is not set.");
+    if (!Directory.Exists(inputDir))
+        throw new ScriptException($"INPUT_DIR directory does not exist: {inputDir}");
+    return inputDir;
 }
 
 T GetJsonValue<T>(JsonElement root, string propertyName, T defaultValue)
@@ -74,7 +62,7 @@ if (!Data.IsGameMaker2())
     return;
 }
 
-string tilesetsIn = ResolveInputDirectory();
+string tilesetsIn = GetInputDirectory();
 PrintLine($"[ImportTilesets] Importing from: {tilesetsIn}");
 
 

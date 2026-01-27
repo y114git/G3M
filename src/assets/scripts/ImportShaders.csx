@@ -10,28 +10,16 @@ using UndertaleModLib.Models;
 
 
 
-string InputDirectory = "";
-
-
-
-
 void PrintLine(string s) => Console.WriteLine(s);
 
-string ResolveInputDirectory()
+string GetInputDirectory()
 {
-    if (!string.IsNullOrEmpty(InputDirectory) && Directory.Exists(InputDirectory))
-        return InputDirectory;
-
-    if (string.IsNullOrEmpty(FilePath))
-        throw new ScriptException("No data.win file loaded. Please load a game data file first.");
-
-    string dataWinDir = Path.GetDirectoryName(FilePath);
-    string shadersDir = Path.Combine(dataWinDir, "Objects", "Shaders");
-    
-    if (Directory.Exists(shadersDir))
-        return shadersDir;
-
-    throw new ScriptException($"Shaders directory not found at: {shadersDir}\nPlease specify InputDirectory or place shaders in an 'Objects/Shaders' folder next to data.win.");
+    string inputDir = Environment.GetEnvironmentVariable("INPUT_DIR");
+    if (string.IsNullOrEmpty(inputDir))
+        throw new ScriptException("INPUT_DIR environment variable is not set.");
+    if (!Directory.Exists(inputDir))
+        throw new ScriptException($"INPUT_DIR directory does not exist: {inputDir}");
+    return inputDir;
 }
 
 
@@ -39,7 +27,7 @@ string ResolveInputDirectory()
 
 EnsureDataLoaded();
 
-string shadersIn = ResolveInputDirectory();
+string shadersIn = GetInputDirectory();
 PrintLine($"[ImportShaders] Importing from: {shadersIn}");
 
 void ImportShader(string shaderDir)

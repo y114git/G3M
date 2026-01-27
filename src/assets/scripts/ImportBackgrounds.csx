@@ -14,28 +14,16 @@ using UndertaleModLib.Util;
 
 
 
-string InputDirectory = "";
-
-
-
-
 void PrintLine(string s) => Console.WriteLine(s);
 
-string ResolveInputDirectory()
+string GetInputDirectory()
 {
-    if (!string.IsNullOrEmpty(InputDirectory) && Directory.Exists(InputDirectory))
-        return InputDirectory;
-
-    if (string.IsNullOrEmpty(FilePath))
-        throw new ScriptException("No data.win file loaded. Please load a game data file first.");
-
-    string dataWinDir = Path.GetDirectoryName(FilePath);
-    string bgDir = Path.Combine(dataWinDir, "Objects", "Backgrounds");
-    
-    if (Directory.Exists(bgDir))
-        return bgDir;
-
-    throw new ScriptException($"Backgrounds directory not found at: {bgDir}\nPlease specify InputDirectory or place backgrounds in an 'Objects/Backgrounds' folder next to data.win.");
+    string inputDir = Environment.GetEnvironmentVariable("INPUT_DIR");
+    if (string.IsNullOrEmpty(inputDir))
+        throw new ScriptException("INPUT_DIR environment variable is not set.");
+    if (!Directory.Exists(inputDir))
+        throw new ScriptException($"INPUT_DIR directory does not exist: {inputDir}");
+    return inputDir;
 }
 
 T GetJsonValue<T>(JsonElement root, string propertyName, T defaultValue)
@@ -67,7 +55,7 @@ T GetJsonValue<T>(JsonElement root, string propertyName, T defaultValue)
 
 EnsureDataLoaded();
 
-string bgDir = ResolveInputDirectory();
+string bgDir = GetInputDirectory();
 PrintLine($"[ImportBackgrounds] Importing from: {bgDir}");
 
 

@@ -14,28 +14,16 @@ using UndertaleModLib.Util;
 
 
 
-string InputDirectory = "";
-
-
-
-
 void PrintLine(string s) => Console.WriteLine(s);
 
-string ResolveInputDirectory()
+string GetInputDirectory()
 {
-    if (!string.IsNullOrEmpty(InputDirectory) && Directory.Exists(InputDirectory))
-        return InputDirectory;
-
-    if (string.IsNullOrEmpty(FilePath))
-        throw new ScriptException("No data.win file loaded. Please load a game data file first.");
-
-    string dataWinDir = Path.GetDirectoryName(FilePath);
-    string roomsDir = Path.Combine(dataWinDir, "Objects", "Rooms");
-    
-    if (Directory.Exists(roomsDir))
-        return roomsDir;
-
-    throw new ScriptException($"Rooms directory not found at: {roomsDir}\nPlease specify InputDirectory or place rooms in an 'Objects/Rooms' folder next to data.win.");
+    string inputDir = Environment.GetEnvironmentVariable("INPUT_DIR");
+    if (string.IsNullOrEmpty(inputDir))
+        throw new ScriptException("INPUT_DIR environment variable is not set.");
+    if (!Directory.Exists(inputDir))
+        throw new ScriptException($"INPUT_DIR directory does not exist: {inputDir}");
+    return inputDir;
 }
 
 
@@ -43,7 +31,7 @@ string ResolveInputDirectory()
 
 EnsureDataLoaded();
 
-string roomsDir = ResolveInputDirectory();
+string roomsDir = GetInputDirectory();
 PrintLine($"[ImportRooms] Importing from: {roomsDir}");
 
 string[] roomFiles = Directory.GetFiles(roomsDir, "*.json");

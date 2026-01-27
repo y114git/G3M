@@ -533,14 +533,40 @@ class MultiModMerger(QObject):
                 f.write('0')
             vanilla_scripts = self._get_export_scripts()
             if vanilla_scripts:
-                returncode, stdout, stderr = self.utmt_wrapper.execute_scripts(vanilla_data_win, vanilla_scripts, output_path=vanilla_data_win, cwd=merge_root)
-                if self._cancelled:
-                    return False
-                if returncode != 0:
-                    failed_script = self._identify_failed_script(stderr, vanilla_scripts)
-                    resource_type = self._get_resource_type_from_script(failed_script)
-                    self.patching_logger.warning(f'Vanilla export failed: {stderr[:500]}')
-                    warning_msg = tr('dialogs.patching_warning.export_failed', operation=tr('dialogs.patching_warning.export'), resource=resource_type)
+
+                export_script_configs = [
+                    ('ExportSprites', 'Sprites'),
+                    ('ExportBackgrounds', 'Backgrounds'),
+                    ('ExportShaders', 'Shaders'),
+                    ('ExportFonts', 'Fonts'),
+                    ('ExportSounds', 'Sounds'),
+                    ('ExportCodeEntries', 'CodeEntries'),
+                    ('ExportTilesets', 'Tilesets'),
+                    ('ExportRooms', 'Rooms'),
+                    ('ExportGameObjects', 'GameObjects'),
+                    ('ExportPaths', 'Paths'),
+                    ('ExportTimelines', 'Timelines'),
+                    ('ExportAudioGroups', 'AudioGroups'),
+                    ('ExportTextureGroupInfo', 'TextureGroups'),
+                    ('ExportExtensions', 'Extensions'),
+                    ('ExportGeneralInfo', 'GeneralInfo'),
+                ]
+                all_exports_successful = True
+                for script_name, subdir in export_script_configs:
+                    if self._cancelled:
+                        return False
+                    if script_name not in vanilla_scripts:
+                        continue
+                    output_dir = os.path.join(vanilla_objects_dir, subdir)
+                    os.makedirs(output_dir, exist_ok=True)
+                    env_vars = {'OUTPUT_DIR': output_dir}
+                    returncode, stdout, stderr = self.utmt_wrapper.execute_script(vanilla_data_win, script_name, output_path=vanilla_data_win, cwd=merge_root, env=env_vars)
+                    if returncode != 0:
+                        self.patching_logger.warning(f'[EXPORT] Vanilla {script_name} failed: {stderr[:300] if stderr else "no error output"}')
+                        all_exports_successful = False
+                if not all_exports_successful:
+                    self.patching_logger.warning('Some vanilla export scripts failed')
+                    warning_msg = tr('dialogs.patching_warning.export_failed', operation=tr('dialogs.patching_warning.export'), resource='vanilla')
                     if not self._show_patching_warning('vanilla_export_failed', tr('dialogs.patching_warning.title'), warning_msg):
                         self.patching_logger.info('[PATCHING_WARNING] User cancelled merge due to vanilla export failure')
                         return False
@@ -1344,7 +1370,13 @@ class MultiModMerger(QObject):
                 existing_mods = [h['mod'] for h in self.resource_modification_history[resource_name]]
                 if mod_name_for_tracking not in existing_mods:
                     self.resource_modification_history[resource_name].append({'type': resource_type, 'mod': mod_name_for_tracking, 'action': resource_action, 'timestamp': time.time()})
-        returncode, stdout, stderr = self.utmt_wrapper.execute_script(data_win_path, script_name, output_path=data_win_path, cwd=data_win_dir)
+        resource_subdir = asset_config.get('resource_subdir')
+        if resource_subdir:
+            input_dir = os.path.join(objects_dir, resource_subdir)
+        else:
+            input_dir = objects_dir
+        env_vars = {'INPUT_DIR': input_dir}
+        returncode, stdout, stderr = self.utmt_wrapper.execute_script(data_win_path, script_name, output_path=data_win_path, cwd=data_win_dir, env=env_vars)
         if self._cancelled:
             self.patching_logger.info(f'{script_name} was cancelled by user, file may be partially modified')
             return False
@@ -1528,7 +1560,19 @@ class MultiModMerger(QObject):
             if not (has_graphics or has_gml or has_shaders or has_tilesets or has_fonts or has_sounds or has_rooms or has_audio_groups or has_paths or has_timelines or has_extensions):
                 self.patching_logger.debug(f'Objects directory has no assets to import: {objects_dir}')
                 return True
-            asset_configs = [{'script_name': 'ImportSprites', 'has_assets': has_graphics, 'step_number': '1/17', 'resource_type': 'sprite', 'resource_action': 'imported', 'get_resources_func': get_sprite_resources}, {'script_name': 'ImportShaders', 'has_assets': has_shaders, 'step_number': '2/17', 'resource_type': 'shader', 'resource_action': 'imported', 'get_resources_func': get_shader_resources}, {'script_name': 'ImportFonts', 'has_assets': has_fonts, 'step_number': '3/17', 'resource_type': 'font', 'resource_action': 'modified', 'get_resources_func': get_font_resources}, {'script_name': 'ImportSounds', 'has_assets': has_sounds, 'step_number': '4/17', 'resource_type': 'sound', 'resource_action': 'modified', 'get_resources_func': get_sound_resources}, {'script_name': 'ImportRooms', 'has_assets': has_rooms, 'step_number': '5/17', 'resource_type': 'room', 'resource_action': 'modified', 'get_resources_func': get_room_resources, 'check_dir_func': lambda obj_dir: os.path.exists(os.path.join(obj_dir, 'Rooms'))}, {'script_name': 'ImportAudioGroups', 'has_assets': has_audio_groups, 'step_number': '6/17', 'resource_type': 'audiogroup', 'resource_action': 'modified', 'get_resources_func': get_audiogroup_resources}, {'script_name': 'ImportPaths', 'has_assets': has_paths, 'step_number': '7/17', 'resource_type': 'path', 'resource_action': 'modified', 'get_resources_func': get_path_resources}, {'script_name': 'ImportTimelines', 'has_assets': has_timelines, 'step_number': '8/17', 'resource_type': 'timeline', 'resource_action': 'modified', 'get_resources_func': get_timeline_resources}, {'script_name': 'ImportExtensions', 'has_assets': has_extensions, 'step_number': '9/17', 'resource_type': 'extension', 'resource_action': 'modified', 'get_resources_func': get_extension_resources}, {'script_name': 'ImportTilesets', 'has_assets': has_tilesets, 'step_number': '10/17', 'resource_type': 'tileset', 'resource_action': 'imported', 'get_resources_func': get_tileset_resources, 'extra_resources_func': get_tileset_config_resource}, {'script_name': 'ImportCodeEntries', 'has_assets': has_gml, 'step_number': '11/17', 'resource_type': 'code', 'resource_action': 'modified', 'get_resources_func': get_gml_resources, 'analyze_errors': True}]
+            asset_configs = [
+                {'script_name': 'ImportSprites', 'has_assets': has_graphics, 'step_number': '1/17', 'resource_type': 'sprite', 'resource_action': 'imported', 'get_resources_func': get_sprite_resources, 'resource_subdir': 'Sprites'},
+                {'script_name': 'ImportShaders', 'has_assets': has_shaders, 'step_number': '2/17', 'resource_type': 'shader', 'resource_action': 'imported', 'get_resources_func': get_shader_resources, 'resource_subdir': 'Shaders'},
+                {'script_name': 'ImportFonts', 'has_assets': has_fonts, 'step_number': '3/17', 'resource_type': 'font', 'resource_action': 'modified', 'get_resources_func': get_font_resources, 'resource_subdir': 'Fonts'},
+                {'script_name': 'ImportSounds', 'has_assets': has_sounds, 'step_number': '4/17', 'resource_type': 'sound', 'resource_action': 'modified', 'get_resources_func': get_sound_resources, 'resource_subdir': 'Sounds'},
+                {'script_name': 'ImportRooms', 'has_assets': has_rooms, 'step_number': '5/17', 'resource_type': 'room', 'resource_action': 'modified', 'get_resources_func': get_room_resources, 'check_dir_func': lambda obj_dir: os.path.exists(os.path.join(obj_dir, 'Rooms')), 'resource_subdir': 'Rooms'},
+                {'script_name': 'ImportAudioGroups', 'has_assets': has_audio_groups, 'step_number': '6/17', 'resource_type': 'audiogroup', 'resource_action': 'modified', 'get_resources_func': get_audiogroup_resources, 'resource_subdir': 'AudioGroups'},
+                {'script_name': 'ImportPaths', 'has_assets': has_paths, 'step_number': '7/17', 'resource_type': 'path', 'resource_action': 'modified', 'get_resources_func': get_path_resources, 'resource_subdir': 'Paths'},
+                {'script_name': 'ImportTimelines', 'has_assets': has_timelines, 'step_number': '8/17', 'resource_type': 'timeline', 'resource_action': 'modified', 'get_resources_func': get_timeline_resources, 'resource_subdir': 'Timelines'},
+                {'script_name': 'ImportExtensions', 'has_assets': has_extensions, 'step_number': '9/17', 'resource_type': 'extension', 'resource_action': 'modified', 'get_resources_func': get_extension_resources, 'resource_subdir': 'Extensions'},
+                {'script_name': 'ImportTilesets', 'has_assets': has_tilesets, 'step_number': '10/17', 'resource_type': 'tileset', 'resource_action': 'imported', 'get_resources_func': get_tileset_resources, 'extra_resources_func': get_tileset_config_resource, 'resource_subdir': 'Tilesets'},
+                {'script_name': 'ImportCodeEntries', 'has_assets': has_gml, 'step_number': '11/17', 'resource_type': 'code', 'resource_action': 'modified', 'get_resources_func': get_gml_resources, 'analyze_errors': True, 'resource_subdir': 'CodeEntries'},
+            ]
             for asset_config in asset_configs:
                 self._import_asset_type(asset_config, data_win_path, data_win_dir, objects_dir, mod_name_for_tracking)
             if 'DeltahubMergeWorkspace' in data_win_dir:
@@ -2079,26 +2123,43 @@ class MultiModMerger(QObject):
             if export_scripts:
                 export_temp = os.path.join(merge_temp_dir, 'other_export')
                 os.makedirs(export_temp, exist_ok=True)
-                returncode, stdout, stderr = self.utmt_wrapper.execute_scripts(other_file, export_scripts, cwd=self.temp_merge_dir)
-                if self._cancelled:
-                    return False
-                try:
-                    for script in export_scripts:
-                        self._check_critical_script_errors(stderr, script, 'other files export')
-                except RuntimeError:
-                    self.patching_logger.error('Merge process aborted due to critical error in export scripts for other files')
-                    raise
-                if returncode != 0:
-                    failed_script = self._identify_failed_script(stderr, export_scripts)
-                    resource_type = self._get_resource_type_from_script(failed_script)
-                    self.patching_logger.error(f'Export scripts failed for ready data.win merge: {stderr[:500]}')
-                    warning_msg = tr('dialogs.patching_warning.export_failed', operation=tr('dialogs.patching_warning.export'), resource=resource_type)
-                    if not self._show_patching_warning('ready_datawin_export_failed', tr('dialogs.patching_warning.title'), warning_msg):
-                        self.patching_logger.info('[PATCHING_WARNING] User cancelled merge due to ready data.win export failure')
+                export_objects_dir = os.path.join(export_temp, 'Objects')
+                os.makedirs(export_objects_dir, exist_ok=True)
+
+                export_script_configs = [
+                    ('ExportSprites', 'Sprites'),
+                    ('ExportBackgrounds', 'Backgrounds'),
+                    ('ExportShaders', 'Shaders'),
+                    ('ExportFonts', 'Fonts'),
+                    ('ExportSounds', 'Sounds'),
+                    ('ExportCodeEntries', 'CodeEntries'),
+                    ('ExportTilesets', 'Tilesets'),
+                    ('ExportRooms', 'Rooms'),
+                    ('ExportGameObjects', 'GameObjects'),
+                    ('ExportPaths', 'Paths'),
+                    ('ExportTimelines', 'Timelines'),
+                    ('ExportAudioGroups', 'AudioGroups'),
+                    ('ExportTextureGroupInfo', 'TextureGroups'),
+                    ('ExportExtensions', 'Extensions'),
+                    ('ExportGeneralInfo', 'GeneralInfo'),
+                ]
+                all_exports_successful = True
+                for script_name, subdir in export_script_configs:
+                    if self._cancelled:
                         return False
-                    self.patching_logger.info('[PATCHING_WARNING] User chose to continue despite ready data.win export failure')
-                    return False
-                if returncode == 0:
+                    if script_name not in export_scripts:
+                        continue
+                    output_dir = os.path.join(export_objects_dir, subdir)
+                    os.makedirs(output_dir, exist_ok=True)
+                    self.patching_logger.info(f'[EXPORT] Running {script_name} with OUTPUT_DIR={output_dir}')
+                    env_vars = {'OUTPUT_DIR': output_dir}
+                    returncode, stdout, stderr = self.utmt_wrapper.execute_script(other_file, script_name, cwd=self.temp_merge_dir, env=env_vars)
+                    if returncode != 0:
+                        self.patching_logger.warning(f'[EXPORT] {script_name} failed: {stderr[:300] if stderr else "no error output"}')
+                        all_exports_successful = False
+                    else:
+                        self.patching_logger.info(f'[EXPORT] {script_name} completed successfully')
+                if all_exports_successful:
                     if mod_dir:
                         mod_objects_dir = os.path.join(mod_dir, 'Objects')
                         if os.path.exists(mod_objects_dir):
@@ -2117,23 +2178,52 @@ class MultiModMerger(QObject):
                             else:
                                 shutil.copytree(export_objects_dir, mod_objects_dir)
                             self.patching_logger.info(f'Copied exported objects from export_temp to {mod_objects_dir} for later import')
-                    scripts_to_run = []
-                    scripts_to_run = self._get_import_scripts()
-                    if scripts_to_run:
-                        returncode, stdout, stderr = self.utmt_wrapper.execute_scripts(base_file, scripts_to_run, output_path=base_file, cwd=export_temp)
-                        if returncode == 0:
-                            self.patching_logger.info('Successfully merged two data.win files using UTMTCLI scripts')
-                            return True
-                        else:
-                            failed_script = self._identify_failed_script(stderr, scripts_to_run)
-                            resource_type = self._get_resource_type_from_script(failed_script)
-                            self.patching_logger.error(f'Import scripts failed for ready data.win merge: {stderr[:500]}')
-                            warning_msg = tr('dialogs.patching_warning.import_failed', operation=tr('dialogs.patching_warning.import_op'), resource=resource_type)
-                            if not self._show_patching_warning('ready_datawin_import_failed', tr('dialogs.patching_warning.title'), warning_msg):
-                                self.patching_logger.info('[PATCHING_WARNING] User cancelled merge due to ready data.win import failure')
-                                return False
-                            self.patching_logger.info('[PATCHING_WARNING] User chose to continue despite ready data.win import failure')
+
+                    import_script_configs = [
+                        ('ImportSprites', 'Sprites'),
+                        ('ImportBackgrounds', 'Backgrounds'),
+                        ('ImportShaders', 'Shaders'),
+                        ('ImportFonts', 'Fonts'),
+                        ('ImportSounds', 'Sounds'),
+                        ('ImportCodeEntries', 'CodeEntries'),
+                        ('ImportTilesets', 'Tilesets'),
+                        ('ImportRooms', 'Rooms'),
+                        ('ImportGameObjects', 'GameObjects'),
+                        ('ImportPaths', 'Paths'),
+                        ('ImportTimelines', 'Timelines'),
+                        ('ImportAudioGroups', 'AudioGroups'),
+                        ('ImportTextureGroupInfo', 'TextureGroups'),
+                        ('ImportExtensions', 'Extensions'),
+                        ('ImportGeneralInfo', 'GeneralInfo'),
+                    ]
+                    all_imports_successful = True
+                    for script_name, subdir in import_script_configs:
+                        if self._cancelled:
                             return False
+                        script_path = self.utmt_wrapper.get_script_path(script_name)
+                        if not script_path:
+                            continue
+                        input_dir = os.path.join(export_objects_dir, subdir)
+                        if not os.path.exists(input_dir):
+                            self.patching_logger.debug(f'[IMPORT] Skipping {script_name} - directory not found: {input_dir}')
+                            continue
+                        if not os.listdir(input_dir):
+                            self.patching_logger.debug(f'[IMPORT] Skipping {script_name} - directory empty: {input_dir}')
+                            continue
+                        self.patching_logger.info(f'[IMPORT] Running {script_name} with INPUT_DIR={input_dir}')
+                        import_env_vars = {'INPUT_DIR': input_dir}
+                        returncode, stdout, stderr = self.utmt_wrapper.execute_script(base_file, script_name, output_path=base_file, cwd=export_temp, env=import_env_vars)
+                        if returncode != 0:
+                            self.patching_logger.warning(f'[IMPORT] {script_name} failed: {stderr[:300] if stderr else "no error output"}')
+                            all_imports_successful = False
+                        else:
+                            self.patching_logger.info(f'[IMPORT] {script_name} completed successfully')
+                    if all_imports_successful:
+                        self.patching_logger.info('Successfully merged two data.win files using UTMTCLI scripts')
+                        return True
+                    else:
+                        self.patching_logger.warning('Some import scripts failed during ready data.win merge, but continuing')
+                        return True
             self.patching_logger.error('UTMTCLI merge failed: Cannot merge data.win files')
             self.patching_logger.error('Fallback copy would overwrite base_file and lose previous mod changes')
             self.patching_logger.error('This mod cannot be merged and will be skipped to prevent data loss')
@@ -2464,6 +2554,7 @@ class MultiModMerger(QObject):
             'ExportAudioGroups',
             'ExportTextureGroupInfo',
             'ExportExtensions',
+            'ExportGeneralInfo',
         ]
         available_scripts = []
         for script_name in export_script_names:
@@ -2488,6 +2579,7 @@ class MultiModMerger(QObject):
             'ImportAudioGroups',
             'ImportTextureGroupInfo',
             'ImportExtensions',
+            'ImportGeneralInfo',
         ]
         available_scripts = []
         for script_name in import_script_names:
@@ -2667,21 +2759,40 @@ class MultiModMerger(QObject):
             if scripts:
                 if self._cancelled:
                     return False
-                env_vars = {'DELTAHUB_MOD_NUMBER': str(mod_number), 'DELTAHUB_CHAPTER_NUMBER': chapter_str}
-                returncode, stdout, stderr = self.utmt_wrapper.execute_scripts(mod_data_win, scripts, output_path=mod_data_win, cwd=merge_root, env=env_vars)
-                if self._cancelled:
-                    return False
-                for script in scripts:
-                    try:
-                        self._check_critical_script_errors(stderr, script, f'mod {mod_number}')
-                    except RuntimeError:
-                        self.patching_logger.error(f'Merge process aborted due to critical error in {script} for mod {mod_number}')
-                        raise
-                if returncode != 0:
-                    failed_script = self._identify_failed_script(stderr, scripts)
-                    resource_type = self._get_resource_type_from_script(failed_script)
-                    self.patching_logger.warning(f'Export scripts failed for mod {mod_number}: {stderr[:500]}')
-                    warning_msg = tr('dialogs.patching_warning.export_failed', operation=tr('dialogs.patching_warning.export'), resource=resource_type)
+
+                export_script_configs = [
+                    ('ExportSprites', 'Sprites'),
+                    ('ExportBackgrounds', 'Backgrounds'),
+                    ('ExportShaders', 'Shaders'),
+                    ('ExportFonts', 'Fonts'),
+                    ('ExportSounds', 'Sounds'),
+                    ('ExportCodeEntries', 'CodeEntries'),
+                    ('ExportTilesets', 'Tilesets'),
+                    ('ExportRooms', 'Rooms'),
+                    ('ExportGameObjects', 'GameObjects'),
+                    ('ExportPaths', 'Paths'),
+                    ('ExportTimelines', 'Timelines'),
+                    ('ExportAudioGroups', 'AudioGroups'),
+                    ('ExportTextureGroupInfo', 'TextureGroups'),
+                    ('ExportExtensions', 'Extensions'),
+                    ('ExportGeneralInfo', 'GeneralInfo'),
+                ]
+                all_exports_successful = True
+                for script_name, subdir in export_script_configs:
+                    if self._cancelled:
+                        return False
+                    if script_name not in scripts:
+                        continue
+                    output_subdir = os.path.join(objects_dir, subdir)
+                    os.makedirs(output_subdir, exist_ok=True)
+                    env_vars = {'OUTPUT_DIR': output_subdir}
+                    returncode, stdout, stderr = self.utmt_wrapper.execute_script(mod_data_win, script_name, output_path=mod_data_win, cwd=merge_root, env=env_vars)
+                    if returncode != 0:
+                        self.patching_logger.warning(f'[EXPORT] Mod {mod_number} {script_name} failed: {stderr[:300] if stderr else "no error output"}')
+                        all_exports_successful = False
+                if not all_exports_successful:
+                    self.patching_logger.warning(f'Some export scripts failed for mod {mod_number}')
+                    warning_msg = tr('dialogs.patching_warning.export_failed', operation=tr('dialogs.patching_warning.export'), resource=f'mod {mod_number}')
                     if not self._show_patching_warning('export_failed', tr('dialogs.patching_warning.title'), warning_msg):
                         self.patching_logger.info(f'[PATCHING_WARNING] User cancelled merge due to export failure for mod {mod_number}')
                         return False

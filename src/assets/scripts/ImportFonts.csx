@@ -14,11 +14,6 @@ using UndertaleModLib.Util;
 
 
 
-string InputDirectory = "";
-
-
-
-
 void PrintLine(string s) => Console.WriteLine(s);
 
 string SafeName(string name)
@@ -29,21 +24,14 @@ string SafeName(string name)
     return sb.ToString();
 }
 
-string ResolveInputDirectory()
+string GetInputDirectory()
 {
-    if (!string.IsNullOrEmpty(InputDirectory) && Directory.Exists(InputDirectory))
-        return InputDirectory;
-
-    if (string.IsNullOrEmpty(FilePath))
-        throw new ScriptException("No data.win file loaded. Please load a game data file first.");
-
-    string dataWinDir = Path.GetDirectoryName(FilePath);
-    string fontsDir = Path.Combine(dataWinDir, "Objects", "Fonts");
-    
-    if (Directory.Exists(fontsDir))
-        return fontsDir;
-
-    throw new ScriptException($"Fonts directory not found at: {fontsDir}\nPlease specify InputDirectory or place fonts in an 'Objects/Fonts' folder next to data.win.");
+    string inputDir = Environment.GetEnvironmentVariable("INPUT_DIR");
+    if (string.IsNullOrEmpty(inputDir))
+        throw new ScriptException("INPUT_DIR environment variable is not set.");
+    if (!Directory.Exists(inputDir))
+        throw new ScriptException($"INPUT_DIR directory does not exist: {inputDir}");
+    return inputDir;
 }
 
 
@@ -51,7 +39,7 @@ string ResolveInputDirectory()
 
 EnsureDataLoaded();
 
-string fontsIn = ResolveInputDirectory();
+string fontsIn = GetInputDirectory();
 PrintLine($"[ImportFonts] Importing from: {fontsIn}");
 
 int imported = 0;

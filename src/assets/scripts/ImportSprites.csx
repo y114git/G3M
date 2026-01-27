@@ -19,28 +19,16 @@ using ImageMagick;
 
 
 
-string InputDirectory = "";
-
-
-
-
 void PrintLine(string s) => Console.WriteLine(s);
 
-string ResolveInputDirectory()
+string GetInputDirectory()
 {
-    if (!string.IsNullOrEmpty(InputDirectory) && Directory.Exists(InputDirectory))
-        return InputDirectory;
-
-    if (string.IsNullOrEmpty(FilePath))
-        throw new ScriptException("No data.win file loaded. Please load a game data file first.");
-
-    string dataWinDir = Path.GetDirectoryName(FilePath);
-    string spritesDir = Path.Combine(dataWinDir, "Objects", "Sprites");
-    
-    if (Directory.Exists(spritesDir))
-        return spritesDir;
-
-    throw new ScriptException($"Sprites directory not found at: {spritesDir}\nPlease specify InputDirectory or place sprites in an 'Objects/Sprites' folder next to data.win.");
+    string inputDir = Environment.GetEnvironmentVariable("INPUT_DIR");
+    if (string.IsNullOrEmpty(inputDir))
+        throw new ScriptException("INPUT_DIR environment variable is not set.");
+    if (!Directory.Exists(inputDir))
+        throw new ScriptException($"INPUT_DIR directory does not exist: {inputDir}");
+    return inputDir;
 }
 
 
@@ -52,7 +40,7 @@ static List<MagickImage> imagesToCleanup = new();
 Regex sprFrameRegex = new(@"^(.+?)(?:_(\d+))$", RegexOptions.Compiled);
 bool noMasksForBasicRectangles = Data.IsVersionAtLeast(2022, 9);
 
-string spritesPath = ResolveInputDirectory();
+string spritesPath = GetInputDirectory();
 PrintLine($"[ImportSprites] Importing from: {spritesPath}");
 
 var pngFiles = Directory.GetFiles(spritesPath, "*.png", SearchOption.AllDirectories);
