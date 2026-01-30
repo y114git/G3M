@@ -75,7 +75,6 @@ class SearchTabBuilder:
         filters_layout.addSpacing(20)
         modgame_combo = QComboBox()
         modgame_combo.addItem(tr('ui.deltarune'), 'deltarune')
-        modgame_combo.addItem(tr('ui.deltarunedemo'), 'deltarunedemo')
         modgame_combo.addItem(tr('ui.undertale'), 'undertale')
         modgame_combo.addItem(tr('ui.undertaleyellow'), 'undertaleyellow')
         modgame_combo.addItem(tr('ui.pizzatower'), 'pizzatower')

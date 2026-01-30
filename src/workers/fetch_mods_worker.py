@@ -15,7 +15,7 @@ from services.localization_service import tr
 from models.mod_models import ModChapterData, ModExtraFile, ModInfo
 from utils.file_utils import version_sort_key
 logger = logging.getLogger(__name__)
-_GAME_MAPPING = {'deltarune': 'deltarune', 'deltarunedemo': 'deltarune', 'undertale': 'undertale', 'undertaleyellow': 'undertaleyellow', 'pizzatower': 'pizzatower', 'sugaryspire': 'sugaryspire'}
+_GAME_MAPPING = {'deltarune': 'deltarune', 'undertale': 'undertale', 'undertaleyellow': 'undertaleyellow', 'pizzatower': 'pizzatower', 'sugaryspire': 'sugaryspire'}
 
 
 class FetchModsThread(QThread):
@@ -283,8 +283,6 @@ class FetchModsThread(QThread):
             composite_version = self._aggregate_versions(files_data)
             base_version = data.get('version')
             game = data.get('game') or data.get('modgame', 'deltarune')
-            if game == 'deltarune' and data.get('is_demo_mod', False):
-                game = 'deltarunedemo'
             screens_list = data.get('screenshots_url', [])
             if isinstance(screens_list, str):
                 screens_list = [s.strip() for s in screens_list.split(',') if s.strip()]

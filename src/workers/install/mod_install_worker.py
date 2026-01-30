@@ -117,7 +117,7 @@ class ModInstallWorker(BaseInstallWorker):
             if has_deltamod_info_file(files_in_root):
                 self.status.emit(tr('status.deltamod_archive_detected_url'), UI_COLORS['status_warning'])
                 from adapters.deltamod_adapter import DeltamodConverter
-                converter = DeltamodConverter(content_path, self.mods_dir)
+                converter = DeltamodConverter(content_path, self.mods_dir, self.gamebanana_metadata)
                 new_mod_path = converter.convert()
                 if new_mod_path:
                     return True

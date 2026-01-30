@@ -581,7 +581,7 @@ class SearchDisplayController(QObject):
         selected_game = 'deltarune'
         if hasattr(self.app, 'modgame_combo'):
             selected_game = self.app.modgame_combo.currentData() or 'deltarune'
-        filters = {'tags': selected_tags, 'game': selected_game, 'search_text': self.app_state.search_text, 'hide_banned': True, 'hide_local': True, 'hide_mods_without_files': hide_mods_without_files, 'status_filter': ['approved', 'pending'], 'exclude_installed': True}
+        filters = {'tags': selected_tags, 'game': selected_game, 'search_text': self.app_state.search_text, 'hide_banned': True, 'hide_local': True, 'hide_mods_without_files': hide_mods_without_files, 'status_filter': ['approved', 'pending'], 'exclude_installed': False}
         sort_config = None
         if hasattr(self.app, 'sort_combo'):
             sort_type = self.app.sort_combo.currentIndex()
@@ -1041,7 +1041,7 @@ class SearchDisplayController(QObject):
 
     def _map_modgame_to_gamebanana(self, game: str) -> str:
         game_value = game
-        mapping = {'deltarune': 'deltarune', 'deltarunedemo': 'deltarune', 'undertale': 'undertale', 'undertaleyellow': 'undertaleyellow', 'pizzatower': 'pizzatower', 'sugaryspire': 'sugaryspire'}
+        mapping = {'deltarune': 'deltarune', 'undertale': 'undertale', 'undertaleyellow': 'undertaleyellow', 'pizzatower': 'pizzatower', 'sugaryspire': 'sugaryspire'}
         return mapping.get((game_value or '').lower(), '')
 
     def load_mods_for_selected_game(self):

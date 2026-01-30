@@ -19,9 +19,10 @@ from utils.file_utils import get_unique_mod_dir, find_deltamod_info_file
 class DeltamodConverter:
     """Converts deltamod format mods to DELTAHUB format."""
 
-    def __init__(self, source_path: str, mods_dir: str):
+    def __init__(self, source_path: str, mods_dir: str, gamebanana_metadata: Optional[Dict] = None):
         self.source_path = source_path
         self.mods_dir = mods_dir
+        self.gamebanana_metadata = gamebanana_metadata or {}
         self.deltamod_info: Dict[str, Any] = {}
         self.modding_xml: Optional[ET.Element] = None
 
@@ -167,13 +168,36 @@ class DeltamodConverter:
             return None
         patches = self._collect_patches()
         meta = self.deltamod_info.get('metadata', {})
-        package_id = meta.get('packageID', '')
-        if package_id and package_id != 'und.und.und':
-            key = package_id.replace('.', '_')
+
+        if self.gamebanana_metadata and 'mod_id' in self.gamebanana_metadata:
+            key = f"gb_{self.gamebanana_metadata['mod_id']}"
         else:
-            key = f"local_{meta.get('name', 'unnamed')}_{uuid.uuid4().hex[:8]}"
+            package_id = meta.get('packageID', '')
+            if package_id and package_id != 'und.und.und':
+                key = package_id.replace('.', '_')
+            else:
+                key = f"local_{meta.get('name', 'unnamed')}_{uuid.uuid4().hex[:8]}"
+
         created_date = datetime.now().strftime('%d.%m.%y %H:%M')
-        config = {'key': key, 'created_date': created_date, 'name': meta.get('name', tr('defaults.local_mod')), 'version': meta.get('version', '1.0.0'), 'author': ', '.join(meta.get('author', [tr('defaults.unknown')])), 'tagline': meta.get('description', tr('defaults.no_description')), 'external_url': meta.get('url', ''), 'game_version': self.deltamod_info.get('deltaruneTargetVersion', tr('defaults.not_specified')), 'game': 'deltarunedemo' if meta.get('demoMod') else 'deltarune', 'files': self._generate_files_structure(patches), 'tags': meta.get('tags', [])}
+        game_value = 'deltarune'
+        if self.gamebanana_metadata and self.gamebanana_metadata.get('game'):
+            game_value = self.gamebanana_metadata['game']
+        elif meta.get('demoMod'):
+            game_value = 'deltarunedemo'
+        config = {'key': key, 'created_date': created_date, 'name': meta.get('name', tr('defaults.local_mod')), 'version': meta.get('version', '1.0.0'), 'author': ', '.join(meta.get('author', [tr('defaults.unknown')])), 'tagline': meta.get('description', tr('defaults.no_description')), 'external_url': self.gamebanana_metadata.get('profile_url') if self.gamebanana_metadata.get('profile_url') else meta.get('url', ''), 'game_version': self.deltamod_info.get('deltaruneTargetVersion', tr('defaults.not_specified')), 'game': game_value, 'files': self._generate_files_structure(patches), 'tags': meta.get('tags', [])}
+
+        if self.gamebanana_metadata:
+            if self.gamebanana_metadata.get('icon_url'):
+                config['icon_url'] = self.gamebanana_metadata['icon_url']
+            if self.gamebanana_metadata.get('tags'):
+                gb_tags = self.gamebanana_metadata['tags']
+                if isinstance(gb_tags, list):
+                    existing_tags = config.get('tags', [])
+                    for tag in gb_tags:
+                        if tag and tag not in existing_tags:
+                            existing_tags.append(tag)
+                    config['tags'] = existing_tags
+
         return config
 
     def _generate_files_structure(self, patches: list) -> Dict[str, Any]:

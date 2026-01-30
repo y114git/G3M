@@ -50,7 +50,7 @@ class InstallGameBananaModThread(BaseInstallWorker):
         Returns:
             Dict: Metadata dictionary.
         """
-        return {'mod_id': mod_id, 'profile_url': self.mod_info.external_url, 'icon_url': self.mod_info.icon_url, 'tags': self.mod_info.tags if hasattr(self.mod_info, 'tags') and self.mod_info.tags else [], 'category': self.mod_info.gamebanana_category if hasattr(self.mod_info, 'gamebanana_category') else None}
+        return {'mod_id': mod_id, 'profile_url': self.mod_info.external_url, 'icon_url': self.mod_info.icon_url, 'tags': self.mod_info.tags if hasattr(self.mod_info, 'tags') and self.mod_info.tags else [], 'category': self.mod_info.gamebanana_category if hasattr(self.mod_info, 'gamebanana_category') else None, 'game': self.mod_info.game if hasattr(self.mod_info, 'game') else 'deltarune'}
 
     def set_selected_file(self, file_index: int):
         """Set the selected file index for installation.
@@ -153,7 +153,7 @@ class InstallGameBananaModThread(BaseInstallWorker):
                     self.finished.emit(True, tr('status.install_complete_success', mod_name=mod_name))
                 except Exception as e:
                     self._cleanup_temp_files(archive_path, archive_dir)
-                    logger.error(f'Error installing DELTAHUB mod from GameBanana: {e}', exc_info=True)
+                    logger.error(f'Error installing DELTAHUB mod from GameBanana (mod {mod_id}): {e}', exc_info=True)
                     raise AppError('errors.gamebanana_installation_failed')
                 return
             self.status.emit(tr('status.converting_mod'), UI_COLORS['status_info'])

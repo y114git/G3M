@@ -11,7 +11,7 @@ import shutil
 import tempfile
 import threading
 from dataclasses import dataclass
-from typing import Dict, Optional, List, Tuple, Set, Any
+from typing import Dict, List, Optional, Set, Any
 from PyQt6.QtCore import QObject, pyqtSignal
 from PyQt6.QtWidgets import QApplication, QDialog, QMessageBox
 from services.localization_service import tr
@@ -1648,6 +1648,11 @@ class ModManager(QObject):
                 metadata_updated = True
                 mod_meta = mods_metadata[key]
             cfg = dict(config_data)
+            mod_folder_path = os.path.join(self.app_state.mods_dir, folder_name) if folder_name else ''
+            if mod_folder_path:
+                resolved_icon = resolve_mod_icon(cfg, mod_folder_path)
+                if resolved_icon:
+                    cfg['icon_url'] = resolved_icon
             if 'game' not in cfg and 'modgame' in cfg:
                 cfg['game'] = cfg.pop('modgame')
             elif 'game' not in cfg:
