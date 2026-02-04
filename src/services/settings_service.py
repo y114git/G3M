@@ -16,7 +16,7 @@ from PyQt6.QtCore import QObject, pyqtSignal, QTimer, QByteArray
 from PyQt6.QtWidgets import QFileDialog, QWidget
 from services.localization_service import tr, LocalizationManager
 from config.constants import LAUNCHER_VERSION, UI_COLORS, SLOT_ID_UNIVERSAL
-from models.game_modes import DemoGameMode, UndertaleGameMode
+from models.game_modes import DemoGameMode, UndertaleGameMode, PizzaTowerGameMode
 from utils.file_utils import get_file_filter
 
 
@@ -121,77 +121,47 @@ class SettingsManager(QObject):
         self.write_json(self.app_state.config_path, self.app_state.local_config)
         self.language_changed.emit(language_code)
 
-    def on_toggle_beta_updates(self, enabled: bool):
-        self.app_state.local_config['beta_updates_enabled'] = enabled
+    def _toggle_setting(self, key: str, enabled: bool, signal: str = 'settings_changed'):
+        self.app_state.local_config[key] = enabled
         self.write_local_config()
-        self.settings_changed.emit()
+        if signal:
+            getattr(self, signal).emit()
 
-    def on_toggle_fullscreen(self, enabled: bool):
-        self.app_state.local_config['fullscreen_enabled'] = enabled
-        self.write_local_config()
-        self.settings_changed.emit()
-
-    def on_toggle_hide_library_filters(self, enabled: bool):
-        self.app_state.local_config['hide_library_filters'] = enabled
-        self.write_local_config()
-        self.settings_changed.emit()
-
-    def on_toggle_steam_launch(self, enabled: bool):
-        self.app_state.local_config['launch_via_steam'] = enabled
-        self.write_local_config()
-        self.settings_changed.emit()
-
-    def on_toggle_portproton(self, enabled: bool):
-        self.app_state.local_config['use_portproton'] = enabled
-        self.write_local_config()
-        self.settings_changed.emit()
+    def on_toggle_beta_updates(self, enabled: bool): self._toggle_setting('beta_updates_enabled', enabled)
+    def on_toggle_fullscreen(self, enabled: bool): self._toggle_setting('fullscreen_enabled', enabled)
+    def on_toggle_hide_library_filters(self, enabled: bool): self._toggle_setting('hide_library_filters', enabled)
+    def on_toggle_steam_launch(self, enabled: bool): self._toggle_setting('launch_via_steam', enabled)
+    def on_toggle_portproton(self, enabled: bool): self._toggle_setting('use_portproton', enabled)
+    def on_toggle_hide_mods_without_files(self, enabled: bool): self._toggle_setting('hide_mods_without_files', enabled)
+    def on_toggle_disable_background(self, enabled: bool): self._toggle_setting('background_disabled', enabled, 'theme_changed')
+    def on_toggle_disable_splash(self, enabled: bool): self._toggle_setting('disable_splash', enabled, None)
+    def on_toggle_skip_patching_warnings(self, enabled: bool): self._toggle_setting('skip_patching_warnings', enabled)
 
     def select_portproton_path(self) -> Optional[str]:
-        dlg_title = tr('ui.select_portproton_path')
-        filepath, _ = QFileDialog.getOpenFileName(self.parent_widget, dlg_title)
+        filepath, _ = QFileDialog.getOpenFileName(self.parent_widget, tr('ui.select_portproton_path'))
         if filepath:
-            self.app_state.local_config['portproton_path'] = filepath
-            self.write_local_config()
-            self.settings_changed.emit()
+            self._toggle_setting('portproton_path', filepath)
             return filepath
         return None
 
-    def on_toggle_hide_mods_without_files(self, enabled: bool):
-        self.app_state.local_config['hide_mods_without_files'] = enabled
-        self.write_local_config()
-        self.settings_changed.emit()
-
-    def on_toggle_disable_background(self, enabled: bool):
-        self.app_state.local_config['background_disabled'] = enabled
-        self.write_local_config()
-        self.theme_changed.emit()
-
-    def on_toggle_disable_splash(self, enabled: bool):
-        self.app_state.local_config['disable_splash'] = enabled
-        self.write_local_config()
-
-    def on_toggle_skip_patching_warnings(self, enabled: bool):
-        self.app_state.local_config['skip_patching_warnings'] = enabled
-        self.write_local_config()
-        self.settings_changed.emit()
+    _GAME_PATH_DIALOGS = {
+        DemoGameMode: ('dialogs.select_demo_folder', 'dialogs.demo_not_found'),
+        UndertaleGameMode: ('dialogs.select_undertale_folder', 'dialogs.undertale_not_found'),
+    }
+    _MACOS_APP_NAMES = {
+        UndertaleGameMode: ('UNDERTALE.app',),
+        PizzaTowerGameMode: ('PizzaTower.app',),
+    }
 
     def prompt_for_game_path(self, is_initial=False) -> bool:
         from models.game_modes import UndertaleYellowGameMode, PizzaTowerGameMode
-        if isinstance(self.app_state.game_mode, DemoGameMode):
-            title = tr('dialogs.select_demo_folder')
-            message = tr('dialogs.demo_not_found')
-        elif isinstance(self.app_state.game_mode, UndertaleGameMode):
-            title = tr('dialogs.select_undertale_folder')
-            message = tr('dialogs.undertale_not_found')
-        elif isinstance(self.app_state.game_mode, UndertaleYellowGameMode):
-            title = tr('dialogs.select_undertaleyellow_folder')
-            message = tr('dialogs.undertaleyellow_not_found')
-        elif isinstance(self.app_state.game_mode, PizzaTowerGameMode):
-            title = tr('dialogs.select_pizzatower_folder')
-            message = tr('dialogs.pizzatower_not_found')
-        else:
-            title = tr('dialogs.select_deltarune_folder')
-            message = tr('dialogs.deltarune_not_found')
+        dialogs = {
+            **self._GAME_PATH_DIALOGS,
+            UndertaleYellowGameMode: ('dialogs.select_undertaleyellow_folder', 'dialogs.undertaleyellow_not_found'),
+            PizzaTowerGameMode: ('dialogs.select_pizzatower_folder', 'dialogs.pizzatower_not_found'),
+        }
+        title_key, msg_key = dialogs.get(type(self.app_state.game_mode), ('dialogs.select_deltarune_folder', 'dialogs.deltarune_not_found'))
+        title, message = tr(title_key), tr(msg_key)
         if is_initial:
             self.feedback_service.show_message('info', 'dialogs.path_not_found', tr('dialogs.game_path_instruction', message=message))
         if platform.system() == 'Darwin':
@@ -202,13 +172,9 @@ class SettingsManager(QObject):
             path = QFileDialog.getExistingDirectory(self.parent_widget, title)
         if path:
             corrected_path = path
-            if platform.system() == 'Darwin' and (not path.endswith('.app')):
-                if isinstance(self.app_state.game_mode, UndertaleGameMode) or isinstance(self.app_state.game_mode, UndertaleYellowGameMode):
-                    app_names = ('UNDERTALE.app',)
-                elif isinstance(self.app_state.game_mode, PizzaTowerGameMode):
-                    app_names = ('PizzaTower.app',)
-                else:
-                    app_names = ('DELTARUNE.app', 'DELTARUNEdemo.app')
+            if platform.system() == 'Darwin' and not path.endswith('.app'):
+                macos_apps = {**self._MACOS_APP_NAMES, UndertaleYellowGameMode: ('UNDERTALE.app',)}
+                app_names = macos_apps.get(type(self.app_state.game_mode), ('DELTARUNE.app', 'DELTARUNEdemo.app'))
                 for app_name in app_names:
                     candidate = os.path.join(path, app_name)
                     if os.path.isdir(candidate):

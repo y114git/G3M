@@ -182,23 +182,21 @@ class UsedModsManager(QObject):
             self.settings_service.write_local_config()
             logging.info(f'_cleanup_mod_from_all_config_keys: Removed mod {mod_key} from all config keys')
 
+    _GAME_MODE_CONFIG_KEYS = {
+        DemoGameMode: 'used_mods_deltarunedemo',
+        UndertaleGameMode: 'used_mods_undertale',
+        UndertaleYellowGameMode: 'used_mods_undertaleyellow',
+        PizzaTowerGameMode: 'used_mods_pizzatower',
+        SugarySpireGameMode: 'used_mods_sugaryspire',
+    }
+
     def get_used_mods_config_key(self, game_mode_instance=None, is_chapter_mode: Optional[bool] = None):
-        if game_mode_instance is None:
-            game_mode_instance = self.app_state.game_mode
-        if is_chapter_mode is None:
-            is_chapter_mode = self.app_state.current_mode == 'chapter'
-        if isinstance(game_mode_instance, DemoGameMode):
-            return 'used_mods_deltarunedemo'
-        elif isinstance(game_mode_instance, UndertaleGameMode):
-            return 'used_mods_undertale'
-        elif isinstance(game_mode_instance, UndertaleYellowGameMode):
-            return 'used_mods_undertaleyellow'
-        elif isinstance(game_mode_instance, PizzaTowerGameMode):
-            return 'used_mods_pizzatower'
-        elif isinstance(game_mode_instance, SugarySpireGameMode):
-            return 'used_mods_sugaryspire'
-        else:
-            return 'used_mods_deltarune_chapter' if is_chapter_mode else 'used_mods_deltarune'
+        game_mode = game_mode_instance or self.app_state.game_mode
+        is_chapter = is_chapter_mode if is_chapter_mode is not None else self.app_state.current_mode == 'chapter'
+        key = self._GAME_MODE_CONFIG_KEYS.get(type(game_mode))
+        if key:
+            return key
+        return 'used_mods_deltarune_chapter' if is_chapter else 'used_mods_deltarune'
 
     def save_used_mods_state(self):
         is_chapter_mode = self.app_state.current_mode == 'chapter'

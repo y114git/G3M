@@ -5,28 +5,17 @@ This module provides utilities for UI operations including debouncing and format
 import logging
 from PyQt6.QtCore import QTimer, QThread
 from typing import Callable, Optional
-from utils.format_utils import format_size_mb as _format_size_mb
 
 
 class DebounceTimer:
     """Timer that delays function execution until after a period of inactivity."""
 
     def __init__(self, delay_ms: int = 200):
-        """Initialize the debounce timer.
-
-        Args:
-            delay_ms: Delay in milliseconds before executing callback.
-        """
         self.delay_ms = delay_ms
         self._timer: Optional[QTimer] = None
         self._callback: Optional[Callable] = None
 
     def call(self, callback: Callable) -> None:
-        """Schedule a callback to execute after the debounce delay.
-
-        Args:
-            callback: Function to execute after delay.
-        """
         if self._timer is not None:
             self._timer.stop()
             self._timer.deleteLater()
@@ -37,7 +26,6 @@ class DebounceTimer:
         self._timer.start(self.delay_ms)
 
     def _execute(self) -> None:
-        """Execute the scheduled callback."""
         if self._callback is not None:
             try:
                 self._callback()
@@ -48,7 +36,6 @@ class DebounceTimer:
         self._callback = None
 
     def cancel(self) -> None:
-        """Cancel the pending callback execution."""
         if self._timer is not None:
             self._timer.stop()
             self._timer.deleteLater()
@@ -57,15 +44,9 @@ class DebounceTimer:
 
 
 def format_size_mb(size_bytes: int) -> str:
-    """Format byte size as megabytes string.
-
-    Args:
-        size_bytes: Size in bytes.
-
-    Returns:
-        str: Formatted size string.
-    """
-    return _format_size_mb(size_bytes)
+    if size_bytes <= 0:
+        return '0 MB'
+    return f'{size_bytes / (1024 * 1024):.1f} MB'
 
 
 def refresh_ui_after_mod_install(main_window, mod_service=None):

@@ -113,29 +113,26 @@ class SettingsUiController:
     def on_language_changed(self, language_code):
         self.settings_service.on_language_changed(language_code)
 
+    _GAME_TYPE_MODES = {
+        'deltarunedemo': DemoGameMode,
+        'undertale': UndertaleGameMode,
+        'undertaleyellow': UndertaleYellowGameMode,
+        'pizzatower': PizzaTowerGameMode,
+        'sugaryspire': SugarySpireGameMode,
+    }
+
     def on_game_type_changed(self, index):
         game_type = self.app.game_type_combo.itemData(index)
         if not game_type:
             return
         self.slot_service.save_used_mods_state()
-        if game_type == 'deltarunedemo':
-            self.app_state.game_mode = DemoGameMode()
-        elif game_type == 'undertale':
-            self.app_state.game_mode = UndertaleGameMode()
-        elif game_type == 'undertaleyellow':
-            self.app_state.game_mode = UndertaleYellowGameMode()
-        elif game_type == 'pizzatower':
-            self.app_state.game_mode = PizzaTowerGameMode()
-        elif game_type == 'sugaryspire':
-            self.app_state.game_mode = SugarySpireGameMode()
-        else:
-            self.app_state.game_mode = FullGameMode()
+        mode_class = self._GAME_TYPE_MODES.get(game_type, FullGameMode)
+        self.app_state.game_mode = mode_class()
         self.app_state.local_config['selected_game_type'] = game_type
         self.settings_service.write_local_config()
-        if hasattr(self.app, '_update_saves_button_state'):
-            self.app._update_saves_button_state()
-        if hasattr(self.app, '_update_checkbox_visibility'):
-            self.app._update_checkbox_visibility()
+        for attr in ('_update_saves_button_state', '_update_checkbox_visibility'):
+            if hasattr(self.app, attr):
+                getattr(self.app, attr)()
         if hasattr(self.slot_service, '_update_steam_checkbox_state'):
             self.slot_service._update_steam_checkbox_state()
 
@@ -236,13 +233,8 @@ class SettingsUiController:
         if hasattr(self.app, 'theme'):
             self.app.theme.update_background_button_state()
 
-    def on_toggle_disable_splash(self, state):
-        is_disabled = bool(state)
-        self.settings_service.on_toggle_disable_splash(is_disabled)
-
-    def on_toggle_skip_patching_warnings(self, state):
-        is_enabled = bool(state)
-        self.settings_service.on_toggle_skip_patching_warnings(is_enabled)
+    def on_toggle_disable_splash(self, state): self.settings_service.on_toggle_disable_splash(bool(state))
+    def on_toggle_skip_patching_warnings(self, state): self.settings_service.on_toggle_skip_patching_warnings(bool(state))
 
     def switch_settings_page(self, page: QWidget):
         if self.app_state.current_settings_page and self.app_state.current_settings_page is not page:
