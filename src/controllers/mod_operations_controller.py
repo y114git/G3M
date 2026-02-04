@@ -16,7 +16,7 @@ from ui.widgets.mod.installed_mod_widget import InstalledModWidget
 from workers.install.batch_install_worker import InstallModsThread
 from workers.install.gamebanana_install_worker import InstallGameBananaModThread
 from workers.gamebanana.prepare_gamebanana_manual_install_worker import PrepareGameBananaManualInstallWorker
-from utils.mod_utils import get_mod_key, get_mod_name, get_gamebanana_mod_id
+from utils.mod_utils import get_mod_key, get_mod_name
 from ui.dialogs.file_picker_dialog import GameBananaFilePickerDialog
 
 
@@ -69,28 +69,6 @@ class ModOperationsController:
         self.app_state.clear_current_task()
         self._safe_execute(lambda: self.app.game_launch.update_button_state(), 'Failed to update button state')
         self.feedback_service.show_message('error', 'errors.gamebanana_install_failed', error=str(error))
-
-    def _get_mod_key_value(self, mod) -> Optional[str]:
-        """Get the key value for a mod.
-
-        Args:
-            mod: Mod object.
-
-        Returns:
-            Optional[str]: Mod key or None.
-        """
-        return get_mod_key(mod)
-
-    def _get_gamebanana_mod_id_str(self, mod) -> Optional[str]:
-        """Get the GameBanana mod ID as a string.
-
-        Args:
-            mod: Mod object.
-
-        Returns:
-            Optional[str]: GameBanana mod ID or None.
-        """
-        return get_gamebanana_mod_id(mod)
 
     def handle_url_install(self, url: str):
         """Handle mod installation from a URL.

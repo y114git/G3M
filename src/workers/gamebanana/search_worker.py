@@ -117,9 +117,9 @@ class SearchGameBananaModsThread(QThread):
                         if self.metadata_cache:
                             cache_valid = self.metadata_cache.is_valid(mod_id_str)
                             if cache_valid:
-                                cached_downloads = self.metadata_cache.get_downloads(mod_id_str)
-                                cached_tagline = self.metadata_cache.get_tagline(mod_id_str)
-                                cached_category = self.metadata_cache.get_category(mod_id_str)
+                                cached_downloads = self.metadata_cache.get_field(mod_id_str, 'downloads')
+                                cached_tagline = self.metadata_cache.get_field(mod_id_str, 'tagline')
+                                cached_category = self.metadata_cache.get_field(mod_id_str, 'category')
                                 if cached_downloads is not None and cached_downloads > 0:
                                     mod_info.downloads = cached_downloads
                                 elif downloads_value > 0:

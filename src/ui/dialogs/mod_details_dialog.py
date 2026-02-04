@@ -60,8 +60,8 @@ class LoadModDetailsThread(QThread):
                     from adapters.gamebanana_cache import GameBananaMetadataCache
                     metadata_cache = GameBananaMetadataCache(self.cache_dir)
                     if metadata_cache.is_valid(mod_id_str):
-                        cached_text = metadata_cache.get_full_description(mod_id_str)
-                        cached_screenshots = metadata_cache.get_screenshots(mod_id_str)
+                        cached_text = metadata_cache.get_field(mod_id_str, 'full_description')
+                        cached_screenshots = metadata_cache.get_field(mod_id_str, 'screenshots')
                         if cached_text or cached_screenshots:
                             logging.debug(f'LoadModDetailsThread: Using cached data for mod {mod_id_str}')
                             result = {}

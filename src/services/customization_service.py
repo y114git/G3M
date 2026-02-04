@@ -39,65 +39,47 @@ class CustomizationManager(QObject):
         self._music_starting = False
         self._current_music_path = None
 
-    def get_background_music_path(self) -> str:
-        """Get path to custom background music file.
+    def _get_custom_file_path(self, base_name: str, extensions: list[str]) -> str:
+        """Get path to a custom file if it exists.
+
+        Args:
+            base_name: Base filename without extension (e.g., 'custom_background_music').
+            extensions: List of extensions to check (e.g., ['.mp3', '.wav']).
 
         Returns:
-            str: Path to music file or empty string.
+            str: Path to the file if found, empty string otherwise.
         """
-        mp3_path = os.path.join(self.app_state.config_dir, 'custom_background_music.mp3')
-        wav_path = os.path.join(self.app_state.config_dir, 'custom_background_music.wav')
-        logging.debug(f'[CustomizationManager] Checking music paths: mp3={mp3_path} (exists: {os.path.exists(mp3_path)}), wav={wav_path} (exists: {os.path.exists(wav_path)})')
-        if os.path.exists(mp3_path):
-            return mp3_path
-        if os.path.exists(wav_path):
-            return wav_path
+        for ext in extensions:
+            path = os.path.join(self.app_state.config_dir, f'{base_name}{ext}')
+            if os.path.exists(path):
+                return path
         return ''
+
+    def get_background_music_path(self) -> str:
+        """Get path to custom background music file."""
+        path = self._get_custom_file_path('custom_background_music', ['.mp3', '.wav'])
+        logging.debug(f'[CustomizationManager] Checking music path: {path} (exists: {bool(path)})')
+        return path
 
     def get_startup_sound_path(self) -> str:
-        """Get path to custom startup sound file.
-
-        Returns:
-            str: Path to sound file or empty string.
-        """
-        mp3 = os.path.join(self.app_state.config_dir, 'custom_startup_sound.mp3')
-        wav = os.path.join(self.app_state.config_dir, 'custom_startup_sound.wav')
-        if os.path.exists(mp3):
-            return mp3
-        if os.path.exists(wav):
-            return wav
-        return ''
+        """Get path to custom startup sound file."""
+        return self._get_custom_file_path('custom_startup_sound', ['.mp3', '.wav'])
 
     def get_background_music_button_text(self) -> str:
-        """Get button text for background music (select or remove).
-
-        Returns:
-            str: Localized button text.
-        """
-        mp3 = os.path.join(self.app_state.config_dir, 'custom_background_music.mp3')
-        wav = os.path.join(self.app_state.config_dir, 'custom_background_music.wav')
-        has_file = os.path.exists(mp3) or os.path.exists(wav)
-        return tr('buttons.remove_background_music') if has_file else tr('buttons.select_background_music')
+        """Get button text for background music (select or remove)."""
+        return tr('buttons.remove_background_music') if self.get_background_music_path() else tr('buttons.select_background_music')
 
     def get_startup_sound_button_text(self) -> str:
-        """Get button text for startup sound (select or remove).
-
-        Returns:
-            str: Localized button text.
-        """
-        path = self.get_startup_sound_path()
-        return tr('buttons.remove_startup_sound') if path else tr('buttons.select_startup_sound')
+        """Get button text for startup sound (select or remove)."""
+        return tr('buttons.remove_startup_sound') if self.get_startup_sound_path() else tr('buttons.select_startup_sound')
 
     def get_custom_logo_path(self) -> str:
-        for ext in ['.png', '.jpg', '.jpeg', '.gif', '.bmp']:
-            logo_path = os.path.join(self.app_state.config_dir, f'custom_logo{ext}')
-            if os.path.exists(logo_path):
-                return logo_path
-        return ''
+        """Get path to custom logo file."""
+        return self._get_custom_file_path('custom_logo', ['.png', '.jpg', '.jpeg', '.gif', '.bmp'])
 
     def get_logo_button_text(self) -> str:
-        has_logo = bool(self.get_custom_logo_path())
-        return tr('buttons.remove_logo') if has_logo else tr('buttons.change_logo')
+        """Get button text for logo (change or remove)."""
+        return tr('buttons.remove_logo') if self.get_custom_logo_path() else tr('buttons.change_logo')
 
     def update_translucent_backgrounds(self, search_container: Optional[QWidget] = None, library_container: Optional[QWidget] = None):
         bg_color = get_theme_color(self.app_state.local_config, 'background', '#000000')

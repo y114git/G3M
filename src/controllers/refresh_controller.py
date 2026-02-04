@@ -240,11 +240,11 @@ class RefreshController:
                             if key and key.startswith('gb_'):
                                 mod_id = key.replace('gb_', '', 1)
                                 if metadata_cache.is_valid(mod_id):
-                                    downloads = metadata_cache.get_downloads(mod_id)
-                                    tagline = metadata_cache.get_tagline(mod_id)
-                                    full_description = metadata_cache.get_full_description(mod_id)
-                                    screenshots = metadata_cache.get_screenshots(mod_id)
-                                    category = metadata_cache.get_category(mod_id)
+                                    downloads = metadata_cache.get_field(mod_id, 'downloads')
+                                    tagline = metadata_cache.get_field(mod_id, 'tagline')
+                                    full_description = metadata_cache.get_field(mod_id, 'full_description')
+                                    screenshots = metadata_cache.get_field(mod_id, 'screenshots')
+                                    category = metadata_cache.get_field(mod_id, 'category')
                                     if downloads is not None:
                                         old_downloads = getattr(mod, 'downloads', 0) or 0
                                         mod.downloads = downloads

@@ -129,65 +129,18 @@ class GameBananaMetadataCache:
             self._save_cache()
             logger.debug(f'GameBananaMetadataCache: Cached metadata for mod {mod_id}: downloads={downloads}, tagline_length={(len(tagline) if tagline else 0)}, has_desc={bool(full_description)}, screenshots_count={(len(screenshots) if screenshots else 0)}, category={category}')
 
-    def get_downloads(self, mod_id: str) -> Optional[int]:
-        """Get cached download count for a mod.
+    def get_field(self, mod_id: str, field: str):
+        """Get a specific field from cached metadata.
 
         Args:
             mod_id: GameBanana mod ID.
+            field: Field name to retrieve.
 
         Returns:
-            Optional[int]: Download count or None.
+            Field value or None if not cached or expired.
         """
         entry = self._get_valid_entry(mod_id)
-        return entry.get('downloads') if entry else None
-
-    def get_tagline(self, mod_id: str) -> Optional[str]:
-        """Get cached tagline for a mod.
-
-        Args:
-            mod_id: GameBanana mod ID.
-
-        Returns:
-            Optional[str]: Tagline or None.
-        """
-        entry = self._get_valid_entry(mod_id)
-        return entry.get('tagline') if entry else None
-
-    def get_full_description(self, mod_id: str) -> Optional[str]:
-        """Get cached full description for a mod.
-
-        Args:
-            mod_id: GameBanana mod ID.
-
-        Returns:
-            Optional[str]: Full description or None.
-        """
-        entry = self._get_valid_entry(mod_id)
-        return entry.get('full_description') if entry else None
-
-    def get_screenshots(self, mod_id: str) -> Optional[list]:
-        """Get cached screenshots for a mod.
-
-        Args:
-            mod_id: GameBanana mod ID.
-
-        Returns:
-            Optional[list]: List of screenshot URLs or None.
-        """
-        entry = self._get_valid_entry(mod_id)
-        return entry.get('screenshots') if entry else None
-
-    def get_category(self, mod_id: str) -> Optional[str]:
-        """Get cached category for a mod.
-
-        Args:
-            mod_id: GameBanana mod ID.
-
-        Returns:
-            Optional[str]: Category name or None.
-        """
-        entry = self._get_valid_entry(mod_id)
-        return entry.get('category') if entry else None
+        return entry.get(field) if entry else None
 
     def clear(self):
         """Clear all cached metadata."""

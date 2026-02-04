@@ -86,11 +86,8 @@ def filter_and_sort_mods(mods_list: List[Any], filters: Dict[str, Any], sort_con
         mod = mod_accessor(item) if mod_accessor else item
         if hide_banned and _get_mod_bool_attr(mod, 'ban_status'):
             continue
-        if isinstance(mod, dict):
-            pass
-        else:
-            if _get_mod_bool_attr(mod, 'hide_mod'):
-                continue
+        if not isinstance(mod, dict) and _get_mod_bool_attr(mod, 'hide_mod'):
+            continue
         key = _get_mod_attr(mod, 'key', None) or _get_mod_attr(mod, 'mod_key', None)
         is_gamebanana_mod = bool(key and isinstance(key, str) and key.startswith('gb_'))
         if only_gamebanana and not is_gamebanana_mod:
@@ -107,19 +104,13 @@ def filter_and_sort_mods(mods_list: List[Any], filters: Dict[str, Any], sort_con
             mod_tags = _get_mod_attr(mod, 'tags', []) or []
             if not isinstance(mod_tags, list):
                 mod_tags = []
-            key = _get_mod_attr(mod, 'key', None) or _get_mod_attr(mod, 'mod_key', None)
-            is_gamebanana_mod = bool(key and isinstance(key, str) and key.startswith('gb_'))
             if is_gamebanana_mod:
                 gamebanana_category = _get_mod_attr(mod, 'gamebanana_category')
                 if gamebanana_category:
                     category_tag = GameBananaAPI.category_to_tag(gamebanana_category)
                     if category_tag and category_tag not in mod_tags:
-                        if not isinstance(mod_tags, list):
-                            mod_tags = []
-                        mod_tags = mod_tags.copy() if isinstance(mod_tags, list) else []
+                        mod_tags = mod_tags.copy()
                         mod_tags.append(category_tag)
-            if not isinstance(mod_tags, list):
-                mod_tags = []
             if not all((tag in mod_tags for tag in selected_tags)):
                 continue
         if selected_game:
