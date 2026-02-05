@@ -1,7 +1,4 @@
-"""Background image loading worker.
-
-This module provides a worker thread for loading background images asynchronously.
-"""
+"""Background image loading worker."""
 from PyQt6.QtCore import QThread, pyqtSignal
 from PyQt6.QtGui import QImage
 
@@ -11,12 +8,7 @@ class BgLoader(QThread):
 
     def __init__(self, path: str, size):
         super().__init__()
-        self._path = path
-        self._size = size
+        self._path, self._size = path, size
 
     def run(self):
-        if self._path.lower().endswith('.gif'):
-            self.loaded.emit(('gif', self._path))
-        else:
-            img = QImage(self._path)
-            self.loaded.emit(('img', img))
+        self.loaded.emit(('gif', self._path) if self._path.lower().endswith('.gif') else ('img', QImage(self._path)))

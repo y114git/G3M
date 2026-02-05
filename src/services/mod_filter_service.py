@@ -1,31 +1,25 @@
 """Mod filtering and sorting utilities."""
-from typing import List, Dict, Any, Optional, Callable
 from services.mod_service import parse_mod_date
-from services.blocklist_service import BlocklistManager
 from adapters.gamebanana_adapter import GameBananaAPI
 _TRUE_VALUES = (True, 'true', 'True', 1)
 
 
-def _get_mod_attr(mod: Any, attr: str, default: Any = None) -> Any:
-    return mod.get(attr, default) if isinstance(mod, dict) else getattr(mod, attr, default)
+def _get_mod_attr(mod, attr, default=None): return mod.get(attr, default) if isinstance(mod, dict) else getattr(mod, attr, default)
+def _get_mod_bool_attr(mod, attr, default=False):
+    v = _get_mod_attr(mod, attr, default)
+    return v in _TRUE_VALUES if v else False
 
 
-def _get_mod_bool_attr(mod: Any, attr: str, default: bool = False) -> bool:
-    value = _get_mod_attr(mod, attr, default)
-    return value in _TRUE_VALUES if value else False
-
-
-def _date_tuple_to_sortable(date_tuple) -> int:
-    if not date_tuple or date_tuple == (0, 0, 0, 0, 0):
+def _date_tuple_to_sortable(dt) -> int:
+    if not dt or dt == (0, 0, 0, 0, 0):
         return 0
     try:
-        y, m, d, h, mi = date_tuple
-        return y * 100000000 + m * 1000000 + d * 10000 + h * 100 + mi
+        return dt[0] * 100000000 + dt[1] * 1000000 + dt[2] * 10000 + dt[3] * 100 + dt[4]
     except (ValueError, TypeError, IndexError):
         return 0
 
 
-def filter_and_sort_mods(mods_list: List[Any], filters: Dict[str, Any], sort_config: Optional[Dict[str, Any]] = None, mod_accessor: Optional[Callable] = None, blocklist_service: Optional[BlocklistManager] = None, installed_mod_keys: Optional[set] = None) -> List[Any]:
+def filter_and_sort_mods(mods_list, filters, sort_config=None, mod_accessor=None, blocklist_service=None, installed_mod_keys=None):
     if not mods_list:
         return []
     selected_tags, selected_game = filters.get('tags', []), filters.get('game') or filters.get('modgame', '')
@@ -57,10 +51,8 @@ def filter_and_sort_mods(mods_list: List[Any], filters: Dict[str, Any], sort_con
                 continue
         if selected_game and (_get_mod_attr(mod, 'game') or _get_mod_attr(mod, 'modgame', 'deltarune')) != selected_game:
             continue
-        if search_text:
-            stl = search_text.lower()
-            if stl not in _get_mod_attr(mod, 'name', '').lower() and stl not in _get_mod_attr(mod, 'tagline', '').lower():
-                continue
+        if search_text and (stl := search_text.lower()) not in _get_mod_attr(mod, 'name', '').lower() and stl not in _get_mod_attr(mod, 'tagline', '').lower():
+            continue
         filtered_list.append(item)
     if sort_config:
         sort_type, reverse = sort_config.get('sort_type', 0), sort_config.get('reverse', False)

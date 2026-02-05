@@ -1,9 +1,5 @@
-"""GameBanana metadata loading worker.
-
-This module provides a worker thread for loading mod metadata from GameBanana in batches.
-"""
+"""GameBanana metadata loading worker."""
 import logging
-from typing import List, Optional
 from PyQt6.QtCore import QThread, pyqtSignal
 from adapters.gamebanana_adapter import GameBananaAPI
 from adapters.gamebanana_cache import GameBananaMetadataCache
@@ -11,33 +7,24 @@ logger = logging.getLogger(__name__)
 
 
 class LoadGameBananaMetadataThread(QThread):
-    mod_updated = pyqtSignal(str, int, str, str)
-    progress = pyqtSignal(int, int)
-    finished = pyqtSignal()
+    mod_updated, progress, finished = pyqtSignal(str, int, str, str), pyqtSignal(int, int), pyqtSignal()
 
-    def __init__(self, mod_ids: List[str], metadata_cache: GameBananaMetadataCache, parent=None, app_state=None):
+    def __init__(self, mod_ids, metadata_cache: GameBananaMetadataCache, parent=None, app_state=None):
         super().__init__(parent)
-        self.mod_ids = mod_ids
-        self.metadata_cache = metadata_cache
-        self.api = GameBananaAPI()
-        self._cancelled = False
-        self._batch_size = 3
-        self.app_state = app_state
+        self.mod_ids, self.metadata_cache, self.api = mod_ids, metadata_cache, GameBananaAPI()
+        self._cancelled, self._batch_size, self.app_state = False, 3, app_state
 
-    def cancel(self):
-        self._cancelled = True
+    def cancel(self): self._cancelled = True
 
-    def _save_metadata(self, mod_id_str: str, downloads: Optional[int], tagline: Optional[str], category: Optional[str]):
-        tagline_to_save = tagline if tagline else 'No description'
-        category_to_save = category if category else None
+    def _save_metadata(self, mod_id_str, downloads, tagline, category):
+        tagline_to_save, category_to_save = tagline or 'No description', category
         self.metadata_cache.set(mod_id_str, downloads, tagline_to_save, category=category_to_save)
-        emit_downloads = downloads if downloads is not None else 0
-        self.mod_updated.emit(mod_id_str, emit_downloads, tagline_to_save, category_to_save or '')
+        self.mod_updated.emit(mod_id_str, downloads or 0, tagline_to_save, category_to_save or '')
 
     def run(self):
         try:
             total = len(self.mod_ids)
-            if total == 0:
+            if not total:
                 logger.debug('LoadGameBananaMetadataThread: No mods to load metadata for')
                 self.finished.emit()
                 return
@@ -45,51 +32,38 @@ class LoadGameBananaMetadataThread(QThread):
             for i in range(0, total, self._batch_size):
                 if self._cancelled or self.isInterruptionRequested():
                     break
-                batch = self.mod_ids[i:i + self._batch_size]
-                for mod_id_str in batch:
+                for mod_id_str in self.mod_ids[i:i + self._batch_size]:
                     if self._cancelled or self.isInterruptionRequested():
                         break
                     try:
-                        mod_id = int(mod_id_str)
-                        downloads, tagline, category = self._load_mod_metadata(mod_id)
-                        if downloads is not None:
+                        downloads, tagline, category = self._load_mod_metadata(int(mod_id_str))
+                        if downloads is not None or tagline or category:
                             self._save_metadata(mod_id_str, downloads, tagline, category)
                             loaded_count += 1
-                        elif tagline or category:
-                            self._save_metadata(mod_id_str, None, tagline, category)
-                            loaded_count += 1
                         else:
-                            logger.debug(f'LoadGameBananaMetadataThread: Failed to load metadata for mod {mod_id_str}, will retry later')
+                            logger.debug(f'LoadGameBananaMetadataThread: Failed to load metadata for mod {mod_id_str}')
                     except (ValueError, TypeError) as e:
                         logger.warning(f'LoadGameBananaMetadataThread: Invalid mod_id {mod_id_str}: {e}')
-                        continue
                     except Exception as e:
                         logger.error(f'LoadGameBananaMetadataThread: Error loading metadata for mod {mod_id_str}: {e}', exc_info=True)
-                        continue
                     self.progress.emit(loaded_count, total)
                     self.msleep(300)
-                if i + self._batch_size < total and (not self._cancelled) and (not self.isInterruptionRequested()):
+                if i + self._batch_size < total and not self._cancelled and not self.isInterruptionRequested():
                     self.msleep(500)
             self.finished.emit()
         except Exception as e:
             logger.error(f'LoadGameBananaMetadataThread: Unexpected error: {e}', exc_info=True)
             self.finished.emit()
 
-    def _load_mod_metadata(self, mod_id: int) -> tuple[Optional[int], Optional[str], Optional[str]]:
-        downloads = None
-        tagline = None
-        category = None
+    def _load_mod_metadata(self, mod_id: int):
         try:
             try:
                 downloads = self.api.get_mod_downloads_only(mod_id)
             except Exception:
                 downloads = None
             try:
-                description = self.api.get_mod_description_only(mod_id)
-                if description:
-                    tagline = description[:200].strip()
-                    if not tagline or len(tagline) < 10:
-                        tagline = None
+                desc = self.api.get_mod_description_only(mod_id)
+                tagline = desc[:200].strip() if desc and len(desc[:200].strip()) >= 10 else None
             except Exception:
                 tagline = None
             try:

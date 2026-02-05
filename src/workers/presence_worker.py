@@ -22,22 +22,20 @@ class PresenceWorker(QObject):
 
     @pyqtSlot()
     def run(self):
+        count = -1
         try:
             if self._busy or not self.app_state or not getattr(self.app_state, 'has_internet', True):
-                self._safe_emit(self.update_online_count, -1)
                 return
             self._busy = True
             resp = get_session().post(f'{CLOUD_FUNCTIONS_BASE_URL}/presenceHeartbeat', json={'sessionId': self.session_id}, timeout=NETWORK_TIMEOUT_MEDIUM)
             if resp.status_code == 200:
                 try:
-                    self._safe_emit(self.update_online_count, max(int((resp.json() or {}).get('online', 0)), 0))
+                    count = max(int((resp.json() or {}).get('online', 0)), 0)
                 except Exception as e:
                     logging.warning(f'PresenceWorker: parse error: {e}', exc_info=True)
-                    self._safe_emit(self.update_online_count, -1)
-            else:
-                self._safe_emit(self.update_online_count, -1)
         except (requests.Timeout, requests.ConnectionError, requests.RequestException):
-            self._safe_emit(self.update_online_count, -1)
+            pass
         finally:
             self._busy = False
+            self._safe_emit(self.update_online_count, count)
             self._safe_emit(self.finished)

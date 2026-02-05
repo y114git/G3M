@@ -9,38 +9,37 @@ from config.constants import IMAGE_CACHE_MAX_SIZE, NETWORK_SEMAPHORE_LIMIT
 try:
     _IMG_CACHE: OrderedDict[str, QImage] = OrderedDict()
     _PIX_CACHE: dict[str, QPixmap] = {}
-    _IMG_CACHE_LOCK = threading.RLock()
-    _NET_SEM = threading.Semaphore(NETWORK_SEMAPHORE_LIMIT)
-    _CACHE_MAX_SIZE = IMAGE_CACHE_MAX_SIZE
+    _IMG_CACHE_LOCK, _NET_SEM = threading.RLock(), threading.Semaphore(NETWORK_SEMAPHORE_LIMIT)
 except Exception as e:
     logging.warning(f'cache: failed to initialize cache/locks: {e}')
-    _IMG_CACHE, _PIX_CACHE, _IMG_CACHE_LOCK, _NET_SEM, _CACHE_MAX_SIZE = OrderedDict(), {}, None, None, IMAGE_CACHE_MAX_SIZE
+    _IMG_CACHE, _PIX_CACHE, _IMG_CACHE_LOCK, _NET_SEM = OrderedDict(), {}, None, None
 
 
 @contextlib.contextmanager
 def cache_lock():
-    """Context manager for thread-safe cache access."""
-    if _IMG_CACHE_LOCK is not None:
+    """Thread-safe cache access context manager."""
+    acquired = _IMG_CACHE_LOCK is not None
+    if acquired:
         _IMG_CACHE_LOCK.acquire()
     try:
         yield
     finally:
-        if _IMG_CACHE_LOCK is not None:
+        if acquired:
             _IMG_CACHE_LOCK.release()
 
 
 def add_to_cache(key: str, image: QImage) -> None:
-    """Add an image to the cache with LRU eviction."""
+    """Add image to cache with LRU eviction."""
     with cache_lock():
         if key in _IMG_CACHE:
             _IMG_CACHE.move_to_end(key)
         _IMG_CACHE[key] = image
-        while len(_IMG_CACHE) > _CACHE_MAX_SIZE:
+        while len(_IMG_CACHE) > IMAGE_CACHE_MAX_SIZE:
             _IMG_CACHE.popitem(last=False)
 
 
 def get_from_cache(key: str) -> QImage | None:
-    """Retrieve an image from the cache."""
+    """Retrieve image from cache."""
     with cache_lock():
         if key in _IMG_CACHE:
             _IMG_CACHE.move_to_end(key)

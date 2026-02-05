@@ -4,9 +4,16 @@ import platform
 import psutil
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
-from config.constants import GAME_PROCESS_NAMES, GAME_EXECUTABLES, DATA_WIN_FILENAME
+from config.constants import GAME_PROCESS_NAMES, GAME_EXECUTABLES, DATA_WIN_FILENAME, SLOT_ID_DEMO, SLOT_ID_UNDERTALE, SLOT_ID_UNDERTALE_YELLOW, SLOT_ID_PIZZA_TOWER, SLOT_ID_SUGARY_SPIRE, SLOT_ID_UNIVERSAL
 if TYPE_CHECKING:
     from models.game_modes import GameMode
+
+
+def _get_game_mode_map():
+    from models.game_modes import DemoGameMode, UndertaleGameMode, UndertaleYellowGameMode, PizzaTowerGameMode, SugarySpireGameMode
+    return {DemoGameMode: ('deltarune', 'DELTARUNEdemo', SLOT_ID_DEMO), UndertaleGameMode: ('undertale', 'UNDERTALE', SLOT_ID_UNDERTALE),
+            UndertaleYellowGameMode: ('undertaleyellow', 'UNDERTALE Yellow', SLOT_ID_UNDERTALE_YELLOW), PizzaTowerGameMode: ('pizzatower', 'Pizza Tower', SLOT_ID_PIZZA_TOWER),
+            SugarySpireGameMode: ('sugaryspire', 'Sugary Spire', SLOT_ID_SUGARY_SPIRE)}
 
 
 def is_game_running(pid: Optional[int] = None):
@@ -47,20 +54,9 @@ def is_valid_game_path(path: str, skip_data_check: bool = False, game_type: str 
     return any(os.path.isfile(os.path.join(path, exe)) for exe in executables)
 
 
-def get_chapter_id_for_game_mode(game_mode: 'GameMode') -> int:
-    from models.game_modes import DemoGameMode, UndertaleGameMode, UndertaleYellowGameMode, PizzaTowerGameMode, SugarySpireGameMode
-    from config.constants import SLOT_ID_DEMO, SLOT_ID_UNDERTALE, SLOT_ID_UNDERTALE_YELLOW, SLOT_ID_PIZZA_TOWER, SLOT_ID_SUGARY_SPIRE, SLOT_ID_UNIVERSAL
-    return {DemoGameMode: SLOT_ID_DEMO, UndertaleGameMode: SLOT_ID_UNDERTALE, UndertaleYellowGameMode: SLOT_ID_UNDERTALE_YELLOW, PizzaTowerGameMode: SLOT_ID_PIZZA_TOWER, SugarySpireGameMode: SLOT_ID_SUGARY_SPIRE}.get(type(game_mode), SLOT_ID_UNIVERSAL)
-
-
-def get_game_type_string(game_mode: 'GameMode') -> str:
-    from models.game_modes import DemoGameMode, UndertaleGameMode, UndertaleYellowGameMode, PizzaTowerGameMode, SugarySpireGameMode
-    return {DemoGameMode: 'deltarune', UndertaleGameMode: 'undertale', UndertaleYellowGameMode: 'undertaleyellow', PizzaTowerGameMode: 'pizzatower', SugarySpireGameMode: 'sugaryspire'}.get(type(game_mode), 'deltarune')
-
-
-def get_game_name_string(game_mode: 'GameMode') -> str:
-    from models.game_modes import DemoGameMode, UndertaleGameMode, UndertaleYellowGameMode, PizzaTowerGameMode, SugarySpireGameMode
-    return {DemoGameMode: 'DELTARUNEdemo', UndertaleGameMode: 'UNDERTALE', UndertaleYellowGameMode: 'UNDERTALE Yellow', PizzaTowerGameMode: 'Pizza Tower', SugarySpireGameMode: 'Sugary Spire'}.get(type(game_mode), 'DELTARUNE')
+def get_game_type_string(game_mode: 'GameMode') -> str: return _get_game_mode_map().get(type(game_mode), ('deltarune',))[0]
+def get_game_name_string(game_mode: 'GameMode') -> str: return _get_game_mode_map().get(type(game_mode), (None, 'DELTARUNE'))[1]
+def get_chapter_id_for_game_mode(game_mode: 'GameMode') -> int: return _get_game_mode_map().get(type(game_mode), (None, None, SLOT_ID_UNIVERSAL))[2]
 
 
 def get_executable_name_for_game(game_type: str, os_type: str = None) -> Optional[str]:
