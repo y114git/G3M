@@ -1,7 +1,4 @@
-"""Mod filtering and sorting utilities.
-
-This module provides utilities for filtering and sorting mod lists based on various criteria.
-"""
+"""Mod filtering and sorting utilities."""
 from typing import List, Dict, Any, Optional, Callable
 from services.mod_service import parse_mod_date
 from services.blocklist_service import BlocklistManager
@@ -10,76 +7,30 @@ _TRUE_VALUES = (True, 'true', 'True', 1)
 
 
 def _get_mod_attr(mod: Any, attr: str, default: Any = None) -> Any:
-    """Get an attribute from a mod (dict or object).
-
-    Args:
-        mod: Mod data (dict or object).
-        attr: Attribute name to retrieve.
-        default: Default value if attribute not found.
-
-    Returns:
-        Any: Attribute value or default.
-    """
-    if isinstance(mod, dict):
-        return mod.get(attr, default)
-    return getattr(mod, attr, default)
+    return mod.get(attr, default) if isinstance(mod, dict) else getattr(mod, attr, default)
 
 
 def _get_mod_bool_attr(mod: Any, attr: str, default: bool = False) -> bool:
-    """Get a boolean attribute from a mod.
-
-    Args:
-        mod: Mod data (dict or object).
-        attr: Attribute name to retrieve.
-        default: Default value if attribute not found.
-
-    Returns:
-        bool: Boolean value of the attribute.
-    """
     value = _get_mod_attr(mod, attr, default)
     return value in _TRUE_VALUES if value else False
 
 
 def _date_tuple_to_sortable(date_tuple) -> int:
-    """Convert a date tuple to a sortable integer.
-
-    Args:
-        date_tuple: Tuple of (year, month, day, hour, minute).
-
-    Returns:
-        int: Sortable integer representation of the date.
-    """
     if not date_tuple or date_tuple == (0, 0, 0, 0, 0):
         return 0
     try:
-        year, month, day, hour, minute = date_tuple
-        return year * 100000000 + month * 1000000 + day * 10000 + hour * 100 + minute
+        y, m, d, h, mi = date_tuple
+        return y * 100000000 + m * 1000000 + d * 10000 + h * 100 + mi
     except (ValueError, TypeError, IndexError):
         return 0
 
 
 def filter_and_sort_mods(mods_list: List[Any], filters: Dict[str, Any], sort_config: Optional[Dict[str, Any]] = None, mod_accessor: Optional[Callable] = None, blocklist_service: Optional[BlocklistManager] = None, installed_mod_keys: Optional[set] = None) -> List[Any]:
-    """Filter and sort a list of mods based on criteria.
-
-    Args:
-        mods_list: List of mods to filter and sort.
-        filters: Dictionary of filter criteria (tags, game, search_text, etc.).
-        sort_config: Optional sorting configuration (sort_type, reverse).
-        mod_accessor: Optional function to extract mod from list items.
-        blocklist_service: Optional blocklist manager for filtering.
-        installed_mod_keys: Optional set of installed mod keys to exclude from results.
-
-    Returns:
-        List[Any]: Filtered and sorted list of mods.
-    """
     if not mods_list:
         return []
-    selected_tags = filters.get('tags', [])
-    selected_game = filters.get('game') or filters.get('modgame', '')
-    search_text = filters.get('search_text', '')
-    hide_banned = filters.get('hide_banned', True)
-    only_gamebanana = filters.get('only_gamebanana', False)
-    status_filter = filters.get('status_filter', ['approved', 'pending'])
+    selected_tags, selected_game = filters.get('tags', []), filters.get('game') or filters.get('modgame', '')
+    search_text, hide_banned = filters.get('search_text', ''), filters.get('hide_banned', True)
+    only_gamebanana, status_filter = filters.get('only_gamebanana', False), filters.get('status_filter', ['approved', 'pending'])
     exclude_installed = filters.get('exclude_installed', False)
     filtered_list = []
     for item in mods_list:
@@ -88,82 +39,40 @@ def filter_and_sort_mods(mods_list: List[Any], filters: Dict[str, Any], sort_con
             continue
         if not isinstance(mod, dict) and _get_mod_bool_attr(mod, 'hide_mod'):
             continue
-        key = _get_mod_attr(mod, 'key', None) or _get_mod_attr(mod, 'mod_key', None)
-        is_gamebanana_mod = bool(key and isinstance(key, str) and key.startswith('gb_'))
-        if only_gamebanana and not is_gamebanana_mod:
+        key = _get_mod_attr(mod, 'key') or _get_mod_attr(mod, 'mod_key')
+        is_gb = bool(key and isinstance(key, str) and key.startswith('gb_'))
+        if only_gamebanana and not is_gb:
             continue
-        if exclude_installed and installed_mod_keys and key and key in installed_mod_keys:
+        if exclude_installed and installed_mod_keys and key in installed_mod_keys:
             continue
-        mod_status = _get_mod_attr(mod, 'status', 'approved')
-        if mod_status not in status_filter:
+        if _get_mod_attr(mod, 'status', 'approved') not in status_filter:
             continue
-        if blocklist_service and selected_game:
-            if blocklist_service.is_mod_blocklisted(mod, selected_game):
-                continue
+        if blocklist_service and selected_game and blocklist_service.is_mod_blocklisted(mod, selected_game):
+            continue
         if selected_tags:
-            mod_tags = _get_mod_attr(mod, 'tags', []) or []
-            if not isinstance(mod_tags, list):
-                mod_tags = []
-            if is_gamebanana_mod:
-                gamebanana_category = _get_mod_attr(mod, 'gamebanana_category')
-                if gamebanana_category:
-                    category_tag = GameBananaAPI.category_to_tag(gamebanana_category)
-                    if category_tag and category_tag not in mod_tags:
-                        mod_tags = mod_tags.copy()
-                        mod_tags.append(category_tag)
-            if not all((tag in mod_tags for tag in selected_tags)):
+            mod_tags = list(_get_mod_attr(mod, 'tags') or [])
+            if is_gb and (cat := _get_mod_attr(mod, 'gamebanana_category')) and (cat_tag := GameBananaAPI.category_to_tag(cat)) and cat_tag not in mod_tags:
+                mod_tags.append(cat_tag)
+            if not all(tag in mod_tags for tag in selected_tags):
                 continue
-        if selected_game:
-            mod_game = _get_mod_attr(mod, 'game', None) or _get_mod_attr(mod, 'modgame', 'deltarune')
-            if mod_game != selected_game:
-                continue
+        if selected_game and (_get_mod_attr(mod, 'game') or _get_mod_attr(mod, 'modgame', 'deltarune')) != selected_game:
+            continue
         if search_text:
-            search_text_lower = search_text.lower()
-            mod_name_lower = _get_mod_attr(mod, 'name', '').lower()
-            mod_tagline_lower = _get_mod_attr(mod, 'tagline', '').lower()
-            if search_text_lower not in mod_name_lower and search_text_lower not in mod_tagline_lower:
+            stl = search_text.lower()
+            if stl not in _get_mod_attr(mod, 'name', '').lower() and stl not in _get_mod_attr(mod, 'tagline', '').lower():
                 continue
         filtered_list.append(item)
     if sort_config:
-        sort_type = sort_config.get('sort_type', 0)
-        reverse = sort_config.get('reverse', False)
+        sort_type, reverse = sort_config.get('sort_type', 0), sort_config.get('reverse', False)
 
         def get_sort_key(item):
-            """Generate sort key for mod items based on sort configuration.
-
-            This inner function creates a sort key for mod items based on the
-            configured sort type (downloads, last updated, or created date).
-
-            Args:
-                item: Mod item to generate sort key for.
-
-            Sort types:
-            - 0: Downloads count (numeric)
-            - 1: Last updated date
-            - 2: Created/installed date
-
-            Returns:
-                Sortable value appropriate for the selected sort type.
-                Returns 0 as fallback for invalid data.
-            """
             mod = mod_accessor(item) if mod_accessor else item
             if sort_type == 0:
-                downloads = _get_mod_attr(mod, 'downloads', None)
-                if downloads is None:
-                    downloads = 0
                 try:
-                    downloads_int = int(downloads) if downloads is not None else 0
+                    return int(_get_mod_attr(mod, 'downloads', 0) or 0)
                 except (ValueError, TypeError):
-                    downloads_int = 0
-                return downloads_int
-            elif sort_type == 1:
-                date_str = _get_mod_attr(mod, 'last_updated') or _get_mod_attr(mod, 'updated_date') or '0'
-                date_tuple = parse_mod_date(date_str)
-                return _date_tuple_to_sortable(date_tuple)
-            elif sort_type == 2:
-                date_str = _get_mod_attr(mod, 'created_date') or _get_mod_attr(mod, 'added_date') or '0'
-                date_tuple = parse_mod_date(date_str)
-                return _date_tuple_to_sortable(date_tuple)
-            return 0
+                    return 0
+            date_str = (_get_mod_attr(mod, 'last_updated') or _get_mod_attr(mod, 'updated_date') or '0') if sort_type == 1 else (_get_mod_attr(mod, 'created_date') or _get_mod_attr(mod, 'added_date') or '0')
+            return _date_tuple_to_sortable(parse_mod_date(date_str))
         filtered_list.sort(key=get_sort_key, reverse=reverse)
     return filtered_list

@@ -1,8 +1,4 @@
-"""Archive extraction utilities.
-
-This module provides utilities for extracting various archive formats
-including zip, tar, rar, and 7z files with safety checks.
-"""
+"""Archive extraction utilities."""
 import os
 import shutil
 import tempfile
@@ -16,55 +12,26 @@ from typing import List, Callable
 from utils.file_utils import safe_move, safe_remove, safe_rmtree, _safe_join, _is_symlink
 
 
-def _is_safe_path(path: str) -> bool:
-    """Check if a path is safe (no directory traversal).
-
-    Args:
-        path: Path to check.
-
-    Returns:
-        bool: True if safe.
-    """
-    return not ('..' in path or path.startswith('/'))
+def _is_safe_path(path: str) -> bool: return not ('..' in path or path.startswith('/'))
 
 
 class UnrarMissingError(Exception):
-    """Exception raised when UnRAR utility is not available."""
     pass
 
 
 def _get_unrar_path() -> str:
-    """Get the path to the UnRAR executable.
-
-    Returns:
-        str: Path to UnRAR executable.
-    """
     from utils.path_utils import get_user_data_root
     bin_dir = os.path.join(get_user_data_root(), 'bin')
-    if platform.system() == 'Windows':
-        return os.path.join(bin_dir, 'UnRAR.exe')
-    else:
-        return os.path.join(bin_dir, 'unrar')
+    return os.path.join(bin_dir, 'UnRAR.exe' if platform.system() == 'Windows' else 'unrar')
 
 
 def _ensure_unrar_available():
-    """Ensure UnRAR utility is available for RAR extraction.
-
-    Raises:
-        UnrarMissingError: If UnRAR is not available.
-    """
     import rarfile
     import subprocess
-    if rarfile.UNRAR_TOOL:
+    for tool in ([rarfile.UNRAR_TOOL] if rarfile.UNRAR_TOOL else []) + (['unrar'] if rarfile.UNRAR_TOOL != 'unrar' else []):
         try:
-            subprocess.run([rarfile.UNRAR_TOOL], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            return
-        except FileNotFoundError:
-            pass
-    if rarfile.UNRAR_TOOL != 'unrar':
-        try:
-            subprocess.run(['unrar'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            rarfile.UNRAR_TOOL = 'unrar'
+            subprocess.run([tool], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            rarfile.UNRAR_TOOL = tool
             return
         except FileNotFoundError:
             pass
@@ -76,29 +43,19 @@ def _ensure_unrar_available():
 
 
 def download_and_setup_unrar(status_callback: Callable[[str], None] = None) -> bool:
-    """Download and set up the UnRAR utility.
-
-    Args:
-        status_callback: Callback for status updates.
-
-    Returns:
-        bool: True if successful.
-    """
     import platform
     import gzip
     try:
         import requests
+        import rarfile
         target_path = _get_unrar_path()
         if os.path.exists(target_path):
-            import rarfile
             rarfile.UNRAR_TOOL = target_path
             return True
         system_os = platform.system()
-        url = None
-        is_gz = False
+        is_gz = system_os == 'Darwin'
         if system_os == 'Windows':
-            url = 'https://www.rarlab.com/rar/unrarw64.exe'
-            target_path = os.path.join(os.path.dirname(target_path), 'unrar_sfx.exe')
+            url, target_path = 'https://www.rarlab.com/rar/unrarw64.exe', os.path.join(os.path.dirname(target_path), 'unrar_sfx.exe')
         elif system_os == 'Darwin':
             url = 'https://www.rarlab.com/rar/unrar_MacOSX_10.13.2_64bit.gz'
             is_gz = True
@@ -140,62 +97,22 @@ def download_and_setup_unrar(status_callback: Callable[[str], None] = None) -> b
         return False
 
 
-def _extract_lzma(tmp_path: str, target_dir: str, fname: str) -> None:
-    """Extract LZMA compressed file.
-
-    Args:
-        tmp_path: Path to LZMA file.
-        target_dir: Directory to extract to.
-        fname: Original filename.
-    """
-    output_path = os.path.join(target_dir, os.path.splitext(fname)[0])
-    with lzma.open(tmp_path) as f_in, open(output_path, 'wb') as f_out:
+def _extract_lzma(tmp_path: str, target_dir: str, fname: str):
+    with lzma.open(tmp_path) as f_in, open(os.path.join(target_dir, os.path.splitext(fname)[0]), 'wb') as f_out:
         shutil.copyfileobj(f_in, f_out)
 
 
 def _detect_archive_format_by_signature(file_path: str) -> str:
-    """Detect archive format by reading file signature.
-
-    Args:
-        file_path: Path to archive file.
-
-    Returns:
-        str: Archive format ('zip', 'rar', '7z', or 'unknown').
-    """
     try:
         with open(file_path, 'rb') as f:
-            header = f.read(10)
-        if len(header) >= 4:
-            if header[:2] == b'PK':
-                return 'zip'
-            if header[:4] == b'Rar!':
-                return 'rar'
-            if header[:2] == b'7z':
-                return '7z'
-        return 'unknown'
+            h = f.read(10)
+        return 'zip' if h[:2] == b'PK' else ('rar' if h[:4] == b'Rar!' else ('7z' if h[:2] == b'7z' else 'unknown'))
     except Exception:
         return 'unknown'
 
 
 def _collect_safe_members(members, name_getter, label: str):
-    """Filter archive members to exclude unsafe paths.
-
-    Args:
-        members: Archive member list.
-        name_getter: Function to extract name from member.
-        label: Archive type label for logging.
-
-    Returns:
-        list: Safe members to extract.
-    """
-    targets = []
-    for member in members:
-        name = name_getter(member)
-        if not _is_safe_path(name):
-            logging.warning(f'_extract_archive_raw: Skipping suspicious path in {label}: {name}')
-            continue
-        targets.append(member)
-    return targets
+    return [m for m in members if _is_safe_path(name_getter(m)) or not logging.warning(f'Skipping suspicious path in {label}: {name_getter(m)}')]
 
 
 def _extract_archive_raw(src_path: str, fname_lower: str, out_dir: str) -> None:
@@ -306,57 +223,27 @@ def _move_tree_safely(src_root: str, dst_root: str) -> None:
                         raise
 
 
-def _cleanup_extracted_archive(target_dir: str, is_game_installation: bool = False) -> None:
-    """Clean up extracted archive contents.
-
-    This function post-processes extracted archive contents to handle
-    common archive structure issues. It flattens nested directories
-    and removes platform-specific chapter directories for game installations.
-
-    Args:
-        target_dir: Directory containing extracted archive contents.
-        is_game_installation: Whether this is a game installation (default: False).
-
-    Cleanup operations:
-    - Flatten nested single-folder structures
-    - Remove platform-specific chapter directories (chapterX_windows/mac)
-    - Handle file conflicts during moves
-    - Safe directory and file removal
-
-    Returns:
-        None, but modifies the target_dir structure in-place.
-    """
-    if is_game_installation:
-        try:
-            entries = list(os.listdir(target_dir))
-            if len(entries) == 1:
-                single_entry = os.path.join(target_dir, entries[0])
-                if os.path.isdir(single_entry):
-                    logging.info(f'Moving contents from nested folder {single_entry} to {target_dir}')
-                    for item in os.listdir(single_entry):
-                        src = os.path.join(single_entry, item)
-                        dst = os.path.join(target_dir, item)
-                        if os.path.exists(dst):
-                            if os.path.isdir(dst):
-                                safe_rmtree(dst)
-                            else:
-                                safe_remove(dst)
-                        safe_move(src, dst)
-                    try:
-                        os.rmdir(single_entry)
-                    except OSError as e:
-                        logging.debug(f'_cleanup_extracted_archive: Failed to remove directory {single_entry}: {e}')
-        except Exception as e:
-            logging.warning(f'Failed to handle nested folder structure: {e}')
-        cleanup_dir_pattern = re.compile('^chapter\\d+_(windows|mac)$', re.I)
-        for root, dirs, _ in os.walk(target_dir, topdown=False):
-            for dir_name in dirs[:]:
-                if cleanup_dir_pattern.match(dir_name):
-                    dir_path = os.path.join(root, dir_name)
-                    if safe_rmtree(dir_path):
-                        dirs.remove(dir_name)
-                    else:
-                        logging.debug(f'_cleanup_extracted_archive: Failed to remove directory {dir_name}')
+def _cleanup_extracted_archive(target_dir: str, is_game_installation: bool = False):
+    if not is_game_installation:
+        return
+    try:
+        entries = list(os.listdir(target_dir))
+        if len(entries) == 1 and os.path.isdir(single := os.path.join(target_dir, entries[0])):
+            for item in os.listdir(single):
+                dst = os.path.join(target_dir, item)
+                (safe_rmtree if os.path.isdir(dst) else safe_remove)(dst) if os.path.exists(dst) else None
+                safe_move(os.path.join(single, item), dst)
+            try:
+                os.rmdir(single)
+            except OSError:
+                pass
+    except Exception as e:
+        logging.warning(f'Failed to handle nested folder: {e}')
+    pattern = re.compile(r'^chapter\d+_(windows|mac)$', re.I)
+    for root, dirs, _ in os.walk(target_dir, topdown=False):
+        for d in dirs[:]:
+            if pattern.match(d) and safe_rmtree(os.path.join(root, d)):
+                dirs.remove(d)
 
 
 class ArchiveExtractor:
@@ -504,59 +391,27 @@ class ArchiveExtractor:
 
 
 def prompt_for_unrar_install(parent_widget=None, signal_callback=None) -> bool:
-    """Prompt user to install UnRAR utility for RAR archive extraction.
-
-    This function checks if UnRAR is available, and if not, prompts the
-    user to install it. It can handle both GUI and non-GUI scenarios,
-    with optional callback signaling for asynchronous operations.
-
-    Args:
-        parent_widget: Parent widget for dialog display (optional).
-        signal_callback: Callback to signal UnRAR requirement (optional).
-
-    Returns:
-        bool: True if UnRAR is available or was successfully installed,
-              False if unavailable or installation failed/declined.
-
-    Features:
-    - Automatic UnRAR availability checking
-    - GUI prompt for user installation choice
-    - Automatic download and installation
-    - Fallback handling for missing GUI components
-    - Callback support for async operations
-    """
     try:
         _ensure_unrar_available()
         return True
     except UnrarMissingError:
         pass
-    if signal_callback is not None:
+    if signal_callback:
         signal_callback()
         return False
     try:
         from PyQt6.QtWidgets import QMessageBox
         from services.localization_service import tr
-        if parent_widget is None:
+        if not parent_widget:
             try:
                 from core.app_state import app_state
                 parent_widget = app_state.main_window
             except (ImportError, AttributeError):
-                logging.warning('Cannot show UnRAR install prompt: no parent widget available')
                 return False
-        reply = QMessageBox.question(parent_widget, tr('errors.unrar_missing_title'), tr('errors.unrar_missing_text'), QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.Yes)
-        if reply == QMessageBox.StandardButton.Yes:
-            success = download_and_setup_unrar()
-            if success:
-                logging.info('UnRAR utility installed successfully')
-                return True
-            else:
-                logging.error('Failed to install UnRAR utility')
-                return False
-        else:
-            logging.info('User declined UnRAR installation')
-            return False
+        if QMessageBox.question(parent_widget, tr('errors.unrar_missing_title'), tr('errors.unrar_missing_text'), QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No) == QMessageBox.StandardButton.Yes:
+            return download_and_setup_unrar() and logging.info('UnRAR installed') or True
+        return False
     except ImportError:
-        logging.warning('Cannot show UnRAR install prompt: GUI components not available')
         return False
 
 

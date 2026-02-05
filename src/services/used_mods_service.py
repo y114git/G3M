@@ -1,7 +1,4 @@
-"""Used mods tracking and slot management.
-
-This module manages which mods are selected for each chapter/slot and handles mod priorities.
-"""
+"""Used mods tracking and slot management."""
 import logging
 from PyQt6.QtCore import QObject, pyqtSignal, QTimer
 from typing import Dict, Optional, Any, List, TYPE_CHECKING
@@ -20,17 +17,13 @@ from utils.file_utils import sanitize_filename
 
 
 class UsedModsManager(QObject):
-    used_mods_updated = pyqtSignal()
-    used_mod_changed = pyqtSignal(int)
-    action_button_update_needed = pyqtSignal()
-    mod_widgets_update_needed = pyqtSignal()
+    used_mods_updated, used_mod_changed = pyqtSignal(), pyqtSignal(int)
+    action_button_update_needed, mod_widgets_update_needed = pyqtSignal(), pyqtSignal()
 
     def __init__(self, app_state: AppState, mod_service: ModManager, feedback_service: FeedbackManager, settings_service: SettingsManager, parent: Optional['AppWindow'] = None):
         super().__init__(parent)
-        self.app_state = app_state
-        self.mod_service = mod_service
-        self.feedback_service = feedback_service
-        self.settings_service = settings_service
+        self.app_state, self.mod_service = app_state, mod_service
+        self.feedback_service, self.settings_service = feedback_service, settings_service
         self.parent_widget: Optional['AppWindow'] = parent
         self.used_mods: Dict[int, List[Any]] = {}
 
@@ -43,86 +36,50 @@ class UsedModsManager(QObject):
 
     def set_used_mod(self, chapter_id: int, mod_data: Optional[Any], save_state: bool = True) -> None:
         key = get_mod_key(mod_data) if mod_data else None
-        mod_name = get_mod_name(mod_data, 'None') if mod_data else 'None'
-        logging.debug(f'set_used_mod: chapter_id={chapter_id}, mod={mod_name} (key={key})')
         current_mods = self.used_mods.get(chapter_id, [])
         if mod_data is None:
-            logging.info(f'Removing all mods from chapter {chapter_id}')
             if chapter_id in self.used_mods:
                 del self.used_mods[chapter_id]
         elif key:
-            found_index = None
-            for i, existing_mod in enumerate(current_mods):
-                existing_key = get_mod_key(existing_mod)
-                if existing_key == key:
-                    found_index = i
-                    break
+            found_index = next((i for i, m in enumerate(current_mods) if get_mod_key(m) == key), None)
             if found_index is not None:
-                logging.info(f'Removing mod {mod_name} from chapter {chapter_id} (toggle off)')
                 current_mods.pop(found_index)
-                if not current_mods:
-                    if chapter_id in self.used_mods:
-                        del self.used_mods[chapter_id]
-                    logging.info(f'No mods remaining for chapter {chapter_id}')
-                else:
+                if current_mods:
                     self.used_mods[chapter_id] = current_mods
-                    logging.info(f'Chapter {chapter_id} now has {len(current_mods)} mod(s)')
+                elif chapter_id in self.used_mods:
+                    del self.used_mods[chapter_id]
             else:
                 current_mods.insert(0, mod_data)
                 self.used_mods[chapter_id] = current_mods
-                logging.info(f'Chapter {chapter_id} now has {len(current_mods)} mod(s)')
         self.used_mod_changed.emit(chapter_id)
         if save_state:
             try:
                 self.save_used_mods_state()
-            except Exception as e:
-                logging.warning(f'set_used_mod: save_state failed: {e}')
+            except Exception:
+                pass
 
     def set_mods_list(self, chapter_id: int, mods_list: List[Any], save_state: bool = True) -> None:
-        mod_names = [get_mod_name(m, 'Unknown') for m in mods_list] if mods_list else []
-        logging.info(f'set_mods_list: chapter_id={chapter_id}, mods={mod_names}, count={(len(mods_list) if mods_list else 0)}')
         if not mods_list:
             if chapter_id in self.used_mods:
                 del self.used_mods[chapter_id]
-                logging.info(f'Removed all mods from chapter {chapter_id}')
         else:
             self.used_mods[chapter_id] = mods_list
-            logging.info(f'Set mod list for chapter {chapter_id}: {len(mods_list)} mod(s)')
         self.used_mod_changed.emit(chapter_id)
         if save_state:
             try:
                 self.save_used_mods_state()
-                logging.debug('Saved mods state after set_mods_list')
-            except Exception as e:
-                logging.warning(f'set_mods_list: save_state failed: {e}')
+            except Exception:
+                pass
 
     def is_mod_used_for_chapter(self, mod_data, chapter_id: int) -> bool:
-        if not mod_data:
+        if not mod_data or not (key := get_mod_key(mod_data)):
             return False
-        key = get_mod_key(mod_data)
-        if not key:
-            return False
-        used_mods_list = self.used_mods.get(chapter_id, [])
-        if not used_mods_list:
-            return False
-        for used_mod in used_mods_list:
-            used_mod_key = get_mod_key(used_mod)
-            if used_mod_key == key:
-                return True
-        return False
+        return any(get_mod_key(m) == key for m in self.used_mods.get(chapter_id, []))
 
     def is_mod_used_anywhere(self, mod_data) -> bool:
-        if not mod_data:
+        if not mod_data or not (key := get_mod_key(mod_data)):
             return False
-        key = get_mod_key(mod_data)
-        if not key:
-            return False
-        for used_mods_list in self.used_mods.values():
-            for used_mod in used_mods_list:
-                used_mod_key = get_mod_key(used_mod)
-                if used_mod_key == key:
-                    return True
-        return False
+        return any(get_mod_key(m) == key for mods in self.used_mods.values() for m in mods)
 
     def remove_mod_from_all_chapters(self, mod_data):
         key = get_mod_key(mod_data)
@@ -234,209 +191,92 @@ class UsedModsManager(QObject):
         logging.info(f'save_used_mods_state: Saved {len(used_mods_data)} chapter(s) with mods')
 
     def load_used_mods_state(self, mode=None):
-        """Load the used mods state from configuration.
-
-        This method loads the saved state of which mods are used for each
-        chapter from the local configuration. It handles both chapter mode
-        and universal mode, validates chapter IDs, and migrates old data
-        formats to the new list-based format.
-
-        Args:
-            mode: Optional mode override (defaults to current app state mode).
-
-        Operations performed:
-        - Loads used mods data from local config
-        - Validates chapter IDs based on game mode
-        - Migrates old string format to list format
-        - Validates mod keys against available mods
-        - Handles missing mods and cleanup
-        - Emits update signals when complete
-
-        Features:
-        - Chapter mode vs universal mode handling
-        - Data format migration
-        - Missing mod detection
-        - Configuration validation
-        - State cleanup and consistency
-
-        Returns:
-            None, but updates the used_mods state and emits signals.
-        """
-        logging.info('Loading used mods state')
         is_chapter_mode = self.app_state.current_mode == 'chapter'
         config_key = self.get_used_mods_config_key(self.app_state.game_mode, is_chapter_mode)
         used_mods_data = self.app_state.local_config.get(config_key, {})
         if not used_mods_data:
-            logging.debug(f'No used mods data found for key: {config_key}')
             self.used_mods.clear()
             self.used_mods_updated.emit()
             return
-        logging.info(f'Found used mods data for {len(used_mods_data)} chapter(s)')
-        mods_loaded = hasattr(self.app_state, 'all_mods') and self.app_state.all_mods and (len(self.app_state.all_mods) > 0)
-        if not mods_loaded:
-            logging.debug('Mods not fully loaded yet, deferring load_used_mods_state - will retry after mods are loaded')
+        if not (hasattr(self.app_state, 'all_mods') and self.app_state.all_mods):
             return
         self.used_mods.clear()
         needs_save = False
+        valid_chapter_ids = [SLOT_ID_MENU, SLOT_ID_CHAPTER_1, SLOT_ID_CHAPTER_2, SLOT_ID_CHAPTER_3, SLOT_ID_CHAPTER_4]
+        expected_chapter_id = get_chapter_id_for_game_mode(self.app_state.game_mode)
         for chapter_id_str, mod_data_raw in list(used_mods_data.items()):
             try:
                 chapter_id = int(chapter_id_str)
             except ValueError:
                 continue
-            is_chapter_mode = self.app_state.current_mode == 'chapter'
-            expected_chapter_id = get_chapter_id_for_game_mode(self.app_state.game_mode)
-            if not is_chapter_mode and expected_chapter_id != SLOT_ID_UNIVERSAL:
-                if chapter_id != expected_chapter_id:
-                    continue
-            elif is_chapter_mode:
-                if chapter_id not in [SLOT_ID_MENU, SLOT_ID_CHAPTER_1, SLOT_ID_CHAPTER_2, SLOT_ID_CHAPTER_3, SLOT_ID_CHAPTER_4]:
-                    continue
-            elif chapter_id != SLOT_ID_UNIVERSAL:
+            if not is_chapter_mode and expected_chapter_id != SLOT_ID_UNIVERSAL and chapter_id != expected_chapter_id:
                 continue
-            mod_keys = []
+            if is_chapter_mode and chapter_id not in valid_chapter_ids:
+                continue
+            if not is_chapter_mode and expected_chapter_id == SLOT_ID_UNIVERSAL and chapter_id != SLOT_ID_UNIVERSAL:
+                continue
+            mod_keys = [mod_data_raw] if isinstance(mod_data_raw, str) else (mod_data_raw if isinstance(mod_data_raw, list) else [])
             if isinstance(mod_data_raw, str):
-                logging.info(f'Migrating chapter {chapter_id} from old format (string) to new format (list)')
-                mod_keys = [mod_data_raw]
                 needs_save = True
-            elif isinstance(mod_data_raw, list):
-                mod_keys = mod_data_raw
-                logging.debug(f'Chapter {chapter_id} already in new format: {len(mod_keys)} mod(s)')
-            else:
-                logging.warning(f'Invalid mod data format for chapter {chapter_id}: {type(mod_data_raw)}')
-                continue
             if not mod_keys:
                 continue
-            mods_list = []
-            missing_mod_keys = []
+            mods_list, missing_keys = [], []
             for key in mod_keys:
                 if not key:
                     continue
-                mod_data = None
-                if hasattr(self.app_state, 'all_mods') and self.app_state.all_mods:
-                    for mod in self.app_state.all_mods:
-                        mod_mod_key = get_mod_key(mod)
-                        if mod_mod_key == key:
-                            mod_data = mod
-                            logging.debug(f"load_used_mods_state: Found mod {get_mod_name(mod, 'Unknown')} with key {key} in all_mods")
-                            break
-                if not mod_data and hasattr(self.app_state, 'all_mods') and self.app_state.all_mods:
-                    if key.startswith('gb_'):
-                        try:
-                            for mod in self.app_state.all_mods:
-                                mod_key_attr = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
-                                if mod_key_attr == key:
-                                    mod_data = mod
-                                    break
-                        except Exception as e:
-                            logging.debug(f'Error matching GameBanana mod by ID: {e}')
-                if not mod_data and self.parent_widget:
-                    installed_mods = self.mod_service.get_installed_mods_list()
-                    for installed_mod in installed_mods:
-                        installed_mod_key = installed_mod.get('mod_key') or installed_mod.get('key') or installed_mod.get('name')
-                        if installed_mod_key == key:
-                            mod_data = self.mod_service.create_mod_object_from_info(installed_mod, getattr(self.app_state, 'all_mods', None))
-                            break
-                        if not mod_data and key.startswith('gb_'):
-                            try:
-                                installed_mod_key = installed_mod.get('key') or installed_mod.get('mod_key')
-                                if installed_mod_key == key:
-                                    mod_data = self.mod_service.create_mod_object_from_info(installed_mod, getattr(self.app_state, 'all_mods', None))
-                                    break
-                            except Exception as e:
-                                logging.debug(f'Error matching GameBanana mod by ID in installed_mods: {e}')
-                if not mod_data and self.parent_widget:
-                    mod_config = self.mod_service.get_mod_config(key)
-                    if mod_config:
-                        mod_data = self.mod_service.create_mod_object_from_info(mod_config, getattr(self.app_state, 'all_mods', None))
-                        if mod_data:
-                            logging.debug(f'load_used_mods_state: Created mod object from config for key {key}')
-                if mod_data:
+                if mod_data := self._find_mod_by_key(key):
                     mods_list.append(mod_data)
                 else:
-                    missing_mod_keys.append(key)
-                    logging.debug(f'Mod with key {key} not found during initial load, will retry after mods are fully loaded')
+                    missing_keys.append(key)
             if mods_list:
                 self.used_mods[chapter_id] = mods_list
-                logging.info(f"Loaded {len(mods_list)} mod(s) for chapter {chapter_id}: {[get_mod_name(m, 'Unknown') for m in mods_list]}")
-            if missing_mod_keys:
+            if missing_keys:
                 if not hasattr(self, '_pending_mod_keys'):
                     self._pending_mod_keys = {}
-                self._pending_mod_keys[chapter_id] = missing_mod_keys
-                logging.info(f'Stored {len(missing_mod_keys)} missing mod key(s) for chapter {chapter_id} for retry after mods are loaded')
-            elif chapter_id_str in used_mods_data and (not mods_list):
-                has_pending_retries = hasattr(self, '_pending_mod_keys') and chapter_id in self._pending_mod_keys
-                if not has_pending_retries:
-                    logging.warning(f'Removing invalid mod data for chapter {chapter_id} (no mods found and no pending retries)')
-                    del used_mods_data[chapter_id_str]
-                    needs_save = True
-                else:
-                    logging.debug(f'Keeping chapter {chapter_id} in saved state due to pending retries')
+                self._pending_mod_keys[chapter_id] = missing_keys
+            elif chapter_id_str in used_mods_data and not mods_list and not (hasattr(self, '_pending_mod_keys') and chapter_id in self._pending_mod_keys):
+                del used_mods_data[chapter_id_str]
+                needs_save = True
         if needs_save:
-            logging.info('Saving used mods state after migration or cleanup')
             self.save_used_mods_state()
-        logging.info(f'Loaded used mods for {len(self.used_mods)} chapter(s)')
         QTimer.singleShot(100, self.used_mods_updated.emit)
         QTimer.singleShot(200, self.mod_widgets_update_needed.emit)
         QTimer.singleShot(300, self.action_button_update_needed.emit)
 
+    def _find_mod_by_key(self, key: str):
+        """Find mod by key from all_mods, installed mods, or config."""
+        if hasattr(self.app_state, 'all_mods') and self.app_state.all_mods:
+            for mod in self.app_state.all_mods:
+                if get_mod_key(mod) == key:
+                    return mod
+                if key.startswith('gb_') and (getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)) == key:
+                    return mod
+        if self.parent_widget:
+            for im in self.mod_service.get_installed_mods_list():
+                im_key = im.get('mod_key') or im.get('key') or im.get('name')
+                if im_key == key or (key.startswith('gb_') and (im.get('key') or im.get('mod_key')) == key):
+                    return self.mod_service.create_mod_object_from_info(im, getattr(self.app_state, 'all_mods', None))
+            if mod_config := self.mod_service.get_mod_config(key):
+                return self.mod_service.create_mod_object_from_info(mod_config, getattr(self.app_state, 'all_mods', None))
+        return None
+
     def _retry_load_missing_mods(self):
-        if not hasattr(self, '_pending_mod_keys') or not self._pending_mod_keys:
+        if not getattr(self, '_pending_mod_keys', None):
             return
-        logging.info('Retrying to load missing mods after mod list update')
         needs_save = False
         for chapter_id, missing_keys in list(self._pending_mod_keys.items()):
-            found_mods = []
-            for key in missing_keys:
-                mod_data = None
-                if hasattr(self.app_state, 'all_mods') and self.app_state.all_mods:
-                    for mod in self.app_state.all_mods:
-                        mod_mod_key = get_mod_key(mod)
-                        if mod_mod_key == key:
-                            mod_data = mod
-                            break
-                        if not mod_data and key.startswith('gb_'):
-                            try:
-                                mod_id_from_key = key.replace('gb_', '')
-                                mod_gb_id = getattr(mod, 'gamebanana_mod_id', None)
-                                if mod_gb_id and str(mod_gb_id) == mod_id_from_key:
-                                    mod_data = mod
-                                    break
-                            except Exception:
-                                pass
-                if not mod_data and self.parent_widget:
-                    installed_mods = self.mod_service.get_installed_mods_list()
-                    for installed_mod in installed_mods:
-                        installed_mod_key = installed_mod.get('mod_key') or installed_mod.get('key') or installed_mod.get('name')
-                        if installed_mod_key == key:
-                            mod_data = self.mod_service.create_mod_object_from_info(installed_mod, getattr(self.app_state, 'all_mods', None))
-                            break
-                        if not mod_data and key.startswith('gb_'):
-                            try:
-                                installed_mod_key = installed_mod.get('key') or installed_mod.get('mod_key')
-                                if installed_mod_key == key:
-                                    mod_data = self.mod_service.create_mod_object_from_info(installed_mod, getattr(self.app_state, 'all_mods', None))
-                                    break
-                            except Exception:
-                                pass
-                if not mod_data and self.parent_widget:
-                    mod_config = self.mod_service.get_mod_config(key)
-                    if mod_config:
-                        mod_data = self.mod_service.create_mod_object_from_info(mod_config, getattr(self.app_state, 'all_mods', None))
-                if mod_data:
-                    found_mods.append(mod_data)
-                    logging.info(f"Found missing mod {get_mod_name(mod_data, 'Unknown')} (key: {key}) for chapter {chapter_id}")
+            found_mods = [m for key in missing_keys if (m := self._find_mod_by_key(key))]
             if found_mods:
                 existing_mods = self.used_mods.get(chapter_id, [])
-                for found_mod in found_mods:
-                    found_key = get_mod_key(found_mod)
-                    if found_key and (not any((get_mod_key(m) == found_key for m in existing_mods))):
-                        existing_mods.append(found_mod)
+                existing_keys = {get_mod_key(m) for m in existing_mods}
+                for mod in found_mods:
+                    if get_mod_key(mod) not in existing_keys:
+                        existing_mods.append(mod)
                 self.used_mods[chapter_id] = existing_mods
-                logging.info(f'Added {len(found_mods)} previously missing mod(s) to chapter {chapter_id}')
                 needs_save = True
-            remaining_keys = [k for k in missing_keys if not any((get_mod_key(m) == k for m in found_mods))]
-            if remaining_keys:
-                self._pending_mod_keys[chapter_id] = remaining_keys
+            remaining = [k for k in missing_keys if not any(get_mod_key(m) == k for m in found_mods)]
+            if remaining:
+                self._pending_mod_keys[chapter_id] = remaining
             else:
                 del self._pending_mod_keys[chapter_id]
         if needs_save:
@@ -444,37 +284,23 @@ class UsedModsManager(QObject):
             self.used_mods_updated.emit()
             self.mod_widgets_update_needed.emit()
 
+    def _is_local_mod(self, mod_data):
+        key = getattr(mod_data, 'key', None) or getattr(mod_data, 'mod_key', None)
+        return key and isinstance(key, str) and key.startswith('local_')
+
     def check_used_mods_need_updates(self) -> bool:
-        for mods_list in self.used_mods.values():
-            for mod_data in mods_list:
-                key = getattr(mod_data, 'key', None) or getattr(mod_data, 'mod_key', None)
-                is_local_key = key and isinstance(key, str) and key.startswith('local_')
-                if is_local_key:
-                    continue
-                if self.mod_service.mod_has_update_available(mod_data):
-                    return True
-        return False
+        return any(self.mod_service.mod_has_update_available(m) for mods in self.used_mods.values() for m in mods if not self._is_local_mod(m))
 
     def collect_mods_needing_update(self) -> list:
         if getattr(self.app_state, 'is_installing', False):
             return []
         is_chapter_mode = self.app_state.current_mode == 'chapter'
-        if is_chapter_mode:
-            active_chapter_ids = [SLOT_ID_MENU, SLOT_ID_CHAPTER_1, SLOT_ID_CHAPTER_2, SLOT_ID_CHAPTER_3, SLOT_ID_CHAPTER_4]
-        else:
-            chapter_id = get_chapter_id_for_game_mode(self.app_state.game_mode)
-            active_chapter_ids = [chapter_id]
+        active_ids = [SLOT_ID_MENU, SLOT_ID_CHAPTER_1, SLOT_ID_CHAPTER_2, SLOT_ID_CHAPTER_3, SLOT_ID_CHAPTER_4] if is_chapter_mode else [get_chapter_id_for_game_mode(self.app_state.game_mode)]
         mods_to_update = []
-        for chapter_id in active_chapter_ids:
-            mods_list = self.used_mods.get(chapter_id, [])
-            for mod_data in mods_list:
-                key = getattr(mod_data, 'key', None) or getattr(mod_data, 'mod_key', None)
-                is_local_key = key and isinstance(key, str) and key.startswith('local_')
-                if is_local_key:
-                    continue
-                needs_update = self.mod_service.mod_has_update_available(mod_data)
-                if needs_update and mod_data not in mods_to_update:
-                    mods_to_update.append(mod_data)
+        for cid in active_ids:
+            for mod in self.used_mods.get(cid, []):
+                if not self._is_local_mod(mod) and self.mod_service.mod_has_update_available(mod) and mod not in mods_to_update:
+                    mods_to_update.append(mod)
         return mods_to_update
 
     def get_active_mod_selections(self) -> Dict[int, List[Any]]:
