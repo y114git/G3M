@@ -24,10 +24,6 @@ class RefreshController:
         self._current_metadata_batch = []
 
     def cleanup(self):
-        """Clean up all active threads and resources.
-
-        Stops fetch, details, and metadata threads and clears references.
-        """
         self._stop_fetch_thread()
 
     def _cleanup_thread_later(self, thread) -> None:
@@ -133,20 +129,8 @@ class RefreshController:
             QTimer.singleShot(3000, self.update_checker.check_for_updates)
 
             class FetchContext:
-                """Context object for mod fetching operations.
-
-                Contains references to required managers and state
-                for mod fetching threads.
-                """
 
                 def __init__(self, app_state, mod_service, settings_service):
-                    """Initialize fetch context.
-
-                    Args:
-                        app_state: Application state manager.
-                        mod_service: Mod management operations.
-                        settings_service: Settings management.
-                    """
                     self.app_state = app_state
                     self.mod_service = mod_service
                     self.settings_service = settings_service
@@ -176,39 +160,6 @@ class RefreshController:
             self._stop_worker_thread(metadata_thread, disconnect_signals=[getattr(metadata_thread, 'mod_updated', None), getattr(metadata_thread, 'finished', None), getattr(metadata_thread, 'progress', None)], check_running=True, error_label='metadata thread')
 
     def _on_fetch_finished(self, success: bool, retranslate_callback=None, update_filtered_mods_callback=None, update_installed_mods_callback=None, update_action_button_callback=None, update_plugin_tabs_callback=None, mods_loaded_signal=None, fetch_thread=None):
-        """Handle completion of mod list fetch operation.
-
-        This method processes the results of a mod list fetch, updates local
-        mod cache, restores cached metadata, and triggers UI updates. It handles
-        the complex coordination between fetch completion and UI state updates.
-
-        Args:
-            success: Whether the fetch was successful.
-            retranslate_callback: Callback to retranslate UI elements.
-            update_filtered_mods_callback: Callback to update filtered mods.
-            update_installed_mods_callback: Callback to update installed mods.
-            update_action_button_callback: Callback to update action button.
-            update_plugin_tabs_callback: Callback to update plugin tabs.
-            mods_loaded_signal: Signal to emit when mods are loaded.
-            fetch_thread: The fetch thread that completed.
-
-        Operations performed:
-        - Invalidates and reloads mod cache
-        - Restores GameBanana metadata from cache
-        - Updates UI components through callbacks
-        - Emits status updates and progress signals
-        - Handles fetch thread cleanup
-        - Starts metadata loading for GameBanana mods
-
-        Features:
-        - Concurrent operation protection
-        - Metadata cache restoration
-        - UI update coordination
-        - Error handling and logging
-
-        Returns:
-            None, but updates app state and triggers UI refreshes.
-        """
         if not hasattr(self, '_fetch_finished_in_progress'):
             self._fetch_finished_in_progress = False
         if self._fetch_finished_in_progress:
@@ -304,23 +255,7 @@ class RefreshController:
             self._fetch_finished_in_progress = False
             fetch_thread_to_cleanup = fetch_thread if fetch_thread else self.fetch_thread
             if fetch_thread_to_cleanup:
-                try:
-                    if fetch_thread_to_cleanup.isFinished():
-                        fetch_thread_to_cleanup.deleteLater()
-                    else:
-
-                        def cleanup_fetch_thread():
-                            try:
-                                if fetch_thread_to_cleanup and fetch_thread_to_cleanup.isFinished():
-                                    fetch_thread_to_cleanup.deleteLater()
-                            except Exception:
-                                pass
-                        try:
-                            fetch_thread_to_cleanup.finished.connect(cleanup_fetch_thread)
-                        except (TypeError, RuntimeError):
-                            pass
-                except Exception as e:
-                    logging.debug(f'RefreshController: Error cleaning up fetch thread: {e}')
+                self._cleanup_thread_later(fetch_thread_to_cleanup)
             if update_plugin_tabs_callback:
                 update_plugin_tabs_callback()
             self._start_metadata_loading()
@@ -367,20 +302,7 @@ class RefreshController:
                             metadata_thread_old.cancel()
                         if metadata_thread_old.isRunning():
                             safe_stop_thread(metadata_thread_old, timeout=2000, blocking=True)
-                        if metadata_thread_old.isFinished():
-                            metadata_thread_old.deleteLater()
-                        else:
-
-                            def cleanup_old_thread():
-                                try:
-                                    if metadata_thread_old.isFinished():
-                                        metadata_thread_old.deleteLater()
-                                except (RuntimeError, AttributeError):
-                                    pass
-                            try:
-                                metadata_thread_old.finished.connect(cleanup_old_thread)
-                            except (TypeError, RuntimeError, AttributeError):
-                                pass
+                        self._cleanup_thread_later(metadata_thread_old)
                     except (RuntimeError, AttributeError):
                         pass
                 except Exception as e:
@@ -419,25 +341,7 @@ class RefreshController:
             metadata_thread = self.metadata_thread
             self.metadata_thread = None
             if metadata_thread:
-                try:
-                    if metadata_thread.isFinished():
-                        metadata_thread.deleteLater()
-                    else:
-
-                        def cleanup_thread():
-                            try:
-                                if metadata_thread.isFinished():
-                                    metadata_thread.deleteLater()
-                            except (RuntimeError, AttributeError):
-                                pass
-                        try:
-                            metadata_thread.finished.connect(cleanup_thread)
-                        except (TypeError, RuntimeError, AttributeError):
-                            pass
-                except (RuntimeError, AttributeError) as e:
-                    logging.debug(f'RefreshController: Thread already cleaned up: {e}')
-                except Exception as e:
-                    logging.warning(f'RefreshController: Error cleaning up metadata thread: {e}')
+                self._cleanup_thread_later(metadata_thread)
             if hasattr(self, '_current_metadata_batch') and self._current_metadata_batch:
                 failed_mods = self._current_metadata_batch
                 if failed_mods:
@@ -451,10 +355,6 @@ class RefreshController:
             if self.app_window and hasattr(self.app_window, 'search_display') and self.app_window.search_display:
 
                 def ensure_sorted():
-                    """Ensure mods are properly sorted after operations.
-
-                    Updates the filtered mods display to maintain proper sorting.
-                    """
                     try:
                         app_window = self.app_window
                         if app_window and hasattr(app_window, 'search_display') and app_window.search_display:

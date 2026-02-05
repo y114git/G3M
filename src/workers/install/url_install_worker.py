@@ -1,7 +1,4 @@
-"""URL-based mod installation worker.
-
-This module provides a worker thread for installing mods from URLs.
-"""
+"""URL-based mod installation worker."""
 import os
 import json
 import shutil

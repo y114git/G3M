@@ -13,7 +13,6 @@ class PluginTabBuilder:
         self.app_state, self.parent, self.widgets = app_state, parent, {}
 
     def build(self) -> QWidget:
-        """Build and return the plugin tab widget."""
         widget = QWidget()
         widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         layout = QVBoxLayout(widget)
@@ -71,5 +70,4 @@ class PluginTabBuilder:
         return widget
 
     def get_widgets(self) -> Dict[str, Any]:
-        """Get the dictionary of UI widgets."""
         return self.widgets

@@ -5,6 +5,8 @@ _TRUE_VALUES = (True, 'true', 'True', 1)
 
 
 def _get_mod_attr(mod, attr, default=None): return mod.get(attr, default) if isinstance(mod, dict) else getattr(mod, attr, default)
+
+
 def _get_mod_bool_attr(mod, attr, default=False):
     v = _get_mod_attr(mod, attr, default)
     return v in _TRUE_VALUES if v else False

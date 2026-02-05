@@ -1,8 +1,4 @@
-"""Plugin management and loading.
-
-This module handles plugin discovery, loading, enabling/disabling,
-and plugin lifecycle management.
-"""
+"""Plugin management and loading."""
 import os
 import sys
 import logging
@@ -26,13 +22,6 @@ class PluginManager(QObject):
     plugin_error = pyqtSignal(str, str)
 
     def __init__(self, app_state, settings_service=None, parent=None):
-        """Initialize the plugin manager.
-
-        Args:
-            app_state: Application state manager.
-            settings_service: Settings manager (optional).
-            parent: Parent QObject (optional).
-        """
         super().__init__(parent)
         self.app_state = app_state
         self.settings_service = settings_service
@@ -41,11 +30,6 @@ class PluginManager(QObject):
         self._plugin_apis: Dict[str, PluginAPI] = {}
 
     def _read_plugins_metadata(self) -> Dict[str, Any]:
-        """Read plugin metadata from disk.
-
-        Returns:
-            Dict[str, Any]: Plugin metadata dictionary.
-        """
         if not os.path.exists(self.app_state.plugins_metadata_path):
             return {}
         try:
@@ -56,11 +40,6 @@ class PluginManager(QObject):
             return {}
 
     def _write_plugins_metadata(self, data: Dict[str, Any]):
-        """Write plugin metadata to disk.
-
-        Args:
-            data: Plugin metadata to write.
-        """
         try:
             from utils.file_utils import save_json
             save_json(self.app_state.plugins_metadata_path, data, indent=2)
@@ -71,14 +50,6 @@ class PluginManager(QObject):
         return {'enabled': True, 'installed_date': None}
 
     def get_plugin_metadata(self, plugin_name: str) -> Dict[str, Any]:
-        """Get metadata for a specific plugin.
-
-        Args:
-            plugin_name: Name of the plugin.
-
-        Returns:
-            Dict[str, Any]: Plugin metadata.
-        """
         metadata = self._read_plugins_metadata()
         return metadata.get(plugin_name, self._default_plugin_metadata())
 
@@ -90,31 +61,13 @@ class PluginManager(QObject):
         self._write_plugins_metadata(metadata)
 
     def is_plugin_enabled(self, plugin_name: str) -> bool:
-        """Check if a plugin is enabled.
-
-        Args:
-            plugin_name: Name of the plugin.
-
-        Returns:
-            bool: True if enabled.
-        """
         plugin_meta = self.get_plugin_metadata(plugin_name)
         return plugin_meta.get('enabled', True)
 
     def enable_plugin(self, plugin_name: str):
-        """Enable a plugin.
-
-        Args:
-            plugin_name: Name of the plugin.
-        """
         self.update_plugin_metadata(plugin_name, {'enabled': True})
 
     def disable_plugin(self, plugin_name: str):
-        """Disable a plugin.
-
-        Args:
-            plugin_name: Name of the plugin.
-        """
         self.update_plugin_metadata(plugin_name, {'enabled': False})
 
     def _extract_plugin_info_from_file(self, plugin_init_py_path: str, plugin_info: dict):
@@ -158,34 +111,6 @@ class PluginManager(QObject):
         return 'enabled'
 
     def convert_plugin_archives(self) -> bool:
-        """Convert plugin archive files to extracted plugin directories.
-
-        This method scans the plugins directory for archive files (ZIP, 7Z, RAR,
-        TAR.GZ, LZMA) that contain plugin_init.py files and extracts them
-        to plugin directories. This is used to migrate from the old archive
-        format to the new directory format.
-
-        Returns:
-            bool: True if any conversions occurred, False otherwise.
-
-        Archive formats supported:
-        - ZIP: Uses zipfile module
-        - TAR.GZ: Uses tarfile module
-        - RAR: Uses rarfile module (optional dependency)
-        - 7Z: Uses py7zr module (optional dependency)
-        - LZMA: Uses tarfile module
-
-        Features:
-        - Detects plugin_init.py presence in archives
-        - Extracts archives to plugin directories
-        - Handles multiple archive formats
-        - Graceful handling of missing dependencies
-        - Proper error logging and cleanup
-
-        Note:
-            Archives without plugin_init.py are ignored as they're
-            not considered valid plugin packages.
-        """
         if not os.path.exists(self.app_state.plugins_dir):
             return False
         conversion_happened = False

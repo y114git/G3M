@@ -57,12 +57,9 @@
     "hide_mods_without_files": "Скрывать моды без файлов",
     "use_portproton": "Использовать PortProton вместо Wine",
     "select_portproton_path": "Выбрать исполняемый файл PortProton",
-    "default_shortcut_name_bat": "Запустить Deltarune (DELTAHUB).bat",
-    "default_shortcut_name_command": "Запустить Deltarune (DELTAHUB).command",
     "delete_local_mod": "Удалить локальный мод",
     "delete_mod": "Удалить мод",
     "descending": "По убыванию",
-    "desktop_shortcut_filter": "Ярлык рабочего стола (*.desktop)",
     "details_button": "Подробнее",
     "direct_launch": "Прямой запуск",
     "direct_launch_steam_conflict": "Прямой запуск несовместим с 'Запуском через Steam'. Пожалуйста, сначала отключите 'Запуск через Steam' в настройках.",
@@ -200,7 +197,6 @@
     "manual_install": "Ручная установка",
     "clear_button": "Очистить",
     "version_colon": "Версия:",
-    "windows_shortcut_filter": "Ярлык Windows (*.bat)",
     "full_install": "Полная установка",
     "deltarune_desc": "Этот мод предназначен для полной версии DELTARUNE.",
     "undertale_desc": "Этот мод предназначен для UNDERTALE.",
@@ -376,7 +372,6 @@
     "select_portproton_path": "Выбрать путь к PortProton",
     "custom_executable": "Кастомный exe",
     "reset_custom_executable": "Сбросить",
-    "shortcut": "Ярлык",
     "show": "Показать",
     "telegram": "ТЕЛЕГРАМ",
     "report_bug": "Сообщить о баге",
@@ -397,7 +392,8 @@
     "public_button": "Публичный",
     "main_slots": "Главные слоты",
     "changelog_close": "Закрыть",
-    "withdraw_request": "Отозвать заявку"
+    "withdraw_request": "Отозвать заявку",
+    "shortcut": "Ярлык"
   },
   "tooltips": {
     "custom_exe": "Вы можете выбрать свой исполняемый файл вместо стандартного (например, DELTARUNE.exe). Это полезно, если он расположен в другом месте или вы, например, хотите, запустить свой кастомный файл запуска.",
@@ -518,7 +514,6 @@
       "generic_warning": "Произошла некритическая ошибка во время патчинга:\n\n{message}\n\nХотите продолжить?"
     },
     "theme_choice": "Выберите действие: Импорт или Экспорт?",
-    "create_shortcut_question": "Создать ярлык?",
     "access_error": "Ошибка доступа",
     "additional_collection": "Дополнительная коллекция",
     "app_will_restart": "Приложение будет перезапущено.",
@@ -529,7 +524,6 @@
     "changes_will_be_lost": "Все изменения будут утеряны.",
     "confirm_deletion": "Подтвердите удаление",
     "corrupted_files_found": "Обнаружены повреждённые файлы, они были сохранены как .bak. Будет загружен новый список.",
-    "current_shortcut_settings": "<b>Текущие настройки для ярлыка:</b>",
     "current_version_banner": "Текущая версия: {current_version}<br><br>",
     "deltarune_not_found": "Не удалось найти DELTARUNE.",
     "demo_not_found": "Не удалось найти ДЕМОВЕРСИЮ DELTARUNE.",
@@ -604,13 +598,8 @@
     "save_file_error": "Не удалось сохранить файл. Проверьте права доступа к папке.",
     "save_mod_secret_key": "Сохранить секретный ключ мода",
     "save_secret_key_instruction": "Теперь вам нужно выбрать место для сохранения файла с секретным ключом.\nЭтот ключ потребуется для редактирования мода в будущем.\n\nВАЖНО: Сохраните файл в надёжном месте!",
-    "save_shortcut": "Сохранить ярлык",
     "select_deltarune_folder": "Выберите папку с игрой DELTARUNE",
     "select_demo_folder": "Выберите папку с ДЕМОВЕРСИЕЙ",
-    "shortcut_create_description": "Нажмите 'Да' чтобы выбрать место сохранения ярлыка.",
-    "shortcut_created_successfully": "Ярлык был успешно создан по пути:\n{path}",
-    "shortcut_description": "Ярлык позволяет запускать игру с выбранными модами и настройками\nбез необходимости открывать лаунчер каждый раз.",
-    "shortcut_multiple_mods_warning": "Невозможно создать ярлык с 2 или более выбранными модами. Пожалуйста, сначала создайте модпак, затем создайте ярлык с модпаком.",
     "steam_deck_compatibility_configured": "Лаунчер автоматически настроил совместимость сохранений для Steam Deck (Proton). Ваши сохранения должны быть доступны.",
     "tab_extra_file_not_found": "В вкладке '{tab_name}' доп. файл не найден: {path}",
     "tab_file_not_found": "В вкладке '{tab_name}' файл не найден: {path}",
@@ -715,7 +704,6 @@
     "no_free_slots": "Невозможно выбрать моды",
     "invalid_url_scheme": "Неверная схема URL. Ожидался deltahub://",
     "local_mod_update_body": "Локальный мод с названием «{mod_name}» уже установлен. Хотите заменить его файлы этой версией?",
-    "cannot_create_shortcut_title": "Невозможно создать ярлык",
     "file_replacement_warning_body": "Этот мод напрямую заменяет основные файлы игры вместо использования рекомендуемого и более безопасного метода патчинга (xdelta).\n\nТакой способ установки не рекомендуется, так как он может быть связан с пиратством игры и нести потенциальные риски.\n\nВы всё равно хотите продолжить установку?",
     "file_read_error": "Не удалось прочитать файл: {error}",
     "changes_under_review": "Изменения рассматриваются",
@@ -821,7 +809,6 @@
     "save_secret_key_title": "Сохранение секретного ключа",
     "secret_key_invalid": "Мод с таким секретным ключом не найден.\nПроверьте правильность введенного ключа.",
     "selected_mod_not_found": "Не удалось найти выбранный мод.",
-    "shortcut_creation_failed": "Не удалось создать ярлык:\n{error}",
     "show_hide_mod": "Показывать мод",
     "specified_executable_not_found": "Указанный исполняемый файл не найден",
     "submission_error_title": "Ошибка отправки",
@@ -949,7 +936,6 @@
     "no_gamebanana_files_for_manual_install": "Нет файлов, доступных для ручной установки с GameBanana."
   },
   "status": {
-    "shortcut_created": "Ярлык создан: {path}",
     "vanilla": "Без изменений",
     "recovering_previous_session": "Восстановление предыдущей сессии...",
     "applying_mod": "Применение мода: {mod_name} ({mod_type})...",
@@ -1018,7 +1004,6 @@
     "preparing_download": "Подготовка скачивания...",
     "restarting": "Перезапуск...",
     "save_path_info": "Папка сохранений: {save_path}",
-    "shortcut_creation_error": "Ошибка создания ярлыка: {error}",
     "unknown_mod": "Неизвестный мод",
     "unpacking_and_installing": "Распаковка и установка...",
     "update_available": "Доступно обновление",
@@ -1078,7 +1063,6 @@
     "local": "Локальный"
   },
   "startup": {
-    "shortcut_settings_read_error": "Ошибка запуска: Не удалось прочитать настройки ярлыка ({error})",
     "steam_deck_setup_error": "Ошибка при настройке совместимости со Steam Deck: {error}",
     "launch_error": "Ошибка запуска: {error}"
   },

@@ -1,7 +1,4 @@
-"""Mod installation worker.
-
-This module provides a worker thread for installing mods from local files.
-"""
+"""Mod installation worker."""
 import os
 import json
 import shutil
@@ -17,32 +14,7 @@ from workers.base_install_worker import BaseInstallWorker
 
 
 class ModInstallWorker(BaseInstallWorker):
-    """Worker for installing mods from archive files or URLs.
-
-    Handles the complete mod installation process including downloading
-    archives, extracting files, validating mod structure, and integrating
-    with the mod management system. Supports both local archives and
-    remote URL downloads.
-
-    Features:
-    - Archive downloading with progress tracking
-    - Multi-format archive extraction (ZIP, RAR, 7Z)
-    - Mod structure validation and detection
-    - Game-specific mod handling
-    - Manual install fallback for complex mods
-    - Integration with GameBanana metadata
-
-    Signals:
-        manual_install_required: Emitted when manual intervention is needed.
-
-    Args:
-        archive_path: Path to mod archive or URL.
-        mods_dir: Directory where mods should be installed.
-        mod_service: Mod management instance.
-        gamebanana_metadata: Additional metadata from GameBanana.
-        parent: Parent QObject.
-        is_pizza_tower_selected: Whether Pizza Tower is the selected game.
-    """
+    """Worker for installing mods from archive files or URLs."""
     manual_install_required = pyqtSignal(str, str, str)
 
     def __init__(self, archive_path: str, mods_dir: str, mod_service=None, gamebanana_metadata: Optional[Dict] = None, parent=None, is_pizza_tower_selected: bool = False):

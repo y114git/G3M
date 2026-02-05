@@ -1,8 +1,4 @@
-"""Controller for search display and mod filtering.
-
-This module manages the search interface, mod filtering, sorting, pagination,
-and interaction with mod plaques in the search results.
-"""
+"""Controller for search display and mod filtering."""
 from services.mod_filter_service import filter_and_sort_mods
 from utils.mod_utils import get_mod_key, get_gamebanana_key, get_gamebanana_mod_id
 from PyQt6.QtWidgets import QInputDialog, QMessageBox
@@ -34,15 +30,6 @@ class SearchDisplayController(QObject):
     ui_widget_updates_enabled = pyqtSignal(str, bool)
 
     def __init__(self, app_state, feedback_service, mod_service, mod_ops, app_window):
-        """Initialize the search display controller.
-
-        Args:
-            app_state: Application state manager.
-            feedback_service: User feedback and dialog manager.
-            mod_service: Mod management operations.
-            mod_ops: Mod operations controller.
-            app_window: Main application window reference.
-        """
         super().__init__()
         self.app_state = app_state
         self.feedback_service = feedback_service
@@ -66,11 +53,6 @@ class SearchDisplayController(QObject):
         self._pending_filter_update = False
 
     def _get_metadata_cache(self):
-        """Get the metadata cache instance.
-
-        Returns:
-            GameBananaMetadataCache instance or None.
-        """
         if hasattr(self.app_state, 'cache_dir') and self.app_state.cache_dir:
             try:
                 return GameBananaMetadataCache(self.app_state.cache_dir)
@@ -79,11 +61,6 @@ class SearchDisplayController(QObject):
         return None
 
     def _get_installed_mod_keys(self) -> set:
-        """Get set of installed mod keys for filtering.
-
-        Returns:
-            Set of mod keys that are installed in the library.
-        """
         installed_keys = set()
         try:
             if hasattr(self, 'mod_service') and self.mod_service:
@@ -97,11 +74,6 @@ class SearchDisplayController(QObject):
         return installed_keys
 
     def _cleanup_load_thread(self, thread):
-        """Clean up a load more thread.
-
-        Args:
-            thread: Thread to clean up.
-        """
         try:
             if thread in self._load_more_threads:
                 self._load_more_threads.remove(thread)
@@ -630,25 +602,6 @@ class SearchDisplayController(QObject):
         self._update_display_debounce.call(self._do_update_display)
 
     def _do_update_display(self):
-        """Perform the actual update of the mod search display.
-
-        This is the core method that updates the visible mod list based on
-        current filters, pagination, and search criteria. It handles thread
-        safety, page management, and dynamic loading of GameBanana mods.
-
-        This method handles:
-        - Thread safety checks (defers if not on main thread)
-        - Page boundary validation and correction
-        - Dynamic loading of additional mods when needed
-        - Creating and arranging mod plaque widgets
-        - Managing empty states and loading indicators
-        - Updating pagination controls
-        - Handling chapter mode display
-        - Managing selection state and UI updates
-
-        The method is protected against concurrent execution and includes
-        comprehensive error handling for all display operations.
-        """
         if self._update_display_in_progress:
             return
         self._update_display_in_progress = True

@@ -1,7 +1,4 @@
-"""GameBanana metadata caching.
-
-This module provides caching for GameBanana mod metadata to reduce API calls.
-"""
+"""GameBanana metadata caching."""
 import json
 import logging
 import os
@@ -52,14 +49,6 @@ class GameBananaMetadataCache:
                 logger.warning(f'GameBananaMetadataCache: Failed to save cache (non-critical): {e}')
 
     def get(self, mod_id: str) -> Optional[Dict]:
-        """Get cached metadata for a mod.
-
-        Args:
-            mod_id: GameBanana mod ID.
-
-        Returns:
-            Optional[Dict]: Cached metadata or None.
-        """
         with self._lock:
             return self._cache.get(mod_id)
 
@@ -79,78 +68,29 @@ class GameBananaMetadataCache:
         return stale_ids
 
     def is_valid(self, mod_id: str) -> bool:
-        """Check if cached metadata is still valid (not expired).
-
-        Args:
-            mod_id: GameBanana mod ID.
-
-        Returns:
-            bool: True if cache entry is valid.
-        """
         with self._lock:
-            if mod_id not in self._cache:
-                return False
-            entry = self._cache[mod_id]
-            timestamp = entry.get('timestamp', 0)
-            current_time = time.time()
-            if current_time - timestamp > CACHE_TTL:
-                logger.debug(f'GameBananaMetadataCache: Cache entry for mod {mod_id} is stale (age: {current_time - timestamp}s)')
-                return False
-            return True
+            entry = self._cache.get(mod_id)
+            return bool(entry and time.time() - entry.get('timestamp', 0) <= CACHE_TTL)
 
-    def set(self, mod_id: str, downloads: Optional[int] = None, tagline: Optional[str] = None, full_description: Optional[str] = None, screenshots: Optional[list] = None, category: Optional[str] = None):
-        """Set or update cached metadata for a mod.
-
-        Args:
-            mod_id: GameBanana mod ID.
-            downloads: Download count.
-            tagline: Mod tagline/description.
-            full_description: Full description text.
-            screenshots: List of screenshot URLs.
-            category: Mod category.
-        """
+    def set(self, mod_id: str, downloads=None, tagline=None, full_description=None, screenshots=None, category=None):
         with self._lock:
-            if mod_id in self._cache:
-                entry = self._cache[mod_id]
-            else:
-                entry = {}
-            if downloads is not None:
-                entry['downloads'] = downloads
-            if tagline is not None:
-                entry['tagline'] = tagline
-            if full_description is not None:
-                entry['full_description'] = full_description
-            if screenshots is not None:
-                entry['screenshots'] = screenshots
-            if category is not None:
-                entry['category'] = category
+            entry = self._cache.get(mod_id, {})
+            updates = {k: v for k, v in {'downloads': downloads, 'tagline': tagline, 'full_description': full_description, 'screenshots': screenshots, 'category': category}.items() if v is not None}
+            entry.update(updates)
             entry['timestamp'] = time.time()
             self._cache[mod_id] = entry
             self._save_cache()
-            logger.debug(f'GameBananaMetadataCache: Cached metadata for mod {mod_id}: downloads={downloads}, tagline_length={(len(tagline) if tagline else 0)}, has_desc={bool(full_description)}, screenshots_count={(len(screenshots) if screenshots else 0)}, category={category}')
 
     def get_field(self, mod_id: str, field: str):
-        """Get a specific field from cached metadata.
-
-        Args:
-            mod_id: GameBanana mod ID.
-            field: Field name to retrieve.
-
-        Returns:
-            Field value or None if not cached or expired.
-        """
         entry = self._get_valid_entry(mod_id)
         return entry.get(field) if entry else None
 
     def clear(self):
-        """Clear all cached metadata."""
         with self._lock:
             self._cache = {}
             self._save_cache()
-            logger.info('GameBananaMetadataCache: Cache cleared')
 
     def clear_stale(self):
-        """Remove expired cache entries."""
         with self._lock:
             current_time = time.time()
             stale_ids = self._collect_stale_ids(current_time)
@@ -162,20 +102,9 @@ class GameBananaMetadataCache:
             return len(stale_ids)
 
     def get_stale_mod_ids(self) -> list[str]:
-        """Get list of mod IDs with expired cache entries.
-
-        Returns:
-            list[str]: List of stale mod IDs.
-        """
         with self._lock:
-            current_time = time.time()
-            return self._collect_stale_ids(current_time)
+            return self._collect_stale_ids(time.time())
 
     def size(self) -> int:
-        """Get the number of cached entries.
-
-        Returns:
-            int: Number of cache entries.
-        """
         with self._lock:
             return len(self._cache)

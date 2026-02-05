@@ -1,7 +1,4 @@
-"""GameBanana mod format conversion.
-
-This module handles converting GameBanana mods to DELTAHUB format.
-"""
+"""GameBanana mod format conversion."""
 import os
 import json
 import zipfile
@@ -30,11 +27,6 @@ class GameBananaConverter:
                 logger.warning(f'Failed to cleanup temp directory: {e}')
 
     def convert(self) -> Optional[str]:
-        """Convert a GameBanana mod archive to DELTAHUB format.
-
-        Returns:
-            Optional[str]: Path to converted mod directory or None on failure.
-        """
         try:
             self.temp_extract_dir = tempfile.mkdtemp(prefix='gb_convert_')
             if not self._check_compatibility():

@@ -1,8 +1,4 @@
-"""Application startup and initialization.
-
-This module handles application startup, single instance checking, logging setup,
-and command-line argument parsing.
-"""
+"""Application startup and initialization."""
 import argparse
 import logging
 import os
@@ -24,22 +20,12 @@ if platform.system() == 'Windows':
     import winreg
 
 
-class ShortcutLaunchError(Exception):
-    """Exception raised when shortcut launch fails."""
-    pass
-
-
 SINGLE_INSTANCE_KEY = 'deltahub.y.114.single-instance-lock'
 _translator = QTranslator()
 _splash_start_time = None
 
 
 def check_game_processes():
-    """Check if any game processes are currently running.
-
-    Returns:
-        str or None: Name of running game process, or None if none found.
-    """
     game_processes = {'DELTARUNE.exe', 'UNDERTALE.exe', 'DELTARUNEdemo.exe', 'DELTARUNE', 'UNDERTALE', 'DELTARUNEdemo'}
     for proc in psutil.process_iter(['name']):
         try:
@@ -51,18 +37,6 @@ def check_game_processes():
 
 
 def configure_logging(app_name: str, user_data_root: str) -> str:
-    """Configure application logging with file and console handlers.
-
-    Logs are stored in DELTAHUB/logs/deltahub.log.
-    On app start, old log is archived to logs/deltahub/ with timestamp.
-
-    Args:
-        app_name: Name of the application.
-        user_data_root: Root directory for user data.
-
-    Returns:
-        str: Path to the log file.
-    """
     logs_dir = os.path.join(user_data_root, 'logs')
     os.makedirs(logs_dir, exist_ok=True)
     log_path = os.path.join(logs_dir, f'{app_name.lower()}.log')
@@ -96,11 +70,6 @@ def configure_logging(app_name: str, user_data_root: str) -> str:
 
 
 def install_excepthook(show_message_callback=None):
-    """Install global exception hook for uncaught exceptions.
-
-    Args:
-        show_message_callback: Callback to show error messages to user.
-    """
 
     def _hook(exctype, value, tb):
         try:
@@ -123,11 +92,6 @@ def install_excepthook(show_message_callback=None):
 
 
 def register_url_protocol():
-    """Register the deltahub:// URL protocol handler for the operating system.
-
-    Configures the system to open deltahub:// URLs with this application.
-    Supports Windows and Linux platforms.
-    """
     if getattr(sys, 'frozen', False):
         executable_path = f'"{sys.executable}"'
     else:
@@ -157,34 +121,18 @@ def register_url_protocol():
 
 
 class SingleInstanceServer(QLocalServer):
-    """Local server for single instance application management.
-
-    Handles communication between multiple launch attempts to ensure
-    only one instance of the application runs at a time.
-    """
 
     def __init__(self, app_instance):
-        """Initialize the single instance server.
-
-        Args:
-            app_instance: The main application window instance.
-        """
         super().__init__()
         self.app_instance = app_instance
         self.newConnection.connect(self.handle_new_connection)
 
     def handle_new_connection(self):
-        """Handle new connection from another application instance."""
         socket = self.nextPendingConnection()
         if socket:
             socket.readyRead.connect(lambda: self.read_socket_data(socket))
 
     def read_socket_data(self, socket):
-        """Read and process data from the socket connection.
-
-        Args:
-            socket: The socket connection to read from.
-        """
         data = socket.readAll().data()
         if data:
             url = data.decode('utf-8')
@@ -194,11 +142,6 @@ class SingleInstanceServer(QLocalServer):
 
 
 def setup_app():
-    """Set up and configure the Qt application instance.
-
-    Returns:
-        QApplication: Configured Qt application instance.
-    """
     language_code = localization_service.detect_system_language()
     localization_service.load_language(language_code)
     os.environ['QT_LOGGING_RULES'] = ';'.join(['qt.qpa.screen.warning=false', 'qt.qpa.window.warning=false', 'qt.multimedia.ffmpeg=false', 'qt.multimedia=false'])
@@ -218,10 +161,6 @@ def setup_app():
 
 
 def cleanup_old_temp_directories():
-    """Clean up temporary directories from previous application sessions.
-
-    Removes temporary directories older than 1 hour that match known patterns.
-    """
     import tempfile
     import glob
     from utils.file_utils import safe_rmtree
@@ -247,11 +186,6 @@ def cleanup_old_temp_directories():
 
 
 def _load_config_file() -> dict:
-    """Load the application configuration file.
-
-    Returns:
-        dict: Configuration dictionary, or empty dict if loading fails.
-    """
     user_root = get_user_data_root()
     settings_path = os.path.join(user_root, 'settings', 'settings.json')
     old_config_path = os.path.join(user_root, 'settings', 'config.json')
@@ -299,11 +233,6 @@ def _load_config_file() -> dict:
 
 
 def run_app():
-    """Main application entry point.
-
-    Initializes logging, handles command-line arguments, manages single instance,
-    shows splash screen, and starts the main application window.
-    """
     try:
         user_root = get_user_data_root()
         configure_logging('DELTAHUB', user_root)
@@ -312,12 +241,10 @@ def run_app():
     except Exception as e:
         logging.warning(f'Failed to initialize logging: {e}')
     parser = argparse.ArgumentParser(description='DELTAHUB')
-    parser.add_argument('--shortcut-launch', type=str)
-    parser.add_argument('--shortcut-path', type=str)
     parser.add_argument('--force-start', action='store_true', help='Force start even if another instance is detected')
     args, unknown_args = parser.parse_known_args()
     url_arg = next((arg for arg in sys.argv[1:] if arg.startswith('deltahub://')), None)
-    if platform.system() == 'Linux' and (not args.shortcut_launch):
+    if platform.system() == 'Linux':
         os.environ.setdefault('NO_AT_BRIDGE', '1')
     app = setup_app()
     socket = QLocalSocket()
@@ -341,16 +268,6 @@ def run_app():
         register_url_protocol()
     except Exception as e:
         logging.warning(f'Failed to register URL protocol during startup: {e}', exc_info=True)
-    if args.shortcut_launch:
-        from core.app_window import AppWindow
-        try:
-            AppWindow(args=args)
-        except ShortcutLaunchError as e:
-            error_msg = str(e) or tr('errors.error')
-            logging.error(f'STARTUP ERROR: {error_msg}')
-            QMessageBox.critical(None, tr('errors.error'), error_msg)
-            sys.exit(1)
-        return
     config = _load_config_file()
     splash_disabled_by_user = config.get('disable_splash', False)
     show_animated_splash = not splash_disabled_by_user

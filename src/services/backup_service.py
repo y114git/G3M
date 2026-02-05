@@ -1,8 +1,4 @@
-"""Backup management for mod installation and restoration.
-
-This module handles backing up and restoring game files during mod operations,
-including atomic directory operations and manifest tracking.
-"""
+"""Backup management for mod installation and restoration."""
 import os
 import shutil
 import json
@@ -15,12 +11,6 @@ class BackupManager:
     """Manages file and directory backups for safe mod operations."""
 
     def __init__(self, backup_dir: str, patching_logger=None):
-        """Initialize the backup manager.
-
-        Args:
-            backup_dir: Directory to store backups.
-            patching_logger: Logger for patching operations.
-        """
         self.backup_dir = backup_dir
         self.patching_logger = patching_logger or get_patching_logger()
         self.original_files: Dict[int, Dict[str, Optional[str]]] = {}
@@ -31,15 +21,6 @@ class BackupManager:
             os.makedirs(backup_dir, exist_ok=True)
 
     def backup_file(self, chapter_id: int, file_path: str) -> bool:
-        """Backup a file before modification.
-
-        Args:
-            chapter_id: Chapter identifier.
-            file_path: Path to file to backup.
-
-        Returns:
-            bool: True if backup successful.
-        """
         self.original_files.setdefault(chapter_id, {})
         self._modification_order.setdefault(chapter_id, [])
         if file_path in self.original_files[chapter_id]:

@@ -126,34 +126,32 @@ class ModPlaqueWidget(BaseModWidget):
         except Exception:
             pass
 
+    _GAME_TAG_STYLES = {
+        'deltarune': ('DELTARUNE', 'black', '1px solid white'),
+        'deltarunedemo': ('DELTARUNE DEMO', 'black', '1px solid lightgreen'),
+        'undertale': ('UNDERTALE', 'red', '1px solid red'),
+        'undertaleyellow': ('UNDERTALE Yellow', '#FFD700', 'none'),
+        'pizzatower': ('PIZZA TOWER', '#D65A18', '1px solid #8B0000'),
+    }
+
+    def _get_game_tag_style(self, text_color: str):
+        game = getattr(self.mod_data, 'game', None) or getattr(self.mod_data, 'modgame', 'deltarune')
+        entry = self._GAME_TAG_STYLES.get(game)
+        if not entry:
+            return None, None
+        label_text, bg, border = entry
+        base = f'background-color: {bg}; color: {text_color}; border: {border};'
+        return label_text, f'font-weight: bold; padding: 2px 5px; border-radius: 3px; {base}'
+
     def _create_tags_layout_if_needed(self, info_layout):
         tags_layout = QHBoxLayout()
         tags_layout.setContentsMargins(0, 5, 0, 0)
         tags_layout.setSpacing(10)
-        game = getattr(self.mod_data, 'game', None) or getattr(self.mod_data, 'modgame', 'deltarune')
-        modgame_text = ''
-        modgame_style = ''
-        config = self._resolve_theme_config()
-        text_color = get_theme_color(config, 'text', 'white') if config else 'white'
-        if game == 'deltarune':
-            modgame_text = 'DELTARUNE'
-            modgame_style = f'background-color: black; color: {text_color}; border: 1px solid white;'
-        elif game == 'deltarunedemo':
-            modgame_text = 'DELTARUNE DEMO'
-            modgame_style = f'background-color: black; color: {text_color}; border: 1px solid lightgreen;'
-        elif game == 'undertale':
-            modgame_text = 'UNDERTALE'
-            modgame_style = f'background-color: red; color: {text_color}; border: 1px solid red;'
-        elif game == 'undertaleyellow':
-            modgame_text = 'UNDERTALE Yellow'
-            modgame_style = f'background-color: #FFD700; color: {text_color}; border: none;'
-        elif game == 'pizzatower':
-            modgame_text = 'PIZZA TOWER'
-            modgame_style = f'background-color: #D65A18; color: {text_color}; border: 1px solid #8B0000;'
+        text_color = self._get_theme_text_color()
+        modgame_text, modgame_stylesheet = self._get_game_tag_style(text_color)
         if modgame_text:
             self.modgame_tag_label = QLabel(modgame_text, self)
-            style_sheet = f'font-weight: bold; padding: 2px 5px; border-radius: 3px; {modgame_style}'
-            self.modgame_tag_label.setStyleSheet(style_sheet)
+            self.modgame_tag_label.setStyleSheet(modgame_stylesheet)
             tags_layout.addWidget(self.modgame_tag_label)
         if self.mod_data.is_verified:
             verified_label = QLabel(tr('ui.verified_label'), self)
@@ -178,21 +176,11 @@ class ModPlaqueWidget(BaseModWidget):
 
     def _update_style(self):
         super()._update_style()
-        config = self._resolve_theme_config()
-        text_color = get_theme_color(config, 'text', 'white') if config else 'white'
+        text_color = self._get_theme_text_color()
         if hasattr(self, 'modgame_tag_label') and self.modgame_tag_label:
-            game = getattr(self.mod_data, 'game', None) or getattr(self.mod_data, 'modgame', 'deltarune')
-            if game == 'deltarunedemo':
-                base_style = f'background-color: black; color: {text_color}; border: 1px solid lightgreen;'
-            elif game == 'undertale':
-                base_style = f'background-color: red; color: {text_color}; border: 1px solid red;'
-            elif game == 'undertaleyellow':
-                base_style = f'background-color: #FFD700; color: {text_color}; border: none;'
-            elif game == 'pizzatower':
-                base_style = f'background-color: #D65A18; color: {text_color}; border: 1px solid #8B0000;'
-            else:
-                base_style = f'background-color: black; color: {text_color}; border: 1px solid white;'
-            self.modgame_tag_label.setStyleSheet(f'font-weight: bold; padding: 2px 5px; border-radius: 3px; {base_style}')
+            _, stylesheet = self._get_game_tag_style(text_color)
+            if stylesheet:
+                self.modgame_tag_label.setStyleSheet(stylesheet)
         if hasattr(self, 'created_label_title') and self.created_label_title:
             self.created_label_title.setStyleSheet(f'color: {text_color};')
         if hasattr(self, 'updated_label_title') and self.updated_label_title:
@@ -305,7 +293,6 @@ class ModPlaqueWidget(BaseModWidget):
             try:
                 self.is_installed = self.parent_app.mod_service.is_mod_installed(key)
             except Exception as e:
-                import logging
                 logging.error(f'ModPlaqueWidget: Error checking installation by key {key}: {e}', exc_info=True)
                 self.is_installed = False
             if not self.is_installed and key and key.startswith('gb_'):
@@ -316,13 +303,11 @@ class ModPlaqueWidget(BaseModWidget):
                             self.is_installed = True
                             break
                 except Exception as e:
-                    import logging
                     logging.warning(f'ModPlaqueWidget: Error checking cache for key {key}: {e}', exc_info=True)
             if not self.is_installed:
                 try:
                     self.is_installed = self.parent_app.mod_service.is_mod_installed(key)
                 except Exception as e:
-                    import logging
                     logging.error(f'ModPlaqueWidget: Error checking installation for mod (key={key}): {e}', exc_info=True)
                     self.is_installed = False
         else:
@@ -535,7 +520,6 @@ class ModPlaqueWidget(BaseModWidget):
             if not self.is_installed:
                 self._apply_gamebanana_install_styles()
         except Exception as e:
-            import logging
             logging.warning(f'ModPlaqueWidget: Error updating mod data: {e}', exc_info=True)
 
     def set_selected(self, selected):

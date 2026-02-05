@@ -1,7 +1,6 @@
 """Configuration loader for environment variables and secrets."""
 import os
 import sys
-from typing import Dict, Any, Optional
 from dotenv import load_dotenv
 
 _CONFIG_KEYS = ('DATA_FIREBASE_URL', 'CLOUD_FUNCTIONS_BASE_URL', 'INTERNAL_SALT')
@@ -11,25 +10,13 @@ class ConfigLoader:
     """Manages loading and caching of configuration values from multiple sources."""
 
     def __init__(self):
-        self._config_cache: Optional[Dict[str, Any]] = None
+        self._cache = None
 
-    def load_config(self) -> Dict[str, Any]:
-        """Load configuration from all available sources and cache the result."""
-        if self._config_cache is not None:
-            return self._config_cache
-        self._load_env_files()
-        self._load_config_env()
-        self._load_secrets_embed()
-        self._config_cache = {key: os.getenv(key, '') for key in _CONFIG_KEYS}
-        return self._config_cache
-
-    def _load_env_files(self) -> None:
-        """Load environment variables from .env file in the project root."""
+    def load_config(self):
+        if self._cache is not None:
+            return self._cache
         root_env = os.path.join(os.path.dirname(__file__), '..', '..', '.env')
         load_dotenv(root_env) if os.path.exists(root_env) else load_dotenv()
-
-    def _load_config_env(self) -> None:
-        """Load environment variables from config.env file."""
         try:
             exe_dir = os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else os.path.abspath('.')
             cfg_path = os.path.join(exe_dir, 'config.env')
@@ -37,9 +24,6 @@ class ConfigLoader:
                 load_dotenv(cfg_path)
         except Exception:
             pass
-
-    def _load_secrets_embed(self) -> None:
-        """Load embedded secrets from the secrets_embed module if available."""
         try:
             import importlib
             _se = importlib.import_module('secrets_embed')
@@ -48,17 +32,17 @@ class ConfigLoader:
                     os.environ[key] = getattr(_se, key)
         except Exception:
             pass
+        self._cache = {key: os.getenv(key, '') for key in _CONFIG_KEYS}
+        return self._cache
 
-    def get(self, key: str, default: str = '') -> str:
-        """Retrieve a configuration value by key."""
+    def get(self, key, default=''):
         return self.load_config().get(key, default)
 
 
 _config_loader = ConfigLoader()
 
 
-def get_config_value(key: str, default: str = '') -> str:
-    """Retrieve a configuration value using the global config loader."""
+def get_config_value(key, default=''):
     return _config_loader.get(key, default)
 
 

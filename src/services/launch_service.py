@@ -1,10 +1,5 @@
-"""Game launch and mod merging management.
-
-This module handles launching games with mods, multi-mod merging,
-game monitoring, and cleanup operations.
-"""
+"""Game launch and mod merging management."""
 import os
-import sys
 import platform
 import shutil
 import subprocess
@@ -34,14 +29,6 @@ class GameLauncher(QObject):
     multi_mod_merge_finished = pyqtSignal(bool)
 
     def __init__(self, app_state, feedback_service, mod_service, parent=None):
-        """Initialize the game launcher.
-
-        Args:
-            app_state: Application state manager.
-            feedback_service: User feedback manager.
-            mod_service: Mod management operations.
-            parent: Parent QObject (optional).
-        """
         super().__init__(parent)
         self.app_state = app_state
         self.feedback_service = feedback_service
@@ -59,19 +46,10 @@ class GameLauncher(QObject):
         self._merge_thread = None
         self._pending_selections = None
         self._merge_finished_callback = None
+        self.restore_window_callback = None
+        self.execute_plugin_hooks = None
 
     def _on_warning_confirmation_needed(self, warning_type: str, title: str, message: str):
-        """Handle a patching warning signal by showing a dialog and responding to the thread.
-
-        This slot is called from the main thread when the worker thread emits
-        a warning_confirmation_needed signal. It shows a dialog and sends the
-        response back to the worker thread.
-
-        Args:
-            warning_type: Type of warning (e.g., 'xdelta_checksum_mismatch').
-            title: Dialog title.
-            message: Warning message to display.
-        """
         from PyQt6.QtWidgets import QMessageBox
         msg_box = QMessageBox()
         msg_box.setWindowTitle(title)
@@ -163,7 +141,7 @@ class GameLauncher(QObject):
             self._continue_after_merge(selections, True, needs_multi_mod)
 
     def _handle_launch_failure(self):
-        if hasattr(self, 'restore_window_callback') and self.restore_window_callback:
+        if self.restore_window_callback:
             self.restore_window_callback()
 
     def _execute_game(self, launch_config: Dict[str, Any], vanilla_mode: bool = False):
@@ -172,8 +150,7 @@ class GameLauncher(QObject):
         launch_type = launch_config.get('type')
         if not target_path:
             self.status_changed.emit(tr('errors.launch_target_not_defined'), 'red')
-            if hasattr(self, 'restore_window_callback') and self.restore_window_callback:
-                self.restore_window_callback()
+            self._handle_launch_failure()
             return
         try:
             self._stop_monitor_thread()
@@ -190,8 +167,7 @@ class GameLauncher(QObject):
             if not working_directory or not os.path.isdir(working_directory):
                 msg = tr('errors.working_directory_not_found', path=working_directory)
                 self.status_changed.emit(msg, 'red')
-                if hasattr(self, 'restore_window_callback') and self.restore_window_callback:
-                    self.restore_window_callback()
+                self._handle_launch_failure()
                 return
             system = platform.system()
             if system == 'Darwin':
@@ -201,9 +177,7 @@ class GameLauncher(QObject):
                 if use_custom_exe:
                     subprocess.Popen(['open', target_path])
                     self.status_changed.emit(tr('status.macos_file_opened'), UI_COLORS['status_steam'])
-                    if getattr(self, 'is_shortcut_launch', False):
-                        sys.exit(0)
-                    elif hasattr(self, 'restore_window_callback') and self.restore_window_callback:
+                    if self.restore_window_callback:
                         QTimer.singleShot(2000, self.restore_window_callback)
                     return
                 if target_path.endswith('.app'):
@@ -235,8 +209,7 @@ class GameLauncher(QObject):
                         self.status_changed.emit(tr('errors.invalid_executable_file', file=os.path.basename(target_path)), UI_COLORS['status_error'])
                     else:
                         self.status_changed.emit(tr('errors.game_launch_error', error=str(launch_error)), UI_COLORS['status_error'])
-                    if hasattr(self, 'restore_window_callback') and self.restore_window_callback:
-                        self.restore_window_callback()
+                    self._handle_launch_failure()
                     return
             self.status_changed.emit(tr('status.game_launched_waiting_for_exit'), UI_COLORS['status_steam'])
             self.monitor_thread = QThread(self)
@@ -247,16 +220,12 @@ class GameLauncher(QObject):
             self.monitor_thread.start()
         except Exception as e:
             self.status_changed.emit(tr('errors.game_launch_error', error=str(e)), 'red')
-            if hasattr(self, 'restore_window_callback') and self.restore_window_callback:
-                self.restore_window_callback()
+            self._handle_launch_failure()
 
     def _on_game_process_finished(self, vanilla_mode: bool):
-        if hasattr(self, 'execute_plugin_hooks') and self.execute_plugin_hooks:
+        if self.execute_plugin_hooks:
             self.execute_plugin_hooks('on_before_game_exit')
-        if getattr(self, 'is_shortcut_launch', False):
-            sys.exit(0)
-        else:
-            self._check_game_running(vanilla_mode)
+        self._check_game_running(vanilla_mode)
 
     def _check_game_running(self, vanilla_mode):
         if is_game_running():
@@ -442,7 +411,7 @@ class GameLauncher(QObject):
                 logging.info('App state reset after launch cancellation')
             except Exception as e:
                 logging.error(f'Failed to reset app state: {e}', exc_info=True)
-            if hasattr(self, 'restore_window_callback') and self.restore_window_callback:
+            if self.restore_window_callback:
                 try:
                     self.restore_window_callback()
                 except Exception as e:
@@ -451,7 +420,7 @@ class GameLauncher(QObject):
     def _continue_after_merge(self, selections: Dict[int, Any], merge_success: bool, needs_multi_mod: bool = False):
         if not merge_success:
             return
-        if needs_multi_mod and hasattr(self, 'multi_mod_merger') and self.multi_mod_merger:
+        if needs_multi_mod and self.multi_mod_merger:
             conflicts_summary = self.multi_mod_merger.get_conflicts_summary()
             if conflicts_summary.get('has_conflicts', False):
                 from ui.dialogs.conflicts_dialog import ConflictsDialog
@@ -463,7 +432,7 @@ class GameLauncher(QObject):
                     return
         if needs_multi_mod:
             pass
-        elif hasattr(self, 'restore_window_callback') and self.restore_window_callback:
+        elif self.restore_window_callback:
             self.game_launch_started.emit()
         has_selected_mods = self._has_selected_mods(selections)
         use_steam = self.app_state.local_config.get('launch_via_steam', False)
@@ -483,7 +452,7 @@ class GameLauncher(QObject):
             self._handle_launch_failure()
             return
         if needs_multi_mod:
-            if hasattr(self, 'restore_window_callback') and self.restore_window_callback:
+            if self.restore_window_callback:
                 self.game_launch_started.emit()
         self._execute_game(launch_config)
         if self.execute_plugin_hooks:

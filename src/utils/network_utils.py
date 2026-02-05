@@ -1,16 +1,12 @@
-"""Network utilities for HTTP requests and downloads.
-
-This module provides utilities for making HTTP requests with retries,
-downloading files, and managing request sessions.
-"""
+"""Network utilities for HTTP requests and downloads."""
 import os
 import platform
 import re
 import time
 import logging
+import threading
 from pathlib import Path
 import requests
-import threading
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from config.constants import MAX_DOWNLOAD_RETRIES, DOWNLOAD_CHUNK_SIZE, NETWORK_TIMEOUT_SHORT, NETWORK_TIMEOUT_MEDIUM, NETWORK_TIMEOUT_HEAD, NETWORK_TIMEOUT_LONG
@@ -18,16 +14,8 @@ _session_lock = threading.Lock()
 _shared_session = None
 
 
-def get_session(app_state=None) -> requests.Session:
-    """Get or create a shared requests session.
-
-    Args:
-        app_state: Application state (optional).
-
-    Returns:
-        requests.Session: Configured session.
-    """
-    if app_state and hasattr(app_state, 'network_session') and (app_state.network_session is not None):
+def get_session(app_state=None):
+    if app_state and hasattr(app_state, 'network_session') and app_state.network_session is not None:
         return app_state.network_session
     global _shared_session
     if _shared_session is not None:
@@ -38,17 +26,10 @@ def get_session(app_state=None) -> requests.Session:
     return _shared_session
 
 
-def _build_session() -> requests.Session:
-    """Build a new requests session with retries and headers.
-
-    Returns:
-        requests.Session: Configured session.
-    """
+def _build_session():
     from config.constants import LAUNCHER_VERSION, BROWSER_HEADERS
-    urllib3_logger = logging.getLogger('urllib3.connectionpool')
-    urllib3_logger.setLevel(logging.ERROR)
-    requests_logger = logging.getLogger('requests')
-    requests_logger.setLevel(logging.WARNING)
+    logging.getLogger('urllib3.connectionpool').setLevel(logging.ERROR)
+    logging.getLogger('requests').setLevel(logging.WARNING)
     session = requests.Session()
     headers = dict(BROWSER_HEADERS or {})
     headers.setdefault('User-Agent', f'DELTAHUB/{LAUNCHER_VERSION}')
@@ -60,8 +41,7 @@ def _build_session() -> requests.Session:
     return session
 
 
-def close_shared_session() -> None:
-    """Close and reset the shared requests session."""
+def close_shared_session():
     global _shared_session
     with _session_lock:
         if _shared_session is not None:
@@ -72,15 +52,6 @@ def close_shared_session() -> None:
 
 
 def get_filename_from_url(session, url):
-    """Extract filename from URL using headers or path.
-
-    Args:
-        session: Requests session to use.
-        url: URL to extract filename from.
-
-    Returns:
-        str: Extracted filename or default.
-    """
     try:
         from urllib.parse import urlparse, unquote
         response = session.head(url, timeout=NETWORK_TIMEOUT_MEDIUM, allow_redirects=True)
@@ -100,36 +71,17 @@ def get_filename_from_url(session, url):
     return Path(url.split('?', 1)[0]).name or 'file.tmp'
 
 
-def download_file(session, url, tmp_path, progress_callback=None, total_size: int = 0, downloaded_ref: list[int] | None = None, max_retries: int = MAX_DOWNLOAD_RETRIES, cancel_check=None, on_response=None):
-    """Download a file with resume support and progress tracking.
-
-    Args:
-        session: Requests session to use.
-        url: URL to download from.
-        tmp_path: Temporary path to save file.
-        progress_callback: Optional callback for progress updates.
-        total_size: Total expected size in bytes.
-        downloaded_ref: Reference list for tracking downloaded bytes.
-        max_retries: Maximum number of retry attempts.
-        cancel_check: Optional function to check if download should be cancelled.
-        on_response: Optional callback when response is received.
-    """
+def download_file(session, url, tmp_path, progress_callback=None, total_size=0, downloaded_ref=None, max_retries=MAX_DOWNLOAD_RETRIES, cancel_check=None, on_response=None):
     if downloaded_ref is None:
         downloaded_ref = [0]
-    expected_size = 0
     try:
-        h = session.head(url, allow_redirects=True, timeout=NETWORK_TIMEOUT_HEAD)
-        expected_size = int(h.headers.get('content-length', 0))
+        expected_size = int(session.head(url, allow_redirects=True, timeout=NETWORK_TIMEOUT_HEAD).headers.get('content-length', 0))
     except (requests.RequestException, ValueError):
         expected_size = 0
-    attempt = 0
-    while attempt < max_retries:
-        attempt += 1
+    for attempt in range(1, max_retries + 1):
         try:
             current_size = os.path.getsize(tmp_path) if os.path.exists(tmp_path) else 0
-            headers = {}
-            if expected_size and 0 < current_size < expected_size:
-                headers['Range'] = f'bytes={current_size}-'
+            headers = {'Range': f'bytes={current_size}-'} if expected_size and 0 < current_size < expected_size else {}
             if session is None:
                 session = get_session()
             r = session.get(url, stream=True, timeout=NETWORK_TIMEOUT_LONG, allow_redirects=True, headers=headers)
@@ -139,16 +91,11 @@ def download_file(session, url, tmp_path, progress_callback=None, total_size: in
                     on_response(r)
             except (TypeError, AttributeError) as e:
                 logging.debug(f'download_file: on_response callback failed: {e}')
-            status_code = getattr(r, 'status_code', 200)
-            duplicate_remaining = 0
-            mode = 'ab' if status_code == 206 and 'Range' in headers else 'wb'
-            if mode == 'wb' and current_size > 0:
-                duplicate_remaining = current_size
-            this_request_expected = 0
+            mode = 'ab' if getattr(r, 'status_code', 200) == 206 and 'Range' in headers else 'wb'
+            duplicate_remaining = current_size if mode == 'wb' and current_size > 0 else 0
             try:
                 this_request_expected = int(r.headers.get('content-length', 0))
-            except (ValueError, TypeError) as e:
-                logging.debug(f'download_file: failed to parse content-length: {e}')
+            except (ValueError, TypeError):
                 this_request_expected = 0
             written_this_request = 0
             with open(tmp_path, mode) as f:
@@ -164,21 +111,18 @@ def download_file(session, url, tmp_path, progress_callback=None, total_size: in
                         if sz <= duplicate_remaining:
                             duplicate_remaining -= sz
                         else:
-                            add = sz - duplicate_remaining
-                            downloaded_ref[0] += add
+                            downloaded_ref[0] += sz - duplicate_remaining
                             duplicate_remaining = 0
                     else:
                         downloaded_ref[0] += sz
                     if total_size > 0 and progress_callback:
                         try:
-                            progress = int(min(100, max(0, downloaded_ref[0] / total_size * 100)))
-                            progress_callback(progress)
-                        except (TypeError, ZeroDivisionError) as e:
-                            logging.debug(f'download_file: progress callback failed: {e}')
-            final_size = os.path.getsize(tmp_path) if os.path.exists(tmp_path) else 0
+                            progress_callback(int(min(100, max(0, downloaded_ref[0] / total_size * 100))))
+                        except (TypeError, ZeroDivisionError):
+                            pass
             if this_request_expected and written_this_request < this_request_expected:
                 raise IOError('connection dropped during download')
-            if expected_size and final_size < expected_size:
+            if expected_size and (os.path.getsize(tmp_path) if os.path.exists(tmp_path) else 0) < expected_size:
                 continue
             return
         except (requests.RequestException, OSError, IOError):
@@ -186,58 +130,28 @@ def download_file(session, url, tmp_path, progress_callback=None, total_size: in
                 raise
             try:
                 time.sleep(min(2.0, 0.2 * attempt))
-            except OSError as sleep_e:
-                logging.debug(f'download_file: sleep failed: {sleep_e}')
+            except OSError:
+                pass
 
 
-def check_internet_connection(max_attempts: int = 2) -> bool:
-    """Check if internet connection is available.
-
-    Args:
-        max_attempts: Maximum number of attempts.
-
-    Returns:
-        bool: True if internet is available.
-    """
+def check_internet_connection(max_attempts=2):
     for attempt in range(max_attempts):
         try:
-            session = get_session()
-            session.get('https://www.google.com', timeout=NETWORK_TIMEOUT_SHORT)
+            get_session().get('https://www.google.com', timeout=NETWORK_TIMEOUT_SHORT)
             return True
         except requests.RequestException:
-            if attempt < max_attempts - 1:
-                continue
+            continue
     return False
 
 
-def safe_request(method: str, url: str, session=None, timeout=None, **kwargs):
-    """Make a safe HTTP request with error handling.
-
-    Args:
-        method: HTTP method (GET, POST, etc.).
-        url: URL to request.
-        session: Optional requests session.
-        timeout: Optional timeout in seconds.
-        **kwargs: Additional arguments for the request.
-
-    Returns:
-        Response object or None on error.
-    """
-    if session is None:
-        session = get_session()
-    if timeout is None:
-        timeout = NETWORK_TIMEOUT_MEDIUM
+def safe_request(method, url, session=None, timeout=None, **kwargs):
     try:
-        method_func = getattr(session, method.lower())
-        return method_func(url, timeout=timeout, **kwargs)
+        return getattr(session or get_session(), method.lower())(url, timeout=timeout or NETWORK_TIMEOUT_MEDIUM, **kwargs)
     except Exception:
         return None
 
 
-def increment_launch_counter() -> None:
-    """Increment the launch counter on the server for analytics."""
+def increment_launch_counter():
     from config.constants import CLOUD_FUNCTIONS_BASE_URL
-    os_map = {'Windows': 'windows', 'Linux': 'linux', 'Darwin': 'macos'}
-    os_key = os_map.get(platform.system(), 'other')
-    url = f'{CLOUD_FUNCTIONS_BASE_URL}/incrementLaunches'
-    safe_request('post', url, json={'os': os_key}, timeout=NETWORK_TIMEOUT_SHORT)
+    os_key = {'Windows': 'windows', 'Linux': 'linux', 'Darwin': 'macos'}.get(platform.system(), 'other')
+    safe_request('post', f'{CLOUD_FUNCTIONS_BASE_URL}/incrementLaunches', json={'os': os_key}, timeout=NETWORK_TIMEOUT_SHORT)

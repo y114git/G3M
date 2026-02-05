@@ -1,8 +1,4 @@
-"""Worker thread for multi-mod merging operations.
-
-This module provides a background thread for merging multiple mods,
-coordinating with the MultiModMerger.
-"""
+"""Worker thread for multi-mod merging operations."""
 import logging
 import threading
 from typing import Dict, List, Any, Optional
@@ -18,16 +14,6 @@ class ModMergeThread(QThread):
     warning_confirmation_needed = pyqtSignal(str, str, str)
 
     def __init__(self, app_state, mod_service, chapter_mods: Dict[int, List[Any]], session_manifest_path: str, parent=None, fast_merge: bool = False):
-        """Initialize the mod merge thread.
-
-        Args:
-            app_state: Application state manager.
-            mod_service: Mod management operations.
-            chapter_mods: Mods to merge by chapter.
-            session_manifest_path: Path to session manifest.
-            parent: Parent QObject (optional).
-            fast_merge: Whether to use fast merge mode.
-        """
         super().__init__(parent)
         self.app_state = app_state
         self.mod_service = mod_service
@@ -40,12 +26,10 @@ class ModMergeThread(QThread):
         self._warning_event = threading.Event()
 
     def set_warning_response(self, response: bool):
-        """Set the response from the main thread for a warning dialog."""
         self._warning_response = response
         self._warning_event.set()
 
     def _handle_warning(self, warning_type: str, title: str, message: str) -> bool:
-        """Handle a warning by emitting signal and waiting for main thread response."""
         self._warning_event.clear()
         self._warning_response = None
         self.warning_confirmation_needed.emit(warning_type, title, message)
@@ -53,7 +37,6 @@ class ModMergeThread(QThread):
         return self._warning_response if self._warning_response is not None else True
 
     def cancel(self):
-        """Cancel the merge operation."""
         self._cancelled = True
         self.requestInterruption()
         if self.merger:

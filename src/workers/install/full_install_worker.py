@@ -15,7 +15,7 @@ class FullInstallThread(QThread):
     status = pyqtSignal(str, str)
     finished = pyqtSignal(bool, str)
 
-    def __init__(self, main_window, target_dir: str, make_shortcut: bool = False):
+    def __init__(self, main_window, target_dir: str):
         super().__init__(main_window)
         self.main_window = main_window
         self.target_dir = target_dir

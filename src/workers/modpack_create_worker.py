@@ -1,7 +1,4 @@
-"""Modpack creation worker thread.
-
-This module provides a background thread for creating modpacks from merged mods.
-"""
+"""Modpack creation worker thread."""
 import logging
 import os
 import json
@@ -18,17 +15,6 @@ from utils.path_utils import get_xdelta_path
 
 
 class CreateModpackThread(QThread):
-    """Worker thread for creating modpacks from multiple chapters.
-
-    Handles the creation of modpack files by merging mods from different
-    chapters using the MultiModMerger. Provides progress updates and
-    status reporting during the modpack creation process.
-
-    Signals:
-        progress_update: Emitted with (progress, message) for progress updates.
-        status_update: Emitted with (message, type) for status updates.
-        finished: Emitted with (success) when creation is complete.
-    """
     progress_update = pyqtSignal(int, str)
     status_update = pyqtSignal(str, str)
     finished = pyqtSignal(bool)

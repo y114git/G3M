@@ -1,8 +1,4 @@
-"""Controller for theme management and UI customization.
-
-This module handles theme application, background management, color customization,
-and dynamic UI element styling throughout the application.
-"""
+"""Controller for theme management and UI customization."""
 from PyQt6.QtWidgets import QApplication, QMessageBox
 from services.localization_service import tr
 from config.constants import THEMES, UI_COLORS
@@ -16,15 +12,6 @@ class ThemeController:
     """Manages theme application and UI customization operations."""
 
     def __init__(self, app_state, feedback_service, settings_service, customization_service, app_window):
-        """Initialize the theme controller.
-
-        Args:
-            app_state: Application state manager.
-            feedback_service: User feedback and dialog manager.
-            settings_service: Application settings manager.
-            customization_service: UI customization manager.
-            app_window: Main application window reference.
-        """
         self.app_state = app_state
         self.feedback_service = feedback_service
         self.settings_service = settings_service
@@ -33,7 +20,6 @@ class ThemeController:
         self._debounce_timer = DebounceTimer(delay_ms=400)
 
     def apply_theme(self):
-        """Apply the current theme with all customizations to the application."""
         theme = THEMES['default']
         background_disabled = self.app_state.local_config.get('background_disabled', False)
         new_background_path = None
@@ -128,11 +114,6 @@ class ThemeController:
         self.app.update()
 
     def on_background_ready(self, obj):
-        """Handle background image/animation loading completion.
-
-        Args:
-            obj: Loaded background object (tuple with type and data).
-        """
         from PyQt6.QtGui import QMovie, QPixmap
         from PyQt6.QtCore import Qt
         if isinstance(obj, tuple):
@@ -150,7 +131,6 @@ class ThemeController:
             self.app.update()
 
     def on_theme_button_click(self):
-        """Handle theme management button click (import/export)."""
         result = self.feedback_service.ask_custom_question(QMessageBox.Icon.Information, 'buttons.theme_management', 'dialogs.theme_choice', [('buttons.import', QMessageBox.ButtonRole.AcceptRole, 'import'), ('buttons.export', QMessageBox.ButtonRole.AcceptRole, 'export')])
         if result == 'import':
             self.settings_service.import_theme()
@@ -158,7 +138,6 @@ class ThemeController:
             self.settings_service.export_theme()
 
     def on_theme_changed_by_service(self):
-        """Handle theme change triggered by settings manager."""
         self.customization_service.load_custom_style_settings(self.app.color_widgets, self.apply_theme)
         self.app.disable_background_checkbox.setChecked(self.app_state.local_config.get('background_disabled', False))
         self.app.disable_splash_checkbox.setChecked(self.app_state.local_config.get('disable_splash', False))
@@ -181,12 +160,10 @@ class ThemeController:
                 self.customization_service.maybe_start_background_music(force=True)
 
     def on_custom_style_edited(self):
-        """Handle custom style edits with debounced theme application."""
         self.settings_service.on_custom_style_edited(self.app.color_widgets)
         self._debounce_timer.call(self.apply_theme)
 
     def update_dynamic_elements(self):
-        """Update styling of dynamic UI elements based on current theme."""
         if hasattr(self.app, 'sort_combo') and hasattr(self.app, 'sort_order_btn'):
             search_tab = None
             for i in range(self.app.tab_widget.count()):
@@ -209,36 +186,30 @@ class ThemeController:
             self.app.library_tab_builder.update_priority_button_style()
 
     def on_background_button_click(self):
-        """Handle background change button click."""
         self.settings_service.on_background_button_click()
         self.update_background_button_state()
 
     def update_background_button_state(self):
-        """Update background button text and enabled state."""
         background_disabled = self.app_state.local_config.get('background_disabled', False)
         self.app.change_background_button.setEnabled(not background_disabled)
         self.app.change_background_button.setText(tr('buttons.remove_background') if self.app_state.local_config.get('custom_background_path') else tr('buttons.change_background'))
 
     def on_background_music_button_click(self):
-        """Handle background music change button click."""
         self.customization_service.stop_background_music()
         self.settings_service.on_background_music_button_click()
         self.app.background_music_button.setText(self.customization_service.get_background_music_button_text())
         self.customization_service.maybe_start_background_music(force=True)
 
     def on_startup_sound_button_click(self):
-        """Handle startup sound change button click."""
         self.settings_service.on_startup_sound_button_click()
         self.app.startup_sound_button.setText(self.customization_service.get_startup_sound_button_text())
 
     def on_logo_button_click(self):
-        """Handle logo change button click."""
         self.settings_service.on_logo_button_click()
         self.update_logo_button_state()
         if hasattr(self.app, 'launcher_icon_label'):
             self.customization_service.load_launcher_icon(self.app.launcher_icon_label)
 
     def update_logo_button_state(self):
-        """Update logo button text based on current state."""
         if hasattr(self.app, 'change_logo_button'):
             self.app.change_logo_button.setText(self.customization_service.get_logo_button_text())

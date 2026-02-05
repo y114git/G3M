@@ -108,19 +108,11 @@ class InstalledModWidget(BaseModWidget):
                 self.game_version_label_title.setStyleSheet(f'color: {text_color};')
 
     def _update_indicator(self):
-        """Update status indicator based on mod integrity and GameBanana linkage.
-
-        3-state system:
-        - GREEN dot: Mod is valid and complete
-        - GB icon: GameBanana linked mod (gb_ key)
-        - RED dot: Mod is broken/incomplete
-        """
         style = 'font-size: 14px; font-weight: bold; margin-left: 5px;'
 
         if self._is_mod_broken():
             self.status_indicator.setStyleSheet(f'color: #F44336; {style}')
             self.status_indicator.setToolTip(tr('tooltips.mod_broken'))
-            return
 
         if self._is_gamebanana_linked():
             gb_icon_path = resource_path('assets/icons/gbicon.png')
@@ -137,7 +129,6 @@ class InstalledModWidget(BaseModWidget):
         self.status_indicator.setToolTip(tr('tooltips.mod_valid'))
 
     def _is_mod_broken(self) -> bool:
-        """Check if mod config is corrupted or files are missing."""
         try:
             if not self.mod_data:
                 return True
@@ -178,7 +169,6 @@ class InstalledModWidget(BaseModWidget):
             return True
 
     def _is_gamebanana_linked(self) -> bool:
-        """Check if mod is linked to GameBanana via gb_ key."""
         key = get_mod_key(self.mod_data)
         if not key:
             return False

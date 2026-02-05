@@ -15,11 +15,6 @@ class SettingsViewBuilder:
         self.widgets = {}
 
     def build(self) -> QFrame:
-        """Build and return the settings view widget.
-
-        Returns:
-            QFrame: Configured settings view widget.
-        """
         settings_widget = QFrame()
         settings_widget.setObjectName('settings_widget')
         settings_layout = QVBoxLayout(settings_widget)
@@ -52,30 +47,6 @@ class SettingsViewBuilder:
         return settings_widget
 
     def _build_settings_menu_page(self) -> QWidget:
-        """Build the main settings menu page.
-
-        This method creates the primary settings interface with language
-        selection and various application options. It organizes settings
-        in a centered layout with proper spacing and styling.
-
-        Returns:
-            QWidget: The complete settings menu page widget.
-
-        UI Components created:
-        - Settings title header
-        - Language selection dropdown
-        - Beta updates checkbox
-        - Clear logs on startup checkbox
-        - Additional settings checkboxes in two columns
-        - Proper layout containers and styling
-
-        Features:
-        - Centered layout with proper spacing
-        - Language management integration
-        - Tooltip support for all controls
-        - Responsive sizing constraints
-        - Consistent styling with application theme
-        """
         settings_menu_page = QWidget()
         settings_menu_layout = QVBoxLayout(settings_menu_page)
         settings_menu_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -241,7 +212,6 @@ class SettingsViewBuilder:
         color_config = {'background': tr('ui.background_color'), 'button': tr('ui.elements_color'), 'border': tr('ui.border_color'), 'button_hover': tr('ui.hover_color'), 'text': tr('ui.main_text_color'), 'version_text': tr('ui.secondary_text_color')}
 
         def create_setting_row(label_text: str):
-            """Create a color settings row with label and color controls."""
             row = QHBoxLayout()
             label = QLabel(label_text)
             color_display = QLineEdit()
@@ -313,9 +283,4 @@ class SettingsViewBuilder:
         return changelog_widget
 
     def get_widgets(self) -> Dict[str, Any]:
-        """Get the dictionary of UI widgets.
-
-        Returns:
-            Dict[str, Any]: Dictionary of widget references.
-        """
         return self.widgets

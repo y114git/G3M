@@ -15,6 +15,7 @@ from typing import Dict, Optional, Callable, TypeVar
 from utils.network_utils import download_file, get_filename_from_url, get_session
 from config.constants import MOD_CONFIG_FILENAME, META_JSON_FILENAME, ICON_PNG_FILENAME, LEGACY_MOD_CONFIG_FILENAME, LEGACY_META_JSON_FILENAME
 T = TypeVar('T')
+_IS_WIN = platform.system() == 'Windows'
 
 
 def _retry_operation(operation: Callable[[], T], max_retries: int = 5, delay: float = 0.1, op_name: str = 'operation', path: str = '') -> T:
@@ -34,7 +35,7 @@ def _retry_operation(operation: Callable[[], T], max_retries: int = 5, delay: fl
 
 
 def _fix_windows_permissions(path: str) -> None:
-    if platform.system() == 'Windows':
+    if _IS_WIN:
         try:
             os.chmod(path, stat.S_IWRITE | stat.S_IREAD)
         except OSError:
@@ -184,11 +185,7 @@ def save_json(path: str, data: Dict, indent: int = 2, max_retries: int = 5, dela
                 f.flush()
                 os.fsync(f.fileno())
             try:
-                if platform.system() == 'Windows' and os.path.exists(path):
-                    try:
-                        os.chmod(path, stat.S_IWRITE | stat.S_IREAD)
-                    except OSError:
-                        pass
+                _fix_windows_permissions(path) if os.path.exists(path) else None
                 os.replace(tmp, path)
                 return
             except (PermissionError, OSError) as e:
@@ -196,18 +193,16 @@ def save_json(path: str, data: Dict, indent: int = 2, max_retries: int = 5, dela
                 if attempt < max_retries - 1:
                     logging.debug(f'save_json: Attempt {attempt + 1}/{max_retries} failed for {path}: {e}, retrying...')
                     time.sleep(delay * (attempt + 1))
-                    _cleanup_tmp(tmp)
-                else:
-                    _cleanup_tmp(tmp)
+                _cleanup_tmp(tmp)
+                if attempt >= max_retries - 1:
                     raise
         except (PermissionError, OSError) as e:
             last_error = e
             if attempt < max_retries - 1:
                 logging.debug(f'save_json: Attempt {attempt + 1}/{max_retries} failed for {path}: {e}, retrying...')
                 time.sleep(delay * (attempt + 1))
-                _cleanup_tmp(tmp)
-            else:
-                _cleanup_tmp(tmp)
+            _cleanup_tmp(tmp)
+            if attempt >= max_retries - 1:
                 raise
         except (TypeError, ValueError) as e:
             _cleanup_tmp(tmp)
@@ -323,166 +318,101 @@ def ensure_writable(path: str) -> bool:
         return False
 
 
-def is_path_in_steam_common(game_path: str, game_name: str) -> bool:
-    """Check if a game path is within a Steam common directory."""
-    if not game_path or not os.path.isdir(game_path):
-        return False
+def _match_steam_path(normalized, steam_path):
     try:
-        game_path_abs = os.path.abspath(game_path)
-        game_path_normalized = os.path.normpath(game_path_abs).lower()
-        game_name_lower = game_name.lower()
+        if os.path.exists(steam_path):
+            sp = os.path.normpath(os.path.abspath(steam_path)).lower().replace('\\', '/')
+            if normalized == sp or normalized.startswith(sp + '/'):
+                return True
     except (OSError, ValueError):
-        return False
-    path_parts = game_path_normalized.replace('\\', '/').split('/')
-    try:
-        for i, part in enumerate(path_parts):
-            if part == 'steamapps' and i + 1 < len(path_parts) and path_parts[i + 1] == 'common' and i + 2 < len(path_parts):
-                return True
-    except (IndexError, AttributeError):
         pass
-    system = platform.system()
-    if system == 'Windows':
-        for pf in filter(None, [os.getenv('ProgramFiles(x86)'), os.getenv('ProgramFiles')]):
-            steam_common = os.path.normpath(os.path.join(pf, 'Steam', 'steamapps', 'common', game_name)).lower()
-            if game_path_normalized == steam_common or game_path_normalized.startswith(steam_common.replace('\\', '/') + '/'):
-                return True
-    elif system == 'Linux':
-        home = os.path.expanduser('~')
-        for steam_path in [os.path.join(home, '.steam', 'steam', 'steamapps', 'common', game_name), os.path.join(home, '.local', 'share', 'Steam', 'steamapps', 'common', game_name), os.path.join(home, '.var', 'app', 'com.valvesoftware.Steam', 'data', 'Steam', 'steamapps', 'common', game_name)]:
-            try:
-                if os.path.exists(steam_path) and (game_path_normalized == (sp := os.path.normpath(os.path.abspath(steam_path)).lower().replace('\\', '/')) or game_path_normalized.startswith(sp + '/')):
-                    return True
-            except (OSError, ValueError):
-                continue
-    elif system == 'Darwin':
-        home = os.path.expanduser('~')
-        for steam_path in [os.path.join(home, 'Library', 'Application Support', 'Steam', 'steamapps', 'common', game_name), os.path.join(home, 'Steam', 'steamapps', 'common', game_name)]:
-            try:
-                if os.path.exists(steam_path) and (game_path_normalized == (sp := os.path.normpath(os.path.abspath(steam_path)).lower().replace('\\', '/')) or game_path_normalized.startswith(sp + '/')):
-                    return True
-            except (OSError, ValueError):
-                continue
     return False
 
 
+def is_path_in_steam_common(game_path: str, game_name: str) -> bool:
+    if not game_path or not os.path.isdir(game_path):
+        return False
+    try:
+        game_path_normalized = os.path.normpath(os.path.abspath(game_path)).lower()
+    except (OSError, ValueError):
+        return False
+    path_parts = game_path_normalized.replace('\\', '/').split('/')
+    if any(path_parts[i] == 'steamapps' and i + 2 < len(path_parts) and path_parts[i + 1] == 'common' for i in range(len(path_parts))):
+        return True
+    home = os.path.expanduser('~')
+    if _IS_WIN:
+        for pf in filter(None, [os.getenv('ProgramFiles(x86)'), os.getenv('ProgramFiles')]):
+            if _match_steam_path(game_path_normalized, os.path.join(pf, 'Steam', 'steamapps', 'common', game_name)):
+                return True
+    elif platform.system() == 'Linux':
+        for sp in [os.path.join(home, '.steam', 'steam'), os.path.join(home, '.local', 'share', 'Steam'), os.path.join(home, '.var', 'app', 'com.valvesoftware.Steam', 'data', 'Steam')]:
+            if _match_steam_path(game_path_normalized, os.path.join(sp, 'steamapps', 'common', game_name)):
+                return True
+    elif platform.system() == 'Darwin':
+        for sp in [os.path.join(home, 'Library', 'Application Support', 'Steam'), os.path.join(home, 'Steam')]:
+            if _match_steam_path(game_path_normalized, os.path.join(sp, 'steamapps', 'common', game_name)):
+                return True
+    return False
+
+
+def _pizza_names(game_name):
+    return ['Pizza Tower', 'PizzaTower', 'pizzatower'] if game_name == 'Pizza Tower' else [game_name]
+
+
 def autodetect_path(game_name: str) -> str | None:
-    """Autodetect game installation path across multiple platforms.
-
-    This function searches for game installations in common locations
-    including Steam directories, program files, and various mount points.
-    It supports Windows, Linux, and macOS with platform-specific paths.
-
-    Args:
-        game_name: Name of the game to search for.
-
-    Supported games:
-    - Pizza Tower (with multiple name variations)
-    - Other Steam games
-
-    Search locations include:
-    - Steam installation directories
-    - Program Files folders (Windows)
-    - Steam library folders
-    - Mount points and media directories (Linux)
-    - Application Support directories (macOS)
-
-    Returns:
-        str | None: Path to game directory if found, None otherwise.
-
-    Note:
-        Some games like Undertale Yellow and Sugary Spire return None
-        as they require manual path specification.
-    """
-    if game_name == 'UNDERTALE YELLOW' or game_name == 'UndertaleYellow' or game_name == 'undertaleyellow':
+    if game_name in ('UNDERTALE YELLOW', 'UndertaleYellow', 'undertaleyellow', 'SUGARY SPIRE', 'SugarySpire', 'sugaryspire'):
         return None
-    if game_name == 'SUGARY SPIRE' or game_name == 'SugarySpire' or game_name == 'sugaryspire':
-        return None
-    system = platform.system()
-    paths = []
+    system, paths, names = platform.system(), [], _pizza_names(game_name)
+    home = os.path.expanduser('~')
     if system == 'Windows':
-        program_files = [os.getenv('ProgramFiles(x86)'), os.getenv('ProgramFiles')]
-        steam_paths = [os.path.join(p, 'Steam', 'steamapps', 'common', game_name) for p in program_files if p]
-        paths.extend(steam_paths)
-        if game_name == 'Pizza Tower':
-            pizza_tower_variations = ['Pizza Tower', 'PizzaTower', 'pizzatower']
-            for variation in pizza_tower_variations:
-                for p in program_files:
-                    if p:
-                        paths.append(os.path.join(p, 'Steam', 'steamapps', 'common', variation))
-        drive_letters = 'CDEFGHIJKLMNOPQRSTUVWXYZ'
-        for drive in drive_letters:
-            for steam_subpath_parts in [['Steam', 'steamapps', 'common'], ['SteamLibrary', 'steamapps', 'common'], ['Program Files', 'Steam', 'steamapps', 'common'], ['Program Files (x86)', 'Steam', 'steamapps', 'common']]:
-                path = os.path.join(f'{drive}:', *steam_subpath_parts, game_name)
-                paths.append(path)
-                if game_name == 'Pizza Tower':
-                    for variation in ['Pizza Tower', 'PizzaTower', 'pizzatower']:
-                        paths.append(os.path.join(f'{drive}:', *steam_subpath_parts, variation))
+        pf_dirs = [p for p in [os.getenv('ProgramFiles(x86)'), os.getenv('ProgramFiles')] if p]
+        for n in names:
+            paths.extend(os.path.join(p, 'Steam', 'steamapps', 'common', n) for p in pf_dirs)
+        steam_subs = [['Steam', 'steamapps', 'common'], ['SteamLibrary', 'steamapps', 'common'], ['Program Files', 'Steam', 'steamapps', 'common'], ['Program Files (x86)', 'Steam', 'steamapps', 'common']]
+        for drive in 'CDEFGHIJKLMNOPQRSTUVWXYZ':
+            for sub in steam_subs:
+                for n in names:
+                    paths.append(os.path.join(f'{drive}:', *sub, n))
     elif system == 'Linux':
-        home = os.path.expanduser('~')
-        base_steam_paths = [f'{home}/.steam/steam/steamapps/common/{game_name}', f'{home}/.local/share/Steam/steamapps/common/{game_name}', f'{home}/.var/app/com.valvesoftware.Steam/data/Steam/steamapps/common/{game_name}']
-        paths.extend(base_steam_paths)
-        if game_name == 'Pizza Tower':
-            for variation in ['Pizza Tower', 'PizzaTower', 'pizzatower']:
-                paths.extend([f'{home}/.steam/steam/steamapps/common/{variation}', f'{home}/.local/share/Steam/steamapps/common/{variation}', f'{home}/.var/app/com.valvesoftware.Steam/data/Steam/steamapps/common/{variation}'])
-        mount_points = ['/mnt', '/media', '/run/media', f'{home}/.steam/steam/steamapps']
-        for mount_base in mount_points:
+        steam_bases = [f'{home}/.steam/steam', f'{home}/.local/share/Steam', f'{home}/.var/app/com.valvesoftware.Steam/data/Steam']
+        for sb in steam_bases:
+            for n in names:
+                paths.append(f'{sb}/steamapps/common/{n}')
+        for mount_base in ['/mnt', '/media', '/run/media', f'{home}/.steam/steam/steamapps']:
             if os.path.isdir(mount_base):
                 try:
                     for item in os.listdir(mount_base):
                         item_path = os.path.join(mount_base, item)
                         if os.path.isdir(item_path):
-                            steam_lib_path = os.path.join(item_path, 'SteamLibrary', 'steamapps', 'common', game_name)
-                            if os.path.exists(steam_lib_path):
-                                paths.append(steam_lib_path)
-                            steam_path = os.path.join(item_path, 'steamapps', 'common', game_name)
-                            if os.path.exists(steam_path):
-                                paths.append(steam_path)
+                            for sub in ['SteamLibrary/steamapps/common', 'steamapps/common']:
+                                sp = os.path.join(item_path, sub, game_name)
+                                if os.path.exists(sp):
+                                    paths.append(sp)
                 except (OSError, PermissionError):
                     pass
-        additional_paths = [f'/run/media/mmcblk0p1/steamapps/common/{game_name}', f'/run/media/mmcblk1p1/steamapps/common/{game_name}', f'/mnt/steam/steamapps/common/{game_name}', f'/media/steam/steamapps/common/{game_name}']
-        paths.extend(additional_paths)
+        for extra in ['/run/media/mmcblk0p1', '/run/media/mmcblk1p1', '/mnt/steam', '/media/steam']:
+            paths.append(f'{extra}/steamapps/common/{game_name}')
     elif system == 'Darwin':
-        home = os.path.expanduser('~')
-        base_paths = [f'{home}/Library/Application Support/Steam/steamapps/common/{game_name}', f'/Applications/{game_name}', f'{home}/Steam/steamapps/common/{game_name}']
-        if game_name == 'Pizza Tower':
-            for variation in ['Pizza Tower', 'PizzaTower', 'pizzatower']:
-                base_paths.extend([f'{home}/Library/Application Support/Steam/steamapps/common/{variation}', f'/Applications/{variation}', f'{home}/Steam/steamapps/common/{variation}'])
+        base_paths = [f'{home}/Library/Application Support/Steam/steamapps/common', '/Applications', f'{home}/Steam/steamapps/common']
+        all_bases = []
+        for bp in base_paths:
+            for n in names:
+                all_bases.append(f'{bp}/{n}')
         if game_name.endswith('demo'):
-            for parent in filter(os.path.isdir, base_paths):
-                for app_name in [f'{game_name}.app', 'DELTARUNE.app']:
-                    full_path = os.path.join(parent, app_name)
-                    if os.path.exists(full_path):
-                        paths.append(full_path)
+            for parent in filter(os.path.isdir, all_bases):
+                for app in [f'{game_name}.app', 'DELTARUNE.app']:
+                    fp = os.path.join(parent, app)
+                    if os.path.exists(fp):
+                        paths.append(fp)
         else:
-            app_paths = [f'{p}/{game_name}.app' for p in base_paths]
-            paths.extend(filter(os.path.isdir, app_paths))
-            if game_name == 'Pizza Tower':
-                for variation in ['Pizza Tower', 'PizzaTower', 'pizzatower']:
-                    variation_paths = [f'{p}/{variation}.app' for p in base_paths]
-                    paths.extend(filter(os.path.isdir, variation_paths))
+            for bp in all_bases:
+                for n in names:
+                    paths.extend(filter(os.path.isdir, [f'{bp}/{n}.app']))
+            paths.extend(filter(os.path.isdir, [f'{bp}/{game_name}.app' for bp in all_bases]))
     return next((p for p in paths if os.path.exists(p)), None)
 
 
 def fix_macos_python_symlink(app_dir: Path) -> None:
-    """Fix Python symlink in macOS app bundles.
-
-    This function fixes the Python symlink in macOS app bundles that
-    may be created incorrectly during packaging. It converts a text
-    file containing the symlink target into a proper symbolic link.
-
-    Args:
-        app_dir: Path to the app bundle directory.
-
-    Operations:
-    - Checks if running on macOS
-    - Validates Python framework path
-    - Reads symlink target from text file
-    - Creates proper symbolic link
-    - Sets executable permissions
-
-    Returns:
-        None, but fixes the Python symlink if needed.
-    """
     try:
         if platform.system() != 'Darwin':
             return
@@ -521,54 +451,23 @@ def cleanup_old_updater_files():
 
 
 def version_sort_key(version_string: str):
-    """Generate a sort key for version strings.
-
-    This function parses version strings and creates a tuple that can
-    be used for proper version sorting. It handles semantic versioning
-    formats and various suffixes.
-
-    Args:
-        version_string: Version string to parse (e.g., "1.2.3", "2.0.1-beta").
-
-    Supported formats:
-    - Semantic versioning (major.minor.patch)
-    - Version suffixes (alpha, beta, rc, etc.)
-    - Simple numeric versions
-    - Mixed alphanumeric versions
-
-    Returns:
-        tuple: Sort key in format (major, minor, patch, has_suffix, suffix)
-               for proper version ordering.
-
-    Note:
-        Invalid version strings return (0, 0, 0, 0, '') as fallback.
-    """
     try:
         s = (version_string or '').strip()
-        m = re.match('^(?P<major>\\d+)(?:\\.(?P<minor>\\d+))?(?:\\.(?P<patch>\\d+))?(?P<suffix>[A-Za-z0-9][A-Za-z0-9._-]*)?$', s)
+        m = re.match(r'^(?P<major>\d+)(?:\.(?P<minor>\d+))?(?:\.(?P<patch>\d+))?(?P<suffix>[A-Za-z0-9][A-Za-z0-9._-]*)?$', s)
         if m:
-            parts = m.groupdict()
-            major = int(parts.get('major') or 0)
-            minor = int(parts.get('minor') or 0)
-            patch = int(parts.get('patch') or 0)
-            suffix = (parts.get('suffix') or '').lower()
-            has_suffix = 1 if suffix else 0
-            return (major, minor, patch, has_suffix, suffix)
-        parts = re.split('[.-]', s)
-        nums = []
-        suffix_part = ''
+            p = m.groupdict()
+            suffix = (p.get('suffix') or '').lower()
+            return (int(p.get('major') or 0), int(p.get('minor') or 0), int(p.get('patch') or 0), 1 if suffix else 0, suffix)
+        parts, nums, suffix_part = re.split('[.-]', s), [], ''
         for part in parts:
             if part.isdigit():
                 nums.append(int(part))
             else:
                 suffix_part = ''.join(parts[parts.index(part):]).lower()
                 break
-        while len(nums) < 3:
-            nums.append(0)
-        has_suffix = 1 if suffix_part else 0
-        return (nums[0], nums[1], nums[2], has_suffix, suffix_part)
-    except Exception as e:
-        logging.debug(f'version_sort_key: failed to parse "{version_string}": {e}')
+        nums.extend([0] * (3 - len(nums)))
+        return (nums[0], nums[1], nums[2], 1 if suffix_part else 0, suffix_part)
+    except Exception:
         return (0, 0, 0, 0, '')
 
 
@@ -639,26 +538,6 @@ def safe_remove(path: str, max_retries: int = 5, delay: float = 0.1) -> bool:
 
 
 def safe_move(src: str, dst: str, max_retries: int = 5, delay: float = 0.1) -> bool:
-    """Safely move a file or directory with retry mechanism.
-
-    This function moves files or directories with proper error handling,
-    permission fixes, and retry logic for common filesystem issues.
-
-    Args:
-        src: Source path to move from.
-        dst: Destination path to move to.
-        max_retries: Maximum number of retry attempts (default: 5).
-        delay: Delay between retries in seconds (default: 0.1).
-
-    Features:
-    - Automatic destination directory creation
-    - Windows permission fixes for files
-    - Retry mechanism for transient errors
-    - Comprehensive error handling
-
-    Returns:
-        bool: True if move was successful, False otherwise.
-    """
     if not os.path.exists(src):
         return False
     dst_dir = os.path.dirname(dst)
@@ -690,26 +569,6 @@ def _rmtree_error_handler(func, path, exc_info):
 
 
 def safe_rmtree(path: str, max_retries: int = 3, delay: float = 0.5) -> bool:
-    """Safely remove a directory tree with retry mechanism.
-
-    This function removes directory trees with proper error handling,
-    permission fixes, and retry logic. It includes special handling
-    for Windows filesystem issues.
-
-    Args:
-        path: Directory path to remove.
-        max_retries: Maximum number of retry attempts (default: 3).
-        delay: Delay between retries in seconds (default: 0.5).
-
-    Features:
-    - Retry mechanism with custom error handler
-    - Windows-specific permission fixes
-    - Fallback rename-and-delete strategy
-    - Threaded cleanup for stubborn directories
-
-    Returns:
-        bool: True if removal was successful, False otherwise.
-    """
     if not os.path.exists(path):
         return True
     if not os.path.isdir(path):
@@ -718,7 +577,7 @@ def safe_rmtree(path: str, max_retries: int = 3, delay: float = 0.5) -> bool:
         _retry_operation(lambda: shutil.rmtree(path, onexc=_rmtree_error_handler), max_retries, delay, 'safe_rmtree', path)
         return True
     except Exception:
-        if platform.system() != 'Windows':
+        if not _IS_WIN:
             try:
                 renamed = os.path.join(tempfile.gettempdir(), f'deltahub_cleanup_{int(time.time())}')
                 if not os.path.exists(renamed):

@@ -1,8 +1,4 @@
-"""Application update checking and installation.
-
-This module handles checking for launcher updates, downloading updates,
-and managing the update installation process.
-"""
+"""Application update checking and installation."""
 import os
 import sys
 import platform
@@ -31,19 +27,11 @@ class UpdateChecker(QObject):
     quit_requested = pyqtSignal()
 
     def __init__(self, app_state: AppState, feedback_service: FeedbackManager, parent=None):
-        """Initialize the update checker.
-
-        Args:
-            app_state: Application state manager.
-            feedback_service: User feedback manager.
-            parent: Parent QObject (optional).
-        """
         super().__init__(parent)
         self.app_state = app_state
         self.feedback_service = feedback_service
 
     def check_for_updates(self):
-        """Check for available launcher updates."""
         beta_enabled = self.app_state.local_config.get('beta_updates_enabled', False)
         system = platform.system()
         if beta_enabled:

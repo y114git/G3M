@@ -304,40 +304,18 @@ class UsedModsManager(QObject):
         return mods_to_update
 
     def get_active_mod_selections(self) -> Dict[int, List[Any]]:
-        selections = {}
+        empty = {cid: [] for cid in range(5)}
         if not self.used_mods:
-            for chapter_id in range(5):
-                selections[chapter_id] = []
-            return selections
-        chapter_id = get_chapter_id_for_game_mode(self.app_state.game_mode)
-        if chapter_id != SLOT_ID_UNIVERSAL:
-            mods_list = self.get_used_mods_list(chapter_id)
-            selections[-1] = mods_list if mods_list else []
-        elif self.app_state.current_mode == 'normal':
-            mods_list = self.get_used_mods_list(SLOT_ID_UNIVERSAL)
-            if mods_list:
-                for chapter_id in range(5):
-                    chapter_mods = []
-                    for mod in mods_list:
-                        if hasattr(mod, 'get_chapter_data') and mod.get_chapter_data(chapter_id):
-                            chapter_mods.append(mod)
-                    selections[chapter_id] = chapter_mods
-            else:
-                used_mod = self.get_used_mod(SLOT_ID_UNIVERSAL)
-                if used_mod:
-                    for chapter_id in range(5):
-                        if hasattr(used_mod, 'get_chapter_data') and used_mod.get_chapter_data(chapter_id):
-                            selections[chapter_id] = [used_mod]
-                        else:
-                            selections[chapter_id] = []
-                else:
-                    for chapter_id in range(5):
-                        selections[chapter_id] = []
-        elif self.app_state.current_mode == 'chapter':
-            for chapter_id in range(5):
-                mods_list = self.get_used_mods_list(chapter_id)
-                selections[chapter_id] = mods_list if mods_list else []
-        return selections
+            return empty
+        gm_chapter = get_chapter_id_for_game_mode(self.app_state.game_mode)
+        if gm_chapter != SLOT_ID_UNIVERSAL:
+            return {-1: self.get_used_mods_list(gm_chapter)}
+        if self.app_state.current_mode == 'chapter':
+            return {cid: self.get_used_mods_list(cid) or [] for cid in range(5)}
+        mods_list = self.get_used_mods_list(SLOT_ID_UNIVERSAL)
+        if not mods_list:
+            return empty
+        return {cid: [m for m in mods_list if hasattr(m, 'get_chapter_data') and m.get_chapter_data(cid)] for cid in range(5)}
 
     def toggle_direct_launch_for_chapter(self, chapter_id: int):
         if chapter_id == 0:

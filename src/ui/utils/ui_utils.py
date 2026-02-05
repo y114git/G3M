@@ -1,7 +1,4 @@
-"""UI utility functions.
-
-This module provides utilities for UI operations including debouncing and formatting.
-"""
+"""UI utility functions."""
 import logging
 from PyQt6.QtCore import QTimer, QThread
 from typing import Callable, Optional
@@ -50,12 +47,6 @@ def format_size_mb(size_bytes: int) -> str:
 
 
 def refresh_ui_after_mod_install(main_window, mod_service=None):
-    """Refresh UI components after mod installation.
-
-    Args:
-        main_window: Main application window.
-        mod_service: Mod manager instance (optional).
-    """
     from PyQt6.QtCore import QTimer
     from config.constants import UI_COLORS
     from services.localization_service import tr

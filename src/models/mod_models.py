@@ -1,8 +1,4 @@
-"""Data models for mod information and metadata.
-
-This module defines dataclasses for representing mod data, chapter-specific data,
-and extra files associated with mods.
-"""
+"""Data models for mod information and metadata."""
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
@@ -24,11 +20,6 @@ class ModChapterData:
     extra_files: List[ModExtraFile] = field(default_factory=list)
 
     def is_valid(self) -> bool:
-        """Check if chapter data is valid (has data file or extra files).
-
-        Returns:
-            bool: True if valid.
-        """
         return bool(self.data_file_url or self.extra_files)
 
 
@@ -70,59 +61,21 @@ class ModInfo:
     has_full_metadata: bool = False
 
     def get_chapter_data(self, chapter_id: int) -> Optional[ModChapterData]:
-        """Get chapter-specific data for a given chapter ID.
-
-        Args:
-            chapter_id: Chapter identifier.
-
-        Returns:
-            Optional[ModChapterData]: Chapter data or None.
-        """
         if self.game == 'undertale' and chapter_id == 0:
             return self.files.get('undertale')
-        file_key = self._CHAPTER_MAP.get(chapter_id)
-        return self.files.get(file_key) if file_key else None
+        return self.files.get(self._CHAPTER_MAP.get(chapter_id))
 
     def is_valid_for_demo(self) -> bool:
-        """Check if mod is valid for the Deltarune demo.
-
-        Returns:
-            bool: True if valid for demo.
-        """
-        if self.game != 'deltarunedemo':
-            return False
-        has_demo_files = bool(self.files and self.files.get('demo'))
-        has_demo_url = bool(self.demo_url and self.demo_version)
-        return has_demo_files or has_demo_url
+        return self.game == 'deltarunedemo' and bool((self.files and self.files.get('demo')) or (self.demo_url and self.demo_version))
 
     def is_gamebanana_mod(self) -> bool:
-        """Check if mod is from GameBanana.
-
-        Returns:
-            bool: True if GameBanana mod.
-        """
         return bool(self.key and isinstance(self.key, str) and self.key.startswith('gb_'))
 
     def get_gamebanana_mod_id(self) -> Optional[str]:
-        """Get the GameBanana mod ID if this is a GameBanana mod.
-
-        Returns:
-            Optional[str]: Mod ID or None.
-        """
-        if not self.is_gamebanana_mod():
-            return None
-        return self.key.replace('gb_', '', 1) if self.key else None
+        return self.key[3:] if self.is_gamebanana_mod() and self.key else None
 
     @classmethod
     def from_dict(cls, data_dict: Dict[str, Any]) -> 'ModInfo':
-        """Create ModInfo instance from dictionary.
-
-        Args:
-            data_dict: Dictionary containing mod data.
-
-        Returns:
-            ModInfo: New ModInfo instance.
-        """
         from services.localization_service import tr
         files_dict = {}
         if 'files' in data_dict and isinstance(data_dict['files'], dict):

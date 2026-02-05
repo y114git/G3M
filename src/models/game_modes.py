@@ -1,237 +1,85 @@
-"""Game mode definitions and mod filtering logic.
-
-This module defines different game modes (Full, Demo, Undertale, etc.) and their
-specific behaviors for mod filtering and UI presentation.
-"""
-from typing import TYPE_CHECKING, Callable
+"""Game mode definitions and mod filtering logic."""
 from config.constants import STEAM_APP_ID_FULL, STEAM_APP_ID_DEMO, STEAM_APP_ID_UNDERTALE, STEAM_APP_ID_PIZZA_TOWER
-if TYPE_CHECKING:
-    from models.mod_models import ModInfo
 
 
 def tr(key: str) -> str:
-    """Translate a localization key to the current language.
-
-    Args:
-        key: Localization key.
-
-    Returns:
-        str: Translated string.
-    """
     from services.localization_service import tr as _tr
     return _tr(key)
 
 
 class GameMode:
     """Base class for game mode definitions."""
-    _path_key: str
-    _custom_exec_key: str
-    steam_id: str
-    _tab_name_keys: list[str]
-    _path_change_button_key: str
-    direct_launch_allowed: bool
+
+    def __init__(self, path_key, custom_exec_key, steam_id, btn_key, tab_keys, direct_launch=True):
+        self._path_key, self._custom_exec_key, self.steam_id = path_key, custom_exec_key, steam_id
+        self._path_change_button_key, self._tab_name_keys, self.direct_launch_allowed = btn_key, tab_keys, direct_launch
 
     @property
-    def path_change_button_text(self) -> str:
-        """Get the localized text for the path change button.
-
-        Returns:
-            str: Localized button text.
-        """
-        return tr(self._path_change_button_key)
-
+    def path_change_button_text(self): return tr(self._path_change_button_key)
     @property
-    def tab_names(self) -> list[str]:
-        """Get localized tab names for this game mode.
-
-        Returns:
-            list[str]: List of localized tab names.
-        """
-        return [tr(key) for key in self._tab_name_keys]
-
-    def get_game_path(self, config: dict) -> str:
-        """Get the game path from configuration.
-
-        Args:
-            config: Configuration dictionary.
-
-        Returns:
-            str: Game path.
-        """
-        return config.get(self._path_key, '')
-
-    def set_game_path(self, config: dict, path: str):
-        """Set the game path in configuration.
-
-        Args:
-            config: Configuration dictionary.
-            path: Game path to set.
-        """
-        config[self._path_key] = path
-
-    def get_custom_exec_config_key(self) -> str:
-        """Get the configuration key for custom executable path.
-
-        Returns:
-            str: Configuration key.
-        """
-        return self._custom_exec_key
-
-    def _is_visible_mod(self, mod: 'ModInfo') -> bool:
-        """Check if a mod should be visible in the UI.
-
-        Args:
-            mod: Mod to check.
-
-        Returns:
-            bool: True if mod should be visible.
-        """
-        return not mod.hide_mod and (not mod.ban_status)
-
-    def _filter_visible_mods(self, all_mods: list['ModInfo'], predicate: Callable[['ModInfo'], bool]) -> list['ModInfo']:
-        """Filter mods by visibility and custom predicate.
-
-        Args:
-            all_mods: List of all mods.
-            predicate: Additional filter function.
-
-        Returns:
-            list['ModInfo']: Filtered mod list.
-        """
-        return [mod for mod in all_mods if self._is_visible_mod(mod) and predicate(mod)]
-
-    def get_chapter_id(self, ui_index: int) -> int:
-        """Convert UI tab index to chapter ID.
-
-        Args:
-            ui_index: UI tab index.
-
-        Returns:
-            int: Chapter ID.
-        """
-        raise NotImplementedError
-
-    def filter_mods_for_ui(self, all_mods: list['ModInfo']) -> dict[int, list['ModInfo']]:
-        """Filter mods for UI display by chapter/tab.
-
-        Args:
-            all_mods: List of all available mods.
-
-        Returns:
-            dict[int, list['ModInfo']]: Mods grouped by chapter/tab index.
-        """
-        raise NotImplementedError
+    def tab_names(self): return [tr(k) for k in self._tab_name_keys]
+    def get_game_path(self, config): return config.get(self._path_key, '')
+    def set_game_path(self, config, path): config[self._path_key] = path
+    def get_custom_exec_config_key(self): return self._custom_exec_key
+    def _is_visible_mod(self, mod): return not mod.hide_mod and not mod.ban_status
+    def _filter_visible_mods(self, all_mods, predicate): return [m for m in all_mods if self._is_visible_mod(m) and predicate(m)]
+    def get_chapter_id(self, ui_index): raise NotImplementedError
+    def filter_mods_for_ui(self, all_mods): raise NotImplementedError
 
 
 class FullGameMode(GameMode):
-    """Game mode for the full Deltarune game."""
+    def __init__(self):
+        super().__init__('game_path', 'custom_executable_path', STEAM_APP_ID_FULL, 'buttons.change_path', ['tabs.main_menu', 'tabs.chapter_1', 'tabs.chapter_2', 'tabs.chapter_3', 'tabs.chapter_4'])
+
+    def get_chapter_id(self, ui_index): return ui_index
+    def filter_mods_for_ui(self, all_mods): return {i: self._filter_visible_mods(all_mods, lambda mod, i=i: mod.game == 'deltarune' and mod.get_chapter_data(i)) for i in range(5)}
+
+
+class _SingleTabGameMode(GameMode):
+    """Base for single-tab game modes."""
+    _chapter_id = 0
+    _game_key = ''
+    _files_key = 'undertale'
+
+    def get_chapter_id(self, ui_index): return self._chapter_id
+    def filter_mods_for_ui(self, all_mods): return {0: self._filter_visible_mods(all_mods, self._mod_predicate)}
+    def _mod_predicate(self, mod): return mod.game == self._game_key and mod.files.get(self._files_key)
+
+
+class DemoGameMode(_SingleTabGameMode):
+    _chapter_id = -1
 
     def __init__(self):
-        """Initialize full game mode with chapter tabs."""
-        self._path_key = 'game_path'
-        self._custom_exec_key = 'custom_executable_path'
-        self.steam_id = STEAM_APP_ID_FULL
-        self._path_change_button_key = 'buttons.change_path'
-        self._tab_name_keys = ['tabs.main_menu', 'tabs.chapter_1', 'tabs.chapter_2', 'tabs.chapter_3', 'tabs.chapter_4']
-        self.direct_launch_allowed = True
+        super().__init__('demo_game_path', 'demo_custom_executable_path', STEAM_APP_ID_DEMO, 'buttons.change_demo_path', ['tabs.demo'], direct_launch=False)
 
-    def get_chapter_id(self, ui_index: int) -> int:
-        return ui_index
-
-    def filter_mods_for_ui(self, all_mods: list['ModInfo']) -> dict[int, list['ModInfo']]:
-        return {i: self._filter_visible_mods(all_mods, lambda mod, i=i: mod.game == 'deltarune' and mod.get_chapter_data(i)) for i in range(5)}
+    def _mod_predicate(self, mod): return mod.is_valid_for_demo()
 
 
-class DemoGameMode(GameMode):
-    """Game mode for the Deltarune demo."""
+class UndertaleGameMode(_SingleTabGameMode):
+    _game_key, _files_key = 'undertale', 'undertale'
 
     def __init__(self):
-        """Initialize demo game mode."""
-        self._path_key = 'demo_game_path'
-        self._custom_exec_key = 'demo_custom_executable_path'
-        self.steam_id = STEAM_APP_ID_DEMO
-        self._path_change_button_key = 'buttons.change_demo_path'
-        self._tab_name_keys = ['tabs.demo']
-        self.direct_launch_allowed = False
-
-    def get_chapter_id(self, ui_index: int) -> int:
-        return -1
-
-    def filter_mods_for_ui(self, all_mods: list['ModInfo']) -> dict[int, list['ModInfo']]:
-        return {0: self._filter_visible_mods(all_mods, lambda mod: mod.is_valid_for_demo())}
+        super().__init__('undertale_game_path', 'undertale_custom_executable_path', STEAM_APP_ID_UNDERTALE, 'buttons.change_undertale_path', ['tabs.undertale'])
 
 
-class UndertaleGameMode(GameMode):
-    """Game mode for Undertale."""
+class UndertaleYellowGameMode(_SingleTabGameMode):
+    _game_key, _files_key = 'undertaleyellow', 'undertale'
 
     def __init__(self):
-        """Initialize Undertale game mode."""
-        self._path_key = 'undertale_game_path'
-        self._custom_exec_key = 'undertale_custom_executable_path'
-        self.steam_id = STEAM_APP_ID_UNDERTALE
-        self._path_change_button_key = 'buttons.change_undertale_path'
-        self._tab_name_keys = ['tabs.undertale']
-        self.direct_launch_allowed = True
-
-    def get_chapter_id(self, ui_index: int) -> int:
-        return 0
-
-    def filter_mods_for_ui(self, all_mods: list['ModInfo']) -> dict[int, list['ModInfo']]:
-        return {0: self._filter_visible_mods(all_mods, lambda mod: mod.game == 'undertale' and mod.files.get('undertale'))}
+        super().__init__('undertaleyellow_game_path', 'undertaleyellow_custom_executable_path', '', 'buttons.change_undertaleyellow_path', ['tabs.undertaleyellow'])
 
 
-class UndertaleYellowGameMode(GameMode):
-    """Game mode for Undertale Yellow."""
+class PizzaTowerGameMode(_SingleTabGameMode):
+    _game_key = 'pizzatower'
 
     def __init__(self):
-        """Initialize Undertale Yellow game mode."""
-        self._path_key = 'undertaleyellow_game_path'
-        self._custom_exec_key = 'undertaleyellow_custom_executable_path'
-        self.steam_id = ''
-        self._path_change_button_key = 'buttons.change_undertaleyellow_path'
-        self._tab_name_keys = ['tabs.undertaleyellow']
-        self.direct_launch_allowed = True
+        super().__init__('pizzatower_game_path', 'pizzatower_custom_executable_path', STEAM_APP_ID_PIZZA_TOWER, 'buttons.change_pizzatower_path', ['tabs.pizzatower'])
 
-    def get_chapter_id(self, ui_index: int) -> int:
-        return 0
-
-    def filter_mods_for_ui(self, all_mods: list['ModInfo']) -> dict[int, list['ModInfo']]:
-        return {0: self._filter_visible_mods(all_mods, lambda mod: mod.game == 'undertaleyellow' and mod.files.get('undertale'))}
+    def _mod_predicate(self, mod): return mod.game == 'pizzatower' and (mod.files.get('0') or mod.files.get('pizzatower'))
 
 
-class PizzaTowerGameMode(GameMode):
-    """Game mode for Pizza Tower."""
+class SugarySpireGameMode(_SingleTabGameMode):
+    _game_key, _files_key = 'sugaryspire', 'undertale'
 
     def __init__(self):
-        """Initialize Pizza Tower game mode."""
-        self._path_key = 'pizzatower_game_path'
-        self._custom_exec_key = 'pizzatower_custom_executable_path'
-        self.steam_id = STEAM_APP_ID_PIZZA_TOWER
-        self._path_change_button_key = 'buttons.change_pizzatower_path'
-        self._tab_name_keys = ['tabs.pizzatower']
-        self.direct_launch_allowed = True
-
-    def get_chapter_id(self, ui_index: int) -> int:
-        return 0
-
-    def filter_mods_for_ui(self, all_mods: list['ModInfo']) -> dict[int, list['ModInfo']]:
-        return {0: self._filter_visible_mods(all_mods, lambda mod: mod.game == 'pizzatower' and (mod.files.get('0') or mod.files.get('pizzatower')))}
-
-
-class SugarySpireGameMode(GameMode):
-    """Game mode for Sugary Spire."""
-
-    def __init__(self):
-        """Initialize Sugary Spire game mode."""
-        self._path_key = 'sugaryspire_game_path'
-        self._custom_exec_key = 'sugaryspire_custom_executable_path'
-        self.steam_id = ''
-        self._path_change_button_key = 'buttons.change_sugaryspire_path'
-        self._tab_name_keys = ['tabs.sugaryspire']
-        self.direct_launch_allowed = True
-
-    def get_chapter_id(self, ui_index: int) -> int:
-        return 0
-
-    def filter_mods_for_ui(self, all_mods: list['ModInfo']) -> dict[int, list['ModInfo']]:
-        return {0: self._filter_visible_mods(all_mods, lambda mod: mod.game == 'sugaryspire' and mod.files.get('undertale'))}
+        super().__init__('sugaryspire_game_path', 'sugaryspire_custom_executable_path', '', 'buttons.change_sugaryspire_path', ['tabs.sugaryspire'])

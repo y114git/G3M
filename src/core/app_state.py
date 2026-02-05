@@ -1,8 +1,4 @@
-"""Application state management with reactive properties.
-
-This module defines the central AppState class that manages all application-wide
-state with Qt signals for reactive updates.
-"""
+"""Application state management with reactive properties."""
 from typing import Dict, Any, List, Optional
 import threading
 import logging
@@ -34,7 +30,6 @@ class AppState(QObject):
     _reactive_attrs = {'_is_installing': 'is_installing_changed', '_is_merging': 'is_merging_changed', '_game_mode': 'game_mode_changed', '_current_mode': 'current_mode_changed', '_selected_chapter_id': 'selected_chapter_changed', '_operation_cancelled': 'operation_cancelled_changed', '_filtered_mods': 'filtered_mods_changed', '_current_page': 'current_page_changed', '_search_text': 'search_text_changed', '_library_search_text': 'library_search_text_changed', '_mods_per_page': 'mods_per_page_changed', '_current_task': 'current_task_changed', '_action_button_text': 'action_button_text_changed', '_action_button_enabled': 'action_button_enabled_changed', '_progress_bar_visible': 'progress_bar_visible_changed', '_progress_bar_value': 'progress_bar_value_changed'}
 
     def __init__(self):
-        """Initialize application state with default values and locks."""
         super().__init__()
         self._mods_metadata_lock = threading.RLock()
         self._state_lock = threading.RLock()

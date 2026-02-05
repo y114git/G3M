@@ -1,8 +1,4 @@
-"""Worker thread for scanning mod directories.
-
-This module handles scanning the mods directory for installed mods,
-reading mod configurations, and caching results.
-"""
+"""Worker thread for scanning mod directories."""
 import os
 import json
 import logging
@@ -15,13 +11,6 @@ class ModScanThread(QThread):
     scan_completed = pyqtSignal(dict)
 
     def __init__(self, mods_dir: str, parent=None, cache_dir: str = None):
-        """Initialize the mod scan thread.
-
-        Args:
-            mods_dir: Directory to scan for mods.
-            parent: Parent QObject (optional).
-            cache_dir: Directory for cache storage (optional).
-        """
         super().__init__(parent)
         self.mods_dir = mods_dir
         self._cancel_flag = False
@@ -32,15 +21,9 @@ class ModScanThread(QThread):
             self.cache_file = os.path.join(cache_dir, 'mod_config_cache.json')
 
     def cancel(self):
-        """Cancel the scan operation."""
         self._cancel_flag = True
 
     def _load_cache(self) -> dict:
-        """Load mod configuration cache from disk.
-
-        Returns:
-            dict: Cached mod configurations.
-        """
         if not self.cache_file or not os.path.exists(self.cache_file):
             return {}
         try:
@@ -56,11 +39,6 @@ class ModScanThread(QThread):
             return {}
 
     def _save_cache(self, cache: dict):
-        """Save mod configuration cache to disk.
-
-        Args:
-            cache: Cache dictionary to save.
-        """
         if not self.cache_file:
             return
         try:
@@ -74,7 +52,6 @@ class ModScanThread(QThread):
             logging.debug(f'ModScanThread: Failed to save cache to {self.cache_file}: {e}')
 
     def run(self):
-        """Run the mod directory scan in background thread."""
         try:
             if self.parent() and hasattr(self.parent(), 'app_state'):
                 app_state = self.parent().app_state

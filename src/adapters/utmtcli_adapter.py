@@ -1,12 +1,8 @@
-"""UTMT CLI execution and management.
-
-This module handles executing the UndertaleModTool CLI for patching operations.
-"""
+"""UTMT CLI execution and management."""
 import os
 import platform
 import subprocess
 import logging
-from typing import Optional
 from utils.path_utils import resource_path
 
 
@@ -20,95 +16,46 @@ class UTMTCLIManager:
         self._active_processes_ref = None
         self._initialize_paths()
 
-    def _detect_platform(self) -> str:
-        system = platform.system()
-        if system == 'Windows':
-            return 'windows'
-        elif system == 'Darwin':
-            return 'macos'
-        else:
-            return 'linux'
+    def _detect_platform(self):
+        return {'Windows': 'windows', 'Darwin': 'macos'}.get(platform.system(), 'linux')
 
-    def _initialize_paths(self) -> None:
+    def _initialize_paths(self):
         base_path = resource_path(f'assets/bin/utmtcli_{self.platform}')
-        logging.info(f'Looking for UTMTCLI at: {base_path}')
         if not os.path.exists(base_path):
             logging.warning(f'UTMTCLI not found at {base_path}')
             return
-        logging.info(f'UTMTCLI found at: {base_path}')
         self.utmtcli_path = base_path
-        if self.platform == 'windows':
-            exe_path = os.path.join(base_path, 'UndertaleModCli.exe')
-            if os.path.exists(exe_path):
-                self.utmtcli_exe = exe_path
-                logging.info(f'Found UTMTCLI executable: {exe_path}')
-            else:
-                logging.warning(f'UndertaleModCli.exe not found in {base_path}')
-                return
+        exe_name = 'UndertaleModCli.exe' if self.platform == 'windows' else 'UndertaleModCli.dll'
+        exe_path = os.path.join(base_path, exe_name)
+        if os.path.exists(exe_path):
+            self.utmtcli_exe = exe_path
+            logging.info(f'Found UTMTCLI: {exe_path}')
         else:
-            dll_path = os.path.join(base_path, 'UndertaleModCli.dll')
-            if os.path.exists(dll_path):
-                self.utmtcli_exe = dll_path
-                logging.info(f'Found UTMTCLI executable: {dll_path}')
-            else:
-                logging.warning(f'UndertaleModCli.dll not found in {base_path}')
-                return
+            logging.warning(f'{exe_name} not found in {base_path}')
 
-    def is_available(self) -> bool:
-        """Check if UTMTCLI is available for use.
-
-        Returns:
-            bool: True if UTMTCLI is available.
-        """
+    def is_available(self):
         return self.utmtcli_path is not None and self.utmtcli_exe is not None
 
     def set_active_processes_list(self, proc_list):
-        """Set the reference to the active processes list.
-
-        Args:
-            proc_list: List to track active processes.
-        """
         self._active_processes_ref = proc_list
 
     def _remove_active_process(self, process) -> None:
         if process and self._active_processes_ref is not None and (process in self._active_processes_ref):
             self._active_processes_ref.remove(process)
 
-    def get_script_path(self, script_name: str) -> Optional[str]:
-        """Get the full path to a script file.
-
-        Args:
-            script_name: Name of the script file.
-
-        Returns:
-            Optional[str]: Full path to script or None if not found.
-        """
-        scripts_path = resource_path('assets/scripts')
+    def get_script_path(self, script_name):
         if not script_name.endswith('.csx'):
             script_name = f'{script_name}.csx'
-        script_path = os.path.join(scripts_path, script_name)
-        if os.path.exists(script_path):
-            return script_path
-        logging.warning(f'Script {script_name} not found at {script_path}')
+        path = os.path.join(resource_path('assets/scripts'), script_name)
+        if os.path.exists(path):
+            return path
+        logging.warning(f'Script {script_name} not found at {path}')
         return None
 
-    def execute_command(self, args: list, cwd: Optional[str] = None, timeout: Optional[int] = None, env: Optional[dict] = None) -> tuple[int, str, str]:
-        """Execute a UTMTCLI command.
-
-        Args:
-            args: Command arguments.
-            cwd: Working directory for execution.
-            timeout: Timeout in seconds.
-            env: Environment variables.
-
-        Returns:
-            tuple[int, str, str]: (Return code, stdout, stderr).
-        """
+    def execute_command(self, args, cwd=None, timeout=None, env=None):
         if not self.is_available():
-            logging.error('UTMTCLI is not available for command execution')
             raise RuntimeError('UTMTCLI is not available')
-        if timeout is None:
-            timeout = 600
+        timeout = timeout or 600
         if self.platform == 'windows':
             command = [self.utmtcli_exe] + args
         else:
@@ -169,20 +116,7 @@ class UTMTCLIManager:
             logging.error(f'Error executing UTMTCLI command: {e}', exc_info=True)
             return (-1, '', str(e))
 
-    def execute_with_scripts(self, data_win_path: str, scripts: list[str], output_path: Optional[str] = None, additional_args: Optional[list[str]] = None, cwd: Optional[str] = None, env: Optional[dict] = None) -> tuple[int, str, str]:
-        """Execute UTMTCLI with scripts to patch a data.win file.
-
-        Args:
-            data_win_path: Path to data.win file.
-            scripts: List of script names or paths.
-            output_path: Optional output path.
-            additional_args: Additional command arguments.
-            cwd: Working directory.
-            env: Environment variables.
-
-        Returns:
-            tuple[int, str, str]: (Return code, stdout, stderr).
-        """
+    def execute_with_scripts(self, data_win_path, scripts, output_path=None, additional_args=None, cwd=None, env=None):
         args = ['load', data_win_path]
         for script in scripts:
             script_path = self.get_script_path(script)
@@ -199,12 +133,7 @@ class UTMTCLIManager:
             args.extend(additional_args)
         return self.execute_command(args, cwd=cwd, env=env)
 
-    def get_utmtcli_path(self) -> Optional[str]:
-        """Get the UTMTCLI installation path.
-
-        Returns:
-            Optional[str]: Path to UTMTCLI directory or None.
-        """
+    def get_utmtcli_path(self):
         return self.utmtcli_path
 
     def get_platform(self) -> str:

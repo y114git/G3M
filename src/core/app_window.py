@@ -1,5 +1,3 @@
-import base64
-import json
 import os
 import platform
 import shutil
@@ -26,7 +24,7 @@ from controllers.settings_controller import SettingsUiController
 from controllers.theme_controller import ThemeController
 from controllers.game_launch_controller import GameLaunchController
 from ui.common.feedback import FeedbackManager
-from core.startup import SingleInstanceServer, ShortcutLaunchError
+from core.startup import SingleInstanceServer
 from core.app_state import AppState
 from services.mod_service import ModManager
 from services.launch_service import GameLauncher
@@ -39,7 +37,6 @@ from ui.builders.settings_view_builder import SettingsViewBuilder
 from services.plugin_service import PluginManager
 from services.customization_service import CustomizationManager
 from services.used_mods_service import UsedModsManager
-from services.shortcut_service import ShortcutManager
 from utils.network_utils import check_internet_connection
 _translator = QTranslator()
 _lock_file = None
@@ -64,7 +61,6 @@ class AppWindow(QWidget):
         from utils.network_utils import _build_session
         self.app_state.network_session = _build_session()
         self.server: SingleInstanceServer | None = None
-        self.is_shortcut_launch = args and args.shortcut_launch
         self.app_state.config_dir = os.path.join(get_user_data_root(), 'settings')
         self.app_state.cache_dir = os.path.join(get_user_data_root(), 'cache')
         self.launcher_dir = get_launcher_dir()
@@ -147,9 +143,6 @@ class AppWindow(QWidget):
         self.slot_service = UsedModsManager(self.app_state, self.mod_service, self.feedback_service, self.settings_service, self)
         self.slot_service.used_mods_updated.connect(self._on_slot_service_used_mods_updated)
         self._load_used_mods_debounce = DebounceTimer(delay_ms=200)
-        self.shortcut_service = ShortcutManager(self.app_state, self.feedback_service, self.mod_service, self)
-        self.shortcut_service.shortcut_created.connect(lambda path: self.feedback_service.update_status(tr('status.shortcut_created', path=path), UI_COLORS['status_success']))
-        self.shortcut_service.status_changed.connect(self.feedback_service.update_status)
         self.mod_ops = ModOperationsController(self.app_state, self.feedback_service, self.mod_service, self)
         self.library_display = LibraryDisplayController(self.app_state, self.feedback_service, self.mod_service, self.slot_service, self)
         self.search_display = SearchDisplayController(self.app_state, self.feedback_service, self.mod_service, self.mod_ops, self)
@@ -183,9 +176,6 @@ class AppWindow(QWidget):
         self.initialization_finished.connect(self._try_start_background_music)
         if is_first_launch:
             self.initialization_finished.connect(self._handle_first_launch_settings)
-        if self.is_shortcut_launch:
-            self._shortcut_launch(args)
-            return
         self.init_ui()
         self.custom_font_family = localization_service.load_font()
         QTimer.singleShot(0, lambda: self.ui_ready.emit())
@@ -343,86 +333,6 @@ class AppWindow(QWidget):
         reply = self.feedback_service.ask_question(title, message)
         self.mod_service.handle_url_prompt_response(reply)
 
-    def _shortcut_launch(self, args):
-        try:
-            settings_json = base64.b64decode(args.shortcut_launch).decode('utf-8')
-            settings = json.loads(settings_json)
-        except (UnicodeDecodeError, ValueError) as e:
-            logging.error(f'Shortcut settings decode error: {e}')
-            raise ShortcutLaunchError('Failed to decode shortcut settings')
-        except (KeyError, TypeError) as e:
-            logging.error(f'Shortcut settings parse error: {e}')
-            raise ShortcutLaunchError('Failed to parse shortcut settings')
-        except Exception as e:
-            logging.error(f'Shortcut settings read error: {e}')
-            raise ShortcutLaunchError('Failed to read shortcut settings')
-        self._load_local_data()
-        QTimer.singleShot(0, self.mod_service.load_local_mods)
-        try:
-            if settings.get('is_undertaleyellow_mode', False):
-                self.app_state.game_mode = UndertaleYellowGameMode()
-            elif settings.get('is_undertale_mode', False):
-                self.app_state.game_mode = UndertaleGameMode()
-            elif settings.get('is_pizzatower_mode', False):
-                self.app_state.game_mode = PizzaTowerGameMode()
-            elif settings.get('is_sugaryspire_mode', False):
-                self.app_state.game_mode = SugarySpireGameMode()
-            else:
-                self.app_state.game_mode = DemoGameMode() if settings.get('is_demo_mode', False) else FullGameMode()
-            game_path = settings.get('game_path', '')
-            demo_game_path = settings.get('demo_game_path', '')
-            undertale_game_path = settings.get('undertale_game_path', '')
-            undertaleyellow_game_path = settings.get('undertaleyellow_game_path', '')
-            pizzatower_game_path = settings.get('pizzatower_game_path', '')
-            sugaryspire_game_path = settings.get('sugaryspire_game_path', '')
-            self.app_state.game_path = game_path
-            self.app_state.demo_game_path = demo_game_path
-            self.app_state.undertale_game_path = undertale_game_path
-            if game_path:
-                self.app_state.local_config['game_path'] = game_path
-            if demo_game_path:
-                self.app_state.local_config['demo_game_path'] = demo_game_path
-            if undertale_game_path:
-                self.app_state.local_config['undertale_game_path'] = undertale_game_path
-            if undertaleyellow_game_path:
-                self.app_state.local_config['undertaleyellow_game_path'] = undertaleyellow_game_path
-            if pizzatower_game_path:
-                self.app_state.local_config['pizzatower_game_path'] = pizzatower_game_path
-            if sugaryspire_game_path:
-                self.app_state.local_config['sugaryspire_game_path'] = sugaryspire_game_path
-            launch_via_steam = settings.get('launch_via_steam', False)
-            use_custom_executable = settings.get('use_custom_executable', False)
-            custom_exec_path = settings.get('custom_executable_path', '')
-            demo_custom_exec_path = settings.get('demo_custom_executable_path', '')
-            undertale_custom_exec_path = settings.get('undertale_custom_executable_path', '')
-            undertaleyellow_custom_exec_path = settings.get('undertaleyellow_custom_executable_path', '')
-            pizzatower_custom_exec_path = settings.get('pizzatower_custom_executable_path', '')
-            sugaryspire_custom_exec_path = settings.get('sugaryspire_custom_executable_path', '')
-            direct_launch_slot_id = settings.get('direct_launch_slot_id', SLOT_ID_UNIVERSAL)
-            is_chapter_mode = settings.get('is_chapter_mode', False)
-            if is_chapter_mode:
-                self.app_state.current_mode = 'chapter'
-            else:
-                self.app_state.current_mode = 'normal'
-            current_game_path = self._get_current_game_path()
-            if not current_game_path or not os.path.exists(current_game_path):
-                logging.error('Game files not found for launch')
-                raise ShortcutLaunchError('Game files not found for launch')
-            mods_settings = settings.get('mods', {})
-            if not mods_settings:
-                mods_settings = settings.get('selections', {})
-            self.shortcut_service.apply_shortcut_mods(mods_settings, is_chapter_mode=is_chapter_mode)
-            self.shortcut_service.launch_game_from_shortcut(launch_via_steam=launch_via_steam, use_custom_executable=use_custom_executable, custom_exec_path=custom_exec_path, demo_custom_exec_path=demo_custom_exec_path, undertale_custom_exec_path=undertale_custom_exec_path, undertaleyellow_custom_exec_path=undertaleyellow_custom_exec_path, pizzatower_custom_exec_path=pizzatower_custom_exec_path, sugaryspire_custom_exec_path=sugaryspire_custom_exec_path, direct_launch_slot_id=direct_launch_slot_id)
-        except (OSError, FileNotFoundError) as e:
-            logging.error(f'Launch error (file system): {e}')
-            raise ShortcutLaunchError(f'File system error: {e}')
-        except (KeyError, AttributeError) as e:
-            logging.error(f'Launch error (missing data): {e}')
-            raise ShortcutLaunchError(f'Missing required data: {e}')
-        except Exception as e:
-            logging.error(f'Launch error: {e}')
-            raise ShortcutLaunchError(str(e) or 'Shortcut launch failed')
-
     def _handle_permission_error(self, path: str):
         self.feedback_service.show_message('error', 'errors.access_denied', path=path)
 
@@ -430,19 +340,6 @@ class AppWindow(QWidget):
         return self.app_state.game_mode.get_game_path(self.app_state.local_config) or ''
 
     def init_ui(self):
-        """Initialize the main user interface components.
-
-        Sets up the complete UI layout including:
-        - Top panel with settings, refresh, and social buttons
-        - Main content area with tab widgets
-        - Bottom panel with status and progress indicators
-        - Launcher icon and branding elements
-        - Full install checkbox for game file installation
-
-        This method creates and configures all UI widgets, sets up
-        layouts, connects signals, and applies styling. It's the main
-        entry point for building the application interface.
-        """
         self.full_install_checkbox = QCheckBox(tr('ui.install_game_files_first'))
         self.full_install_checkbox.stateChanged.connect(self._on_toggle_full_install)
         self.full_install_checkbox.hide()
@@ -493,7 +390,6 @@ class AppWindow(QWidget):
         self.progress_bar.setVisible(False)
         self.action_frame = QHBoxLayout()
         self.shortcut_button = QPushButton(tr('buttons.shortcut'))
-        self.shortcut_button.clicked.connect(self.shortcut_service.create_shortcut_flow)
         self.action_button = QPushButton(tr('status.please_wait'))
         self.action_button.setEnabled(False)
         self.action_button.setMinimumWidth(200)
@@ -901,34 +797,6 @@ class AppWindow(QWidget):
             logging.error(f'Error in _on_auto_sorting_changed: {e}', exc_info=True)
 
     def _on_gamebanana_sort_changed(self, index: int):
-        """Handle GameBanana sort option change.
-
-        This method handles changes to the GameBanana sorting dropdown,
-        updating the sort order and refreshing the mod list. It manages
-        the complex process of stopping ongoing operations and restarting
-        with the new sort criteria.
-
-        Args:
-            index: Index of the selected sort option.
-
-        Operations performed:
-        - Validates sort selection and checks for changes
-        - Stops ongoing fetch and metadata threads
-        - Cancels pending display updates
-        - Clears loaded pages and filtered mods
-        - Resets pagination
-        - Removes GameBanana mods from current list
-        - Restarts mod loading with new sort order
-
-        Features:
-        - Debounced updates to prevent rapid changes
-        - Thread-safe operation cancellation
-        - State cleanup and reset
-        - Progress indication during transition
-
-        Returns:
-            None, but updates the app state and refreshes the mod list.
-        """
         try:
             if not hasattr(self, 'gb_sort_combo'):
                 return
@@ -1159,7 +1027,7 @@ class AppWindow(QWidget):
             except requests.RequestException:
                 self.feedback_service.update_status(tr('status.global_settings_load_failed'), UI_COLORS['status_warning'])
                 self.app_state.has_internet = False
-        if not self.is_shortcut_launch and self.app_state.has_internet:
+        if self.app_state.has_internet:
             self.app_state.pending_announce_check = True
         if localization_service.get_current_language() == 'ru':
             changelog_url = self.app_state.global_settings.get('changelog_ru_url', self.app_state.global_settings.get('changelog_url'))
@@ -1301,7 +1169,7 @@ class AppWindow(QWidget):
             self.show_update_prompt.emit(update_info)
 
     def _perform_update_ui_prep(self):
-        widgets = [self.action_button, self.chat_button, self.shortcut_button, self.open_deltahub_folder_button, self.change_background_button]
+        widgets = [self.action_button, self.chat_button, self.open_deltahub_folder_button, self.change_background_button]
         if self.change_path_button:
             widgets.append(self.change_path_button)
         for widget in widgets:
@@ -1327,7 +1195,7 @@ class AppWindow(QWidget):
         try:
             if not self.app_state.is_settings_view:
                 self.tab_widget.setEnabled(True)
-            widgets = [self.action_button, self.chat_button, self.shortcut_button, self.open_deltahub_folder_button, self.change_background_button]
+            widgets = [self.action_button, self.chat_button, self.open_deltahub_folder_button, self.change_background_button]
             if self.change_path_button:
                 widgets.append(self.change_path_button)
             for w in widgets:
@@ -1349,16 +1217,15 @@ class AppWindow(QWidget):
             self.progress_bar.setVisible(True)
 
     def _update_status(self, message: str, color: str = 'white'):
-        if not self.is_shortcut_launch:
-            from config.constants import UI_COLORS
-            actual_color = UI_COLORS.get(color, color)
-            if not self.status_label.wordWrap():
-                self.status_label.setWordWrap(True)
-            self.status_label.setText(message)
-            self.status_label.setStyleSheet(f'color: {actual_color};')
+        from config.constants import UI_COLORS
+        actual_color = UI_COLORS.get(color, color)
+        if not self.status_label.wordWrap():
+            self.status_label.setWordWrap(True)
+        self.status_label.setText(message)
+        self.status_label.setStyleSheet(f'color: {actual_color};')
 
     def _update_online_label(self, count: int):
-        if not self.is_shortcut_launch and hasattr(self, 'online_label') and (self.online_label is not None):
+        if hasattr(self, 'online_label') and (self.online_label is not None):
             self._last_online_count = count
             display_count = '?' if count < 0 else count
             self.online_label.setText(f"<span style='color:{UI_COLORS['status_ready']};'>●</span> {tr('status.online_count', count=display_count)}")
@@ -1458,36 +1325,14 @@ class AppWindow(QWidget):
             btn.setStyleSheet(f'\n                QPushButton#chapter_tab_{i} {{\n                    background-color: {button_color};\n                    border: 2px {border_style} {border_color};\n                    color: {text_color};\n                    font-weight: bold;\n                    font-size: 13px;\n                    border-radius: 0px;\n                    padding: 5px;\n                }}\n                QPushButton#chapter_tab_{i}:checked {{\n                    background-color: {hover_color};\n                    border: 3px {border_style} {border_color};\n                }}\n                QPushButton#chapter_tab_{i}:hover {{\n                    background-color: {hover_color};\n                }}\n            ')
 
     def _retranslate_texts(self):
-        """Update all UI text elements with current language translations.
-
-        This method updates all translatable text elements in the main window
-        when the language is changed. It handles buttons, labels, tooltips,
-        combo boxes, and other UI components to ensure proper localization.
-
-        Updated elements include:
-        - Color configuration values
-        - Navigation buttons (settings, back)
-        - Social media buttons (Telegram, Discord)
-        - Tab labels and search elements
-        - Sort and filter controls
-        - Game selection dropdown
-        - Tag filters and search controls
-        - Pagination controls
-        - GameBanana sorting options
-        - Custom executable controls
-        - Auto-sorting settings
-
-        Returns:
-            None, but updates all UI text in-place.
-        """
         self.color_config = {'background': tr('ui.background_color'), 'button': tr('ui.elements_color'), 'border': tr('ui.border_color'), 'button_hover': tr('ui.hover_color'), 'text': tr('ui.main_text_color'), 'version_text': tr('ui.secondary_text_color')}
         self.settings_button.setText(tr('ui.back_button') if self.app_state.is_settings_view else tr('ui.settings_title'))
         self.online_label.setToolTip(tr('tooltips.online_counter'))
         self.telegram_button.setText(tr('buttons.telegram'))
         self.beta_updates_checkbox.setToolTip(tr('tooltips.beta_updates'))
         self.discord_button.setText(tr('buttons.discord'))
-        self.shortcut_button.setText(tr('buttons.shortcut'))
         self.chat_button.setText(tr('ui.chat_button'))
+        self.shortcut_button.setText(tr('buttons.shortcut'))
         self.main_tab_widget.setTabText(0, tr('ui.search_tab'))
         self.main_tab_widget.setTabText(1, tr('ui.library_tab'))
         if hasattr(self, 'plugins_tab') and self.main_tab_widget.count() > 2:
@@ -1710,18 +1555,8 @@ class AppWindow(QWidget):
             self._suppress_tab_handlers = False
 
     def closeEvent(self, event):
-        """Handle application window close event.
-
-        Stops background processes, saves state, and cleans up resources.
-
-        Args:
-            event: Qt close event.
-        """
         self.customization_service.stop_background_music()
         self._online_timer.stop()
-        if self.is_shortcut_launch:
-            super().closeEvent(event)
-            return
         try:
             threads_to_stop = []
             if self.game_launcher.monitor_thread:
@@ -1893,7 +1728,7 @@ class AppWindow(QWidget):
             self.search_display.update_search_plaques()
 
     def _on_refresh_clicked(self, is_initial=False):
-        if not is_initial and (not self.is_shortcut_launch) and self.app_state.has_internet:
+        if not is_initial and self.app_state.has_internet:
             if self._reload_global_settings():
                 QTimer.singleShot(500, lambda: self._check_and_show_announce(force_check=True))
 

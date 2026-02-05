@@ -25,6 +25,7 @@ class ChatRequestThread(QThread):
 
     def request_messages(self, channel: str): self._start_request('get_messages', channel)
     def request_send_message(self, channel: str, message: str): self._start_request('send_message', channel, message)
+
     def cancel(self):
         self._cancelled = True
         self.requestInterruption()

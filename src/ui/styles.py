@@ -22,24 +22,6 @@ def _apply_template_replacements(template: str, replacements: dict[str, str]) ->
 
 
 def build_stylesheet(frame_bg_color: str, button_color: str, border_color: str, button_hover_color: str, main_text_color: str, font_family_main: str, font_size_main: int, font_size_small: int, checkbox_checked_color: str, scroll_handle_color: str, scroll_groove_color: str = 'rgba(0, 0, 0, 40)') -> str:
-    """Build a complete stylesheet from templates with color replacements.
-
-    Args:
-        frame_bg_color: Background color for frames.
-        button_color: Button background color.
-        border_color: Border color.
-        button_hover_color: Button hover state color.
-        main_text_color: Main text color.
-        font_family_main: Main font family.
-        font_size_main: Main font size.
-        font_size_small: Small font size.
-        checkbox_checked_color: Checkbox checked state color.
-        scroll_handle_color: Scrollbar handle color.
-        scroll_groove_color: Scrollbar groove color.
-
-    Returns:
-        str: Complete stylesheet string.
-    """
     main_template = _load_qss_template('main.qss')
     scrollbar_template = _load_qss_template('scrollbar.qss')
     main_stylesheet = _apply_template_replacements(main_template, {'%frame_bg_color%': frame_bg_color, '%button_color%': button_color, '%border_color%': border_color, '%button_hover_color%': button_hover_color, '%main_text_color%': main_text_color, '%font_family_main%': font_family_main, '%font_size_main%': str(font_size_main), '%font_size_small%': str(font_size_small), '%checkbox_checked_color%': checkbox_checked_color})

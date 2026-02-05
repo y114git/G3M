@@ -1,8 +1,4 @@
-"""Application settings management.
-
-This module handles reading, writing, and managing application settings,
-including configuration migration and user preferences.
-"""
+"""Application settings management."""
 import json
 import logging
 import os
@@ -29,14 +25,6 @@ class SettingsManager(QObject):
     status_changed = pyqtSignal(str, str)
 
     def __init__(self, app_state, feedback_service, localization_service: LocalizationManager, parent=None):
-        """Initialize the settings manager.
-
-        Args:
-            app_state: Application state manager.
-            feedback_service: User feedback manager.
-            localization_service: Localization manager.
-            parent: Parent QObject (optional).
-        """
         super().__init__(parent)
         self.app_state = app_state
         self.feedback_service = feedback_service
@@ -44,14 +32,6 @@ class SettingsManager(QObject):
         self.parent_widget = parent
 
     def read_json(self, path: str):
-        """Read JSON file with error handling.
-
-        Args:
-            path: Path to JSON file.
-
-        Returns:
-            Parsed JSON data or empty dict.
-        """
         from utils.file_utils import load_json
         data = load_json(path, migrate_config=True)
         if not data and os.path.exists(path):
@@ -61,12 +41,6 @@ class SettingsManager(QObject):
         return data
 
     def write_json(self, path: str, data):
-        """Write data to JSON file with error handling.
-
-        Args:
-            path: Path to JSON file.
-            data: Data to write.
-        """
         try:
             from utils.file_utils import save_json
             save_json(path, data, indent=2)
@@ -93,27 +67,18 @@ class SettingsManager(QObject):
                 pass
 
     def write_local_config(self):
-        """Write local configuration to disk."""
         self.write_json(self.app_state.config_path, self.app_state.local_config)
 
     def migrate_config_if_needed(self):
-        """Migrate configuration to current version and set defaults."""
         self.app_state.local_config['cache_format_version'] = LAUNCHER_VERSION
         defaults = {'game_path': '', 'last_selected': {}, 'use_custom_executable': False, 'demo_game_path': '', 'launch_via_steam': False, 'use_portproton': False, 'portproton_path': '', 'direct_launch_slot_id': SLOT_ID_UNIVERSAL, 'demo_mode_enabled': False, 'chapter_mode_enabled': False, 'custom_background_path': '', 'custom_executable_path': '', 'background_disabled': False, 'custom_color_background': '', 'custom_color_button': '', 'custom_color_border': '', 'custom_color_button_hover': '', 'custom_color_text': '', 'custom_color_version_text': '', 'beta_updates_enabled': False, 'fast_merging_enabled': False, 'pizzatower_game_path': '', 'pizzatower_custom_executable_path': '', 'skip_patching_warnings': False}
         for key, value in defaults.items():
             self.app_state.local_config.setdefault(key, value)
-        if 'disable_splash' not in self.app_state.local_config:
-            self.app_state.local_config['disable_splash'] = False
-        if 'first_launch_splash_shown' not in self.app_state.local_config:
-            self.app_state.local_config['first_launch_splash_shown'] = False
+        self.app_state.local_config.setdefault('disable_splash', False)
+        self.app_state.local_config.setdefault('first_launch_splash_shown', False)
         self.write_local_config()
 
     def on_language_changed(self, language_code: str):
-        """Handle language change event.
-
-        Args:
-            language_code: New language code.
-        """
         current_language = self.app_state.local_config.get('language', 'en')
         if language_code == current_language:
             return
@@ -198,53 +163,22 @@ class SettingsManager(QObject):
         self.write_local_config()
         self.theme_changed.emit()
 
-    def on_background_music_button_click(self):
-        mp3, wav = self._get_audio_paths('background_music')
-        custom_exists = os.path.exists(mp3) or os.path.exists(wav)
-        if custom_exists:
-            try:
-                self._remove_files((mp3, wav))
-                self.feedback_service.show_message('info', 'dialogs.success', tr('dialogs.background_music_removed'))
-                self.theme_changed.emit()
-            except Exception:
-                self.feedback_service.show_message('warning', 'errors.error', tr('errors.remove_background_music_failed'))
-        else:
-            file_path, _ = QFileDialog.getOpenFileName(self.parent_widget, tr('dialogs.select_background_music'), '', 'Audio Files (*.mp3 *.wav)')
-            if file_path:
-                lower = file_path.lower()
-                if not (lower.endswith('.mp3') or lower.endswith('.wav')):
-                    self.feedback_service.show_message('warning', 'errors.error', tr('errors.can_select_only_mp3_wav'))
-                    return
-                try:
-                    os.makedirs(self.app_state.config_dir, exist_ok=True)
-                    ext = '.mp3' if lower.endswith('.mp3') else '.wav'
-                    dest_path = os.path.join(self.app_state.config_dir, f'custom_background_music{ext}')
-                    logging.info(f'[SettingsManager] Copying background music from {file_path} to {dest_path}')
-                    shutil.copy2(file_path, dest_path)
-                    logging.info(f'[SettingsManager] Background music copied successfully, file exists: {os.path.exists(dest_path)}')
-                    self.theme_changed.emit()
-                except Exception as e:
-                    logging.error(f'[SettingsManager] Failed to copy background music: {e}', exc_info=True)
-                    self.feedback_service.show_message('warning', 'errors.error', tr('errors.copy_background_music_failed'))
-
-    def on_startup_sound_button_click(self):
-        mp3, wav = self._get_audio_paths('startup_sound')
+    def _handle_audio_file_click(self, base_name: str, select_dialog_key: str, removed_msg_key: str, remove_fail_key: str, copy_fail_key: str, custom_path_getter: str = ''):
+        mp3, wav = self._get_audio_paths(base_name)
         existing = ''
-        if self.parent_widget and hasattr(self.parent_widget, 'customization_service'):
-            existing = self.parent_widget.customization_service.get_startup_sound_path()
-        elif os.path.exists(mp3):
-            existing = mp3
-        elif os.path.exists(wav):
-            existing = wav
+        if custom_path_getter and self.parent_widget and hasattr(self.parent_widget, 'customization_service'):
+            existing = getattr(self.parent_widget.customization_service, custom_path_getter, lambda: '')() or ''
+        if not existing:
+            existing = mp3 if os.path.exists(mp3) else (wav if os.path.exists(wav) else '')
         if existing:
             try:
                 self._remove_files((mp3, wav))
-                self.feedback_service.show_message('info', 'dialogs.success', tr('dialogs.startup_sound_removed'))
+                self.feedback_service.show_message('info', 'dialogs.success', tr(removed_msg_key))
                 self.theme_changed.emit()
             except Exception:
-                self.feedback_service.show_message('warning', 'errors.error', tr('errors.remove_startup_sound_failed'))
+                self.feedback_service.show_message('warning', 'errors.error', tr(remove_fail_key))
         else:
-            file_path, _ = QFileDialog.getOpenFileName(self.parent_widget, tr('dialogs.select_startup_sound'), '', 'Audio Files (*.mp3 *.wav)')
+            file_path, _ = QFileDialog.getOpenFileName(self.parent_widget, tr(select_dialog_key), '', 'Audio Files (*.mp3 *.wav)')
             if file_path:
                 lower = file_path.lower()
                 if not (lower.endswith('.mp3') or lower.endswith('.wav')):
@@ -253,11 +187,18 @@ class SettingsManager(QObject):
                 try:
                     os.makedirs(self.app_state.config_dir, exist_ok=True)
                     ext = '.mp3' if lower.endswith('.mp3') else '.wav'
-                    dest = os.path.join(self.app_state.config_dir, f'custom_startup_sound{ext}')
+                    dest = os.path.join(self.app_state.config_dir, f'custom_{base_name}{ext}')
                     shutil.copy2(file_path, dest)
                     self.theme_changed.emit()
-                except Exception:
-                    self.feedback_service.show_message('warning', 'errors.error', tr('errors.copy_startup_sound_failed'))
+                except Exception as e:
+                    logging.error(f'[SettingsManager] Failed to copy {base_name}: {e}', exc_info=True)
+                    self.feedback_service.show_message('warning', 'errors.error', tr(copy_fail_key))
+
+    def on_background_music_button_click(self):
+        self._handle_audio_file_click('background_music', 'dialogs.select_background_music', 'dialogs.background_music_removed', 'errors.remove_background_music_failed', 'errors.copy_background_music_failed')
+
+    def on_startup_sound_button_click(self):
+        self._handle_audio_file_click('startup_sound', 'dialogs.select_startup_sound', 'dialogs.startup_sound_removed', 'errors.remove_startup_sound_failed', 'errors.copy_startup_sound_failed', 'get_startup_sound_path')
 
     def on_logo_button_click(self):
         existing_logo = ''
@@ -449,10 +390,7 @@ class SettingsManager(QObject):
         if not self.feedback_service.ask_question('dialogs.reset_settings_confirm_title', 'dialogs.reset_settings_confirm_text', '', False):
             return
         language = self.app_state.local_config.get('language', 'en')
-        custom_files = [os.path.join(self.app_state.config_dir, 'custom_background_music.mp3'), os.path.join(self.app_state.config_dir, 'custom_background_music.wav'), os.path.join(self.app_state.config_dir, 'custom_startup_sound.mp3'), os.path.join(self.app_state.config_dir, 'custom_startup_sound.wav')]
-        for file_path in custom_files:
-            if os.path.exists(file_path):
-                os.remove(file_path)
+        self._remove_files([os.path.join(self.app_state.config_dir, f) for f in ('custom_background_music.mp3', 'custom_background_music.wav', 'custom_startup_sound.mp3', 'custom_startup_sound.wav')])
         self.app_state.local_config.clear()
         self.app_state.local_config['language'] = language
         config_keys_to_clear = ['saved_slots_deltarune', 'saved_slots_deltarune_chapter', 'saved_slots_deltarunedemo', 'saved_slots_undertale']

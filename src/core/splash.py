@@ -1,8 +1,4 @@
-"""Custom splash screen with GIF animation support.
-
-This module provides a custom splash screen that can display animated GIFs
-during application startup.
-"""
+"""Custom splash screen with GIF animation support."""
 from PyQt6.QtWidgets import QSplashScreen, QLabel, QApplication
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QPixmap, QMovie
@@ -13,12 +9,6 @@ class CustomSplashScreen(QSplashScreen):
     """Splash screen with support for animated GIF backgrounds."""
 
     def __init__(self, pixmap=None, gif_path=None):
-        """Initialize the splash screen.
-
-        Args:
-            pixmap: Static pixmap to display (optional).
-            gif_path: Path to animated GIF file (optional).
-        """
         if pixmap:
             super().__init__(pixmap)
         else:
@@ -31,14 +21,6 @@ class CustomSplashScreen(QSplashScreen):
             self.setup_gif_animation(gif_path)
 
     def setup_gif_animation(self, gif_path):
-        """Set up GIF animation for the splash screen.
-
-        Args:
-            gif_path: Path to the GIF file.
-
-        Returns:
-            bool: True if setup successful, False otherwise.
-        """
         try:
             self.movie = QMovie(gif_path)
             if not self.movie.isValid():
@@ -80,11 +62,6 @@ class CustomSplashScreen(QSplashScreen):
             return False
 
     def start_gif_animation(self, sound_start_callback=None):
-        """Start the GIF animation.
-
-        Args:
-            sound_start_callback: Callback to invoke when first frame renders.
-        """
         if hasattr(self, 'movie') and self.movie.isValid():
             if hasattr(self, 'gif_label'):
                 self.gif_label.show()
@@ -93,23 +70,16 @@ class CustomSplashScreen(QSplashScreen):
             self.movie.start()
 
     def _on_frame_changed(self, frame_number):
-        """Handle frame change event to trigger sound callback.
-
-        Args:
-            frame_number: Current frame number.
-        """
         if not self._first_frame_rendered:
             self._first_frame_rendered = True
             if self._sound_start_callback:
                 self._sound_start_callback()
 
     def stop_gif_animation(self):
-        """Stop the GIF animation."""
         if hasattr(self, 'movie'):
             self.movie.stop()
 
     def on_gif_finished(self):
-        """Handle GIF animation completion."""
         if hasattr(self, 'movie'):
             self.movie.stop()
 
@@ -121,14 +91,6 @@ class CustomSplashScreen(QSplashScreen):
 
 
 def create_png_splash(config_dir: str = None):
-    """Create a PNG-based splash screen with optional custom logo.
-
-    Args:
-        config_dir: Directory to search for custom logo files.
-
-    Returns:
-        CustomSplashScreen: Configured splash screen instance.
-    """
     pixmap = QPixmap()
     splash_path = None
     if config_dir:
