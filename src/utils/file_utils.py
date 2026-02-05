@@ -1,8 +1,4 @@
-"""File operation utilities.
-
-This module provides utilities for file operations including downloading,
-extracting archives, JSON handling, and safe file operations with retries.
-"""
+"""File operation utilities."""
 import os
 import platform
 import re
@@ -22,21 +18,7 @@ T = TypeVar('T')
 
 
 def _retry_operation(operation: Callable[[], T], max_retries: int = 5, delay: float = 0.1, op_name: str = 'operation', path: str = '') -> T:
-    """Retry a file operation with exponential backoff.
-
-    Args:
-        operation: Operation to retry.
-        max_retries: Maximum retry attempts.
-        delay: Initial delay between retries.
-        op_name: Operation name for logging.
-        path: File path for logging.
-
-    Returns:
-        T: Operation result.
-
-    Raises:
-        Last exception if all retries fail.
-    """
+    """Retry a file operation with exponential backoff."""
     last_error = None
     for attempt in range(max_retries):
         try:
@@ -52,11 +34,6 @@ def _retry_operation(operation: Callable[[], T], max_retries: int = 5, delay: fl
 
 
 def _fix_windows_permissions(path: str) -> None:
-    """Fix Windows file permissions for write access.
-
-    Args:
-        path: Path to fix permissions for.
-    """
     if platform.system() == 'Windows':
         try:
             os.chmod(path, stat.S_IWRITE | stat.S_IREAD)
@@ -65,31 +42,14 @@ def _fix_windows_permissions(path: str) -> None:
 
 
 def download_file_with_progress(url: str, target_path: str, progress_callback=None, session=None, cancel_check=None, on_response=None, downloaded_ref=None) -> bool:
-    """Download file with progress tracking.
-
-    Args:
-        url: URL to download from.
-        target_path: Path to save file.
-        progress_callback: Callback for progress updates.
-        session: Requests session to use.
-        cancel_check: Function to check if cancelled.
-        on_response: Callback for response handling.
-        downloaded_ref: Reference to track downloaded bytes.
-
-    Returns:
-        bool: True if download successful.
-    """
     from config.constants import NETWORK_TIMEOUT_HEAD
-    if session is None:
-        session = get_session()
+    session = session or get_session()
     total_size = 0
     try:
-        head_response = session.head(url, allow_redirects=True, timeout=NETWORK_TIMEOUT_HEAD)
-        total_size = int(head_response.headers.get('content-length', 0))
+        total_size = int(session.head(url, allow_redirects=True, timeout=NETWORK_TIMEOUT_HEAD).headers.get('content-length', 0))
     except Exception as e:
-        logging.debug(f'download_file_with_progress: Could not get content-length from HEAD request: {e}')
-    if downloaded_ref is None:
-        downloaded_ref = [0]
+        logging.debug(f'download_file_with_progress: Could not get content-length: {e}')
+    downloaded_ref = downloaded_ref or [0]
     try:
         download_file(session, url, target_path, progress_callback=progress_callback, total_size=total_size, downloaded_ref=downloaded_ref, cancel_check=cancel_check, on_response=on_response)
         if progress_callback:
@@ -97,7 +57,7 @@ def download_file_with_progress(url: str, target_path: str, progress_callback=No
         return True
     except RuntimeError as e:
         if str(e) == 'download_cancelled':
-            logging.debug('download_file_with_progress: Download cancelled by user')
+            logging.debug('download_file_with_progress: Download cancelled')
             return False
         logging.error(f'download_file_with_progress: Download failed: {e}', exc_info=True)
         return False
@@ -107,25 +67,9 @@ def download_file_with_progress(url: str, target_path: str, progress_callback=No
 
 
 def download_and_extract_archive(url: str, target_dir: str, progress_callback=None, total_size: int = 0, downloaded_ref: list[int] | None = None, session=None, is_game_installation=False, cancel_check=None, on_response=None):
-    """Download and extract an archive file.
-
-    Args:
-        url: URL to download from.
-        target_dir: Directory to extract to.
-        progress_callback: Callback for progress updates.
-        total_size: Total file size in bytes.
-        downloaded_ref: Reference to track downloaded bytes.
-        session: Requests session to use.
-        is_game_installation: Whether this is a game installation.
-        cancel_check: Function to check if cancelled.
-        on_response: Callback for response handling.
-    """
     from utils.archive_utils import extract_archive
-    if downloaded_ref is None:
-        downloaded_ref = [0]
+    downloaded_ref, session = downloaded_ref or [0], session or get_session()
     os.makedirs(target_dir, exist_ok=True)
-    if session is None:
-        session = get_session()
     fname = get_filename_from_url(session, url)
     with tempfile.TemporaryDirectory(prefix='deltahub-dl-') as tmp:
         tmp_path = os.path.join(tmp, fname)
@@ -136,14 +80,6 @@ def download_and_extract_archive(url: str, target_dir: str, progress_callback=No
 
 
 def _is_symlink(path: str) -> bool:
-    """Check if a path is a symbolic link.
-
-    Args:
-        path: Path to check.
-
-    Returns:
-        bool: True if path is a symlink.
-    """
     try:
         return os.path.islink(path)
     except OSError:
@@ -151,18 +87,6 @@ def _is_symlink(path: str) -> bool:
 
 
 def _safe_join(base: str, *paths: str) -> str:
-    """Safely join paths with directory traversal protection.
-
-    Args:
-        base: Base directory path.
-        *paths: Path components to join.
-
-    Returns:
-        str: Joined absolute path.
-
-    Raises:
-        ValueError: If path traversal is detected.
-    """
     base_abs = os.path.abspath(base)
     final = os.path.abspath(os.path.join(base_abs, *paths))
     if os.path.commonpath([final, base_abs]) != base_abs:
@@ -171,31 +95,13 @@ def _safe_join(base: str, *paths: str) -> str:
 
 
 def normalize_mod_package(mod_root: str, *, rename_legacy: bool = True, check_executables: bool = True, require_mod_config: bool = False, require_manifest: bool = False) -> Dict[str, Optional[str]]:
-    """Normalize a mod package structure and locate key files.
-
-    Args:
-        mod_root: Root directory of the mod package.
-        rename_legacy: Whether to rename legacy files.
-        check_executables: Whether to check for prohibited executables.
-        require_mod_config: Whether mod_config.json is required.
-        require_manifest: Whether manifest file is required.
-
-    Returns:
-        Dict[str, Optional[str]]: Paths to meta, mod_config, and icon files.
-
-    Raises:
-        ValueError: If mod_root is not a directory.
-        FileNotFoundError: If required files are missing.
-    """
     if not os.path.isdir(mod_root):
         raise ValueError('mod_root_not_directory')
     _flatten_single_child_directories(mod_root)
-    meta_path = find_deltamod_info_file(mod_root)
-    mod_config_path = _find_file_recursive(mod_root, MOD_CONFIG_FILENAME)
-    icon_path = _find_file_recursive(mod_root, ICON_PNG_FILENAME)
-    if require_manifest and (not meta_path):
+    meta_path, mod_config_path, icon_path = find_deltamod_info_file(mod_root), _find_file_recursive(mod_root, MOD_CONFIG_FILENAME), _find_file_recursive(mod_root, ICON_PNG_FILENAME)
+    if require_manifest and not meta_path:
         raise FileNotFoundError('manifest_missing')
-    if require_mod_config and (not mod_config_path):
+    if require_mod_config and not mod_config_path:
         raise FileNotFoundError('mod_config_missing')
     if check_executables:
         _ensure_no_prohibited_files(mod_root)
@@ -203,30 +109,20 @@ def normalize_mod_package(mod_root: str, *, rename_legacy: bool = True, check_ex
 
 
 def _flatten_single_child_directories(root: str):
-    """Flatten directory structure by moving up single child directories.
-
-    Args:
-        root: Root directory to flatten.
-    """
     while True:
         try:
-            entries = [e for e in os.listdir(root) if e not in ('.', '..') and (not e.startswith('__MACOSX'))]
+            entries = [e for e in os.listdir(root) if e not in ('.', '..') and not e.startswith('__MACOSX')]
         except OSError:
             return
-        files = [e for e in entries if os.path.isfile(os.path.join(root, e))]
-        dirs = [e for e in entries if os.path.isdir(os.path.join(root, e))]
+        files, dirs = [e for e in entries if os.path.isfile(os.path.join(root, e))], [e for e in entries if os.path.isdir(os.path.join(root, e))]
         if files or len(dirs) != 1:
             return
         child = os.path.join(root, dirs[0])
         try:
             for item in os.listdir(child):
-                src = os.path.join(child, item)
-                dst = os.path.join(root, item)
+                src, dst = os.path.join(child, item), os.path.join(root, item)
                 if os.path.exists(dst):
-                    if os.path.isdir(dst):
-                        safe_rmtree(dst)
-                    else:
-                        safe_remove(dst)
+                    safe_rmtree(dst) if os.path.isdir(dst) else safe_remove(dst)
                 safe_move(src, dst)
             os.rmdir(child)
         except OSError:
@@ -234,58 +130,27 @@ def _flatten_single_child_directories(root: str):
 
 
 def _find_file_recursive(root: str, filename: str) -> Optional[str]:
-    """Recursively search for a file by name (case-insensitive).
-
-    Args:
-        root: Root directory to search.
-        filename: Filename to find.
-
-    Returns:
-        Optional[str]: Path to file if found, None otherwise.
-    """
-    filename_lower = filename.lower()
-    for current_root, _, files in os.walk(root):
+    fn_lower = filename.lower()
+    for r, _, files in os.walk(root):
         for f in files:
-            if f.lower() == filename_lower:
-                return os.path.join(current_root, f)
+            if f.lower() == fn_lower:
+                return os.path.join(r, f)
     return None
 
 
 def _ensure_no_prohibited_files(root: str):
-    """Check for prohibited file types in directory tree.
-
-    Args:
-        root: Root directory to check.
-
-    Raises:
-        ValueError: If prohibited files are found.
-    """
-    prohibited_exts = {'.exe', '.js', '.ts', '.bat', '.cmd'}
-    for current_root, _, files in os.walk(root):
+    prohibited = {'.exe', '.js', '.ts', '.bat', '.cmd'}
+    for r, _, files in os.walk(root):
         for f in files:
-            ext = os.path.splitext(f)[1].lower()
-            if ext in prohibited_exts:
-                raise ValueError(f'prohibited_file:{os.path.join(current_root, f)}')
+            if os.path.splitext(f)[1].lower() in prohibited:
+                raise ValueError(f'prohibited_file:{os.path.join(r, f)}')
 
 
 def sanitize_filename(name: str) -> str:
-    """Remove invalid characters from filename.
-
-    Args:
-        name: Filename to sanitize.
-
-    Returns:
-        str: Sanitized filename.
-    """
     return re.sub('[\\\\/*?:"<>|]', '', name).strip()
 
 
 def _cleanup_tmp(path: str) -> None:
-    """Clean up temporary file if it exists.
-
-    Args:
-        path: Path to temporary file.
-    """
     try:
         if os.path.exists(path):
             os.remove(path)
@@ -294,26 +159,11 @@ def _cleanup_tmp(path: str) -> None:
 
 
 def atomic_write_json(path: str, data: Dict, indent: int = 2) -> None:
-    """Atomically write JSON data to file.
-
-    Args:
-        path: File path.
-        data: Data to write.
-        indent: JSON indentation level.
-    """
     save_json(path, data, indent=indent)
 
 
 def save_json(path: str, data: Dict, indent: int = 2, max_retries: int = 5, delay: float = 0.1) -> None:
-    """Save JSON data to file with retry logic.
-
-    Args:
-        path: File path.
-        data: Data to save.
-        indent: JSON indentation level.
-        max_retries: Maximum retry attempts.
-        delay: Delay between retries.
-    """
+    """Save JSON data to file with retry logic."""
     dir_path = os.path.dirname(path)
     if dir_path:
         os.makedirs(dir_path, exist_ok=True)
@@ -367,32 +217,9 @@ def save_json(path: str, data: Dict, indent: int = 2, max_retries: int = 5, dela
 
 
 def load_json(path: str, migrate_config: bool = True) -> Dict:
-    """Load JSON file with optional config migration.
-
-    This function loads a JSON file from disk and optionally performs
-    migration of legacy configuration formats to the current format.
-    It handles missing files gracefully and supports automatic config updates.
-
-    Args:
-        path: Path to the JSON file to load.
-        migrate_config: Whether to perform config migration (default: True).
-
-    Migration features:
-    - Legacy config.json to mod_config.json migration
-    - Field name updates (mod_key -> key, modgame -> game)
-    - Structure changes (chapters -> files)
-    - Game detection from demo mod flags
-    - Tag normalization (translation -> textedit)
-
-    Returns:
-        Dict: Loaded JSON data, empty dict if file doesn't exist.
-
-    Note:
-        When migration is enabled, the file will be automatically
-        updated with the new format if changes are needed.
-    """
+    """Load JSON file with optional config migration."""
     try:
-        if path.endswith('mod_config.json') and (not os.path.exists(path)) and migrate_config:
+        if path.endswith('mod_config.json') and not os.path.exists(path) and migrate_config:
             legacy_path = path.replace('mod_config.json', 'config.json')
             if os.path.exists(legacy_path):
                 path = legacy_path
@@ -422,18 +249,14 @@ def load_json(path: str, migrate_config: bool = True) -> Dict:
                     del data['chapters']
                     needs_migration = True
                 if 'is_demo_mod' in data and 'game' not in data:
-                    if data.get('is_demo_mod', False):
-                        data['game'] = 'deltarunedemo'
-                    else:
-                        data['game'] = 'deltarune'
+                    data['game'] = 'deltarunedemo' if data.get('is_demo_mod', False) else 'deltarune'
                     del data['is_demo_mod']
                     needs_migration = True
                 if 'tags' in data:
                     tags = data['tags']
-                    if isinstance(tags, list):
-                        if 'translation' in tags:
-                            data['tags'] = ['textedit' if tag == 'translation' else tag for tag in tags]
-                            needs_migration = True
+                    if isinstance(tags, list) and 'translation' in tags:
+                        data['tags'] = ['textedit' if tag == 'translation' else tag for tag in tags]
+                        needs_migration = True
                     elif tags == 'translation':
                         data['tags'] = 'textedit'
                         needs_migration = True
@@ -459,13 +282,8 @@ def load_json(path: str, migrate_config: bool = True) -> Dict:
 
 
 def remove_archive_extension(filename: str) -> str:
-    filename_lower = filename.lower()
-    if filename_lower.endswith('.tar.gz'):
-        return filename[:-7]
-    elif filename_lower.endswith('.tar.lzma'):
-        return filename[:-9]
-    else:
-        return os.path.splitext(filename)[0]
+    fl = filename.lower()
+    return filename[:-7] if fl.endswith('.tar.gz') else (filename[:-9] if fl.endswith('.tar.lzma') else os.path.splitext(filename)[0])
 
 
 def get_chapter_folder_name(chapter_id: int, game: Optional[str] = None, modgame: Optional[str] = None) -> str:
@@ -473,32 +291,23 @@ def get_chapter_folder_name(chapter_id: int, game: Optional[str] = None, modgame
     game_value = game or modgame
     if chapter_id == -1 or chapter_id == SLOT_ID_DEMO:
         return 'demo'
-    elif chapter_id == SLOT_ID_PIZZA_TOWER:
-        if game_value == 'pizzatower':
-            return 'pizzatower'
-        return f'chapter_{chapter_id}'
-    elif chapter_id == SLOT_ID_UNDERTALE or chapter_id == 0:
+    if chapter_id == SLOT_ID_PIZZA_TOWER:
+        return 'pizzatower' if game_value == 'pizzatower' else f'chapter_{chapter_id}'
+    if chapter_id in (SLOT_ID_UNDERTALE, 0, SLOT_ID_UNDERTALE_YELLOW):
         return 'chapter_0'
-    elif chapter_id == SLOT_ID_UNDERTALE_YELLOW:
-        return 'chapter_0'
-    elif chapter_id == SLOT_ID_SUGARY_SPIRE:
+    if chapter_id == SLOT_ID_SUGARY_SPIRE:
         return 'sugaryspire'
-    else:
-        return f'chapter_{chapter_id}'
+    return f'chapter_{chapter_id}'
 
 
 def get_unique_mod_dir(mods_dir, mod_name):
-    sanitized_name = sanitize_filename(mod_name)
-    base_dir = os.path.join(mods_dir, sanitized_name)
-    if not os.path.exists(base_dir):
-        return sanitized_name
+    sanitized = sanitize_filename(mod_name)
+    if not os.path.exists(os.path.join(mods_dir, sanitized)):
+        return sanitized
     counter = 1
-    while True:
-        unique_name = f'{sanitized_name}_{counter}'
-        unique_dir = os.path.join(mods_dir, unique_name)
-        if not os.path.exists(unique_dir):
-            return unique_name
+    while os.path.exists(os.path.join(mods_dir, f'{sanitized}_{counter}')):
         counter += 1
+    return f'{sanitized}_{counter}'
 
 
 def ensure_writable(path: str) -> bool:
@@ -515,27 +324,7 @@ def ensure_writable(path: str) -> bool:
 
 
 def is_path_in_steam_common(game_path: str, game_name: str) -> bool:
-    """Check if a game path is within a Steam common directory.
-
-    This function determines whether a given game path is located in
-    a Steam installation's common games directory. It checks across
-    multiple platforms and Steam installation locations.
-
-    Args:
-        game_path: Path to the game directory to check.
-        game_name: Name of the game to match against.
-
-    Checks include:
-    - Path analysis for steamapps/common structure
-    - Windows Program Files Steam installations
-    - Linux Steam home directory locations
-    - macOS Steam application support directories
-    - Case-insensitive path matching
-
-    Returns:
-        bool: True if the path is within a Steam common directory,
-              False otherwise.
-    """
+    """Check if a game path is within a Steam common directory."""
     if not game_path or not os.path.isdir(game_path):
         return False
     try:
@@ -547,41 +336,30 @@ def is_path_in_steam_common(game_path: str, game_name: str) -> bool:
     path_parts = game_path_normalized.replace('\\', '/').split('/')
     try:
         for i, part in enumerate(path_parts):
-            if part == 'steamapps' and i + 1 < len(path_parts) and (path_parts[i + 1] == 'common'):
-                if i + 2 < len(path_parts) and path_parts[i + 2] == game_name_lower:
-                    return True
-                if i + 2 < len(path_parts):
-                    return True
+            if part == 'steamapps' and i + 1 < len(path_parts) and path_parts[i + 1] == 'common' and i + 2 < len(path_parts):
+                return True
     except (IndexError, AttributeError):
         pass
     system = platform.system()
     if system == 'Windows':
-        program_files = [os.getenv('ProgramFiles(x86)'), os.getenv('ProgramFiles')]
-        for pf in program_files:
-            if pf:
-                steam_common = os.path.normpath(os.path.join(pf, 'Steam', 'steamapps', 'common', game_name)).lower()
-                if game_path_normalized == steam_common or game_path_normalized.startswith(steam_common.replace('\\', '/') + '/'):
-                    return True
+        for pf in filter(None, [os.getenv('ProgramFiles(x86)'), os.getenv('ProgramFiles')]):
+            steam_common = os.path.normpath(os.path.join(pf, 'Steam', 'steamapps', 'common', game_name)).lower()
+            if game_path_normalized == steam_common or game_path_normalized.startswith(steam_common.replace('\\', '/') + '/'):
+                return True
     elif system == 'Linux':
         home = os.path.expanduser('~')
-        base_steam_paths = [os.path.join(home, '.steam', 'steam', 'steamapps', 'common', game_name), os.path.join(home, '.local', 'share', 'Steam', 'steamapps', 'common', game_name), os.path.join(home, '.var', 'app', 'com.valvesoftware.Steam', 'data', 'Steam', 'steamapps', 'common', game_name)]
-        for steam_path in base_steam_paths:
+        for steam_path in [os.path.join(home, '.steam', 'steam', 'steamapps', 'common', game_name), os.path.join(home, '.local', 'share', 'Steam', 'steamapps', 'common', game_name), os.path.join(home, '.var', 'app', 'com.valvesoftware.Steam', 'data', 'Steam', 'steamapps', 'common', game_name)]:
             try:
-                if os.path.exists(steam_path):
-                    steam_path_normalized = os.path.normpath(os.path.abspath(steam_path)).lower().replace('\\', '/')
-                    if game_path_normalized == steam_path_normalized or game_path_normalized.startswith(steam_path_normalized + '/'):
-                        return True
+                if os.path.exists(steam_path) and (game_path_normalized == (sp := os.path.normpath(os.path.abspath(steam_path)).lower().replace('\\', '/')) or game_path_normalized.startswith(sp + '/')):
+                    return True
             except (OSError, ValueError):
                 continue
     elif system == 'Darwin':
         home = os.path.expanduser('~')
-        base_paths = [os.path.join(home, 'Library', 'Application Support', 'Steam', 'steamapps', 'common', game_name), os.path.join(home, 'Steam', 'steamapps', 'common', game_name)]
-        for steam_path in base_paths:
+        for steam_path in [os.path.join(home, 'Library', 'Application Support', 'Steam', 'steamapps', 'common', game_name), os.path.join(home, 'Steam', 'steamapps', 'common', game_name)]:
             try:
-                if os.path.exists(steam_path):
-                    steam_path_normalized = os.path.normpath(os.path.abspath(steam_path)).lower().replace('\\', '/')
-                    if game_path_normalized == steam_path_normalized or game_path_normalized.startswith(steam_path_normalized + '/'):
-                        return True
+                if os.path.exists(steam_path) and (game_path_normalized == (sp := os.path.normpath(os.path.abspath(steam_path)).lower().replace('\\', '/')) or game_path_normalized.startswith(sp + '/')):
+                    return True
             except (OSError, ValueError):
                 continue
     return False

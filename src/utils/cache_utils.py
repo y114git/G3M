@@ -1,13 +1,11 @@
-"""Image and data caching utilities.
-
-This module provides caching for images and other data to improve performance.
-"""
+"""Image and data caching utilities."""
 import contextlib
 import logging
 import threading
 from collections import OrderedDict
 from PyQt6.QtGui import QImage, QPixmap
 from config.constants import IMAGE_CACHE_MAX_SIZE, NETWORK_SEMAPHORE_LIMIT
+
 try:
     _IMG_CACHE: OrderedDict[str, QImage] = OrderedDict()
     _PIX_CACHE: dict[str, QPixmap] = {}
@@ -16,16 +14,12 @@ try:
     _CACHE_MAX_SIZE = IMAGE_CACHE_MAX_SIZE
 except Exception as e:
     logging.warning(f'cache: failed to initialize cache/locks: {e}')
-    _IMG_CACHE, _PIX_CACHE, _IMG_CACHE_LOCK, _NET_SEM, _CACHE_MAX_SIZE = (OrderedDict(), {}, None, None, IMAGE_CACHE_MAX_SIZE)
+    _IMG_CACHE, _PIX_CACHE, _IMG_CACHE_LOCK, _NET_SEM, _CACHE_MAX_SIZE = OrderedDict(), {}, None, None, IMAGE_CACHE_MAX_SIZE
 
 
 @contextlib.contextmanager
 def cache_lock():
-    """Context manager for thread-safe cache access.
-
-    Yields:
-        None: Lock is held during context.
-    """
+    """Context manager for thread-safe cache access."""
     if _IMG_CACHE_LOCK is not None:
         _IMG_CACHE_LOCK.acquire()
     try:
@@ -36,12 +30,7 @@ def cache_lock():
 
 
 def add_to_cache(key: str, image: QImage) -> None:
-    """Add an image to the cache with LRU eviction.
-
-    Args:
-        key: Cache key.
-        image: Image to cache.
-    """
+    """Add an image to the cache with LRU eviction."""
     with cache_lock():
         if key in _IMG_CACHE:
             _IMG_CACHE.move_to_end(key)
@@ -51,14 +40,7 @@ def add_to_cache(key: str, image: QImage) -> None:
 
 
 def get_from_cache(key: str) -> QImage | None:
-    """Retrieve an image from the cache.
-
-    Args:
-        key: Cache key.
-
-    Returns:
-        QImage | None: Cached image or None if not found.
-    """
+    """Retrieve an image from the cache."""
     with cache_lock():
         if key in _IMG_CACHE:
             _IMG_CACHE.move_to_end(key)
