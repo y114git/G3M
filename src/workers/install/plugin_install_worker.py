@@ -19,13 +19,6 @@ class PluginInstallWorker(BaseInstallWorker):
         self.archive_path = archive_path
         self.plugins_dir = plugins_dir
         self.plugin_service = plugin_service
-        self._cancelled = False
-        self._session = None
-
-    def cancel(self):
-        self._cancelled = True
-        if self._session:
-            self._safe_close(self._session, 'session')
 
     def _check_archive_has_plugin_init_py(self, archive_path: str) -> bool:
         from utils.archive_utils import ArchiveExtractor, UnrarMissingError

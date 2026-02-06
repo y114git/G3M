@@ -201,12 +201,8 @@ class PluginWidget(QFrame):
         self._update_actions_visibility()
 
     def _update_actions_visibility(self):
-        if not hasattr(self, 'actions_widget'):
-            return
-        if self.is_selected:
-            self.actions_widget.setVisible(True)
-        else:
-            self.actions_widget.setVisible(False)
+        if hasattr(self, 'actions_widget'):
+            self.actions_widget.setVisible(self.is_selected)
 
     def update_plugin_info(self, plugin_info: dict):
         self.plugin_info = plugin_info

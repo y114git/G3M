@@ -21,13 +21,6 @@ class ThemeInstallWorker(BaseInstallWorker):
         self.config_dir = config_dir
         self.app_state = app_state
         self.settings_service = settings_service
-        self._cancelled = False
-        self._session = None
-
-    def cancel(self):
-        self._cancelled = True
-        if self._session:
-            self._safe_close(self._session, 'session')
 
     def _apply_theme_settings(self, theme_settings: dict, source_dir: str) -> None:
         for key, value in theme_settings.items():

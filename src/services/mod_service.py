@@ -19,7 +19,6 @@ from utils.file_utils import sanitize_filename, has_deltamod_info_file
 from utils.mod_utils import get_mod_key, get_mod_name, resolve_mod_icon
 from config.constants import UI_COLORS, MOD_CONFIG_FILENAME, LEGACY_MOD_CONFIG_FILENAME
 import time
-from config.constants import CLOUD_FUNCTIONS_BASE_URL
 from core.exceptions import ModUninstallationError
 
 
@@ -466,6 +465,29 @@ class ModManager(QObject):
             self._mods_cache_valid = True
             return self._mods_cache.copy()
 
+    @staticmethod
+    def _check_archive_is_deltamod(item_path: str, item_name: str) -> bool:
+        item_lower = item_name.lower()
+        try:
+            if item_lower.endswith('.zip'):
+                with zipfile.ZipFile(item_path, 'r') as zf:
+                    return has_deltamod_info_file(zf.namelist())
+            elif item_lower.endswith('.tar.gz'):
+                import tarfile
+                with tarfile.open(item_path, 'r:gz') as tf:
+                    return has_deltamod_info_file(tf.getnames())
+            elif item_lower.endswith('.rar'):
+                import rarfile
+                with rarfile.RarFile(item_path, 'r') as rf:
+                    return has_deltamod_info_file(rf.namelist())
+            elif item_lower.endswith('.7z'):
+                import py7zr
+                with py7zr.SevenZipFile(item_path, mode='r') as zf:
+                    return has_deltamod_info_file(zf.getnames())
+        except (OSError, ImportError) as e:
+            logging.warning(f'_check_archive_is_deltamod: failed to check {item_name}: {e}', exc_info=True)
+        return False
+
     def convert_legacy_mods(self) -> bool:
         if not os.path.exists(self.app_state.mods_dir):
             return False
@@ -475,33 +497,7 @@ class ModManager(QObject):
                 item_path = os.path.join(self.app_state.mods_dir, item_name)
                 if os.path.isfile(item_path) and item_name.lower().endswith(('.zip', '.7z', '.rar', '.tar.gz', '.lzma')):
                     try:
-                        is_deltamod_archive = False
-                        item_name_lower = item_name.lower()
-                        if item_name_lower.endswith('.zip'):
-                            with zipfile.ZipFile(item_path, 'r') as zf:
-                                if has_deltamod_info_file(zf.namelist()):
-                                    is_deltamod_archive = True
-                        elif item_name_lower.endswith('.tar.gz'):
-                            import tarfile
-                            with tarfile.open(item_path, 'r:gz') as tf:
-                                if has_deltamod_info_file(tf.getnames()):
-                                    is_deltamod_archive = True
-                        elif item_name_lower.endswith('.rar'):
-                            try:
-                                import rarfile
-                                with rarfile.RarFile(item_path, 'r') as rf:
-                                    if has_deltamod_info_file(rf.namelist()):
-                                        is_deltamod_archive = True
-                            except (OSError, ImportError) as e:
-                                logging.warning(f'convert_legacy_mods: failed to check rar archive {item_name}: {e}', exc_info=True)
-                        elif item_name_lower.endswith('.7z'):
-                            import py7zr
-                            try:
-                                with py7zr.SevenZipFile(item_path, mode='r') as zf:
-                                    if has_deltamod_info_file(zf.getnames()):
-                                        is_deltamod_archive = True
-                            except (OSError, ImportError) as e:
-                                logging.warning(f'convert_legacy_mods: failed to check 7z archive {item_name}: {e}', exc_info=True)
+                        is_deltamod_archive = self._check_archive_is_deltamod(item_path, item_name)
                         if is_deltamod_archive:
                             self.status_changed.emit(tr('status.deltamod_archive_detected', name=item_name), UI_COLORS['status_info'])
                             QApplication.processEvents()
@@ -594,83 +590,68 @@ class ModManager(QObject):
                     installed_gamebanana_by_key[key] = config_data
                     logging.debug(f'load_local_mods: Registered installed GameBanana mod - key={key}')
             updated_count = 0
+
+            def _update_mod_icon(mod, config_data, key):
+                mod_folder_path = self.get_mod_folder_path(key)
+                if mod_folder_path:
+                    if key in installed_mods:
+                        config_data = self.get_mod_config(key)
+                    config_icon_url = config_data.get('icon_url', '')
+                    resolved_icon = resolve_mod_icon(config_data, mod_folder_path)
+                    if resolved_icon:
+                        mod.icon_url = resolved_icon
+                    elif config_icon_url:
+                        mod.icon_url = config_icon_url
+
             for mod in list(self.app_state.all_mods):
                 key = mod.key
                 if key in installed_mods:
-                    config_data = installed_mods[key]
-                    mod_folder_path = self.get_mod_folder_path(key)
-                    if mod_folder_path:
-                        config_data = self.get_mod_config(key)
-                        config_icon_url = config_data.get('icon_url', '')
-                        resolved_icon = resolve_mod_icon(config_data, mod_folder_path)
-                        if resolved_icon:
-                            mod.icon_url = resolved_icon
-                        elif config_icon_url:
-                            mod.icon_url = config_icon_url
+                    _update_mod_icon(mod, installed_mods[key], key)
                     if key and key.startswith('gb_'):
                         updated_count += 1
                 elif key and key.startswith('gb_') and (key in installed_gamebanana_by_key):
-                    config_data = installed_gamebanana_by_key[key]
-                    mod_folder_path = self.get_mod_folder_path(key)
-                    if mod_folder_path:
-                        config_icon_url = config_data.get('icon_url', '')
-                        resolved_icon = resolve_mod_icon(config_data, mod_folder_path)
-                        if resolved_icon:
-                            mod.icon_url = resolved_icon
-                        elif config_icon_url:
-                            mod.icon_url = config_icon_url
+                    _update_mod_icon(mod, installed_gamebanana_by_key[key], key)
                     updated_count += 1
             logging.debug(f'load_local_mods: Updated {updated_count} existing GameBanana mods in all_mods')
+
+            def _find_mod_by_key(key):
+                for mod in self.app_state.all_mods:
+                    if (getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)) == key:
+                        return mod
+                return None
+
+            def _try_update_mod_files(existing_mod, config_data, key, replace_in_list=False):
+                if (not hasattr(existing_mod, 'files') or not existing_mod.files) and config_data.get('files'):
+                    try:
+                        files_data = config_data.get('files', {})
+                        if isinstance(files_data, dict) and files_data:
+                            new_mod = self.create_mod_object_from_info(config_data, self.app_state.all_mods)
+                            if replace_in_list:
+                                for i, mod in enumerate(self.app_state.all_mods):
+                                    if (getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)) == key:
+                                        self.app_state.all_mods[i] = new_mod
+                                        break
+                            elif hasattr(new_mod, 'files') and new_mod.files:
+                                existing_mod.files = new_mod.files
+                        else:
+                            logging.debug(f'load_local_mods: Skipping mod {key} with empty/invalid files data')
+                    except Exception as e:
+                        logging.warning(f'load_local_mods: Failed to load files for mod {key}: {e}', exc_info=True)
+
             existing_keys = {getattr(mod, 'key', None) or getattr(mod, 'mod_key', None) for mod in self.app_state.all_mods}
             for key, config_data in list(installed_mods.items()):
-                is_local_key = key and isinstance(key, str) and key.startswith('local_')
-                if is_local_key:
+                if key and isinstance(key, str) and key.startswith('local_'):
                     continue
                 if key and key.startswith('gb_'):
-                    gb_id_str = key.replace('gb_', '', 1)
                     if key in existing_keys:
-                        existing_mod = None
-                        for mod in self.app_state.all_mods:
-                            mod_key_attr = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
-                            if mod_key_attr == key:
-                                existing_mod = mod
-                                break
+                        existing_mod = _find_mod_by_key(key)
                         if existing_mod:
-                            if (not hasattr(existing_mod, 'files') or not existing_mod.files) and config_data.get('files'):
-                                try:
-                                    files_data = config_data.get('files', {})
-                                    if isinstance(files_data, dict) and files_data:
-                                        temp_mod = self.create_mod_object_from_info(config_data, self.app_state.all_mods)
-                                        if hasattr(temp_mod, 'files') and temp_mod.files:
-                                            existing_mod.files = temp_mod.files
-                                    else:
-                                        logging.debug(f'load_local_mods: Skipping mod {key} with empty/invalid files data')
-                                except Exception as e:
-                                    logging.warning(f'load_local_mods: Failed to load files for mod {key}: {e}', exc_info=True)
-                            continue
+                            _try_update_mod_files(existing_mod, config_data, key)
                     continue
-                elif key in existing_keys:
-                    existing_mod = None
-                    for mod in self.app_state.all_mods:
-                        mod_key_attr = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
-                        if mod_key_attr == key:
-                            existing_mod = mod
-                            break
+                if key in existing_keys:
+                    existing_mod = _find_mod_by_key(key)
                     if existing_mod:
-                        if (not hasattr(existing_mod, 'files') or not existing_mod.files) and config_data.get('files'):
-                            try:
-                                files_data = config_data.get('files', {})
-                                if isinstance(files_data, dict) and files_data:
-                                    new_mod = self.create_mod_object_from_info(config_data, self.app_state.all_mods)
-                                    for i, mod in enumerate(self.app_state.all_mods):
-                                        mod_key_attr = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
-                                        if mod_key_attr == key:
-                                            self.app_state.all_mods[i] = new_mod
-                                            break
-                                else:
-                                    logging.debug(f'load_local_mods: Skipping mod {key} with empty/invalid files data')
-                            except Exception as e:
-                                logging.warning(f'load_local_mods: Failed to reload mod {key}: {e}', exc_info=True)
+                        _try_update_mod_files(existing_mod, config_data, key, replace_in_list=True)
                     continue
                 try:
                     mod_folder_path = self.get_mod_folder_path(key)
@@ -1222,12 +1203,6 @@ class ModManager(QObject):
                 self._get_mods_cache()
             return key in self._mods_cache
 
-    def find_mod_by_name(self, mod_name: str) -> Optional[str]:
-        with self._cache_lock:
-            if not self._mods_cache_valid:
-                self._get_mods_cache()
-            return self._mods_by_name.get(mod_name.lower())
-
     def check_mod_exists(self, mod_info):
         cache = self._get_mods_cache()
         key = mod_info.get('key') or mod_info.get('mod_key', '')
@@ -1355,77 +1330,30 @@ class ModManager(QObject):
             mod_info['files'] = normalized_files
         return mod_models.ModInfo.from_dict(mod_info)
 
-    def has_pending_changes(self, hashed_key: str) -> bool:
-        import requests
-        try:
-            from utils.network_utils import get_session
-            resp = get_session().get(f'{CLOUD_FUNCTIONS_BASE_URL}/getPendingChangeData?modId={hashed_key}', timeout=10)
-            return bool(resp.status_code == 200 and resp.json())
-        except requests.RequestException:
-            return False
-
-    def withdraw_pending_mod(self, hashed_key: str) -> None:
-        import requests
-        try:
-            from utils.network_utils import get_session
-            get_session().post(f'{CLOUD_FUNCTIONS_BASE_URL}/withdrawPendingMod', json={'hashedKey': hashed_key}, timeout=10)
-        except requests.RequestException:
-            raise
-
-    def withdraw_pending_change(self, hashed_key: str) -> None:
-        import requests
-        try:
-            from utils.network_utils import get_session
-            resp = get_session().post(f'{CLOUD_FUNCTIONS_BASE_URL}/withdrawPendingChange', json={'hashedKey': hashed_key}, timeout=10)
-            resp.raise_for_status()
-        except requests.RequestException:
-            raise
-
-    def list_local_mods(self) -> List[dict]:
-        local_mods: List[dict] = []
+    def _iter_mod_configs(self):
+        from utils.file_utils import migrate_mod_config, load_json
         if not os.path.exists(self.app_state.mods_dir):
-            return local_mods
+            return
         for folder_name in os.listdir(self.app_state.mods_dir):
             folder_path = os.path.join(self.app_state.mods_dir, folder_name)
             if not os.path.isdir(folder_path):
                 continue
-            from utils.file_utils import migrate_mod_config
             migrate_mod_config(folder_path)
             config_path = os.path.join(folder_path, MOD_CONFIG_FILENAME)
             if not os.path.exists(config_path):
                 continue
             try:
-                from utils.file_utils import load_json
                 config_data = load_json(config_path, migrate_config=True)
-                if config_data:
-                    key = config_data.get('key') or config_data.get('mod_key', '')
-                    is_local = key and isinstance(key, str) and key.startswith('local_')
-                    if is_local:
-                        local_mods.append({'key': key, 'name': config_data.get('name', 'Unknown mod'), 'data': config_data, 'folder_path': folder_path})
+                if config_data and isinstance(config_data, dict):
+                    yield folder_name, folder_path, config_path, config_data
             except Exception as e:
-                logging.warning(f'list_local_mods: failed to read {config_path}: {e}', exc_info=True)
-                continue
-        return local_mods
+                logging.warning(f'_iter_mod_configs: failed to read {config_path}: {e}', exc_info=True)
 
     def migrate_metadata_from_local_configs(self) -> bool:
         mods_metadata = self._read_metadata()
         updated = False
-        if not os.path.exists(self.app_state.mods_dir):
-            return False
-        for folder_name in os.listdir(self.app_state.mods_dir):
-            folder_path = os.path.join(self.app_state.mods_dir, folder_name)
-            if not os.path.isdir(folder_path):
-                continue
-            from utils.file_utils import migrate_mod_config
-            migrate_mod_config(folder_path)
-            config_path = os.path.join(folder_path, MOD_CONFIG_FILENAME)
-            if not os.path.exists(config_path):
-                continue
+        for folder_name, folder_path, config_path, config_data in self._iter_mod_configs():
             try:
-                from utils.file_utils import load_json
-                config_data = load_json(config_path, migrate_config=True)
-                if not config_data or not isinstance(config_data, dict):
-                    continue
                 key = config_data.get('key') or config_data.get('mod_key')
                 if not key:
                     continue
@@ -1504,21 +1432,8 @@ class ModManager(QObject):
                     config_key = config_data.get('key') or config_data.get('mod_key', '') if 'config_data' in locals() else cache_key
                     logging.warning(f'Failed to build installed mod from cache for key {config_key}: {e}', exc_info=True)
         else:
-            for folder_name in os.listdir(self.app_state.mods_dir):
-                folder_path = os.path.join(self.app_state.mods_dir, folder_name)
-                if not os.path.isdir(folder_path):
-                    continue
-                from utils.file_utils import migrate_mod_config
-                migrate_mod_config(folder_path)
-                config_path = os.path.join(folder_path, MOD_CONFIG_FILENAME)
-                if os.path.exists(config_path):
-                    try:
-                        from utils.file_utils import load_json
-                        config_data = load_json(config_path, migrate_config=True)
-                        _append_from_config(config_data, folder_name)
-                    except Exception as e:
-                        logging.warning(f'Failed to read config {config_path}: {e}')
-                        continue
+            for folder_name, folder_path, config_path, config_data in self._iter_mod_configs():
+                _append_from_config(config_data, folder_name)
         orphaned_keys = set(mods_metadata.keys()) - found_mod_keys
         if orphaned_keys:
             for key in list(orphaned_keys):

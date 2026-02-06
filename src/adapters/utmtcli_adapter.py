@@ -10,14 +10,11 @@ class UTMTCLIManager:
     """Manages UndertaleModTool CLI execution for patching operations."""
 
     def __init__(self):
-        self.platform = self._detect_platform()
+        self.platform = {'Windows': 'windows', 'Darwin': 'macos'}.get(platform.system(), 'linux')
         self.utmtcli_path = None
         self.utmtcli_exe = None
         self._active_processes_ref = None
         self._initialize_paths()
-
-    def _detect_platform(self):
-        return {'Windows': 'windows', 'Darwin': 'macos'}.get(platform.system(), 'linux')
 
     def _initialize_paths(self):
         base_path = resource_path(f'assets/bin/utmtcli_{self.platform}')
@@ -132,9 +129,6 @@ class UTMTCLIManager:
         if additional_args:
             args.extend(additional_args)
         return self.execute_command(args, cwd=cwd, env=env)
-
-    def get_utmtcli_path(self):
-        return self.utmtcli_path
 
     def get_platform(self) -> str:
         return self.platform

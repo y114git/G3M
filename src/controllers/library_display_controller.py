@@ -40,6 +40,25 @@ class LibraryDisplayController:
             return
         self.refresh_async()
 
+    def _filter_and_sort_installed(self, installed_mods):
+        filters, sort_config = self._build_library_filters_and_sort()
+        filtered_mods = filter_and_sort_mods(installed_mods, filters, sort_config)
+        if hasattr(self.app, 'library_sort_combo'):
+            sort_type = self.app.library_sort_combo.currentIndex()
+            if sort_type == 0:
+                reverse = not self.app.library_sort_ascending
+                filtered_mods.sort(key=lambda mod: mod.get('name', '').lower(), reverse=reverse)
+        return filtered_mods
+
+    @staticmethod
+    def _distribute_mods_across_chapters(mods_list):
+        chapter_mods = {}
+        for ch_id in range(5):
+            chapter_mods_for_chapter = [mod for mod in mods_list if hasattr(mod, 'get_chapter_data') and mod.get_chapter_data(ch_id)]
+            if chapter_mods_for_chapter:
+                chapter_mods[ch_id] = chapter_mods_for_chapter
+        return chapter_mods
+
     def _build_library_filters_and_sort(self):
         selected_tags = []
         only_gamebanana = False
@@ -75,13 +94,7 @@ class LibraryDisplayController:
         self.app._updating_chapter_mods = True
         clear_layout_widgets(self.app.installed_mods_layout, keep_last_n=1)
         installed_mods = self.mod_service.get_installed_mods_list()
-        filters, sort_config = self._build_library_filters_and_sort()
-        filtered_mods = filter_and_sort_mods(installed_mods, filters, sort_config)
-        if hasattr(self.app, 'library_sort_combo'):
-            sort_type = self.app.library_sort_combo.currentIndex()
-            if sort_type == 0:
-                reverse = not self.app.library_sort_ascending
-                filtered_mods.sort(key=lambda mod: mod.get('name', '').lower(), reverse=reverse)
+        filtered_mods = self._filter_and_sort_installed(installed_mods)
         for mod_info in filtered_mods:
             mod_data = self.mod_service.create_mod_object_from_info(mod_info, getattr(self.app_state, 'all_mods', None))
             if not mod_data or not self.mod_service.mod_has_files_for_chapter(mod_data, selected_chapter_id):
@@ -157,13 +170,7 @@ class LibraryDisplayController:
             clear_layout_widgets(self.app.installed_mods_layout, keep_last_n=1)
             self.cleanup_missing_mods(installed_mods)
             existing_mods = [mod_info for mod_info in installed_mods if self.mod_service.check_mod_exists(mod_info)]
-            filters, sort_config = self._build_library_filters_and_sort()
-            filtered_mods = filter_and_sort_mods(existing_mods, filters, sort_config)
-            if hasattr(self.app, 'library_sort_combo'):
-                sort_type = self.app.library_sort_combo.currentIndex()
-                if sort_type == 0:
-                    reverse = not self.app.library_sort_ascending
-                    filtered_mods.sort(key=lambda mod: mod.get('name', '').lower(), reverse=reverse)
+            filtered_mods = self._filter_and_sort_installed(existing_mods)
             from PyQt6.QtCore import QTimer
             mods = list(filtered_mods)
             batch_index = 0
@@ -483,25 +490,13 @@ class LibraryDisplayController:
             mods_list = self.slot_service.get_used_mods_list(chapter_id)
             if mods_list and len(mods_list) >= 2:
                 if chapter_id == SLOT_ID_UNIVERSAL:
-                    for ch_id in range(5):
-                        chapter_mods_for_chapter = []
-                        for mod in mods_list:
-                            if hasattr(mod, 'get_chapter_data') and mod.get_chapter_data(ch_id):
-                                chapter_mods_for_chapter.append(mod)
-                        if chapter_mods_for_chapter:
-                            chapter_mods[ch_id] = chapter_mods_for_chapter
+                    chapter_mods = self._distribute_mods_across_chapters(mods_list)
                 else:
                     chapter_mods = {chapter_id: mods_list}
             else:
                 mods_list = self.slot_service.get_used_mods_list(SLOT_ID_UNIVERSAL)
                 if mods_list and len(mods_list) >= 2:
-                    for chapter_id in range(5):
-                        chapter_mods_for_chapter = []
-                        for mod in mods_list:
-                            if hasattr(mod, 'get_chapter_data') and mod.get_chapter_data(chapter_id):
-                                chapter_mods_for_chapter.append(mod)
-                        if chapter_mods_for_chapter:
-                            chapter_mods[chapter_id] = chapter_mods_for_chapter
+                    chapter_mods = self._distribute_mods_across_chapters(mods_list)
         if not chapter_mods:
             return
         try:

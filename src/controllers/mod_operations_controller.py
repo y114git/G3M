@@ -36,23 +36,30 @@ class ModOperationsController:
             logging.debug(f'{error_msg_prefix}: {e}')
             return default_return
 
+    @staticmethod
+    def _disconnect_task_signals(task):
+        for sig_name in ('progress', 'status', 'finished'):
+            if hasattr(task, sig_name):
+                try:
+                    getattr(task, sig_name).disconnect()
+                except (TypeError, RuntimeError):
+                    pass
+
+    def _pick_gamebanana_file(self, available_files, mod_name, external_url):
+        if len(available_files) <= 1:
+            return available_files[0] if available_files else None
+        dialog = GameBananaFilePickerDialog(self.app, available_files, mod_name, external_url)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            self.feedback_service.update_status(tr('status.operation_cancelled'), UI_COLORS['status_warning'])
+            return None
+        return dialog.get_selected_file() or available_files[0]
+
     def _handle_install_start_error(self, error: Exception) -> None:
         self.app_state.is_installing = False
         self.set_install_buttons_enabled(True)
         self.app_state.clear_current_task()
         self._safe_execute(lambda: self.app.game_launch.update_button_state(), 'Failed to update button state')
         self.feedback_service.show_message('error', 'errors.gamebanana_install_failed', error=str(error))
-
-    def handle_url_install(self, url: str):
-        from services.game_detection_service import is_game_running
-        if is_game_running():
-            return
-        self.app.activateWindow()
-        self.app.raise_()
-        if self.app_state.is_installing:
-            self.feedback_service.show_message('warning', 'dialogs.install_in_progress_title', tr('dialogs.install_in_progress_body'))
-            return
-        self.mod_service.install_from_url(url)
 
     def on_mod_install_requested(self, mod):
         if self.app_state.is_installing:
@@ -70,21 +77,7 @@ class ModOperationsController:
                 logging.info('ModOperationsController: Previous task is still running, cancelling it first')
                 previous_task = self.app_state.current_task
                 try:
-                    if hasattr(previous_task, 'progress'):
-                        try:
-                            previous_task.progress.disconnect()
-                        except (TypeError, RuntimeError):
-                            pass
-                    if hasattr(previous_task, 'status'):
-                        try:
-                            previous_task.status.disconnect()
-                        except (TypeError, RuntimeError):
-                            pass
-                    if hasattr(previous_task, 'finished'):
-                        try:
-                            previous_task.finished.disconnect()
-                        except (TypeError, RuntimeError):
-                            pass
+                    self._disconnect_task_signals(previous_task)
                 except Exception as e:
                     logging.warning(f'ModOperationsController: Error disconnecting signals: {e}')
                 if hasattr(previous_task, 'cancel'):
@@ -306,16 +299,9 @@ class ModOperationsController:
                 if not available_files:
                     self._show_incompatible_gamebanana_dialog(mod=mod)
                     return
-                selected_file = available_files[0]
-                if len(available_files) > 1:
-                    dialog = GameBananaFilePickerDialog(self.app, available_files, mod.name, getattr(mod, 'external_url', None))
-                    result = dialog.exec()
-                    if result != QDialog.DialogCode.Accepted:
-                        self.feedback_service.update_status(tr('status.operation_cancelled'), UI_COLORS['status_warning'])
-                        return
-                    selection = dialog.get_selected_file()
-                    if selection:
-                        selected_file = selection
+                selected_file = self._pick_gamebanana_file(available_files, mod.name, getattr(mod, 'external_url', None))
+                if selected_file is None:
+                    return
                 self._install_gamebanana_mod(mod, force, is_update, selected_file)
                 return
             available_chapters = []
@@ -338,33 +324,20 @@ class ModOperationsController:
             self._safe_execute(lambda: setattr(self.app_state, 'operation_cancelled', False), 'Failed to set operation_cancelled')
             if self.app_state.current_task:
                 try:
-                    if hasattr(self.app_state.current_task, 'progress'):
-                        self.app_state.current_task.progress.disconnect()
-                    if hasattr(self.app_state.current_task, 'status'):
-                        self.app_state.current_task.status.disconnect()
-                    if hasattr(self.app_state.current_task, 'finished'):
-                        self.app_state.current_task.finished.disconnect()
+                    self._disconnect_task_signals(self.app_state.current_task)
                 except (TypeError, RuntimeError) as e:
                     logging.debug(f'Failed to disconnect signals from previous task: {e}')
             self.app._install_op_id += 1
             op_id = self.app._install_op_id
             install_thread = InstallModsThread(self.app, install_tasks, was_installed_before)
             self._start_install_thread(install_thread, op_id)
-        except (IOError, OSError) as e:
+        except (IOError, OSError, KeyError, Exception) as e:
             from core.exceptions import ModInstallationError
             key = get_mod_key(mod)
-            mod_name = get_mod_name(mod, 'Unknown Mod')
-            raise ModInstallationError(f'File operation failed during installation: {e}', key=key, mod_name=mod_name, reason='io_error') from e
-        except KeyError as e:
-            from core.exceptions import ModInstallationError
-            key = get_mod_key(mod)
-            mod_name = get_mod_name(mod, 'Unknown Mod')
-            raise ModInstallationError(f'Missing required data: {e}', key=key, mod_name=mod_name, reason='missing_data') from e
-        except Exception as e:
-            from core.exceptions import ModInstallationError
-            key = get_mod_key(mod)
-            mod_name = get_mod_name(mod, 'Unknown Mod')
-            raise ModInstallationError(f'Unexpected error during installation: {e}', key=key, mod_name=mod_name, reason='unknown') from e
+            mod_name_str = get_mod_name(mod, 'Unknown Mod')
+            reason_map = {IOError: 'io_error', OSError: 'io_error', KeyError: 'missing_data'}
+            reason = reason_map.get(type(e), 'unknown')
+            raise ModInstallationError(f'{reason}: {e}', key=key, mod_name=mod_name_str, reason=reason) from e
 
     def on_install_progress_token(self, value: int, op_id: int):
         current_op_id = getattr(self.app, '_install_op_id', 0)
@@ -632,16 +605,9 @@ class ModOperationsController:
             if not available_files:
                 self.feedback_service.show_message('error', tr('errors.error'), tr('errors.no_gamebanana_files_for_manual_install'))
                 return
-            selected_file = available_files[0]
-            if len(available_files) > 1:
-                dialog = GameBananaFilePickerDialog(self.app, available_files, mod.name, getattr(mod, 'external_url', None))
-                result = dialog.exec()
-                if result != QDialog.DialogCode.Accepted:
-                    self.feedback_service.update_status(tr('status.operation_cancelled'), UI_COLORS['status_warning'])
-                    return
-                selection = dialog.get_selected_file()
-                if selection:
-                    selected_file = selection
+            selected_file = self._pick_gamebanana_file(available_files, mod.name, getattr(mod, 'external_url', None))
+            if selected_file is None:
+                return
             self._start_prepare_worker(mod, selected_file)
         except Exception as e:
             logging.error(f'Manual install from GameBanana failed: {e}', exc_info=True)
@@ -655,12 +621,9 @@ class ModOperationsController:
         self.app.game_launch.update_button_state()
 
         def on_finished(success: bool, result):
-            self.app_state.is_installing = False
+            self.app_state.reset_install_state()
             self.app_state._scan_blocked = False
             self.set_install_buttons_enabled(True)
-            self.app_state.progress_bar_visible = False
-            self.app_state.progress_bar_value = 0
-            self.app_state.clear_current_task()
             self.app.game_launch.update_button_state()
             if success and isinstance(result, tuple):
                 prepared_path, gb_metadata, temp_dir = result

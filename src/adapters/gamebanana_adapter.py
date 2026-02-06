@@ -8,7 +8,6 @@ from typing import Dict, List, Optional, Any, Tuple
 from datetime import datetime
 from config.constants import GAMEBANANA_API_BASE, GAMEBANANA_GAME_IDS, GAMEBANANA_TOOL_ID_DELTAHUB, GAMEBANANA_TOOL_ID_DELTAMOD, NETWORK_TIMEOUT_MEDIUM, NETWORK_TIMEOUT_SHORT
 from utils.network_utils import get_session
-from utils.file_utils import check_filename_is_deltamod_info
 from models.mod_models import ModInfo
 logger = logging.getLogger(__name__)
 
@@ -273,9 +272,6 @@ class GameBananaAPI:
     def get_mod_full_details_for_display(self, mod_id, external_url=None, max_retries=2):
         return self._fetch_fields(mod_id, ('text', 'description', 'screenshots'), external_url, max_retries)
 
-    def _get_mod_full_details(self, mod_id, external_url=None):
-        return self.get_mod_full_details_for_display(mod_id, external_url=external_url)
-
     def get_mod_details(self, mod_id, external_url=None, max_retries=2):
         itemtype = self._get_item_type_from_url(external_url)
         data = self._api_request(f'{self.base_url}/{itemtype}/{mod_id}', max_retries=max_retries, operation='get_mod_details', mod_id=mod_id)
@@ -420,40 +416,6 @@ class GameBananaAPI:
                 return None
         return None
 
-    def check_file_has_deltamodinfo(self, file_id: int) -> bool:
-        file_type = self.check_file_compatibility(file_id)
-        return file_type is not None
-
-    def check_file_compatibility(self, file_id: int) -> Optional[str]:
-        file_tree = self.get_file_contents(file_id)
-        if not file_tree or not isinstance(file_tree, list):
-            return None
-        has_deltahub = any((isinstance(f, str) and f.lower() == 'mod_config.json' for f in file_tree))
-        has_deltamod = any((isinstance(f, str) and check_filename_is_deltamod_info(f) for f in file_tree))
-        if has_deltahub:
-            return 'deltahub'
-        if has_deltamod:
-            return 'deltamod'
-        return None
-
-    def find_compatible_file(self, mod_id: int, external_url: Optional[str] = None) -> Optional[Dict]:
-        files = self.get_mod_files(mod_id, external_url=external_url)
-        if not files:
-            return None
-        deltahub_file, deltamod_file = (None, None)
-        for file_info in files:
-            file_id = file_info.get('_idRow')
-            if not file_id or not file_info.get('_bHasContents', False):
-                continue
-            file_format = self.check_file_compatibility(file_id)
-            if file_format == 'deltahub':
-                file_info['file_format'] = 'deltahub'
-                deltahub_file = file_info
-            elif file_format == 'deltamod' and (not deltamod_file):
-                file_info['file_format'] = 'deltamod'
-                deltamod_file = file_info
-        return deltahub_file or deltamod_file
-
     def search_mods(self, game_id: int, search_string: Optional[str] = None, page: int = 1, per_page: int = 20, sort: str = 'best_match', max_retries: int = 2) -> Optional[Dict]:
         url = f'{self.base_url}/Util/Search/Results'
         search_str = search_string.strip() if search_string and len(search_string.strip()) >= 2 else '  '
@@ -533,12 +495,6 @@ class GameBananaAPI:
         return screenshots
 
     @staticmethod
-    def extract_all_screenshots(preview_media):
-        if not preview_media:
-            return []
-        return [f"{img.get('_sBaseUrl', '')}/{img.get('_sFile', '')}" for img in preview_media.get('_aImages', []) if isinstance(img, dict) and img.get('_sType') == 'screenshot' and img.get('_sBaseUrl') and img.get('_sFile')]
-
-    @staticmethod
     def extract_icon_url(preview_media):
         if not preview_media:
             return None
@@ -596,27 +552,3 @@ class GameBananaAPI:
                 category = (c.get('_sName') or c.get('name')) if isinstance(c, dict) else (c if isinstance(c, str) else str(c) if c else None)
         external_url = gb_data.get('_sProfileUrl') or f"https://gamebanana.com/{'wips' if is_wip else 'mods'}/{mod_id}"
         return ModInfo(key=f'gb_{mod_id}', name=gb_data.get('_sName', 'Unknown Mod'), version=gb_data.get('_sVersion', '') or '1.0.0', author=submitter.get('_sName', 'Unknown') if isinstance(submitter, dict) else 'Unknown', tagline=tagline, game_version='Not specified', downloads=downloads, created_date=self.timestamp_to_date(gb_data.get('_tsDateAdded')) or 'N/A', last_updated=self.timestamp_to_date(gb_data.get('_tsDateModified')) or 'N/A', game=game_name, is_verified=gb_data.get('_bIsVerified', False), icon_url=self.extract_icon_url(gb_data.get('_aPreviewMedia', {})), tags=self.extract_tags(gb_data.get('_aTags', [])), external_url=external_url, screenshots_url=[], description_url=gb_data.get('_sTextUrl', ''), full_description=None, gamebanana_has_compatible_file=False, gamebanana_category=category, gamebanana_is_tool_compatible=False, gamebanana_supported_files=[], gamebanana_supported_tool_ids=[], gamebanana_preferred_format=None, gamebanana_has_deltahub_file=False, gamebanana_has_deltamod_file=False, gamebanana_compatibility_checked=False)
-
-    @staticmethod
-    def mod_data_dict_to_mod_info(mod_data: Dict[str, Any], game_name: str = 'deltarune') -> Optional[ModInfo]:
-        try:
-            key = mod_data.get('key') or mod_data.get('mod_key')
-            if not key or not key.startswith('gb_'):
-                return None
-            mod_id = key.replace('gb_', '', 1)
-            if not mod_id:
-                return None
-            data_dict = mod_data.copy()
-            if 'key' not in data_dict and 'mod_key' not in data_dict:
-                data_dict['key'] = key
-            if 'game' not in data_dict and 'modgame' not in data_dict:
-                data_dict['game'] = game_name
-            data_dict['hide_mod'] = False
-            data_dict['ban_status'] = False
-            data_dict['files'] = {}
-            if 'has_full_metadata' not in data_dict:
-                data_dict['has_full_metadata'] = True
-            return ModInfo.from_dict(data_dict)
-        except Exception as e:
-            logger.error(f'Error converting mod data to ModInfo: {e}', exc_info=True)
-            return None

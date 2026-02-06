@@ -1,6 +1,7 @@
 from PyQt6.QtCore import Qt, QThreadPool
 from PyQt6.QtGui import QImage, QPixmap, QColor, QPainter
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QSizePolicy
+from PyQt6 import sip as _sip
 from services.localization_service import tr
 from ui.utils.image_loader import ImageLoaderRunnable
 import logging
@@ -143,7 +144,6 @@ class ScreenshotsCarousel(QWidget):
                         self._images[idx] = qimg
                         self._loading[idx] = False
                     try:
-                        from PyQt6 import sip as _sip
                         if not hasattr(self, 'image_label') or _sip.isdeleted(self.image_label):
                             return
                     except Exception:
@@ -155,14 +155,12 @@ class ScreenshotsCarousel(QWidget):
                     if idx < len(self._loading):
                         self._loading[idx] = False
                     try:
-                        from PyQt6 import sip as _sip
                         if not hasattr(self, 'image_label') or _sip.isdeleted(self.image_label):
                             return
                     except Exception:
                         pass
                     if idx == self.index:
                         try:
-                            from PyQt6 import sip as _sip
                             if hasattr(self, 'image_label') and (not _sip.isdeleted(self.image_label)):
                                 self.image_label.setText(tr('errors.file_not_available'))
                         except Exception:
@@ -216,7 +214,6 @@ class ScreenshotsCarousel(QWidget):
 
     def _set_pixmap(self, qimg: QImage):
         try:
-            from PyQt6 import sip as _sip
             if not hasattr(self, 'image_label'):
                 return
             try:
@@ -256,7 +253,6 @@ class ScreenshotsCarousel(QWidget):
             current = self._images[self.index]
             if current is not None:
                 try:
-                    from PyQt6 import sip as _sip
                     if hasattr(self, 'image_label') and (not _sip.isdeleted(self.image_label)):
                         self._set_pixmap(current)
                 except Exception:

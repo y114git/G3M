@@ -92,6 +92,3 @@ class BaseInstallWorker(QThread):
                     total_mb = format_size_mb(total_size)
                     self.status.emit(f'{status_text} ({downloaded_mb} / {total_mb})', status_color)
         return progress_callback
-
-    def _set_active_response(self, response) -> None:
-        self._active_response = response

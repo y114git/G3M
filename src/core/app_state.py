@@ -115,15 +115,6 @@ class AppState(QObject):
             if mod not in self._all_mods:
                 self._all_mods.append(mod)
 
-    def remove_mod(self, mod: ModInfo) -> None:
-        with self._mods_metadata_lock:
-            if mod in self._all_mods:
-                self._all_mods.remove(mod)
-
-    def clear_all_mods(self) -> None:
-        with self._mods_metadata_lock:
-            self._all_mods.clear()
-
     def extend_all_mods(self, mods: List[ModInfo]) -> None:
         with self._mods_metadata_lock:
             existing_keys = {getattr(m, 'key', None) or getattr(m, 'mod_key', None) for m in self._all_mods}
@@ -271,6 +262,12 @@ class AppState(QObject):
 
     def clear_current_task(self) -> None:
         self._current_task = None
+
+    def reset_install_state(self) -> None:
+        self.is_installing = False
+        self.progress_bar_visible = False
+        self.progress_bar_value = 0
+        self.clear_current_task()
 
     def cancel_current_operation(self):
         self._operation_cancelled = True

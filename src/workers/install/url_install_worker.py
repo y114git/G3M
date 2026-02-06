@@ -20,6 +20,19 @@ class UrlInstallThread(BaseInstallWorker):
     prompt_required = pyqtSignal(str, str)
     manual_install_required = pyqtSignal(str, str, str)
 
+    @staticmethod
+    def _unpack_content_path(archive_path: str, unpack_dir: str, use_shutil: bool = True) -> str:
+        if use_shutil:
+            shutil.unpack_archive(archive_path, unpack_dir)
+        else:
+            from utils.archive_utils import extract_any_archive
+            extract_any_archive(archive_path, unpack_dir)
+        content_path = unpack_dir
+        unpacked_items = os.listdir(unpack_dir)
+        if len(unpacked_items) == 1 and os.path.isdir(os.path.join(unpack_dir, unpacked_items[0])):
+            content_path = os.path.join(unpack_dir, unpacked_items[0])
+        return content_path
+
     def __init__(self, main_window, url: str):
         super().__init__(main_window)
         self.main_window = main_window
@@ -60,44 +73,11 @@ class UrlInstallThread(BaseInstallWorker):
         except Exception as e:
             self.finished.emit(False, str(e))
 
-    def _process_deltahub_redirect(self, url: str, redirect_config: dict):
-        with tempfile.TemporaryDirectory(prefix='dh-redirect-dl-') as temp_dir:
-            archive_path = self._download_archive(url, temp_dir)
-            with tempfile.TemporaryDirectory(prefix='dh-redirect-unpack-') as unpack_dir:
-                shutil.unpack_archive(archive_path, unpack_dir)
-                content_path = unpack_dir
-                unpacked_items = os.listdir(unpack_dir)
-                if len(unpacked_items) == 1 and os.path.isdir(os.path.join(unpack_dir, unpacked_items[0])):
-                    content_path = os.path.join(unpack_dir, unpacked_items[0])
-                files_in_root = os.listdir(content_path)
-                if MOD_CONFIG_FILENAME in files_in_root:
-                    mod_dir = self._install_deltahub_mod_from_path(content_path)
-                    if mod_dir:
-                        mod_name = os.path.basename(mod_dir)
-                        self.finished.emit(True, tr('status.install_complete_success', mod_name=mod_name))
-                    else:
-                        raise AppError('errors.mod_installation_failed')
-                elif has_deltamod_info_file(files_in_root):
-                    from adapters.deltamod_adapter import DeltamodConverter
-                    converter = DeltamodConverter(content_path, self.main_window.app_state.mods_dir)
-                    new_mod_path = converter.convert()
-                    if new_mod_path:
-                        mod_name = os.path.basename(new_mod_path)
-                        self.finished.emit(True, tr('status.install_complete_success', mod_name=mod_name))
-                    else:
-                        raise AppError('errors.deltamod_conversion_failed_url')
-                else:
-                    raise AppError('errors.deltamod_archive_invalid_redirect')
-
     def _process_deltamod_archive(self, url: str):
         with tempfile.TemporaryDirectory(prefix='dh-redirect-dl-') as temp_dir:
             archive_path = self._download_archive(url, temp_dir)
             with tempfile.TemporaryDirectory(prefix='dh-redirect-unpack-') as unpack_dir:
-                shutil.unpack_archive(archive_path, unpack_dir)
-                content_path = unpack_dir
-                unpacked_items = os.listdir(unpack_dir)
-                if len(unpacked_items) == 1 and os.path.isdir(os.path.join(unpack_dir, unpacked_items[0])):
-                    content_path = os.path.join(unpack_dir, unpacked_items[0])
+                content_path = self._unpack_content_path(archive_path, unpack_dir)
                 files_in_root = os.listdir(content_path)
                 if MOD_CONFIG_FILENAME in files_in_root:
                     mod_dir = self._install_deltahub_mod_from_path(content_path)
@@ -380,11 +360,7 @@ class UrlInstallThread(BaseInstallWorker):
     def _extract_and_install_theme(self, archive_path: str, temp_dir: str):
         with tempfile.TemporaryDirectory(prefix='dh-theme-extract-') as unpack_dir:
             try:
-                shutil.unpack_archive(archive_path, unpack_dir)
-                content_path = unpack_dir
-                unpacked_items = os.listdir(unpack_dir)
-                if len(unpacked_items) == 1 and os.path.isdir(os.path.join(unpack_dir, unpacked_items[0])):
-                    content_path = os.path.join(unpack_dir, unpacked_items[0])
+                content_path = self._unpack_content_path(archive_path, unpack_dir)
                 theme_file_path = None
                 for root, dirs, files in os.walk(content_path):
                     for file in files:
@@ -428,12 +404,7 @@ class UrlInstallThread(BaseInstallWorker):
     def _check_redirect(self, archive_path: str, temp_dir: str) -> bool:
         try:
             with tempfile.TemporaryDirectory(prefix='dh-redirect-check-') as unpack_dir:
-                from utils.archive_utils import extract_any_archive
-                extract_any_archive(archive_path, unpack_dir)
-                content_path = unpack_dir
-                unpacked_items = os.listdir(unpack_dir)
-                if len(unpacked_items) == 1 and os.path.isdir(os.path.join(unpack_dir, unpacked_items[0])):
-                    content_path = os.path.join(unpack_dir, unpacked_items[0])
+                content_path = self._unpack_content_path(archive_path, unpack_dir, use_shutil=False)
                 files_in_root = os.listdir(content_path)
                 redirect_config_path = None
                 if MOD_CONFIG_FILENAME in files_in_root and len(files_in_root) == 1:
@@ -450,10 +421,7 @@ class UrlInstallThread(BaseInstallWorker):
                         if redirect_url:
                             self.status.emit(tr('status.deltamod_redirect_found'), UI_COLORS['status_info'])
                             self.progress.emit(0)
-                            if MOD_CONFIG_FILENAME in files_in_root:
-                                self._process_deltahub_redirect(redirect_url, redirect_config)
-                            else:
-                                self._process_deltamod_archive(redirect_url)
+                            self._process_deltamod_archive(redirect_url)
                             return True
                     except Exception as e:
                         logging.warning(f'UrlInstallThread: Error reading redirect config: {e}')
@@ -514,11 +482,7 @@ class UrlInstallThread(BaseInstallWorker):
     def _install_mod_from_archive(self, archive_path: str, temp_dir: str):
         try:
             with tempfile.TemporaryDirectory(prefix='dh-url-unpack-') as unpack_dir:
-                shutil.unpack_archive(archive_path, unpack_dir)
-                content_path = unpack_dir
-                unpacked_items = os.listdir(unpack_dir)
-                if len(unpacked_items) == 1 and os.path.isdir(os.path.join(unpack_dir, unpacked_items[0])):
-                    content_path = os.path.join(unpack_dir, unpacked_items[0])
+                content_path = self._unpack_content_path(archive_path, unpack_dir)
                 files_in_root = os.listdir(content_path)
                 if has_deltamod_info_file(files_in_root):
                     self.status.emit(tr('status.deltamod_archive_detected_url'), UI_COLORS['status_info'])

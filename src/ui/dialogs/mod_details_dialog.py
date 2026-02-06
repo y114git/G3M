@@ -4,6 +4,7 @@ from services.localization_service import tr
 from ui.common.styling import get_theme_color, load_mod_icon_universal
 from ui.widgets.shared.outlined_label import OutlinedTextLabel
 from ui.widgets.shared.screenshots_carousel import ScreenshotsCarousel
+from PyQt6 import sip as _sip
 import logging
 import webbrowser
 
@@ -300,7 +301,6 @@ def open_mod_details_dialog(parent, mod_data):
             if dialog_closed:
                 return
             try:
-                from PyQt6 import sip as _sip
                 if _sip.isdeleted(dialog) or _sip.isdeleted(desc_text) or _sip.isdeleted(screenshots_container):
                     dialog_closed = True
                     return
@@ -322,7 +322,6 @@ def open_mod_details_dialog(parent, mod_data):
                     if dialog_closed:
                         return
                     try:
-                        from PyQt6 import sip as _sip
                         if _sip.isdeleted(desc_text):
                             dialog_closed = True
                             return
@@ -349,7 +348,6 @@ def open_mod_details_dialog(parent, mod_data):
                     if dialog_closed:
                         return
                     try:
-                        from PyQt6 import sip as _sip
                         if _sip.isdeleted(screenshots_container) or _sip.isdeleted(screenshots_container_layout):
                             dialog_closed = True
                             return

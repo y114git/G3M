@@ -101,10 +101,6 @@ class GameBananaMetadataCache:
                 logger.info(f'GameBananaMetadataCache: Removed {len(stale_ids)} stale entries from cache')
             return len(stale_ids)
 
-    def get_stale_mod_ids(self) -> list[str]:
-        with self._lock:
-            return self._collect_stale_ids(time.time())
-
     def size(self) -> int:
         with self._lock:
             return len(self._cache)

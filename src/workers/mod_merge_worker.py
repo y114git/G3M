@@ -68,7 +68,7 @@ class ModMergeThread(QThread):
                 self.merger.status_update.connect(self.status_update.emit)
             except RuntimeError:
                 pass
-            self.merger.set_warning_callback(self._handle_warning)
+            self.merger._warning_callback = self._handle_warning
             self.merger.warning_confirmation_needed.connect(lambda wt, t, m: self.warning_confirmation_needed.emit(wt, t, m))
             self.merger._session_manifest_path = self.session_manifest_path
             self.merger._cancelled = False

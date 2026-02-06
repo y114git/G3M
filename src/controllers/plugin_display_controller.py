@@ -154,9 +154,9 @@ class PluginDisplayController:
         dialog = ImportDialog(self.app, self.feedback_service, 'plugins')
         if dialog.exec() == QDialog.DialogCode.Accepted:
             if dialog.import_method == 'file' and dialog.selected_file:
-                self._install_plugin_from_file(dialog.selected_file)
+                self._install_plugin(dialog.selected_file, 'file')
             elif dialog.import_method == 'url' and dialog.selected_url:
-                self._install_plugin_from_url(dialog.selected_url)
+                self._install_plugin(dialog.selected_url, 'URL')
 
     def _start_plugin_install(self, worker: PluginInstallWorker):
         worker.status.connect(lambda msg, color: self.feedback_service.update_status(msg, color))
@@ -168,12 +168,6 @@ class PluginDisplayController:
         self.app_state.progress_bar_value = 0
         self.app_state.current_task = worker
         worker.start()
-
-    def _install_plugin_from_file(self, file_path: str):
-        self._install_plugin(file_path, 'file')
-
-    def _install_plugin_from_url(self, url: str):
-        self._install_plugin(url, 'URL')
 
     def _on_unrar_needed(self):
         try:
@@ -192,10 +186,7 @@ class PluginDisplayController:
                 self.app_state.current_task.signal_unrar_installed(False)
 
     def _on_plugin_install_finished(self, success: bool, message: str):
-        self.app_state.is_installing = False
-        self.app_state.progress_bar_visible = False
-        self.app_state.progress_bar_value = 0
-        self.app_state.clear_current_task()
+        self.app_state.reset_install_state()
         if success:
             if self.plugin_service:
                 self.plugin_service.convert_plugin_archives()

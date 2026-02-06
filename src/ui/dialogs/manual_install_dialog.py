@@ -194,6 +194,31 @@ class ManualModInstallDialog(QDialog):
         layout.addStretch()
         return widget
 
+    def _show_file_picker_dialog(self, files: list, title: str, label_text: str) -> Optional[str]:
+        from PyQt6.QtWidgets import QListWidget
+        file_dialog = QDialog(self)
+        file_dialog.setWindowTitle(title)
+        file_dialog.resize(600, 400)
+        layout = QVBoxLayout(file_dialog)
+        layout.addWidget(QLabel(label_text))
+        list_widget = QListWidget()
+        for file_path, rel_path in files:
+            item_text = f'{os.path.basename(file_path)} ({rel_path})'
+            list_widget.addItem(item_text)
+            list_widget.item(list_widget.count() - 1).setData(Qt.ItemDataRole.UserRole, file_path)
+        if list_widget.count() > 0:
+            list_widget.setCurrentRow(0)
+        layout.addWidget(list_widget)
+        button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        button_box.accepted.connect(file_dialog.accept)
+        button_box.rejected.connect(file_dialog.reject)
+        layout.addWidget(button_box)
+        if file_dialog.exec() == QDialog.DialogCode.Accepted:
+            current_item = list_widget.currentItem()
+            if current_item:
+                return current_item.data(Qt.ItemDataRole.UserRole)
+        return None
+
     def _browse_data_file(self, chapter_id: int):
         extensions = list(DATA_FILE_EXTENSIONS) + ['.data', '.ios', '.droid', '.unx']
         selected_data_files = set(self.data_file_selections.values())
@@ -212,35 +237,14 @@ class ManualModInstallDialog(QDialog):
         if not found_files:
             QMessageBox.information(self, tr('dialogs.no_data_files'), tr('dialogs.no_data_files_in_directory'))
             return
-        from PyQt6.QtWidgets import QListWidget
-        file_dialog = QDialog(self)
-        file_dialog.setWindowTitle(tr('dialogs.select_data_file', file_type='DATA'))
-        file_dialog.resize(600, 400)
-        layout = QVBoxLayout(file_dialog)
-        label = QLabel(tr('dialogs.select_data_file_info', chapter=chapter_id))
-        layout.addWidget(label)
-        list_widget = QListWidget()
-        for file_path, rel_path in found_files:
-            item_text = f'{os.path.basename(file_path)} ({rel_path})'
-            list_widget.addItem(item_text)
-            list_widget.item(list_widget.count() - 1).setData(Qt.ItemDataRole.UserRole, file_path)
-        if list_widget.count() > 0:
-            list_widget.setCurrentRow(0)
-        layout.addWidget(list_widget)
-        button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
-        button_box.accepted.connect(file_dialog.accept)
-        button_box.rejected.connect(file_dialog.reject)
-        layout.addWidget(button_box)
-        if file_dialog.exec() == QDialog.DialogCode.Accepted:
-            current_item = list_widget.currentItem()
-            if current_item:
-                file_path = current_item.data(Qt.ItemDataRole.UserRole)
-                self.data_file_selections[chapter_id] = file_path
-                if chapter_id in self.data_file_edits:
-                    self.data_file_edits[chapter_id].setText(os.path.basename(file_path))
-                self._update_data_file_visibility()
-                self._populate_extra_files_list()
-                self._update_xdelta_patches_section(chapter_id)
+        file_path = self._show_file_picker_dialog(found_files, tr('dialogs.select_data_file', file_type='DATA'), tr('dialogs.select_data_file_info', chapter=chapter_id))
+        if file_path:
+            self.data_file_selections[chapter_id] = file_path
+            if chapter_id in self.data_file_edits:
+                self.data_file_edits[chapter_id].setText(os.path.basename(file_path))
+            self._update_data_file_visibility()
+            self._populate_extra_files_list()
+            self._update_xdelta_patches_section(chapter_id)
 
     def _clear_data_file(self, chapter_id: int):
         if chapter_id in self.data_file_selections:
@@ -399,34 +403,13 @@ class ManualModInstallDialog(QDialog):
         if not available_xdelta:
             QMessageBox.information(self, tr('dialogs.no_data_files'), tr('dialogs.no_xdelta_files_available'))
             return
-        from PyQt6.QtWidgets import QListWidget
-        file_dialog = QDialog(self)
-        file_dialog.setWindowTitle(tr('dialogs.select_xdelta_patch'))
-        file_dialog.resize(600, 400)
-        layout = QVBoxLayout(file_dialog)
-        label = QLabel(tr('dialogs.select_xdelta_patch_info'))
-        layout.addWidget(label)
-        list_widget = QListWidget()
-        for file_path, rel_path in available_xdelta:
-            item_text = f'{os.path.basename(file_path)} ({rel_path})'
-            list_widget.addItem(item_text)
-            list_widget.item(list_widget.count() - 1).setData(Qt.ItemDataRole.UserRole, file_path)
-        if list_widget.count() > 0:
-            list_widget.setCurrentRow(0)
-        layout.addWidget(list_widget)
-        button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
-        button_box.accepted.connect(file_dialog.accept)
-        button_box.rejected.connect(file_dialog.reject)
-        layout.addWidget(button_box)
-        if file_dialog.exec() == QDialog.DialogCode.Accepted:
-            current_item = list_widget.currentItem()
-            if current_item:
-                file_path = current_item.data(Qt.ItemDataRole.UserRole)
-                if chapter_id not in self.xdelta_patches_mappings:
-                    self.xdelta_patches_mappings[chapter_id] = {}
-                self.xdelta_patches_mappings[chapter_id][file_path] = ''
-                self._update_xdelta_patches_section(chapter_id)
-                self._populate_extra_files_list()
+        file_path = self._show_file_picker_dialog(available_xdelta, tr('dialogs.select_xdelta_patch'), tr('dialogs.select_xdelta_patch_info'))
+        if file_path:
+            if chapter_id not in self.xdelta_patches_mappings:
+                self.xdelta_patches_mappings[chapter_id] = {}
+            self.xdelta_patches_mappings[chapter_id][file_path] = ''
+            self._update_xdelta_patches_section(chapter_id)
+            self._populate_extra_files_list()
 
     def _clear_xdelta_patch(self, file_path: str, chapter_id: int):
         if chapter_id in self.xdelta_patches_mappings and file_path in self.xdelta_patches_mappings[chapter_id]:
@@ -653,6 +636,21 @@ class ManualModInstallDialog(QDialog):
             logging.error(f'Failed to create mod: {e}', exc_info=True)
             QMessageBox.critical(self, tr('errors.error'), tr('errors.manual_install_failed', error=str(e)))
 
+    @staticmethod
+    def _make_archive_key(relative_path: str) -> str:
+        clean_path = relative_path.rstrip('/') if relative_path else ''
+        if clean_path:
+            key = clean_path.replace('/', '_').replace('\\', '_').strip('_')
+            return key if key else 'root'
+        return 'root'
+
+    @staticmethod
+    def _get_chapter_key(game: str, chapter_id: int) -> str:
+        _GAME_KEY_MAP = {'deltarunedemo': 'demo', 'undertale': 'undertale', 'undertaleyellow': 'undertaleyellow', 'pizzatower': 'pizzatower', 'sugaryspire': 'sugaryspire'}
+        if game == 'deltarune':
+            return str(chapter_id) if chapter_id >= 0 else '0'
+        return _GAME_KEY_MAP.get(game, '0')
+
     def _create_mod_from_files(self):
         if not self.app_state or not self.mod_service:
             raise ValueError('app_state or mod_service not available')
@@ -675,25 +673,7 @@ class ManualModInstallDialog(QDialog):
         files_structure = {}
         game = self.game_combo.currentData()
         for chapter_id, data_file_path in self.data_file_selections.items():
-            if game == 'deltarune':
-                if chapter_id == 0:
-                    chapter_key = '0'
-                elif chapter_id > 0:
-                    chapter_key = str(chapter_id)
-                else:
-                    continue
-            elif game == 'deltarunedemo':
-                chapter_key = 'demo'
-            elif game == 'undertale':
-                chapter_key = 'undertale'
-            elif game == 'undertaleyellow':
-                chapter_key = 'undertaleyellow'
-            elif game == 'pizzatower':
-                chapter_key = 'pizzatower'
-            elif game == 'sugaryspire':
-                chapter_key = 'sugaryspire'
-            else:
-                chapter_key = '0'
+            chapter_key = self._get_chapter_key(game, chapter_id)
             if chapter_key not in files_structure:
                 files_structure[chapter_key] = {}
             if game == 'deltarune':
@@ -722,25 +702,7 @@ class ManualModInstallDialog(QDialog):
             relative_path = self.extra_files_mappings.get(file_path, '')
             all_extra_files.append((file_path, relative_path))
         for chapter_id, patches in self.xdelta_patches_mappings.items():
-            if game == 'deltarune':
-                if chapter_id == 0:
-                    patch_chapter_key = '0'
-                elif chapter_id > 0:
-                    patch_chapter_key = str(chapter_id)
-                else:
-                    continue
-            elif game == 'deltarunedemo':
-                patch_chapter_key = 'demo'
-            elif game == 'undertale':
-                patch_chapter_key = 'undertale'
-            elif game == 'undertaleyellow':
-                patch_chapter_key = 'undertaleyellow'
-            elif game == 'pizzatower':
-                patch_chapter_key = 'pizzatower'
-            elif game == 'sugaryspire':
-                patch_chapter_key = 'sugaryspire'
-            else:
-                patch_chapter_key = '0'
+            patch_chapter_key = self._get_chapter_key(game, chapter_id)
             if patch_chapter_key not in files_structure:
                 continue
             for xdelta_file_path, target_path in patches.items():
@@ -756,12 +718,7 @@ class ManualModInstallDialog(QDialog):
                 else:
                     relative_path = ''
                 clean_path = relative_path.rstrip('/') if relative_path else ''
-                if clean_path:
-                    archive_key = clean_path.replace('/', '_').replace('\\', '_').strip('_')
-                    if not archive_key:
-                        archive_key = 'root'
-                else:
-                    archive_key = 'root'
+                archive_key = self._make_archive_key(relative_path)
                 renamed_xdelta_name = f'{file_part}.xdelta'
                 if clean_path:
                     archive_internal_path = f'{clean_path}/{renamed_xdelta_name}'
@@ -783,35 +740,12 @@ class ManualModInstallDialog(QDialog):
             target_chapter_id = 0
             if game == 'deltarune' and self.data_file_selections:
                 target_chapter_id = min(self.data_file_selections.keys())
-            if game == 'deltarune':
-                if target_chapter_id == 0:
-                    chapter_key = '0'
-                elif target_chapter_id > 0:
-                    chapter_key = str(target_chapter_id)
-                else:
-                    chapter_key = '0'
-            elif game == 'deltarunedemo':
-                chapter_key = 'demo'
-            elif game == 'undertale':
-                chapter_key = 'undertale'
-            elif game == 'undertaleyellow':
-                chapter_key = 'undertaleyellow'
-            elif game == 'pizzatower':
-                chapter_key = 'pizzatower'
-            elif game == 'sugaryspire':
-                chapter_key = 'sugaryspire'
-            else:
-                chapter_key = '0'
+            chapter_key = self._get_chapter_key(game, target_chapter_id)
             if chapter_key not in files_structure:
                 files_structure[chapter_key] = {}
             extra_file_name = os.path.basename(extra_file_path)
             clean_path = relative_path.rstrip('/') if relative_path else ''
-            if clean_path:
-                archive_key = clean_path.replace('/', '_').replace('\\', '_').strip('_')
-                if not archive_key:
-                    archive_key = 'root'
-            else:
-                archive_key = 'root'
+            archive_key = self._make_archive_key(relative_path)
             clean_relative_path = relative_path.rstrip('/') if relative_path else ''
             if clean_relative_path:
                 archive_internal_path = f'{clean_relative_path}/{extra_file_name}'
@@ -853,20 +787,10 @@ class ManualModInstallDialog(QDialog):
             files_structure[chapter_key]['extra_files'][archive_key].append(archive_name)
         config_data = {'key': mod_key, 'name': mod_name, 'game': game, 'files': files_structure}
         if self.gamebanana_metadata:
-            if self.gamebanana_metadata.get('author'):
-                config_data['author'] = self.gamebanana_metadata['author']
-            if self.gamebanana_metadata.get('tagline'):
-                config_data['tagline'] = self.gamebanana_metadata['tagline']
-            if self.gamebanana_metadata.get('icon_url'):
-                config_data['icon_url'] = self.gamebanana_metadata['icon_url']
-            if self.gamebanana_metadata.get('external_url'):
-                config_data['external_url'] = self.gamebanana_metadata['external_url']
-            if self.gamebanana_metadata.get('tags'):
-                config_data['tags'] = self.gamebanana_metadata['tags']
-            if self.gamebanana_metadata.get('version'):
-                config_data['version'] = self.gamebanana_metadata['version']
-            else:
-                config_data['version'] = '1.0.0'
+            for field in ('author', 'tagline', 'icon_url', 'external_url', 'tags', 'version'):
+                if self.gamebanana_metadata.get(field):
+                    config_data[field] = self.gamebanana_metadata[field]
+            config_data.setdefault('version', '1.0.0')
         else:
             config_data['author'] = 'Unknown'
             config_data['version'] = '1.0.0'

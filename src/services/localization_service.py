@@ -183,17 +183,6 @@ class LocalizationManager:
             logging.error(f'Error loading language {language_code}: {e}')
             return False
 
-    def merge_translations(self, new_translations: dict):
-
-        def _update_dict(d, u):
-            for k, v in u.items():
-                if isinstance(v, dict):
-                    d[k] = _update_dict(d.get(k, {}), v)
-                else:
-                    d[k] = v
-            return d
-        _update_dict(self.translations, new_translations)
-
     def merge_plugin_translations(self, plugin_id: str, plugin_translations: dict):
         if plugin_id not in self.translations:
             self.translations[plugin_id] = {}
@@ -251,9 +240,6 @@ class LocalizationManager:
 
     def get_current_language(self) -> str:
         return self.current_language
-
-    def get_current_language_name(self) -> str:
-        return self.available_languages.get(self.current_language, {}).get('name', self.current_language.upper())
 
     def load_font(self) -> Optional[str]:
         language = self.get_current_language()

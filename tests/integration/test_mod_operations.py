@@ -2,7 +2,6 @@ import os
 import json
 import tempfile
 import zipfile
-from unittest.mock import Mock, patch
 
 
 class TestModInstallation:

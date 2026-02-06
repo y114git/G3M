@@ -41,16 +41,6 @@ def _build_session():
     return session
 
 
-def close_shared_session():
-    global _shared_session
-    with _session_lock:
-        if _shared_session is not None:
-            try:
-                _shared_session.close()
-            finally:
-                _shared_session = None
-
-
 def get_filename_from_url(session, url):
     try:
         from urllib.parse import urlparse, unquote

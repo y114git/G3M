@@ -13,7 +13,6 @@ from utils.file_utils import ensure_writable, is_path_in_steam_common
 from services.game_detection_service import is_game_running, get_game_name_string
 from models.game_modes import UndertaleGameMode, UndertaleYellowGameMode, PizzaTowerGameMode, SugarySpireGameMode, FullGameMode
 from utils.path_utils import find_chapter_resource_dir, resolve_game_executable
-from utils.mod_utils import get_mod_key
 from services.patching_log_service import rotate_patching_log
 from workers.game_monitor_worker import GameMonitorWorker
 from services.mod_merge_service import MultiModMerger
@@ -386,19 +385,25 @@ class GameLauncher(QObject):
         logging.info('Multi-mod merge completed successfully')
         self._continue_after_merge(selections, True, True)
 
+    def _try_restore_backups(self, context: str = '') -> bool:
+        if not hasattr(self, 'multi_mod_merger') or not self.multi_mod_merger:
+            return False
+        try:
+            restored = self.multi_mod_merger.restore_all_backups()
+            if restored:
+                logging.info(f'{context}: backups restored successfully')
+                self.status_changed.emit(tr('status.files_restored'), UI_COLORS['status_success'])
+            else:
+                logging.debug(f'{context}: no backups to restore')
+            return restored
+        except Exception as e:
+            logging.error(f'{context}: Failed to restore backups: {e}', exc_info=True)
+            return False
+
     def _cancel_launch_after_merge(self):
         logging.info('Cancelling launch after merge: restoring backups and resetting state')
         try:
-            if hasattr(self, 'multi_mod_merger') and self.multi_mod_merger:
-                try:
-                    restored = self.multi_mod_merger.restore_all_backups()
-                    if restored:
-                        logging.info('Backups restored successfully after launch cancellation')
-                        self.status_changed.emit(tr('status.files_restored'), UI_COLORS['status_success'])
-                    else:
-                        logging.debug('No backups to restore after launch cancellation')
-                except Exception as e:
-                    logging.error(f'Failed to restore backups after launch cancellation: {e}', exc_info=True)
+            self._try_restore_backups('cancel_launch_after_merge')
         except Exception as e:
             logging.error(f'Error during launch cancellation cleanup: {e}', exc_info=True)
         finally:
@@ -491,19 +496,10 @@ class GameLauncher(QObject):
         restore_errors = []
         logging.info('[CLEANUP] Starting cleanup of game files after game exit')
         try:
-            if hasattr(self, 'multi_mod_merger') and self.multi_mod_merger:
-                try:
-                    logging.info('[CLEANUP] Restoring multi-mod backups (data.win and other modified files)')
-                    restored = self.multi_mod_merger.restore_all_backups()
-                    if restored:
-                        logging.info('[CLEANUP] Multi-mod backups restored successfully - original game files have been restored')
-                        self.status_changed.emit(tr('status.files_restored'), UI_COLORS['status_success'])
-                    else:
-                        logging.debug('[CLEANUP] No multi-mod backups to restore (no mods were applied or files were already restored)')
-                except Exception as e:
-                    error_msg = f'Failed to restore multi-mod backups: {e}'
-                    logging.error(f'[CLEANUP] {error_msg}', exc_info=True)
-                    restore_errors.append(error_msg)
+            try:
+                self._try_restore_backups('[CLEANUP]')
+            except Exception as e:
+                restore_errors.append(f'Failed to restore multi-mod backups: {e}')
             cleanup_info = self._direct_launch_cleanup_info
             if cleanup_info:
                 if 'mus_folders' in cleanup_info and cleanup_info['mus_folders']:
@@ -541,21 +537,9 @@ class GameLauncher(QObject):
     def recover_previous_session(self):
         try:
             self.feedback_service.update_status(tr('status.recovering_previous_session'), UI_COLORS['status_warning'])
-            if hasattr(self, 'multi_mod_merger') and self.multi_mod_merger:
-                try:
-                    restored = self.multi_mod_merger.restore_all_backups()
-                    if restored:
-                        logging.info('recover_previous_session: backups restored successfully')
-                        self.feedback_service.update_status(tr('status.files_restored'), UI_COLORS['status_success'])
-                    else:
-                        logging.debug('recover_previous_session: no backups to restore')
-                except Exception as e:
-                    error_msg = f'Failed to restore backups: {e}'
-                    logging.error(f'recover_previous_session: {error_msg}', exc_info=True)
-                    self.feedback_service.update_status(tr('errors.files_restore_error', error=str(e)), UI_COLORS['status_error'])
+            self._try_restore_backups('recover_previous_session')
         except Exception as e:
-            error_msg = f'Failed to recover previous session: {e}'
-            logging.error(f'recover_previous_session: {error_msg}', exc_info=True)
+            logging.error(f'recover_previous_session: Failed: {e}', exc_info=True)
             self.feedback_service.update_status(tr('errors.files_restore_error', error=str(e)), UI_COLORS['status_error'])
 
     def _find_and_validate_game_path(self, selections: Optional[Dict[int, Any]] = None, is_initial: bool = False):
@@ -602,41 +586,5 @@ class GameLauncher(QObject):
                 if mod_data:
                     return True
             elif mod_data and mod_data != 'no_change':
-                return True
-        return False
-
-    def _mod_has_data_files_for_chapter(self, mod, chapter_id: int) -> bool:
-        key = get_mod_key(mod)
-        if not key:
-            return False
-        if key.startswith('local_'):
-            mod_config = self.mod_service.get_mod_config(key)
-            if mod_config:
-                chapter_files = mod_config.get('files', {}).get(str(chapter_id), {})
-                if chapter_files.get('data_file_url'):
-                    return True
-        else:
-            chapter_data = mod.get_chapter_data(chapter_id)
-            if chapter_data and hasattr(chapter_data, 'data_file_url') and chapter_data.data_file_url:
-                return True
-        return False
-
-    def _has_mods_with_data_files(self, selections: Dict[int, Any]) -> bool:
-        for ui_index, mod_data in selections.items():
-            if isinstance(mod_data, list):
-                if not mod_data:
-                    continue
-                for mod in mod_data:
-                    chapter_id = self.app_state.game_mode.get_chapter_id(ui_index)
-                    if self._mod_has_data_files_for_chapter(mod, chapter_id):
-                        return True
-                continue
-            if mod_data == 'no_change':
-                continue
-            mod = next((m for m in self.app_state.all_mods if m.key == mod_data), None)
-            if not mod:
-                continue
-            chapter_id = self.app_state.game_mode.get_chapter_id(ui_index)
-            if self._mod_has_data_files_for_chapter(mod, chapter_id):
                 return True
         return False

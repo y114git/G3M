@@ -27,10 +27,6 @@ class UsedModsManager(QObject):
         self.parent_widget: Optional['AppWindow'] = parent
         self.used_mods: Dict[int, List[Any]] = {}
 
-    def get_used_mod(self, chapter_id: int):
-        mods_list = self.used_mods.get(chapter_id, [])
-        return mods_list[0] if mods_list else None
-
     def get_used_mods_list(self, chapter_id: int) -> List[Any]:
         return self.used_mods.get(chapter_id, [])
 
@@ -75,11 +71,6 @@ class UsedModsManager(QObject):
         if not mod_data or not (key := get_mod_key(mod_data)):
             return False
         return any(get_mod_key(m) == key for m in self.used_mods.get(chapter_id, []))
-
-    def is_mod_used_anywhere(self, mod_data) -> bool:
-        if not mod_data or not (key := get_mod_key(mod_data)):
-            return False
-        return any(get_mod_key(m) == key for mods in self.used_mods.values() for m in mods)
 
     def remove_mod_from_all_chapters(self, mod_data):
         key = get_mod_key(mod_data)

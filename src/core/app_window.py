@@ -11,10 +11,12 @@ from PyQt6.QtGui import QColor, QIcon, QPainter, QPixmap, QDesktopServices
 from PyQt6.QtWidgets import QApplication, QCheckBox, QFrame, QLabel, QProgressBar, QPushButton, QTabWidget, QVBoxLayout, QWidget, QHBoxLayout, QSizePolicy, QColorDialog, QDialog, QMessageBox
 from services.localization_service import localization_service, tr
 from models.game_modes import FullGameMode, DemoGameMode, UndertaleGameMode, UndertaleYellowGameMode, PizzaTowerGameMode, SugarySpireGameMode
-from config.constants import UI_COLORS, SOCIAL_LINKS, ONLINE_UPDATE_INTERVAL, INITIALIZATION_TIMEOUT, THREAD_WAIT_TIMEOUT, SLOT_ID_UNIVERSAL
+from config.constants import UI_COLORS, SOCIAL_LINKS, ONLINE_UPDATE_INTERVAL, INITIALIZATION_TIMEOUT, THREAD_WAIT_TIMEOUT, SLOT_ID_UNIVERSAL, SLOT_ID_MENU, SLOT_ID_CHAPTER_1, SLOT_ID_CHAPTER_2, SLOT_ID_CHAPTER_3, SLOT_ID_CHAPTER_4, CLOUD_FUNCTIONS_BASE_URL
 from services.game_detection_service import is_game_running
 from ui.utils.ui_utils import safe_stop_thread, DebounceTimer
+from ui.common.styling import get_theme_color
 from utils.path_utils import get_user_data_root, resource_path, get_launcher_dir, get_user_plugins_dir
+from utils.network_utils import get_session
 from workers.presence_worker import PresenceWorker
 from workers.changelog_worker import FetchChangelogWorker
 from controllers.mod_operations_controller import ModOperationsController
@@ -146,11 +148,10 @@ class AppWindow(QWidget):
         self.mod_ops = ModOperationsController(self.app_state, self.feedback_service, self.mod_service, self)
         self.library_display = LibraryDisplayController(self.app_state, self.feedback_service, self.mod_service, self.slot_service, self)
         self.search_display = SearchDisplayController(self.app_state, self.feedback_service, self.mod_service, self.mod_ops, self)
-        self.search_display.ui_button_text_update.connect(self._on_search_ui_button_text_update)
-        self.search_display.ui_button_tooltip_update.connect(self._on_search_ui_button_tooltip_update)
-        self.search_display.ui_button_enabled_update.connect(self._on_search_ui_button_enabled_update)
-        self.search_display.ui_label_text_update.connect(self._on_search_ui_label_text_update)
-        self.search_display.ui_widget_updates_enabled.connect(self._on_search_ui_widget_updates_enabled)
+        self.search_display.ui_button_text_update.connect(lambda w, v: self._set_widget_attr(w, 'setText', v))
+        self.search_display.ui_button_tooltip_update.connect(lambda w, v: self._set_widget_attr(w, 'setToolTip', v))
+        self.search_display.ui_button_enabled_update.connect(lambda w, v: self._set_widget_attr(w, 'setEnabled', v))
+        self.search_display.ui_widget_updates_enabled.connect(lambda w, v: self._set_widget_attr(w, 'setUpdatesEnabled', v))
         self.settings_ui = SettingsUiController(self.app_state, self.feedback_service, self.settings_service, self.slot_service, self.customization_service, self)
         self.theme = ThemeController(self.app_state, self.feedback_service, self.settings_service, self.customization_service, self)
         self.game_launch = GameLaunchController(self.app_state, self.feedback_service, self.mod_service, self.slot_service, self.settings_service, self.game_launcher, self.customization_service, self.plugin_service, self)
@@ -226,10 +227,7 @@ class AppWindow(QWidget):
         self.raise_()
 
     def _reset_install_state(self) -> None:
-        self.app_state.is_installing = False
-        self.app_state.progress_bar_visible = False
-        self.app_state.progress_bar_value = 0
-        self.app_state.clear_current_task()
+        self.app_state.reset_install_state()
 
     def _refresh_after_install(self) -> None:
         if self.plugin_service:
@@ -555,7 +553,7 @@ class AppWindow(QWidget):
         self._set_checkbox_checked_silently(self.chapter_mode_checkbox, saved_chapter_mode)
         self.game_type_combo.setEnabled(not saved_chapter_mode)
         self._set_checkbox_checked_silently(self.full_install_checkbox, saved_full_install)
-        self.game_launch.set_full_install_checkbox_state(saved_full_install)
+        self.game_launch._full_install_checkbox_is_checked = saved_full_install
         self.app_state.is_installing_changed.connect(self.game_launch.update_button_state)
         self.app_state.is_installing_changed.connect(lambda v: self.mod_ops.set_install_buttons_enabled(not v))
         self.app_state.is_installing_changed.connect(lambda v: self._update_all_install_buttons())
@@ -565,18 +563,8 @@ class AppWindow(QWidget):
         self.app_state.selected_chapter_id = None
         if saved_chapter_mode and hasattr(self, 'chapter_tabs_widget'):
             self.chapter_tabs_widget.setVisible(True)
-        if saved_game_type == 'deltarunedemo':
-            self.app_state.game_mode = DemoGameMode()
-        elif saved_game_type == 'undertale':
-            self.app_state.game_mode = UndertaleGameMode()
-        elif saved_game_type == 'undertaleyellow':
-            self.app_state.game_mode = UndertaleYellowGameMode()
-        elif saved_game_type == 'pizzatower':
-            self.app_state.game_mode = PizzaTowerGameMode()
-        elif saved_game_type == 'sugaryspire':
-            self.app_state.game_mode = SugarySpireGameMode()
-        else:
-            self.app_state.game_mode = FullGameMode()
+        _GAME_MODE_MAP = {'deltarunedemo': DemoGameMode, 'undertale': UndertaleGameMode, 'undertaleyellow': UndertaleYellowGameMode, 'pizzatower': PizzaTowerGameMode, 'sugaryspire': SugarySpireGameMode}
+        self.app_state.game_mode = _GAME_MODE_MAP.get(saved_game_type, FullGameMode)()
         self.app_state.game_mode_changed.connect(self._on_game_mode_updated_by_state)
         self._update_checkbox_visibility()
         self._update_change_path_button_text()
@@ -703,22 +691,22 @@ class AppWindow(QWidget):
         self.tabs = {}
         self.setWindowIcon(QIcon(resource_path('assets/icons/icon.ico')))
 
-    def _on_mods_loaded(self):
-        if self.initialization_timer and self.initialization_timer.isActive():
-            self.initialization_timer.stop()
+    def _finish_initialization(self):
         self.app_state.initialization_completed = True
         self.initialization_finished.emit()
         if hasattr(self.app_state, 'pending_announce_check') and self.app_state.pending_announce_check and (not self.app_state.update_in_progress):
             QTimer.singleShot(500, self._check_and_show_announce)
 
+    def _on_mods_loaded(self):
+        if self.initialization_timer and self.initialization_timer.isActive():
+            self.initialization_timer.stop()
+        self._finish_initialization()
+
     def _force_finish_initialization(self):
         if self.app_state.initialization_completed:
             return
         self.app_state.mods_loaded = True
-        self.app_state.initialization_completed = True
-        self.initialization_finished.emit()
-        if hasattr(self.app_state, 'pending_announce_check') and self.app_state.pending_announce_check and (not self.app_state.update_in_progress):
-            QTimer.singleShot(500, self._check_and_show_announce)
+        self._finish_initialization()
 
     def _try_start_background_music(self):
         if getattr(self, 'is_shown_to_user', False) and self.isVisible():
@@ -753,24 +741,18 @@ class AppWindow(QWidget):
             logging.warning(f'Error in _on_sort_refresh_complete: {e}', exc_info=True)
             self.app_state.gamebanana_loading = False
 
+    def _apply_sort_order(self, ascending: bool, btn):
+        btn.setText('▲' if ascending else '▼')
+        btn.setToolTip(tr('ui.ascending') if ascending else tr('ui.descending'))
+
     def _toggle_library_sort_order(self):
         self.library_sort_ascending = not self.library_sort_ascending
-        if self.library_sort_ascending:
-            self.library_sort_order_btn.setText('▲')
-            self.library_sort_order_btn.setToolTip(tr('ui.ascending'))
-        else:
-            self.library_sort_order_btn.setText('▼')
-            self.library_sort_order_btn.setToolTip(tr('ui.descending'))
+        self._apply_sort_order(self.library_sort_ascending, self.library_sort_order_btn)
         self._on_library_filter_changed()
 
     def _toggle_sort_order(self):
         self.sort_ascending = not self.sort_ascending
-        if self.sort_ascending:
-            self.sort_order_btn.setText('▲')
-            self.sort_order_btn.setToolTip(tr('ui.ascending'))
-        else:
-            self.sort_order_btn.setText('▼')
-            self.sort_order_btn.setToolTip(tr('ui.descending'))
+        self._apply_sort_order(self.sort_ascending, self.sort_order_btn)
         self.search_display.update_filtered_mods()
 
     def _on_mods_per_page_changed(self, value: int):
@@ -942,9 +924,6 @@ class AppWindow(QWidget):
         except Exception:
             pass
 
-    def _update_pagination_controls(self):
-        self.search_display.update_pagination()
-
     def _update_change_path_button_text(self):
         if self.change_path_button:
             self.change_path_button.setText(self.app_state.game_mode.path_change_button_text)
@@ -1019,8 +998,6 @@ class AppWindow(QWidget):
             self._init_session()
             try:
                 import requests
-                from config.constants import CLOUD_FUNCTIONS_BASE_URL
-                from utils.network_utils import get_session
                 response = get_session(self.app_state).get(f'{CLOUD_FUNCTIONS_BASE_URL}/getGlobalSettings', timeout=5)
                 if response.status_code == 200:
                     self.app_state.global_settings = response.json() or {}
@@ -1168,19 +1145,25 @@ class AppWindow(QWidget):
             logging.warning(f'Update dialog: conditions not met after max retries (init_completed={init_completed}, is_shown={is_shown}, is_visible={is_visible}), showing dialog anyway')
             self.show_update_prompt.emit(update_info)
 
-    def _perform_update_ui_prep(self):
+    def _get_update_widgets(self):
         widgets = [self.action_button, self.chat_button, self.open_deltahub_folder_button, self.change_background_button]
         if self.change_path_button:
             widgets.append(self.change_path_button)
-        for widget in widgets:
-            if widget:
-                widget.setEnabled(False)
+        return widgets
+
+    def _set_update_ui_enabled(self, enabled: bool):
+        for w in self._get_update_widgets():
+            if w:
+                w.setEnabled(enabled)
         try:
             if hasattr(self, 'top_refresh_button') and self.top_refresh_button:
-                self.top_refresh_button.setEnabled(False)
+                self.top_refresh_button.setEnabled(enabled)
         except Exception:
             pass
-        self.settings_button.setEnabled(False)
+        self.settings_button.setEnabled(enabled)
+
+    def _perform_update_ui_prep(self):
+        self._set_update_ui_enabled(False)
         if not self.app_state.is_settings_view:
             self.tab_widget.setEnabled(False)
         self.progress_bar.setVisible(True)
@@ -1195,18 +1178,7 @@ class AppWindow(QWidget):
         try:
             if not self.app_state.is_settings_view:
                 self.tab_widget.setEnabled(True)
-            widgets = [self.action_button, self.chat_button, self.open_deltahub_folder_button, self.change_background_button]
-            if self.change_path_button:
-                widgets.append(self.change_path_button)
-            for w in widgets:
-                if w:
-                    w.setEnabled(True)
-            try:
-                if hasattr(self, 'top_refresh_button') and self.top_refresh_button:
-                    self.top_refresh_button.setEnabled(True)
-            except Exception:
-                pass
-            self.settings_button.setEnabled(True)
+            self._set_update_ui_enabled(True)
             self.game_launch.update_button_state()
         except Exception:
             pass
@@ -1287,7 +1259,6 @@ class AppWindow(QWidget):
                 self.library_display.update_for_chapter_mode(selected_chapter_id)
 
     def _setup_chapter_tabs(self):
-        from config.constants import SLOT_ID_MENU, SLOT_ID_CHAPTER_1, SLOT_ID_CHAPTER_2, SLOT_ID_CHAPTER_3, SLOT_ID_CHAPTER_4
         chapter_ids = [SLOT_ID_MENU, SLOT_ID_CHAPTER_1, SLOT_ID_CHAPTER_2, SLOT_ID_CHAPTER_3, SLOT_ID_CHAPTER_4]
         for i, chapter_id in enumerate(chapter_ids):
             if i < len(self.chapter_tab_buttons):
@@ -1299,7 +1270,6 @@ class AppWindow(QWidget):
 
     def _on_chapter_tab_clicked(self, chapter_id):
         logging.debug(f'Chapter tab clicked: {chapter_id}')
-        from config.constants import SLOT_ID_MENU, SLOT_ID_CHAPTER_1, SLOT_ID_CHAPTER_2, SLOT_ID_CHAPTER_3, SLOT_ID_CHAPTER_4
         chapter_ids = [SLOT_ID_MENU, SLOT_ID_CHAPTER_1, SLOT_ID_CHAPTER_2, SLOT_ID_CHAPTER_3, SLOT_ID_CHAPTER_4]
         for i, btn in enumerate(self.chapter_tab_buttons):
             btn.setChecked(chapter_ids[i] == chapter_id if i < len(chapter_ids) else False)
@@ -1311,8 +1281,6 @@ class AppWindow(QWidget):
     def _update_chapter_tabs_style(self):
         if not hasattr(self, 'chapter_tab_buttons'):
             return
-        from config.constants import SLOT_ID_MENU, SLOT_ID_CHAPTER_1, SLOT_ID_CHAPTER_2, SLOT_ID_CHAPTER_3, SLOT_ID_CHAPTER_4
-        from ui.common.styling import get_theme_color
         chapter_ids = [SLOT_ID_MENU, SLOT_ID_CHAPTER_1, SLOT_ID_CHAPTER_2, SLOT_ID_CHAPTER_3, SLOT_ID_CHAPTER_4]
         direct_launch_chapter_id = self.app_state.local_config.get('direct_launch_slot_id', -1)
         border_color = get_theme_color(self.app_state.local_config, 'border', 'white')
@@ -1508,7 +1476,6 @@ class AppWindow(QWidget):
                     self._update_online_label(getattr(self, '_last_online_count', 0))
             except Exception:
                 pass
-            from ui.common.styling import get_theme_color
             text_color = get_theme_color(self.app_state.local_config, 'text', 'white')
             bg_color = get_theme_color(self.app_state.local_config, 'background', '#000000')
             if hasattr(self, 'plugin_tab_builder'):
@@ -1538,7 +1505,7 @@ class AppWindow(QWidget):
             self.search_display.update_filtered_mods()
             self.search_display.update_all_plaques_labels()
             self.library_display.update_display()
-            self._update_pagination_controls()
+            self.search_display.update_pagination()
             self.game_launch.update_button_state()
             if hasattr(self, 'plugins_search_button'):
                 self.plugins_search_button.setText(tr('plugins.search_plugins'))
@@ -1653,8 +1620,6 @@ class AppWindow(QWidget):
         if not self.app_state.has_internet:
             return
         try:
-            from utils.network_utils import get_session
-            from config.constants import CLOUD_FUNCTIONS_BASE_URL
             get_session(self.app_state).post(f'{CLOUD_FUNCTIONS_BASE_URL}/presenceHeartbeat', json={'sessionId': self.session_id}, timeout=5)
         except Exception:
             self.app_state.has_internet = False
@@ -1692,12 +1657,6 @@ class AppWindow(QWidget):
     def _install_single_mod(self, mod, force=False):
         self.mod_ops.install_mod(mod, force)
 
-    def _on_single_mod_install_finished(self, success):
-        was_installed_before = False
-        if self.app_state.current_task:
-            was_installed_before = getattr(self.app_state.current_task, 'was_installed_before', False)
-        self.mod_ops._on_install_complete(success, '', was_installed_before)
-
     def _show_chapter_mode_instruction(self):
         if not hasattr(self, 'installed_mods_layout'):
             return
@@ -1705,7 +1664,6 @@ class AppWindow(QWidget):
         clear_layout_widgets(self.installed_mods_layout, keep_last_n=1)
         instruction_widget = QLabel(tr('ui.chapter_mode_instruction'))
         instruction_widget.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        from ui.common.styling import get_theme_color
         secondary_text_color = get_theme_color(self.app_state.local_config, 'version_text', '#CCCCCC')
         border_color = get_theme_color(self.app_state.local_config, 'border', '#666666')
         instruction_widget.setStyleSheet(f'\n            QLabel {{\n                color: {secondary_text_color};\n                font-size: 14px;\n                font-style: italic;\n                padding: 20px;\n                border: 2px dashed {border_color};\n                background-color: rgba(255, 255, 255, 0.1);\n            }}\n        ')
@@ -1716,7 +1674,7 @@ class AppWindow(QWidget):
     def _on_toggle_full_install(self, state):
         self.app_state.is_full_install = bool(state)
         if hasattr(self, 'game_launch'):
-            self.game_launch.set_full_install_checkbox_state(bool(state))
+            self.game_launch._full_install_checkbox_is_checked = bool(state)
         if platform.system() == 'Darwin' and self.app_state.is_full_install:
             self.feedback_service.show_message('info', 'dialogs.unavailable', tr('dialogs.macos_install_unavailable'))
             self._set_checkbox_checked_silently(self.full_install_checkbox, False)
@@ -1754,6 +1712,34 @@ class AppWindow(QWidget):
             self.plugin_display.update_display()
         self._handling_plugin_tab = False
 
+    def _run_with_plugin_api(self, plugin, handler):
+        plugin_api = plugin.get('api')
+        if plugin_api:
+            setattr(self, 'plugin_api', plugin_api)
+        try:
+            return handler(self)
+        finally:
+            if hasattr(self, 'plugin_api'):
+                delattr(self, 'plugin_api')
+
+    def _resolve_plugin_from_widget(self, current_widget, visible_plugins, plugin):
+        try:
+            bound = getattr(current_widget, '_plugin_info', None)
+            if isinstance(bound, dict):
+                return bound
+        except Exception:
+            pass
+        try:
+            if current_widget is not None and hasattr(current_widget, 'property'):
+                name_key = current_widget.property('plugin_name_key')
+                if name_key:
+                    for p in visible_plugins:
+                        if p.get('name_key') == name_key:
+                            return p
+        except Exception:
+            pass
+        return plugin
+
     def _on_tab_changed(self, index):
         num_original_tabs = 3
         if getattr(self, '_suppress_tab_handlers', False):
@@ -1775,34 +1761,12 @@ class AppWindow(QWidget):
                     if self._handling_plugin_tab:
                         return
                     self._handling_plugin_tab = True
-                    try:
-                        bound = getattr(current_widget, '_plugin_info', None)
-                        if isinstance(bound, dict):
-                            plugin = bound
-                    except Exception:
-                        pass
-                    try:
-                        if current_widget is not None and hasattr(current_widget, 'property'):
-                            name_key = current_widget.property('plugin_name_key')
-                            if name_key:
-                                for p in visible_plugins:
-                                    if p.get('name_key') == name_key:
-                                        plugin = p
-                                        break
-                    except Exception:
-                        pass
+                    plugin = self._resolve_plugin_from_widget(current_widget, visible_plugins, plugin)
                     try:
                         new_widget = None
                         handler = plugin.get('page_init') if callable(plugin.get('page_init')) else plugin.get('on_tab_open')
                         if callable(handler):
-                            plugin_api = plugin.get('api')
-                            if plugin_api:
-                                setattr(self, 'plugin_api', plugin_api)
-                            try:
-                                new_widget = handler(self)
-                            finally:
-                                if hasattr(self, 'plugin_api'):
-                                    delattr(self, 'plugin_api')
+                            new_widget = self._run_with_plugin_api(plugin, handler)
                         if isinstance(new_widget, QWidget):
                             self.main_tab_widget.removeTab(index)
                             self.main_tab_widget.insertTab(index, new_widget, tr(plugin['name_key']))
@@ -1814,8 +1778,6 @@ class AppWindow(QWidget):
                         logging.error(f"Error running plugin '{plugin['name_key']}': {e}")
                         self.feedback_service.show_message('error', 'errors.error', f"Failed to run plugin '{tr(plugin['name_key'])}':\n{e}")
                         self.main_tab_widget.setCurrentIndex(self.previous_tab_index)
-                        if hasattr(self, 'plugin_api'):
-                            delattr(self, 'plugin_api')
                     finally:
                         self._handling_plugin_tab = False
                     return
@@ -1823,14 +1785,7 @@ class AppWindow(QWidget):
                     on_tab_open_handler = plugin.get('on_tab_open')
                     if callable(on_tab_open_handler):
                         try:
-                            plugin_api = plugin.get('api')
-                            if plugin_api:
-                                setattr(self, 'plugin_api', plugin_api)
-                            try:
-                                on_tab_open_handler(self)
-                            finally:
-                                if hasattr(self, 'plugin_api'):
-                                    delattr(self, 'plugin_api')
+                            self._run_with_plugin_api(plugin, on_tab_open_handler)
                         except Exception as e:
                             logging.debug(f"Error calling on_tab_open for plugin '{plugin.get('name_key', 'unknown')}': {e}")
             self.previous_tab_index = index
@@ -1839,17 +1794,13 @@ class AppWindow(QWidget):
             if not getattr(self.app_state, 'library_initialized', False):
                 QTimer.singleShot(0, self.library_display.update_display)
                 self.app_state.library_initialized = True
-            self.previous_tab_index = index
-        else:
-            self.previous_tab_index = index
+        self.previous_tab_index = index
 
     def _reload_global_settings(self):
         if not self.app_state.has_internet:
             return
         try:
             import requests
-            from config.constants import CLOUD_FUNCTIONS_BASE_URL
-            from utils.network_utils import get_session
             response = get_session(self.app_state).get(f'{CLOUD_FUNCTIONS_BASE_URL}/getGlobalSettings', timeout=5)
             if response.status_code == 200:
                 self.app_state.global_settings = response.json() or {}
@@ -1956,30 +1907,10 @@ class AppWindow(QWidget):
             shutil.move(old_config_path, new_config_path)
             logging.info('Migrated settings config.json to settings.json')
 
-    def _on_search_ui_button_text_update(self, widget_name: str, text: str):
+    def _set_widget_attr(self, widget_name: str, method: str, value):
         widget = getattr(self, widget_name, None)
-        if widget and hasattr(widget, 'setText'):
-            widget.setText(text)
-
-    def _on_search_ui_button_tooltip_update(self, widget_name: str, tooltip: str):
-        widget = getattr(self, widget_name, None)
-        if widget and hasattr(widget, 'setToolTip'):
-            widget.setToolTip(tooltip)
-
-    def _on_search_ui_button_enabled_update(self, widget_name: str, enabled: bool):
-        widget = getattr(self, widget_name, None)
-        if widget and hasattr(widget, 'setEnabled'):
-            widget.setEnabled(enabled)
-
-    def _on_search_ui_label_text_update(self, widget_name: str, text: str):
-        widget = getattr(self, widget_name, None)
-        if widget and hasattr(widget, 'setText'):
-            widget.setText(text)
-
-    def _on_search_ui_widget_updates_enabled(self, widget_name: str, enabled: bool):
-        widget = getattr(self, widget_name, None)
-        if widget and hasattr(widget, 'setUpdatesEnabled'):
-            widget.setUpdatesEnabled(enabled)
+        if widget and hasattr(widget, method):
+            getattr(widget, method)(value)
 
     def _show_pending_dialogs(self):
         if not self.app_state.pending_dialogs:

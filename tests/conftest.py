@@ -126,18 +126,6 @@ def feedback_service(qapp):
 
 
 @pytest.fixture
-def mock_gamebanana_api():
-    with patch('src.adapters.gamebanana_adapter.GameBananaAPI') as mock_api_class:
-        mock_api = MagicMock()
-        mock_api_class.return_value = mock_api
-        mock_api.get_game_mods.return_value = ([], [])
-        mock_api.get_mod_details.return_value = {}
-        mock_api.get_supported_files_for_mod.return_value = {'supported_files': [], 'has_supported_files': False, 'compatibility_checked': True, 'preferred_format': None, 'tool_ids': [], 'has_deltahub_file': False, 'has_deltamod_file': False}
-        mock_api.get_file_contents.return_value = []
-        yield mock_api
-
-
-@pytest.fixture
 def mock_requests():
     with patch('requests.get') as mock_get, patch('requests.post') as mock_post, patch('requests.Session') as mock_session:
         mock_response = MagicMock()
@@ -153,21 +141,6 @@ def mock_requests():
         mock_session_instance.post.return_value = mock_response
         mock_session.return_value = mock_session_instance
         yield {'get': mock_get, 'post': mock_post, 'session': mock_session, 'response': mock_response}
-
-
-@pytest.fixture
-def mock_file_operations(temp_dir):
-
-    def mock_get_user_data_root():
-        return temp_dir
-
-    def mock_get_user_mods_dir():
-        return os.path.join(temp_dir, 'mods')
-
-    def mock_get_user_plugins_dir():
-        return os.path.join(temp_dir, 'plugins')
-    with patch('src.utils.path_utils.get_user_data_root', mock_get_user_data_root), patch('src.utils.path_utils.get_user_mods_dir', mock_get_user_mods_dir), patch('src.utils.path_utils.get_user_plugins_dir', mock_get_user_plugins_dir):
-        yield
 
 
 @pytest.fixture
@@ -214,29 +187,6 @@ def patches_dir():
 def deltarune_chapter_dirs(game_data_dir):
     base = Path(game_data_dir) / 'deltarune'
     return {'menu': str(base / 'chapter0_menu'), 'chapter1': str(base / 'chapter1_'), 'chapter2': str(base / 'chapter2_'), 'chapter3': str(base / 'chapter3_'), 'chapter4': str(base / 'chapter4_')}
-
-
-@pytest.fixture
-def game_dirs(game_data_dir):
-    base = Path(game_data_dir)
-    return {'deltarune': str(base / 'deltarune'), 'deltarune_demo': str(base / 'deltarune_demo'), 'undertale': str(base / 'undertale'), 'undertale_yellow': str(base / 'undertale_yellow'), 'pizzatower': str(base / 'pizzatower'), 'sugaryspire': str(base / 'sugaryspire')}
-
-
-@pytest.fixture
-def patches_dirs(patches_dir):
-    patches_path = Path(patches_dir)
-    if not patches_path.exists():
-        return []
-    patch_dirs = []
-    for game_dir in patches_path.iterdir():
-        if game_dir.is_dir():
-            if (game_dir / 'chapter1_').exists() or (game_dir / 'chapter0_menu').exists():
-                for chapter_dir in game_dir.iterdir():
-                    if chapter_dir.is_dir():
-                        patch_dirs.append(str(chapter_dir))
-            else:
-                patch_dirs.append(str(game_dir))
-    return patch_dirs
 
 
 @pytest.fixture

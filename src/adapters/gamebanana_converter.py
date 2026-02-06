@@ -57,11 +57,7 @@ class GameBananaConverter:
             if not os.path.exists(self.archive_path):
                 return False
             with zipfile.ZipFile(self.archive_path, 'r') as zf:
-                namelist = zf.namelist()
-                for name in namelist:
-                    if check_filename_is_deltamod_info(name):
-                        return True
-                return False
+                return any(check_filename_is_deltamod_info(name) for name in zf.namelist())
         except zipfile.BadZipFile:
             logger.debug(f'Archive is not a valid zip file: {self.archive_path}')
             return False

@@ -4,7 +4,7 @@ import shutil
 import json
 from typing import Dict, Optional
 from services.patching_log_service import get_patching_logger
-from utils.file_utils import safe_move, safe_remove, safe_rmtree
+from utils.file_utils import safe_remove, safe_rmtree
 
 
 class BackupManager:
@@ -46,37 +46,6 @@ class BackupManager:
         except Exception as e:
             self.patching_logger.error(f'[BACKUP] Failed to backup file {file_path} (chapter {chapter_id}): {e}', exc_info=True)
             return False
-
-    def backup_directory_atomic(self, chapter_id: int, dir_path: str) -> Optional[str]:
-        """Atomically backup a directory by moving it.
-
-        Args:
-            chapter_id: Chapter identifier.
-            dir_path: Path to directory to backup.
-
-        Returns:
-            Optional[str]: Backup path or None if failed.
-        """
-        if not os.path.exists(dir_path) or not os.path.isdir(dir_path):
-            self.patching_logger.warning(f'[BACKUP] Directory does not exist or is not a directory: {dir_path}')
-            return None
-        try:
-            dir_name = os.path.basename(dir_path.rstrip(os.sep))
-            backup_dir_name = f'chapter_{chapter_id}_{dir_name}'
-            backup_path = os.path.join(self.backup_dir, backup_dir_name)
-            counter = 1
-            while os.path.exists(backup_path):
-                backup_path = os.path.join(self.backup_dir, f'{backup_dir_name}_{counter}')
-                counter += 1
-            if safe_move(dir_path, backup_path):
-                self.patching_logger.info(f'[BACKUP] Atomically backed up directory: {dir_path} -> {backup_path} (chapter {chapter_id})')
-                return backup_path
-            else:
-                self.patching_logger.error(f'[BACKUP] Failed to atomically backup directory {dir_path} (chapter {chapter_id})')
-                return None
-        except Exception as e:
-            self.patching_logger.error(f'[BACKUP] Failed to backup directory {dir_path} (chapter {chapter_id}): {e}', exc_info=True)
-            return None
 
     def mark_file_added(self, chapter_id: int, file_path: str):
         self.added_files.setdefault(chapter_id, {})[file_path] = True
@@ -201,9 +170,3 @@ class BackupManager:
                     pass
         except Exception as e:
             self.patching_logger.debug(f'[RESTORE] Could not remove parent directory for {file_path}: {e}')
-
-    def clear_backups(self):
-        self.original_files.clear()
-        self.added_files.clear()
-        self._modification_order.clear()
-        self._session_manifest_path = None

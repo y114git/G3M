@@ -166,14 +166,6 @@ class ModPlaqueWidget(BaseModWidget):
         tags_layout.addStretch()
         info_layout.addLayout(tags_layout)
 
-    def _resolve_theme_config(self):
-        if self.parent_app:
-            if hasattr(self.parent_app, 'local_config'):
-                return self.parent_app.local_config
-            if hasattr(self.parent_app, 'app_state') and hasattr(self.parent_app.app_state, 'local_config'):
-                return self.parent_app.app_state.local_config
-        return None
-
     def _update_style(self):
         super()._update_style()
         text_color = self._get_theme_text_color()
@@ -280,12 +272,8 @@ class ModPlaqueWidget(BaseModWidget):
         self.main_layout.addWidget(self.actions_widget)
 
     def _update_actions_visibility(self):
-        if not hasattr(self, 'actions_widget'):
-            return
-        if self.is_selected:
-            self.actions_widget.setVisible(True)
-        else:
-            self.actions_widget.setVisible(False)
+        if hasattr(self, 'actions_widget'):
+            self.actions_widget.setVisible(self.is_selected)
 
     def _check_installation_status(self):
         if self.parent_app and hasattr(self.parent_app, 'mod_service'):

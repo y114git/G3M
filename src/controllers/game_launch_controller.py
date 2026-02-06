@@ -35,9 +35,6 @@ class GameLaunchController(QObject):
         self.app = app_window
         self._full_install_checkbox_is_checked = False
 
-    def set_full_install_checkbox_state(self, checked: bool):
-        self._full_install_checkbox_is_checked = checked
-
     def _is_full_install_enabled(self) -> bool:
         return isinstance(self.app_state.game_mode, (DemoGameMode, UndertaleYellowGameMode, SugarySpireGameMode)) and self._full_install_checkbox_is_checked
 

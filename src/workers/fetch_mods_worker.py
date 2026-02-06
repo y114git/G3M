@@ -123,9 +123,7 @@ class FetchModsThread(QThread):
                         return (mods, mods_needing_metadata)
                 fetcher = GameBananaFetcher(sort_param=sort_param, metadata_cache=metadata_cache, app_state=app_state)
 
-                def emit_status(msg, color):
-                    self.status.emit(msg, color)
-                fetcher.status = emit_status
+                fetcher.status = lambda msg, color: self.status.emit(msg, color)
                 initial_pages = 3
                 gamebanana_mods, mods_needing_metadata = fetcher.fetch_mods(initial_pages=initial_pages)
                 if gamebanana_mods:

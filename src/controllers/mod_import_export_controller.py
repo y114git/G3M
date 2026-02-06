@@ -21,10 +21,7 @@ class ModImportExportController:
         self.app_window = app_window
 
     def _reset_install_state(self) -> None:
-        self.app_state.is_installing = False
-        self.app_state.progress_bar_visible = False
-        self.app_state.progress_bar_value = 0
-        self.app_state.clear_current_task()
+        self.app_state.reset_install_state()
 
     def _refresh_mod_list(self) -> None:
         self.mod_service.invalidate_mods_cache()
@@ -243,20 +240,31 @@ class ModImportExportController:
         if worker and hasattr(worker, 'signal_unrar_installed'):
             worker.signal_unrar_installed(success)
 
+    def _open_manual_install_dialog(self, prepared_path, source_file_path, temp_dir, on_accept=None):
+        from ui.dialogs.manual_install_dialog import ManualModInstallDialog
+        from services.game_detection_service import get_game_type_string
+        initial_game_type = None
+        if self.app_state and hasattr(self.app_state, 'game_mode'):
+            initial_game_type = get_game_type_string(self.app_state.game_mode)
+        dialog = ManualModInstallDialog(self.app_window, prepared_path, gamebanana_metadata=None, source_file_path=source_file_path, initial_game_type=initial_game_type)
+        dialog.temp_dir_to_cleanup = temp_dir
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            if on_accept:
+                on_accept()
+            else:
+                self._refresh_mod_list()
+            QMessageBox.information(self.app_window, tr('dialogs.success'), tr('dialogs.mod_created_successfully'))
+            return True
+        return False
+
     def _on_manual_install_required(self, prepared_path: str, archive_path: str, temp_dir: str):
         try:
             self._reset_install_state()
-            from ui.dialogs.manual_install_dialog import ManualModInstallDialog
-            from services.game_detection_service import get_game_type_string
-            initial_game_type = None
-            if self.app_state and hasattr(self.app_state, 'game_mode'):
-                initial_game_type = get_game_type_string(self.app_state.game_mode)
-            dialog = ManualModInstallDialog(self.app_window, prepared_path, gamebanana_metadata=None, source_file_path=archive_path, initial_game_type=initial_game_type)
-            dialog.temp_dir_to_cleanup = temp_dir
-            if dialog.exec() == QDialog.DialogCode.Accepted:
+
+            def _on_accept():
                 from ui.utils.ui_utils import refresh_ui_after_mod_install
                 refresh_ui_after_mod_install(self.app_window, self.mod_service)
-                QMessageBox.information(self.app_window, tr('dialogs.success'), tr('dialogs.mod_created_successfully'))
+            self._open_manual_install_dialog(prepared_path, archive_path, temp_dir, on_accept=_on_accept)
         except Exception as e:
             logging.error(f'Failed to open manual install dialog from URL: {e}', exc_info=True)
             self.app_window.feedback_service.show_message('error', tr('errors.error'), tr('errors.manual_install_failed', error=str(e)))
@@ -282,18 +290,7 @@ class ModImportExportController:
         try:
             prepared_path, temp_dir = self._prepare_local_files_for_manual_install(file_path)
             if prepared_path:
-                from ui.dialogs.manual_install_dialog import ManualModInstallDialog
-                from services.game_detection_service import get_game_type_string
-                initial_game_type = None
-                if self.app_state and hasattr(self.app_state, 'game_mode'):
-                    initial_game_type = get_game_type_string(self.app_state.game_mode)
-                dialog = ManualModInstallDialog(self.app_window, prepared_path, gamebanana_metadata=None, source_file_path=file_path, initial_game_type=initial_game_type)
-                dialog.temp_dir_to_cleanup = temp_dir
-                if dialog.exec() == QDialog.DialogCode.Accepted:
-                    self.mod_service.invalidate_mods_cache()
-                    self.mod_service.load_local_mods(_skip_conversion=True)
-                    self.mod_service.mod_list_updated.emit()
-                    QMessageBox.information(self.app_window, tr('dialogs.success'), tr('dialogs.mod_created_successfully'))
+                self._open_manual_install_dialog(prepared_path, file_path, temp_dir)
         except Exception as e:
             logging.error(f'Manual install from file failed: {e}', exc_info=True)
             QMessageBox.critical(self.app_window, tr('errors.error'), tr('errors.manual_install_failed', error=str(e)))

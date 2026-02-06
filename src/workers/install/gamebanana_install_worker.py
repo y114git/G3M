@@ -32,11 +32,6 @@ class InstallGameBananaModThread(BaseInstallWorker):
     def _build_gb_metadata(self, mod_id: int) -> Dict:
         return {'mod_id': mod_id, 'profile_url': self.mod_info.external_url, 'icon_url': self.mod_info.icon_url, 'tags': self.mod_info.tags if hasattr(self.mod_info, 'tags') and self.mod_info.tags else [], 'category': self.mod_info.gamebanana_category if hasattr(self.mod_info, 'gamebanana_category') else None, 'game': self.mod_info.game if hasattr(self.mod_info, 'game') else 'deltarune'}
 
-    def set_selected_file(self, file_index: int):
-        self._selected_file_index = file_index
-        if self._file_selection_event:
-            self._file_selection_event.set()
-
     def run(self):
         archive_path = None
         archive_dir = None
@@ -285,15 +280,6 @@ class InstallGameBananaModThread(BaseInstallWorker):
         except Exception as e:
             logger.error(f'Error finding installed mod directory: {e}', exc_info=True)
             return None
-
-    def _check_file_compatibility(self, download_url: str, file_info: Dict) -> Optional[Dict]:
-        try:
-            filename = file_info.get('_sFile', 'check.zip')
-            if filename.lower().endswith(('.zip', '.7z', '.rar')):
-                return {'download_url': download_url, 'filename': filename, 'file_info': file_info}
-        except Exception as e:
-            logger.debug(f'Error checking file compatibility: {e}')
-        return None
 
     def _resolve_selected_file(self, mod_id: int) -> Optional[Dict]:
         from services.mod_service import ModManager

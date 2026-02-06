@@ -353,12 +353,6 @@ class ArchiveExtractor:
         return extracted_files
 
     @staticmethod
-    def is_supported_format(filename: str) -> bool:
-        filename_lower = filename.lower()
-        supported_extensions = ('.zip', '.rar', '.7z', '.tar.gz', '.lzma')
-        return filename_lower.endswith(supported_extensions)
-
-    @staticmethod
     def _matches_target(name: str, target: str) -> bool:
         n = name.replace('\\', '/').strip('/')
         return n == target or n.endswith(f'/{target}')

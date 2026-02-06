@@ -3,6 +3,7 @@ import argparse
 import logging
 import os
 import platform
+import shutil
 import sys
 import subprocess
 import time
@@ -47,7 +48,6 @@ def configure_logging(app_name: str, user_data_root: str) -> str:
             from datetime import datetime
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
             archive_path = os.path.join(archive_dir, f'deltahub_{timestamp}.log')
-            import shutil
             shutil.copy2(log_path, archive_path)
         except Exception:
             pass
@@ -200,7 +200,6 @@ def _load_config_file() -> dict:
             logging.warning('Config file does not contain a dictionary, resetting to empty config')
             backup_path = f'{config_path}.invalid.bak'
             try:
-                import shutil
                 shutil.copy2(config_path, backup_path)
                 logging.warning(f'Invalid config structure detected, backed up to {backup_path}')
                 os.remove(config_path)
@@ -209,14 +208,12 @@ def _load_config_file() -> dict:
                 logging.warning(f'Failed to backup invalid config file: {e}')
             return {}
         if config_path == old_config_path and (not os.path.exists(settings_path)):
-            import shutil
             shutil.move(old_config_path, settings_path)
             logging.info('Migrated settings config.json to settings.json in startup')
         return config
     except json.JSONDecodeError:
         backup_path = f'{config_path}.invalid.bak'
         try:
-            import shutil
             shutil.copy2(config_path, backup_path)
             logging.warning(f'Corrupted config file detected, backed up to {backup_path}')
             os.remove(config_path)

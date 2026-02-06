@@ -51,20 +51,5 @@ class UtmtWrapper:
     def execute_script(self, data_win_path, script_name, output_path=None, cwd=None, env=None):
         return self._run_scripts(data_win_path, [script_name], output_path, cwd, env)
 
-    def execute_scripts(self, data_win_path, script_names, output_path=None, cwd=None, env=None):
-        return self._run_scripts(data_win_path, script_names, output_path, cwd, env)
-
     def set_active_processes_list(self, proc_list):
         self.utmtcli.set_active_processes_list(proc_list)
-
-    _MERGE_SCRIPTS = ['ImportSprites', 'ImportBackgrounds', 'ImportShaders', 'ImportFonts', 'ImportSounds', 'ImportAudioGroups', 'ImportPaths', 'ImportRooms', 'ImportGameObjects', 'ImportTimelines', 'ImportExtensions', 'ImportTilesets', 'ImportCodeEntries']
-
-    def merge_assets(self, data_win_path: str, mod_source_dir: str) -> bool:
-        success = True
-        for name in self._MERGE_SCRIPTS:
-            if self.get_script_path(name):
-                rc, _, stderr = self.execute_script(data_win_path, name, cwd=mod_source_dir)
-                if rc != 0:
-                    self.patching_logger.warning(f'[UTMT] {name} failed: {stderr[:200]}')
-                    success = False
-        return success

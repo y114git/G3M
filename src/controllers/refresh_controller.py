@@ -5,6 +5,7 @@ from workers.fetch_mods_worker import FetchModsThread
 from config.constants import UI_COLORS
 from services.game_detection_service import is_game_running
 from ui.utils.ui_utils import safe_stop_thread
+from adapters.gamebanana_cache import GameBananaMetadataCache
 
 
 class RefreshController:
@@ -77,7 +78,6 @@ class RefreshController:
                 return
             if hasattr(self.app_state, 'cache_dir') and self.app_state.cache_dir:
                 try:
-                    from adapters.gamebanana_cache import GameBananaMetadataCache
                     metadata_cache = GameBananaMetadataCache(self.app_state.cache_dir)
                     if hasattr(self.app_state, 'all_mods') and self.app_state.all_mods:
                         for mod in self.app_state.all_mods:
@@ -181,7 +181,6 @@ class RefreshController:
                     logging.debug(f'RefreshController: GameBanana mod in all_mods: {mod_info}')
             if hasattr(self.app_state, 'cache_dir') and self.app_state.cache_dir:
                 try:
-                    from adapters.gamebanana_cache import GameBananaMetadataCache
                     metadata_cache = GameBananaMetadataCache(self.app_state.cache_dir)
                     restored_count = 0
                     downloads_restored = False
@@ -265,7 +264,6 @@ class RefreshController:
         try:
             if not hasattr(self.app_state, 'cache_dir') or not self.app_state.cache_dir:
                 return
-            from adapters.gamebanana_cache import GameBananaMetadataCache
             metadata_cache = GameBananaMetadataCache(self.app_state.cache_dir)
             stale_count = metadata_cache.clear_stale()
             if stale_count > 0:
@@ -308,7 +306,6 @@ class RefreshController:
                 except Exception as e:
                     logging.warning(f'RefreshController: Error cleaning up old metadata thread: {e}')
             try:
-                from adapters.gamebanana_cache import GameBananaMetadataCache
                 if not hasattr(self.app_state, 'cache_dir') or not self.app_state.cache_dir:
                     logging.warning('RefreshController: cache_dir not available, cannot load metadata')
                     return

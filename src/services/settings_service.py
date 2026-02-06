@@ -372,10 +372,7 @@ class SettingsManager(QObject):
                 self.app_state.current_task.signal_unrar_installed(False)
 
     def _on_theme_install_finished(self, success: bool, message: str):
-        self.app_state.is_installing = False
-        self.app_state.progress_bar_visible = False
-        self.app_state.progress_bar_value = 0
-        self.app_state.clear_current_task()
+        self.app_state.reset_install_state()
         if success:
             self.theme_changed.emit()
             self.settings_changed.emit()
