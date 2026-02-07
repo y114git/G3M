@@ -84,6 +84,7 @@ class RefreshController:
                         category = getattr(mod, 'gamebanana_category', None)
                         if downloads is not None or tagline or full_desc or screenshots or category:
                             metadata_cache.set(mod_id, downloads=downloads, tagline=tagline, full_description=full_desc, screenshots=screenshots, category=category)
+                    metadata_cache.flush()
                 except Exception as e:
                     logging.warning(f'RefreshController: Error saving metadata to cache: {e}', exc_info=True)
             if language_combo is not None:
@@ -272,12 +273,13 @@ class RefreshController:
             self.metadata_thread = None
             if metadata_thread:
                 self._cleanup_thread_later(metadata_thread)
-            if self._current_metadata_batch:
+            was_cancelled = metadata_thread and getattr(metadata_thread, '_cancelled', False)
+            if self._current_metadata_batch and was_cancelled:
                 if not hasattr(self.app_state, 'gamebanana_mods_needing_metadata'):
                     self.app_state.gamebanana_mods_needing_metadata = []
                 existing = set(self.app_state.gamebanana_mods_needing_metadata)
                 self.app_state.gamebanana_mods_needing_metadata = list(existing | set(self._current_metadata_batch))
-                self._current_metadata_batch = []
+            self._current_metadata_batch = []
             if self.app_window and hasattr(self.app_window, 'search_display') and self.app_window.search_display:
                 self.app_window.search_display.update_filtered_mods(preserve_page=True)
             remaining = getattr(self.app_state, 'gamebanana_mods_needing_metadata', [])

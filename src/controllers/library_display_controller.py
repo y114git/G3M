@@ -41,13 +41,15 @@ class LibraryDisplayController:
         self.refresh_async()
 
     def _filter_and_sort_installed(self, installed_mods):
-        filters, sort_config = self._build_library_filters_and_sort()
-        filtered_mods = filter_and_sort_mods(installed_mods, filters, sort_config)
+        filters, _ = self._build_library_filters_and_sort()
+        filtered_mods = filter_and_sort_mods(installed_mods, filters)
         if hasattr(self.app, 'library_sort_combo'):
             sort_type = self.app.library_sort_combo.currentIndex()
+            reverse = not self.app.library_sort_ascending
             if sort_type == 0:
-                reverse = not self.app.library_sort_ascending
                 filtered_mods.sort(key=lambda mod: mod.get('name', '').lower(), reverse=reverse)
+            else:
+                filtered_mods.sort(key=lambda mod: mod.get('added_date') or '', reverse=reverse)
         return filtered_mods
 
     @staticmethod

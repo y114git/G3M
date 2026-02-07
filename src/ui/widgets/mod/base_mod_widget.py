@@ -95,8 +95,27 @@ class BaseModWidget(QFrame):
     def _create_tags_layout_if_needed(self, info_layout):
         pass
 
+    def _resolve_local_icon_fallback(self):
+        key = get_mod_key(self.mod_data)
+        if not key or not key.startswith('gb_'):
+            return None
+        app = self.parent_app
+        if not app or not hasattr(app, 'mod_service'):
+            return None
+        try:
+            folder = app.mod_service.get_mod_folder_path(key)
+            if not folder:
+                return None
+            config = app.mod_service.get_mod_config(key)
+            if not config:
+                return None
+            from utils.mod_utils import resolve_mod_icon
+            return resolve_mod_icon(config, folder)
+        except Exception:
+            return None
+
     def _load_icon(self):
-        load_mod_icon_universal(self.icon_label, self.mod_data, 80)
+        load_mod_icon_universal(self.icon_label, self.mod_data, 80, local_fallback=self._resolve_local_icon_fallback())
 
     def _resolve_theme_config(self):
         if self.parent_app:

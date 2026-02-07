@@ -56,6 +56,7 @@ class ModPlaqueWidget(BaseModWidget):
                     break
                 current = current.parent() if hasattr(current, 'parent') else None
         self.is_installed = False
+        self._last_icon_url = getattr(mod_data, 'icon_url', None) or getattr(mod_data, 'icon_path', None)
         self.frame_selector = 'modPlaque'
         self.setObjectName('modPlaque')
         self.setFrameShape(QFrame.Shape.StyledPanel)
@@ -427,8 +428,11 @@ class ModPlaqueWidget(BaseModWidget):
     def update_mod_data(self):
         try:
             if hasattr(self, 'icon_label'):
-                from ui.common.styling import load_mod_icon_universal
-                load_mod_icon_universal(self.icon_label, self.mod_data, size=80)
+                new_icon = getattr(self.mod_data, 'icon_url', None) or getattr(self.mod_data, 'icon_path', None)
+                if new_icon != getattr(self, '_last_icon_url', None):
+                    self._last_icon_url = new_icon
+                    from ui.common.styling import load_mod_icon_universal
+                    load_mod_icon_universal(self.icon_label, self.mod_data, size=80, local_fallback=self._resolve_local_icon_fallback())
             if hasattr(self, 'downloads_label'):
                 self.downloads_label.setText(self._get_downloads_text())
             if hasattr(self, 'tagline_label'):

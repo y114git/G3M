@@ -275,31 +275,6 @@ class ModManager(QObject):
             for key, config_data in installed_mods.items():
                 if key and key.startswith('gb_'):
                     installed_gamebanana_by_key[key] = config_data
-                    logging.debug(f'load_local_mods: Registered installed GameBanana mod - key={key}')
-            updated_count = 0
-
-            def _update_mod_icon(mod, config_data, key):
-                mod_folder_path = self.get_mod_folder_path(key)
-                if mod_folder_path:
-                    if key in installed_mods:
-                        config_data = self.get_mod_config(key)
-                    config_icon_url = config_data.get('icon_url', '')
-                    resolved_icon = resolve_mod_icon(config_data, mod_folder_path)
-                    if resolved_icon:
-                        mod.icon_url = resolved_icon
-                    elif config_icon_url:
-                        mod.icon_url = config_icon_url
-
-            for mod in list(self.app_state.all_mods):
-                key = mod.key
-                if key in installed_mods:
-                    _update_mod_icon(mod, installed_mods[key], key)
-                    if key and key.startswith('gb_'):
-                        updated_count += 1
-                elif key and key.startswith('gb_') and (key in installed_gamebanana_by_key):
-                    _update_mod_icon(mod, installed_gamebanana_by_key[key], key)
-                    updated_count += 1
-            logging.debug(f'load_local_mods: Updated {updated_count} existing GameBanana mods in all_mods')
 
             def _find_mod_by_key(key):
                 for mod in self.app_state.all_mods:

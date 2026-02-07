@@ -637,7 +637,7 @@ class SearchDisplayController(QObject):
                             self.app.mod_list_layout.removeWidget(widget)
                             widget.deleteLater()
 
-            if self.app_state.gamebanana_loading and len(current_page_mods) == 0:
+            if not self.app_state.mods_loaded or (self.app_state.gamebanana_loading and len(current_page_mods) == 0):
                 _remove_loading_indicators()
                 from PyQt6.QtWidgets import QLabel
                 from PyQt6.QtCore import Qt
@@ -646,6 +646,9 @@ class SearchDisplayController(QObject):
                 loading_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
                 loading_label.setStyleSheet('font-size: 16px; padding: 20px; color: gray;')
                 self.app.mod_list_layout.insertWidget(0, loading_label)
+                if not getattr(self.app, '_mods_display_ready_emitted', False) and hasattr(self.app, 'mods_display_ready'):
+                    self.app._mods_display_ready_emitted = True
+                    self.app.mods_display_ready.emit()
                 self._update_display_in_progress = False
                 return
             _remove_loading_indicators()

@@ -102,7 +102,7 @@ def clear_layout_widgets(layout, keep_last_n=1, hide_instead_of_delete=False):
             logging.debug(f'clear_layout_widgets: Error removing widget: {e}')
 
 
-def load_mod_icon_universal(icon_label, mod_data, size=80):
+def load_mod_icon_universal(icon_label, mod_data, size=80, local_fallback=None):
     from utils.path_utils import resource_path
 
     def _crop_and_scale_pixmap(pixmap, allow_empty=False):
@@ -193,13 +193,29 @@ def load_mod_icon_universal(icon_label, mod_data, size=80):
                             if not pm.isNull():
                                 scaled_pixmap = _crop_and_scale_pixmap(pm)
                                 lbl.setPixmap(scaled_pixmap)
+                            else:
+                                _try_local_fallback()
+                        else:
+                            _try_local_fallback()
                     except (RuntimeError, AttributeError) as e:
                         logging.debug(f'load_mod_icon_universal: Widget deleted during image load: {e}')
                     except Exception as e:
                         logging.debug(f'load_mod_icon_universal: Error setting pixmap: {e}')
 
+                def _try_local_fallback():
+                    if local_fallback and os.path.exists(local_fallback):
+                        try:
+                            lbl = label_ref()
+                            if lbl and not sip.isdeleted(lbl):
+                                pm = QPixmap(local_fallback)
+                                if not pm.isNull():
+                                    lbl.setPixmap(_crop_and_scale_pixmap(pm))
+                        except (RuntimeError, AttributeError):
+                            pass
+
                 def _on_error(url, err):
                     logging.debug(f'load_mod_icon_universal: Failed to load image from URL {url}: {err}')
+                    _try_local_fallback()
                 signals.result.connect(_on_loaded_image)
                 signals.error.connect(_on_error)
                 runnable = ImageLoaderRunnable(icon_url, signals)

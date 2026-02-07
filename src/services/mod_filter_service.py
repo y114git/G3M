@@ -28,6 +28,7 @@ def filter_and_sort_mods(mods_list, filters, sort_config=None, mod_accessor=None
     search_text, hide_banned = filters.get('search_text', ''), filters.get('hide_banned', True)
     only_gamebanana, status_filter = filters.get('only_gamebanana', False), filters.get('status_filter', ['approved', 'pending'])
     exclude_installed = filters.get('exclude_installed', False)
+    hide_local = filters.get('hide_local', False)
     filtered_list = []
     for item in mods_list:
         mod = mod_accessor(item) if mod_accessor else item
@@ -36,6 +37,8 @@ def filter_and_sort_mods(mods_list, filters, sort_config=None, mod_accessor=None
         if not isinstance(mod, dict) and _get_mod_bool_attr(mod, 'hide_mod'):
             continue
         key = _get_mod_attr(mod, 'key') or _get_mod_attr(mod, 'mod_key')
+        if hide_local and key and isinstance(key, str) and key.startswith('local_'):
+            continue
         is_gb = bool(key and isinstance(key, str) and key.startswith('gb_'))
         if only_gamebanana and not is_gb:
             continue

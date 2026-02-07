@@ -50,9 +50,11 @@ class LoadGameBananaMetadataThread(QThread):
                     self.msleep(300)
                 if i + self._batch_size < total and not self._cancelled and not self.isInterruptionRequested():
                     self.msleep(500)
+            self.metadata_cache.flush()
             self.finished.emit()
         except Exception as e:
             logger.error(f'LoadGameBananaMetadataThread: Unexpected error: {e}', exc_info=True)
+            self.metadata_cache.flush()
             self.finished.emit()
 
     def _load_mod_metadata(self, mod_id: int):
