@@ -75,18 +75,10 @@ class PluginManager(QObject):
             with open(plugin_init_py_path, 'r', encoding='utf-8') as f:
                 content = f.read()
             import re
-            plugin_id_match = re.search('PLUGIN_ID\\s*=\\s*["\\\']([^"\\\']+)["\\\']', content)
-            plugin_name_match = re.search('PLUGIN_NAME\\s*=\\s*["\\\']([^"\\\']+)["\\\']', content)
-            if plugin_id_match:
-                plugin_info['plugin_id'] = plugin_id_match.group(1)
-            if plugin_name_match:
-                plugin_info['name_key'] = plugin_name_match.group(1)
-            version_match = re.search('VERSION\\s*=\\s*["\\\']([^"\\\']+)["\\\']', content)
-            if version_match:
-                plugin_info['version'] = version_match.group(1)
-            author_match = re.search('AUTHOR\\s*=\\s*["\\\']([^"\\\']+)["\\\']', content)
-            if author_match:
-                plugin_info['author'] = author_match.group(1)
+            for var_name, info_key in [('PLUGIN_ID', 'plugin_id'), ('PLUGIN_NAME', 'name_key'), ('VERSION', 'version'), ('AUTHOR', 'author')]:
+                match = re.search(f'{var_name}\\s*=\\s*["\']([^"\']+)["\']', content)
+                if match:
+                    plugin_info[info_key] = match.group(1)
             desc_patterns = ['DESCRIPTION\\s*=\\s*["\\\']([^"\\\']+)["\\\']', 'DESCRIPTION\\s*=\\s*"""([^"]*)"""', "DESCRIPTION\\s*=\\s*'''([^']*)'''"]
             for pattern in desc_patterns:
                 desc_match = re.search(pattern, content, re.DOTALL)
@@ -110,6 +102,44 @@ class PluginManager(QObject):
             return 'disabled'
         return 'enabled'
 
+    @staticmethod
+    def _archive_has_plugin_init(item_path: str, item_name_lower: str) -> bool:
+        def _has_init(names):
+            return any(n.replace('\\', '/').strip('/') == 'plugin_init.py' or n.replace('\\', '/').strip('/').endswith('/plugin_init.py') for n in names)
+        try:
+            if item_name_lower.endswith('.zip'):
+                with zipfile.ZipFile(item_path, 'r') as zf:
+                    return _has_init(zf.namelist())
+            elif item_name_lower.endswith('.tar.gz'):
+                with tarfile.open(item_path, 'r:gz') as tf:
+                    return _has_init(m.name for m in tf.getmembers())
+            elif item_name_lower.endswith('.rar'):
+                import rarfile
+                with rarfile.RarFile(item_path, 'r') as rf:
+                    return _has_init(rf.namelist())
+            elif item_name_lower.endswith('.7z'):
+                import py7zr
+                with py7zr.SevenZipFile(item_path, mode='r') as zf:
+                    return _has_init(zf.getnames())
+        except (OSError, ImportError) as e:
+            logging.warning(f'convert_plugin_archives: failed to check archive {item_path}: {e}')
+        return False
+
+    def _find_plugin_root(self, temp_dir: str) -> str:
+        if os.path.isfile(os.path.join(temp_dir, 'plugin_init.py')):
+            return temp_dir
+        contents = os.listdir(temp_dir)
+        if len(contents) == 1:
+            single_dir = os.path.join(temp_dir, contents[0])
+            if os.path.isdir(single_dir) and os.path.isfile(os.path.join(single_dir, 'plugin_init.py')):
+                return single_dir
+        for root, dirs, files in os.walk(temp_dir):
+            if 'plugin_init.py' in files:
+                rel_path = os.path.relpath(root, temp_dir)
+                if rel_path != '.' and os.path.dirname(rel_path) == '':
+                    return root
+        return temp_dir
+
     def convert_plugin_archives(self) -> bool:
         if not os.path.exists(self.app_state.plugins_dir):
             return False
@@ -117,109 +147,45 @@ class PluginManager(QObject):
         try:
             for item_name in os.listdir(self.app_state.plugins_dir):
                 item_path = os.path.join(self.app_state.plugins_dir, item_name)
-                if os.path.isfile(item_path) and item_name.lower().endswith(('.zip', '.7z', '.rar', '.tar.gz', '.lzma')):
+                if not (os.path.isfile(item_path) and item_name.lower().endswith(('.zip', '.7z', '.rar', '.tar.gz', '.lzma'))):
+                    continue
+                try:
+                    if not self._archive_has_plugin_init(item_path, item_name.lower()):
+                        continue
+                    from utils.file_utils import remove_archive_extension
+                    plugin_folder_name = remove_archive_extension(item_name)
+                    plugin_folder_path = os.path.join(self.app_state.plugins_dir, plugin_folder_name)
+                    if os.path.exists(plugin_folder_path):
+                        logging.warning(f'convert_plugin_archives: plugin folder already exists: {plugin_folder_name}')
+                        try:
+                            os.remove(item_path)
+                        except Exception as e:
+                            logging.warning(f'convert_plugin_archives: failed to remove archive {item_name}: {e}')
+                        continue
                     try:
-                        has_plugin_init_py = False
-                        item_name_lower = item_name.lower()
-                        if item_name_lower.endswith('.zip'):
-                            with zipfile.ZipFile(item_path, 'r') as zf:
-                                for name in zf.namelist():
-                                    normalized = name.replace('\\', '/').strip('/')
-                                    if normalized == 'plugin_init.py' or normalized.endswith('/plugin_init.py'):
-                                        has_plugin_init_py = True
-                                        break
-                        elif item_name_lower.endswith('.tar.gz'):
-                            with tarfile.open(item_path, 'r:gz') as tf:
-                                for member in tf.getmembers():
-                                    name = member.name.replace('\\', '/').strip('/')
-                                    if name == 'plugin_init.py' or name.endswith('/plugin_init.py'):
-                                        has_plugin_init_py = True
-                                        break
-                        elif item_name_lower.endswith('.rar'):
-                            try:
-                                import rarfile
-                                with rarfile.RarFile(item_path, 'r') as rf:
-                                    for name in rf.namelist():
-                                        normalized = name.replace('\\', '/').strip('/')
-                                        if normalized == 'plugin_init.py' or normalized.endswith('/plugin_init.py'):
-                                            has_plugin_init_py = True
-                                            break
-                            except (OSError, ImportError) as e:
-                                logging.warning(f'convert_plugin_archives: failed to check rar archive {item_name}: {e}', exc_info=True)
-                        elif item_name_lower.endswith('.7z'):
-                            try:
-                                import py7zr
-                                with py7zr.SevenZipFile(item_path, mode='r') as zf:
-                                    for name in zf.getnames():
-                                        normalized = name.replace('\\', '/').strip('/')
-                                        if normalized == 'plugin_init.py' or normalized.endswith('/plugin_init.py'):
-                                            has_plugin_init_py = True
-                                            break
-                            except (OSError, ImportError) as e:
-                                logging.warning(f'convert_plugin_archives: failed to check 7z archive {item_name}: {e}', exc_info=True)
-                        if has_plugin_init_py:
-                            from utils.file_utils import remove_archive_extension
-                            plugin_folder_name = remove_archive_extension(item_name)
-                            plugin_folder_path = os.path.join(self.app_state.plugins_dir, plugin_folder_name)
-                            if os.path.exists(plugin_folder_path):
-                                logging.warning(f'convert_plugin_archives: plugin folder already exists: {plugin_folder_name}')
-                                try:
-                                    os.remove(item_path)
-                                except Exception as e:
-                                    logging.warning(f'convert_plugin_archives: failed to remove archive {item_name}: {e}')
-                                continue
-                            try:
-                                with tempfile.TemporaryDirectory() as temp_dir:
-                                    from utils.archive_utils import extract_with_unrar_retry
-                                    extract_with_unrar_retry(item_path, temp_dir)
-                                    contents = os.listdir(temp_dir)
-                                    plugin_init_py_path = os.path.join(temp_dir, 'plugin_init.py')
-                                    if os.path.isfile(plugin_init_py_path):
-                                        os.makedirs(plugin_folder_path, exist_ok=True)
-                                        for item in os.listdir(temp_dir):
-                                            shutil.move(os.path.join(temp_dir, item), plugin_folder_path)
-                                    else:
-                                        found_plugin_dir = None
-                                        if len(contents) == 1:
-                                            single_dir = os.path.join(temp_dir, contents[0])
-                                            if os.path.isdir(single_dir):
-                                                single_plugin_init_py = os.path.join(single_dir, 'plugin_init.py')
-                                                if os.path.isfile(single_plugin_init_py):
-                                                    found_plugin_dir = single_dir
-                                        if not found_plugin_dir:
-                                            for root, dirs, files in os.walk(temp_dir):
-                                                if 'plugin_init.py' in files:
-                                                    rel_path = os.path.relpath(root, temp_dir)
-                                                    if rel_path != '.' and os.path.dirname(rel_path) == '.':
-                                                        found_plugin_dir = root
-                                                        break
-                                        if found_plugin_dir:
-                                            os.makedirs(plugin_folder_path, exist_ok=True)
-                                            for item in os.listdir(found_plugin_dir):
-                                                shutil.move(os.path.join(found_plugin_dir, item), plugin_folder_path)
-                                        else:
-                                            os.makedirs(plugin_folder_path, exist_ok=True)
-                                            for item in os.listdir(temp_dir):
-                                                shutil.move(os.path.join(temp_dir, item), plugin_folder_path)
-                                installed_date = datetime.now().strftime('%d.%m.%y %H:%M')
-                                self.update_plugin_metadata(plugin_folder_name, {'enabled': True, 'installed_date': installed_date})
-                                os.remove(item_path)
-                                conversion_happened = True
-                                logging.info(f'convert_plugin_archives: extracted plugin archive {item_name} -> {plugin_folder_name}')
-                            except Exception as e:
-                                error_msg = f'Failed to extract plugin archive {item_name}: {e}'
-                                logging.error(f'convert_plugin_archives: {error_msg}', exc_info=True)
-                                try:
-                                    os.remove(item_path)
-                                except Exception:
-                                    pass
+                        with tempfile.TemporaryDirectory() as temp_dir:
+                            from utils.archive_utils import extract_with_unrar_retry
+                            extract_with_unrar_retry(item_path, temp_dir)
+                            source_dir = self._find_plugin_root(temp_dir)
+                            os.makedirs(plugin_folder_path, exist_ok=True)
+                            for item in os.listdir(source_dir):
+                                shutil.move(os.path.join(source_dir, item), plugin_folder_path)
+                        installed_date = datetime.now().strftime('%d.%m.%y %H:%M')
+                        self.update_plugin_metadata(plugin_folder_name, {'enabled': True, 'installed_date': installed_date})
+                        os.remove(item_path)
+                        conversion_happened = True
+                        logging.info(f'convert_plugin_archives: extracted plugin archive {item_name} -> {plugin_folder_name}')
                     except Exception as e:
-                        error_msg = f'Failed to process plugin archive {item_name}: {e}'
-                        logging.error(f'convert_plugin_archives: {error_msg}', exc_info=True)
+                        logging.error(f'convert_plugin_archives: Failed to extract {item_name}: {e}', exc_info=True)
+                        try:
+                            os.remove(item_path)
+                        except Exception:
+                            pass
+                except Exception as e:
+                    logging.error(f'convert_plugin_archives: Failed to process {item_name}: {e}', exc_info=True)
             return conversion_happened
         except Exception as e:
-            error_msg = f'Error during plugin archive conversion: {e}'
-            logging.error(f'convert_plugin_archives: {error_msg}', exc_info=True)
+            logging.error(f'convert_plugin_archives: Error: {e}', exc_info=True)
             return False
 
     def load_plugins(self):
@@ -243,12 +209,8 @@ class PluginManager(QObject):
                     plugin_module = importlib.util.module_from_spec(spec)
                     sys.modules[f'plugins.{plugin_name}'] = plugin_module
                     spec.loader.exec_module(plugin_module)
-                    plugin_id = getattr(plugin_module, 'PLUGIN_ID', None)
-                    plugin_name_key = getattr(plugin_module, 'PLUGIN_NAME', None)
-                    if not plugin_id:
-                        plugin_id = plugin_name
-                    if not plugin_name_key:
-                        plugin_name_key = plugin_id
+                    plugin_id = getattr(plugin_module, 'PLUGIN_ID', None) or plugin_name
+                    plugin_name_key = getattr(plugin_module, 'PLUGIN_NAME', None) or plugin_id
                     version = getattr(plugin_module, 'VERSION', None)
                     author = getattr(plugin_module, 'AUTHOR', None)
                     description = getattr(plugin_module, 'DESCRIPTION', None)
@@ -264,25 +226,20 @@ class PluginManager(QObject):
                         continue
                     current_lang = localization_service.get_current_language().upper()
                     lang_dict_name = f'LANG_{current_lang}'
-                    plugin_translations = getattr(plugin_module, lang_dict_name, None)
-                    if isinstance(plugin_translations, dict):
-                        localization_service.merge_plugin_translations(plugin_id, plugin_translations)
+                    plugin_strings = getattr(plugin_module, lang_dict_name, None)
+                    if isinstance(plugin_strings, dict):
+                        localization_service.merge_plugin_strings(plugin_id, plugin_strings)
                     elif current_lang != 'EN':
-                        en_translations = getattr(plugin_module, 'LANG_EN', None)
-                        if isinstance(en_translations, dict):
-                            localization_service.merge_plugin_translations(plugin_id, en_translations)
+                        en_strings = getattr(plugin_module, 'LANG_EN', None)
+                        if isinstance(en_strings, dict):
+                            localization_service.merge_plugin_strings(plugin_id, en_strings)
                     plugin_meta = self.get_plugin_metadata(plugin_name)
                     if not plugin_meta.get('installed_date'):
                         installed_date = datetime.now().strftime('%d.%m.%y %H:%M')
                         self.update_plugin_metadata(plugin_name, {'installed_date': installed_date})
                         plugin_meta['installed_date'] = installed_date
                     if description is not None:
-                        if isinstance(description, str):
-                            description = description.strip()
-                            if not description:
-                                description = None
-                        else:
-                            description = str(description).strip() if str(description).strip() else None
+                        description = (description if isinstance(description, str) else str(description)).strip() or None
                     plugin_api = None
                     if self.app_window:
                         plugin_api = PluginAPI(self.app_state, self.app_window, plugin_id, self)
@@ -377,16 +334,9 @@ class PluginManager(QObject):
             if status == 'enabled':
                 loaded_plugin = next((p for p in self.app_state.plugins if p.get('name') == item_name), None)
                 if loaded_plugin:
-                    if not plugin_info.get('plugin_id') and loaded_plugin.get('plugin_id'):
-                        plugin_info['plugin_id'] = loaded_plugin.get('plugin_id')
-                    if not plugin_info.get('name_key') and loaded_plugin.get('name_key'):
-                        plugin_info['name_key'] = loaded_plugin.get('name_key')
-                    if not plugin_info.get('version') and loaded_plugin.get('version'):
-                        plugin_info['version'] = loaded_plugin.get('version')
-                    if not plugin_info.get('author') and loaded_plugin.get('author'):
-                        plugin_info['author'] = loaded_plugin.get('author')
-                    if not plugin_info.get('description') and loaded_plugin.get('description'):
-                        plugin_info['description'] = loaded_plugin.get('description')
+                    for field in ('plugin_id', 'name_key', 'version', 'author', 'description'):
+                        if not plugin_info.get(field) and loaded_plugin.get(field):
+                            plugin_info[field] = loaded_plugin[field]
                     plugin_info['tab_hide'] = loaded_plugin.get('tab_hide', False)
             all_plugins.append(plugin_info)
         return all_plugins

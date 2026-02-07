@@ -115,4 +115,3 @@ class TestManualInstall:
         controller = ModOperationsController(app_state=app_state, feedback_service=feedback_service, mod_service=mod_service, app_window=mock_app_window)
         assert hasattr(controller, '_start_manual_install_from_gamebanana')
         assert hasattr(controller, '_start_prepare_worker')
-        assert hasattr(controller, '_prepare_gamebanana_files_for_manual_install')

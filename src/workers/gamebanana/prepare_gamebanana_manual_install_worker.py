@@ -13,6 +13,7 @@ from services.localization_service import tr
 from core.exceptions import AppError
 from utils.file_utils import download_file_with_progress
 from utils.network_utils import get_session
+from utils.mod_utils import get_mod_key
 from workers.base_install_worker import BaseInstallWorker
 logger = logging.getLogger(__name__)
 
@@ -30,7 +31,7 @@ class PrepareGameBananaManualInstallWorker(BaseInstallWorker):
     def run(self):
         temp_dir = None
         try:
-            mod_key = getattr(self.mod, 'key', None) or getattr(self.mod, 'mod_key', None)
+            mod_key = get_mod_key(self.mod)
             mod_id_str = mod_key.replace('gb_', '', 1) if mod_key and mod_key.startswith('gb_') else None
             if not mod_id_str:
                 raise AppError('errors.invalid_gamebanana_mod_id')
@@ -90,8 +91,7 @@ class PrepareGameBananaManualInstallWorker(BaseInstallWorker):
                         pass
                 self.finished_with_result.emit(False, tr('status.operation_cancelled'))
                 return
-            else:
-                raise
+            raise
         except Exception as e:
             logger.error(f'PrepareGameBananaManualInstallWorker: Failed to prepare files: {e}', exc_info=True)
             if temp_dir and os.path.exists(temp_dir):

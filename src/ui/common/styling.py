@@ -6,6 +6,7 @@ import weakref
 from PyQt6 import sip
 from PyQt6.QtGui import QColor, QPixmap
 from PyQt6.QtWidgets import QLabel
+from utils.mod_utils import get_mod_key
 _STYLE_TEMPLATE = 'QFrame#{frame_selector} {{\n    background-color: {bg_color};\n    border: {border_width} solid {border_color};\n}}\nQFrame#{frame_selector}:hover {{\n    border-color: {hover_border_color};\n}}\nQLabel#{icon_selector} {{\n    border: 2px solid {border_color};\n}}\nQLabel#versionLabel {{\n    color: {version_text_color};\n}}\nQLabel#secondaryText {{\n    color: {version_text_color};\n    font-size: 12px;\n}}\nQLabel#primaryText {{\n    color: {text_color};\n    font-size: 12px;\n}}\nQPushButton#plaqueButton, QPushButton#plaqueButtonInstall, QPushButton#plaqueButtonUninstall {{\n    min-width: 110px;\n    max-width: 110px;\n    min-height: 35px;\n    max-height: 35px;\n    font-size: 15px;\n    padding: 1px;\n}}\nQPushButton#plaqueButtonInstall {{\n    background-color: #4CAF50;\n    font-weight: bold;\n}}\nQPushButton#plaqueButtonInstall:hover {{\n    background-color: #5cb85c;\n}}\nQPushButton#plaqueButtonUninstall {{\n    background-color: #F44336;\n    font-weight: bold;\n}}\nQPushButton#plaqueButtonUninstall:hover {{\n    background-color: #d32f2f;\n}}'
 
 
@@ -134,7 +135,7 @@ def load_mod_icon_universal(icon_label, mod_data, size=80):
             if os.path.isabs(icon_url):
                 local_icon_to_load = icon_url
             else:
-                key = getattr(mod_data, 'key', None) or getattr(mod_data, 'mod_key', None)
+                key = get_mod_key(mod_data)
                 is_local_key = key and isinstance(key, str) and key.startswith('local_')
                 if is_local_key:
                     mod_folder_path = None

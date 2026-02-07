@@ -33,8 +33,7 @@ class TestModManager:
         assert 'test_mod_001' in cache
 
     def test_mod_service_validate_config_valid(self, app_state, feedback_service):
-        from services.mod_service import ModManager
-        mod_service = ModManager(app_state=app_state, feedback_service=feedback_service)
+        from utils.mod_scan_utils import validate_mod_config
         valid_config = {
             'key': 'test_mod',
             'name': 'Test Mod',
@@ -42,36 +41,33 @@ class TestModManager:
             'files': {},
             'tags': []
         }
-        result = mod_service._validate_mod_config(valid_config, '/fake/path', 'test_mod')
+        result = validate_mod_config(valid_config, '/fake/path', 'test_mod')
         assert result is True
 
     def test_mod_service_validate_config_invalid_dict(self, app_state, feedback_service):
-        from services.mod_service import ModManager
-        mod_service = ModManager(app_state=app_state, feedback_service=feedback_service)
+        from utils.mod_scan_utils import validate_mod_config
         invalid_config = ['key', 'name']
-        result = mod_service._validate_mod_config(invalid_config, '/fake/path', 'test_mod')
+        result = validate_mod_config(invalid_config, '/fake/path', 'test_mod')
         assert result is False
 
     def test_mod_service_validate_config_missing_fields(self, app_state, feedback_service):
-        from services.mod_service import ModManager
-        mod_service = ModManager(app_state=app_state, feedback_service=feedback_service)
+        from utils.mod_scan_utils import validate_mod_config
         invalid_config = {'version': '1.0.0'}
-        result = mod_service._validate_mod_config(invalid_config, '/fake/path', 'test_mod')
+        result = validate_mod_config(invalid_config, '/fake/path', 'test_mod')
         assert result is False
 
     def test_mod_service_validate_config_invalid_types(self, app_state, feedback_service):
-        from services.mod_service import ModManager
-        mod_service = ModManager(app_state=app_state, feedback_service=feedback_service)
+        from utils.mod_scan_utils import validate_mod_config
         invalid_config = {'key': 'test', 'name': 123}
-        result = mod_service._validate_mod_config(invalid_config, '/fake/path', 'test_mod')
+        result = validate_mod_config(invalid_config, '/fake/path', 'test_mod')
         assert result is False
 
         invalid_config2 = {'key': 'test', 'name': 'Test', 'files': []}
-        result2 = mod_service._validate_mod_config(invalid_config2, '/fake/path', 'test_mod')
+        result2 = validate_mod_config(invalid_config2, '/fake/path', 'test_mod')
         assert result2 is False
 
         invalid_config3 = {'key': 'test', 'name': 'Test', 'tags': {}}
-        result3 = mod_service._validate_mod_config(invalid_config3, '/fake/path', 'test_mod')
+        result3 = validate_mod_config(invalid_config3, '/fake/path', 'test_mod')
         assert result3 is False
 
 

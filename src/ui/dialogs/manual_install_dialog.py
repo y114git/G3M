@@ -65,12 +65,8 @@ class ManualModInstallDialog(QDialog):
         self.game_combo.addItem('UNDERTALE Yellow', 'undertaleyellow')
         self.game_combo.addItem('Pizza Tower', 'pizzatower')
         self.game_combo.addItem('Sugary Spire', 'sugaryspire')
-        game_value = None
-        if self.initial_game_type:
-            game_value = self.initial_game_type
-        elif self.gamebanana_metadata.get('game'):
-            game_value = self.gamebanana_metadata['game']
-        elif self.app_state and hasattr(self.app_state, 'game_mode'):
+        game_value = self.initial_game_type or self.gamebanana_metadata.get('game')
+        if not game_value and self.app_state and hasattr(self.app_state, 'game_mode'):
             from services.game_detection_service import get_game_type_string
             game_value = get_game_type_string(self.app_state.game_mode)
         if game_value:
@@ -108,7 +104,6 @@ class ManualModInstallDialog(QDialog):
         scroll_layout = QVBoxLayout(scroll_content)
         self.data_tabs = QTabWidget()
         self.data_tabs.setStyleSheet('QTabWidget::tab-bar { alignment: center; }')
-        self.data_tabs.currentChanged.connect(self._on_data_tab_changed)
         scroll_layout.addWidget(self.data_tabs)
         scroll.setWidget(scroll_content)
         data_layout.addWidget(scroll)
@@ -220,20 +215,10 @@ class ManualModInstallDialog(QDialog):
         return None
 
     def _browse_data_file(self, chapter_id: int):
-        extensions = list(DATA_FILE_EXTENSIONS) + ['.data', '.ios', '.droid', '.unx']
-        selected_data_files = set(self.data_file_selections.values())
-        used_as_patches = set()
-        for patches in self.xdelta_patches_mappings.values():
-            used_as_patches.update(patches.keys())
-        found_files = []
-        for file_path, rel_path in self.all_files:
-            if file_path in selected_data_files:
-                continue
-            if file_path in used_as_patches:
-                continue
-            file_ext = os.path.splitext(file_path)[1].lower()
-            if file_ext in extensions:
-                found_files.append((file_path, rel_path))
+        extensions = set(DATA_FILE_EXTENSIONS) | {'.data', '.ios', '.droid', '.unx'}
+        selected_data, used_patches = self._get_excluded_files()
+        excluded = selected_data | used_patches
+        found_files = [(fp, rp) for fp, rp in self.all_files if fp not in excluded and os.path.splitext(fp)[1].lower() in extensions]
         if not found_files:
             QMessageBox.information(self, tr('dialogs.no_data_files'), tr('dialogs.no_data_files_in_directory'))
             return
@@ -259,27 +244,17 @@ class ManualModInstallDialog(QDialog):
         for chapter_id in list(self.xdelta_patch_widgets.keys()):
             self._update_xdelta_patches_section(chapter_id)
 
-    def _on_data_tab_changed(self, index: int):
-        pass
+    def _get_excluded_files(self):
+        selected = set(self.data_file_selections.values())
+        patches = set()
+        for p in self.xdelta_patches_mappings.values():
+            patches.update(p.keys())
+        return selected, patches
 
     def _get_available_xdelta_files(self, chapter_id: int) -> List[tuple]:
-        available = []
-        selected_data_files = set(self.data_file_selections.values())
-        xdelta_extensions = ('.xdelta', '.vcdiff')
-        used_as_patches = set()
-        for cid, patches in self.xdelta_patches_mappings.items():
-            used_as_patches.update(patches.keys())
-        for file_path, rel_path in self.all_files:
-            if file_path in selected_data_files:
-                continue
-            if file_path in self.unused_files:
-                continue
-            if file_path in used_as_patches:
-                continue
-            file_ext = os.path.splitext(file_path)[1].lower()
-            if file_ext in xdelta_extensions:
-                available.append((file_path, rel_path))
-        return available
+        selected_data, used_patches = self._get_excluded_files()
+        excluded = selected_data | self.unused_files | used_patches
+        return [(fp, rp) for fp, rp in self.all_files if fp not in excluded and os.path.splitext(fp)[1].lower() in ('.xdelta', '.vcdiff')]
 
     def _create_xdelta_patches_section(self, chapter_id: int) -> Optional[QWidget]:
         if chapter_id not in self.xdelta_patches_mappings or not self.xdelta_patches_mappings[chapter_id]:
@@ -349,7 +324,7 @@ class ManualModInstallDialog(QDialog):
         return widget
 
     def _on_xdelta_target_path_changed(self, file_path: str, text: str, chapter_id: int):
-        normalized = self._normalize_xdelta_target_path(text)
+        normalized = self._normalize_path(text)
         if normalized != text:
             if chapter_id in self.xdelta_patch_widgets and file_path in self.xdelta_patch_widgets[chapter_id]:
                 widget = self.xdelta_patch_widgets[chapter_id][file_path]
@@ -363,18 +338,13 @@ class ManualModInstallDialog(QDialog):
         elif file_path in self.xdelta_patches_mappings[chapter_id]:
             del self.xdelta_patches_mappings[chapter_id][file_path]
 
-    def _normalize_xdelta_target_path(self, path: str) -> str:
+    @staticmethod
+    def _normalize_path(path: str, trailing_slash: bool = False) -> str:
         if not path:
             return ''
-        path = path.strip()
-        path = path.replace('\\', '/')
-        path = path.strip('/')
-        parts = path.split('/')
-        valid_parts = []
-        for part in parts:
-            if part and part != '..' and (not os.path.isabs(part)):
-                valid_parts.append(part)
-        return '/'.join(valid_parts)
+        path = path.strip().strip('/').strip('\\').replace('\\', '/')
+        result = '/'.join(p for p in path.split('/') if p and p != '..' and not os.path.isabs(p))
+        return (result + '/') if result and trailing_slash else result
 
     def _browse_xdelta_target_file(self, file_path: str, chapter_id: int):
         game_root = self._get_or_prompt_game_folder()
@@ -444,20 +414,14 @@ class ManualModInstallDialog(QDialog):
                 item = self.extra_files_list_layout.takeAt(0)
                 if item.widget():
                     item.widget().deleteLater()
-        selected_data_files = set(self.data_file_selections.values())
-        used_as_patches = set()
-        for patches in self.xdelta_patches_mappings.values():
-            used_as_patches.update(patches.keys())
-        extra_files = [(fp, rp) for fp, rp in self.all_files if fp not in selected_data_files and fp not in used_as_patches]
+        selected_data, used_patches = self._get_excluded_files()
+        extra_files = [(fp, rp) for fp, rp in self.all_files if fp not in selected_data and fp not in used_patches]
         if not extra_files:
             no_files_label = QLabel(tr('dialogs.no_data_files'))
             no_files_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             self.extra_files_list_layout.addWidget(no_files_label)
             return
-        if not hasattr(self, 'extra_file_widgets'):
-            self.extra_file_widgets = {}
-        else:
-            self.extra_file_widgets.clear()
+        self.extra_file_widgets.clear()
         for file_path, rel_path in extra_files:
             file_widget = self._create_extra_file_widget(file_path, rel_path)
             self.extra_files_list_layout.addWidget(file_widget)
@@ -474,12 +438,8 @@ class ManualModInstallDialog(QDialog):
         file_name_label.setMinimumWidth(150)
         file_name_label.setMaximumWidth(200)
         layout.addWidget(file_name_label)
-        auto_path = ''
-        if rel_path and os.path.dirname(rel_path):
-            dir_part = os.path.dirname(rel_path)
-            auto_path = dir_part.replace('\\', '/').strip('/')
-            if auto_path:
-                auto_path += '/'
+        dir_part = os.path.dirname(rel_path).replace('\\', '/').strip('/') if rel_path else ''
+        auto_path = (dir_part + '/') if dir_part else ''
         path_input = QLineEdit()
         path_input.setObjectName('path_input')
         path_input.setMinimumWidth(300)
@@ -512,7 +472,7 @@ class ManualModInstallDialog(QDialog):
         return widget
 
     def _on_path_changed(self, file_path: str, text: str):
-        normalized = self._normalize_relative_path(text)
+        normalized = self._normalize_path(text, trailing_slash=True)
         if normalized != text:
             if file_path in self.extra_file_widgets:
                 widget = self.extra_file_widgets[file_path]
@@ -523,22 +483,6 @@ class ManualModInstallDialog(QDialog):
             self.extra_files_mappings[file_path] = normalized
         elif file_path in self.extra_files_mappings:
             del self.extra_files_mappings[file_path]
-
-    def _normalize_relative_path(self, path: str) -> str:
-        if not path:
-            return ''
-        path = path.strip()
-        path = path.strip('/').strip('\\')
-        path = path.replace('\\', '/')
-        parts = path.split('/')
-        valid_parts = []
-        for part in parts:
-            if part and part != '..' and (not os.path.isabs(part)):
-                valid_parts.append(part)
-        result = '/'.join(valid_parts)
-        if result:
-            result += '/'
-        return result
 
     def _browse_target_folder(self, file_path: str):
         game_root = self._get_or_prompt_game_folder()
@@ -584,42 +528,32 @@ class ManualModInstallDialog(QDialog):
         return game_root if game_root and os.path.exists(game_root) else None
 
     def _toggle_file_usage(self, file_path: str):
-        if file_path in self.unused_files:
-            self.unused_files.remove(file_path)
-        else:
+        is_unused = file_path not in self.unused_files
+        if is_unused:
             self.unused_files.add(file_path)
-            if file_path in self.extra_files_mappings:
-                del self.extra_files_mappings[file_path]
-        if file_path in self.extra_file_widgets:
-            widget = self.extra_file_widgets[file_path]
-            toggle_btn = widget.findChild(QPushButton, f'toggle_btn_{file_path}')
-            if toggle_btn:
-                if file_path in self.unused_files:
-                    toggle_btn.setText(tr('ui.use_button'))
-                else:
-                    toggle_btn.setText(tr('ui.remove_button'))
-            path_input = widget.findChild(QLineEdit, 'path_input')
-            if path_input:
-                if file_path in self.unused_files:
-                    path_input.setEnabled(False)
-                    path_input.clear()
-                else:
-                    path_input.setEnabled(True)
-            browse_btn = None
-            for child in widget.findChildren(QPushButton):
-                if child.objectName() != f'toggle_btn_{file_path}' and child.text() == tr('ui.browse_button'):
-                    browse_btn = child
-                    break
-            if browse_btn:
-                browse_btn.setEnabled(file_path not in self.unused_files)
+            self.extra_files_mappings.pop(file_path, None)
+        else:
+            self.unused_files.discard(file_path)
+        if file_path not in self.extra_file_widgets:
+            return
+        widget = self.extra_file_widgets[file_path]
+        toggle_btn = widget.findChild(QPushButton, f'toggle_btn_{file_path}')
+        if toggle_btn:
+            toggle_btn.setText(tr('ui.use_button') if is_unused else tr('ui.remove_button'))
+        path_input = widget.findChild(QLineEdit, 'path_input')
+        if path_input:
+            path_input.setEnabled(not is_unused)
+            if is_unused:
+                path_input.clear()
+        for child in widget.findChildren(QPushButton):
+            if child.objectName() != f'toggle_btn_{file_path}' and child.text() == tr('ui.browse_button'):
+                child.setEnabled(not is_unused)
+                break
 
     def _on_finish(self):
         has_data_files = bool(self.data_file_selections)
-        selected_data_files = set(self.data_file_selections.values())
-        used_as_patches = set()
-        for patches in self.xdelta_patches_mappings.values():
-            used_as_patches.update(patches.keys())
-        extra_files_count = sum((1 for fp, _ in self.all_files if fp not in selected_data_files and fp not in self.unused_files and (fp not in used_as_patches)))
+        selected_data, used_patches = self._get_excluded_files()
+        extra_files_count = sum(1 for fp, _ in self.all_files if fp not in selected_data and fp not in self.unused_files and fp not in used_patches)
         has_extra_files = extra_files_count > 0
         if not has_data_files and (not has_extra_files):
             QMessageBox.warning(self, tr('errors.error'), tr('dialogs.no_data_file_selected'))
@@ -687,20 +621,9 @@ class ManualModInstallDialog(QDialog):
             shutil.copy2(data_file_path, target_data_path)
             files_structure[chapter_key]['data_file_url'] = data_file_name
         archive_files_map = {}
-        selected_data_files = set(self.data_file_selections.values())
-        used_as_patches = set()
-        for patches in self.xdelta_patches_mappings.values():
-            used_as_patches.update(patches.keys())
-        all_extra_files = []
-        for file_path, rel_path in self.all_files:
-            if file_path in selected_data_files:
-                continue
-            if file_path in self.unused_files:
-                continue
-            if file_path in used_as_patches:
-                continue
-            relative_path = self.extra_files_mappings.get(file_path, '')
-            all_extra_files.append((file_path, relative_path))
+        selected_data, used_patches = self._get_excluded_files()
+        excluded = selected_data | self.unused_files | used_patches
+        all_extra_files = [(fp, self.extra_files_mappings.get(fp, '')) for fp in (fp for fp, _ in self.all_files if fp not in excluded)]
         for chapter_id, patches in self.xdelta_patches_mappings.items():
             patch_chapter_key = self._get_chapter_key(game, chapter_id)
             if patch_chapter_key not in files_structure:
@@ -713,29 +636,16 @@ class ManualModInstallDialog(QDialog):
                     continue
                 dir_part = os.path.dirname(target_path_normalized)
                 file_part = os.path.basename(target_path_normalized)
-                if dir_part:
-                    relative_path = dir_part + '/'
-                else:
-                    relative_path = ''
+                relative_path = (dir_part + '/') if dir_part else ''
                 clean_path = relative_path.rstrip('/') if relative_path else ''
                 archive_key = self._make_archive_key(relative_path)
                 renamed_xdelta_name = f'{file_part}.xdelta'
-                if clean_path:
-                    archive_internal_path = f'{clean_path}/{renamed_xdelta_name}'
-                else:
-                    archive_internal_path = renamed_xdelta_name
+                archive_internal_path = f'{clean_path}/{renamed_xdelta_name}' if clean_path else renamed_xdelta_name
                 archive_map_key = (patch_chapter_key, archive_key)
                 if archive_map_key not in archive_files_map:
                     archive_files_map[archive_map_key] = []
                 archive_files_map[archive_map_key].append((xdelta_file_path, relative_path, archive_internal_path))
         for extra_file_path, relative_path in all_extra_files:
-            is_data_file = False
-            for ch_id, data_path in self.data_file_selections.items():
-                if extra_file_path == data_path:
-                    is_data_file = True
-                    break
-            if is_data_file:
-                continue
             relative_path = relative_path.strip().strip('/').strip('\\') if relative_path else ''
             target_chapter_id = 0
             if game == 'deltarune' and self.data_file_selections:
@@ -746,24 +656,17 @@ class ManualModInstallDialog(QDialog):
             extra_file_name = os.path.basename(extra_file_path)
             clean_path = relative_path.rstrip('/') if relative_path else ''
             archive_key = self._make_archive_key(relative_path)
-            clean_relative_path = relative_path.rstrip('/') if relative_path else ''
-            if clean_relative_path:
-                archive_internal_path = f'{clean_relative_path}/{extra_file_name}'
-            else:
-                archive_internal_path = extra_file_name
+            archive_internal_path = f'{clean_path}/{extra_file_name}' if clean_path else extra_file_name
             archive_map_key = (chapter_key, archive_key)
             if archive_map_key not in archive_files_map:
                 archive_files_map[archive_map_key] = []
             archive_files_map[archive_map_key].append((extra_file_path, relative_path, archive_internal_path))
         for (chapter_key, archive_key), file_list in archive_files_map.items():
             if game == 'deltarune':
-                if chapter_key == '0':
+                try:
+                    target_chapter_id = int(chapter_key)
+                except ValueError:
                     target_chapter_id = 0
-                else:
-                    try:
-                        target_chapter_id = int(chapter_key)
-                    except ValueError:
-                        target_chapter_id = 0
                 chapter_folder_name = get_chapter_folder_name(target_chapter_id, game=game)
             else:
                 chapter_folder_name = chapter_key

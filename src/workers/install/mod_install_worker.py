@@ -91,21 +91,17 @@ class ModInstallWorker(BaseInstallWorker):
                 from adapters.deltamod_adapter import DeltamodConverter
                 converter = DeltamodConverter(content_path, self.mods_dir, self.gamebanana_metadata)
                 new_mod_path = converter.convert()
-                if new_mod_path:
-                    return True
-                else:
+                if not new_mod_path:
                     logging.error('ModInstallWorker: Deltamod conversion failed')
-                    return False
+                return bool(new_mod_path)
             mod_config_path = None
-            for root, dirs, files in os.walk(content_path):
-                if MOD_CONFIG_FILENAME in files:
-                    mod_config_path = os.path.join(root, MOD_CONFIG_FILENAME)
-                    break
-            if not mod_config_path:
+            for config_name in (MOD_CONFIG_FILENAME, LEGACY_MOD_CONFIG_FILENAME):
                 for root, dirs, files in os.walk(content_path):
-                    if LEGACY_MOD_CONFIG_FILENAME in files:
-                        mod_config_path = os.path.join(root, LEGACY_MOD_CONFIG_FILENAME)
+                    if config_name in files:
+                        mod_config_path = os.path.join(root, config_name)
                         break
+                if mod_config_path:
+                    break
             if not mod_config_path:
                 logging.error('ModInstallWorker: config file not found in mod archive')
                 return False
@@ -205,8 +201,8 @@ class ModInstallWorker(BaseInstallWorker):
                 config_updated = True
             final_config_path = target_config_path if os.path.exists(target_config_path) else os.path.join(target_mod_dir, MOD_CONFIG_FILENAME)
             if config_updated or not os.path.exists(final_config_path):
-                from utils.file_utils import atomic_write_json
-                atomic_write_json(final_config_path, config_data, indent=2)
+                from utils.file_utils import save_json
+                save_json(final_config_path, config_data, indent=2)
             return True
         except Exception as e:
             logging.error(f'ModInstallWorker: Error installing mod from path: {e}', exc_info=True)

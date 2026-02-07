@@ -399,18 +399,8 @@ class ChatWindow(QDialog):
                         self._closed = True
             elif not self._closed:
                 try:
-                    if error == 'message_too_long':
-                        self.status_label.setText(tr('chat.message_too_long'))
-                    elif error == 'contains_url':
-                        self.status_label.setText(tr('chat.contains_url'))
-                    elif error == 'no_internet':
-                        self.status_label.setText(tr('chat.no_internet'))
-                    elif error == 'config_error':
-                        self.status_label.setText(tr('chat.config_error'))
-                    elif error == 'channel_error':
-                        self.status_label.setText(tr('chat.channel_error'))
-                    else:
-                        self.status_label.setText(tr('chat.error_sending'))
+                    error_keys = {'message_too_long': 'chat.message_too_long', 'contains_url': 'chat.contains_url', 'no_internet': 'chat.no_internet', 'config_error': 'chat.config_error', 'channel_error': 'chat.channel_error'}
+                    self.status_label.setText(tr(error_keys.get(error, 'chat.error_sending')))
                 except (RuntimeError, AttributeError):
                     self._closed = True
         except (RuntimeError, AttributeError) as e:
@@ -495,18 +485,11 @@ class ChatWindow(QDialog):
             self.chat_request_thread.cancel()
             try:
                 self.chat_request_thread.blockSignals(True)
-                try:
-                    self.chat_request_thread.messages_received.disconnect()
-                except (TypeError, RuntimeError):
-                    pass
-                try:
-                    self.chat_request_thread.message_sent.disconnect()
-                except (TypeError, RuntimeError):
-                    pass
-                try:
-                    self.chat_request_thread.error_occurred.disconnect()
-                except (TypeError, RuntimeError):
-                    pass
+                for sig in (self.chat_request_thread.messages_received, self.chat_request_thread.message_sent, self.chat_request_thread.error_occurred):
+                    try:
+                        sig.disconnect()
+                    except (TypeError, RuntimeError):
+                        pass
                 self.chat_request_thread.blockSignals(False)
             except (TypeError, RuntimeError, AttributeError):
                 pass

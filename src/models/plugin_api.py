@@ -2,6 +2,7 @@
 import logging
 from typing import Any, List, Optional
 from PyQt6.QtCore import QObject
+from utils.mod_utils import get_mod_key
 
 
 class PluginAPI(QObject):
@@ -33,7 +34,7 @@ class PluginAPI(QObject):
         return list(self.app_state.all_mods) if hasattr(self.app_state, 'all_mods') and self.app_state.all_mods else []
 
     def get_mod_by_key(self, key: str) -> Optional[Any]:
-        return next((m for m in self.get_mods() if (getattr(m, 'key', None) or getattr(m, 'mod_key', None)) == key), None)
+        return next((m for m in self.get_mods() if get_mod_key(m) == key), None)
 
     def get_config(self, key: str, default: Any = None) -> Any:
         return self._config.get(key, default)

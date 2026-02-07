@@ -148,10 +148,10 @@ def setup_app():
     if not getattr(sys, 'frozen', False):
         os.environ.setdefault('QT_MEDIA_BACKEND', 'ffmpeg')
     app = QApplication(sys.argv)
-    qt_translation_file = localization_service.get_qt_translation_name(language_code)
-    if qt_translation_file:
+    qt_locale_file = localization_service.get_qt_locale_name(language_code)
+    if qt_locale_file:
         path = QLibraryInfo.path(QLibraryInfo.LibraryPath.TranslationsPath)
-        if _translator.load(qt_translation_file, path):
+        if _translator.load(qt_locale_file, path):
             app.installTranslator(_translator)
     app.setApplicationName('DELTAHUB')
     from config.constants import LAUNCHER_VERSION
@@ -197,29 +197,18 @@ def _load_config_file() -> dict:
         with open(config_path, 'r', encoding='utf-8') as f:
             config = json.load(f)
         if not isinstance(config, dict):
-            logging.warning('Config file does not contain a dictionary, resetting to empty config')
-            backup_path = f'{config_path}.invalid.bak'
-            try:
-                shutil.copy2(config_path, backup_path)
-                logging.warning(f'Invalid config structure detected, backed up to {backup_path}')
-                os.remove(config_path)
-                logging.info(f'Removed invalid config file: {config_path}')
-            except Exception as e:
-                logging.warning(f'Failed to backup invalid config file: {e}')
-            return {}
+            raise ValueError('Config is not a dict')
         if config_path == old_config_path and (not os.path.exists(settings_path)):
             shutil.move(old_config_path, settings_path)
-            logging.info('Migrated settings config.json to settings.json in startup')
         return config
-    except json.JSONDecodeError:
+    except (json.JSONDecodeError, ValueError):
         backup_path = f'{config_path}.invalid.bak'
         try:
             shutil.copy2(config_path, backup_path)
-            logging.warning(f'Corrupted config file detected, backed up to {backup_path}')
             os.remove(config_path)
-            logging.info(f'Removed corrupted config file: {config_path}')
+            logging.warning(f'Invalid/corrupted config backed up to {backup_path}')
         except Exception as e:
-            logging.warning(f'Failed to backup corrupted config file: {e}')
+            logging.warning(f'Failed to backup config file: {e}')
         return {}
     except (PermissionError, OSError) as e:
         logging.warning(f'Permission or OS error loading config file: {e}')
@@ -270,29 +259,6 @@ def run_app():
     show_animated_splash = not splash_disabled_by_user
 
     def create_launcher_and_show_splash(app, initial_url, show_animation: bool):
-        """Create the launcher window and show splash screen.
-
-        This function handles the application startup sequence, including
-        creating and displaying the splash screen (either animated GIF or
-        static PNG), managing the launcher window display, and coordinating
-        the transition from splash to main application window.
-
-        Args:
-            app: The QApplication instance.
-            initial_url: Initial URL to handle on startup.
-            show_animation: Whether to show animated splash screen.
-
-        This function manages:
-        - Splash screen creation and display (PNG or animated GIF)
-        - Audio playback for splash screen
-        - Launcher window initialization and showing
-        - Minimum splash duration enforcement
-        - Proper cleanup and transition handling
-        - Error handling for window display issues
-
-        Returns:
-            None, but sets up the application state and shows windows.
-        """
         global _splash_start_time
         launcher_app = {}
         window_shown_flag = {'shown': False}
@@ -321,7 +287,6 @@ def run_app():
                     ex.is_shown_to_user = True
                     if hasattr(ex, 'app_state'):
                         ex.app_state.is_shown_to_user = True
-                    from PyQt6.QtWidgets import QApplication
                     qapp = QApplication.instance()
                     if qapp:
                         qapp.processEvents()
@@ -370,25 +335,6 @@ def run_app():
         QTimer.singleShot(SPLASH_WATCHDOG_TIMEOUT, watchdog_callback)
 
         def create_launcher():
-            """Create and initialize the main application launcher window.
-
-            This function creates the AppWindow instance, sets up the
-            single-instance server, and configures the startup sequence.
-            It handles the transition from splash screen to main window
-            and manages various timing and fallback scenarios.
-
-            Features:
-            - AppWindow creation and initialization
-            - Single instance server setup
-            - Post-show initialization
-            - Mods display ready handling
-            - Fallback window showing with timeouts
-            - Splash screen coordination
-            - Error handling and cleanup
-
-            Returns:
-                None, but creates the launcher_app['instance'] with the AppWindow.
-            """
             try:
                 from core.app_window import AppWindow
                 launcher_app['instance'] = AppWindow(parent_for_dialogs=splash, initial_url=initial_url)

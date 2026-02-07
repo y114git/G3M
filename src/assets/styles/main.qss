@@ -39,7 +39,7 @@ QPushButton:disabled, QComboBox:disabled {
     color: #888888;
     border: 2px solid #555555;
 }
-QPushButton#addTranslationButton {
+QPushButton#addLocalizationButton {
     min-width: 33px;
     min-height: 33px;
     padding: 2px;

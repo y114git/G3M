@@ -8,7 +8,9 @@ import zipfile
 from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QFileDialog, QMessageBox, QListWidget, QListWidgetItem, QCheckBox
 from PyQt6.QtCore import Qt
 from services.localization_service import tr
-from utils.file_utils import find_deltamod_info_file
+from utils.file_utils import find_deltamod_info_file, save_json
+from utils.archive_utils import extract_archive
+from utils.mod_utils import get_mod_key
 from config.constants import MOD_CONFIG_FILENAME, LEGACY_MOD_CONFIG_FILENAME
 
 
@@ -19,9 +21,6 @@ class ModImportExportController:
         self.app_state = app_state
         self.mod_service = mod_service
         self.app_window = app_window
-
-    def _reset_install_state(self) -> None:
-        self.app_state.reset_install_state()
 
     def _refresh_mod_list(self) -> None:
         self.mod_service.invalidate_mods_cache()
@@ -57,11 +56,8 @@ class ModImportExportController:
 
     def _install_mod_from_file(self, file_path: str):
         from utils.file_utils import sanitize_filename, remove_archive_extension
-        logging.info(f'[IMPORT] Starting mod import from file: {file_path}')
         try:
             with tempfile.TemporaryDirectory(prefix='deltahub_import_') as temp_dir:
-                logging.info(f'[IMPORT] Extracting archive to temporary directory: {temp_dir}')
-                from utils.archive_utils import extract_archive
                 try:
                     extract_archive(file_path, temp_dir)
                 except Exception as e:
@@ -76,18 +72,14 @@ class ModImportExportController:
                 contents = os.listdir(temp_dir)
                 if len(contents) == 1 and os.path.isdir(os.path.join(temp_dir, contents[0])):
                     content_path = os.path.join(temp_dir, contents[0])
-                    logging.info(f'[IMPORT] Archive contains single directory, using: {content_path}')
                 if find_deltamod_info_file(content_path):
-                    logging.info('[IMPORT] DELTAMOD format detected, converting...')
                     from adapters.deltamod_adapter import DeltamodConverter
                     converter = DeltamodConverter(content_path, self.app_state.mods_dir)
                     new_mod_path = converter.convert()
                     if new_mod_path:
-                        logging.info(f'[IMPORT] DELTAMOD converted successfully to: {new_mod_path}')
                         self._refresh_mod_list()
                         QMessageBox.information(self.app_window, tr('dialogs.success'), tr('status.mod_imported_success'))
                     else:
-                        logging.error('[IMPORT] DELTAMOD conversion failed')
                         QMessageBox.critical(self.app_window, tr('errors.error'), tr('errors.mod_import_failed', error='Conversion failed'))
                     return
                 config_path_to_read = os.path.join(content_path, MOD_CONFIG_FILENAME)
@@ -95,25 +87,19 @@ class ModImportExportController:
                     legacy_config_path = os.path.join(content_path, LEGACY_MOD_CONFIG_FILENAME)
                     if os.path.exists(legacy_config_path):
                         config_path_to_read = legacy_config_path
-                        logging.info('[IMPORT] Found legacy config.json, will migrate to mod_config.json')
-                logging.info(f'[IMPORT] Looking for mod config at: {config_path_to_read}')
                 if os.path.exists(config_path_to_read):
-                    logging.info('[IMPORT] Found mod config, reading...')
                     with open(config_path_to_read, 'r', encoding='utf-8') as f:
                         config = json.load(f)
                     key = config.get('key') or config.get('mod_key')
                     mod_name = config.get('name', 'Unknown')
-                    logging.info(f'[IMPORT] Mod name: {mod_name}, key: {key}')
                     mod_key_generated = False
                     if not key:
-                        from utils.file_utils import save_json
                         key = f"local_{sanitize_filename(mod_name).lower().replace(' ', '_')}"
                         config['key'] = key
                         if 'mod_key' in config:
                             del config['mod_key']
                         save_json(config_path_to_read, config, indent=2)
                         mod_key_generated = True
-                        logging.info(f'[IMPORT] Generated key: {key}')
                     archive_name = remove_archive_extension(os.path.basename(file_path))
                     folder_name = sanitize_filename(archive_name)
                     target_mod_dir = os.path.join(self.app_state.mods_dir, folder_name)
@@ -128,9 +114,8 @@ class ModImportExportController:
                     if os.path.exists(target_old_config_path) and (not os.path.exists(target_config_path)):
                         try:
                             shutil.move(target_old_config_path, target_config_path)
-                            logging.info(f'Migrated mod config.json to mod_config.json during import in {folder_name}')
                         except Exception as e:
-                            logging.warning(f'Failed to migrate mod config.json to mod_config.json during import in {folder_name}: {e}')
+                            logging.warning(f'Failed to migrate config during import: {e}')
                     config_path = target_config_path
                     config_updated = False
                     if 'files' in config:
@@ -161,14 +146,10 @@ class ModImportExportController:
                         config['icon_url'] = '_icon.png' if os.path.basename(icon_path) == '_icon.png' else 'icon.png'
                         config_updated = True
                     if config_updated or mod_key_generated:
-                        from utils.file_utils import save_json
                         save_json(config_path, config, indent=2)
-                    logging.info(f'[IMPORT] Mod installed successfully to: {target_mod_dir}')
                     self._refresh_mod_list()
-                    logging.info('[IMPORT] Mod cache invalidated and mod list reloaded')
                     QMessageBox.information(self.app_window, tr('dialogs.success'), tr('status.mod_imported_success'))
                 else:
-                    logging.error(f'[IMPORT] Mod config not found at: {config_path_to_read}')
                     self._show_import_error_with_manual_install(file_path, tr('errors.invalid_mod_format'))
         except Exception as e:
             logging.error(f'[IMPORT] Mod import failed: {e}', exc_info=True)
@@ -182,34 +163,25 @@ class ModImportExportController:
             if success:
                 self.app_window.feedback_service.update_status(tr('status.ready'), 'green')
                 return True
-            else:
-                from PyQt6.QtGui import QDesktopServices
-                from PyQt6.QtCore import QUrl
-                import platform
-                bin_path = os.path.dirname(_get_unrar_path())
-                system_os = platform.system()
-                msg_text = ''
-                url_to_open = ''
-                if system_os == 'Linux':
-                    url_to_open = 'https://www.rarlab.com/rar_add.htm'
-                    msg_text = tr('errors.unrar_manual_install_linux', url=url_to_open, path=bin_path)
-                elif system_os == 'Darwin':
-                    url_to_open = 'https://www.rarlab.com/rar/unrar_MacOSX_10.13.2_64bit.gz'
-                    msg_text = tr('errors.unrar_manual_install_mac', url=url_to_open, path=bin_path)
-                else:
-                    url_to_open = 'https://www.rarlab.com/rar/unrarw64.exe'
-                    msg_text = tr('errors.unrar_manual_install_windows', url=url_to_open, path=bin_path)
-                msg = QMessageBox(self.app_window)
-                msg.setIcon(QMessageBox.Icon.Warning)
-                msg.setWindowTitle(tr('errors.error'))
-                msg.setText(tr('errors.unrar_download_failed', error='Download failed/Platform not supported'))
-                msg.setInformativeText(msg_text)
-                open_btn = msg.addButton(tr('buttons.open_browser') if tr('buttons.open_browser') != 'buttons.open_browser' else 'Open Website', QMessageBox.ButtonRole.ActionRole)
-                _ = msg.addButton(tr('buttons.ok'), QMessageBox.ButtonRole.AcceptRole)
-                msg.exec()
-                if msg.clickedButton() == open_btn:
-                    QDesktopServices.openUrl(QUrl(url_to_open))
-                return False
+            from PyQt6.QtGui import QDesktopServices
+            from PyQt6.QtCore import QUrl
+            import platform
+            bin_path = os.path.dirname(_get_unrar_path())
+            system_os = platform.system()
+            platform_info = {'Linux': ('https://www.rarlab.com/rar_add.htm', 'errors.unrar_manual_install_linux'), 'Darwin': ('https://www.rarlab.com/rar/unrar_MacOSX_10.13.2_64bit.gz', 'errors.unrar_manual_install_mac')}
+            url_to_open, msg_key = platform_info.get(system_os, ('https://www.rarlab.com/rar/unrarw64.exe', 'errors.unrar_manual_install_windows'))
+            msg_text = tr(msg_key, url=url_to_open, path=bin_path)
+            msg = QMessageBox(self.app_window)
+            msg.setIcon(QMessageBox.Icon.Warning)
+            msg.setWindowTitle(tr('errors.error'))
+            msg.setText(tr('errors.unrar_download_failed', error='Download failed/Platform not supported'))
+            msg.setInformativeText(msg_text)
+            open_btn = msg.addButton(tr('buttons.open_browser') if tr('buttons.open_browser') != 'buttons.open_browser' else 'Open Website', QMessageBox.ButtonRole.ActionRole)
+            _ = msg.addButton(tr('buttons.ok'), QMessageBox.ButtonRole.AcceptRole)
+            msg.exec()
+            if msg.clickedButton() == open_btn:
+                QDesktopServices.openUrl(QUrl(url_to_open))
+            return False
         return False
 
     def _install_mod_from_url(self, url: str):
@@ -259,7 +231,7 @@ class ModImportExportController:
 
     def _on_manual_install_required(self, prepared_path: str, archive_path: str, temp_dir: str):
         try:
-            self._reset_install_state()
+            self.app_state.reset_install_state()
 
             def _on_accept():
                 from ui.utils.ui_utils import refresh_ui_after_mod_install
@@ -297,7 +269,6 @@ class ModImportExportController:
 
     def _prepare_local_files_for_manual_install(self, file_path: str) -> str:
         temp_dir = tempfile.mkdtemp(prefix='deltahub_manual_install_')
-        from utils.archive_utils import extract_archive
         try:
             try:
                 extract_archive(file_path, temp_dir)
@@ -323,7 +294,7 @@ class ModImportExportController:
             raise
 
     def _on_mod_install_finished(self, success: bool, message: str):
-        self._reset_install_state()
+        self.app_state.reset_install_state()
         if success:
             self._refresh_mod_list()
             self.app_window.feedback_service.update_status(message, 'green')
@@ -367,7 +338,7 @@ class ModImportExportController:
                 mod_data = None
                 if hasattr(self.app_state, 'all_mods'):
                     for mod in self.app_state.all_mods:
-                        mod_key_attr = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
+                        mod_key_attr = get_mod_key(mod)
                         if mod_key_attr == key:
                             mod_data = mod
                             break
@@ -391,9 +362,8 @@ class ModImportExportController:
 
     def _find_mod_dir_by_config(self, mod) -> str | None:
         if not os.path.exists(self.app_state.mods_dir):
-            logging.error(f'Mods directory does not exist: {self.app_state.mods_dir}')
             return None
-        mod_key_attr = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
+        mod_key_attr = get_mod_key(mod)
         for entry in os.scandir(self.app_state.mods_dir):
             if not entry.is_dir():
                 continue
@@ -403,7 +373,6 @@ class ModImportExportController:
                 if os.path.exists(old_config_path):
                     try:
                         shutil.move(old_config_path, config_path)
-                        logging.info(f'Migrated mod config.json to mod_config.json during export in {entry.name}')
                     except Exception as e:
                         logging.warning(f'Error migrating config in {entry.path}: {e}')
                         continue
@@ -413,7 +382,7 @@ class ModImportExportController:
                 with open(config_path, 'r', encoding='utf-8') as f:
                     config = json.load(f)
                 config_key = config.get('key') or config.get('mod_key')
-                if config_key and config_key == mod_key_attr:
+                if config_key == mod_key_attr:
                     return entry.path
                 if not config_key and config.get('name', '') == mod.name:
                     return entry.path
@@ -434,13 +403,13 @@ class ModImportExportController:
             return
         try:
             self.mod_service.invalidate_mods_cache()
-            key = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
+            key = get_mod_key(mod)
             mod_dir = self.mod_service.get_mod_folder_path(key)
             if not mod_dir or not os.path.exists(mod_dir):
                 mod_dir = self._find_mod_dir_by_config(mod)
             if not mod_dir or not os.path.exists(mod_dir):
                 logging.error(f'Mod folder not found for mod: {mod.name}')
-                mod_key_attr = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
+                mod_key_attr = get_mod_key(mod)
                 QMessageBox.critical(self.app_window, tr('errors.error'), tr('errors.mod_folder_not_found_simple', path=mod_dir or mod_key_attr))
                 return
             game = getattr(mod, 'game', None) or getattr(mod, 'modgame', None)

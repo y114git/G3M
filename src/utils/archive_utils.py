@@ -231,7 +231,8 @@ def _cleanup_extracted_archive(target_dir: str, is_game_installation: bool = Fal
         if len(entries) == 1 and os.path.isdir(single := os.path.join(target_dir, entries[0])):
             for item in os.listdir(single):
                 dst = os.path.join(target_dir, item)
-                (safe_rmtree if os.path.isdir(dst) else safe_remove)(dst) if os.path.exists(dst) else None
+                if os.path.exists(dst):
+                    (safe_rmtree if os.path.isdir(dst) else safe_remove)(dst)
                 safe_move(os.path.join(single, item), dst)
             try:
                 os.rmdir(single)
@@ -403,7 +404,10 @@ def prompt_for_unrar_install(parent_widget=None, signal_callback=None) -> bool:
             except (ImportError, AttributeError):
                 return False
         if QMessageBox.question(parent_widget, tr('errors.unrar_missing_title'), tr('errors.unrar_missing_text'), QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No) == QMessageBox.StandardButton.Yes:
-            return download_and_setup_unrar() and logging.info('UnRAR installed') or True
+            success = download_and_setup_unrar()
+            if success:
+                logging.info('UnRAR installed')
+            return success
         return False
     except ImportError:
         return False

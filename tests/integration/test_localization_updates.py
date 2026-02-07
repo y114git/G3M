@@ -46,9 +46,9 @@ class TestUIElementsUseTrFunction:
             pytest.fail(f'Found {len(issues)} potential hardcoded UI texts (should use tr()):\n' + '\n'.join(issues[:30]))
 
 
-class TestWidgetRetranslateMethods:
+class TestWidgetRelocalizeMethods:
 
-    def test_widgets_have_retranslate_methods(self):
+    def test_widgets_have_relocalize_methods(self):
         ui_widgets_dir = Path('src/ui/widgets')
         if not ui_widgets_dir.exists():
             pytest.skip('src/ui/widgets directory not found')
@@ -60,15 +60,15 @@ class TestWidgetRetranslateMethods:
                 continue
             try:
                 content = widget_path.read_text(encoding='utf-8')
-                has_translation = 'tr(' in content
-                has_retranslate = bool(re.search('def\\s+retranslate', content, re.IGNORECASE))
-                if has_translation and (not has_retranslate):
+                has_localization = 'tr(' in content
+                has_relocalize = bool(re.search('def\\s+relocalize', content, re.IGNORECASE))
+                if has_localization and (not has_relocalize):
                     if 'class' in content and ('Widget' in content or 'QFrame' in content or 'QWidget' in content):
-                        issues.append(f'{widget_file} uses translations but may not have retranslate method')
+                        issues.append(f'{widget_file} uses localization but may not have relocalize method')
             except Exception:
                 pass
         if issues:
-            pytest.skip(f"Widgets that may need retranslate methods: {', '.join(issues)}")
+            pytest.skip(f"Widgets that may need relocalize methods: {', '.join(issues)}")
 
 
 class TestLocalizationRefresh:

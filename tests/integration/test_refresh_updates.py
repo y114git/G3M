@@ -20,7 +20,7 @@ class TestRefreshModList:
             assert mock_fetch.called
             assert mock_thread.start.called
 
-    def test_refresh_calls_retranslate(self, app_state):
+    def test_refresh_calls_relocalize(self, app_state):
         from controllers.refresh_controller import RefreshController
         feedback_service = Mock()
         mod_service = Mock()
@@ -28,13 +28,13 @@ class TestRefreshModList:
         game_launch_controller = Mock()
         update_checker = Mock()
         app_window = Mock()
-        retranslate_callback = Mock()
+        localization_callback = Mock()
         refresh_controller = RefreshController(app_state, feedback_service, mod_service, slot_service, game_launch_controller, update_checker, app_window=app_window)
         with patch('controllers.refresh_controller.FetchModsThread') as mock_fetch, \
                 patch('controllers.refresh_controller.is_game_running', return_value=False):
             mock_thread = Mock()
             mock_fetch.return_value = mock_thread
-            refresh_controller.refresh_mods_list(is_initial=False, retranslate_callback=retranslate_callback)
+            refresh_controller.refresh_mods_list(is_initial=False, localization_callback=localization_callback)
             assert mock_fetch.called
 
 

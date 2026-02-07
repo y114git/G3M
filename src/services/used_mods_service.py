@@ -78,11 +78,7 @@ class UsedModsManager(QObject):
             return
         chapters_changed = []
         for chapter_id, used_mods_list in list(self.used_mods.items()):
-            updated_list = []
-            for used_mod in used_mods_list:
-                used_mod_key = get_mod_key(used_mod)
-                if used_mod_key != key:
-                    updated_list.append(used_mod)
+            updated_list = [m for m in used_mods_list if get_mod_key(m) != key]
             if len(updated_list) != len(used_mods_list):
                 chapters_changed.append(chapter_id)
                 if updated_list:
@@ -157,7 +153,7 @@ class UsedModsManager(QObject):
                     if isinstance(mod_data, dict):
                         key = mod_data.get('key') or mod_data.get('mod_key')
                     else:
-                        key = getattr(mod_data, 'key', None) or getattr(mod_data, 'mod_key', None)
+                        key = get_mod_key(mod_data)
                     mod_name = get_mod_name(mod_data, '')
                     if not key or (key == mod_name and mod_name):
                         if mod_name and isinstance(mod_name, str):
@@ -240,8 +236,6 @@ class UsedModsManager(QObject):
             for mod in self.app_state.all_mods:
                 if get_mod_key(mod) == key:
                     return mod
-                if key.startswith('gb_') and (getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)) == key:
-                    return mod
         if self.parent_widget:
             for im in self.mod_service.get_installed_mods_list():
                 im_key = im.get('mod_key') or im.get('key') or im.get('name')
@@ -276,7 +270,7 @@ class UsedModsManager(QObject):
             self.mod_widgets_update_needed.emit()
 
     def _is_local_mod(self, mod_data):
-        key = getattr(mod_data, 'key', None) or getattr(mod_data, 'mod_key', None)
+        key = get_mod_key(mod_data)
         return key and isinstance(key, str) and key.startswith('local_')
 
     def check_used_mods_need_updates(self) -> bool:
@@ -316,16 +310,10 @@ class UsedModsManager(QObject):
         is_currently_enabled = current_direct_launch == chapter_id
         chapter_names = {1: tr('tabs.chapter_1'), 2: tr('tabs.chapter_2'), 3: tr('tabs.chapter_3'), 4: tr('tabs.chapter_4')}
         chapter_name = chapter_names.get(chapter_id, tr('ui.chapter_n', chapter=str(chapter_id)))
-        if is_currently_enabled:
-            message = tr('ui.disable_direct_launch', chapter=chapter_name)
-            if not self.feedback_service.ask_question('ui.direct_launch', 'ui.direct_launch', message, False):
-                return
-            self.app_state.local_config['direct_launch_slot_id'] = -1
-        else:
-            message = tr('ui.enable_direct_launch', chapter=chapter_name)
-            if not self.feedback_service.ask_question('ui.direct_launch', 'ui.direct_launch', message, False):
-                return
-            self.app_state.local_config['direct_launch_slot_id'] = chapter_id
+        msg_key = 'ui.disable_direct_launch' if is_currently_enabled else 'ui.enable_direct_launch'
+        if not self.feedback_service.ask_question('ui.direct_launch', 'ui.direct_launch', tr(msg_key, chapter=chapter_name), False):
+            return
+        self.app_state.local_config['direct_launch_slot_id'] = -1 if is_currently_enabled else chapter_id
         self.settings_service.write_local_config()
         self.action_button_update_needed.emit()
         if self.parent_widget and hasattr(self.parent_widget, 'launch_via_steam_checkbox'):

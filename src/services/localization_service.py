@@ -1,4 +1,4 @@
-"""Localization and translation management."""
+"""Localization management."""
 import json
 import locale
 import logging
@@ -11,7 +11,7 @@ from PyQt6.QtGui import QFontDatabase
 
 
 class LocalizationManager:
-    """Manages application localization and translations."""
+    """Manages application localization."""
 
     def __init__(self):
         self.internal_lang_dir = resource_path('assets/lang')
@@ -19,7 +19,7 @@ class LocalizationManager:
         os.makedirs(self.external_lang_dir, exist_ok=True)
         self._sync_internal_languages()
         self.current_language = 'en'
-        self.translations = {}
+        self.strings = {}
         self.available_languages = {}
         self._load_available_languages()
 
@@ -121,7 +121,7 @@ class LocalizationManager:
     def get_available_languages(self) -> Dict[str, str]:
         return {code: info['name'] for code, info in self.available_languages.items()}
 
-    def get_qt_translation_name(self, language_code: str) -> str:
+    def get_qt_locale_name(self, language_code: str) -> str:
         return self.available_languages.get(language_code, {}).get('qt_translation', 'qtbase_en')
 
     def get_font_path(self, language_code: str) -> Optional[str]:
@@ -135,29 +135,17 @@ class LocalizationManager:
     def detect_system_language(self) -> str:
         try:
             system_locale = None
-            try:
-                system_locale, _ = locale.getlocale(locale.LC_CTYPE)
-            except (AttributeError, TypeError, ValueError):
+            for getter in (lambda: locale.getlocale(locale.LC_CTYPE), locale.getlocale):
                 try:
-                    system_locale, _ = locale.getlocale()
+                    system_locale, _ = getter()
+                    if system_locale:
+                        break
                 except (AttributeError, TypeError, ValueError):
                     pass
             if not system_locale:
                 lang_env = os.environ.get('LANG') or os.environ.get('LC_ALL') or os.environ.get('LC_CTYPE')
                 if lang_env:
                     system_locale = lang_env.split('.')[0].split('_')[0]
-            if not system_locale:
-                try:
-                    import locale as locale_module
-                    old_locale = locale_module.getlocale()
-                    try:
-                        locale_module.setlocale(locale_module.LC_ALL, '')
-                        system_locale, _ = locale_module.getlocale()
-                    finally:
-                        if old_locale:
-                            locale_module.setlocale(locale_module.LC_ALL, old_locale)
-                except Exception:
-                    pass
             if system_locale:
                 lang_code = system_locale.split('_')[0].lower()
                 if lang_code in self.available_languages:
@@ -176,16 +164,16 @@ class LocalizationManager:
         lang_file = lang_info['path']
         try:
             with open(lang_file, 'r', encoding='utf-8') as f:
-                self.translations = json.load(f)
+                self.strings = json.load(f)
                 self.current_language = language_code
                 return True
         except Exception as e:
             logging.error(f'Error loading language {language_code}: {e}')
             return False
 
-    def merge_plugin_translations(self, plugin_id: str, plugin_translations: dict):
-        if plugin_id not in self.translations:
-            self.translations[plugin_id] = {}
+    def merge_plugin_strings(self, plugin_id: str, plugin_strings: dict):
+        if plugin_id not in self.strings:
+            self.strings[plugin_id] = {}
 
         def _merge_nested(target: dict, source: dict):
             for key, value in source.items():
@@ -195,7 +183,7 @@ class LocalizationManager:
                     _merge_nested(target[key], value)
                 else:
                     target[key] = value
-        _merge_nested(self.translations[plugin_id], plugin_translations)
+        _merge_nested(self.strings[plugin_id], plugin_strings)
 
     def get_plugin_tr(self, plugin_id: str):
 
@@ -209,7 +197,7 @@ class LocalizationManager:
 
     def get_text(self, key: str, **kwargs) -> str:
         keys = key.split('.')
-        value = self.translations
+        value = self.strings
         try:
             for k in keys:
                 if k in value:
@@ -252,11 +240,11 @@ class LocalizationManager:
                     return families[0]
         return None
 
-    def update_qt_translations(self, language_code: str, qt_translator_holder: dict) -> bool:
+    def update_qt_locale(self, language_code: str, qt_translator_holder: dict) -> bool:
         from PyQt6.QtCore import QTranslator
         from PyQt6.QtWidgets import QApplication
-        qt_translation = self.get_qt_translation_name(language_code)
-        if not qt_translation:
+        qt_locale_name = self.get_qt_locale_name(language_code)
+        if not qt_locale_name:
             return False
         app = QApplication.instance()
         if app is None:
@@ -264,7 +252,7 @@ class LocalizationManager:
         if '_qt_translator' in qt_translator_holder and qt_translator_holder['_qt_translator']:
             app.removeTranslator(qt_translator_holder['_qt_translator'])
         qt_translator_holder['_qt_translator'] = QTranslator()
-        if qt_translator_holder['_qt_translator'].load(qt_translation, QLibraryInfo.path(QLibraryInfo.LibraryPath.TranslationsPath)):
+        if qt_translator_holder['_qt_translator'].load(qt_locale_name, QLibraryInfo.path(QLibraryInfo.LibraryPath.TranslationsPath)):
             app.installTranslator(qt_translator_holder['_qt_translator'])
             return True
         return False
@@ -292,9 +280,9 @@ def _fallback_tr(key: str, **kwargs) -> str:
         if not os.path.exists(en_path):
             en_path = os.path.join(localization_service.internal_lang_dir, 'lang_en.json')
         with open(en_path, 'r', encoding='utf-8') as f:
-            en_translations = json.load(f)
+            en_strings = json.load(f)
         keys = key.split('.')
-        value = en_translations
+        value = en_strings
         for k in keys:
             if k in value:
                 value = value[k]

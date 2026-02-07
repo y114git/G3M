@@ -12,6 +12,6 @@ if path_to_src not in sys.path:
     sys.path.insert(0, path_to_src)
 if __name__ == '__main__':
     from core.startup import run_app
-    from utils.file_utils import cleanup_old_updater_files
+    from utils.path_utils import cleanup_old_updater_files
     cleanup_old_updater_files()
     run_app()

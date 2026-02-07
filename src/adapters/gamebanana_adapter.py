@@ -390,30 +390,15 @@ class GameBananaAPI:
 
     def get_file_contents(self, file_id, max_retries=2):
         params = {'itemtype': 'File', 'itemid': file_id, 'fields': 'aFileTree()'}
-        for attempt in range(max_retries + 1):
-            try:
-                self._wait_for_rate_limit()
-                response = self.session.get(f'{self.core_api_base}/Core/Item/Data', params=params, timeout=NETWORK_TIMEOUT_MEDIUM)
-                response.raise_for_status()
-                data = response.json()
-                ft = data[0] if isinstance(data, list) and data else data
-                if isinstance(ft, dict):
-                    fl = [v for k, v in ft.items() if isinstance(v, str) and k not in ('screenshots', 'folders')]
-                    return fl or None
-                if isinstance(ft, list):
-                    if not ft:
-                        return []
-                    return ft if isinstance(ft[0], str) else (ft[0] if isinstance(ft[0], list) else None)
-                return None
-            except requests.RequestException as e:
-                sc = getattr(getattr(e, 'response', None), 'status_code', None)
-                if self._handle_rate_limit_retry(sc, attempt, max_retries):
-                    continue
-                logger.error(f'Error fetching file contents for {file_id}: {e}')
-                return None
-            except Exception as e:
-                logger.error(f'get_file_contents for {file_id}: {e}', exc_info=True)
-                return None
+        data = self._api_request(f'{self.core_api_base}/Core/Item/Data', params, max_retries=max_retries, operation='get_file_contents', mod_id=file_id)
+        if data is None:
+            return None
+        ft = data[0] if isinstance(data, list) and data else data
+        if isinstance(ft, dict):
+            fl = [v for k, v in ft.items() if isinstance(v, str) and k not in ('screenshots', 'folders')]
+            return fl or None
+        if isinstance(ft, list):
+            return ft if (not ft or isinstance(ft[0], str)) else (ft[0] if isinstance(ft[0], list) else None)
         return None
 
     def search_mods(self, game_id: int, search_string: Optional[str] = None, page: int = 1, per_page: int = 20, sort: str = 'best_match', max_retries: int = 2) -> Optional[Dict]:
@@ -427,33 +412,26 @@ class GameBananaAPI:
             for attempt in range(max_retries + 1):
                 try:
                     self._wait_for_rate_limit()
-                    logger.debug(f'search_mods: Requesting {model_type} URL: {url} with params: {params} for game {game_id}, page {page}, sort={sort}')
                     response = self.session.get(url, params=params, timeout=NETWORK_TIMEOUT_MEDIUM)
-                    logger.debug(f'search_mods: {model_type} response status: {response.status_code}, URL: {response.url}')
                     response.raise_for_status()
                     data = response.json()
-                    records = data.get('_aRecords', [])
-                    logger.debug(f'search_mods: Got {len(records)} {model_type} results for game {game_id}, page {page}, sort={sort}')
-                    all_records.extend(records)
+                    all_records.extend(data.get('_aRecords', []))
                     if not all_data:
                         all_data = data.copy()
                     break
                 except requests.RequestException as e:
                     status_code = getattr(e.response, 'status_code', None) if hasattr(e, 'response') and e.response else None
-                    if self._handle_rate_limit_retry(status_code, attempt, max_retries, f'search_mods: Rate limit (429) for {model_type} game {game_id}, waiting {{wait_time}} seconds before retry'):
+                    if self._handle_rate_limit_retry(status_code, attempt, max_retries):
                         continue
-                    logger.error(f'Error searching {model_type} mods for game {game_id}: {e}')
-                    if hasattr(e, 'response') and e.response is not None:
-                        logger.error(f'Response status: {e.response.status_code}, response text: {e.response.text[:500]}')
+                    self._handle_request_exception(e, None, f'search_mods({model_type})')
                     break
                 except Exception as e:
-                    logger.error(f'Unexpected error searching {model_type} mods for game {game_id}: {e}', exc_info=True)
+                    logger.error(f'search_mods({model_type}) for game {game_id}: {e}', exc_info=True)
                     break
         if all_data:
             all_data['_aRecords'] = all_records
             if '_nRecordCount' in all_data:
                 all_data['_nRecordCount'] = len(all_records)
-            logger.debug(f'search_mods: Combined {len(all_records)} total results (Mod + Wip) for game {game_id}, page {page}, sort={sort}')
             return all_data
         return None
 

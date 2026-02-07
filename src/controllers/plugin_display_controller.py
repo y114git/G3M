@@ -198,7 +198,7 @@ class PluginDisplayController:
         else:
             self.feedback_service.show_message('error', 'errors.error', message)
 
-    def retranslate_plugin_widgets(self):
+    def relocalize_plugin_widgets(self):
         for plugin_name, widget in self._plugin_widgets.items():
-            if hasattr(widget, 'retranslate_texts'):
-                widget.retranslate_texts()
+            if hasattr(widget, 'relocalize_texts'):
+                widget.relocalize_texts()

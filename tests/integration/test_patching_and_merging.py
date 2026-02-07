@@ -155,7 +155,7 @@ class TestMerging:
         assert hasattr(merger, 'xdelta_path')
 
     def test_progress_throttler_initialization(self, app_state, feedback_service, qapp):
-        from services.mod_merge_service import ProgressThrottler
+        from utils.progress_throttler import ProgressThrottler
         callback_calls = []
 
         def test_callback(progress, message):

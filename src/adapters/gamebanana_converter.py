@@ -163,8 +163,8 @@ class GameBananaConverter:
                     if tag and tag not in existing_tags:
                         existing_tags.append(tag)
                 config_data['tags'] = existing_tags
-            from utils.file_utils import atomic_write_json
-            atomic_write_json(config_path, config_data, indent=4)
+            from utils.file_utils import save_json
+            save_json(config_path, config_data, indent=4)
             logger.info(f"GameBananaConverter: Updated config for GameBanana mod: key={config_data.get('key') or config_data.get('mod_key')}, mod_dir={mod_dir}")
             return mod_dir
         except (IOError, json.JSONDecodeError, TypeError, KeyError) as e:

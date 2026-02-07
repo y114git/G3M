@@ -33,13 +33,13 @@ class TestConstants:
 class TestConfigLoader:
 
     def test_config_loader_import(self):
-        from config.loader import get_config_value, ConfigLoader
+        from config.config_loader import get_config_value, ConfigLoader
         assert callable(get_config_value)
         assert ConfigLoader is not None
 
-    @patch('config.loader.get_config_value')
+    @patch('config.config_loader.get_config_value')
     def test_get_config_value(self, mock_get_value):
-        from config.loader import get_config_value
+        from config.config_loader import get_config_value
         mock_get_value.return_value = 'test_value'
         assert callable(get_config_value)
         assert get_config_value('TEST_KEY', 'default') == 'test_value'

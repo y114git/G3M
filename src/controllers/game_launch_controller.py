@@ -8,6 +8,7 @@ from services.localization_service import tr
 from config.constants import UI_COLORS
 from models.game_modes import DemoGameMode, UndertaleYellowGameMode, SugarySpireGameMode
 from workers.install.full_install_worker import FullInstallThread
+from utils.mod_utils import get_mod_key
 
 
 class GameLaunchController(QObject):
@@ -231,10 +232,10 @@ class GameLaunchController(QObject):
         for chapter_id, mod_data in list(self.slot_service.used_mods.items()):
             if not mod_data:
                 continue
-            key = getattr(mod_data, 'key', None) or getattr(mod_data, 'mod_key', None)
+            key = get_mod_key(mod_data)
             if not key:
                 continue
-            updated_mod = next((mod for mod in self.app_state.all_mods if (getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)) == key), None)
+            updated_mod = next((mod for mod in self.app_state.all_mods if get_mod_key(mod) == key), None)
             if not updated_mod:
                 mod_config = self.mod_service.get_mod_config(key)
                 if mod_config:

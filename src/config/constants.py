@@ -6,7 +6,7 @@ including version information, network timeouts, game identifiers, UI themes,
 and various configuration parameters.
 """
 import platform
-from .loader import get_config_value
+from .config_loader import get_config_value
 LAUNCHER_VERSION = '2.4.7stable'
 APP_ID = 'deltahub.y.114'
 DATA_FIREBASE_URL = get_config_value('DATA_FIREBASE_URL', '')

@@ -9,7 +9,8 @@ from PyQt6.QtCore import QThread, pyqtSignal
 from config.constants import CLOUD_FUNCTIONS_BASE_URL, UI_COLORS, GAMEBANANA_GAME_IDS, GAMEBANANA_PER_PAGE
 from services.localization_service import tr
 from models.mod_models import ModChapterData, ModExtraFile, ModInfo
-from utils.file_utils import version_sort_key
+from utils.path_utils import version_sort_key
+from utils.mod_utils import get_mod_key
 logger = logging.getLogger(__name__)
 _GAME_MAPPING = {'deltarune': 'deltarune', 'undertale': 'undertale', 'undertaleyellow': 'undertaleyellow', 'pizzatower': 'pizzatower', 'sugaryspire': 'sugaryspire'}
 
@@ -78,7 +79,6 @@ class FetchModsThread(QThread):
 
                     def fetch_mods(self, initial_pages: int = 3):
                         from adapters.gamebanana_adapter import GameBananaAPI
-                        from config.constants import GAMEBANANA_GAME_IDS
                         self.api = GameBananaAPI()
                         selected_game = 'deltarune'
                         if self.app_state and hasattr(self.app_state, 'local_config'):
@@ -102,7 +102,6 @@ class FetchModsThread(QThread):
                     def _fetch_game_mods(self, game_name: str, game_id: int, start_page: int = 1, num_pages: int = 3, sort: str = 'default') -> Tuple[List[ModInfo], List[str]]:
                         mods = []
                         mods_needing_metadata = []
-                        from config.constants import GAMEBANANA_PER_PAGE
                         try:
                             if not self.api:
                                 return (mods, mods_needing_metadata)
@@ -150,41 +149,27 @@ class FetchModsThread(QThread):
                             app_state.gamebanana_loaded_pages[game_id] = pages_loaded
             except Exception as e:
                 logger.error(f'FetchModsThread: Failed to fetch GameBanana mods: {e}', exc_info=True)
-            logger.info('FetchModsThread: Getting local mods')
             local_mods = self._get_local_mods()
-            logger.info(f'FetchModsThread: Found {len(local_mods)} local mods to preserve')
-            installed_gamebanana_mod_keys = set()
             mod_service = getattr(self.main_window, 'mod_service', None)
-            if mod_service:
-                try:
-                    installed_mods = mod_service.get_installed_mods_list()
-                    for installed_mod in installed_mods:
-                        key = installed_mod.get('key') or installed_mod.get('mod_key')
-                        if key and key.startswith('gb_'):
-                            installed_gamebanana_mod_keys.add(key)
-                    logger.info(f'FetchModsThread: Found {len(installed_gamebanana_mod_keys)} installed GameBanana mods')
-                except Exception as e:
-                    logger.warning(f'FetchModsThread: Error getting installed GameBanana mods: {e}')
             installed_mods_with_files = {}
             if mod_service:
                 try:
-                    installed_mods_list = mod_service.get_installed_mods_list()
-                    for installed_mod in installed_mods_list:
+                    for installed_mod in mod_service.get_installed_mods_list():
                         key = installed_mod.get('key') or installed_mod.get('mod_key')
                         if key and installed_mod.get('files'):
                             installed_mods_with_files[key] = installed_mod
                 except Exception as e:
-                    logger.warning(f'FetchModsThread: Error getting installed mods with files: {e}')
+                    logger.warning(f'FetchModsThread: Error getting installed mods: {e}')
             existing_mods_with_files = {}
             app_state = getattr(self.main_window, 'app_state', None)
             if app_state and hasattr(app_state, 'all_mods'):
                 for mod in app_state.all_mods:
-                    key = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
+                    key = get_mod_key(mod)
                     if key and hasattr(mod, 'files') and mod.files:
                         existing_mods_with_files[key] = mod
             all_mods_filtered = []
             for mod in all_mods:
-                key = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
+                key = get_mod_key(mod)
                 is_local_key = key and isinstance(key, str) and key.startswith('local_')
                 if is_local_key:
                     continue
@@ -226,8 +211,8 @@ class FetchModsThread(QThread):
                 else:
                     all_mods_filtered.append(mod)
             for local_mod in local_mods:
-                key = getattr(local_mod, 'key', None) or getattr(local_mod, 'mod_key', None)
-                if key and key not in [getattr(m, 'key', None) or getattr(m, 'mod_key', None) for m in all_mods_filtered]:
+                key = get_mod_key(local_mod)
+                if key and key not in {get_mod_key(m) for m in all_mods_filtered}:
                     all_mods_filtered.append(local_mod)
             app_state = getattr(self.main_window, 'app_state', None)
             if app_state:
@@ -372,7 +357,7 @@ class FetchModsThread(QThread):
         app_state = getattr(self.main_window, 'app_state', None)
         if app_state and hasattr(app_state, 'all_mods'):
             for mod in app_state.all_mods:
-                key = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
+                key = get_mod_key(mod)
                 is_local_key = key and isinstance(key, str) and key.startswith('local_')
                 if is_local_key:
                     local_mods.append(mod)

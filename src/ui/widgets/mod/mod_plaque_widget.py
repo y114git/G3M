@@ -4,6 +4,7 @@ from PyQt6.QtWidgets import QLabel, QPushButton, QHBoxLayout, QVBoxLayout, QFram
 from .base_mod_widget import BaseModWidget
 from services.localization_service import tr
 from ui.common.styling import get_theme_color
+from utils.mod_utils import get_mod_key
 import logging
 
 
@@ -18,7 +19,7 @@ class CompatibilityCheckThread(QThread):
         try:
             if self.isInterruptionRequested():
                 return
-            key = getattr(self.mod_data, 'key', None) or getattr(self.mod_data, 'mod_key', None)
+            key = get_mod_key(self.mod_data)
             if not key or not key.startswith('gb_'):
                 return
             mod_id = key.replace('gb_', '', 1)
@@ -67,7 +68,7 @@ class ModPlaqueWidget(BaseModWidget):
         self._update_style()
         if self.is_installed and hasattr(self, 'install_button'):
             self._apply_uninstall_button_style()
-        key = getattr(self.mod_data, 'key', None) or getattr(self.mod_data, 'mod_key', None)
+        key = get_mod_key(self.mod_data)
         if key and key.startswith('gb_'):
             self._start_compatibility_check()
         try:
@@ -78,53 +79,22 @@ class ModPlaqueWidget(BaseModWidget):
     def _cleanup_compatibility_thread(self):
         try:
             thread = getattr(self, '_compatibility_thread', None)
-        except Exception:
-            thread = None
-        if not thread:
-            return
-        try:
+            if not thread:
+                return
             if thread.isRunning():
-                try:
-                    thread.requestInterruption()
-                except Exception:
-                    pass
-                try:
-                    thread.quit()
-                except Exception:
-                    pass
+                thread.requestInterruption()
+                thread.quit()
                 try:
                     thread.compatibility_checked.disconnect()
                     thread.finished.disconnect()
                 except (TypeError, RuntimeError):
                     pass
-
-                def cleanup_when_finished():
-                    try:
-                        if thread and thread.isFinished():
-                            thread.deleteLater()
-                    except Exception:
-                        pass
-                try:
-                    thread.finished.connect(cleanup_when_finished)
-                except (TypeError, RuntimeError):
-                    try:
-                        if thread.isRunning():
-                            thread.wait(2000)
-                        if thread.isFinished():
-                            thread.deleteLater()
-                    except Exception:
-                        pass
+                thread.finished.connect(lambda: thread.deleteLater() if thread.isFinished() else None)
             elif thread.isFinished():
-                try:
-                    thread.deleteLater()
-                except Exception:
-                    pass
+                thread.deleteLater()
         except Exception:
             pass
-        try:
-            self._compatibility_thread = None
-        except Exception:
-            pass
+        self._compatibility_thread = None
 
     _GAME_TAG_STYLES = {
         'deltarune': ('DELTARUNE', 'black', '1px solid white'),
@@ -157,7 +127,7 @@ class ModPlaqueWidget(BaseModWidget):
             verified_label = QLabel(tr('ui.verified_label'), self)
             verified_label.setStyleSheet('color: #4CAF50; font-size: 14px;')
             tags_layout.addWidget(verified_label)
-        key = getattr(self.mod_data, 'key', None) or getattr(self.mod_data, 'mod_key', None)
+        key = get_mod_key(self.mod_data)
         if key and key.startswith('gb_'):
             self.gb_status_label = QLabel(self)
             self.gb_status_label.setObjectName('gbStatusLabel')
@@ -169,14 +139,14 @@ class ModPlaqueWidget(BaseModWidget):
     def _update_style(self):
         super()._update_style()
         text_color = self._get_theme_text_color()
-        if hasattr(self, 'modgame_tag_label') and self.modgame_tag_label:
+        if getattr(self, 'modgame_tag_label', None):
             _, stylesheet = self._get_game_tag_style(text_color)
             if stylesheet:
                 self.modgame_tag_label.setStyleSheet(stylesheet)
-        if hasattr(self, 'created_label_title') and self.created_label_title:
-            self.created_label_title.setStyleSheet(f'color: {text_color};')
-        if hasattr(self, 'updated_label_title') and self.updated_label_title:
-            self.updated_label_title.setStyleSheet(f'color: {text_color};')
+        for attr in ('created_label_title', 'updated_label_title'):
+            label = getattr(self, attr, None)
+            if label:
+                label.setStyleSheet(f'color: {text_color};')
 
     def _get_theme_text_color(self, fallback='white'):
         config = self._resolve_theme_config()
@@ -189,20 +159,18 @@ class ModPlaqueWidget(BaseModWidget):
 
     def _get_mod_identifier(self):
         try:
-            key = getattr(self.mod_data, 'key', None) or getattr(self.mod_data, 'mod_key', None)
-            if key:
-                if key.startswith('gb_'):
-                    mod_id = key.replace('gb_', '', 1)
-                    if mod_id:
-                        return f'gb::{mod_id}'
-                return f'key::{key}'
+            key = get_mod_key(self.mod_data)
+            if not key:
+                return None
+            if key.startswith('gb_') and key[3:]:
+                return f'gb::{key[3:]}'
+            return f'key::{key}'
         except Exception:
-            pass
-        return None
+            return None
 
     def _get_downloads_text(self):
         try:
-            key = getattr(self.mod_data, 'key', None) or getattr(self.mod_data, 'mod_key', None)
+            key = get_mod_key(self.mod_data)
             downloads_value = getattr(self.mod_data, 'downloads', 0) or 0
             if key and key.startswith('gb_'):
                 has_full = getattr(self.mod_data, 'has_full_metadata', True)
@@ -277,7 +245,7 @@ class ModPlaqueWidget(BaseModWidget):
 
     def _check_installation_status(self):
         if self.parent_app and hasattr(self.parent_app, 'mod_service'):
-            key = getattr(self.mod_data, 'key', None) or getattr(self.mod_data, 'mod_key', '')
+            key = get_mod_key(self.mod_data) or ''
             try:
                 self.is_installed = self.parent_app.mod_service.is_mod_installed(key)
             except Exception as e:
@@ -285,19 +253,9 @@ class ModPlaqueWidget(BaseModWidget):
                 self.is_installed = False
             if not self.is_installed and key and key.startswith('gb_'):
                 try:
-                    cache = self.parent_app.mod_service._get_mods_cache()
-                    for cached_key, mod_info in cache.items():
-                        if cached_key == key:
-                            self.is_installed = True
-                            break
+                    self.is_installed = key in self.parent_app.mod_service._get_mods_cache()
                 except Exception as e:
                     logging.warning(f'ModPlaqueWidget: Error checking cache for key {key}: {e}', exc_info=True)
-            if not self.is_installed:
-                try:
-                    self.is_installed = self.parent_app.mod_service.is_mod_installed(key)
-                except Exception as e:
-                    logging.error(f'ModPlaqueWidget: Error checking installation for mod (key={key}): {e}', exc_info=True)
-                    self.is_installed = False
         else:
             self.is_installed = False
         self._update_install_button()
@@ -340,17 +298,22 @@ class ModPlaqueWidget(BaseModWidget):
         except Exception as e:
             logging.warning(f'ModPlaqueWidget: Failed to start compatibility check: {e}', exc_info=True)
 
+    _COMPAT_ATTR_MAP = {
+        'gamebanana_supported_files': ('supported_files', []),
+        'gamebanana_has_compatible_file': ('has_supported_files', False),
+        'gamebanana_is_tool_compatible': ('has_supported_files', False),
+        'gamebanana_compatibility_checked': ('compatibility_checked', False),
+        'gamebanana_preferred_format': ('preferred_format', None),
+        'gamebanana_has_deltahub_file': ('has_deltahub_file', False),
+        'gamebanana_has_deltamod_file': ('has_deltamod_file', False),
+    }
+
     def _on_compatibility_checked(self, mod_data, compat_info):
         if mod_data != self.mod_data:
             return
         try:
-            setattr(self.mod_data, 'gamebanana_supported_files', compat_info.get('supported_files', []))
-            setattr(self.mod_data, 'gamebanana_has_compatible_file', compat_info.get('has_supported_files', False))
-            setattr(self.mod_data, 'gamebanana_is_tool_compatible', compat_info.get('has_supported_files', False))
-            setattr(self.mod_data, 'gamebanana_compatibility_checked', compat_info.get('compatibility_checked', False))
-            setattr(self.mod_data, 'gamebanana_preferred_format', compat_info.get('preferred_format', None))
-            setattr(self.mod_data, 'gamebanana_has_deltahub_file', compat_info.get('has_deltahub_file', False))
-            setattr(self.mod_data, 'gamebanana_has_deltamod_file', compat_info.get('has_deltamod_file', False))
+            for attr, (info_key, default) in self._COMPAT_ATTR_MAP.items():
+                setattr(self.mod_data, attr, compat_info.get(info_key, default))
             self._apply_gamebanana_install_styles()
             self._update_gamebanana_status_label()
         except Exception as e:
@@ -383,7 +346,7 @@ class ModPlaqueWidget(BaseModWidget):
             self.install_button.setEnabled(not is_installing)
 
     def _apply_gamebanana_install_styles(self):
-        key = getattr(self.mod_data, 'key', None) or getattr(self.mod_data, 'mod_key', None)
+        key = get_mod_key(self.mod_data)
         if not key or not key.startswith('gb_'):
             self.install_button.setStyleSheet('')
             self.install_button.setToolTip('')
@@ -409,7 +372,7 @@ class ModPlaqueWidget(BaseModWidget):
     def _update_gamebanana_status_label(self):
         if not self.gb_status_label:
             return
-        key = getattr(self.mod_data, 'key', None) or getattr(self.mod_data, 'mod_key', None)
+        key = get_mod_key(self.mod_data)
         is_gb = bool(key and key.startswith('gb_'))
         if not is_gb:
             self.gb_status_label.setVisible(False)
@@ -453,11 +416,10 @@ class ModPlaqueWidget(BaseModWidget):
         was_installed = self.is_installed
         self._check_installation_status()
         if was_installed and (not self.is_installed):
-            key = getattr(self.mod_data, 'key', None) or getattr(self.mod_data, 'mod_key', None)
+            key = get_mod_key(self.mod_data)
             if key and key.startswith('gb_'):
-                setattr(self.mod_data, 'gamebanana_compatibility_checked', False)
-                setattr(self.mod_data, 'gamebanana_is_tool_compatible', False)
-                setattr(self.mod_data, 'gamebanana_supported_files', [])
+                for attr, val in [('gamebanana_compatibility_checked', False), ('gamebanana_is_tool_compatible', False), ('gamebanana_supported_files', [])]:
+                    setattr(self.mod_data, attr, val)
                 self._start_compatibility_check()
                 self._update_gamebanana_status_label()
                 self._apply_gamebanana_install_styles()
@@ -470,40 +432,19 @@ class ModPlaqueWidget(BaseModWidget):
             if hasattr(self, 'downloads_label'):
                 self.downloads_label.setText(self._get_downloads_text())
             if hasattr(self, 'tagline_label'):
-                try:
-                    tagline = getattr(self.mod_data, 'tagline', '') or tr('ui.no_description')
-                    key = getattr(self.mod_data, 'key', None) or getattr(self.mod_data, 'mod_key', None)
-                    if key and key.startswith('gb_'):
-                        has_full = getattr(self.mod_data, 'has_full_metadata', True)
-                        if not has_full:
-                            tagline = tr('ui.loading_placeholder')
-                    if len(tagline) > 200:
-                        tagline = tagline[:197] + '...'
-                    self.tagline_label.setText(tagline)
-                except Exception:
-                    tagline = getattr(self.mod_data, 'tagline', '') or tr('ui.no_description')
-                    if len(tagline) > 200:
-                        tagline = tagline[:197] + '...'
-                    self.tagline_label.setText(tagline)
-            key = getattr(self.mod_data, 'key', None) or getattr(self.mod_data, 'mod_key', None)
+                tagline = getattr(self.mod_data, 'tagline', '') or tr('ui.no_description')
+                key = get_mod_key(self.mod_data)
+                if key and key.startswith('gb_') and not getattr(self.mod_data, 'has_full_metadata', True):
+                    tagline = tr('ui.loading_placeholder')
+                if len(tagline) > 200:
+                    tagline = tagline[:197] + '...'
+                self.tagline_label.setText(tagline)
+            key = get_mod_key(self.mod_data)
             if key and key.startswith('gb_'):
-                checked = bool(getattr(self.mod_data, 'gamebanana_compatibility_checked', False))
-                if not checked:
-                    if self._compatibility_thread and self._compatibility_thread.isRunning():
-                        return
-                    if hasattr(self, '_compatibility_check_timer') and self._compatibility_check_timer.isActive():
-                        return
-                    if self._compatibility_thread and self._compatibility_thread.isFinished():
-                        try:
-                            self._compatibility_thread.compatibility_checked.disconnect()
-                        except (TypeError, RuntimeError):
-                            pass
-                        try:
-                            self._compatibility_thread.finished.disconnect()
-                        except (TypeError, RuntimeError):
-                            pass
-                        self._compatibility_thread = None
-                    self._start_compatibility_check()
+                if not getattr(self.mod_data, 'gamebanana_compatibility_checked', False):
+                    if not (self._compatibility_thread and self._compatibility_thread.isRunning()):
+                        if not (hasattr(self, '_compatibility_check_timer') and self._compatibility_check_timer.isActive()):
+                            self._start_compatibility_check()
             self._update_gamebanana_status_label()
             if not self.is_installed:
                 self._apply_gamebanana_install_styles()

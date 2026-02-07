@@ -223,7 +223,7 @@ class TestPathUtils:
         assert is_invalid is False
 
     def test_autodetect_pizzatower_variations(self, temp_dir):
-        from utils.file_utils import autodetect_path
+        from utils.path_utils import autodetect_path
         # Create mock Steam directory structure with Pizza Tower variation
         system = platform.system()
         if system == 'Windows':

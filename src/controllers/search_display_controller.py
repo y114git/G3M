@@ -13,6 +13,7 @@ from workers.gamebanana.search_worker import SearchGameBananaModsThread
 from adapters.gamebanana_cache import GameBananaMetadataCache
 from config.constants import GAMEBANANA_GAME_IDS, GAMEBANANA_PER_PAGE
 from ui.utils.ui_utils import DebounceTimer
+from controllers.search_metadata_handler import SearchMetadataHandler
 import logging
 logger = logging.getLogger(__name__)
 
@@ -41,8 +42,6 @@ class SearchDisplayController(QObject):
         self._last_load_attempt = {'items_needed': 0, 'current_total': 0, 'attempts': 0}
         self._load_check_done = False
         self._update_display_in_progress = False
-        self._pending_metadata_updates = {}
-        self._metadata_update_timer = None
         self.plaque_widget_cache: dict[str, ModPlaqueWidget] = {}
         self._update_display_debounce = DebounceTimer(delay_ms=200)
         self._initial_mods_display_done = False
@@ -50,6 +49,43 @@ class SearchDisplayController(QObject):
         self._current_search_text = ''
         self._update_filtered_mods_in_progress = False
         self._pending_filter_update = False
+        self._metadata_handler = SearchMetadataHandler(
+            app_state=app_state,
+            app_window=app_window,
+            update_filtered_mods_cb=self.update_filtered_mods,
+            update_plaques_cb=self._update_plaques_for_mods,
+        )
+
+    def _iter_layout_plaques(self):
+        """Yield all ModPlaqueWidget instances currently in mod_list_layout."""
+        if not hasattr(self.app, 'mod_list_layout'):
+            return
+        for i in range(self.app.mod_list_layout.count() - 1):
+            item = self.app.mod_list_layout.itemAt(i)
+            if item and item.widget() and isinstance(item.widget(), ModPlaqueWidget):
+                yield item.widget()
+
+    @staticmethod
+    def _mod_needs_metadata(mod) -> bool:
+        """Check whether a GameBanana mod is missing metadata."""
+        if not getattr(mod, 'tagline', '').strip():
+            return True
+        if not getattr(mod, 'downloads', None):
+            return True
+        return hasattr(mod, 'has_full_metadata') and not mod.has_full_metadata
+
+    def _queue_mods_for_metadata(self, mod_id_list: list) -> None:
+        """Add mod IDs to the metadata loading queue and trigger loading."""
+        if not mod_id_list:
+            return
+        if not hasattr(self.app_state, 'gamebanana_mods_needing_metadata'):
+            self.app_state.gamebanana_mods_needing_metadata = []
+        existing = set(self.app_state.gamebanana_mods_needing_metadata)
+        new_ids = set(mod_id_list)
+        self.app_state.gamebanana_mods_needing_metadata = list(existing | new_ids)
+        logger.info(f'SearchDisplayController: Added {len(new_ids)} mod IDs to metadata loading queue')
+        if hasattr(self.app, 'refresh_controller') and self.app.refresh_controller:
+            QTimer.singleShot(500, lambda: self.app.refresh_controller._start_metadata_loading())
 
     def _show_no_results_and_clear_search(self, search_text: str):
         def _do_show():
@@ -82,17 +118,29 @@ class SearchDisplayController(QObject):
         return None
 
     def _get_installed_mod_keys(self) -> set:
-        installed_keys = set()
         try:
-            if hasattr(self, 'mod_service') and self.mod_service:
-                installed_mods = self.mod_service.get_installed_mods_list()
-                for mod_info in installed_mods:
-                    key = mod_info.get('key') or mod_info.get('mod_key')
-                    if key:
-                        installed_keys.add(key)
+            if self.mod_service:
+                return {k for m in self.mod_service.get_installed_mods_list() if (k := m.get('key') or m.get('mod_key'))}
         except Exception as e:
             logger.warning(f'SearchDisplayController: Error getting installed mod keys: {e}', exc_info=True)
-        return installed_keys
+        return set()
+
+    def _remove_active_timer(self, timer):
+        try:
+            if timer in self._active_search_timers:
+                self._active_search_timers.remove(timer)
+        except (ValueError, RuntimeError):
+            pass
+
+    def _clear_search_timers(self):
+        """Stop and delete all active search timers."""
+        for timer in self._active_search_timers[:]:
+            try:
+                timer.stop()
+                timer.deleteLater()
+            except (RuntimeError, ValueError):
+                pass
+        self._active_search_timers.clear()
 
     def _cleanup_load_thread(self, thread):
         try:
@@ -135,13 +183,7 @@ class SearchDisplayController(QObject):
                     should_load_more = True
                     self._load_more_gamebanana_mods_if_needed(items_needed, preferred_game)
             max_available_page = max(1, (total_mods - 1) // self.app_state.mods_per_page + 1) if total_mods > 0 else 1
-            can_advance = False
-            if should_load_more and self.app_state.gamebanana_loading:
-                can_advance = True
-            elif current_page < max_available_page:
-                can_advance = True
-            elif total_mods > 0 and self.app_state.gamebanana_loading:
-                can_advance = True
+            can_advance = (should_load_more and self.app_state.gamebanana_loading) or (current_page < max_available_page) or (total_mods > 0 and self.app_state.gamebanana_loading)
             if can_advance:
                 self.app_state.current_page += 1
                 self.update_display()
@@ -296,22 +338,10 @@ class SearchDisplayController(QObject):
         search_pages = self.app_state.gamebanana_search_loaded_pages[search_key]
         last_page = search_pages.get(game_id, 0)
         current_page = self.app_state.current_page
-        pages_needed = []
-        if current_page > last_page:
-            for page in range(last_page + 1, current_page + 1):
-                pages_needed.append(page)
-        next_page = current_page + 1
-        if next_page > last_page:
-            pages_needed.append(next_page)
+        pages_needed = sorted(set(list(range(last_page + 1, current_page + 1)) + ([current_page + 1] if current_page + 1 > last_page else [])))
         if not pages_needed:
             return
-        for timer in self._active_search_timers[:]:
-            try:
-                timer.stop()
-                timer.deleteLater()
-            except (RuntimeError, ValueError):
-                pass
-        self._active_search_timers.clear()
+        self._clear_search_timers()
         self._current_search_text = search_text
         self.app_state.gamebanana_loading = True
         all_new_mods = []
@@ -342,20 +372,12 @@ class SearchDisplayController(QObject):
                     self.update_filtered_mods(preserve_page=True)
                     self.update_display()
                 self.update_pagination()
-            try:
-                if search_timeout_timer in self._active_search_timers:
-                    self._active_search_timers.remove(search_timeout_timer)
-            except (ValueError, RuntimeError):
-                pass
+            self._remove_active_timer(search_timeout_timer)
         search_timeout_timer.timeout.connect(handle_timeout)
 
         def on_all_results_received():
             search_timeout_timer.stop()
-            try:
-                if search_timeout_timer in self._active_search_timers:
-                    self._active_search_timers.remove(search_timeout_timer)
-            except (ValueError, RuntimeError):
-                pass
+            self._remove_active_timer(search_timeout_timer)
             if self._current_search_text != search_text:
                 return
             current_thread = QThread.currentThread()
@@ -371,8 +393,8 @@ class SearchDisplayController(QObject):
                     self.update_filtered_mods(preserve_page=True)
                     self.update_pagination()
                     return
-                existing_keys = {getattr(m, 'key', None) or getattr(m, 'mod_key', None) for m in self.app_state.all_mods if (getattr(m, 'key', None) or getattr(m, 'mod_key', None)) and (getattr(m, 'key', None) or getattr(m, 'mod_key', None)).startswith('gb_')}
-                new_mods_to_add = [m for m in all_new_mods if (getattr(m, 'key', None) or getattr(m, 'mod_key', None)) and (getattr(m, 'key', None) or getattr(m, 'mod_key', None)).startswith('gb_') and ((getattr(m, 'key', None) or getattr(m, 'mod_key', None)) not in existing_keys)]
+                existing_keys = {k for m in self.app_state.all_mods if (k := get_mod_key(m)) and k.startswith('gb_')}
+                new_mods_to_add = [m for m in all_new_mods if (k := get_mod_key(m)) and k.startswith('gb_') and k not in existing_keys]
                 if self.app_state.search_text == search_text and new_mods_to_add:
                     self.app_state.extend_all_mods(new_mods_to_add)
                     max_loaded_page = max(pages_needed) if pages_needed else last_page
@@ -430,15 +452,9 @@ class SearchDisplayController(QObject):
 
     def show_blocklist_dialog(self):
         try:
-            selected_game = 'deltarune'
-            if hasattr(self.app, 'modgame_combo'):
-                selected_game = self.app.modgame_combo.currentData() or 'deltarune'
-            all_games = ['deltarune', 'deltarunedemo', 'undertale', 'undertaleyellow', 'pizzatower', 'sugaryspire']
-            all_games.append('global')
-            existing_games = self.blocklist_service.get_all_games()
-            for game in existing_games:
-                if game not in all_games:
-                    all_games.append(game)
+            selected_game = self._get_selected_game()
+            all_games = ['deltarune', 'deltarunedemo', 'undertale', 'undertaleyellow', 'pizzatower', 'sugaryspire', 'global']
+            all_games.extend(g for g in self.blocklist_service.get_all_games() if g not in all_games)
             dialog = BlocklistDialog(self.blocklist_service, selected_game, all_games, self.app)
             dialog.blocklist_changed.connect(self.on_blocklist_changed)
             dialog.exec()
@@ -454,13 +470,7 @@ class SearchDisplayController(QObject):
 
     def show_search_dialog(self):
         if self.app_state.search_text:
-            for timer in self._active_search_timers[:]:
-                try:
-                    timer.stop()
-                    timer.deleteLater()
-                except (RuntimeError, ValueError):
-                    pass
-            self._active_search_timers.clear()
+            self._clear_search_timers()
             for thread in self._load_more_threads[:]:
                 if isinstance(thread, SearchGameBananaModsThread):
                     thread.cancel()
@@ -492,9 +502,7 @@ class SearchDisplayController(QObject):
         for attr_name, tag_value in tag_checkboxes.items():
             if hasattr(self.app, attr_name) and getattr(self.app, attr_name).isChecked():
                 selected_tags.append(tag_value)
-        selected_game = 'deltarune'
-        if hasattr(self.app, 'modgame_combo'):
-            selected_game = self.app.modgame_combo.currentData() or 'deltarune'
+        selected_game = self._get_selected_game()
         filters = {'tags': selected_tags, 'game': selected_game, 'search_text': self.app_state.search_text, 'hide_banned': True, 'hide_local': True, 'hide_mods_without_files': hide_mods_without_files, 'status_filter': ['approved', 'pending'], 'exclude_installed': False}
         sort_config = None
         if hasattr(self.app, 'sort_combo'):
@@ -590,9 +598,7 @@ class SearchDisplayController(QObject):
             if total_mods == 0:
                 self.app_state.current_page = 1
             else:
-                max_page = max(1, (total_mods - 1) // self.app_state.mods_per_page + 1)
-                if self.app_state.current_page > max_page:
-                    self.app_state.current_page = max_page
+                self._clamp_current_page()
             if self.app_state.mods_loaded and total_mods > 0 and (not self._load_check_done):
                 items_needed = self.app_state.current_page * self.app_state.mods_per_page
                 if total_mods < items_needed and (not self.app_state.gamebanana_loading):
@@ -678,7 +684,6 @@ class SearchDisplayController(QObject):
                 def process_batch(batch_start: int):
                     nonlocal target_position, widgets_shown, widgets_created
                     batch_end = min(batch_start + BATCH_SIZE, len(mods_to_process))
-                    from PyQt6.QtWidgets import QApplication
                     app = QApplication.instance()
                     for batch_idx in range(batch_start, batch_end):
                         idx, mod = mods_to_process[batch_idx]
@@ -774,7 +779,6 @@ class SearchDisplayController(QObject):
 
                         def check_and_emit_ready():
                             try:
-                                from PyQt6.QtWidgets import QApplication
                                 app = QApplication.instance()
                                 if app:
                                     for _ in range(5):
@@ -855,94 +859,75 @@ class SearchDisplayController(QObject):
         can_load_more = self.app_state.mods_loaded and (not self.app_state.gamebanana_loading)
         self.ui_button_enabled_update.emit('next_page_btn', has_more_mods or can_load_more)
 
+    @staticmethod
+    def _refresh_plaque(widget):
+        """Refresh a single plaque widget's data, status, and button state."""
+        if hasattr(widget, 'update_mod_data'):
+            widget.update_mod_data()
+        widget.update_installation_status()
+        if hasattr(widget, 'update_install_button_state'):
+            widget.update_install_button_state()
+
     def update_search_plaques(self):
-        for i in range(self.app.mod_list_layout.count() - 1):
-            item = self.app.mod_list_layout.itemAt(i)
-            if item:
-                widget = item.widget()
-                if isinstance(widget, ModPlaqueWidget):
-                    try:
-                        if hasattr(widget, 'update_mod_data'):
-                            widget.update_mod_data()
-                        widget.update_installation_status()
-                        if hasattr(widget, 'update_install_button_state'):
-                            widget.update_install_button_state()
-                    except Exception:
-                        pass
+        for widget in self._iter_layout_plaques():
+            try:
+                self._refresh_plaque(widget)
+            except Exception:
+                pass
 
     def on_mod_clicked(self, mod):
-        for i in range(self.app.mod_list_layout.count() - 1):
-            item = self.app.mod_list_layout.itemAt(i)
-            if item:
-                widget = item.widget()
-                if isinstance(widget, ModPlaqueWidget) and widget.mod_data == mod:
-                    self.clear_all_selections()
-                    widget.set_selected(True)
-                    break
+        for widget in self._iter_layout_plaques():
+            if widget.mod_data == mod:
+                self.clear_all_selections()
+                widget.set_selected(True)
+                break
 
     def show_details(self, mod_data):
         open_mod_details_dialog(self.app, mod_data)
 
     def clear_all_selections(self):
-        for i in range(self.app.mod_list_layout.count() - 1):
-            item = self.app.mod_list_layout.itemAt(i)
-            if item:
-                widget = item.widget()
-                if isinstance(widget, ModPlaqueWidget):
-                    widget.set_selected(False)
+        for widget in self._iter_layout_plaques():
+            widget.set_selected(False)
 
     def _cleanup_details_threads(self):
+        if not self._current_details_thread:
+            return
+        thread = self._current_details_thread
+        self._current_details_thread = None
         try:
-            if not self._current_details_thread:
-                return
-            thread = self._current_details_thread
-            self._current_details_thread = None
-            try:
-                if hasattr(thread, 'cancel'):
-                    thread.cancel()
+            if hasattr(thread, 'cancel'):
+                thread.cancel()
+            thread.blockSignals(True)
+            for signal_name in ('mod_updated', 'finished', 'progress'):
                 try:
-                    thread.blockSignals(True)
-                    try:
-                        thread.mod_updated.disconnect()
-                    except (TypeError, RuntimeError):
-                        pass
-                    try:
-                        thread.finished.disconnect()
-                    except (TypeError, RuntimeError):
-                        pass
-                    try:
-                        thread.progress.disconnect()
-                    except (TypeError, RuntimeError):
-                        pass
-                    thread.blockSignals(False)
-                except (TypeError, RuntimeError):
+                    getattr(thread, signal_name).disconnect()
+                except (TypeError, RuntimeError, AttributeError):
                     pass
-                if not thread.isRunning():
-                    thread.deleteLater()
-            except Exception as e:
-                logger.error(f'SearchDisplayController: Error cleaning up details thread: {e}', exc_info=True)
+            thread.blockSignals(False)
+            if not thread.isRunning():
+                thread.deleteLater()
         except Exception as e:
-            logger.error(f'SearchDisplayController: Error in _cleanup_details_threads: {e}', exc_info=True)
+            logger.error(f'SearchDisplayController: Error cleaning up details thread: {e}', exc_info=True)
+
+    def _get_selected_game(self) -> str:
+        """Return the currently selected game from the combo box, defaulting to 'deltarune'."""
+        if hasattr(self.app, 'modgame_combo'):
+            return self.app.modgame_combo.currentData() or 'deltarune'
+        return 'deltarune'
 
     def _get_selected_gamebanana_game(self) -> str:
-        selected_game = 'deltarune'
-        if hasattr(self.app, 'modgame_combo'):
-            selected_game = self.app.modgame_combo.currentData() or 'deltarune'
-        gamebanana_game = self._map_modgame_to_gamebanana(selected_game)
-        if not gamebanana_game or gamebanana_game not in GAMEBANANA_GAME_IDS:
-            gamebanana_game = 'deltarune'
-        return gamebanana_game
+        mapped = self._map_modgame_to_gamebanana(self._get_selected_game())
+        return mapped if mapped in GAMEBANANA_GAME_IDS else 'deltarune'
 
-    def _map_modgame_to_gamebanana(self, game: str) -> str:
-        game_value = game
-        mapping = {'deltarune': 'deltarune', 'undertale': 'undertale', 'undertaleyellow': 'undertaleyellow', 'pizzatower': 'pizzatower', 'sugaryspire': 'sugaryspire'}
-        return mapping.get((game_value or '').lower(), '')
+    @staticmethod
+    def _map_modgame_to_gamebanana(game: str) -> str:
+        key = (game or '').lower()
+        return key if key in GAMEBANANA_GAME_IDS else ''
 
     def load_mods_for_selected_game(self):
         if not hasattr(self.app, 'modgame_combo'):
             return
-        selected_game = self.app.modgame_combo.currentData() or 'deltarune'
-        gamebanana_game = self._map_modgame_to_gamebanana(selected_game)
+        gamebanana_game = self._get_selected_gamebanana_game()
         if not gamebanana_game:
             gamebanana_game = 'deltarune'
         game_id = GAMEBANANA_GAME_IDS.get(gamebanana_game)
@@ -957,7 +942,6 @@ class SearchDisplayController(QObject):
         self.app_state.gamebanana_loading = True
         self.app_state.filtered_mods = []
         self.update_display()
-        from workers.gamebanana.load_more_worker import LoadMoreGameBananaModsThread
         metadata_cache = self._get_metadata_cache()
         sort_param = getattr(self.app_state, 'gamebanana_sort', 'default')
         load_thread = LoadMoreGameBananaModsThread(game_id, start_page=1, num_pages=3, sort=sort_param, parent=self.app, metadata_cache=metadata_cache)
@@ -972,26 +956,11 @@ class SearchDisplayController(QObject):
                         self.app_state.extend_all_mods(new_mods_to_add)
                         pages_loaded = 3
                         self.app_state.gamebanana_loaded_pages[game_id] = pages_loaded
-                        mods_needing_metadata = []
-                        for mod in new_mods_to_add:
-                            mod_id_str = get_gamebanana_mod_id(mod)
-                            if mod_id_str:
-                                needs_metadata = False
-                                if not hasattr(mod, 'tagline') or not mod.tagline or mod.tagline.strip() == '':
-                                    needs_metadata = True
-                                if not hasattr(mod, 'downloads') or mod.downloads is None or mod.downloads == 0:
-                                    needs_metadata = True
-                                if needs_metadata and mod_id_str:
-                                    mods_needing_metadata.append(mod_id_str)
-                        if mods_needing_metadata:
-                            if not hasattr(self.app_state, 'gamebanana_mods_needing_metadata'):
-                                self.app_state.gamebanana_mods_needing_metadata = []
-                            existing = set(self.app_state.gamebanana_mods_needing_metadata)
-                            new_ids = set(mods_needing_metadata)
-                            self.app_state.gamebanana_mods_needing_metadata = list(existing | new_ids)
-                            logger.info(f'SearchDisplayController: Added {len(new_ids)} mod IDs to metadata loading queue')
-                            if hasattr(self.app, 'refresh_controller') and self.app.refresh_controller:
-                                QTimer.singleShot(500, lambda: self.app.refresh_controller._start_metadata_loading())
+                        mods_needing = [
+                            mid for mod in new_mods_to_add
+                            if (mid := get_gamebanana_mod_id(mod)) and self._mod_needs_metadata(mod)
+                        ]
+                        self._queue_mods_for_metadata(mods_needing)
                         self.update_filtered_mods()
                 else:
                     self.app_state.gamebanana_loaded_pages[game_id] = 100
@@ -1009,159 +978,38 @@ class SearchDisplayController(QObject):
             if not filtered:
                 return ''
             per_page = self.app_state.mods_per_page or GAMEBANANA_PER_PAGE
-            start_idx = max(0, (page_num - 1) * per_page)
-            if start_idx < len(filtered):
-                candidate = filtered[start_idx]
-            else:
-                candidate = filtered[-1]
-            return getattr(candidate, 'game', None) or getattr(candidate, 'modgame', '') or ''
+            idx = min(max(0, (page_num - 1) * per_page), len(filtered) - 1)
+            return getattr(filtered[idx], 'game', None) or getattr(filtered[idx], 'modgame', '') or ''
         except Exception:
             return ''
-
-    def on_metadata_updated(self, mod_id: str, downloads: int, tagline: str, category: str = ''):
-        try:
-            if downloads is not None or tagline or category:
-                try:
-                    if hasattr(self.app, 'refresh_controller') and self.app.refresh_controller:
-                        if hasattr(self.app.refresh_controller, '_current_metadata_batch'):
-                            if mod_id in self.app.refresh_controller._current_metadata_batch:
-                                self.app.refresh_controller._current_metadata_batch.remove(mod_id)
-                                logger.debug(f'SearchDisplayController: Removed mod {mod_id} from current batch after successful load')
-                    if hasattr(self.app_state, 'gamebanana_mods_needing_metadata') and self.app_state.gamebanana_mods_needing_metadata:
-                        if mod_id in self.app_state.gamebanana_mods_needing_metadata:
-                            self.app_state.gamebanana_mods_needing_metadata.remove(mod_id)
-                            logger.debug(f'SearchDisplayController: Removed mod {mod_id} from metadata queue after successful load')
-                except (ValueError, AttributeError) as e:
-                    logger.debug(f'SearchDisplayController: Error removing mod {mod_id} from queue: {e}')
-            self._pending_metadata_updates[mod_id] = (downloads, tagline, category)
-            if self._metadata_update_timer is None:
-                self._metadata_update_timer = QTimer()
-                self._metadata_update_timer.setSingleShot(True)
-                self._metadata_update_timer.timeout.connect(self._apply_pending_metadata_updates)
-            self._metadata_update_timer.stop()
-            self._metadata_update_timer.start(1500)
-        except Exception as e:
-            logger.error(f'SearchDisplayController: Error in on_metadata_updated: {e}', exc_info=True)
-
-    def _apply_pending_metadata_updates(self):
-        try:
-            if not self._pending_metadata_updates:
-                return
-            updated_mods = []
-            needs_refilter = False
-            downloads_changed = False
-            if hasattr(self.app_state, 'all_mods') and self.app_state.all_mods:
-                for mod in self.app_state.all_mods:
-                    mod_id = get_gamebanana_mod_id(mod)
-                    if not mod_id or mod_id not in self._pending_metadata_updates:
-                        continue
-                    update_data = self._pending_metadata_updates[mod_id]
-                    if len(update_data) >= 3:
-                        downloads, tagline, category = update_data
-                    else:
-                        downloads, tagline = (update_data[0], update_data[1])
-                        category = ''
-                    if downloads is not None and downloads >= 0:
-                        old_downloads = getattr(mod, 'downloads', None)
-                        if old_downloads is None:
-                            old_downloads = 0
-                        else:
-                            try:
-                                old_downloads = int(old_downloads)
-                            except (ValueError, TypeError):
-                                old_downloads = 0
-                        try:
-                            downloads_int = int(downloads)
-                        except (ValueError, TypeError):
-                            downloads_int = 0
-                        if old_downloads != downloads_int:
-                            mod.downloads = downloads_int
-                            downloads_changed = True
-                        elif mod.downloads != downloads_int:
-                            mod.downloads = downloads_int
-                            downloads_changed = True
-                    if tagline and tagline != 'No description' and (mod.tagline != tagline):
-                        mod.tagline = tagline
-                    if category:
-                        if not hasattr(mod, 'gamebanana_category') or mod.gamebanana_category != category:
-                            mod.gamebanana_category = category
-                            needs_refilter = True
-                    try:
-                        mod.has_full_metadata = True
-                    except Exception:
-                        pass
-                    updated_mods.append(mod_id)
-            self._pending_metadata_updates.clear()
-            sort_needs_resort = False
-            sort_type = None
-            if hasattr(self.app, 'sort_combo'):
-                sort_type = self.app.sort_combo.currentIndex()
-                if sort_type == 0 and downloads_changed and (len(updated_mods) > 1):
-                    sort_needs_resort = True
-            if (sort_needs_resort or needs_refilter) and len(updated_mods) > 1:
-                logger.debug(f"SearchDisplayController: Re-sorting mods after metadata update (downloads_changed={downloads_changed}, needs_refilter={needs_refilter}, sort_type={(sort_type if sort_type is not None else 'N/A')}, mods_count={len(updated_mods)})")
-                self.update_filtered_mods(preserve_page=True)
-            elif updated_mods:
-                self._update_plaques_for_mods(updated_mods)
-        except Exception as e:
-            logger.error(f'SearchDisplayController: Error in _apply_pending_metadata_updates: {e}', exc_info=True)
-            self._pending_metadata_updates.clear()
 
     def _check_installed_mods_for_metadata(self):
         try:
             if not hasattr(self.app_state, 'all_mods') or not self.app_state.all_mods:
                 return
-            mods_needing_metadata = []
-            for mod in self.app_state.all_mods:
-                if not hasattr(mod, 'is_gamebanana_mod') or not mod.is_gamebanana_mod():
-                    continue
-                mod_id_str = get_gamebanana_mod_id(mod)
-                if not mod_id_str:
-                    continue
-                needs_metadata = False
-                if not hasattr(mod, 'tagline') or not mod.tagline or mod.tagline.strip() == '':
-                    needs_metadata = True
-                if not hasattr(mod, 'downloads') or mod.downloads is None or mod.downloads == 0:
-                    needs_metadata = True
-                if hasattr(mod, 'has_full_metadata') and (not mod.has_full_metadata):
-                    needs_metadata = True
-                if needs_metadata:
-                    mods_needing_metadata.append(mod_id_str)
-            if mods_needing_metadata:
-                if not hasattr(self.app_state, 'gamebanana_mods_needing_metadata'):
-                    self.app_state.gamebanana_mods_needing_metadata = []
-                existing = set(self.app_state.gamebanana_mods_needing_metadata)
-                new_ids = set(mods_needing_metadata)
-                self.app_state.gamebanana_mods_needing_metadata = list(existing | new_ids)
-                logger.info(f'SearchDisplayController: Added {len(new_ids)} installed mod IDs to metadata loading queue')
-                if hasattr(self.app, 'refresh_controller') and self.app.refresh_controller:
-                    QTimer.singleShot(500, lambda: self.app.refresh_controller._start_metadata_loading())
+            mods_needing = [
+                mod_id_str
+                for mod in self.app_state.all_mods
+                if hasattr(mod, 'is_gamebanana_mod') and mod.is_gamebanana_mod()
+                and (mod_id_str := get_gamebanana_mod_id(mod))
+                and self._mod_needs_metadata(mod)
+            ]
+            self._queue_mods_for_metadata(mods_needing)
         except Exception as e:
             logger.error(f'SearchDisplayController: Error in _check_installed_mods_for_metadata: {e}', exc_info=True)
 
     def _update_plaques_for_mods(self, mod_ids: list):
         try:
-            if not hasattr(self.app, 'mod_list_layout'):
-                return
             mod_ids_set = set(mod_ids)
-            updated_widgets = []
-            for i in range(self.app.mod_list_layout.count() - 1):
-                item = self.app.mod_list_layout.itemAt(i)
-                if item:
-                    widget = item.widget()
-                    if isinstance(widget, ModPlaqueWidget):
-                        mod = widget.mod_data
-                        if mod and mod.is_gamebanana_mod():
-                            mod_id = mod.get_gamebanana_mod_id()
-                            if mod_id and mod_id in mod_ids_set:
-                                try:
-                                    widget.update_mod_data()
-                                    widget.update_installation_status()
-                                    if hasattr(widget, 'update_install_button_state'):
-                                        widget.update_install_button_state()
-                                    updated_widgets.append(widget)
-                                except Exception as e:
-                                    logger.warning(f'SearchDisplayController: Error updating plaque for mod {mod_id}: {e}')
+            for widget in self._iter_layout_plaques():
+                mod = widget.mod_data
+                if mod and mod.is_gamebanana_mod():
+                    mod_id = mod.get_gamebanana_mod_id()
+                    if mod_id and mod_id in mod_ids_set:
+                        try:
+                            self._refresh_plaque(widget)
+                        except Exception as e:
+                            logger.warning(f'SearchDisplayController: Error updating plaque for mod {mod_id}: {e}')
         except Exception as e:
             logger.error(f'SearchDisplayController: Error in _update_plaques_for_mods: {e}', exc_info=True)
 
@@ -1175,18 +1023,5 @@ class SearchDisplayController(QObject):
                         plaque._update_style()
                 except Exception as e:
                     logger.warning(f'SearchDisplayController: Error updating labels for plaque {cache_key}: {e}')
-            if hasattr(self.app, 'mod_list_layout'):
-                for i in range(self.app.mod_list_layout.count() - 1):
-                    item = self.app.mod_list_layout.itemAt(i)
-                    if item:
-                        widget = item.widget()
-                        if isinstance(widget, ModPlaqueWidget):
-                            try:
-                                if hasattr(widget, 'update_labels_text'):
-                                    widget.update_labels_text()
-                                if hasattr(widget, '_update_style'):
-                                    widget._update_style()
-                            except Exception as e:
-                                logger.warning(f'SearchDisplayController: Error updating labels for widget in layout: {e}')
         except Exception as e:
             logger.error(f'SearchDisplayController: Error in update_all_plaques_labels: {e}', exc_info=True)

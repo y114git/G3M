@@ -17,7 +17,7 @@ class BlocklistDialog(QDialog):
         self.available_games = available_games
         self.setup_ui()
         self.load_blocklist()
-        self.retranslate_ui()
+        self.relocalize_ui()
 
     def setup_ui(self):
         self.setWindowTitle(tr('blocklist.title'))
@@ -168,7 +168,7 @@ class BlocklistDialog(QDialog):
                 self.update_blocklist_display()
                 self.blocklist_changed.emit()
 
-    def retranslate_ui(self):
+    def relocalize_ui(self):
         self.setWindowTitle(tr('blocklist.title'))
         if hasattr(self, 'game_combo'):
             self.load_blocklist()

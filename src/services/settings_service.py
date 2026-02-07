@@ -12,7 +12,7 @@ from PyQt6.QtCore import QObject, pyqtSignal, QTimer, QByteArray
 from PyQt6.QtWidgets import QFileDialog, QWidget
 from services.localization_service import tr, LocalizationManager
 from config.constants import LAUNCHER_VERSION, UI_COLORS, SLOT_ID_UNIVERSAL
-from models.game_modes import DemoGameMode, UndertaleGameMode, PizzaTowerGameMode
+from models.game_modes import DemoGameMode, UndertaleGameMode, PizzaTowerGameMode, UndertaleYellowGameMode
 from utils.file_utils import get_file_filter
 
 
@@ -23,6 +23,8 @@ class SettingsManager(QObject):
     theme_changed = pyqtSignal()
     restart_required = pyqtSignal(str)
     status_changed = pyqtSignal(str, str)
+    _IMAGE_EXTENSIONS = ('.png', '.jpg', '.jpeg', '.gif', '.bmp')
+    _AUDIO_OLD_FILES = ('custom_background_music.mp3', 'custom_background_music.wav', 'custom_startup_sound.mp3', 'custom_startup_sound.wav')
 
     def __init__(self, app_state, feedback_service, localization_service: LocalizationManager, parent=None):
         super().__init__(parent)
@@ -119,7 +121,6 @@ class SettingsManager(QObject):
     }
 
     def prompt_for_game_path(self, is_initial=False) -> bool:
-        from models.game_modes import UndertaleYellowGameMode, PizzaTowerGameMode
         dialogs = {
             **self._GAME_PATH_DIALOGS,
             UndertaleYellowGameMode: ('dialogs.select_undertaleyellow_folder', 'dialogs.undertaleyellow_not_found'),
@@ -200,16 +201,19 @@ class SettingsManager(QObject):
     def on_startup_sound_button_click(self):
         self._handle_audio_file_click('startup_sound', 'dialogs.select_startup_sound', 'dialogs.startup_sound_removed', 'errors.remove_startup_sound_failed', 'errors.copy_startup_sound_failed', 'get_startup_sound_path')
 
+    def _remove_logo_files(self):
+        for ext in self._IMAGE_EXTENSIONS:
+            path = os.path.join(self.app_state.config_dir, f'custom_logo{ext}')
+            if os.path.exists(path):
+                os.remove(path)
+
     def on_logo_button_click(self):
         existing_logo = ''
         if self.parent_widget and hasattr(self.parent_widget, 'customization_service'):
             existing_logo = self.parent_widget.customization_service.get_custom_logo_path()
         if existing_logo:
             try:
-                for ext in ['.png', '.jpg', '.jpeg', '.gif', '.bmp']:
-                    logo_path = os.path.join(self.app_state.config_dir, f'custom_logo{ext}')
-                    if os.path.exists(logo_path):
-                        os.remove(logo_path)
+                self._remove_logo_files()
                 self.feedback_service.show_message('info', 'dialogs.success', tr('dialogs.logo_removed'))
                 self.theme_changed.emit()
             except Exception:
@@ -220,15 +224,11 @@ class SettingsManager(QObject):
                 try:
                     os.makedirs(self.app_state.config_dir, exist_ok=True)
                     ext = os.path.splitext(file_path)[1].lower()
-                    if ext not in ['.png', '.jpg', '.jpeg', '.gif', '.bmp']:
+                    if ext not in self._IMAGE_EXTENSIONS:
                         self.feedback_service.show_message('warning', 'errors.error', tr('errors.invalid_image_format'))
                         return
-                    for old_ext in ['.png', '.jpg', '.jpeg', '.gif', '.bmp']:
-                        old_path = os.path.join(self.app_state.config_dir, f'custom_logo{old_ext}')
-                        if os.path.exists(old_path):
-                            os.remove(old_path)
-                    dest_path = os.path.join(self.app_state.config_dir, f'custom_logo{ext}')
-                    shutil.copy2(file_path, dest_path)
+                    self._remove_logo_files()
+                    shutil.copy2(file_path, os.path.join(self.app_state.config_dir, f'custom_logo{ext}'))
                     self.theme_changed.emit()
                 except Exception:
                     self.feedback_service.show_message('warning', 'errors.error', tr('errors.copy_logo_failed'))
@@ -239,11 +239,7 @@ class SettingsManager(QObject):
     def on_custom_style_edited(self, color_widgets: dict):
         for key, widget in color_widgets.items():
             color = widget.text()
-            config_key = f'custom_color_{key}'
-            if color and self.is_valid_hex_color(color):
-                self.app_state.local_config[config_key] = color
-            else:
-                self.app_state.local_config[config_key] = ''
+            self.app_state.local_config[f'custom_color_{key}'] = color if color and self.is_valid_hex_color(color) else ''
         self.write_local_config()
         self.theme_changed.emit()
 
@@ -251,25 +247,21 @@ class SettingsManager(QObject):
         theme_file_path, _ = QFileDialog.getSaveFileName(self.parent_widget, tr('dialogs.export_theme_title'), '', f"{tr('file_descriptions.theme_files')} (*.dhtheme)")
         if not theme_file_path:
             return
-        theme_settings = {'custom_color_background': self.app_state.local_config.get('custom_color_background', ''), 'custom_color_button': self.app_state.local_config.get('custom_color_button', ''), 'custom_color_border': self.app_state.local_config.get('custom_color_border', ''), 'custom_color_button_hover': self.app_state.local_config.get('custom_color_button_hover', ''), 'custom_color_text': self.app_state.local_config.get('custom_color_text', ''), 'custom_color_version_text': self.app_state.local_config.get('custom_color_version_text', ''), 'background_disabled': self.app_state.local_config.get('background_disabled', False), 'disable_splash': self.app_state.local_config.get('disable_splash', False)}
+        _color_keys = ('custom_color_background', 'custom_color_button', 'custom_color_border', 'custom_color_button_hover', 'custom_color_text', 'custom_color_version_text')
+        theme_settings = {k: self.app_state.local_config.get(k, '') for k in _color_keys}
+        theme_settings.update({'background_disabled': self.app_state.local_config.get('background_disabled', False), 'disable_splash': self.app_state.local_config.get('disable_splash', False)})
         with zipfile.ZipFile(theme_file_path, 'w') as zipf:
             zipf.writestr('theme.json', json.dumps(theme_settings, indent=2))
-            bg_path = self.app_state.local_config.get('custom_background_path')
-            if bg_path and os.path.exists(bg_path):
-                zipf.write(bg_path, f'background{os.path.splitext(bg_path)[1]}')
-            music_path = None
-            sound_path = None
-            logo_path = None
+            assets = [('custom_background_path', 'background')]
             if self.parent_widget and hasattr(self.parent_widget, 'customization_service'):
-                music_path = self.parent_widget.customization_service.get_background_music_path() or None
-                sound_path = self.parent_widget.customization_service.get_startup_sound_path() or None
-                logo_path = self.parent_widget.customization_service.get_custom_logo_path() or None
-            if music_path and os.path.exists(music_path):
-                zipf.write(music_path, f'background_music{os.path.splitext(music_path)[1]}')
-            if sound_path and os.path.exists(sound_path):
-                zipf.write(sound_path, f'startup_sound{os.path.splitext(sound_path)[1]}')
-            if logo_path and os.path.exists(logo_path):
-                zipf.write(logo_path, f'custom_logo{os.path.splitext(logo_path)[1]}')
+                cs = self.parent_widget.customization_service
+                assets += [(cs.get_background_music_path(), 'background_music'), (cs.get_startup_sound_path(), 'startup_sound'), (cs.get_custom_logo_path(), 'custom_logo')]
+            else:
+                assets.append((None, None))
+            for src, name in assets:
+                path = self.app_state.local_config.get(src) if isinstance(src, str) and os.path.sep not in src and '/' not in src else src
+                if path and os.path.exists(path):
+                    zipf.write(path, f'{name}{os.path.splitext(path)[1]}')
         self.feedback_service.show_message('info', 'dialogs.success', tr('dialogs.theme_exported_success'))
 
     def import_theme(self):
@@ -302,29 +294,19 @@ class SettingsManager(QObject):
                     theme_settings = json.load(f)
                 for key, value in theme_settings.items():
                     self.app_state.local_config[key] = value
-                for old_file in ['custom_background_music.mp3', 'custom_background_music.wav', 'custom_startup_sound.mp3', 'custom_startup_sound.wav']:
-                    if os.path.exists(os.path.join(self.app_state.config_dir, old_file)):
-                        os.remove(os.path.join(self.app_state.config_dir, old_file))
-                for ext in ['.png', '.jpg', '.jpeg', '.gif', '.bmp']:
-                    old_logo = os.path.join(self.app_state.config_dir, f'custom_logo{ext}')
-                    if os.path.exists(old_logo):
-                        os.remove(old_logo)
+                self._remove_files([os.path.join(self.app_state.config_dir, f) for f in self._AUDIO_OLD_FILES])
+                self._remove_logo_files()
                 self.app_state.local_config['custom_background_path'] = ''
+                _asset_prefixes = {'background.': 'custom_background', 'background_music.': 'custom_background_music', 'startup_sound.': 'custom_startup_sound', 'custom_logo.': 'custom_logo'}
                 for filename in os.listdir(temp_dir):
-                    src_path = os.path.join(temp_dir, filename)
-                    if filename.startswith('background.'):
-                        ext = os.path.splitext(filename)[1]
-                        dest_path = os.path.join(self.app_state.config_dir, f'custom_background{ext}')
-                        shutil.copy2(src_path, dest_path)
-                        self.app_state.local_config['custom_background_path'] = dest_path
-                    elif filename.startswith('background_music.'):
-                        shutil.copy2(src_path, os.path.join(self.app_state.config_dir, f'custom_background_music{os.path.splitext(filename)[1]}'))
-                    elif filename.startswith('startup_sound.'):
-                        shutil.copy2(src_path, os.path.join(self.app_state.config_dir, f'custom_startup_sound{os.path.splitext(filename)[1]}'))
-                    elif filename.startswith('custom_logo.'):
-                        ext = os.path.splitext(filename)[1]
-                        dest_path = os.path.join(self.app_state.config_dir, f'custom_logo{ext}')
-                        shutil.copy2(src_path, dest_path)
+                    for prefix, dest_name in _asset_prefixes.items():
+                        if filename.startswith(prefix):
+                            ext = os.path.splitext(filename)[1]
+                            dest_path = os.path.join(self.app_state.config_dir, f'{dest_name}{ext}')
+                            shutil.copy2(os.path.join(temp_dir, filename), dest_path)
+                            if prefix == 'background.':
+                                self.app_state.local_config['custom_background_path'] = dest_path
+                            break
             self.write_local_config()
             self.app_state.local_config['first_launch_splash_shown'] = True
             if 'disable_splash' in theme_settings:
@@ -387,7 +369,7 @@ class SettingsManager(QObject):
         if not self.feedback_service.ask_question('dialogs.reset_settings_confirm_title', 'dialogs.reset_settings_confirm_text', '', False):
             return
         language = self.app_state.local_config.get('language', 'en')
-        self._remove_files([os.path.join(self.app_state.config_dir, f) for f in ('custom_background_music.mp3', 'custom_background_music.wav', 'custom_startup_sound.mp3', 'custom_startup_sound.wav')])
+        self._remove_files([os.path.join(self.app_state.config_dir, f) for f in self._AUDIO_OLD_FILES])
         self.app_state.local_config.clear()
         self.app_state.local_config['language'] = language
         config_keys_to_clear = ['saved_slots_deltarune', 'saved_slots_deltarune_chapter', 'saved_slots_deltarunedemo', 'saved_slots_undertale']
@@ -423,9 +405,7 @@ class SettingsManager(QObject):
         self.write_local_config()
 
     def schedule_geometry_save(self, widget: QWidget, timeout_ms: int = 500):
-        if not hasattr(self, '_geometry_save_timer'):
-            self._geometry_save_timer = None
-        if self._geometry_save_timer is None:
+        if not getattr(self, '_geometry_save_timer', None):
             self._geometry_save_timer = QTimer()
             self._geometry_save_timer.setSingleShot(True)
             self._geometry_save_timer.timeout.connect(lambda: self.save_window_geometry(widget))

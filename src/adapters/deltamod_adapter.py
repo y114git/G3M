@@ -63,12 +63,7 @@ class DeltamodConverter:
                 if not os.path.exists(current_path):
                     return None
                 try:
-                    entries = os.listdir(current_path)
-                    found = None
-                    for entry in entries:
-                        if entry.lower() == part.lower():
-                            found = entry
-                            break
+                    found = next((e for e in os.listdir(current_path) if e.lower() == part.lower()), None)
                     if found is None:
                         return None
                     current_path = os.path.join(current_path, found)
@@ -240,6 +235,18 @@ class DeltamodConverter:
             logging.error(f'Failed to create extra_file archive {archive_path}: {e}', exc_info=True)
             return False
 
+    def _resolve_patch_file(self, patch_file_rel: str) -> Optional[str]:
+        for variant in (patch_file_rel, patch_file_rel.replace('\\', '/'), patch_file_rel.replace('/', '\\')):
+            candidate = os.path.join(self.source_path, variant)
+            if os.path.exists(candidate):
+                return candidate
+        if os.name == 'nt':
+            found = self._find_file_case_insensitive(self.source_path, patch_file_rel)
+            if found:
+                return found
+        found = self._find_file_recursive(self.source_path, os.path.basename(patch_file_rel))
+        return found
+
     def _process_files(self, target_mod_dir: str) -> None:
         if self.modding_xml is None:
             return
@@ -261,45 +268,13 @@ class DeltamodConverter:
             if not chapter_key:
                 logging.warning(f'DeltamodConverter: could not determine chapter for path: {to_path}')
                 continue
-            if chapter_key == 'demo':
-                chapter_dir_name = 'demo'
-            elif chapter_key == '0':
-                chapter_dir_name = 'chapter_0'
-            else:
-                chapter_dir_name = f'chapter_{chapter_key}'
+            chapter_dir_name = 'demo' if chapter_key == 'demo' else f'chapter_{chapter_key}'
             target_chapter_dir = os.path.join(target_mod_dir, chapter_dir_name)
             os.makedirs(target_chapter_dir, exist_ok=True)
             if patch_type == 'override':
-                patch_file_abs = os.path.join(self.source_path, patch_file_rel)
-                if not os.path.exists(patch_file_abs):
-                    normalized_rel = patch_file_rel.replace('\\', '/')
-                    patch_file_abs = os.path.join(self.source_path, normalized_rel)
-                if not os.path.exists(patch_file_abs):
-                    backslash_rel = patch_file_rel.replace('/', '\\')
-                    patch_file_abs = os.path.join(self.source_path, backslash_rel)
-                if not os.path.exists(patch_file_abs):
-                    if os.name == 'nt':
-                        found_path = self._find_file_case_insensitive(self.source_path, patch_file_rel)
-                        if found_path:
-                            patch_file_abs = found_path
-                if not patch_file_abs or not os.path.exists(patch_file_abs):
-                    filename_only = os.path.basename(patch_file_rel)
-                    found_path = self._find_file_recursive(self.source_path, filename_only)
-                    if found_path:
-                        patch_file_abs = found_path
-                        logging.info(f'DeltamodConverter: found file via recursive search: {filename_only} -> {found_path}')
-                if not patch_file_abs or not os.path.exists(patch_file_abs):
-                    logging.error(f'DeltamodConverter: override patch file not found: {patch_file_rel} (tried: {os.path.join(self.source_path, patch_file_rel)})')
-                    try:
-                        available_files = []
-                        for root, dirs, files in os.walk(self.source_path):
-                            for file in files:
-                                rel_path = os.path.relpath(os.path.join(root, file), self.source_path)
-                                available_files.append(rel_path.replace('\\', '/'))
-                        if available_files:
-                            logging.debug(f'Available files in source: {available_files[:20]}')
-                    except Exception:
-                        pass
+                patch_file_abs = self._resolve_patch_file(patch_file_rel)
+                if not patch_file_abs:
+                    logging.error(f'DeltamodConverter: override patch file not found: {patch_file_rel}')
                     continue
                 archive_key = (relative_path + filename).replace('/', '_').replace('\\', '_')
                 if not archive_key:

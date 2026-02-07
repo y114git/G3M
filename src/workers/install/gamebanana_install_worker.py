@@ -12,6 +12,7 @@ from adapters.gamebanana_adapter import GameBananaAPI
 from adapters.gamebanana_converter import GameBananaConverter
 from utils.file_utils import normalize_mod_package
 from utils.network_utils import get_session
+from utils.mod_utils import get_mod_key
 from workers.base_install_worker import BaseInstallWorker
 logger = logging.getLogger(__name__)
 
@@ -30,32 +31,32 @@ class InstallGameBananaModThread(BaseInstallWorker):
         self.selected_file = selected_file
 
     def _build_gb_metadata(self, mod_id: int) -> Dict:
-        return {'mod_id': mod_id, 'profile_url': self.mod_info.external_url, 'icon_url': self.mod_info.icon_url, 'tags': self.mod_info.tags if hasattr(self.mod_info, 'tags') and self.mod_info.tags else [], 'category': self.mod_info.gamebanana_category if hasattr(self.mod_info, 'gamebanana_category') else None, 'game': self.mod_info.game if hasattr(self.mod_info, 'game') else 'deltarune'}
+        return {'mod_id': mod_id, 'profile_url': self.mod_info.external_url, 'icon_url': self.mod_info.icon_url, 'tags': getattr(self.mod_info, 'tags', None) or [], 'category': getattr(self.mod_info, 'gamebanana_category', None), 'game': getattr(self.mod_info, 'game', 'deltarune')}
+
+    def _emit_cancelled(self, archive_path=None, archive_dir=None):
+        self._cleanup_temp_files(archive_path, archive_dir)
+        self.finished.emit(False, tr('status.operation_cancelled'))
 
     def run(self):
         archive_path = None
         archive_dir = None
         try:
-            mod_key = getattr(self.mod_info, 'key', None) or getattr(self.mod_info, 'mod_key', None)
+            mod_key = get_mod_key(self.mod_info)
             mod_id_str = self.mod_info.get_gamebanana_mod_id() if hasattr(self.mod_info, 'get_gamebanana_mod_id') else mod_key.replace('gb_', '', 1) if mod_key and mod_key.startswith('gb_') else None
             if not mod_id_str:
                 raise AppError('errors.invalid_gamebanana_mod_id')
             mod_id = int(mod_id_str)
             if self._cancelled:
-                self.finished.emit(False, tr('status.operation_cancelled'))
-                return
+                return self._emit_cancelled()
             self.status.emit(tr('status.preparing_download'), UI_COLORS['status_info'])
             file_choice = self._resolve_selected_file(int(mod_id))
             if not file_choice:
                 mod_url = self.mod_info.external_url or f'https://gamebanana.com/mods/{mod_id}'
-                error_msg = f'MOD_NOT_COMPATIBLE:{mod_url}'
-                logger.warning(f'Mod {mod_id} does not have a compatible file assigned for auto install')
                 self.status.emit(tr('status.installation_failed'), UI_COLORS['status_error'])
-                self.finished.emit(False, error_msg)
+                self.finished.emit(False, f'MOD_NOT_COMPATIBLE:{mod_url}')
                 return
             if self._cancelled:
-                self.finished.emit(False, tr('status.operation_cancelled'))
-                return
+                return self._emit_cancelled()
             download_url = file_choice.get('download_url') or file_choice.get('_sDownloadUrl')
             if not download_url:
                 raise AppError('errors.no_download_url')
@@ -93,20 +94,11 @@ class InstallGameBananaModThread(BaseInstallWorker):
                     raise RuntimeError('download_failed')
             except RuntimeError as e:
                 if str(e) == 'download_cancelled' or self._cancelled:
-                    self._cleanup_temp_files(archive_path, archive_dir)
-                    self.finished.emit(False, tr('status.operation_cancelled'))
-                    return
-                else:
-                    raise
+                    return self._emit_cancelled(archive_path, archive_dir)
+                raise
             if self._cancelled:
-                self._cleanup_temp_files(archive_path, archive_dir)
-                self.finished.emit(False, tr('status.operation_cancelled'))
-                return
+                return self._emit_cancelled(archive_path, archive_dir)
             file_format = file_choice.get('compatibility', 'deltahub')
-            if self._cancelled:
-                self._cleanup_temp_files(archive_path, archive_dir)
-                self.finished.emit(False, tr('status.operation_cancelled'))
-                return
             if file_format == 'deltahub':
                 self.status.emit(tr('status.installing_mod'), UI_COLORS['status_info'])
                 try:
@@ -135,12 +127,11 @@ class InstallGameBananaModThread(BaseInstallWorker):
             mod_name = os.path.basename(mod_dir)
             self.finished.emit(True, tr('status.install_complete_success', mod_name=mod_name))
         except RuntimeError as e:
+            self._cleanup_temp_files(archive_path, archive_dir)
             if str(e) == 'download_cancelled' or self._cancelled:
-                self._cleanup_temp_files(archive_path, archive_dir)
                 self.finished.emit(False, tr('status.operation_cancelled'))
             else:
-                logger.error(f'Error installing GameBanana mod (RuntimeError): {e}', exc_info=True)
-                self._cleanup_temp_files(archive_path, archive_dir)
+                logger.error(f'Error installing GameBanana mod: {e}', exc_info=True)
                 self.finished.emit(False, str(e))
         except Exception as e:
             logger.error(f'Error installing GameBanana mod: {e}', exc_info=True)
@@ -199,12 +190,6 @@ class InstallGameBananaModThread(BaseInstallWorker):
                     except Exception as e:
                         logger.error(f'Error downloading redirect mod: {e}')
                         raise ValueError(f'Failed to download redirect mod: {e}')
-            key = config_data.get('key') or config_data.get('mod_key')
-            if not key:
-                key = f'gb_{mod_id}'
-                config_data['key'] = key
-                if 'mod_key' in config_data:
-                    del config_data['mod_key']
             mod_name = config_data.get('name', f'mod_{mod_id}')
             folder_name = sanitize_filename(mod_name)
             target_mod_dir = os.path.join(self.main_window.app_state.mods_dir, folder_name)
@@ -229,7 +214,6 @@ class InstallGameBananaModThread(BaseInstallWorker):
             if hasattr(self.mod_info, 'tags') and self.mod_info.tags:
                 tags = self.mod_info.tags if isinstance(self.mod_info.tags, list) else [self.mod_info.tags]
             elif hasattr(self.mod_info, 'gamebanana_category') and self.mod_info.gamebanana_category:
-                from adapters.gamebanana_adapter import GameBananaAPI
                 category_tag = GameBananaAPI.category_to_tag(self.mod_info.gamebanana_category)
                 if category_tag:
                     tags = [category_tag]
@@ -247,8 +231,8 @@ class InstallGameBananaModThread(BaseInstallWorker):
                 del config_data['mod_key']
             target_config_path = os.path.join(target_mod_dir, MOD_CONFIG_FILENAME)
             try:
-                from utils.file_utils import atomic_write_json
-                atomic_write_json(target_config_path, config_data, indent=4)
+                from utils.file_utils import save_json
+                save_json(target_config_path, config_data, indent=4)
                 logger.info(f'Installed DELTAHUB mod: {target_mod_dir}, key = {expected_mod_key}')
             except Exception as e:
                 logger.error(f'Error writing mod_config.json: {e}')

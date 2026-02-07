@@ -4,6 +4,8 @@ from services.localization_service import tr
 from ui.common.styling import get_theme_color, load_mod_icon_universal
 from ui.widgets.shared.outlined_label import OutlinedTextLabel
 from ui.widgets.shared.screenshots_carousel import ScreenshotsCarousel
+from utils.mod_utils import get_mod_key
+from adapters.gamebanana_adapter import GameBananaAPI
 from PyQt6 import sip as _sip
 import logging
 import webbrowser
@@ -21,10 +23,10 @@ class LoadModDetailsThread(QThread):
         try:
             if self.isInterruptionRequested():
                 return
-            key = getattr(self.mod_data, 'key', None) or getattr(self.mod_data, 'mod_key', None)
-            if not key or not key.startswith('gb_'):
+            mod_key = get_mod_key(self.mod_data)
+            if not mod_key or not mod_key.startswith('gb_'):
                 return
-            mod_id_str = key.replace('gb_', '', 1)
+            mod_id_str = mod_key.replace('gb_', '', 1)
             if not mod_id_str:
                 return
             mod_id = int(mod_id_str)
@@ -47,20 +49,14 @@ class LoadModDetailsThread(QThread):
                             if cached_text:
                                 result['text'] = cached_text
                             if cached_screenshots:
-                                external_url = getattr(self.mod_data, 'external_url', None)
-                                from adapters.gamebanana_adapter import GameBananaAPI
-                                api = GameBananaAPI()
-                                cached_screenshots = api.fix_screenshot_urls(cached_screenshots, external_url=external_url)
-                                result['screenshots'] = cached_screenshots
-                            if result:
-                                if not self.isInterruptionRequested():
-                                    self.details_loaded.emit(result)
+                                result['screenshots'] = GameBananaAPI.fix_screenshot_urls(cached_screenshots, external_url=getattr(self.mod_data, 'external_url', None))
+                            if result and not self.isInterruptionRequested():
+                                self.details_loaded.emit(result)
                                 return
                 except Exception as e:
                     logging.warning(f'LoadModDetailsThread: Error accessing cache: {e}', exc_info=True)
             if self.isInterruptionRequested():
                 return
-            from adapters.gamebanana_adapter import GameBananaAPI
             api = GameBananaAPI()
             external_url = getattr(self.mod_data, 'external_url', None)
             details = api.get_mod_text_and_screenshots(mod_id, external_url=external_url)
@@ -69,12 +65,7 @@ class LoadModDetailsThread(QThread):
                 text_field = details.get('text')
                 full_description = None
                 if text_field:
-                    if isinstance(text_field, list) and len(text_field) > 0:
-                        full_description = text_field[0]
-                    elif isinstance(text_field, str):
-                        full_description = text_field
-                    else:
-                        full_description = str(text_field)
+                    full_description = text_field[0] if isinstance(text_field, list) and text_field else (text_field if isinstance(text_field, str) else str(text_field))
                     result['text'] = full_description
                 screenshots_field = details.get('screenshots')
                 screenshots = []
@@ -170,11 +161,11 @@ def open_mod_details_dialog(parent, mod_data):
         tags_header = QLabel(tr('ui.tags_label'))
         tags_header.setStyleSheet(f'font-size: 12px; color: {text_color}; font-weight: bold;')
         metadata_layout.addWidget(tags_header)
-        tag_translations = {'textedit': tr('tags.textedit'), 'translation': tr('tags.textedit'), 'customization': tr('tags.customization'), 'gameplay': tr('tags.gameplay'), 'other': tr('tags.other')}
+        tag_labels = {'textedit': tr('tags.textedit'), 'translation': tr('tags.textedit'), 'customization': tr('tags.customization'), 'gameplay': tr('tags.gameplay'), 'other': tr('tags.other')}
         tags_list = mod_data.tags if isinstance(mod_data.tags, list) else [mod_data.tags]
         filtered_tags = [tag for tag in tags_list if tag]
-        translated_tags = [tag_translations.get(tag, tag) or tag for tag in filtered_tags]
-        for tag in translated_tags:
+        localized_tags = [tag_labels.get(tag, tag) or tag for tag in filtered_tags]
+        for tag in localized_tags:
             tag_label = QLabel(tag)
             tag_label.setStyleSheet(f'font-size: 12px; color: {secondary_text_color}; margin-left: 10px;')
             tag_label.setMaximumWidth(190)
@@ -214,15 +205,7 @@ def open_mod_details_dialog(parent, mod_data):
     game_value = getattr(mod_data, 'game', None) or getattr(mod_data, 'modgame', 'deltarune')
     modgame_label = OutlinedTextLabel(tr(f'ui.{game_value}_label'))
     fill_color = text_color
-    outline_color = '#222222'
-    if game_value == 'deltarune':
-        outline_color = '#222222'
-    elif game_value == 'deltarunedemo':
-        outline_color = 'lightgreen'
-    elif game_value == 'undertale':
-        outline_color = '#750B0B'
-    elif game_value == 'undertaleyellow':
-        outline_color = '#FFD700'
+    outline_color = {'deltarunedemo': 'lightgreen', 'undertale': '#750B0B', 'undertaleyellow': '#FFD700'}.get(game_value, '#222222')
     f = modgame_label.font()
     f.setBold(True)
     f.setPointSize(15)
@@ -268,7 +251,6 @@ def open_mod_details_dialog(parent, mod_data):
     screenshots = getattr(mod_data, 'screenshots_url', []) or []
     external_url = getattr(mod_data, 'external_url', None)
     if screenshots and external_url:
-        from adapters.gamebanana_adapter import GameBananaAPI
         screenshots = GameBananaAPI.fix_screenshot_urls(screenshots, external_url=external_url)
     screenshots_widget = None
     if isinstance(screenshots, list) and any((isinstance(u, str) and u.strip() for u in screenshots)):
@@ -295,38 +277,23 @@ def open_mod_details_dialog(parent, mod_data):
     desc_text.setOpenExternalLinks(True)
     dialog_closed = False
 
+    def _is_alive(*widgets):
+        try:
+            return all(not _sip.isdeleted(w) for w in widgets)
+        except (ImportError, AttributeError, RuntimeError):
+            try:
+                return dialog.isVisible()
+            except (RuntimeError, AttributeError):
+                return False
+
     def update_ui_with_details(details_dict):
         nonlocal dialog_closed
         try:
-            if dialog_closed:
-                return
-            try:
-                if _sip.isdeleted(dialog) or _sip.isdeleted(desc_text) or _sip.isdeleted(screenshots_container):
-                    dialog_closed = True
-                    return
-            except (ImportError, AttributeError):
-                try:
-                    if not dialog.isVisible() or not hasattr(dialog, 'isVisible'):
-                        dialog_closed = True
-                        return
-                except (RuntimeError, AttributeError):
-                    dialog_closed = True
-                    return
-            except (RuntimeError, AttributeError):
+            if dialog_closed or not _is_alive(dialog, desc_text, screenshots_container):
                 dialog_closed = True
-                return
-            if dialog_closed:
                 return
             if details_dict.get('text'):
                 try:
-                    if dialog_closed:
-                        return
-                    try:
-                        if _sip.isdeleted(desc_text):
-                            dialog_closed = True
-                            return
-                    except (ImportError, AttributeError, RuntimeError):
-                        pass
                     desc_text.setHtml(details_dict['text'])
                 except (RuntimeError, AttributeError) as e:
                     dialog_closed = True
@@ -335,34 +302,20 @@ def open_mod_details_dialog(parent, mod_data):
                 except Exception as e:
                     logging.warning(f'Error setting full_description HTML: {e}')
                     try:
-                        if not dialog_closed:
-                            desc_text.setPlainText(details_dict['text'])
+                        desc_text.setPlainText(details_dict['text'])
                     except (RuntimeError, AttributeError):
                         dialog_closed = True
                         return
-                    except Exception:
-                        pass
             new_screenshots = details_dict.get('screenshots', [])
             if new_screenshots and isinstance(new_screenshots, list) and any((isinstance(u, str) and u.strip() for u in new_screenshots)):
                 try:
-                    if dialog_closed:
+                    if not _is_alive(screenshots_container):
+                        dialog_closed = True
                         return
-                    try:
-                        if _sip.isdeleted(screenshots_container) or _sip.isdeleted(screenshots_container_layout):
-                            dialog_closed = True
-                            return
-                    except (ImportError, AttributeError, RuntimeError):
-                        pass
                     while screenshots_container_layout.count() > 0:
                         item = screenshots_container_layout.takeAt(0)
-                        widget = item.widget() if item else None
-                        if widget:
-                            try:
-                                widget.deleteLater()
-                            except (RuntimeError, AttributeError):
-                                pass
-                    if dialog_closed:
-                        return
+                        if item and item.widget():
+                            item.widget().deleteLater()
                     screenshots_title = QLabel(f"<b>{tr('ui.screenshots_title')}</b>")
                     screenshots_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
                     screenshots_container_layout.addWidget(screenshots_title)
@@ -397,43 +350,28 @@ def open_mod_details_dialog(parent, mod_data):
     def cleanup_thread():
         nonlocal load_thread, dialog_closed
         dialog_closed = True
-        if load_thread is not None:
-            thread_to_cleanup = load_thread
-            load_thread = None
+        if load_thread is None:
+            return
+        thread_to_cleanup = load_thread
+        load_thread = None
+        try:
+            thread_to_cleanup.blockSignals(True)
             try:
-                thread_to_cleanup.blockSignals(True)
-                try:
-                    thread_to_cleanup.details_loaded.disconnect()
-                except (TypeError, RuntimeError):
-                    pass
-                thread_to_cleanup.blockSignals(False)
-            except (TypeError, RuntimeError, AttributeError):
+                thread_to_cleanup.details_loaded.disconnect()
+            except (TypeError, RuntimeError):
                 pass
-            try:
-                if thread_to_cleanup.isRunning():
-                    thread_to_cleanup.requestInterruption()
-                    thread_to_cleanup.quit()
-                    if not thread_to_cleanup.wait(2000):
-                        logging.warning('LoadModDetailsThread: Thread did not stop within 2s timeout, but continuing cleanup')
-            except (RuntimeError, AttributeError) as e:
-                logging.debug(f'LoadModDetailsThread: Error waiting for thread: {e}')
-            try:
-                if thread_to_cleanup.isFinished():
-                    thread_to_cleanup.deleteLater()
-                else:
-
-                    def delayed_cleanup():
-                        try:
-                            if thread_to_cleanup.isFinished():
-                                thread_to_cleanup.deleteLater()
-                        except (RuntimeError, AttributeError):
-                            pass
-                    try:
-                        thread_to_cleanup.finished.connect(delayed_cleanup)
-                    except (TypeError, RuntimeError):
-                        pass
-            except (RuntimeError, AttributeError):
-                pass
+            thread_to_cleanup.blockSignals(False)
+            if thread_to_cleanup.isRunning():
+                thread_to_cleanup.requestInterruption()
+                thread_to_cleanup.quit()
+                if not thread_to_cleanup.wait(2000):
+                    logging.warning('LoadModDetailsThread: Thread did not stop within 2s timeout')
+            if thread_to_cleanup.isFinished():
+                thread_to_cleanup.deleteLater()
+            else:
+                thread_to_cleanup.finished.connect(lambda: thread_to_cleanup.deleteLater() if thread_to_cleanup.isFinished() else None)
+        except (RuntimeError, AttributeError) as e:
+            logging.debug(f'LoadModDetailsThread: Error during cleanup: {e}')
 
     def on_dialog_close(event):
         cleanup_thread()

@@ -102,10 +102,10 @@ class InstalledModWidget(BaseModWidget):
         config = self._resolve_theme_config()
         if config:
             text_color = get_theme_color(config, 'text', 'white')
-            if hasattr(self, 'added_label_title') and self.added_label_title:
-                self.added_label_title.setStyleSheet(f'color: {text_color};')
-            if hasattr(self, 'game_version_label_title') and self.game_version_label_title:
-                self.game_version_label_title.setStyleSheet(f'color: {text_color};')
+            for attr in ('added_label_title', 'game_version_label_title'):
+                label = getattr(self, attr, None)
+                if label:
+                    label.setStyleSheet(f'color: {text_color};')
 
     def _update_indicator(self):
         style = 'font-size: 14px; font-weight: bold; margin-left: 5px;'
@@ -185,10 +185,7 @@ class InstalledModWidget(BaseModWidget):
             self.use_button.setStyleSheet('\n                QPushButton#plaqueButtonInstall {\n                    background-color: #4CAF50;\n                    font-weight: bold;\n                }\n                QPushButton#plaqueButtonInstall:hover {\n                    background-color: #5cb85c;\n                }\n            ')
 
     def _sync_status(self):
-        if self.is_in_slot:
-            self.status = 'in_slot'
-        else:
-            self.status = 'ready'
+        self.status = 'in_slot' if self.is_in_slot else 'ready'
         self._update_button_from_status()
         self._update_indicator()
         self._update_actions_visibility()

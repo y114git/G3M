@@ -12,6 +12,7 @@ from PyQt6.QtCore import QThread, pyqtSignal
 from services.mod_merge_service import MultiModMerger
 from services.localization_service import tr
 from utils.path_utils import get_xdelta_path
+from utils.file_utils import get_chapter_folder_name
 
 
 class CreateModpackThread(QThread):
@@ -81,14 +82,11 @@ class CreateModpackThread(QThread):
         finally:
             if self.merger:
                 try:
-                    try:
-                        self.merger.progress_update.disconnect()
-                    except (TypeError, RuntimeError):
-                        pass
-                    try:
-                        self.merger.status_update.disconnect()
-                    except (TypeError, RuntimeError):
-                        pass
+                    for sig in (self.merger.progress_update, self.merger.status_update):
+                        try:
+                            sig.disconnect()
+                        except (TypeError, RuntimeError):
+                            pass
                     self.merger.cleanup(force=True)
                 except Exception as cleanup_error:
                     logging.warning(f'Error during merger cleanup: {cleanup_error}', exc_info=True)
@@ -107,21 +105,13 @@ class CreateModpackThread(QThread):
                 if self.isInterruptionRequested() or self._cancelled:
                     return
                 game = self._get_mod_game(mods_list)
-                from utils.file_utils import get_chapter_folder_name
                 chapter_folder_name = get_chapter_folder_name(chapter_id, game=game)
                 chapter_modpack_dir = os.path.join(self.modpack_dir, chapter_folder_name)
                 if not os.path.exists(chapter_modpack_dir):
                     continue
                 system = platform.system()
-                modified_data_file = None
-                original_data_file = None
-                data_filename = None
-                if system == 'Darwin':
-                    modified_data_file = os.path.join(chapter_modpack_dir, 'game.ios')
-                    data_filename = 'game.ios'
-                else:
-                    modified_data_file = os.path.join(chapter_modpack_dir, 'data.win')
-                    data_filename = 'data.win'
+                data_filename = 'game.ios' if system == 'Darwin' else 'data.win'
+                modified_data_file = os.path.join(chapter_modpack_dir, data_filename)
                 if not os.path.exists(modified_data_file):
                     continue
                 original_data_file = self._find_original_data_file(chapter_id, game, data_filename)
@@ -177,12 +167,10 @@ class CreateModpackThread(QThread):
         if not detected_games:
             from services.game_detection_service import get_game_type_string
             return get_game_type_string(self.app_state.game_mode)
-        unique_games = list(set(detected_games))
+        unique_games = set(detected_games)
         if len(unique_games) == 1:
-            primary_game = unique_games[0]
-            return primary_game
-        most_common = max(set(detected_games), key=detected_games.count)
-        return most_common
+            return unique_games.pop()
+        return max(unique_games, key=detected_games.count)
 
     def _find_original_data_file(self, chapter_id: int, game: str, data_filename: str) -> str:
         try:
@@ -227,16 +215,10 @@ class CreateModpackThread(QThread):
             files_data = {}
             detected_games = []
             for chapter_id, mods_list in self.chapter_mods.items():
-                if chapter_id == -1:
-                    chapter_key = 'demo'
-                elif chapter_id == 0:
-                    chapter_key = '0'
-                else:
-                    chapter_key = str(chapter_id)
+                chapter_key = 'demo' if chapter_id == -1 else str(chapter_id)
                 game = self._get_mod_game(mods_list)
                 if game:
                     detected_games.append(game)
-                from utils.file_utils import get_chapter_folder_name
                 chapter_folder_name = get_chapter_folder_name(chapter_id, game=game)
                 chapter_modpack_dir = os.path.join(self.modpack_dir, chapter_folder_name)
                 if not os.path.exists(chapter_modpack_dir):
@@ -244,27 +226,17 @@ class CreateModpackThread(QThread):
                 file_info = {}
                 system = platform.system()
                 if self.xdelta_modpack:
-                    xdelta_patch = None
-                    if system == 'Darwin':
-                        xdelta_patch = os.path.join(chapter_modpack_dir, 'game.xdelta')
-                    else:
-                        xdelta_patch = os.path.join(chapter_modpack_dir, 'data.xdelta')
+                    xdelta_patch = os.path.join(chapter_modpack_dir, 'game.xdelta' if system == 'Darwin' else 'data.xdelta')
                     if os.path.exists(xdelta_patch):
                         file_info['data_file_url'] = os.path.basename(xdelta_patch)
                         file_info['data_file_version'] = '1.0.0'
                         files_data[chapter_key] = file_info
                         continue
-                    else:
-                        logging.warning(f'xdelta_modpack enabled but xdelta patch not found for chapter {chapter_id}, skipping in config')
-                        continue
-                if system == 'Darwin':
-                    data_file = os.path.join(chapter_modpack_dir, 'game.ios')
-                    if os.path.exists(data_file):
-                        file_info['data_file_url'] = 'game.ios'
-                else:
-                    data_file = os.path.join(chapter_modpack_dir, 'data.win')
-                    if os.path.exists(data_file):
-                        file_info['data_file_url'] = 'data.win'
+                    logging.warning(f'xdelta_modpack enabled but xdelta patch not found for chapter {chapter_id}, skipping in config')
+                    continue
+                data_name = 'game.ios' if system == 'Darwin' else 'data.win'
+                if os.path.exists(os.path.join(chapter_modpack_dir, data_name)):
+                    file_info['data_file_url'] = data_name
                 if file_info:
                     file_info['data_file_version'] = '1.0.0'
                     files_data[chapter_key] = file_info

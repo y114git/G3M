@@ -43,7 +43,7 @@ class UpdateChecker(QObject):
                 self.feedback_service.update_status(tr('status.update_info_not_found'), UI_COLORS['status_warning'])
                 return
             remote_version = launcher_files.get('version')
-            from utils.file_utils import version_sort_key as _vkey
+            from utils.path_utils import version_sort_key as _vkey
             if not remote_version or _vkey(remote_version) <= _vkey(LAUNCHER_VERSION):
                 self.feedback_service.update_status(tr('status.launcher_version_up_to_date'), UI_COLORS['status_success'])
                 return
@@ -197,7 +197,7 @@ class UpdateChecker(QObject):
                         raise AppError('errors.app_not_found_after_unpack')
                     logging.info(f'[UPDATE] Found .app bundle: {new_content_path}')
                     from pathlib import Path
-                    from utils.file_utils import fix_macos_python_symlink
+                    from utils.path_utils import fix_macos_python_symlink
                     fix_macos_python_symlink(Path(new_content_path))
                     logging.info('[UPDATE] Fixed Python symlink in .app bundle')
                 else:
@@ -231,12 +231,11 @@ class UpdateChecker(QObject):
                     os.chmod(new_content_path, 493)
                     logging.info('[UPDATE] Set executable permissions on new launcher')
                 persistent_temp_dir = tempfile.mkdtemp(prefix='deltahub-update-persistent-')
+                persistent_new_path = os.path.join(persistent_temp_dir, os.path.basename(new_content_path))
                 if system == 'Darwin':
-                    persistent_new_path = os.path.join(persistent_temp_dir, os.path.basename(new_content_path))
                     logging.info(f'[UPDATE] Copying .app bundle to persistent temp: {persistent_new_path}')
                     shutil.copytree(new_content_path, persistent_new_path)
                 else:
-                    persistent_new_path = os.path.join(persistent_temp_dir, os.path.basename(new_content_path))
                     logging.info(f'[UPDATE] Copying executable to persistent temp: {persistent_new_path}')
                     shutil.copy2(new_content_path, persistent_new_path)
                     os.chmod(persistent_new_path, 493)

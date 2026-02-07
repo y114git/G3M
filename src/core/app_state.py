@@ -5,6 +5,7 @@ import logging
 from PyQt6.QtCore import QObject, QThread, pyqtSignal
 from models.mod_models import ModInfo
 from models.game_modes import GameMode, FullGameMode
+from utils.mod_utils import get_mod_key
 
 
 class AppState(QObject):
@@ -117,9 +118,9 @@ class AppState(QObject):
 
     def extend_all_mods(self, mods: List[ModInfo]) -> None:
         with self._mods_metadata_lock:
-            existing_keys = {getattr(m, 'key', None) or getattr(m, 'mod_key', None) for m in self._all_mods}
+            existing_keys = {get_mod_key(m) for m in self._all_mods}
             for mod in mods:
-                key = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
+                key = get_mod_key(mod)
                 if key and key not in existing_keys:
                     self._all_mods.append(mod)
                     existing_keys.add(key)

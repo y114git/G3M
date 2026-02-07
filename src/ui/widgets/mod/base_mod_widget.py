@@ -2,6 +2,7 @@ from PyQt6.QtCore import pyqtSignal, Qt
 from PyQt6.QtWidgets import QFrame, QHBoxLayout, QVBoxLayout, QLabel, QWidget
 from ui.common.styling import load_mod_icon_universal, update_mod_widget_style, get_theme_color
 from services.localization_service import tr
+from utils.mod_utils import get_mod_key
 
 
 class BaseModWidget(QFrame):
@@ -72,7 +73,7 @@ class BaseModWidget(QFrame):
         info_layout.addLayout(metadata_layout)
         tagline_text = self.mod_data.tagline or tr('ui.no_description')
         try:
-            mod_key = getattr(self.mod_data, 'key', None) or getattr(self.mod_data, 'mod_key', None)
+            mod_key = get_mod_key(self.mod_data)
             if mod_key and mod_key.startswith('gb_'):
                 has_full = getattr(self.mod_data, 'has_full_metadata', True)
                 if not has_full:

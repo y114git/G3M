@@ -3,11 +3,12 @@ import shutil
 import tempfile
 import time
 import logging
-from urllib.parse import urlparse
+from urllib.parse import urlparse, unquote
 from PyQt6.QtCore import QThread, pyqtSignal
-from config.constants import UI_COLORS, NETWORK_TIMEOUT_HEAD, NETWORK_TIMEOUT_MEDIUM, MOD_CONFIG_FILENAME, CLOUD_FUNCTIONS_BASE_URL
+from config.constants import UI_COLORS, NETWORK_TIMEOUT_HEAD, NETWORK_TIMEOUT_MEDIUM, MOD_CONFIG_FILENAME, CLOUD_FUNCTIONS_BASE_URL, DATA_FILE_EXTENSIONS
 from services.localization_service import tr
 from utils.file_utils import get_unique_mod_dir
+from utils.mod_utils import get_mod_key
 from utils.network_utils import get_session, download_file
 from ui.utils.ui_utils import format_size_mb
 
@@ -79,6 +80,7 @@ class InstallModsThread(QThread):
             config_data = self.main_window.settings_service.read_json(config_path)
             local_versions = config_data.get('chapters', {}).get(str(chapter_id), {}).get('versions', {}) or {}
             remote_versions = self._collect_remote_versions_for_chapter(mod, chapter_id)
+            from utils.path_utils import version_sort_key
             components_to_update: dict[str, dict] = {}
             chapter_data = mod.get_chapter_data(chapter_id) if chapter_id != -1 else None
             if chapter_data and chapter_data.data_file_url and remote_versions.get('data'):
@@ -87,7 +89,6 @@ class InstallModsThread(QThread):
                 else:
                     local_data_v = local_versions.get('data')
                     remote_data_v = remote_versions.get('data')
-                    from utils.file_utils import version_sort_key
                     if remote_data_v and version_sort_key(remote_data_v) > version_sort_key(local_data_v or '0.0.0'):
                         components_to_update['data'] = {'url': chapter_data.data_file_url, 'local_version': local_data_v, 'remote_version': remote_data_v}
             if chapter_data:
@@ -97,7 +98,6 @@ class InstallModsThread(QThread):
                         continue
                     rv = remote_versions.get(extra_file.key)
                     lv = local_versions.get(extra_file.key)
-                    from utils.file_utils import version_sort_key
                     if rv and version_sort_key(rv) > version_sort_key(lv or '0.0.0'):
                         components_to_update[extra_file.key] = {'url': extra_file.url, 'local_version': lv, 'remote_version': rv}
                 remote_extra_keys = {ef.key for ef in chapter_data.extra_files}
@@ -127,15 +127,12 @@ class InstallModsThread(QThread):
             return False
 
     def _download_component_file(self, url: str, target_dir: str, component_type: str, progress_callback, total_size: int, downloaded_ref: list[int], session=None):
-        import requests
         import platform
-        from urllib.parse import urlparse, unquote
         if session is None:
             session = get_session()
         parsed_url = urlparse(url)
         filename = unquote(os.path.basename(parsed_url.path))
         if component_type == 'data':
-            from config.constants import DATA_FILE_EXTENSIONS
             if not filename.lower().endswith(DATA_FILE_EXTENSIONS):
                 if platform.system() == 'Darwin':
                     filename = 'game.ios.xdelta'
@@ -150,20 +147,6 @@ class InstallModsThread(QThread):
             def on_response(r):
                 self._active_response = r
             download_file(session, url, target_path, progress_callback, total_size, downloaded_ref, cancel_check=lambda: self._cancelled, on_response=on_response)
-        except (requests.Timeout, requests.ConnectionError, requests.RequestException):
-            if os.path.exists(target_path):
-                try:
-                    os.remove(target_path)
-                except OSError as rm_e:
-                    logging.debug(f'_download_component_file: cleanup failed: {rm_e}')
-            raise
-        except RuntimeError as e:
-            if os.path.exists(target_path):
-                try:
-                    os.remove(target_path)
-                except OSError:
-                    pass
-            raise
         except Exception:
             if os.path.exists(target_path):
                 try:
@@ -183,31 +166,6 @@ class InstallModsThread(QThread):
         return progress_callback
 
     def run(self):
-        """Execute the mod installation process.
-
-        This is the main method that handles downloading and installing
-        multiple mods. It manages the complete installation workflow
-        including download coordination, file extraction, mod validation,
-        and progress reporting.
-
-        The process includes:
-        - Setting up temporary directories
-        - Creating installation tasks for each mod component
-        - Determining which components need updating
-        - Managing download queues with progress tracking
-        - Handling file extraction and validation
-        - Updating mod configurations and metadata
-        - Managing installation state and cleanup
-
-        Supports installation of:
-        - Full mod packages
-        - Individual chapter data
-        - Demo versions
-        - Extra files and components
-
-        Emits progress updates and status messages throughout
-        the installation process.
-        """
         import requests
         try:
             self.temp_root = tempfile.mkdtemp(prefix='deltahub-install-')
@@ -215,7 +173,7 @@ class InstallModsThread(QThread):
             total_bytes = 0
             mod_folders = {}
             for mod, chapter_id in self.install_tasks:
-                key = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
+                key = get_mod_key(mod)
                 if key not in mod_folders:
                     mod_folder_path = self.main_window.mod_service.get_mod_folder_path(key)
                     if mod_folder_path:
@@ -223,7 +181,7 @@ class InstallModsThread(QThread):
                         mod_folders[key] = existing_folder
                     else:
                         mod_folders[key] = get_unique_mod_dir(self.main_window.app_state.mods_dir, mod.name)
-                mod_key = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
+                mod_key = get_mod_key(mod)
                 existing_folder = mod_folders.get(mod_key, '')
                 chapter_data = mod.get_chapter_data(chapter_id) if chapter_id != -1 else None
                 if chapter_id == -1 and mod.is_valid_for_demo():
@@ -322,30 +280,22 @@ class InstallModsThread(QThread):
                 self._installed_dirs.append(cache_dir)
                 chapter_data = mod.get_chapter_data(chapter_id)
                 is_data_file = chapter_data and url and (chapter_data.data_file_url == url)
-                from config.constants import DATA_FILE_EXTENSIONS
                 is_xdelta = url.lower().endswith(DATA_FILE_EXTENSIONS) if url else False
-                try:
-                    if is_data_file:
-                        if is_xdelta:
-                            progress_callback = self._make_progress_callback(mod.name, current_index, total_items, total_bytes, downloaded_ref)
-                            self._download_component_file(url, cache_dir, 'data', progress_callback, total_bytes, downloaded_ref, session)
-                        else:
-                            from utils.file_utils import download_and_extract_archive
-                            progress_callback = self._make_progress_callback(mod.name, current_index, total_items, total_bytes, downloaded_ref)
-                            download_and_extract_archive(url, cache_dir, progress_callback, total_bytes, downloaded_ref, session, cancel_check=lambda: self._cancelled)
-                            if self._cancelled:
-                                self.finished.emit(False)
-                                return
-                    else:
+                if is_data_file:
+                    if is_xdelta:
                         progress_callback = self._make_progress_callback(mod.name, current_index, total_items, total_bytes, downloaded_ref)
-                        self._download_component_file(url, cache_dir, 'extra', progress_callback, total_bytes, downloaded_ref, session)
-                except RuntimeError as e:
-                    if str(e) == 'download_cancelled':
-                        raise
-                    raise
-                except Exception:
-                    raise
-                key = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
+                        self._download_component_file(url, cache_dir, 'data', progress_callback, total_bytes, downloaded_ref, session)
+                    else:
+                        from utils.file_utils import download_and_extract_archive
+                        progress_callback = self._make_progress_callback(mod.name, current_index, total_items, total_bytes, downloaded_ref)
+                        download_and_extract_archive(url, cache_dir, progress_callback, total_bytes, downloaded_ref, session, cancel_check=lambda: self._cancelled)
+                        if self._cancelled:
+                            self.finished.emit(False)
+                            return
+                else:
+                    progress_callback = self._make_progress_callback(mod.name, current_index, total_items, total_bytes, downloaded_ref)
+                    self._download_component_file(url, cache_dir, 'extra', progress_callback, total_bytes, downloaded_ref, session)
+                key = get_mod_key(mod)
                 if key not in installed_mods:
                     installed_mods[key] = {'mod': mod, 'chapters': set()}
                 installed_mods[key]['chapters'].add(chapter_id)
@@ -386,12 +336,7 @@ class InstallModsThread(QThread):
                         file_info['data_file_version'] = mod.demo_version or '1.0.0'
                         file_info['versions'] = {'demo': mod.demo_version or '1.0.0'}
                     if file_info:
-                        if chapter_id == -1:
-                            file_key = 'demo'
-                        elif chapter_id == 0:
-                            file_key = '0'
-                        else:
-                            file_key = str(chapter_id)
+                        file_key = 'demo' if chapter_id == -1 else str(chapter_id)
                         files_data[file_key] = file_info
                 config_data = {'key': mod.key, 'name': mod.name, 'author': mod.author, 'version': mod.version, 'game_version': mod.game_version, 'game': mod.game, 'files': files_data, 'tags': mod.tags}
                 if hasattr(mod, 'icon_url') and mod.icon_url:

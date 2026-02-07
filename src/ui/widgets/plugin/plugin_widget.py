@@ -129,17 +129,12 @@ class PluginWidget(QFrame):
         metadata_layout.addStretch()
         info_layout.addLayout(metadata_layout)
         description_text = self._get_description_text()
-        if description_text:
-            self.description_label = QLabel(description_text, self)
-            self.description_label.setWordWrap(True)
-            self.description_label.setObjectName('secondaryText')
-            info_layout.addWidget(self.description_label)
-        else:
-            self.description_label = QLabel(tr('ui.no_description'), self)
-            self.description_label.setWordWrap(True)
-            self.description_label.setObjectName('secondaryText')
+        self.description_label = QLabel(description_text or tr('ui.no_description'), self)
+        self.description_label.setWordWrap(True)
+        self.description_label.setObjectName('secondaryText')
+        if not description_text:
             self.description_label.setStyleSheet('font-style: italic;')
-            info_layout.addWidget(self.description_label)
+        info_layout.addWidget(self.description_label)
         error = self.plugin_info.get('error')
         if error:
             error_label = QLabel(f'Error: {error}', self)
@@ -169,18 +164,13 @@ class PluginWidget(QFrame):
         self.main_layout = main_layout
         self.title_layout = title_layout
 
+    _STATUS_STYLES = {'enabled': ('#4CAF50', 'plugins.status_enabled'), 'disabled': ('#FFA500', 'plugins.status_disabled')}
+
     def _update_status_indicator(self):
         status = self.plugin_info.get('status', 'enabled')
-        style = 'font-size: 14px; font-weight: bold;'
-        if status == 'enabled':
-            self.status_indicator.setStyleSheet(f'color: #4CAF50; {style}')
-            self.status_indicator.setToolTip(tr('plugins.status_enabled'))
-        elif status == 'disabled':
-            self.status_indicator.setStyleSheet(f'color: #FFA500; {style}')
-            self.status_indicator.setToolTip(tr('plugins.status_disabled'))
-        else:
-            self.status_indicator.setStyleSheet(f'color: #F44336; {style}')
-            self.status_indicator.setToolTip(tr('plugins.status_broken'))
+        color, tooltip_key = self._STATUS_STYLES.get(status, ('#F44336', 'plugins.status_broken'))
+        self.status_indicator.setStyleSheet(f'color: {color}; font-size: 14px; font-weight: bold;')
+        self.status_indicator.setToolTip(tr(tooltip_key))
 
     def _update_toggle_button(self):
         status = self.plugin_info.get('status', 'enabled')
@@ -268,7 +258,7 @@ class PluginWidget(QFrame):
             self._update_style()
         self._load_icon()
 
-    def retranslate_texts(self):
+    def relocalize_texts(self):
         if hasattr(self, 'name_label'):
             self.name_label.setText(self._resolve_plugin_name())
         if hasattr(self, 'author_label_title') and self.author_label_title:
@@ -291,17 +281,14 @@ class PluginWidget(QFrame):
         icon_path = None
         if plugin_path and os.path.isdir(plugin_path):
             icon_extensions = ['.png', '.jpg', '.jpeg', '.ico', '.bmp', '.gif', '.svg']
-            for ext in icon_extensions:
-                potential_icon = os.path.join(plugin_path, f'_icon{ext}')
-                if os.path.isfile(potential_icon):
-                    icon_path = potential_icon
-                    break
-            if not icon_path:
+            for prefix in ('_icon', 'icon'):
                 for ext in icon_extensions:
-                    potential_icon = os.path.join(plugin_path, f'icon{ext}')
+                    potential_icon = os.path.join(plugin_path, f'{prefix}{ext}')
                     if os.path.isfile(potential_icon):
                         icon_path = potential_icon
                         break
+                if icon_path:
+                    break
         if icon_path and os.path.exists(icon_path):
             try:
                 pixmap = QPixmap()

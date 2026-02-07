@@ -7,12 +7,12 @@ from PyQt6.QtCore import QTimer
 from PyQt6.QtWidgets import QDialog, QMessageBox
 from services.localization_service import tr
 from config.constants import UI_COLORS
-from core.exceptions import AppError
 from ui.widgets.mod.installed_mod_widget import InstalledModWidget
 from workers.install.batch_install_worker import InstallModsThread
 from workers.install.gamebanana_install_worker import InstallGameBananaModThread
 from workers.gamebanana.prepare_gamebanana_manual_install_worker import PrepareGameBananaManualInstallWorker
 from utils.mod_utils import get_mod_key, get_mod_name
+from adapters.gamebanana_adapter import GameBananaAPI
 from ui.dialogs.file_picker_dialog import GameBananaFilePickerDialog
 
 
@@ -158,13 +158,12 @@ class ModOperationsController:
             self._handle_install_start_error(e)
 
     def _show_incompatible_gamebanana_dialog(self, mod=None, mod_url: Optional[str] = None):
-        from PyQt6.QtWidgets import QMessageBox
         import webbrowser
         url_to_open = mod_url
         if not url_to_open and mod:
             url_to_open = getattr(mod, 'external_url', None)
             if not url_to_open:
-                key = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
+                key = get_mod_key(mod)
                 if key and key.startswith('gb_'):
                     mod_id = key.replace('gb_', '', 1)
                     if mod_id:
@@ -195,7 +194,6 @@ class ModOperationsController:
             return []
         mod_id = int(mod_id_str)
         try:
-            from adapters.gamebanana_adapter import GameBananaAPI
             api = GameBananaAPI()
             external_url = getattr(mod, 'external_url', None)
             compat = api.get_supported_files_for_mod(int(mod_id), external_url=external_url)
@@ -216,7 +214,6 @@ class ModOperationsController:
             return []
         mod_id = int(mod_id_str)
         try:
-            from adapters.gamebanana_adapter import GameBananaAPI
             api = GameBananaAPI()
             external_url = getattr(mod, 'external_url', None)
             all_files = api.get_mod_files(mod_id, external_url=external_url)
@@ -396,141 +393,57 @@ class ModOperationsController:
             self.app.game_launch.update_button_state()
             self.app_state._scan_blocked = False
             return
-        logging.info('ModOperationsController: Installation complete, invalidating mods cache and reloading local mods')
         self.app_state._scan_blocked = False
         self._safe_execute(lambda: self.mod_service.invalidate_mods_cache(), 'invalidate_mods_cache failed', default_return=None)
         try:
             self.mod_service.load_local_mods()
-            logging.info('ModOperationsController: Local mods reloaded after installation')
             self.mod_service.mod_list_updated.emit()
-            QTimer.singleShot(100, lambda: self._safe_execute(lambda: self.app.search_display.update_search_plaques() if hasattr(self.app, 'search_display') else None, 'Failed to update search plaques'))
-            self._safe_execute(lambda: self.app.search_display.update_search_plaques(), 'Failed to refresh plaques after cache reload')
+            self._safe_execute(lambda: self.app.search_display.update_search_plaques() if hasattr(self.app, 'search_display') else None, 'Failed to update search plaques')
             if installed_mod_info and hasattr(self.app_state, 'all_mods'):
-                if not self.app_state.all_mods:
-                    self.app_state.all_mods = []
-                key = getattr(installed_mod_info, 'key', None) or getattr(installed_mod_info, 'mod_key', None)
-                mod_already_in_all_mods = False
+                key = get_mod_key(installed_mod_info)
                 if key:
-                    mod_already_in_all_mods = any(((getattr(m, 'key', None) or getattr(m, 'mod_key', None)) == key for m in self.app_state.all_mods))
-                is_gamebanana_mod = key and key.startswith('gb_')
-                if not mod_already_in_all_mods:
-                    try:
-                        cache = self.mod_service._get_mods_cache()
-                        mod_to_add = None
-                        if key and key in cache:
-                            mod_to_add = self.mod_service.create_mod_object_from_info(cache[key].config_data, self.app_state.all_mods)
-                        if mod_to_add:
-                            self.app_state.append_mod(mod_to_add)
-                            logging.info(f'''ModOperationsController: Added installed mod "{mod_to_add.name}" (key: {getattr(mod_to_add, 'key', None) or getattr(mod_to_add, 'mod_key', 'N/A')}) to all_mods''')
-                        else:
-                            logging.warning(f'ModOperationsController: Could not create mod object for installed mod (key: {key})')
-                    except Exception as e:
-                        logging.warning(f'ModOperationsController: Failed to add installed mod to all_mods: {e}', exc_info=True)
-                elif is_gamebanana_mod and mod_already_in_all_mods:
-                    try:
-                        existing_mod = None
-                        for m in self.app_state.all_mods:
-                            mod_key_attr = getattr(m, 'key', None) or getattr(m, 'mod_key', None)
-                            if mod_key_attr == key:
-                                existing_mod = m
-                                break
-                        if existing_mod:
-                            cache = self.mod_service._get_mods_cache()
-                            if key and key in cache:
-                                config_data = cache[key].config_data
-                                if config_data.get('files') and (not hasattr(existing_mod, 'files') or not existing_mod.files):
-                                    temp_mod = self.mod_service.create_mod_object_from_info(config_data, self.app_state.all_mods)
-                                    if hasattr(temp_mod, 'files') and temp_mod.files:
-                                        existing_mod.files = temp_mod.files
-                    except Exception as e:
-                        logging.debug(f'ModOperationsController: Failed to update files for GameBanana mod {key}: {e}')
+                    self._sync_installed_mod_to_all_mods(key)
         except Exception as e:
             logging.warning(f'ModOperationsController: Failed to reload local mods: {e}', exc_info=True)
 
         def update_filtered_mods():
             try:
-                if hasattr(self.app, 'search_display'):
-                    logging.info('ModOperationsController: Updating filtered mods after installation')
-                    self.app.search_display.update_filtered_mods(preserve_page=True)
-                    logging.info('ModOperationsController: Filtered mods updated')
-                    if installed_mod_info and hasattr(self.app_state, 'filtered_mods') and self.app_state.filtered_mods:
-                        try:
-                            installed_mod_found = False
-                            installed_mod_page = None
-                            key = getattr(installed_mod_info, 'key', None) or getattr(installed_mod_info, 'mod_key', None)
-                            if key and key.startswith('gb_'):
-                                logging.info(f'ModOperationsController: Searching for installed GameBanana mod with key {key} in {len(self.app_state.filtered_mods)} filtered mods')
-                                for idx, mod in enumerate(self.app_state.filtered_mods):
-                                    if (getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)) == key:
-                                        installed_mod_found = True
-                                        installed_mod_page = idx // self.app_state.mods_per_page + 1
-                                        logging.info(f'''ModOperationsController: Found installed mod "{mod.name}" (key: {key}) at index {idx}, page {installed_mod_page}''')
-                                        break
-                                if not installed_mod_found:
-                                    logging.warning(f'ModOperationsController: Installed mod with key {key} NOT FOUND in filtered_mods! Checking all_mods...')
-                                    if hasattr(self.app_state, 'all_mods') and self.app_state.all_mods:
-                                        for mod in self.app_state.all_mods:
-                                            if (getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)) == key:
-                                                mod_key_attr = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
-                                                logging.warning(f'''ModOperationsController: Mod "{mod.name}" (key: {key}) found in all_mods but NOT in filtered_mods! Key: {mod_key_attr}, status: {getattr(mod, 'status', 'N/A')}''')
-                                                break
-                                    for idx, mod in enumerate(self.app_state.filtered_mods[:10]):
-                                        mod_key_attr = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
-                                        if mod_key_attr and mod_key_attr.startswith('gb_'):
-                                            logging.info(f'''ModOperationsController: Filtered mod {idx}: "{mod.name}" (key: {mod_key_attr})''')
-                            else:
-                                key = getattr(installed_mod_info, 'key', None) or getattr(installed_mod_info, 'mod_key', None)
-                                logging.info(f'ModOperationsController: Searching for installed mod with key {key} in {len(self.app_state.filtered_mods)} filtered mods')
-                                for idx, mod in enumerate(self.app_state.filtered_mods):
-                                    mod_key_attr = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
-                                    if mod_key_attr == key:
-                                        installed_mod_found = True
-                                        installed_mod_page = idx // self.app_state.mods_per_page + 1
-                                        logging.info(f'ModOperationsController: Found installed mod "{mod.name}" (key: {key}) at index {idx}, page {installed_mod_page}')
-                                        break
-                            if installed_mod_found and installed_mod_page:
-                                if installed_mod_page != self.app_state.current_page:
-                                    logging.info(f'ModOperationsController: Navigating to page {installed_mod_page} to show installed mod')
-                                    self.app_state.current_page = installed_mod_page
-                                self._safe_execute(lambda: self.app.search_display.update_display(), 'Failed to update display after installation')
-                            elif not installed_mod_found:
-                                logging.error('ModOperationsController: Installed mod was not found in filtered_mods after installation! This is a bug.')
-                        except Exception as e:
-                            logging.warning(f'ModOperationsController: Failed to navigate to installed mod page: {e}', exc_info=True)
+                if not hasattr(self.app, 'search_display'):
+                    return
+                self.app.search_display.update_filtered_mods(preserve_page=True)
+                if not (installed_mod_info and self.app_state.filtered_mods):
+                    return
+                key = get_mod_key(installed_mod_info)
+                if not key:
+                    return
+                for idx, mod in enumerate(self.app_state.filtered_mods):
+                    if get_mod_key(mod) == key:
+                        page = idx // self.app_state.mods_per_page + 1
+                        if page != self.app_state.current_page:
+                            self.app_state.current_page = page
+                        self._safe_execute(lambda: self.app.search_display.update_display(), 'Failed to update display')
+                        return
+                logging.debug(f'ModOperationsController: Installed mod {key} not found in filtered_mods')
             except Exception as e:
                 logging.warning(f'ModOperationsController: Failed to update filtered mods: {e}', exc_info=True)
 
         def check_cache_and_update():
             try:
-                cache = self.mod_service._get_mods_cache()
-                logging.info(f'ModOperationsController: Cache after reload has {len(cache)} mods')
-                for key, mod_info in list(cache.items())[:5]:
-                    if key and key.startswith('gb_'):
-                        logging.info(f'ModOperationsController: Found installed GameBanana mod - key={key}')
+                self.mod_service._get_mods_cache()
             except Exception as e:
                 logging.warning(f'ModOperationsController: Failed to check cache: {e}')
 
         def update_plaques_with_retry():
             try:
-                logging.info('ModOperationsController: Updating search plaques')
                 self.mod_service.invalidate_mods_cache()
-                logging.info('ModOperationsController: Mods cache invalidated before updating plaques')
-                cache = self.mod_service._get_mods_cache()
-                logging.info(f'ModOperationsController: Reloaded mods cache, found {len(cache)} installed mods')
-                for key, mod_info in cache.items():
-                    if key and key.startswith('gb_'):
-                        logging.info(f'ModOperationsController: Installed GameBanana mod in cache - key={key}')
                 self.app.search_display.update_search_plaques()
-                logging.info('ModOperationsController: Search plaques updated')
             except Exception as e:
                 logging.warning(f'ModOperationsController: Failed to update search plaques: {e}', exc_info=True)
 
         def update_library_with_retry():
             try:
                 if hasattr(self.app, 'library_display'):
-                    logging.info('ModOperationsController: Updating library display')
                     self.app.library_display.update_display()
-                    logging.info('ModOperationsController: Library display updated')
             except Exception as e:
                 logging.warning(f'ModOperationsController: Failed to update library display: {e}', exc_info=True)
         from ui.utils.ui_utils import DebounceTimer
@@ -556,6 +469,26 @@ class ModOperationsController:
             next_mod = self.app.pending_updates.pop(0)
             QTimer.singleShot(0, lambda: self.mod_service.update_mod(next_mod))
         self.app.game_launch.update_button_state()
+
+    def _sync_installed_mod_to_all_mods(self, key: str):
+        try:
+            if not self.app_state.all_mods:
+                self.app_state.all_mods = []
+            existing_mod = next((m for m in self.app_state.all_mods if get_mod_key(m) == key), None)
+            cache = self.mod_service._get_mods_cache()
+            if key not in cache:
+                return
+            config_data = cache[key].config_data
+            if not existing_mod:
+                mod_to_add = self.mod_service.create_mod_object_from_info(config_data, self.app_state.all_mods)
+                if mod_to_add:
+                    self.app_state.append_mod(mod_to_add)
+            elif config_data.get('files') and (not hasattr(existing_mod, 'files') or not existing_mod.files):
+                temp_mod = self.mod_service.create_mod_object_from_info(config_data, self.app_state.all_mods)
+                if hasattr(temp_mod, 'files') and temp_mod.files:
+                    existing_mod.files = temp_mod.files
+        except Exception as e:
+            logging.debug(f'ModOperationsController: _sync_installed_mod_to_all_mods failed for {key}: {e}')
 
     def refresh_specific_mod_widget_after_update(self, mod_info=None):
         mod_to_update = mod_info
@@ -655,52 +588,6 @@ class ModOperationsController:
         self.app_state.progress_bar_value = 0
         self.app_state.current_task = worker
         worker.start()
-
-    def _prepare_gamebanana_files_for_manual_install(self, mod, selected_file: Dict) -> tuple:
-        import tempfile
-        from utils.file_utils import download_file_with_progress
-        from utils.archive_utils import extract_archive
-        from config.constants import NETWORK_TIMEOUT_HEAD
-        from utils.network_utils import get_session
-        temp_dir = None
-        try:
-            mod_key = getattr(mod, 'key', None) or getattr(mod, 'mod_key', None)
-            mod_id_str = mod_key.replace('gb_', '', 1) if mod_key and mod_key.startswith('gb_') else None
-            if not mod_id_str:
-                raise AppError('errors.invalid_gamebanana_mod_id')
-            mod_id = int(mod_id_str)
-            download_url = selected_file.get('download_url') or selected_file.get('_sDownloadUrl')
-            if not download_url:
-                raise AppError('errors.no_download_url')
-            file_name = selected_file.get('name') or selected_file.get('_sFile') or selected_file.get('_sName') or f'mod_{mod_id}.zip'
-            temp_dir = tempfile.mkdtemp(prefix='gb_manual_install_')
-            archive_path = os.path.join(temp_dir, file_name)
-            session = get_session()
-            downloaded_ref = [0]
-            try:
-                session.head(download_url, allow_redirects=True, timeout=NETWORK_TIMEOUT_HEAD)
-            except Exception:
-                pass
-            success = download_file_with_progress(download_url, archive_path, session=session, downloaded_ref=downloaded_ref)
-            if not success:
-                raise RuntimeError('download_failed')
-            extract_dir = os.path.join(temp_dir, 'extracted')
-            os.makedirs(extract_dir, exist_ok=True)
-            extract_archive(archive_path, extract_dir)
-            content_path = extract_dir
-            contents = os.listdir(extract_dir)
-            if len(contents) == 1 and os.path.isdir(os.path.join(extract_dir, contents[0])):
-                content_path = os.path.join(extract_dir, contents[0])
-            gb_metadata = {'mod_id': mod_id, 'name': getattr(mod, 'name', 'Unknown Mod'), 'icon_url': getattr(mod, 'icon_url', None), 'external_url': getattr(mod, 'external_url', None), 'tags': getattr(mod, 'tags', []) if hasattr(mod, 'tags') and mod.tags else [], 'category': getattr(mod, 'gamebanana_category', None) if hasattr(mod, 'gamebanana_category') else None, 'author': getattr(mod, 'author', 'Unknown'), 'tagline': getattr(mod, 'tagline', ''), 'game': getattr(mod, 'game', 'deltarune'), 'version': getattr(mod, 'version', '1.0.0')}
-            return (content_path, gb_metadata, temp_dir)
-        except Exception as e:
-            logging.error(f'Failed to prepare GameBanana files: {e}', exc_info=True)
-            if temp_dir and os.path.exists(temp_dir):
-                try:
-                    shutil.rmtree(temp_dir, ignore_errors=True)
-                except Exception:
-                    pass
-            raise
 
     def set_install_buttons_enabled(self, enabled: bool):
         self._safe_execute(lambda: (self.app.action_button.setEnabled(True if self.app_state.is_installing else enabled), self.app.saves_button.setEnabled(True)), 'Failed to set install buttons enabled')

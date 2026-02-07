@@ -164,7 +164,6 @@ class UrlInstallThread(BaseInstallWorker):
             filename = f'archive{file_ext}'
         supported_extensions = ['.zip', '.rar', '.7z', '.tar.gz', '.lzma', '.dhtheme']
         if not any((filename.lower().endswith(ext) for ext in supported_extensions)):
-            from utils.archive_utils import get_file_extension_from_url
             file_ext = get_file_extension_from_url(url)
             filename = f'archive{file_ext}'
         archive_path = os.path.join(temp_dir, filename)
@@ -346,11 +345,7 @@ class UrlInstallThread(BaseInstallWorker):
                 elif 'disable_splash' not in app_state.local_config:
                     app_state.local_config['disable_splash'] = True
                 settings_service.write_local_config()
-            try:
-                if os.path.exists(theme_file_path):
-                    os.remove(theme_file_path)
-            except Exception as e:
-                logging.warning(f'UrlInstallThread: Failed to remove theme file: {e}')
+            self._try_remove_file(theme_file_path)
             self.status.emit(tr('themes.theme_installed'), 'success')
             self.finished.emit(True, tr('themes.theme_installed_success'))
         except Exception as e:
@@ -390,11 +385,7 @@ class UrlInstallThread(BaseInstallWorker):
                 archive_name = f'plugin{file_ext}'
             target_archive_path = os.path.join(plugins_dir, archive_name)
             shutil.copy2(archive_path, target_archive_path)
-            try:
-                if os.path.exists(archive_path):
-                    os.remove(archive_path)
-            except Exception as e:
-                logging.warning(f'UrlInstallThread: Failed to remove plugin archive: {e}')
+            self._try_remove_file(archive_path)
             self.status.emit(tr('plugins.plugin_installed'), 'success')
             self.finished.emit(True, tr('plugins.plugin_installed_success'))
         except Exception as e:
@@ -428,6 +419,14 @@ class UrlInstallThread(BaseInstallWorker):
         except Exception as e:
             logging.warning(f'UrlInstallThread: Error checking redirect: {e}')
         return False
+
+    @staticmethod
+    def _try_remove_file(path: str):
+        try:
+            if path and os.path.exists(path):
+                os.remove(path)
+        except Exception as e:
+            logging.warning(f'UrlInstallThread: Failed to remove file {path}: {e}')
 
     def _install_mod_from_hash(self, mod_hash: str):
         try:
@@ -484,37 +483,24 @@ class UrlInstallThread(BaseInstallWorker):
             with tempfile.TemporaryDirectory(prefix='dh-url-unpack-') as unpack_dir:
                 content_path = self._unpack_content_path(archive_path, unpack_dir)
                 files_in_root = os.listdir(content_path)
+                mod_name = None
                 if has_deltamod_info_file(files_in_root):
                     self.status.emit(tr('status.deltamod_archive_detected_url'), UI_COLORS['status_info'])
                     from adapters.deltamod_adapter import DeltamodConverter
-                    converter = DeltamodConverter(content_path, self.main_window.app_state.mods_dir)
-                    new_mod_path = converter.convert()
-                    if new_mod_path:
-                        mod_name = os.path.basename(new_mod_path)
-                        try:
-                            if os.path.exists(archive_path):
-                                os.remove(archive_path)
-                        except Exception as e:
-                            logging.warning(f'UrlInstallThread: Failed to remove mod archive: {e}')
-                        self.finished.emit(True, tr('status.install_complete_success', mod_name=mod_name))
-                    else:
+                    new_mod_path = DeltamodConverter(content_path, self.main_window.app_state.mods_dir).convert()
+                    if not new_mod_path:
                         raise AppError('errors.deltamod_conversion_failed_url')
-                    return
-                if MOD_CONFIG_FILENAME in files_in_root:
+                    mod_name = os.path.basename(new_mod_path)
+                elif MOD_CONFIG_FILENAME in files_in_root:
                     self.status.emit(tr('status.installing_mod'), UI_COLORS['status_info'])
                     mod_dir = self._install_deltahub_mod_from_path(content_path)
-                    if mod_dir:
-                        mod_name = os.path.basename(mod_dir)
-                        try:
-                            if os.path.exists(archive_path):
-                                os.remove(archive_path)
-                        except Exception as e:
-                            logging.warning(f'UrlInstallThread: Failed to remove mod archive: {e}')
-                        self.finished.emit(True, tr('status.install_complete_success', mod_name=mod_name))
-                    else:
+                    if not mod_dir:
                         raise AppError('errors.mod_installation_failed')
+                    mod_name = os.path.basename(mod_dir)
                 else:
                     raise AppError('errors.unsupported_mod_format_url')
+                self._try_remove_file(archive_path)
+                self.finished.emit(True, tr('status.install_complete_success', mod_name=mod_name))
         except Exception as e:
             logging.error(f'UrlInstallThread: Error installing mod: {e}', exc_info=True)
             self.finished.emit(False, str(e))

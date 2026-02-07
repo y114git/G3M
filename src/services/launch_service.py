@@ -9,8 +9,9 @@ from typing import Dict, Optional, Any, List
 from PyQt6.QtCore import QObject, QThread, QTimer, pyqtSignal
 from PyQt6.QtWidgets import QDialog
 from services.localization_service import tr
-from utils.file_utils import ensure_writable, is_path_in_steam_common
-from services.game_detection_service import is_game_running, get_game_name_string
+from utils.file_utils import ensure_writable
+from utils.path_utils import is_path_in_steam_common
+from services.game_detection_service import is_game_running, get_game_name_string, get_game_type_string
 from models.game_modes import UndertaleGameMode, UndertaleYellowGameMode, PizzaTowerGameMode, SugarySpireGameMode, FullGameMode
 from utils.path_utils import find_chapter_resource_dir, resolve_game_executable
 from services.patching_log_service import rotate_patching_log
@@ -63,15 +64,12 @@ class GameLauncher(QObject):
             self._merge_thread.set_warning_response(result)
 
     def _stop_monitor_thread(self):
-        """Stop the game monitoring thread."""
         if not self.monitor_thread:
             return
         try:
             if self.monitor_thread.isRunning():
                 self.monitor_thread.requestInterruption()
                 self.monitor_thread.quit()
-                if self.monitor_thread.isRunning():
-                    logging.debug('monitor thread still running, will clean up via finished signal')
             self.monitor_thread.deleteLater()
             if hasattr(self, 'monitor_worker') and self.monitor_worker is not None:
                 self.monitor_worker.deleteLater()
@@ -247,7 +245,7 @@ class GameLauncher(QObject):
         direct_launch_slot_id = self.app_state.local_config.get('direct_launch_slot_id', SLOT_ID_UNIVERSAL)
         is_chapter_mode = self.app_state.current_mode == 'chapter'
         is_deltarune = isinstance(self.app_state.game_mode, FullGameMode)
-        direct_launch = direct_launch_slot_id >= 0 and direct_launch_slot_id != 0 and is_chapter_mode and self.app_state.game_mode.direct_launch_allowed and (platform.system() != 'Darwin')
+        direct_launch = direct_launch_slot_id > 0 and is_chapter_mode and self.app_state.game_mode.direct_launch_allowed and (platform.system() != 'Darwin')
         should_block_steam = is_deltarune and is_chapter_mode and (direct_launch_slot_id >= 0)
         if use_steam and self.app_state.game_mode.steam_id and (not should_block_steam):
             return {'target': f'steam://rungameid/{self.app_state.game_mode.steam_id}', 'cwd': None, 'type': 'webbrowser'}
@@ -278,7 +276,7 @@ class GameLauncher(QObject):
             if use_custom_exe:
                 target_exe = os.path.join(chapter_folder, os.path.basename(source_exe))
             else:
-                from services.game_detection_service import get_game_type_string, get_executable_name_for_game
+                from services.game_detection_service import get_executable_name_for_game
                 game_type = get_game_type_string(self.app_state.game_mode)
                 exe_name = get_executable_name_for_game(game_type) or 'DELTARUNE.exe'
                 target_exe = os.path.join(chapter_folder, exe_name)
@@ -310,16 +308,10 @@ class GameLauncher(QObject):
         current_game_path = self._get_current_game_path()
         if not current_game_path or not os.path.isdir(current_game_path):
             return None
-        is_undertale = isinstance(self.app_state.game_mode, UndertaleGameMode) or isinstance(self.app_state.game_mode, UndertaleYellowGameMode)
-        is_pizzatower = isinstance(self.app_state.game_mode, PizzaTowerGameMode)
-        is_sugaryspire = isinstance(self.app_state.game_mode, SugarySpireGameMode)
-        if is_pizzatower or is_sugaryspire:
-            from services.game_detection_service import get_game_type_string
-            game_type = get_game_type_string(self.app_state.game_mode)
-            executable = resolve_game_executable(current_game_path, is_undertale=False, game_type=game_type)
-        else:
-            executable = resolve_game_executable(current_game_path, is_undertale)
-        return executable
+        is_undertale = isinstance(self.app_state.game_mode, (UndertaleGameMode, UndertaleYellowGameMode))
+        if isinstance(self.app_state.game_mode, (PizzaTowerGameMode, SugarySpireGameMode)):
+            return resolve_game_executable(current_game_path, is_undertale=False, game_type=get_game_type_string(self.app_state.game_mode))
+        return resolve_game_executable(current_game_path, is_undertale)
 
     def _get_source_executable_path(self):
         cfg_key = self.app_state.game_mode.get_custom_exec_config_key()
@@ -401,21 +393,16 @@ class GameLauncher(QObject):
             return False
 
     def _cancel_launch_after_merge(self):
-        logging.info('Cancelling launch after merge: restoring backups and resetting state')
         try:
             self._try_restore_backups('cancel_launch_after_merge')
         except Exception as e:
-            logging.error(f'Error during launch cancellation cleanup: {e}', exc_info=True)
+            logging.error(f'Cancel launch cleanup failed: {e}', exc_info=True)
         finally:
-            try:
-                self.app_state.progress_bar_visible = False
-                self.app_state.progress_bar_value = 0
-                self.app_state.is_merging = False
-                self.app_state.action_button_text = None
-                self.app_state.action_button_enabled = True
-                logging.info('App state reset after launch cancellation')
-            except Exception as e:
-                logging.error(f'Failed to reset app state: {e}', exc_info=True)
+            self.app_state.progress_bar_visible = False
+            self.app_state.progress_bar_value = 0
+            self.app_state.is_merging = False
+            self.app_state.action_button_text = None
+            self.app_state.action_button_enabled = True
             if self.restore_window_callback:
                 try:
                     self.restore_window_callback()
@@ -473,65 +460,33 @@ class GameLauncher(QObject):
         if message:
             self.status_changed.emit(message, UI_COLORS['status_info'])
 
-    def _verify_file_integrity(self, file_path: str, expected_size: Optional[int] = None) -> bool:
-        try:
-            if not os.path.exists(file_path):
-                logging.error(f'_verify_file_integrity: file does not exist: {file_path}')
-                return False
-            if not os.path.isfile(file_path):
-                logging.error(f'_verify_file_integrity: path is not a file: {file_path}')
-                return False
-            actual_size = os.path.getsize(file_path)
-            if expected_size is not None and actual_size != expected_size:
-                logging.error(f'_verify_file_integrity: size mismatch for {file_path}: expected {expected_size}, got {actual_size}')
-                return False
-            with open(file_path, 'rb') as f:
-                f.read(1)
-            return True
-        except Exception as e:
-            logging.error(f'_verify_file_integrity: verification failed for {file_path}: {e}', exc_info=True)
-            return False
-
     def _cleanup_direct_launch_files(self):
         restore_errors = []
-        logging.info('[CLEANUP] Starting cleanup of game files after game exit')
         try:
             try:
                 self._try_restore_backups('[CLEANUP]')
             except Exception as e:
-                restore_errors.append(f'Failed to restore multi-mod backups: {e}')
+                restore_errors.append(str(e))
             cleanup_info = self._direct_launch_cleanup_info
             if cleanup_info:
-                if 'mus_folders' in cleanup_info and cleanup_info['mus_folders']:
-                    for mus_folder_path in cleanup_info['mus_folders']:
-                        if os.path.exists(mus_folder_path) and os.path.isdir(mus_folder_path):
-                            try:
-                                logging.info(f'[CLEANUP] Removing copied music folder: {mus_folder_path}')
-                                shutil.rmtree(mus_folder_path)
-                                logging.info(f'[CLEANUP] Successfully removed music folder: {mus_folder_path}')
-                            except Exception as e:
-                                error_msg = f'Failed to remove music folder {mus_folder_path}: {e}'
-                                logging.error(f'[CLEANUP] {error_msg}', exc_info=True)
-                                restore_errors.append(error_msg)
-                if 'target_exe' in cleanup_info and os.path.exists(cleanup_info['target_exe']):
+                for mus_folder_path in cleanup_info.get('mus_folders', []):
+                    if os.path.isdir(mus_folder_path):
+                        try:
+                            shutil.rmtree(mus_folder_path)
+                        except Exception as e:
+                            restore_errors.append(f'music folder {mus_folder_path}: {e}')
+                target_exe = cleanup_info.get('target_exe')
+                if target_exe and os.path.exists(target_exe):
                     try:
-                        logging.info(f"[CLEANUP] Removing direct launch executable: {cleanup_info['target_exe']}")
-                        os.remove(cleanup_info['target_exe'])
-                        logging.info(f"[CLEANUP] Successfully removed direct launch exe: {cleanup_info['target_exe']}")
+                        os.remove(target_exe)
                     except Exception as e:
-                        error_msg = f'Failed to remove direct launch exe: {e}'
-                        logging.error(f'[CLEANUP] {error_msg}', exc_info=True)
-                        restore_errors.append(error_msg)
+                        restore_errors.append(f'direct launch exe: {e}')
                 self._direct_launch_cleanup_info = None
             if restore_errors:
-                error_summary = f'Errors during cleanup: {len(restore_errors)} failure(s). See logs for details.'
-                logging.error(f'[CLEANUP] {error_summary}. Errors: {restore_errors[:3]}')
+                logging.error(f'[CLEANUP] {len(restore_errors)} error(s): {restore_errors[:3]}')
                 self.status_changed.emit(tr('errors.files_restore_error', error=str(restore_errors[0])), UI_COLORS['status_error'])
-            else:
-                logging.info('[CLEANUP] Cleanup completed successfully - all game files restored to original state')
         except Exception as e:
-            error_msg = f'Critical error during file restoration: {e}'
-            logging.error(f'[CLEANUP] {error_msg}', exc_info=True)
+            logging.error(f'[CLEANUP] Critical error: {e}', exc_info=True)
             self.status_changed.emit(tr('errors.files_restore_error', error=str(e)), UI_COLORS['status_error'])
 
     def recover_previous_session(self):
@@ -543,8 +498,8 @@ class GameLauncher(QObject):
             self.feedback_service.update_status(tr('errors.files_restore_error', error=str(e)), UI_COLORS['status_error'])
 
     def _find_and_validate_game_path(self, selections: Optional[Dict[int, Any]] = None, is_initial: bool = False):
-        from utils.file_utils import autodetect_path
-        from services.game_detection_service import is_valid_game_path, get_game_type_string
+        from utils.path_utils import autodetect_path
+        from services.game_detection_service import is_valid_game_path
         path_from_config = self._get_current_game_path()
         game_name = get_game_name_string(self.app_state.game_mode)
         game_type = get_game_type_string(self.app_state.game_mode)
@@ -552,12 +507,11 @@ class GameLauncher(QObject):
             if is_valid_game_path(path_from_config, skip_data_check=False, game_type=game_type):
                 self.status_changed.emit(tr('status.game_path', path=path_from_config), UI_COLORS['status_info'])
                 return True
-            else:
-                parent_path = os.path.dirname(path_from_config)
-                if parent_path and os.path.exists(parent_path) and is_valid_game_path(parent_path, skip_data_check=False, game_type=game_type):
-                    self.app_state.game_mode.set_game_path(self.app_state.local_config, parent_path)
-                    self.status_changed.emit(tr('status.game_folder_found', path=parent_path), UI_COLORS['status_success'])
-                    return True
+            parent_path = os.path.dirname(path_from_config)
+            if parent_path and os.path.exists(parent_path) and is_valid_game_path(parent_path, skip_data_check=False, game_type=game_type):
+                self.app_state.game_mode.set_game_path(self.app_state.local_config, parent_path)
+                self.status_changed.emit(tr('status.game_folder_found', path=parent_path), UI_COLORS['status_success'])
+                return True
         custom_exec_key = self.app_state.game_mode.get_custom_exec_config_key()
         custom_path = self.app_state.local_config.get(custom_exec_key, '')
         if custom_path and os.path.isfile(custom_path):
@@ -581,10 +535,4 @@ class GameLauncher(QObject):
         return False
 
     def _has_selected_mods(self, selections: Dict[int, Any]) -> bool:
-        for chapter_id, mod_data in selections.items():
-            if isinstance(mod_data, list):
-                if mod_data:
-                    return True
-            elif mod_data and mod_data != 'no_change':
-                return True
-        return False
+        return any((mod_data if isinstance(mod_data, list) else (mod_data and mod_data != 'no_change')) for mod_data in selections.values())
