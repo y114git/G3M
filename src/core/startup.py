@@ -348,32 +348,37 @@ def run_app():
                 if show_animation:
                     launcher_app['instance']._splash_was_shown = True
                 launcher_app['instance']._post_show_initialization()
-                mods_display_ready_flag = {'ready': False}
+                init_ready_flag = {'ready': False}
 
-                def on_mods_display_ready():
+                def on_initialization_finished():
                     if window_shown_flag['shown']:
                         return
-                    mods_display_ready_flag['ready'] = True
+                    init_ready_flag['ready'] = True
                     window_shown_flag['shown'] = True
                     if show_animation:
                         close_splash_when_ready()
                     else:
                         close_splash_and_show_launcher()
-                launcher_app['instance'].mods_display_ready.connect(on_mods_display_ready)
-                if hasattr(launcher_app['instance'], '_mods_display_ready_emitted'):
-                    if launcher_app['instance']._mods_display_ready_emitted:
-                        QTimer.singleShot(100, on_mods_display_ready)
+                    ex = launcher_app.get('instance')
+                    if ex:
+                        QTimer.singleShot(150, ex._restore_last_active_tab)
+                launcher_app['instance'].initialization_finished.connect(on_initialization_finished)
+                if getattr(launcher_app['instance'].app_state, 'initialization_completed', False):
+                    QTimer.singleShot(100, on_initialization_finished)
 
                 def fallback_show_window():
                     if window_shown_flag['shown']:
                         return
-                    if not mods_display_ready_flag['ready']:
-                        logging.info('Fallback: Showing window after timeout (mods display not ready in time)')
+                    if not init_ready_flag['ready']:
+                        logging.info('Fallback: Showing window after timeout (initialization not finished in time)')
                         window_shown_flag['shown'] = True
                         if show_animation:
                             close_splash_when_ready()
                         else:
                             close_splash_and_show_launcher()
+                        ex = launcher_app.get('instance')
+                        if ex:
+                            QTimer.singleShot(150, ex._restore_last_active_tab)
                 if show_animation:
                     fallback_time = max(LAUNCHER_FALLBACK_TIMEOUT, int(SPLASH_MIN_DURATION * 1000))
                     QTimer.singleShot(fallback_time, fallback_show_window)

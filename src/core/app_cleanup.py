@@ -51,6 +51,9 @@ def perform_close_cleanup(w):
                     pass
         except Exception as e:
             logging.debug(f'Error cleaning up child processes: {e}')
+        if hasattr(w, 'main_tab_widget'):
+            w.app_state.local_config['last_active_tab'] = w.main_tab_widget.currentIndex()
+            w.settings_service.write_local_config()
         w.settings_service.save_window_geometry(w)
         QApplication.processEvents()
         w.hide()

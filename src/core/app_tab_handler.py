@@ -11,6 +11,7 @@ def handle_tab_changed(w, index):
     if getattr(w, '_suppress_tab_handlers', False):
         w.previous_tab_index = index
         return
+
     if index == 2:
         if hasattr(w, 'plugin_display'):
             w.plugin_display.update_display()
@@ -36,14 +37,20 @@ def handle_tab_changed(w, index):
                     if isinstance(new_widget, QWidget):
                         w.main_tab_widget.removeTab(index)
                         w.main_tab_widget.insertTab(index, new_widget, tr(plugin['name_key']))
+                        w._programmatic_tab_change = True
                         w.main_tab_widget.setCurrentIndex(index)
+                        w._programmatic_tab_change = False
                         w.previous_tab_index = index
                     else:
+                        w._programmatic_tab_change = True
                         w.main_tab_widget.setCurrentIndex(w.previous_tab_index)
+                        w._programmatic_tab_change = False
                 except Exception as e:
                     logging.error(f"Error running plugin '{plugin['name_key']}': {e}")
                     w.feedback_service.show_message('error', 'errors.error', f"Failed to run plugin '{tr(plugin['name_key'])}':\n{e}")
+                    w._programmatic_tab_change = True
                     w.main_tab_widget.setCurrentIndex(w.previous_tab_index)
+                    w._programmatic_tab_change = False
                 finally:
                     w._handling_plugin_tab = False
                 return

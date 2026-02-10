@@ -157,6 +157,8 @@ class AppWindow(QWidget):
         if is_first_launch:
             self.initialization_finished.connect(self._handle_first_launch_settings)
         self.init_ui()
+
+        self._update_plugin_tabs()
         self.custom_font_family = localization_service.load_font()
         QTimer.singleShot(0, lambda: self.ui_ready.emit())
         self._connect_own_signals()
@@ -357,7 +359,6 @@ class AppWindow(QWidget):
         self.main_tab_widget.addTab(self.search_mods_tab, tr('ui.search_tab'))
         self.main_tab_widget.addTab(self.library_tab, tr('ui.library_tab'))
         self.main_tab_widget.addTab(self.plugins_tab, tr('ui.plugins_tab'))
-        self._update_plugin_tabs()
         self.previous_tab_index = 0
         self.main_tab_widget.currentChanged.connect(self._on_tab_changed)
         self.main_tab_widget.setStyleSheet('\n            QTabWidget::tab-bar {\n                alignment: center;\n            }\n            QTabBar::tab {\n                min-width: 120px;\n                padding: 8px 16px;\n            }\n        ')
@@ -792,7 +793,7 @@ class AppWindow(QWidget):
                     logging.info('AppWindow: Mods list built successfully (from callback)')
                 except Exception as e:
                     logging.error(f'AppWindow: Error building mods list: {e}', exc_info=True)
-            on_fetch_finished_kwargs = {'update_filtered_mods_callback': update_filtered_mods_callback, 'update_installed_mods_callback': lambda: self._update_installed_mods_display(set_library_initialized=not saved_chapter_mode), 'update_action_button_callback': lambda: self.game_launch.update_button_state(), 'update_plugin_tabs_callback': self._update_plugin_tabs, 'mods_loaded_signal': self.mods_loaded_signal}
+            on_fetch_finished_kwargs = {'update_filtered_mods_callback': update_filtered_mods_callback, 'update_installed_mods_callback': lambda: self._update_installed_mods_display(set_library_initialized=not saved_chapter_mode), 'update_action_button_callback': lambda: self.game_launch.update_button_state(), 'mods_loaded_signal': self.mods_loaded_signal}
             self.refresh_controller.refresh_mods_list(is_initial=True, language_combo=self.language_combo, localization_callback=self._relocalize_ui, on_fetch_finished_kwargs=on_fetch_finished_kwargs)
             try:
                 if hasattr(self, 'search_display'):
@@ -1096,6 +1097,15 @@ class AppWindow(QWidget):
         if hasattr(self, 'plugin_display'):
             self.plugin_display.update_display()
         self._handling_plugin_tab = False
+
+    def _restore_last_active_tab(self):
+        last_tab = self.app_state.local_config.get('last_active_tab', 0)
+        if last_tab == 0:
+            return
+        max_tabs = self.main_tab_widget.count() - 1
+        if last_tab > max_tabs:
+            return
+        self.main_tab_widget.setCurrentIndex(last_tab)
 
     def _run_with_plugin_api(self, plugin, handler):
         plugin_api = plugin.get('api')
