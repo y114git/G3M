@@ -7,7 +7,7 @@ from services.localization_service import tr
 from services.blocklist_service import BlocklistManager
 from ui.dialogs.mod_details_dialog import open_mod_details_dialog
 from ui.dialogs.blocklist_dialog import BlocklistDialog
-from ui.widgets.mod.mod_plaque_widget import ModPlaqueWidget
+from ui.widgets.mod.mod_card_widget import ModCardWidget
 from workers.gamebanana.load_more_worker import LoadMoreGameBananaModsThread
 from workers.gamebanana.search_worker import SearchGameBananaModsThread
 from adapters.gamebanana_cache import GameBananaMetadataCache
@@ -42,7 +42,7 @@ class SearchDisplayController(QObject):
         self._last_load_attempt = {'items_needed': 0, 'current_total': 0, 'attempts': 0}
         self._load_check_done = False
         self._update_display_in_progress = False
-        self.plaque_widget_cache: dict[str, ModPlaqueWidget] = {}
+        self.card_widget_cache: dict[str, ModCardWidget] = {}
         self._update_display_debounce = DebounceTimer(delay_ms=200)
         self._initial_mods_display_done = False
         self._active_search_timers = []
@@ -53,16 +53,16 @@ class SearchDisplayController(QObject):
             app_state=app_state,
             app_window=app_window,
             update_filtered_mods_cb=self.update_filtered_mods,
-            update_plaques_cb=self._update_plaques_for_mods,
+            update_cards_cb=self._update_cards_for_mods,
         )
 
-    def _iter_layout_plaques(self):
-        """Yield all ModPlaqueWidget instances currently in mod_list_layout."""
+    def _iter_layout_cards(self):
+        """Yield all ModCardWidget instances currently in mod_list_layout."""
         if not hasattr(self.app, 'mod_list_layout'):
             return
         for i in range(self.app.mod_list_layout.count() - 1):
             item = self.app.mod_list_layout.itemAt(i)
-            if item and item.widget() and isinstance(item.widget(), ModPlaqueWidget):
+            if item and item.widget() and isinstance(item.widget(), ModCardWidget):
                 yield item.widget()
 
     @staticmethod
@@ -667,7 +667,7 @@ class SearchDisplayController(QObject):
                 item = self.app.mod_list_layout.itemAt(i)
                 if item and item.widget():
                     widget = item.widget()
-                    if isinstance(widget, ModPlaqueWidget):
+                    if isinstance(widget, ModCardWidget):
                         if hasattr(widget, 'mod_data') and widget.mod_data:
                             cache_key = get_mod_cache_key(widget.mod_data)
                             existing_widgets_in_layout[cache_key] = (widget, i)
@@ -693,46 +693,46 @@ class SearchDisplayController(QObject):
                             continue
                         try:
                             cache_key = get_mod_cache_key(mod)
-                            if cache_key in self.plaque_widget_cache:
-                                plaque = self.plaque_widget_cache[cache_key]
-                                if hasattr(plaque, 'mod_data'):
-                                    plaque.mod_data = mod
-                                    if hasattr(plaque, 'update_mod_data'):
-                                        plaque.update_mod_data()
-                                    if hasattr(plaque, 'update_installation_status'):
-                                        plaque.update_installation_status()
+                            if cache_key in self.card_widget_cache:
+                                card = self.card_widget_cache[cache_key]
+                                if hasattr(card, 'mod_data'):
+                                    card.mod_data = mod
+                                    if hasattr(card, 'update_mod_data'):
+                                        card.update_mod_data()
+                                    if hasattr(card, 'update_installation_status'):
+                                        card.update_installation_status()
                                 current_position = None
                                 for i in range(self.app.mod_list_layout.count() - 1):
                                     item = self.app.mod_list_layout.itemAt(i)
-                                    if item and item.widget() == plaque:
+                                    if item and item.widget() == card:
                                         current_position = i
                                         break
                                 if current_position is not None:
                                     if current_position != target_position:
-                                        self.app.mod_list_layout.removeWidget(plaque)
-                                        self.app.mod_list_layout.insertWidget(target_position, plaque)
+                                        self.app.mod_list_layout.removeWidget(card)
+                                        self.app.mod_list_layout.insertWidget(target_position, card)
                                 else:
-                                    self.app.mod_list_layout.insertWidget(target_position, plaque)
-                                if hasattr(plaque, 'update_install_button_state'):
-                                    plaque.update_install_button_state()
+                                    self.app.mod_list_layout.insertWidget(target_position, card)
+                                if hasattr(card, 'update_install_button_state'):
+                                    card.update_install_button_state()
                                 widgets_shown += 1
                                 target_position += 1
                             else:
                                 parent_widget = self.app.mod_list_widget if hasattr(self.app, 'mod_list_widget') else self.app
-                                plaque = ModPlaqueWidget(mod, parent=parent_widget, parent_app=self.app)
-                                plaque.install_requested.connect(self.mod_ops.on_mod_install_requested)
-                                plaque.uninstall_requested.connect(self.mod_ops.on_mod_uninstall_requested)
-                                plaque.clicked.connect(self.on_mod_clicked)
-                                plaque.details_requested.connect(self.show_details)
-                                if hasattr(plaque, 'update_install_button_state'):
-                                    plaque.update_install_button_state()
-                                self.app.mod_list_layout.insertWidget(target_position, plaque)
-                                self.plaque_widget_cache[cache_key] = plaque
+                                card = ModCardWidget(mod, parent=parent_widget, parent_app=self.app)
+                                card.install_requested.connect(self.mod_ops.on_mod_install_requested)
+                                card.uninstall_requested.connect(self.mod_ops.on_mod_uninstall_requested)
+                                card.clicked.connect(self.on_mod_clicked)
+                                card.details_requested.connect(self.show_details)
+                                if hasattr(card, 'update_install_button_state'):
+                                    card.update_install_button_state()
+                                self.app.mod_list_layout.insertWidget(target_position, card)
+                                self.card_widget_cache[cache_key] = card
                                 widgets_created += 1
                                 widgets_shown += 1
                                 target_position += 1
                         except Exception as e:
-                            logger.error(f"Error processing plaque for mod {(mod.name if mod else 'unknown')} at index {start_index + idx}: {e}", exc_info=True)
+                            logger.error(f"Error processing card for mod {(mod.name if mod else 'unknown')} at index {start_index + idx}: {e}", exc_info=True)
                             continue
                     if batch_end < len(mods_to_process):
                         QTimer.singleShot(BATCH_DELAY_MS, lambda: process_batch(batch_end))
@@ -745,7 +745,7 @@ class SearchDisplayController(QObject):
                         item = self.app.mod_list_layout.itemAt(i)
                         if item and item.widget():
                             widget = item.widget()
-                            if isinstance(widget, ModPlaqueWidget):
+                            if isinstance(widget, ModCardWidget):
                                 widget_cache_key = get_mod_cache_key(widget.mod_data) if hasattr(widget, 'mod_data') and widget.mod_data else None
                                 if widget_cache_key and widget_cache_key not in current_page_cache_keys:
                                     widgets_to_hide.append(widget)
@@ -759,7 +759,7 @@ class SearchDisplayController(QObject):
                         item = self.app.mod_list_layout.itemAt(i)
                         if item and item.widget():
                             widget = item.widget()
-                            if isinstance(widget, ModPlaqueWidget):
+                            if isinstance(widget, ModCardWidget):
                                 widget_cache_key = get_mod_cache_key(widget.mod_data) if hasattr(widget, 'mod_data') and widget.mod_data else None
                                 if widget_cache_key and widget_cache_key in current_page_cache_keys:
                                     widget.show()
@@ -789,7 +789,7 @@ class SearchDisplayController(QObject):
                                         item = self.app.mod_list_layout.itemAt(i)
                                         if item and item.widget():
                                             widget = item.widget()
-                                            if isinstance(widget, ModPlaqueWidget):
+                                            if isinstance(widget, ModCardWidget):
                                                 widget_count += 1
                                                 if not widget.isVisible():
                                                     widgets_ready = False
@@ -811,7 +811,7 @@ class SearchDisplayController(QObject):
                                 if has_mods_to_display and expected_widget_count > 0:
                                     if widgets_ready and widget_count >= expected_widget_count and (visible_widget_count >= expected_widget_count):
                                         should_emit = True
-                                        logger.info(f'SearchDisplayController: First page plaques ready ({visible_widget_count}/{expected_widget_count} visible widgets)')
+                                        logger.info(f'SearchDisplayController: First page cards ready ({visible_widget_count}/{expected_widget_count} visible widgets)')
                                     else:
                                         logger.debug(f'SearchDisplayController: First page not ready yet - widgets: {widget_count}/{expected_widget_count}, visible: {visible_widget_count}/{expected_widget_count}')
                                 elif expected_widget_count == 0 and (not has_mods_to_display):
@@ -820,7 +820,7 @@ class SearchDisplayController(QObject):
                                 if should_emit:
                                     self._initial_mods_display_done = True
                                     if hasattr(self.app, 'mods_display_ready'):
-                                        logger.info(f'SearchDisplayController: First page plaques ready ({visible_widget_count} widgets visible), emitting mods_display_ready signal')
+                                        logger.info(f'SearchDisplayController: First page cards ready ({visible_widget_count} widgets visible), emitting mods_display_ready signal')
                                         self.app._mods_display_ready_emitted = True
                                         if app:
                                             app.processEvents()
@@ -858,22 +858,22 @@ class SearchDisplayController(QObject):
         self.ui_button_enabled_update.emit('next_page_btn', has_more_mods or can_load_more)
 
     @staticmethod
-    def _refresh_plaque(widget):
-        """Refresh a single plaque widget's data, status, and button state."""
+    def _refresh_card(widget):
+        """Refresh a single card widget's data, status, and button state."""
         if hasattr(widget, 'update_mod_data'):
             widget.update_mod_data()
         widget.update_installation_status()
         if hasattr(widget, 'update_install_button_state'):
             widget.update_install_button_state()
 
-    def update_search_plaques(self):
+    def update_search_cards(self):
         mod_list_widget = getattr(self.app, 'mod_list_widget', None)
         if mod_list_widget:
             mod_list_widget.setUpdatesEnabled(False)
         try:
-            for widget in self._iter_layout_plaques():
+            for widget in self._iter_layout_cards():
                 try:
-                    self._refresh_plaque(widget)
+                    self._refresh_card(widget)
                 except Exception:
                     pass
         finally:
@@ -881,7 +881,7 @@ class SearchDisplayController(QObject):
                 mod_list_widget.setUpdatesEnabled(True)
 
     def on_mod_clicked(self, mod):
-        for widget in self._iter_layout_plaques():
+        for widget in self._iter_layout_cards():
             if widget.mod_data == mod:
                 self.clear_all_selections()
                 widget.set_selected(True)
@@ -891,7 +891,7 @@ class SearchDisplayController(QObject):
         open_mod_details_dialog(self.app, mod_data)
 
     def clear_all_selections(self):
-        for widget in self._iter_layout_plaques():
+        for widget in self._iter_layout_cards():
             widget.set_selected(False)
 
     def _cleanup_details_threads(self):
@@ -1003,30 +1003,30 @@ class SearchDisplayController(QObject):
         except Exception as e:
             logger.error(f'SearchDisplayController: Error in _check_installed_mods_for_metadata: {e}', exc_info=True)
 
-    def _update_plaques_for_mods(self, mod_ids: list):
+    def _update_cards_for_mods(self, mod_ids: list):
         try:
             mod_ids_set = set(mod_ids)
-            for widget in self._iter_layout_plaques():
+            for widget in self._iter_layout_cards():
                 mod = widget.mod_data
                 if mod and mod.is_gamebanana_mod():
                     mod_id = mod.get_gamebanana_mod_id()
                     if mod_id and mod_id in mod_ids_set:
                         try:
-                            self._refresh_plaque(widget)
+                            self._refresh_card(widget)
                         except Exception as e:
-                            logger.warning(f'SearchDisplayController: Error updating plaque for mod {mod_id}: {e}')
+                            logger.warning(f'SearchDisplayController: Error updating card for mod {mod_id}: {e}')
         except Exception as e:
-            logger.error(f'SearchDisplayController: Error in _update_plaques_for_mods: {e}', exc_info=True)
+            logger.error(f'SearchDisplayController: Error in _update_cards_for_mods: {e}', exc_info=True)
 
-    def update_all_plaques_labels(self):
+    def update_all_cards_labels(self):
         try:
-            for cache_key, plaque in self.plaque_widget_cache.items():
+            for cache_key, card in self.card_widget_cache.items():
                 try:
-                    if hasattr(plaque, 'update_labels_text'):
-                        plaque.update_labels_text()
-                    if hasattr(plaque, '_update_style'):
-                        plaque._update_style()
+                    if hasattr(card, 'update_labels_text'):
+                        card.update_labels_text()
+                    if hasattr(card, '_update_style'):
+                        card._update_style()
                 except Exception as e:
-                    logger.warning(f'SearchDisplayController: Error updating labels for plaque {cache_key}: {e}')
+                    logger.warning(f'SearchDisplayController: Error updating labels for card {cache_key}: {e}')
         except Exception as e:
-            logger.error(f'SearchDisplayController: Error in update_all_plaques_labels: {e}', exc_info=True)
+            logger.error(f'SearchDisplayController: Error in update_all_cards_labels: {e}', exc_info=True)

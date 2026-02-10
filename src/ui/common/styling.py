@@ -7,7 +7,7 @@ from PyQt6 import sip
 from PyQt6.QtGui import QColor, QPixmap
 from PyQt6.QtWidgets import QLabel
 from utils.mod_utils import get_mod_key
-_STYLE_TEMPLATE = 'QFrame#{frame_selector} {{\n    background-color: {bg_color};\n    border: {border_width} solid {border_color};\n}}\nQFrame#{frame_selector}:hover {{\n    border-color: {hover_border_color};\n}}\nQLabel#{icon_selector} {{\n    border: 2px solid {border_color};\n}}\nQLabel#versionLabel {{\n    color: {version_text_color};\n}}\nQLabel#secondaryText {{\n    color: {version_text_color};\n    font-size: 12px;\n}}\nQLabel#primaryText {{\n    color: {text_color};\n    font-size: 12px;\n}}\nQPushButton#plaqueButton, QPushButton#plaqueButtonInstall, QPushButton#plaqueButtonUninstall {{\n    min-width: 110px;\n    max-width: 110px;\n    min-height: 35px;\n    max-height: 35px;\n    font-size: 15px;\n    padding: 1px;\n}}\nQPushButton#plaqueButtonInstall {{\n    background-color: #4CAF50;\n    font-weight: bold;\n}}\nQPushButton#plaqueButtonInstall:hover {{\n    background-color: #5cb85c;\n}}\nQPushButton#plaqueButtonUninstall {{\n    background-color: #F44336;\n    font-weight: bold;\n}}\nQPushButton#plaqueButtonUninstall:hover {{\n    background-color: #d32f2f;\n}}'
+_STYLE_TEMPLATE = 'QFrame#{frame_selector} {{\n    background-color: {bg_color};\n    border: {border_width} solid {border_color};\n}}\nQFrame#{frame_selector}:hover {{\n    border-color: {hover_border_color};\n}}\nQLabel#{icon_selector} {{\n    border: 2px solid {border_color};\n}}\nQLabel#versionLabel {{\n    color: {version_text_color};\n}}\nQLabel#secondaryText {{\n    color: {version_text_color};\n    font-size: 12px;\n}}\nQLabel#primaryText {{\n    color: {text_color};\n    font-size: 12px;\n}}\nQPushButton#cardButton, QPushButton#cardButtonInstall, QPushButton#cardButtonUninstall {{\n    min-width: 110px;\n    max-width: 110px;\n    min-height: 35px;\n    max-height: 35px;\n    font-size: 15px;\n    padding: 1px;\n}}\nQPushButton#cardButtonInstall {{\n    background-color: #4CAF50;\n    font-weight: bold;\n}}\nQPushButton#cardButtonInstall:hover {{\n    background-color: #5cb85c;\n}}\nQPushButton#cardButtonUninstall {{\n    background-color: #F44336;\n    font-weight: bold;\n}}\nQPushButton#cardButtonUninstall:hover {{\n    background-color: #d32f2f;\n}}'
 
 
 def generate_widget_style(frame_selector, bg_color, border_color, hover_border_color, text_color, version_text_color, is_selected=False, icon_selector='modIcon'):
@@ -24,20 +24,20 @@ def update_mod_widget_style(widget, frame_selector, parent_app=None):
         elif hasattr(parent_app, 'app_state') and hasattr(parent_app.app_state, 'local_config'):
             config = parent_app.app_state.local_config
     if config:
-        plaque_bg_color = get_theme_color(config, 'background', '#000000')
+        card_bg_color = get_theme_color(config, 'background', '#000000')
         border_color = get_theme_color(config, 'border', '#fff')
         hover_border_color = get_theme_color(config, 'button_hover', '#fff')
         text_color = get_theme_color(config, 'text', '#ffffff')
         version_text_color = get_theme_color(config, 'version_text', 'rgba(255, 255, 255, 178)')
     else:
-        plaque_bg_color = '#000000'
+        card_bg_color = '#000000'
         border_color = '#fff'
         hover_border_color = '#fff'
         text_color = '#ffffff'
         version_text_color = 'rgba(255, 255, 255, 178)'
     is_selected = getattr(widget, 'is_selected', False)
     icon_selector = 'pluginIcon' if frame_selector == 'pluginWidget' else 'modIcon'
-    widget.setStyleSheet(generate_widget_style(frame_selector, plaque_bg_color, border_color, hover_border_color, text_color, version_text_color, is_selected, icon_selector))
+    widget.setStyleSheet(generate_widget_style(frame_selector, card_bg_color, border_color, hover_border_color, text_color, version_text_color, is_selected, icon_selector))
 
 
 _EMPTY_MESSAGE_STYLE = 'QLabel {{\n    color: {color};\n    font-size: {font_size}px;\n    font-style: italic;\n    opacity: 0.75;\n    background-color: transparent;\n    padding: 40px;\n}}'

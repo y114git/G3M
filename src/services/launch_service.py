@@ -12,12 +12,12 @@ from services.localization_service import tr
 from utils.file_utils import ensure_writable
 from utils.path_utils import is_path_in_steam_common
 from services.game_detection_service import is_game_running, get_game_name_string, get_game_type_string
-from models.game_modes import UndertaleGameMode, UndertaleYellowGameMode, PizzaTowerGameMode, SugarySpireGameMode, FullGameMode
+
 from utils.path_utils import find_chapter_resource_dir, resolve_game_executable
 from services.patching_log_service import rotate_patching_log
 from workers.game_monitor_worker import GameMonitorWorker
 from services.mod_patching_service import ModPatcher
-from config.constants import UI_COLORS, SLOT_ID_UNIVERSAL
+from config.constants import UI_COLORS, TAB_ALL
 
 
 class GameLauncher(QObject):
@@ -85,10 +85,10 @@ class GameLauncher(QObject):
             parent_obj = self.parent()
         except (AttributeError, TypeError):
             parent_obj = None
-        slot_service = getattr(parent_obj, 'slot_service', None) if parent_obj else None
-        if not slot_service or not hasattr(slot_service, 'get_active_mod_selections'):
+        used_mods_service = getattr(parent_obj, 'used_mods_service', None) if parent_obj else None
+        if not used_mods_service or not hasattr(used_mods_service, 'get_active_mod_selections'):
             return {chapter_id: [] for chapter_id in range(5)}
-        return slot_service.get_active_mod_selections()
+        return used_mods_service.get_active_mod_selections()
 
     def _launch_game_with_selections(self, selections: Dict[int, Any], execute_plugin_hooks=None, restore_window_callback=None):
         rotate_patching_log()
@@ -242,15 +242,14 @@ class GameLauncher(QObject):
 
     def _determine_launch_config(self, selections: Dict[int, Any]) -> Optional[Dict[str, Any]]:
         use_steam = self.app_state.local_config.get('launch_via_steam', False)
-        direct_launch_slot_id = self.app_state.local_config.get('direct_launch_slot_id', SLOT_ID_UNIVERSAL)
+        direct_launch_tab_id = self.app_state.local_config.get('direct_launch_slot_id', TAB_ALL)
         is_chapter_mode = self.app_state.current_mode == 'chapter'
-        is_deltarune = isinstance(self.app_state.game_mode, FullGameMode)
-        direct_launch = direct_launch_slot_id > 0 and is_chapter_mode and self.app_state.game_mode.direct_launch_allowed and (platform.system() != 'Darwin')
-        should_block_steam = is_deltarune and is_chapter_mode and (direct_launch_slot_id >= 0)
-        if use_steam and self.app_state.game_mode.steam_id and (not should_block_steam):
-            return {'target': f'steam://rungameid/{self.app_state.game_mode.steam_id}', 'cwd': None, 'type': 'webbrowser'}
+        direct_launch = direct_launch_tab_id > 0 and is_chapter_mode and self.app_state.game_mode.direct_launch_allowed and (platform.system() != 'Darwin')
+        should_block_steam = self.app_state.game_mode.block_steam_with_direct_launch and is_chapter_mode and (direct_launch_tab_id >= 0)
+        if use_steam and self.app_state.game_mode.steam_app_id and (not should_block_steam):
+            return {'target': f'steam://rungameid/{self.app_state.game_mode.steam_app_id}', 'cwd': None, 'type': 'webbrowser'}
         if direct_launch:
-            return self._handle_direct_launch(direct_launch_slot_id)
+            return self._handle_direct_launch(direct_launch_tab_id)
         launch_target = self._get_executable_path()
         if not launch_target:
             self.status_changed.emit(tr('errors.executable_not_found'), UI_COLORS['status_error'])
@@ -308,8 +307,8 @@ class GameLauncher(QObject):
         current_game_path = self._get_current_game_path()
         if not current_game_path or not os.path.isdir(current_game_path):
             return None
-        is_undertale = isinstance(self.app_state.game_mode, (UndertaleGameMode, UndertaleYellowGameMode))
-        if isinstance(self.app_state.game_mode, (PizzaTowerGameMode, SugarySpireGameMode)):
+        is_undertale = self.app_state.game_mode.game_id in ('undertale', 'undertaleyellow')
+        if self.app_state.game_mode.game_id in ('pizzatower', 'sugaryspire'):
             return resolve_game_executable(current_game_path, is_undertale=False, game_type=get_game_type_string(self.app_state.game_mode))
         return resolve_game_executable(current_game_path, is_undertale)
 
@@ -333,8 +332,8 @@ class GameLauncher(QObject):
         self.app_state.progress_bar_visible = True
         self.app_state.progress_bar_value = 0
         session_manifest_path = os.path.join(self.app_state.config_dir, 'session.lock')
-        fast_merge = self.app_state.local_config.get('fast_merging_enabled', False)
-        self._patching_thread = ModPatchingThread(self.app_state, self.mod_service, chapter_mods, session_manifest_path, self, fast_merge=fast_merge)
+        fast_patch = self.app_state.local_config.get('fast_merging_enabled', False)
+        self._patching_thread = ModPatchingThread(self.app_state, self.mod_service, chapter_mods, session_manifest_path, self, fast_patch=fast_patch)
         self._patching_thread.progress_update.connect(self._on_patching_progress)
         self._patching_thread.status_update.connect(self._on_patching_status)
         self._patching_thread.finished.connect(lambda success: self._on_patching_finished(selections, success))
@@ -394,7 +393,7 @@ class GameLauncher(QObject):
 
     def _cancel_launch_after_patching(self):
         try:
-            self._try_restore_backups('cancel_launch_after_merge')
+            self._try_restore_backups('cancel_launch_after_patching')
         except Exception as e:
             logging.error(f'Cancel launch cleanup failed: {e}', exc_info=True)
         finally:
@@ -428,7 +427,7 @@ class GameLauncher(QObject):
             self.game_launch_started.emit()
         has_selected_mods = self._has_selected_mods(selections)
         use_steam = self.app_state.local_config.get('launch_via_steam', False)
-        if has_selected_mods and use_steam and self.app_state.game_mode.steam_id:
+        if has_selected_mods and use_steam and self.app_state.game_mode.steam_app_id:
             current_path = self._get_current_game_path()
             if current_path:
                 game_name = get_game_name_string(self.app_state.game_mode)

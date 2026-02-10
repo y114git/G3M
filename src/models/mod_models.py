@@ -12,8 +12,8 @@ class ModExtraFile:
 
 
 @dataclass
-class ModChapterData:
-    """Represents chapter-specific data for a mod."""
+class ModFileData:
+    """File data for a game content section (chapter, whole game, etc.)."""
     description: Optional[str] = None
     data_file_url: Optional[str] = None
     data_file_version: Optional[str] = None
@@ -26,7 +26,6 @@ class ModChapterData:
 @dataclass
 class ModInfo:
     """Complete information about a mod including metadata and files."""
-    _CHAPTER_MAP = {0: '0', 1: '1', 2: '2', 3: '3', 4: '4', -1: 'demo'}
     key: str
     name: str
     version: str
@@ -41,7 +40,7 @@ class ModInfo:
     tags: List[str] = field(default_factory=list)
     hide_mod: bool = False
     ban_status: bool = False
-    files: Dict[str, ModChapterData] = field(default_factory=dict)
+    files: Dict[str, ModFileData] = field(default_factory=dict)
     demo_url: Optional[str] = None
     demo_version: Optional[str] = None
     created_date: Optional[str] = None
@@ -60,10 +59,19 @@ class ModInfo:
     gamebanana_compatibility_checked: bool = False
     has_full_metadata: bool = False
 
-    def get_chapter_data(self, chapter_id: int) -> Optional[ModChapterData]:
-        if self.game == 'undertale' and chapter_id == 0:
-            return self.files.get('undertale')
-        return self.files.get(self._CHAPTER_MAP.get(chapter_id))
+    def get_file_data(self, files_key: str) -> Optional['ModFileData']:
+        """Get file data by the content section key (e.g. '1', 'undertale', 'demo')."""
+        return self.files.get(files_key)
+
+    def get_chapter_data(self, chapter_id: int) -> Optional['ModFileData']:
+        """Get file data by tab_id. Uses game registry for correct key lookup."""
+        from models.game_modes import get_game
+        game_def = get_game(self.game)
+        if game_def:
+            tab = game_def.get_tab(chapter_id)
+            if tab:
+                return self.files.get(tab.files_key)
+        return self.files.get(str(chapter_id))
 
     def is_valid_for_demo(self) -> bool:
         return self.game == 'deltarunedemo' and bool((self.files and self.files.get('demo')) or (self.demo_url and self.demo_version))
@@ -85,8 +93,8 @@ class ModInfo:
                     if extra_files and isinstance(extra_files, list) and isinstance(extra_files[0], dict):
                         value = value.copy()
                         value['extra_files'] = [ModExtraFile(**ef) if isinstance(ef, dict) else ef for ef in extra_files]
-                    files_dict[key] = ModChapterData(**value)
-                elif isinstance(value, ModChapterData):
+                    files_dict[key] = ModFileData(**value)
+                elif isinstance(value, ModFileData):
                     files_dict[key] = value
         key = data_dict.get('key') or data_dict.get('mod_key', '')
         game = data_dict.get('game') or data_dict.get('modgame', 'deltarune')

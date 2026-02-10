@@ -7,7 +7,7 @@ from services.localization_service import tr
 from ui.common.styling import clear_layout_widgets, show_empty_message_in_layout
 from ui.widgets.mod.installed_mod_widget import InstalledModWidget
 from ui.dialogs.mod_priority_dialog import ModPriorityDialog
-from config.constants import SLOT_ID_UNIVERSAL, SLOT_ID_DEMO, SLOT_ID_UNDERTALE, SLOT_ID_UNDERTALE_YELLOW, SLOT_ID_SUGARY_SPIRE, SLOT_ID_MENU, SLOT_ID_CHAPTER_1, SLOT_ID_CHAPTER_2, SLOT_ID_CHAPTER_3, SLOT_ID_CHAPTER_4
+from config.constants import TAB_ALL, TAB_DEMO, TAB_UNDERTALE, TAB_UNDERTALE_YELLOW, TAB_SUGARY_SPIRE, TAB_MENU, TAB_CHAPTER_1, TAB_CHAPTER_2, TAB_CHAPTER_3, TAB_CHAPTER_4
 from services.mod_filter_service import filter_and_sort_mods
 from utils.mod_utils import get_mod_key, get_mod_name
 from services.game_detection_service import get_chapter_id_for_game_mode
@@ -16,11 +16,11 @@ from services.game_detection_service import get_chapter_id_for_game_mode
 class LibraryDisplayController:
     """Manages the display and interaction of installed mods in the library."""
 
-    def __init__(self, app_state, feedback_service, mod_service, slot_service, app_window):
+    def __init__(self, app_state, feedback_service, mod_service, used_mods_service, app_window):
         self.app_state = app_state
         self.feedback_service = feedback_service
         self.mod_service = mod_service
-        self.slot_service = slot_service
+        self.used_mods_service = used_mods_service
         self.app = app_window
         self._updating_display = False
 
@@ -110,12 +110,12 @@ class LibraryDisplayController:
                 mod_widget.clicked.connect(self.on_mod_clicked)
                 mod_widget.remove_requested.connect(self.on_mod_remove)
                 mod_widget.use_requested.connect(lambda mod_data=mod_data: self._handle_mod_use(mod_data, selected_chapter_id))
-                is_used = self.slot_service.is_mod_used_for_chapter(mod_data, selected_chapter_id)
-                mod_widget.set_in_slot(is_used)
+                is_used = self.used_mods_service.is_mod_used_for_chapter(mod_data, selected_chapter_id)
+                mod_widget.set_active(is_used)
                 self.app.installed_mods_layout.insertWidget(self.app.installed_mods_layout.count() - 1, mod_widget)
                 mod_widget.show()
         if self.app.installed_mods_layout.count() <= 1:
-            chapter_names = {SLOT_ID_UNIVERSAL: tr('ui.mod_slot'), SLOT_ID_MENU: tr('chapters.menu'), SLOT_ID_CHAPTER_1: tr('tabs.chapter_1'), SLOT_ID_CHAPTER_2: tr('tabs.chapter_2'), SLOT_ID_CHAPTER_3: tr('tabs.chapter_3'), SLOT_ID_CHAPTER_4: tr('tabs.chapter_4')}
+            chapter_names = {TAB_ALL: tr('ui.mod_slot'), TAB_MENU: tr('chapters.menu'), TAB_CHAPTER_1: tr('tabs.chapter_1'), TAB_CHAPTER_2: tr('tabs.chapter_2'), TAB_CHAPTER_3: tr('tabs.chapter_3'), TAB_CHAPTER_4: tr('tabs.chapter_4')}
             chapter_name = chapter_names.get(selected_chapter_id, tr('ui.chapter_n', chapter=str(selected_chapter_id)))
             show_empty_message_in_layout(self.app.installed_mods_layout, tr('ui.no_mods_for_chapter', chapter_name=chapter_name), self.app_state.local_config, font_size=16)
         self._update_priority_button_visibility(selected_chapter_id)
@@ -207,7 +207,7 @@ class LibraryDisplayController:
                     if end >= len(mods):
                         if self.app.installed_mods_layout.count() <= 1:
                             show_empty_message_in_layout(self.app.installed_mods_layout, tr('ui.empty'), self.app_state.local_config, font_size=18)
-                        self.update_mod_widgets_slot_status()
+                        self.update_mod_widgets_active_status()
                         self.app.game_launch.update_button_state()
                         _finish_display()
                     else:
@@ -216,7 +216,7 @@ class LibraryDisplayController:
                     try:
                         if self.app.installed_mods_layout.count() <= 1:
                             show_empty_message_in_layout(self.app.installed_mods_layout, tr('ui.empty'), self.app_state.local_config, font_size=18)
-                        self.update_mod_widgets_slot_status()
+                        self.update_mod_widgets_active_status()
                         self.app.game_launch.update_button_state()
                     except Exception:
                         pass
@@ -242,9 +242,9 @@ class LibraryDisplayController:
             dummy_mod_data = self.mod_service.create_mod_object_from_info({'key': orphaned_key, 'name': 'Orphaned Mod'}, getattr(self.app_state, 'all_mods', None))
             if not dummy_mod_data:
                 continue
-            self.slot_service.remove_mod_from_all_chapters(dummy_mod_data)
+            self.used_mods_service.remove_mod_from_all_chapters(dummy_mod_data)
 
-    def update_mod_widgets_slot_status(self):
+    def update_mod_widgets_active_status(self):
         if not hasattr(self.app, 'installed_mods_layout') or self.app.installed_mods_layout is None:
             return
         is_chapter_mode = hasattr(self.app, 'chapter_mode_checkbox') and self.app.chapter_mode_checkbox.isChecked()
@@ -255,11 +255,11 @@ class LibraryDisplayController:
                 widget = item.widget()
                 if isinstance(widget, InstalledModWidget):
                     if selected_chapter_id is not None:
-                        is_used = self.slot_service.is_mod_used_for_chapter(widget.mod_data, selected_chapter_id)
+                        is_used = self.used_mods_service.is_mod_used_for_chapter(widget.mod_data, selected_chapter_id)
                     else:
                         check_chapter_id = get_chapter_id_for_game_mode(self.app_state.game_mode)
-                        is_used = self.slot_service.is_mod_used_for_chapter(widget.mod_data, check_chapter_id)
-                    widget.set_in_slot(is_used)
+                        is_used = self.used_mods_service.is_mod_used_for_chapter(widget.mod_data, check_chapter_id)
+                    widget.set_active(is_used)
 
     def on_mod_clicked(self, mod_data):
         target_widget = None
@@ -288,7 +288,7 @@ class LibraryDisplayController:
                 self.mod_service.delete_mod_files(mod_data)
                 removal_data = {'key': key, **(({'name': mod_name} if mod_name else {}))} if key else mod_data
                 try:
-                    self.slot_service.remove_mod_from_all_chapters(removal_data)
+                    self.used_mods_service.remove_mod_from_all_chapters(removal_data)
                 except Exception as e:
                     logging.warning(f'Failed to remove mod from chapters after deletion: {e}', exc_info=True)
                 try:
@@ -314,7 +314,7 @@ class LibraryDisplayController:
         try:
             self.update_display()
             if hasattr(self.app, 'search_display'):
-                self.app.search_display.update_search_plaques()
+                self.app.search_display.update_search_cards()
                 self.app.search_display.update_filtered_mods(preserve_page=True)
         except Exception as e:
             logging.error(f'Error updating UI after mod deletion: {e}', exc_info=True)
@@ -322,8 +322,8 @@ class LibraryDisplayController:
     def on_mod_use(self, mod_data):
         target_chapter_id = get_chapter_id_for_game_mode(self.app_state.game_mode)
         game_value = getattr(mod_data, 'game', None) or getattr(mod_data, 'modgame', None)
-        if target_chapter_id == SLOT_ID_UNIVERSAL and game_value == 'undertale':
-            target_chapter_id = SLOT_ID_UNDERTALE
+        if target_chapter_id == TAB_ALL and game_value == 'undertale':
+            target_chapter_id = TAB_UNDERTALE
         self._handle_mod_use(mod_data, target_chapter_id)
 
     def _handle_mod_use(self, mod_data, chapter_id):
@@ -340,8 +340,8 @@ class LibraryDisplayController:
                         if widget_mod_key == current_mod_key:
                             mod_widget = widget
                             break
-        self.slot_service.set_used_mod(chapter_id, mod_data)
-        self.update_mod_widgets_slot_status()
+        self.used_mods_service.set_used_mod(chapter_id, mod_data)
+        self.update_mod_widgets_active_status()
         self._update_priority_button_visibility(chapter_id)
         if mod_widget:
             mod_widget.set_selected(False)
@@ -360,22 +360,22 @@ class LibraryDisplayController:
         if self.app_state.current_mode == 'chapter':
             return self.app_state.selected_chapter_id
         chapter_id = get_chapter_id_for_game_mode(self.app_state.game_mode)
-        if chapter_id != SLOT_ID_UNIVERSAL:
+        if chapter_id != TAB_ALL:
             return chapter_id
 
-        def _has_mods(slot_id, min_count=2):
-            mods_list = self.slot_service.get_used_mods_list(slot_id)
+        def _has_mods(tab_id, min_count=2):
+            mods_list = self.used_mods_service.get_used_mods_list(tab_id)
             return len(mods_list) >= min_count if mods_list else False
 
-        if _has_mods(SLOT_ID_UNIVERSAL):
-            return SLOT_ID_UNIVERSAL
+        if _has_mods(TAB_ALL):
+            return TAB_ALL
         for cid in range(5):
             if _has_mods(cid):
                 return cid
-        for slot_id in [SLOT_ID_DEMO, SLOT_ID_UNDERTALE, SLOT_ID_UNDERTALE_YELLOW, SLOT_ID_SUGARY_SPIRE]:
-            if _has_mods(slot_id):
-                return slot_id
-        return SLOT_ID_UNIVERSAL
+        for tab_id in [TAB_DEMO, TAB_UNDERTALE, TAB_UNDERTALE_YELLOW, TAB_SUGARY_SPIRE]:
+            if _has_mods(tab_id):
+                return tab_id
+        return TAB_ALL
 
     def _set_priority_widgets_visible(self, visible: bool):
         self.app.priority_button.setVisible(visible)
@@ -398,7 +398,7 @@ class LibraryDisplayController:
         if chapter_id is None:
             self._set_priority_widgets_visible(False)
             return
-        mods_list = self.slot_service.get_used_mods_list(chapter_id)
+        mods_list = self.used_mods_service.get_used_mods_list(chapter_id)
         self._set_priority_widgets_visible(len(mods_list) >= 2 if mods_list else False)
 
     def on_priority_button_click(self):
@@ -407,7 +407,7 @@ class LibraryDisplayController:
         chapter_id = self._get_current_chapter_id()
         if chapter_id is None:
             return
-        mods_list = self.slot_service.get_used_mods_list(chapter_id)
+        mods_list = self.used_mods_service.get_used_mods_list(chapter_id)
         if not mods_list or len(mods_list) < 2:
             return
         from PyQt6.QtWidgets import QDialog
@@ -416,7 +416,7 @@ class LibraryDisplayController:
             if dialog.exec() == QDialog.DialogCode.Accepted:
                 new_order = dialog.get_result()
                 if new_order:
-                    self.slot_service.set_mods_list(chapter_id, new_order)
+                    self.used_mods_service.set_mods_list(chapter_id, new_order)
                     if self.app_state.current_mode == 'chapter':
                         self.update_for_chapter_mode(chapter_id)
                     else:
@@ -437,20 +437,20 @@ class LibraryDisplayController:
             chapter_id = self._get_current_chapter_id()
             if chapter_id is None:
                 return
-            mods_list = self.slot_service.get_used_mods_list(chapter_id)
+            mods_list = self.used_mods_service.get_used_mods_list(chapter_id)
             if not mods_list or len(mods_list) < 2:
                 return
             chapter_mods = {chapter_id: mods_list}
         else:
             chapter_id = get_chapter_id_for_game_mode(self.app_state.game_mode)
-            mods_list = self.slot_service.get_used_mods_list(chapter_id)
+            mods_list = self.used_mods_service.get_used_mods_list(chapter_id)
             if mods_list and len(mods_list) >= 2:
-                if chapter_id == SLOT_ID_UNIVERSAL:
+                if chapter_id == TAB_ALL:
                     chapter_mods = self._distribute_mods_across_chapters(mods_list)
                 else:
                     chapter_mods = {chapter_id: mods_list}
             else:
-                mods_list = self.slot_service.get_used_mods_list(SLOT_ID_UNIVERSAL)
+                mods_list = self.used_mods_service.get_used_mods_list(TAB_ALL)
                 if mods_list and len(mods_list) >= 2:
                     chapter_mods = self._distribute_mods_across_chapters(mods_list)
         if not chapter_mods:
@@ -465,9 +465,9 @@ class LibraryDisplayController:
             xdelta_modpack = dialog.get_xdelta_modpack()
             unique_mod_folder = get_unique_mod_dir(self.app_state.mods_dir, modpack_name)
             modpack_dir = os.path.join(self.app_state.mods_dir, unique_mod_folder)
-            fast_merge = getattr(self.app, 'fast_merging_checkbox', None) and self.app.fast_merging_checkbox.isChecked()
+            fast_patch = getattr(self.app, 'fast_merging_checkbox', None) and self.app.fast_merging_checkbox.isChecked()
             from workers.modpack_create_worker import CreateModpackThread
-            thread = CreateModpackThread(chapter_mods, modpack_name, modpack_dir, self.app_state, self.mod_service, self.app, fast_merge=fast_merge, xdelta_modpack=xdelta_modpack)
+            thread = CreateModpackThread(chapter_mods, modpack_name, modpack_dir, self.app_state, self.mod_service, self.app, fast_patch=fast_patch, xdelta_modpack=xdelta_modpack)
             thread.progress_update.connect(self._on_modpack_progress)
             thread.status_update.connect(self._on_modpack_status)
             thread.finished.connect(lambda success: self._on_modpack_finished(success, modpack_dir))
@@ -500,7 +500,7 @@ class LibraryDisplayController:
             self.update_display()
             if hasattr(self.app, 'search_display'):
                 self.app.search_display.update_filtered_mods(preserve_page=True)
-                self.app.search_display.update_search_plaques()
+                self.app.search_display.update_search_cards()
             QTimer.singleShot(300, self.refresh_async)
             self.feedback_service.show_message('success', 'dialogs.modpack_created_title', tr('dialogs.modpack_created_message', modpack_dir=modpack_dir))
         except Exception as e:

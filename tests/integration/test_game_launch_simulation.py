@@ -77,36 +77,36 @@ class TestGameLaunchSimulation:
         mock_process_iter.return_value = [mock_process]
 
     def test_get_game_type_string(self):
-        from models.game_modes import UndertaleGameMode, UndertaleYellowGameMode, PizzaTowerGameMode, SugarySpireGameMode
-        game_mode = UndertaleGameMode()
+        from models.game_modes import UndertaleGame, UndertaleYellowGame, PizzaTowerGame, SugarySpireGame
+        game_mode = UndertaleGame()
         game_type = get_game_type_string(game_mode)
         assert game_type in ['undertale', 'deltarune', 'undertaleyellow']
-        game_mode = UndertaleYellowGameMode()
+        game_mode = UndertaleYellowGame()
         game_type = get_game_type_string(game_mode)
         assert game_type == 'undertaleyellow'
-        game_mode = PizzaTowerGameMode()
+        game_mode = PizzaTowerGame()
         game_type = get_game_type_string(game_mode)
         assert game_type == 'pizzatower'
-        game_mode = SugarySpireGameMode()
+        game_mode = SugarySpireGame()
         game_type = get_game_type_string(game_mode)
         assert game_type == 'sugaryspire'
 
     def test_get_game_name_string(self):
-        from models.game_modes import UndertaleGameMode, UndertaleYellowGameMode, PizzaTowerGameMode, SugarySpireGameMode
-        game_mode = UndertaleGameMode()
+        from models.game_modes import UndertaleGame, UndertaleYellowGame, PizzaTowerGame, SugarySpireGame
+        game_mode = UndertaleGame()
         game_name = get_game_name_string(game_mode)
         assert isinstance(game_name, str)
         assert len(game_name) > 0
-        game_mode = UndertaleYellowGameMode()
+        game_mode = UndertaleYellowGame()
         game_name = get_game_name_string(game_mode)
         assert isinstance(game_name, str)
         assert len(game_name) > 0
-        game_mode = PizzaTowerGameMode()
+        game_mode = PizzaTowerGame()
         game_name = get_game_name_string(game_mode)
         assert isinstance(game_name, str)
         assert len(game_name) > 0
         assert 'Pizza Tower' in game_name or 'PIZZA TOWER' in game_name.upper()
-        game_mode = SugarySpireGameMode()
+        game_mode = SugarySpireGame()
         game_name = get_game_name_string(game_mode)
         assert isinstance(game_name, str)
         assert len(game_name) > 0

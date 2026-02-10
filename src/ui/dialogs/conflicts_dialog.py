@@ -62,20 +62,20 @@ class ConflictsDialog(QDialog):
         layout.addLayout(button_layout)
 
     def _open_logs_and_launch(self):
-        merge_conflicts_log = get_conflicts_log_path()
+        patch_conflicts_log = get_conflicts_log_path()
         opened = False
-        if os.path.exists(merge_conflicts_log):
+        if os.path.exists(patch_conflicts_log):
             try:
                 if os.name == 'nt':
-                    os.startfile(merge_conflicts_log)
+                    os.startfile(patch_conflicts_log)
                 elif os.name == 'posix':
                     if os.uname().sysname == 'Darwin':
-                        os.system(f'open "{merge_conflicts_log}"')
+                        os.system(f'open "{patch_conflicts_log}"')
                     else:
-                        os.system(f'xdg-open "{merge_conflicts_log}"')
+                        os.system(f'xdg-open "{patch_conflicts_log}"')
                 opened = True
             except Exception as e:
-                QMessageBox.warning(self, tr('errors.error'), tr('dialogs.conflicts.failed_to_open_log', file=os.path.basename(merge_conflicts_log), error=str(e)))
+                QMessageBox.warning(self, tr('errors.error'), tr('dialogs.conflicts.failed_to_open_log', file=os.path.basename(patch_conflicts_log), error=str(e)))
         if not opened:
             QMessageBox.information(self, tr('dialogs.conflicts.no_logs_title'), tr('dialogs.conflicts.no_logs_message'))
         self.accept()

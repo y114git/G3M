@@ -31,13 +31,13 @@ def cleanup_stale_manifest(session_manifest_path: Optional[str], logger, backup_
     return False
 
 
-def restore_backups_from_manifest(session_manifest_path: str, temp_merge_dir: Optional[str],
+def restore_backups_from_manifest(session_manifest_path: str, temp_patch_dir: Optional[str],
                                   cleanup_temp_dir_fn, logger) -> bool:
     """Restore backups from a session manifest file.
 
     Args:
         session_manifest_path: Path to the session manifest JSON.
-        temp_merge_dir: Temp merge directory (for fallback backup_dir).
+        temp_patch_dir: Temp patch directory (for fallback backup_dir).
         cleanup_temp_dir_fn: Callable to clean up temp dir on success.
         logger: Logger instance.
     Returns:
@@ -52,8 +52,8 @@ def restore_backups_from_manifest(session_manifest_path: str, temp_merge_dir: Op
         multimod_backups = manifest_data.get('multimod_backups', {})
         if original_files_data or added_files_data:
             if not backup_dir:
-                if temp_merge_dir:
-                    backup_dir = os.path.join(temp_merge_dir, 'backups')
+                if temp_patch_dir:
+                    backup_dir = os.path.join(temp_patch_dir, 'backups')
             if backup_dir and os.path.exists(backup_dir):
                 logger.info(f'Loading backup info from session manifest (new format): {len(original_files_data)} chapter(s) with original files, {len(added_files_data)} chapter(s) with added files')
                 backup_service = BackupManager(backup_dir, patching_logger=logger)

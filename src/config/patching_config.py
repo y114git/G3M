@@ -1,4 +1,4 @@
-"""Configuration constants for the mod merge/patching system."""
+"""Configuration constants for the mod patching system."""
 
 EXPORT_SCRIPT_CONFIGS = [
     ('ExportSprites', 'Sprites'), ('ExportBackgrounds', 'Backgrounds'),
@@ -36,7 +36,7 @@ ASSET_TRACKING_CONFIGS = [
     ('Shaders', None, 'shaders', True),
 ]
 
-MERGE_SUBDIRS = [
+PATCH_SUBDIRS = [
     ('Sprites', 'sprite', True),
     ('Backgrounds', 'background', False),
     ('Tilesets', 'tileset', False),

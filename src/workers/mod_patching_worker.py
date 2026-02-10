@@ -13,13 +13,13 @@ class ModPatchingThread(QThread):
     finished = pyqtSignal(bool)
     warning_confirmation_needed = pyqtSignal(str, str, str)
 
-    def __init__(self, app_state, mod_service, chapter_mods: Dict[int, List[Any]], session_manifest_path: str, parent=None, fast_merge: bool = False):
+    def __init__(self, app_state, mod_service, chapter_mods: Dict[int, List[Any]], session_manifest_path: str, parent=None, fast_patch: bool = False):
         super().__init__(parent)
         self.app_state = app_state
         self.mod_service = mod_service
         self.chapter_mods = chapter_mods
         self.session_manifest_path = session_manifest_path
-        self.fast_merge = fast_merge
+        self.fast_patch = fast_patch
         self.patcher = None
         self._cancelled = False
         self._warning_response: Optional[bool] = None
@@ -75,7 +75,7 @@ class ModPatchingThread(QThread):
             if self.isInterruptionRequested() or self._cancelled:
                 self.finished.emit(False)
                 return
-            success = self.patcher.process_mod_merge(self.chapter_mods, is_modpack=False, fast_merge=self.fast_merge)
+            success = self.patcher.process_mod_patch(self.chapter_mods, is_modpack=False, fast_patch=self.fast_patch)
             if self.isInterruptionRequested() or self._cancelled:
                 self.patcher._cancelled = True
                 if self.patcher:

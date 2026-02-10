@@ -9,7 +9,7 @@ from typing import Dict, List, Optional, Set
 from PyQt6.QtCore import QObject, pyqtSignal
 from PyQt6.QtWidgets import QApplication, QDialog, QMessageBox
 from services.localization_service import tr
-from models.mod_models import ModChapterData
+from models.mod_models import ModFileData
 import models.mod_models as mod_models
 from workers.install.url_install_worker import UrlInstallThread
 from workers.mod_scan_worker import ModScanThread
@@ -390,7 +390,7 @@ class ModManager(QObject):
                 continue
             try:
                 extra_files_list = parse_extra_files_raw(ch_info.get('extra_files', []), ch_info)
-                mod.files[file_key] = ModChapterData(
+                mod.files[file_key] = ModFileData(
                     description=ch_info.get('description'),
                     data_file_url=ch_info.get('data_file_url'),
                     data_file_version=resolve_data_file_version(ch_info),
@@ -416,7 +416,7 @@ class ModManager(QObject):
                 ch_info.get('extra_files', []), ch_info,
                 chapter_folder=chapter_folder if mod_folder_path else None,
             )
-            mod.files[file_key] = ModChapterData(
+            mod.files[file_key] = ModFileData(
                 description=config_data.get('tagline', ''),
                 data_file_url=data_file_url,
                 data_file_version=resolve_data_file_version(ch_info),

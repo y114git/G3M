@@ -11,11 +11,11 @@ from utils.mod_utils import get_mod_key
 
 class RefreshController:
 
-    def __init__(self, app_state, feedback_service, mod_service, slot_service, game_launch_controller, update_checker, settings_service=None, app_window=None):
+    def __init__(self, app_state, feedback_service, mod_service, used_mods_service, game_launch_controller, update_checker, settings_service=None, app_window=None):
         self.app_state = app_state
         self.feedback_service = feedback_service
         self.mod_service = mod_service
-        self.slot_service = slot_service
+        self.used_mods_service = used_mods_service
         self.game_launch_controller = game_launch_controller
         self.update_checker = update_checker
         self.settings_service = settings_service
@@ -188,7 +188,7 @@ class RefreshController:
             else:
                 fallback_msg = tr('ui.network_fallback_message') if self.app_state.all_mods else tr('ui.network_update_failed')
                 self.feedback_service.update_status(fallback_msg, UI_COLORS['status_error'])
-            self.slot_service.load_used_mods_state()
+            self.used_mods_service.load_used_mods_state()
         except Exception as e:
             error_msg = f'Error processing mod list: {e}'
             logging.error(f'RefreshController._on_fetch_finished: {error_msg}', exc_info=True)

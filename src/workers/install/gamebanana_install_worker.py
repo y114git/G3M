@@ -276,6 +276,6 @@ class InstallGameBananaModThread(BaseInstallWorker):
     def _notify_search_refresh(self):
         try:
             if hasattr(self.main_window, 'search_display'):
-                QTimer.singleShot(0, self.main_window.search_display.update_search_plaques)
+                QTimer.singleShot(0, self.main_window.search_display.update_search_cards)
         except Exception as e:
             logger.debug(f'InstallGameBananaModThread: Error notifying search refresh: {e}')

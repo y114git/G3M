@@ -7,35 +7,35 @@ from utils.patching import mod_content_utils as mod_content
 from config.patching_config import SKIP_FILES, ARCHIVE_EXTENSIONS
 
 
-def apply_xdelta_override(merger, file_name: str, source_path: str, target_dir: str, chapter_id: Optional[int], fallback_target: Optional[str] = None, label: str = '') -> bool:
+def apply_xdelta_override(patcher, file_name: str, source_path: str, target_dir: str, chapter_id: Optional[int], fallback_target: Optional[str] = None, label: str = '') -> bool:
     """Apply xdelta patch to matching target files. On failure, copies to fallback_target if provided."""
     target_files = mod_content.find_target_files_for_xdelta(target_dir, file_name)
     if not target_files:
-        merger.patching_logger.debug(f'No target files found for xdelta patch {file_name}{label}, skipping (expected filename: {os.path.splitext(file_name)[0]})')
+        patcher.patching_logger.debug(f'No target files found for xdelta patch {file_name}{label}, skipping (expected filename: {os.path.splitext(file_name)[0]})')
         if fallback_target:
-            merger._backup_or_mark_file(chapter_id, fallback_target)
+            patcher._backup_or_mark_file(chapter_id, fallback_target)
             shutil.copy2(source_path, fallback_target)
         return False
     patch_applied = False
     for tf in target_files:
-        if chapter_id is not None and merger.backup_service and os.path.exists(tf):
-            merger.backup_service.backup_file(chapter_id, tf)
-        if merger._apply_xdelta_to_file(tf, source_path):
-            merger.patching_logger.info(f'Applied xdelta patch {file_name}{label} to {os.path.relpath(tf, target_dir)}')
+        if chapter_id is not None and patcher.backup_service and os.path.exists(tf):
+            patcher.backup_service.backup_file(chapter_id, tf)
+        if patcher._apply_xdelta_to_file(tf, source_path):
+            patcher.patching_logger.info(f'Applied xdelta patch {file_name}{label} to {os.path.relpath(tf, target_dir)}')
             patch_applied = True
         else:
-            merger.patching_logger.warning(f'Failed to apply xdelta patch {file_name}{label} to {os.path.relpath(tf, target_dir)}, skipping')
+            patcher.patching_logger.warning(f'Failed to apply xdelta patch {file_name}{label} to {os.path.relpath(tf, target_dir)}, skipping')
     if not patch_applied:
         if fallback_target:
-            merger.patching_logger.warning(f'Xdelta patch {file_name}{label} could not be applied to any target files, copying as regular file')
-            merger._backup_or_mark_file(chapter_id, fallback_target)
+            patcher.patching_logger.warning(f'Xdelta patch {file_name}{label} could not be applied to any target files, copying as regular file')
+            patcher._backup_or_mark_file(chapter_id, fallback_target)
             shutil.copy2(source_path, fallback_target)
         else:
-            merger.patching_logger.warning(f'Xdelta patch {file_name}{label} could not be applied to any target files, skipping')
+            patcher.patching_logger.warning(f'Xdelta patch {file_name}{label} could not be applied to any target files, skipping')
     return patch_applied
 
 
-def extract_archive_to_target(merger, archive_path: str, target_dir: str, chapter_id: Optional[int] = None) -> bool:
+def extract_archive_to_target(patcher, archive_path: str, target_dir: str, chapter_id: Optional[int] = None) -> bool:
     try:
         from utils.archive_utils import extract_any_archive
         if chapter_id is None:
@@ -51,18 +51,18 @@ def extract_archive_to_target(merger, archive_path: str, target_dir: str, chapte
                     os.makedirs(target_dirname, exist_ok=True)
                     file_lower = file.lower()
                     if file_lower.endswith(('.xdelta', '.vcdiff')):
-                        apply_xdelta_override(merger, file, source_file, target_dir, chapter_id, fallback_target=target_file, label=' from archive')
+                        apply_xdelta_override(patcher, file, source_file, target_dir, chapter_id, fallback_target=target_file, label=' from archive')
                         continue
-                    merger._backup_or_mark_file(chapter_id, target_file)
+                    patcher._backup_or_mark_file(chapter_id, target_file)
                     shutil.copy2(source_file, target_file)
-        merger.patching_logger.debug(f'Extracted archive: {archive_path}')
+        patcher.patching_logger.debug(f'Extracted archive: {archive_path}')
         return True
     except Exception as e:
-        merger.patching_logger.error(f'Failed to extract archive {archive_path}: {e}', exc_info=True)
+        patcher.patching_logger.error(f'Failed to extract archive {archive_path}: {e}', exc_info=True)
         return False
 
 
-def apply_file_overrides(merger, mod_source_dir: str, target_dir: str, used_archive_names: set, is_modpack: bool, chapter_id: Optional[int] = None) -> bool:
+def apply_file_overrides(patcher, mod_source_dir: str, target_dir: str, used_archive_names: set, is_modpack: bool, chapter_id: Optional[int] = None) -> bool:
     if not os.path.isdir(mod_source_dir):
         return True
     if used_archive_names is None:
@@ -84,18 +84,18 @@ def apply_file_overrides(merger, mod_source_dir: str, target_dir: str, used_arch
             if file_lower.endswith(('.xdelta', '.vcdiff')):
                 if not is_modpack:
                     xdelta_chapter_id = chapter_id if chapter_id is not None else mod_content.extract_chapter_id_from_path(target_dir)
-                    apply_xdelta_override(merger, file, source_path, target_dir, xdelta_chapter_id)
-                elif merger.xdelta_modpack:
+                    apply_xdelta_override(patcher, file, source_path, target_dir, xdelta_chapter_id)
+                elif patcher.xdelta_modpack:
                     rel_path = os.path.relpath(source_path, mod_source_dir)
                     target_path = os.path.join(target_dir, rel_path)
                     os.makedirs(os.path.dirname(target_path), exist_ok=True)
                     try:
                         shutil.copy2(source_path, target_path)
-                        merger.patching_logger.debug(f'Copied xdelta file {file} to modpack (xdelta_modpack enabled)')
+                        patcher.patching_logger.debug(f'Copied xdelta file {file} to modpack (xdelta_modpack enabled)')
                     except Exception as e:
-                        merger.patching_logger.warning(f'Failed to copy xdelta file {source_path}: {e}')
+                        patcher.patching_logger.warning(f'Failed to copy xdelta file {source_path}: {e}')
                 else:
-                    merger.patching_logger.debug(f'Skipping xdelta file {file} (xdelta_modpack disabled)')
+                    patcher.patching_logger.debug(f'Skipping xdelta file {file} (xdelta_modpack disabled)')
                 continue
             if file_lower.endswith(xdelta_extensions):
                 continue
@@ -122,27 +122,27 @@ def apply_file_overrides(merger, mod_source_dir: str, target_dir: str, used_arch
                             target_archive_name = f'{base_name}_mod{mod_index}{ext}'
                             target_archive_path = os.path.join(target_dir, target_archive_name)
                             mod_index += 1
-                    merger.patching_logger.debug(f'Copying archive: {archive_name} -> {os.path.basename(target_archive_path)}')
+                    patcher.patching_logger.debug(f'Copying archive: {archive_name} -> {os.path.basename(target_archive_path)}')
                     try:
                         shutil.copy2(source_path, target_archive_path)
                     except Exception as e:
-                        merger.patching_logger.error(f'Failed to copy archive {source_path}: {e}')
+                        patcher.patching_logger.error(f'Failed to copy archive {source_path}: {e}')
                         return False
                 else:
-                    merger.patching_logger.debug(f'Extracting archive contents: {os.path.basename(file)}')
-                    if not extract_archive_to_target(merger, source_path, target_dir, chapter_id):
-                        merger.patching_logger.warning(f'Failed to extract archive {source_path}, continuing...')
+                    patcher.patching_logger.debug(f'Extracting archive contents: {os.path.basename(file)}')
+                    if not extract_archive_to_target(patcher, source_path, target_dir, chapter_id):
+                        patcher.patching_logger.warning(f'Failed to extract archive {source_path}, continuing...')
                 continue
             rel_path = os.path.relpath(source_path, mod_source_dir)
             target_path = os.path.join(target_dir, rel_path)
             if os.path.normpath(source_path) in processed_archives:
                 continue
             if not is_modpack:
-                merger._backup_or_mark_file(chapter_id, target_path)
+                patcher._backup_or_mark_file(chapter_id, target_path)
             os.makedirs(os.path.dirname(target_path), exist_ok=True)
             try:
                 shutil.copy2(source_path, target_path)
             except Exception as e:
-                merger.patching_logger.error(f'Failed to copy override file {source_path}: {e}')
+                patcher.patching_logger.error(f'Failed to copy override file {source_path}: {e}')
                 return False
     return True

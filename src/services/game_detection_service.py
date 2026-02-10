@@ -4,16 +4,9 @@ import platform
 import psutil
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
-from config.constants import GAME_PROCESS_NAMES, GAME_EXECUTABLES, DATA_WIN_FILENAME, SLOT_ID_DEMO, SLOT_ID_UNDERTALE, SLOT_ID_UNDERTALE_YELLOW, SLOT_ID_PIZZA_TOWER, SLOT_ID_SUGARY_SPIRE, SLOT_ID_UNIVERSAL
+from config.constants import GAME_PROCESS_NAMES, GAME_EXECUTABLES, DATA_WIN_FILENAME, TAB_ALL
 if TYPE_CHECKING:
-    from models.game_modes import GameMode
-
-
-def _get_game_mode_map():
-    from models.game_modes import DemoGameMode, UndertaleGameMode, UndertaleYellowGameMode, PizzaTowerGameMode, SugarySpireGameMode
-    return {DemoGameMode: ('deltarune', 'DELTARUNEdemo', SLOT_ID_DEMO), UndertaleGameMode: ('undertale', 'UNDERTALE', SLOT_ID_UNDERTALE),
-            UndertaleYellowGameMode: ('undertaleyellow', 'UNDERTALE Yellow', SLOT_ID_UNDERTALE_YELLOW), PizzaTowerGameMode: ('pizzatower', 'Pizza Tower', SLOT_ID_PIZZA_TOWER),
-            SugarySpireGameMode: ('sugaryspire', 'Sugary Spire', SLOT_ID_SUGARY_SPIRE)}
+    from models.game_modes import GameDefinition
 
 
 def is_game_running(pid: Optional[int] = None):
@@ -27,9 +20,11 @@ def is_game_running(pid: Optional[int] = None):
 
 def is_valid_mac_game_path(path: str, skip_data_check: bool, game_type: str) -> bool:
     app_path = Path(path)
-    _MAC_APP_NAMES = {'undertale': ('UNDERTALE.app',), 'undertaleyellow': ('UNDERTALE.app',), 'pizzatower': ('PizzaTower.app',), 'sugaryspire': ('SugarySpire_ExhibitionNight.app',)}
+    from models.game_modes import get_game
+    gm = get_game(game_type)
+    app_names = gm.macos_app_names if gm else ('DELTARUNE.app', 'DELTARUNEdemo.app')
     if not path.endswith('.app'):
-        app_path = next((app_path / name for name in _MAC_APP_NAMES.get(game_type, ('DELTARUNE.app', 'DELTARUNEdemo.app')) if (app_path / name).is_dir()), None)
+        app_path = next((app_path / name for name in app_names if (app_path / name).is_dir()), None)
     if not app_path or not app_path.is_dir():
         return False
     macos_dir, res_dir = app_path / 'Contents' / 'MacOS', app_path / 'Contents' / 'Resources'
@@ -54,9 +49,16 @@ def is_valid_game_path(path: str, skip_data_check: bool = False, game_type: str 
     return any(os.path.isfile(os.path.join(path, exe)) for exe in executables)
 
 
-def get_game_type_string(game_mode: 'GameMode') -> str: return _get_game_mode_map().get(type(game_mode), ('deltarune',))[0]
-def get_game_name_string(game_mode: 'GameMode') -> str: return _get_game_mode_map().get(type(game_mode), (None, 'DELTARUNE'))[1]
-def get_chapter_id_for_game_mode(game_mode: 'GameMode') -> int: return _get_game_mode_map().get(type(game_mode), (None, None, SLOT_ID_UNIVERSAL))[2]
+def get_game_type_string(game_mode: 'GameDefinition') -> str:
+    return getattr(game_mode, 'game_id', 'deltarune')
+
+
+def get_game_name_string(game_mode: 'GameDefinition') -> str:
+    return getattr(game_mode, 'display_name', 'DELTARUNE')
+
+
+def get_chapter_id_for_game_mode(game_mode: 'GameDefinition') -> int:
+    return getattr(game_mode, 'default_tab_id', TAB_ALL)
 
 
 def get_executable_name_for_game(game_type: str, os_type: str = None) -> Optional[str]:

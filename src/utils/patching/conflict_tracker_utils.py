@@ -7,7 +7,7 @@ from services.patching_log_service import get_conflicts_logger, rotate_conflicts
 
 
 class PatchingConflictTracker:
-    """Tracks resource modification history and detected conflicts during merge."""
+    """Tracks resource modification history and detected conflicts during patching."""
 
     def __init__(self, patching_logger):
         self.patching_logger = patching_logger
@@ -17,13 +17,13 @@ class PatchingConflictTracker:
         self._conflicts_log_rotated_this_session: bool = False
 
     def reset(self, patching_logger=None):
-        """Reset state for a new merge session."""
+        """Reset state for a new patching session."""
         if patching_logger:
             self.patching_logger = patching_logger
         self.conflicts_logger = get_conflicts_logger()
         self.detected_conflicts = []
 
-    def track_mod_history(self, resource_name: str, resource_type: str, mod_name: str, action: str = 'merged') -> None:
+    def track_mod_history(self, resource_name: str, resource_type: str, mod_name: str, action: str = 'patched') -> None:
         if mod_name in ('0', 'vanilla', 'unknown_mod'):
             return
         if resource_name not in self.resource_modification_history:
@@ -33,7 +33,7 @@ class PatchingConflictTracker:
             self.resource_modification_history[resource_name].append({'type': resource_type, 'mod': mod_name, 'action': action, 'timestamp': time.time()})
 
     def log_conflict(self, resource_type: str, resource_name: str, prev_mods: List[str], current_mod: str) -> None:
-        prev_filtered = [m for m in prev_mods if m not in ('0', 'vanilla', 'unknown_mod', 'merged_mods', current_mod)]
+        prev_filtered = [m for m in prev_mods if m not in ('0', 'vanilla', 'unknown_mod', 'patched_mods', current_mod)]
         prev_unique = list(dict.fromkeys(prev_filtered))
         if not prev_unique:
             return

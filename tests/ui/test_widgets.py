@@ -30,15 +30,15 @@ class TestModWidgets:
             qapp.processEvents()
             time.sleep(0.05)
 
-    def test_mod_plaque_widget_creation(self, qapp):
-        from ui.widgets.mod.mod_plaque_widget import ModPlaqueWidget
+    def test_mod_card_widget_creation(self, qapp):
+        from ui.widgets.mod.mod_card_widget import ModCardWidget
         from models.mod_models import ModInfo
         from unittest.mock import patch
         from ui.utils.ui_utils import safe_stop_thread
         mod_data = ModInfo(key='test_mod', name='Test Mod', version='1.0.0', author='Test Author', tagline='Test tagline', game_version='', description_url='', downloads=0, game='deltarune', is_verified=False)
         mod_data.is_gamebanana_mod = False
         with patch('ui.widgets.mod.base_mod_widget.load_mod_icon_universal'):
-            widget = ModPlaqueWidget(mod_data, parent=None)
+            widget = ModCardWidget(mod_data, parent=None)
             assert widget is not None
             assert isinstance(widget, QWidget)
         if hasattr(widget, '_compatibility_thread') and widget._compatibility_thread:

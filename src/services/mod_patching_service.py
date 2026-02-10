@@ -23,7 +23,7 @@ from utils.patching.mod_content_utils import (
 )
 from config.patching_config import (
     EXPORT_SCRIPT_CONFIGS, IMPORT_SCRIPT_CONFIGS, SCRIPT_TYPES,
-    ASSET_TRACKING_CONFIGS, MERGE_SUBDIRS,
+    ASSET_TRACKING_CONFIGS, PATCH_SUBDIRS,
 )
 
 
@@ -42,15 +42,15 @@ class ModPatcher(QObject):
         self.mod_service = mod_service
         self.utmt_wrapper = UtmtWrapper(patching_logger=self.patching_logger)
         self.xdelta_path = get_xdelta_path()
-        self.patching_logger.info(f'[MultiModMerger.__init__] xdelta_path initialized: {self.xdelta_path}')
+        self.patching_logger.info(f'[ModPatcher.__init__] xdelta_path initialized: {self.xdelta_path}')
         if self.xdelta_path:
             if platform.system() != 'Windows':
                 import stat
                 if os.path.exists(self.xdelta_path):
                     file_stat = os.stat(self.xdelta_path)
                     is_executable = bool(file_stat.st_mode & stat.S_IEXEC)
-                    self.patching_logger.info(f'[MultiModMerger.__init__] xdelta permissions: {oct(file_stat.st_mode)} (executable: {is_executable})')
-        self.temp_merge_dir = None
+                    self.patching_logger.info(f'[ModPatcher.__init__] xdelta permissions: {oct(file_stat.st_mode)} (executable: {is_executable})')
+        self.temp_patch_dir = None
         self.backup_service: Optional[BackupManager] = None
         self._cancelled = False
         self._active_processes: List[subprocess.Popen] = []
@@ -157,20 +157,20 @@ class ModPatcher(QObject):
         return code_count, sprite_count, shader_count
 
     def _cleanup_temp_dir(self, keep_backups: bool = False) -> None:
-        if not self.temp_merge_dir or not os.path.exists(self.temp_merge_dir):
+        if not self.temp_patch_dir or not os.path.exists(self.temp_patch_dir):
             return
         if not keep_backups:
-            if safe_rmtree(self.temp_merge_dir):
-                self.patching_logger.info(f'Cleaned up temp merge directory: {self.temp_merge_dir}')
+            if safe_rmtree(self.temp_patch_dir):
+                self.patching_logger.info(f'Cleaned up temp patch directory: {self.temp_patch_dir}')
             else:
-                self.patching_logger.warning(f'Failed to cleanup temp merge dir {self.temp_merge_dir}')
-            self.temp_merge_dir = None
+                self.patching_logger.warning(f'Failed to cleanup temp patch dir {self.temp_patch_dir}')
+            self.temp_patch_dir = None
         else:
             try:
-                for item in os.listdir(self.temp_merge_dir):
+                for item in os.listdir(self.temp_patch_dir):
                     if item == 'backups':
                         continue
-                    item_path = os.path.join(self.temp_merge_dir, item)
+                    item_path = os.path.join(self.temp_patch_dir, item)
                     is_dir = os.path.isdir(item_path)
                     ok = safe_rmtree(item_path) if is_dir else safe_remove(item_path)
                     kind = 'directory' if is_dir else 'file'
@@ -178,9 +178,9 @@ class ModPatcher(QObject):
                         self.patching_logger.debug(f'Removed temp {kind}: {item_path}')
                     else:
                         self.patching_logger.warning(f'Failed to remove temp {kind} {item_path}')
-                self.patching_logger.info(f'Cleaned up temp files from merge directory, kept backups: {self.temp_merge_dir}')
+                self.patching_logger.info(f'Cleaned up temp files from patch directory, kept backups: {self.temp_patch_dir}')
             except Exception as e:
-                self.patching_logger.warning(f'Failed to cleanup temp files from merge dir {self.temp_merge_dir}: {e}')
+                self.patching_logger.warning(f'Failed to cleanup temp files from patch dir {self.temp_patch_dir}: {e}')
 
     def _show_patching_warning(self, warning_type: str, title: str, message: str) -> bool:
         self.patching_logger.warning(f'[PATCHING_WARNING] {warning_type}: {message}')
@@ -215,11 +215,11 @@ class ModPatcher(QObject):
                         if name not in target:
                             target[name] = mod_name
 
-    def process_mod_merge(self, chapter_mods: Dict[int, List[Any]], is_modpack: bool, modpack_dir: Optional[str] = None, fast_merge: bool = False, xdelta_modpack: bool = False) -> bool:
+    def process_mod_patch(self, chapter_mods: Dict[int, List[Any]], is_modpack: bool, modpack_dir: Optional[str] = None, fast_patch: bool = False, xdelta_modpack: bool = False) -> bool:
         self.xdelta_modpack = xdelta_modpack
         self.patching_logger = get_patching_logger()
         self.conflict_tracker.reset(self.patching_logger)
-        op = 'modpack creation' if is_modpack else 'multi-mod merge'
+        op = 'modpack creation' if is_modpack else 'multi-mod patching'
         self.patching_logger.info(f'Starting {op} for {len(chapter_mods)} chapter(s)')
         for chapter_id, mods_list in chapter_mods.items():
             mod_names = [getattr(m, 'name', 'Unknown') for m in mods_list]
@@ -235,21 +235,21 @@ class ModPatcher(QObject):
             total_chapters = len([c for c in chapter_mods.values() if c])
             total_mods = sum((len(mods_list) for mods_list in chapter_mods.values()))
             current_progress = 0
-            merge_msg = self._safe_tr('status.preparing_mod_patching', f'Preparing to merge {total_mods} mod(s) for {total_chapters} chapter(s)...', chapters=total_chapters, mods=total_mods)
-            self.progress_update.emit(0, merge_msg)
+            patch_msg = self._safe_tr('status.preparing_mod_patching', f'Preparing to patch {total_mods} mod(s) for {total_chapters} chapter(s)...', chapters=total_chapters, mods=total_mods)
+            self.progress_update.emit(0, patch_msg)
             try:
                 prefix = 'deltahub_modpack_' if is_modpack else 'deltahub_multimod_'
-                self.temp_merge_dir = tempfile.mkdtemp(prefix=prefix)
-                backup_dir = os.path.join(self.temp_merge_dir, 'backups')
+                self.temp_patch_dir = tempfile.mkdtemp(prefix=prefix)
+                backup_dir = os.path.join(self.temp_patch_dir, 'backups')
                 self.backup_service = BackupManager(backup_dir, patching_logger=self.patching_logger)
-                self.patching_logger.info(f'Created temp merge directory: {self.temp_merge_dir}')
+                self.patching_logger.info(f'Created temp patch directory: {self.temp_patch_dir}')
                 current_progress += 5
             except Exception as e:
-                self.patching_logger.error(f'Failed to create temp merge directory: {e}', exc_info=True)
+                self.patching_logger.error(f'Failed to create temp patch directory: {e}', exc_info=True)
                 self.status_update.emit(tr('errors.temp_dir_creation_failed'), 'error')
                 return False
-            merge_msg = self._safe_tr('status.patching_mods', f'Merging mods... {current_progress}%', progress=current_progress)
-            self.progress_update.emit(min(current_progress, 95), merge_msg)
+            patch_msg = self._safe_tr('status.patching_mods', f'Patching mods... {current_progress}%', progress=current_progress)
+            self.progress_update.emit(min(current_progress, 95), patch_msg)
             chapter_index = 0
             for chapter_id, mods_list in sorted(chapter_mods.items()):
                 if not mods_list:
@@ -264,29 +264,29 @@ class ModPatcher(QObject):
                 chapter_index += 1
                 chapter_progress_base = (chapter_index - 1) * (100 // total_chapters) if total_chapters > 0 else 0
                 self.patching_logger.info(f'Processing chapter {chapter_id} with {len(mods_list)} mod(s)')
-                from config.constants import SLOT_ID_CHAPTER_1, SLOT_ID_CHAPTER_2, SLOT_ID_CHAPTER_3, SLOT_ID_CHAPTER_4
-                is_actual_chapter = chapter_id in (SLOT_ID_CHAPTER_1, SLOT_ID_CHAPTER_2, SLOT_ID_CHAPTER_3, SLOT_ID_CHAPTER_4)
+                from config.constants import TAB_CHAPTER_1, TAB_CHAPTER_2, TAB_CHAPTER_3, TAB_CHAPTER_4
+                is_actual_chapter = chapter_id in (TAB_CHAPTER_1, TAB_CHAPTER_2, TAB_CHAPTER_3, TAB_CHAPTER_4)
                 if is_actual_chapter:
-                    chapter_msg = self._safe_tr('status.patching_chapter', f'Merging chapter {chapter_id} ({chapter_index}/{total_chapters})...', chapter=chapter_id, current=chapter_index, total=total_chapters)
+                    chapter_msg = self._safe_tr('status.patching_chapter', f'Patching chapter {chapter_id} ({chapter_index}/{total_chapters})...', chapter=chapter_id, current=chapter_index, total=total_chapters)
                 else:
                     progress_pct = min(chapter_progress_base + 5, 95)
-                    chapter_msg = self._safe_tr('status.patching_mods', f'Merging mods... {progress_pct}%', progress=progress_pct)
+                    chapter_msg = self._safe_tr('status.patching_mods', f'Patching mods... {progress_pct}%', progress=progress_pct)
                 self.progress_update.emit(min(chapter_progress_base + 5, 95), chapter_msg)
                 if is_modpack and modpack_dir:
                     game = self._resolve_mod_game(mods_list[0]) if mods_list else None
                     chapter_folder_name = get_chapter_folder_name(chapter_id, game=game)
                     chapter_modpack_dir = os.path.join(modpack_dir, chapter_folder_name)
-                    if not self._merge_mods_for_chapter_to_dir(chapter_id, mods_list, chapter_modpack_dir, chapter_progress_base, total_chapters, fast_merge=fast_merge, game=game):
-                        self.patching_logger.error(f'Failed to merge mods for chapter {chapter_id} in modpack')
+                    if not self._patch_chapter_to_dir(chapter_id, mods_list, chapter_modpack_dir, chapter_progress_base, total_chapters, fast_patch=fast_patch, game=game):
+                        self.patching_logger.error(f'Failed to patch mods for chapter {chapter_id} in modpack')
                         failed_msg = self._safe_tr('status.patching_failed', 'Modpack creation failed')
                         self.progress_update.emit(0, failed_msg)
                         return False
-                elif not self._merge_mods_for_chapter(chapter_id, mods_list, chapter_progress_base, total_chapters, fast_merge=fast_merge):
+                elif not self._patch_chapter(chapter_id, mods_list, chapter_progress_base, total_chapters, fast_patch=fast_patch):
                     target_dir = self._get_target_dir(chapter_id)
                     if not target_dir:
                         self.patching_logger.warning(f'Target directory not found for chapter {chapter_id}, skipping mods for this chapter. The game may not have this chapter installed.')
                         continue
-                    self.patching_logger.error(f'Failed to merge mods for chapter {chapter_id}, restoring backups')
+                    self.patching_logger.error(f'Failed to patch mods for chapter {chapter_id}, restoring backups')
                     if self.backup_service:
                         self.backup_service.restore_backups(chapter_id)
                     data_modifying_count = 0
@@ -301,18 +301,18 @@ class ModPatcher(QObject):
                         mod_name = getattr(mods_list[0], 'name', 'Unknown')
                         failed_msg = self._safe_tr('errors.mod_patch_failed_single', f'Failed to apply mod {mod_name}', mod_name=mod_name)
                     else:
-                        failed_msg = self._safe_tr('status.patching_failed', 'Mod merge failed')
+                        failed_msg = self._safe_tr('status.patching_failed', 'Mod patching failed')
                     self.status_update.emit(failed_msg, 'error')
                     self.progress_update.emit(0, failed_msg)
                     return False
                 chapter_progress = chapter_index * (100 // total_chapters) if total_chapters > 0 else 100
-                merged_msg = self._safe_tr('status.chapter_patched', f'Chapter {chapter_id} merged successfully', chapter=chapter_id)
-                self.progress_update.emit(min(chapter_progress, 95), merged_msg)
-                self.patching_logger.info(f'Successfully {"processed" if is_modpack else "merged"} mods for chapter {chapter_id}')
+                patched_msg = self._safe_tr('status.chapter_patched', f'Chapter {chapter_id} patched successfully', chapter=chapter_id)
+                self.progress_update.emit(min(chapter_progress, 95), patched_msg)
+                self.patching_logger.info(f'Successfully {"processed" if is_modpack else "patched"} mods for chapter {chapter_id}')
                 if not is_modpack:
                     if self.backup_service and self._session_manifest_path:
                         self.backup_service.save_backups_to_manifest(self._session_manifest_path)
-            completed_msg = self._safe_tr('status.patching_completed', 'Mod merge completed successfully')
+            completed_msg = self._safe_tr('status.patching_completed', 'Mod patching completed successfully')
             self.progress_update.emit(100, completed_msg)
             self.patching_logger.info(f'{op.capitalize()} completed successfully')
             self._cleanup_temp_dir(keep_backups=not is_modpack)
@@ -326,14 +326,14 @@ class ModPatcher(QObject):
                         self.backup_service.restore_backups(chapter_id)
             return False
         finally:
-            if hasattr(self, 'temp_merge_dir') and self.temp_merge_dir and os.path.exists(self.temp_merge_dir):
+            if hasattr(self, 'temp_patch_dir') and self.temp_patch_dir and os.path.exists(self.temp_patch_dir):
                 if is_modpack:
-                    if not safe_rmtree(self.temp_merge_dir):
-                        self.patching_logger.warning(f'Failed to cleanup temp merge dir in finally block: {self.temp_merge_dir}')
-                    self.temp_merge_dir = None
+                    if not safe_rmtree(self.temp_patch_dir):
+                        self.patching_logger.warning(f'Failed to cleanup temp patch dir in finally block: {self.temp_patch_dir}')
+                    self.temp_patch_dir = None
 
-    def _merge_mods_for_chapter(self, chapter_id: int, mods_list: List[Any], progress_base: int = 0, total_chapters: int = 1, fast_merge: bool = False) -> bool:
-        self.patching_logger.debug(f'_merge_mods_for_chapter: chapter_id={chapter_id}, mods_count={len(mods_list)}')
+    def _patch_chapter(self, chapter_id: int, mods_list: List[Any], progress_base: int = 0, total_chapters: int = 1, fast_patch: bool = False) -> bool:
+        self.patching_logger.debug(f'_patch_chapter: chapter_id={chapter_id}, mods_count={len(mods_list)}')
         target_dir = self._get_target_dir(chapter_id)
         if not target_dir:
             error_msg = tr('errors.target_directory_not_found', chapter=chapter_id)
@@ -349,12 +349,12 @@ class ModPatcher(QObject):
             expected_path = os.path.join(target_dir, 'data.win')
             warning_msg = tr('dialogs.patching_warning.data_win_not_found', search_path=expected_path)
             if not self._show_patching_warning('data_win_not_found', tr('dialogs.patching_warning.title'), warning_msg):
-                self.patching_logger.info(f'[PATCHING_WARNING] User cancelled merge due to missing data.win at: {expected_path}')
+                self.patching_logger.info(f'[PATCHING_WARNING] User cancelled patching due to missing data.win at: {expected_path}')
                 return False
             return self._apply_file_overrides_only(chapter_id, mods_list, target_dir)
         if not self.backup_service.backup_file(chapter_id, data_win_path):
             return False
-        return self._perform_chapter_merge(chapter_id, mods_list, data_win_path, target_dir, None, progress_base, total_chapters, is_modpack=False, fast_merge=fast_merge)
+        return self._perform_chapter_patch(chapter_id, mods_list, data_win_path, target_dir, None, progress_base, total_chapters, is_modpack=False, fast_patch=fast_patch)
 
     def _fast_path_backup_if_exists(self, output_data_win_path: str, target_dir: str) -> None:
         """Create a backup of the output file if it exists, for fast-path operations."""
@@ -390,7 +390,7 @@ class ModPatcher(QObject):
                 self.backup_service.restore_backups(chapter_id)
             return False
 
-    def _perform_chapter_merge(self, chapter_id: int, mods_list: List[Any], output_data_win_path: str, target_dir: str, modpack_dir: Optional[str], progress_base: int, total_chapters: int, is_modpack: bool, fast_merge: bool = False) -> bool:
+    def _perform_chapter_patch(self, chapter_id: int, mods_list: List[Any], output_data_win_path: str, target_dir: str, modpack_dir: Optional[str], progress_base: int, total_chapters: int, is_modpack: bool, fast_patch: bool = False) -> bool:
         original_data_win = output_data_win_path
         if not mods_list:
             self.patching_logger.info(f'[OPTIMIZATION] No mods to apply for chapter {chapter_id}, skipping')
@@ -399,16 +399,16 @@ class ModPatcher(QObject):
         xdelta_progress = chapter_progress_range * 0.3
         export_progress = chapter_progress_range * 0.3
         import_progress = chapter_progress_range * 0.4
-        merge_root = self.temp_merge_dir
-        if not merge_root:
-            self.patching_logger.error('Temp merge directory not set')
+        patch_root = self.temp_patch_dir
+        if not patch_root:
+            self.patching_logger.error('Temp patch directory not set')
             return False
-        output_dir = os.path.join(merge_root, 'output')
+        output_dir = os.path.join(patch_root, 'output')
         os.makedirs(output_dir, exist_ok=True)
         cache_running_dir = os.path.join(output_dir, 'DeltahubCache', 'running')
         os.makedirs(cache_running_dir, exist_ok=True)
         chapter_str = str(chapter_id)
-        xdelta_combiner_dir = os.path.join(output_dir, 'DeltahubMergeWorkspace', chapter_str)
+        xdelta_combiner_dir = os.path.join(output_dir, 'DeltahubPatchWorkspace', chapter_str)
         vanilla_dir = os.path.join(xdelta_combiner_dir, '0')
         os.makedirs(vanilla_dir, exist_ok=True)
         original_filename = os.path.basename(original_data_win)
@@ -504,12 +504,12 @@ class ModPatcher(QObject):
                 f.write('0')
             vanilla_scripts = self._get_available_scripts('Export')
             if vanilla_scripts:
-                all_exports_successful = self._run_export_scripts(vanilla_scripts, vanilla_data_win, vanilla_objects_dir, merge_root, label='Vanilla ')
+                all_exports_successful = self._run_export_scripts(vanilla_scripts, vanilla_data_win, vanilla_objects_dir, patch_root, label='Vanilla ')
                 if not all_exports_successful:
                     self.patching_logger.warning('Some vanilla export scripts failed')
                     warning_msg = tr('dialogs.patching_warning.export_failed', operation=tr('dialogs.patching_warning.export'), resource='vanilla')
                     if not self._show_patching_warning('vanilla_export_failed', tr('dialogs.patching_warning.title'), warning_msg):
-                        self.patching_logger.info('[PATCHING_WARNING] User cancelled merge due to vanilla export failure')
+                        self.patching_logger.info('[PATCHING_WARNING] User cancelled patching due to vanilla export failure')
                         return False
                     self.patching_logger.info('[PATCHING_WARNING] User chose to continue despite vanilla export failure')
                 else:
@@ -565,17 +565,17 @@ class ModPatcher(QObject):
             if ready_data_win_files:
                 self.patching_logger.info(f'Found {len(ready_data_win_files)} ready data.win/game.ios file(s) from {mod_name} (mod {mod_number}), merging')
                 patch_progress = mod_progress_start + int(mod_progress_range * 0.5)
-                self.progress_update.emit(min(patch_progress, 95), f'Merging ready data.win from {mod_name}...')
+                self.progress_update.emit(min(patch_progress, 95), f'Applying ready data.win from {mod_name}...')
                 if not self._handle_ready_data_win(mod_data_win, ready_data_win_files, mod_dir):
-                    self.patching_logger.error(f'Failed to merge ready data.win files from {mod_name}')
+                    self.patching_logger.error(f'Failed to apply ready data.win files from {mod_name}')
                     self._fail_restore(is_modpack, chapter_id)
                     return False
-                self.patching_logger.info(f'Successfully merged ready data.win files from {mod_name} (mod {mod_number})')
+                self.patching_logger.info(f'Successfully applied ready data.win files from {mod_name} (mod {mod_number})')
                 target_dir_result = self._get_target_dir(chapter_id)
                 if target_dir_result is not None and mod_source_dir:
                     used_archive_names = set()
                     if not self._apply_file_overrides(mod_source_dir, target_dir_result, used_archive_names, False, chapter_id):
-                        self.patching_logger.warning(f'Failed to apply file overrides from {mod_name} after ready data.win merge')
+                        self.patching_logger.warning(f'Failed to apply file overrides from {mod_name} after ready data.win patching')
                 if not data_patches and (not csx_scripts):
                     mods_already_exported.add(mod_number)
                     self.patching_logger.info(f'Mod {mod_name} (number {mod_number}) has only ready data.win, will skip export scripts')
@@ -585,7 +585,7 @@ class ModPatcher(QObject):
                 patch_progress = mod_progress_start + int(mod_progress_range * 0.3)
                 self.progress_update.emit(min(patch_progress, 95), f'Applying patches from {mod_name}...')
                 if not self._apply_xdelta_patches(mod_data_win, data_patches, progress_callback=lambda p: self.progress_update.emit(min(mod_progress_start + int(mod_progress_range * (0.3 + p * 0.4)), 95), f'Applying patches from {mod_name}...')):
-                    self.patching_logger.error(f'[MERGE] Failed to apply data patches from {mod_name} (mod {mod_number}). This may be due to incompatibility with previously applied mods. The patch may have been created for the original data.win, but the file has already been modified.')
+                    self.patching_logger.error(f'[PATCH] Failed to apply data patches from {mod_name} (mod {mod_number}). This may be due to incompatibility with previously applied mods. The patch may have been created for the original data.win, but the file has already been modified.')
                     self._fail_restore(is_modpack, chapter_id)
                     return False
                 self.patching_logger.info(f'Successfully applied data patches from {mod_name} (mod {mod_number})')
@@ -611,9 +611,9 @@ class ModPatcher(QObject):
             self.progress_update.emit(min(mod_progress_end, 95), f'Completed {mod_name}')
         mods_to_export = [m for i, m in enumerate(mods_to_apply) if i + 1 not in mods_already_exported]
         highest_priority_mod_exported_files = set()
-        if fast_merge and mods_to_export:
+        if fast_patch and mods_to_export:
 
-            if not self._perform_parallel_export(mods_to_export, mods_to_apply, mod_patched_files, mod_types, vanilla_data_win, merge_root, cache_running_dir, chapter_str, chapter_id, progress_base + int(xdelta_progress), export_progress, lambda p, msg: self.progress_update.emit(p, msg)):
+            if not self._perform_parallel_export(mods_to_export, mods_to_apply, mod_patched_files, mod_types, vanilla_data_win, patch_root, cache_running_dir, chapter_str, chapter_id, progress_base + int(xdelta_progress), export_progress, lambda p, msg: self.progress_update.emit(p, msg)):
                 self._fail_restore(is_modpack, chapter_id)
                 return False
             for mod_data in mods_to_export:
@@ -653,7 +653,7 @@ class ModPatcher(QObject):
                     self.patching_logger.info(f'Skipping export for mod {mod_number} ({mod_name}) - already exported')
                     continue
                 self.patching_logger.info(f'Exporting assets from mod {mod_number} ({mod_name}) using strategy: {scripts}, comparison: {comparison_file}')
-                if not self._export_mod_assets_optimized(mod_data_win, mod_number, scripts, comparison_file, vanilla_data_win, merge_root, cache_running_dir, chapter_str):
+                if not self._export_mod_assets_optimized(mod_data_win, mod_number, scripts, comparison_file, vanilla_data_win, patch_root, cache_running_dir, chapter_str):
                     self.patching_logger.warning(f'Failed to export assets from mod {mod_number} ({mod_name})')
                 else:
                     objects_dir = os.path.join(mod_dir, 'Objects')
@@ -710,15 +710,15 @@ class ModPatcher(QObject):
             else:
                 self.patching_logger.debug(f'Objects directory not found for mod {mod_number} ({mod_name}) - may not have exported assets')
         objects_dirs_to_import.sort(key=lambda x: x[1])
-        self.patching_logger.info(f'Merge order (by priority): {[(m[1], m[2]) for m in objects_dirs_to_import]}')
-        merged_objects_dir = os.path.join(xdelta_combiner_dir, 'DeltahubMerged')
-        target_objects_dir = os.path.join(merged_objects_dir, 'Objects')
-        if os.path.exists(merged_objects_dir):
-            self.patching_logger.debug(f'Cleaning up previous merge directory: {merged_objects_dir}')
-            if not safe_rmtree(merged_objects_dir):
-                self.patching_logger.warning(f'Failed to clean up previous merge directory: {merged_objects_dir}')
+        self.patching_logger.info(f'Patch order (by priority): {[(m[1], m[2]) for m in objects_dirs_to_import]}')
+        combined_objects_dir = os.path.join(xdelta_combiner_dir, 'DeltahubCombined')
+        target_objects_dir = os.path.join(combined_objects_dir, 'Objects')
+        if os.path.exists(combined_objects_dir):
+            self.patching_logger.debug(f'Cleaning up previous patch directory: {combined_objects_dir}')
+            if not safe_rmtree(combined_objects_dir):
+                self.patching_logger.warning(f'Failed to clean up previous patch directory: {combined_objects_dir}')
         os.makedirs(target_objects_dir, exist_ok=True)
-        self.patching_logger.info(f'Created clean merge directory: {target_objects_dir}')
+        self.patching_logger.info(f'Created clean patch directory: {target_objects_dir}')
         vanilla_objects_dir = os.path.join(xdelta_combiner_dir, '0', 'Objects')
         vanilla_hashes = {}
         if os.path.exists(vanilla_objects_dir):
@@ -726,7 +726,7 @@ class ModPatcher(QObject):
             vanilla_hashes = resource_filter.compute_resource_hashes(vanilla_objects_dir)
             self.patching_logger.info(f'[FILTER] Computed hashes for {sum((len(v) for v in vanilla_hashes.values()))} vanilla resources')
         filtered_objects_dirs = []
-        if fast_merge and objects_dirs_to_import:
+        if fast_patch and objects_dirs_to_import:
             filter_progress = chapter_progress_range * 0.2
             filter_base = progress_base + int(xdelta_progress + export_progress)
 
@@ -752,34 +752,34 @@ class ModPatcher(QObject):
                     filtered_dir = resource_filter.filter_vanilla_identical_resources(vanilla_hashes, objects_dir, mod_number, mod_name, logger=self.patching_logger)
                     if filtered_dir and os.path.exists(filtered_dir):
                         filtered_objects_dirs.append((mod_number, mod_priority, mod_name, filtered_dir))
-        self.patching_logger.info('[MERGE] Merging filtered mods into clean directory (vanilla-identical resources already filtered out)')
+        self.patching_logger.info('[PATCH] Combining filtered mods into clean directory (vanilla-identical resources already filtered out)')
         for idx, (mod_number, mod_priority, mod_name, objects_dir) in enumerate(filtered_objects_dirs):
             if self._cancelled_restore(is_modpack, chapter_id):
                 return False
-            merge_step = idx / len(filtered_objects_dirs) * (import_progress * 0.5) if filtered_objects_dirs else 0
-            current_progress = progress_base + int(xdelta_progress + export_progress + merge_step)
-            merge_msg = self._safe_tr('status.patching_assets', f'Merging assets from {mod_name} ({idx + 1}/{len(filtered_objects_dirs)})...', mod=mod_name, current=idx + 1, total=len(filtered_objects_dirs))
-            self.progress_update.emit(min(current_progress, 90), merge_msg)
-            self.patching_logger.info(f'Merging Objects from mod {mod_number} ({mod_name}, priority {mod_priority}) into clean merge directory (step {idx + 1}/{len(filtered_objects_dirs)})')
-            self._log_resource_counts(objects_dir, f'[MERGE] Mod {mod_number} ({mod_name}) to merge (after filtering)')
+            combine_step = idx / len(filtered_objects_dirs) * (import_progress * 0.5) if filtered_objects_dirs else 0
+            current_progress = progress_base + int(xdelta_progress + export_progress + combine_step)
+            patch_msg = self._safe_tr('status.patching_assets', f'Combining assets from {mod_name} ({idx + 1}/{len(filtered_objects_dirs)})...', mod=mod_name, current=idx + 1, total=len(filtered_objects_dirs))
+            self.progress_update.emit(min(current_progress, 90), patch_msg)
+            self.patching_logger.info(f'Combining assets from mod {mod_number} ({mod_name}, priority {mod_priority}) into clean patch directory (step {idx + 1}/{len(filtered_objects_dirs)})')
+            self._log_resource_counts(objects_dir, f'[PATCH] Mod {mod_number} ({mod_name}) to combine (after filtering)')
             if os.path.exists(objects_dir) and any(True for _, dirs, files in os.walk(objects_dir) if dirs or files):
-                self._merge_objects_directories(target_objects_dir, objects_dir, mod_name)
+                self._combine_objects_directories(target_objects_dir, objects_dir, mod_name)
             else:
-                self.patching_logger.debug(f'Mod {mod_number} ({mod_name}) has no resources to merge after filtering')
+                self.patching_logger.debug(f'Mod {mod_number} ({mod_name}) has no resources to combine after filtering')
         if os.path.exists(target_objects_dir):
             self._log_resource_counts(target_objects_dir, '[IMPORT] Before import')
             if self._cancelled_restore(is_modpack, chapter_id):
                 return False
             import_progress_step = progress_base + int(xdelta_progress + export_progress + import_progress * 0.5)
-            self.progress_update.emit(min(import_progress_step, 95), 'Importing merged assets into data.win...')
-            self.patching_logger.info('Importing merged Objects directory (contains all exported mods, sorted by priority) into data.win')
+            self.progress_update.emit(min(import_progress_step, 95), 'Importing combined assets into data.win...')
+            self.patching_logger.info('Importing combined Objects directory (contains all exported mods, sorted by priority) into data.win')
             if not self._import_assets_from_objects_dir(base_data_win, target_objects_dir, mods_to_apply, mods_count):
-                self.patching_logger.warning('Failed to import merged assets into data.win')
+                self.patching_logger.warning('Failed to import combined assets into data.win')
                 self._fail_restore(is_modpack, chapter_id)
                 return False
-            self.patching_logger.info('Successfully imported merged Objects into data.win')
+            self.patching_logger.info('Successfully imported combined Objects into data.win')
         else:
-            self.patching_logger.debug('No Objects directory to import after merging mods (only xdelta changes)')
+            self.patching_logger.debug('No Objects directory to import after combining mods (only xdelta changes)')
         if self._cancelled_restore(is_modpack, chapter_id):
             return False
         if is_modpack:
@@ -791,9 +791,9 @@ class ModPatcher(QObject):
             return False
         try:
             shutil.copyfile(base_data_win, final_output_path)
-            self.patching_logger.info(f'Copied merged data.win to {final_output_path}')
+            self.patching_logger.info(f'Copied patched data.win to {final_output_path}')
         except Exception as e:
-            self.patching_logger.error(f'Failed to copy merged data.win: {e}')
+            self.patching_logger.error(f'Failed to copy patched data.win: {e}')
             self._fail_restore(is_modpack, chapter_id)
             return False
         if self._cancelled_restore(is_modpack, chapter_id):
@@ -814,11 +814,11 @@ class ModPatcher(QObject):
                 if mod_source_dir:
                     if not self._apply_file_overrides(mod_source_dir, target_dir, used_archive_names, False, chapter_id):
                         self.patching_logger.warning(f"Failed to apply file overrides from {getattr(mod_data, 'name', 'Unknown')}")
-        self.patching_logger.info('Multi-mod merge completed successfully')
+        self.patching_logger.info('Multi-mod patching completed successfully')
         return True
 
-    def _merge_mods_for_chapter_to_dir(self, chapter_id: int, mods_list: List[Any], modpack_dir: str, progress_base: int = 0, total_chapters: int = 1, fast_merge: bool = False, game: Optional[str] = None) -> bool:
-        self.patching_logger.debug(f'_merge_mods_for_chapter_to_dir: chapter_id={chapter_id}, mods_count={len(mods_list)}, modpack_dir={modpack_dir}, game={game}')
+    def _patch_chapter_to_dir(self, chapter_id: int, mods_list: List[Any], modpack_dir: str, progress_base: int = 0, total_chapters: int = 1, fast_patch: bool = False, game: Optional[str] = None) -> bool:
+        self.patching_logger.debug(f'_patch_chapter_to_dir: chapter_id={chapter_id}, mods_count={len(mods_list)}, modpack_dir={modpack_dir}, game={game}')
         os.makedirs(modpack_dir, exist_ok=True)
         target_dir = self._get_target_dir(chapter_id, game=game)
         if not target_dir:
@@ -828,7 +828,7 @@ class ModPatcher(QObject):
         data_win_path = mod_content.find_data_win(target_dir)
         if not data_win_path:
             return self._apply_file_overrides_only(chapter_id, mods_list, modpack_dir, is_modpack=True)
-        return self._perform_chapter_merge(chapter_id, mods_list, data_win_path, target_dir, modpack_dir, progress_base, total_chapters, is_modpack=True, fast_merge=fast_merge)
+        return self._perform_chapter_patch(chapter_id, mods_list, data_win_path, target_dir, modpack_dir, progress_base, total_chapters, is_modpack=True, fast_patch=fast_patch)
 
     def _apply_file_overrides_only(self, chapter_id: int, mods_list: List[Any], target_dir: str, is_modpack: bool = False) -> bool:
         mods_to_apply = list(reversed(mods_list))
@@ -852,21 +852,21 @@ class ModPatcher(QObject):
             platform_name = self.utmt_wrapper.get_platform()
             warning_msg = tr('dialogs.patching_warning.utmt_not_available', platform=platform_name)
             if not self._show_patching_warning('utmt_not_available', tr('dialogs.patching_warning.title'), warning_msg):
-                self.patching_logger.info('[PATCHING_WARNING] User cancelled merge due to UTMT not available')
+                self.patching_logger.info('[PATCHING_WARNING] User cancelled patching due to UTMT not available')
                 self.status_update.emit(tr('errors.utmtcli_not_available', platform=platform_name), 'error')
                 return False
             self.patching_logger.info('[PATCHING_WARNING] User chose to continue despite UTMT not available')
             return True
         env = {}
-        if self.temp_merge_dir and os.path.exists(os.path.join(self.temp_merge_dir, 'output')):
-            env['DELTAHUB_ROOT'] = self.temp_merge_dir
+        if self.temp_patch_dir and os.path.exists(os.path.join(self.temp_patch_dir, 'output')):
+            env['DELTAHUB_ROOT'] = self.temp_patch_dir
         for script_path in csx_scripts:
             if self._cancelled:
                 return False
             script_name = os.path.basename(script_path)
             try:
                 self.patching_logger.info(f'Executing CSX script: {script_name}')
-                returncode, stdout, stderr = self.utmt_wrapper.execute_script(data_win_path, script_path, output_path=data_win_path, cwd=self.temp_merge_dir or None, env=env)
+                returncode, stdout, stderr = self.utmt_wrapper.execute_script(data_win_path, script_path, output_path=data_win_path, cwd=self.temp_patch_dir or None, env=env)
                 if self._cancelled:
                     return False
                 if returncode != 0:
@@ -874,7 +874,7 @@ class ModPatcher(QObject):
                     self.patching_logger.error(f'CSX script execution failed: {(stderr or "Unknown error")[:500]}')
                     warning_msg = tr('dialogs.patching_warning.csx_script_failed', script_name=script_name, error=error_msg)
                     if not self._show_patching_warning('csx_script_failed', tr('dialogs.patching_warning.title'), warning_msg):
-                        self.patching_logger.info(f'[PATCHING_WARNING] User cancelled merge due to CSX script failure: {script_name}')
+                        self.patching_logger.info(f'[PATCHING_WARNING] User cancelled patching due to CSX script failure: {script_name}')
                         self.status_update.emit(tr('errors.csx_script_failed', script=script_name), 'error')
                         return False
                     self.patching_logger.info(f'[PATCHING_WARNING] User chose to continue despite CSX script failure: {script_name}')
@@ -885,7 +885,7 @@ class ModPatcher(QObject):
                 self.patching_logger.error(f'CSX script error: {e}')
                 warning_msg = tr('dialogs.patching_warning.csx_script_failed', script_name=script_name, error=error_msg)
                 if not self._show_patching_warning('csx_script_exception', tr('dialogs.patching_warning.title'), warning_msg):
-                    self.patching_logger.info(f'[PATCHING_WARNING] User cancelled merge due to CSX script exception: {script_name}')
+                    self.patching_logger.info(f'[PATCHING_WARNING] User cancelled patching due to CSX script exception: {script_name}')
                     return False
                 self.patching_logger.info(f'[PATCHING_WARNING] User chose to continue despite CSX script exception: {script_name}')
         return True
@@ -897,11 +897,11 @@ class ModPatcher(QObject):
             if self._cancelled:
                 return False
             try:
-                self.patching_logger.info(f'Merging ready data.win file: {os.path.basename(ready_file)}')
-                if not self._merge_two_data_win_files(base_data_win, ready_file, mod_dir):
-                    self.patching_logger.error(f'Failed to merge ready data.win file: {ready_file}')
+                self.patching_logger.info(f'Applying ready data.win file: {os.path.basename(ready_file)}')
+                if not self._combine_two_data_win_files(base_data_win, ready_file, mod_dir):
+                    self.patching_logger.error(f'Failed to apply ready data.win file: {ready_file}')
                     return False
-                self.patching_logger.info(f'Successfully merged ready data.win file: {os.path.basename(ready_file)}')
+                self.patching_logger.info(f'Successfully applied ready data.win file: {os.path.basename(ready_file)}')
             except Exception as e:
                 self.patching_logger.error(f'Error merging ready data.win file: {e}')
                 return False
@@ -951,7 +951,7 @@ class ModPatcher(QObject):
                 self.patching_logger.error(f'[IMPORT] {script_name} failed: {stderr[:500]}')
         else:
             self.patching_logger.info(f'Successfully imported {resource_type} from Objects directory')
-        if mod_name_for_tracking not in ('0', 'vanilla', 'unknown_mod', 'merged_mods'):
+        if mod_name_for_tracking not in ('0', 'vanilla', 'unknown_mod', 'patched_mods'):
             for resource_name in resource_names:
                 if resource_name in self.conflict_tracker.resource_modification_history:
                     history = self.conflict_tracker.resource_modification_history[resource_name]
@@ -960,7 +960,7 @@ class ModPatcher(QObject):
                     if len(history) > 1:
                         prev_mods = [h['mod'] for h in history[:-1]]
                         self.conflict_tracker.log_conflict(resource_type, resource_name, prev_mods, mod_name_for_tracking)
-                        prev_filtered = [m for m in prev_mods if m not in ('0', 'vanilla', 'unknown_mod', 'merged_mods', mod_name_for_tracking)]
+                        prev_filtered = [m for m in prev_mods if m not in ('0', 'vanilla', 'unknown_mod', 'patched_mods', mod_name_for_tracking)]
                         prev_unique = list(dict.fromkeys(prev_filtered))
                         if prev_unique:
                             history[-1]['conflicts_with'] = prev_unique
@@ -974,7 +974,7 @@ class ModPatcher(QObject):
             data_win_dir = os.path.dirname(data_win_path)
             expected_objects_dir = os.path.join(data_win_dir, 'Objects')
             if objects_dir != expected_objects_dir:
-                if 'DeltahubMergeWorkspace' in data_win_dir:
+                if 'DeltahubPatchWorkspace' in data_win_dir:
                     self.patching_logger.debug(f'Creating Objects directory link/copy in temporary folder: {expected_objects_dir}')
                     if os.path.exists(expected_objects_dir):
                         if os.path.islink(expected_objects_dir):
@@ -997,7 +997,7 @@ class ModPatcher(QObject):
             if not has_graphics and not any(has.values()):
                 self.patching_logger.debug(f'Objects directory has no assets to import: {objects_dir}')
                 return True
-            mod_name_for_tracking = 'merged_mods'
+            mod_name_for_tracking = 'patched_mods'
             logger = self.patching_logger
             asset_configs = [
                 {'script_name': 'ImportGeneralInfo', 'has_assets': True, 'step_number': '1/15', 'resource_type': 'generalinfo', 'resource_action': 'imported', 'get_resources_func': _no_res, 'resource_subdir': ''},
@@ -1018,7 +1018,7 @@ class ModPatcher(QObject):
             ]
             for asset_config in asset_configs:
                 self._import_asset_type(asset_config, data_win_path, data_win_dir, objects_dir, mod_name_for_tracking)
-            if 'DeltahubMergeWorkspace' in data_win_dir:
+            if 'DeltahubPatchWorkspace' in data_win_dir:
                 packager_dir = os.path.join(data_win_dir, 'Packager')
                 if os.path.exists(packager_dir):
                     try:
@@ -1034,7 +1034,7 @@ class ModPatcher(QObject):
     def get_conflicts_summary(self) -> Dict[str, Any]:
         return self.conflict_tracker.get_conflicts_summary()
 
-    def _merge_subdirectory(self, target_base: str, source_base: str, folder_name: str, resource_type: str, source_mod_name: str, track_history: bool = False) -> None:
+    def _combine_subdirectory(self, target_base: str, source_base: str, folder_name: str, resource_type: str, source_mod_name: str, track_history: bool = False) -> None:
         source_dir = os.path.join(source_base, folder_name)
         target_dir = os.path.join(target_base, folder_name)
         if not os.path.exists(source_dir):
@@ -1067,19 +1067,19 @@ class ModPatcher(QObject):
         else:
             shutil.copytree(source_dir, target_dir, dirs_exist_ok=True)
 
-    def _merge_objects_directories(self, target_objects_dir: str, source_objects_dir: str, source_mod_name: str = 'unknown') -> None:
+    def _combine_objects_directories(self, target_objects_dir: str, source_objects_dir: str, source_mod_name: str = 'unknown') -> None:
         if not os.path.exists(source_objects_dir):
             return
         try:
             if os.path.abspath(source_objects_dir) == os.path.abspath(target_objects_dir):
-                self.patching_logger.debug(f'[MERGE] Skipping merge: source and target are the same directory: {source_objects_dir}')
+                self.patching_logger.debug(f'[PATCH] Skipping combine: source and target are the same directory: {source_objects_dir}')
                 return
         except Exception:
             pass
         os.makedirs(target_objects_dir, exist_ok=True)
-        subdirs_to_merge = MERGE_SUBDIRS
-        for folder_name, resource_type, track_history in subdirs_to_merge:
-            self._merge_subdirectory(target_objects_dir, source_objects_dir, folder_name, resource_type, source_mod_name, track_history)
+        subdirs_to_combine = PATCH_SUBDIRS
+        for folder_name, resource_type, track_history in subdirs_to_combine:
+            self._combine_subdirectory(target_objects_dir, source_objects_dir, folder_name, resource_type, source_mod_name, track_history)
         source_code = os.path.join(source_objects_dir, 'CodeEntries')
         target_code = os.path.join(target_objects_dir, 'CodeEntries')
         if os.path.exists(source_code):
@@ -1099,21 +1099,21 @@ class ModPatcher(QObject):
         if os.path.exists(source_asset_order):
             safe_copy(source_asset_order, target_asset_order)
 
-    def _merge_two_data_win_files(self, base_file: str, other_file: str, mod_dir: Optional[str] = None) -> bool:
-        if not self.temp_merge_dir:
-            self.patching_logger.error('Temp merge directory not set')
+    def _combine_two_data_win_files(self, base_file: str, other_file: str, mod_dir: Optional[str] = None) -> bool:
+        if not self.temp_patch_dir:
+            self.patching_logger.error('Temp patch directory not set')
             return False
         try:
-            merge_temp_dir = os.path.join(self.temp_merge_dir, 'merge_temp')
-            os.makedirs(merge_temp_dir, exist_ok=True)
+            combine_temp_dir = os.path.join(self.temp_patch_dir, 'combine_temp')
+            os.makedirs(combine_temp_dir, exist_ok=True)
             if self._cancelled:
                 return False
             mod_number = None
             chapter_str = None
             if mod_dir:
                 parts = mod_dir.replace('\\', '/').split('/')
-                if 'DeltahubMergeWorkspace' in parts:
-                    idx = parts.index('DeltahubMergeWorkspace')
+                if 'DeltahubPatchWorkspace' in parts:
+                    idx = parts.index('DeltahubPatchWorkspace')
                     if idx + 1 < len(parts):
                         chapter_str = parts[idx + 1]
                     if idx + 2 < len(parts):
@@ -1123,7 +1123,7 @@ class ModPatcher(QObject):
                         except ValueError:
                             pass
             if mod_number is not None and chapter_str is not None:
-                output_dir = os.path.join(self.temp_merge_dir, 'output')
+                output_dir = os.path.join(self.temp_patch_dir, 'output')
                 cache_running_dir = os.path.join(output_dir, 'DeltahubCache', 'running')
                 os.makedirs(cache_running_dir, exist_ok=True)
                 chapter_file = os.path.join(cache_running_dir, 'chapterNumber.txt')
@@ -1137,11 +1137,11 @@ class ModPatcher(QObject):
             if not export_scripts:
                 self.patching_logger.error('No export scripts found! At least one export script is required.')
                 return False
-            export_temp = os.path.join(merge_temp_dir, 'other_export')
+            export_temp = os.path.join(combine_temp_dir, 'other_export')
             os.makedirs(export_temp, exist_ok=True)
             export_objects_dir = os.path.join(export_temp, 'Objects')
             os.makedirs(export_objects_dir, exist_ok=True)
-            all_exports_successful = self._run_export_scripts(export_scripts, other_file, export_objects_dir, self.temp_merge_dir)
+            all_exports_successful = self._run_export_scripts(export_scripts, other_file, export_objects_dir, self.temp_patch_dir)
             if all_exports_successful:
                 if mod_dir:
                     mod_objects_dir = os.path.join(mod_dir, 'Objects')
@@ -1153,22 +1153,22 @@ class ModPatcher(QObject):
                     if os.path.exists(export_objects_dir):
                         if os.path.exists(mod_objects_dir):
                             mod_name_from_dir = os.path.basename(mod_dir) if mod_dir else 'unknown_mod'
-                            self._merge_objects_directories(mod_objects_dir, export_objects_dir, mod_name_from_dir)
+                            self._combine_objects_directories(mod_objects_dir, export_objects_dir, mod_name_from_dir)
                         else:
                             shutil.copytree(export_objects_dir, mod_objects_dir)
                         self.patching_logger.info(f'Copied exported objects from export_temp to {mod_objects_dir} for later import')
                 all_imports_successful = self._run_import_scripts_from_dir(None, base_file, export_objects_dir, export_temp)
                 if all_imports_successful:
-                    self.patching_logger.info('Successfully merged two data.win files using UTMTCLI scripts')
+                    self.patching_logger.info('Successfully combined two data.win files using UTMTCLI scripts')
                 else:
-                    self.patching_logger.warning('Some import scripts failed during ready data.win merge, but continuing')
+                    self.patching_logger.warning('Some import scripts failed during ready data.win patching, but continuing')
                 return True
-            self.patching_logger.error('UTMTCLI merge failed: Cannot merge data.win files')
+            self.patching_logger.error('UTMTCLI combine failed: Cannot combine data.win files')
             self.patching_logger.error('Fallback copy would overwrite base_file and lose previous mod changes')
-            self.patching_logger.error('This mod cannot be merged and will be skipped to prevent data loss')
+            self.patching_logger.error('This mod cannot be combined and will be skipped to prevent data loss')
             return False
         except Exception as e:
-            self.patching_logger.error(f'Failed to merge two data.win files: {e}', exc_info=True)
+            self.patching_logger.error(f'Failed to combine two data.win files: {e}', exc_info=True)
             self.patching_logger.error('Cannot use fallback copy as it would cause irreversible data loss')
             return False
 
@@ -1192,7 +1192,7 @@ class ModPatcher(QObject):
             return (scripts, None)
         return ([], None)
 
-    def _export_mod_assets_optimized(self, mod_data_win: str, mod_number: int, scripts: List[str], comparison_file: Optional[str], vanilla_file: str, merge_root: str, cache_running_dir: str, chapter_str: str) -> bool:
+    def _export_mod_assets_optimized(self, mod_data_win: str, mod_number: int, scripts: List[str], comparison_file: Optional[str], vanilla_file: str, patch_root: str, cache_running_dir: str, chapter_str: str) -> bool:
         try:
             mod_dir = os.path.dirname(mod_data_win)
             objects_dir = os.path.join(mod_dir, 'Objects')
@@ -1207,12 +1207,12 @@ class ModPatcher(QObject):
             if scripts:
                 if self._cancelled:
                     return False
-                all_exports_successful = self._run_export_scripts(scripts, mod_data_win, objects_dir, merge_root, label=f'Mod {mod_number} ')
+                all_exports_successful = self._run_export_scripts(scripts, mod_data_win, objects_dir, patch_root, label=f'Mod {mod_number} ')
                 if not all_exports_successful:
                     self.patching_logger.warning(f'Some export scripts failed for mod {mod_number}')
                     warning_msg = tr('dialogs.patching_warning.export_failed', operation=tr('dialogs.patching_warning.export'), resource=f'mod {mod_number}')
                     if not self._show_patching_warning('export_failed', tr('dialogs.patching_warning.title'), warning_msg):
-                        self.patching_logger.info(f'[PATCHING_WARNING] User cancelled merge due to export failure for mod {mod_number}')
+                        self.patching_logger.info(f'[PATCHING_WARNING] User cancelled patching due to export failure for mod {mod_number}')
                         return False
                     self.patching_logger.info(f'[PATCHING_WARNING] User chose to continue despite export failure for mod {mod_number}')
                     return False
@@ -1228,9 +1228,9 @@ class ModPatcher(QObject):
             self.patching_logger.error(f'Failed to export mod assets: {e}', exc_info=True)
             return False
 
-    def _perform_parallel_export(self, mods_to_export: List[Any], mods_to_apply: List[Any], mod_patched_files: Dict[int, str], mod_types: Dict[int, Dict], vanilla_data_win: str, merge_root: str, cache_running_dir: str, chapter_str: str, chapter_id: int, progress_base: int, export_progress: int, progress_callback) -> bool:
+    def _perform_parallel_export(self, mods_to_export: List[Any], mods_to_apply: List[Any], mod_patched_files: Dict[int, str], mod_types: Dict[int, Dict], vanilla_data_win: str, patch_root: str, cache_running_dir: str, chapter_str: str, chapter_id: int, progress_base: int, export_progress: int, progress_callback) -> bool:
         from utils.patching.parallel_export_utils import perform_parallel_export
-        return perform_parallel_export(self, mods_to_export, mods_to_apply, mod_patched_files, mod_types, vanilla_data_win, merge_root, cache_running_dir, chapter_str, chapter_id, progress_base, export_progress, progress_callback)
+        return perform_parallel_export(self, mods_to_export, mods_to_apply, mod_patched_files, mod_types, vanilla_data_win, patch_root, cache_running_dir, chapter_str, chapter_id, progress_base, export_progress, progress_callback)
 
     def _perform_parallel_filtering(self, vanilla_hashes: Dict[str, Dict[str, str]], mods_dirs_info: List[tuple], progress_base: int, filter_progress: int, progress_callback) -> Dict[int, Optional[str]]:
         from utils.patching.parallel_export_utils import perform_parallel_filtering
@@ -1285,7 +1285,7 @@ class ModPatcher(QObject):
         if self._session_manifest_path and os.path.exists(self._session_manifest_path):
             from utils.patching.session_restore_utils import restore_backups_from_manifest
             return restore_backups_from_manifest(
-                self._session_manifest_path, self.temp_merge_dir,
+                self._session_manifest_path, self.temp_patch_dir,
                 self._cleanup_temp_dir, self.patching_logger)
         self.patching_logger.debug('No backup files found to restore')
         return False

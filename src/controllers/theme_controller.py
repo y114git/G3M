@@ -74,8 +74,8 @@ class ThemeController:
         style_sheet = build_stylesheet(frame_bg_color=frame_bg_color, button_color=button_color, border_color=border_color, button_hover_color=button_hover_color, main_text_color=main_text_color, font_family_main=font_family_main, font_size_main=font_size_main, font_size_small=font_size_small, checkbox_checked_color=checkbox_checked_color, scroll_handle_color=scroll_handle_color)
         app_inst = QApplication.instance()
         (app_inst if isinstance(app_inst, QApplication) else self.app).setStyleSheet(style_sheet)
-        if hasattr(self.app, 'search_display') and hasattr(self.app.search_display, 'update_all_plaques_labels'):
-            self.app.search_display.update_all_plaques_labels()
+        if hasattr(self.app, 'search_display') and hasattr(self.app.search_display, 'update_all_cards_labels'):
+            self.app.search_display.update_all_cards_labels()
         if hasattr(self.app, 'plugin_display') and hasattr(self.app.plugin_display, '_plugin_widgets'):
             for widget in self.app.plugin_display._plugin_widgets.values():
                 if hasattr(widget, '_update_style'):
@@ -181,7 +181,7 @@ class ThemeController:
                         filters.setStyleSheet(f'QFrame#filters {{ background-color: {filter_bg_color}; border: 2px solid {filter_border_color}; padding: 8px; }}')
         mod_list = getattr(self.app, 'mod_list_widget', None)
         installed_mods = getattr(self.app, 'installed_mods_widget', None)
-        self.customization_service.update_mod_plaques_styles(mod_list, installed_mods)
+        self.customization_service.update_mod_cards_styles(mod_list, installed_mods)
         if hasattr(self.app, 'library_tab_builder'):
             self.app.library_tab_builder.update_priority_button_style()
 

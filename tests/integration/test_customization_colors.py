@@ -167,8 +167,8 @@ class TestThemeApplication:
                 app_window.setStyleSheet = Mock()
                 theme_controller.apply_theme()
                 assert app_window.setStyleSheet.called
-                assert customization_service.update_mod_plaques_styles.called or True
+                assert customization_service.update_mod_cards_styles.called or True
                 assert customization_service.update_translucent_backgrounds.called or True
                 assert app_window.setStyleSheet.called
-                assert customization_service.update_mod_plaques_styles.called or True
+                assert customization_service.update_mod_cards_styles.called or True
                 assert customization_service.update_translucent_backgrounds.called or True

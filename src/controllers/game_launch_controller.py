@@ -6,7 +6,6 @@ from PyQt6.QtCore import QObject, pyqtSignal
 from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QVBoxLayout, QFileDialog, QWidget
 from services.localization_service import tr
 from config.constants import UI_COLORS
-from models.game_modes import DemoGameMode, UndertaleYellowGameMode, SugarySpireGameMode
 from workers.install.full_install_worker import FullInstallThread
 from utils.mod_utils import get_mod_key
 
@@ -23,12 +22,12 @@ class GameLaunchController(QObject):
     show_pending_dialogs_requested = pyqtSignal()
     pending_updates_changed = pyqtSignal(list)
 
-    def __init__(self, app_state, feedback_service, mod_service, slot_service, settings_service, game_launcher, customization_service, plugin_service, app_window):
+    def __init__(self, app_state, feedback_service, mod_service, used_mods_service, settings_service, game_launcher, customization_service, plugin_service, app_window):
         super().__init__()
         self.app_state = app_state
         self.feedback_service = feedback_service
         self.mod_service = mod_service
-        self.slot_service = slot_service
+        self.used_mods_service = used_mods_service
         self.settings_service = settings_service
         self.game_launcher = game_launcher
         self.customization_service = customization_service
@@ -37,7 +36,7 @@ class GameLaunchController(QObject):
         self._full_install_checkbox_is_checked = False
 
     def _is_full_install_enabled(self) -> bool:
-        return isinstance(self.app_state.game_mode, (DemoGameMode, UndertaleYellowGameMode, SugarySpireGameMode)) and self._full_install_checkbox_is_checked
+        return self.app_state.game_mode.supports_full_install and self._full_install_checkbox_is_checked
 
     def update_button_state(self):
         if self.app_state.is_installing and (not self.app_state.operation_cancelled) or self.app_state.is_patching:
@@ -48,7 +47,7 @@ class GameLaunchController(QObject):
             self.app_state.action_button_text = tr('status.please_wait')
             self.app_state.action_button_enabled = False
             return
-        action_text = tr('buttons.install') if self._is_full_install_enabled() else tr('ui.update_button') if self.slot_service.check_used_mods_need_updates() else tr('ui.launch_button')
+        action_text = tr('buttons.install') if self._is_full_install_enabled() else tr('ui.update_button') if self.used_mods_service.check_used_mods_need_updates() else tr('ui.launch_button')
         self.app_state.action_button_text = action_text
         self.app_state.action_button_enabled = True
 
@@ -125,7 +124,7 @@ class GameLaunchController(QObject):
         if self._is_full_install_enabled():
             self.perform_full_install()
             return
-        if self.slot_service.check_used_mods_need_updates():
+        if self.used_mods_service.check_used_mods_need_updates():
             self.update_mods_in_use()
             return
         if self.app_state.operation_cancelled:
@@ -163,8 +162,8 @@ class GameLaunchController(QObject):
         if self.app_state.is_installing or (self.app_state.current_task and self.app_state.current_task.isRunning()):
             return
         self.app_state.action_button_enabled = False
-        is_yellow = isinstance(self.app_state.game_mode, UndertaleYellowGameMode)
-        is_spire = isinstance(self.app_state.game_mode, SugarySpireGameMode)
+        is_yellow = self.app_state.game_mode.game_id == 'undertaleyellow'
+        is_spire = self.app_state.game_mode.game_id == 'sugaryspire'
         dlg = QDialog(cast(QWidget, self.app))
         if is_spire:
             dlg.setWindowTitle(tr('dialogs.full_spire_install'))
@@ -212,9 +211,9 @@ class GameLaunchController(QObject):
         self._full_install_checkbox_is_checked = False
         self.app_state.is_full_install = False
         if success:
-            if isinstance(self.app_state.game_mode, DemoGameMode):
+            if self.app_state.game_mode.game_id == 'deltarunedemo':
                 self.app_state.demo_game_path = self.app_state.local_config['demo_game_path'] = target_dir
-            elif isinstance(self.app_state.game_mode, (UndertaleYellowGameMode, SugarySpireGameMode)):
+            elif self.app_state.game_mode.supports_full_install:
                 self.app_state.game_mode.set_game_path(self.app_state.local_config, target_dir)
             else:
                 self.app_state.game_path = self.app_state.local_config['game_path'] = target_dir
@@ -225,7 +224,7 @@ class GameLaunchController(QObject):
         self.update_button_state()
 
     def update_mods_in_use(self):
-        mods_to_update = self.slot_service.collect_mods_needing_update()
+        mods_to_update = self.used_mods_service.collect_mods_needing_update()
         if mods_to_update:
             self.pending_updates_changed.emit(mods_to_update[1:] if len(mods_to_update) > 1 else [])
             self.app_state.operation_cancelled = False
@@ -236,7 +235,7 @@ class GameLaunchController(QObject):
     def refresh_mods_in_use(self):
         if not self.app_state.all_mods:
             return
-        for chapter_id, mod_data in list(self.slot_service.used_mods.items()):
+        for chapter_id, mod_data in list(self.used_mods_service.used_mods.items()):
             if not mod_data:
                 continue
             key = get_mod_key(mod_data)
@@ -248,4 +247,4 @@ class GameLaunchController(QObject):
                 if mod_config:
                     updated_mod = self.mod_service.create_mod_object_from_info(mod_config, self.app_state.all_mods)
             if updated_mod:
-                self.slot_service.used_mods[chapter_id] = updated_mod
+                self.used_mods_service.used_mods[chapter_id] = updated_mod

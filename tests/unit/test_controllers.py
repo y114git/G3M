@@ -24,9 +24,9 @@ class TestLibraryDisplayController:
         from services.localization_service import localization_service
         mod_service = ModManager(app_state, feedback_service)
         settings_service = SettingsManager(app_state=app_state, feedback_service=feedback_service, localization_service=localization_service, parent=None)
-        slot_service = UsedModsManager(app_state, mod_service, feedback_service, settings_service, None)
+        used_mods_service = UsedModsManager(app_state, mod_service, feedback_service, settings_service, None)
         app_window = Mock()
-        controller = LibraryDisplayController(app_state=app_state, feedback_service=feedback_service, mod_service=mod_service, slot_service=slot_service, app_window=app_window)
+        controller = LibraryDisplayController(app_state=app_state, feedback_service=feedback_service, mod_service=mod_service, used_mods_service=used_mods_service, app_window=app_window)
         assert controller is not None
         assert controller.app_state == app_state
 
@@ -54,7 +54,7 @@ class TestSearchDisplayController:
         controller = SearchDisplayController(app_state=app_state, feedback_service=feedback_service, mod_service=mod_service, mod_ops=mod_ops, app_window=app_window)
         assert controller is not None
         assert controller.app_state == app_state
-        assert hasattr(controller, 'plaque_widget_cache')
+        assert hasattr(controller, 'card_widget_cache')
         assert hasattr(controller, '_update_display_debounce')
 
 
@@ -69,10 +69,10 @@ class TestSettingsUiController:
         from services.customization_service import CustomizationManager
         from services.mod_service import ModManager
         mod_service = ModManager(app_state, feedback_service)
-        slot_service = UsedModsManager(app_state, mod_service, feedback_service, settings_service, None)
+        used_mods_service = UsedModsManager(app_state, mod_service, feedback_service, settings_service, None)
         customization_service = CustomizationManager(app_state)
         app_window = Mock()
-        controller = SettingsUiController(app_state=app_state, feedback_service=feedback_service, settings_service=settings_service, slot_service=slot_service, customization_service=customization_service, app_window=app_window)
+        controller = SettingsUiController(app_state=app_state, feedback_service=feedback_service, settings_service=settings_service, used_mods_service=used_mods_service, customization_service=customization_service, app_window=app_window)
         assert controller is not None
         assert controller.app_state == app_state
 
@@ -105,11 +105,11 @@ class TestGameLaunchController:
         from services.plugin_service import PluginManager
         mod_service = ModManager(app_state, feedback_service)
         settings_service = SettingsManager(app_state=app_state, feedback_service=feedback_service, localization_service=localization_service, parent=qapp)
-        slot_service = UsedModsManager(app_state, mod_service, feedback_service, settings_service, None)
+        used_mods_service = UsedModsManager(app_state, mod_service, feedback_service, settings_service, None)
         game_launcher = GameLauncher(app_state, feedback_service, mod_service)
         customization_service = CustomizationManager(app_state)
         plugin_service = PluginManager(app_state, settings_service)
         app_window = Mock()
-        controller = GameLaunchController(app_state=app_state, feedback_service=feedback_service, mod_service=mod_service, slot_service=slot_service, settings_service=settings_service, game_launcher=game_launcher, customization_service=customization_service, plugin_service=plugin_service, app_window=app_window)
+        controller = GameLaunchController(app_state=app_state, feedback_service=feedback_service, mod_service=mod_service, used_mods_service=used_mods_service, settings_service=settings_service, game_launcher=game_launcher, customization_service=customization_service, plugin_service=plugin_service, app_window=app_window)
         assert controller is not None
         assert controller.app_state == app_state

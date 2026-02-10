@@ -79,7 +79,7 @@ def find_chapter_resource_dir(base_dir, chapter_id):
     try:
         if not base_dir:
             return None
-        from config.constants import SLOT_ID_DEMO, SLOT_ID_UNDERTALE, SLOT_ID_UNDERTALE_YELLOW, SLOT_ID_PIZZA_TOWER, SLOT_ID_SUGARY_SPIRE
+        from config.constants import TAB_DEMO, TAB_UNDERTALE, TAB_UNDERTALE_YELLOW, TAB_PIZZA_TOWER, TAB_SUGARY_SPIRE
         target_base = base_dir
         if _SYS == 'Darwin':
             if not target_base.endswith('.app'):
@@ -91,7 +91,7 @@ def find_chapter_resource_dir(base_dir, chapter_id):
             target_base = os.path.join(target_base, 'Contents', 'Resources')
             if not os.path.isdir(target_base):
                 return None
-        if chapter_id in (-1, 0, SLOT_ID_DEMO, SLOT_ID_UNDERTALE, SLOT_ID_UNDERTALE_YELLOW, SLOT_ID_PIZZA_TOWER, SLOT_ID_SUGARY_SPIRE):
+        if chapter_id in (-1, 0, TAB_DEMO, TAB_UNDERTALE, TAB_UNDERTALE_YELLOW, TAB_PIZZA_TOWER, TAB_SUGARY_SPIRE):
             return target_base
         prefix = f'chapter{chapter_id}_'
         return next((os.path.join(target_base, e) for e in os.listdir(target_base) if os.path.isdir(os.path.join(target_base, e)) and e.startswith(prefix)), None)

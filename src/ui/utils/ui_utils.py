@@ -62,7 +62,7 @@ def refresh_ui_after_mod_install(main_window, mod_service=None):
     if hasattr(main_window, 'library_display'):
         main_window.library_display.update_display()
     if hasattr(main_window, 'search_display'):
-        main_window.search_display.update_search_plaques()
+        main_window.search_display.update_search_cards()
         main_window.search_display.update_filtered_mods(preserve_page=True)
     if hasattr(main_window, 'settings_service'):
         main_window.settings_service.theme_changed.emit()

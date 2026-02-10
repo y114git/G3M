@@ -7,11 +7,11 @@ class TestRefreshModList:
         from controllers.refresh_controller import RefreshController
         feedback_service = Mock()
         mod_service = Mock()
-        slot_service = Mock()
+        used_mods_service = Mock()
         game_launch_controller = Mock()
         update_checker = Mock()
         app_window = Mock()
-        refresh_controller = RefreshController(app_state, feedback_service, mod_service, slot_service, game_launch_controller, update_checker, app_window=app_window)
+        refresh_controller = RefreshController(app_state, feedback_service, mod_service, used_mods_service, game_launch_controller, update_checker, app_window=app_window)
         with patch('controllers.refresh_controller.FetchModsThread') as mock_fetch, \
                 patch('controllers.refresh_controller.is_game_running', return_value=False):
             mock_thread = Mock()
@@ -24,12 +24,12 @@ class TestRefreshModList:
         from controllers.refresh_controller import RefreshController
         feedback_service = Mock()
         mod_service = Mock()
-        slot_service = Mock()
+        used_mods_service = Mock()
         game_launch_controller = Mock()
         update_checker = Mock()
         app_window = Mock()
         localization_callback = Mock()
-        refresh_controller = RefreshController(app_state, feedback_service, mod_service, slot_service, game_launch_controller, update_checker, app_window=app_window)
+        refresh_controller = RefreshController(app_state, feedback_service, mod_service, used_mods_service, game_launch_controller, update_checker, app_window=app_window)
         with patch('controllers.refresh_controller.FetchModsThread') as mock_fetch, \
                 patch('controllers.refresh_controller.is_game_running', return_value=False):
             mock_thread = Mock()
@@ -45,12 +45,12 @@ class TestRefreshLanguageCombo:
         from PyQt6.QtWidgets import QComboBox
         feedback_service = Mock()
         mod_service = Mock()
-        slot_service = Mock()
+        used_mods_service = Mock()
         game_launch_controller = Mock()
         update_checker = Mock()
         app_window = Mock()
         language_combo = QComboBox()
-        refresh_controller = RefreshController(app_state, feedback_service, mod_service, slot_service, game_launch_controller, update_checker, app_window=app_window)
+        refresh_controller = RefreshController(app_state, feedback_service, mod_service, used_mods_service, game_launch_controller, update_checker, app_window=app_window)
         with patch('controllers.refresh_controller.localization_service') as mock_loc:
             mock_loc.get_current_language.return_value = 'en'
             mock_loc.get_available_languages.return_value = {'en': 'English', 'ru': 'Russian'}
@@ -67,11 +67,11 @@ class TestRefreshLibraryDisplay:
         from controllers.library_display_controller import LibraryDisplayController
         feedback_service = Mock()
         mod_service = Mock()
-        slot_service = Mock()
+        used_mods_service = Mock()
         app_window = Mock()
         app_window.installed_mods_layout = Mock()
         app_window.installed_mods_container = Mock()
-        controller = LibraryDisplayController(app_state, feedback_service, mod_service, slot_service, app_window)
+        controller = LibraryDisplayController(app_state, feedback_service, mod_service, used_mods_service, app_window)
         assert hasattr(controller, 'refresh_async')
         assert hasattr(controller, 'update_display_from_list')
 
@@ -82,9 +82,9 @@ class TestRefreshMetadataLoading:
         from controllers.refresh_controller import RefreshController
         feedback_service = Mock()
         mod_service = Mock()
-        slot_service = Mock()
+        used_mods_service = Mock()
         game_launch_controller = Mock()
         update_checker = Mock()
         app_window = Mock()
-        refresh_controller = RefreshController(app_state, feedback_service, mod_service, slot_service, game_launch_controller, update_checker, app_window=app_window)
+        refresh_controller = RefreshController(app_state, feedback_service, mod_service, used_mods_service, game_launch_controller, update_checker, app_window=app_window)
         assert hasattr(refresh_controller, 'metadata_thread')

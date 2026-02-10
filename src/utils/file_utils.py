@@ -276,15 +276,15 @@ def remove_archive_extension(filename: str) -> str:
 
 
 def get_chapter_folder_name(chapter_id: int, game: Optional[str] = None, modgame: Optional[str] = None) -> str:
-    from config.constants import SLOT_ID_PIZZA_TOWER, SLOT_ID_UNDERTALE, SLOT_ID_UNDERTALE_YELLOW, SLOT_ID_DEMO, SLOT_ID_SUGARY_SPIRE
+    from config.constants import TAB_PIZZA_TOWER, TAB_UNDERTALE, TAB_UNDERTALE_YELLOW, TAB_DEMO, TAB_SUGARY_SPIRE
     game_value = game or modgame
-    if chapter_id == -1 or chapter_id == SLOT_ID_DEMO:
+    if chapter_id == -1 or chapter_id == TAB_DEMO:
         return 'demo'
-    if chapter_id == SLOT_ID_PIZZA_TOWER:
+    if chapter_id == TAB_PIZZA_TOWER:
         return 'pizzatower' if game_value == 'pizzatower' else f'chapter_{chapter_id}'
-    if chapter_id in (SLOT_ID_UNDERTALE, 0, SLOT_ID_UNDERTALE_YELLOW):
+    if chapter_id in (TAB_UNDERTALE, 0, TAB_UNDERTALE_YELLOW):
         return 'chapter_0'
-    if chapter_id == SLOT_ID_SUGARY_SPIRE:
+    if chapter_id == TAB_SUGARY_SPIRE:
         return 'sugaryspire'
     return f'chapter_{chapter_id}'
 

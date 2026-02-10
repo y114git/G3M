@@ -11,8 +11,8 @@ from typing import Optional
 from PyQt6.QtCore import QObject, pyqtSignal, QTimer, QByteArray
 from PyQt6.QtWidgets import QFileDialog, QWidget
 from services.localization_service import tr, LocalizationManager
-from config.constants import LAUNCHER_VERSION, UI_COLORS, SLOT_ID_UNIVERSAL
-from models.game_modes import DemoGameMode, UndertaleGameMode, PizzaTowerGameMode, UndertaleYellowGameMode
+from config.constants import LAUNCHER_VERSION, UI_COLORS, TAB_ALL
+
 from utils.file_utils import get_file_filter
 
 
@@ -73,7 +73,7 @@ class SettingsManager(QObject):
 
     def migrate_config_if_needed(self):
         self.app_state.local_config['cache_format_version'] = LAUNCHER_VERSION
-        defaults = {'game_path': '', 'last_selected': {}, 'use_custom_executable': False, 'demo_game_path': '', 'launch_via_steam': False, 'use_portproton': False, 'portproton_path': '', 'direct_launch_slot_id': SLOT_ID_UNIVERSAL, 'demo_mode_enabled': False, 'chapter_mode_enabled': False, 'custom_background_path': '', 'custom_executable_path': '', 'background_disabled': False, 'custom_color_background': '', 'custom_color_button': '', 'custom_color_border': '', 'custom_color_button_hover': '', 'custom_color_text': '', 'custom_color_version_text': '', 'beta_updates_enabled': False, 'fast_merging_enabled': False, 'pizzatower_game_path': '', 'pizzatower_custom_executable_path': '', 'skip_patching_warnings': False}
+        defaults = {'game_path': '', 'last_selected': {}, 'use_custom_executable': False, 'demo_game_path': '', 'launch_via_steam': False, 'use_portproton': False, 'portproton_path': '', 'direct_launch_slot_id': TAB_ALL, 'demo_mode_enabled': False, 'chapter_mode_enabled': False, 'custom_background_path': '', 'custom_executable_path': '', 'background_disabled': False, 'custom_color_background': '', 'custom_color_button': '', 'custom_color_border': '', 'custom_color_button_hover': '', 'custom_color_text': '', 'custom_color_version_text': '', 'beta_updates_enabled': False, 'fast_merging_enabled': False, 'pizzatower_game_path': '', 'pizzatower_custom_executable_path': '', 'skip_patching_warnings': False}
         for key, value in defaults.items():
             self.app_state.local_config.setdefault(key, value)
         self.app_state.local_config.setdefault('disable_splash', False)
@@ -111,23 +111,9 @@ class SettingsManager(QObject):
             return filepath
         return None
 
-    _GAME_PATH_DIALOGS = {
-        DemoGameMode: ('dialogs.select_demo_folder', 'dialogs.demo_not_found'),
-        UndertaleGameMode: ('dialogs.select_undertale_folder', 'dialogs.undertale_not_found'),
-    }
-    _MACOS_APP_NAMES = {
-        UndertaleGameMode: ('UNDERTALE.app',),
-        PizzaTowerGameMode: ('PizzaTower.app',),
-    }
-
     def prompt_for_game_path(self, is_initial=False) -> bool:
-        dialogs = {
-            **self._GAME_PATH_DIALOGS,
-            UndertaleYellowGameMode: ('dialogs.select_undertaleyellow_folder', 'dialogs.undertaleyellow_not_found'),
-            PizzaTowerGameMode: ('dialogs.select_pizzatower_folder', 'dialogs.pizzatower_not_found'),
-        }
-        title_key, msg_key = dialogs.get(type(self.app_state.game_mode), ('dialogs.select_deltarune_folder', 'dialogs.deltarune_not_found'))
-        title, message = tr(title_key), tr(msg_key)
+        game = self.app_state.game_mode
+        title, message = tr(game.path_select_dialog_key), tr(game.path_not_found_dialog_key)
         if is_initial:
             self.feedback_service.show_message('info', 'dialogs.path_not_found', tr('dialogs.game_path_instruction', message=message))
         if platform.system() == 'Darwin':
@@ -139,8 +125,7 @@ class SettingsManager(QObject):
         if path:
             corrected_path = path
             if platform.system() == 'Darwin' and not path.endswith('.app'):
-                macos_apps = {**self._MACOS_APP_NAMES, UndertaleYellowGameMode: ('UNDERTALE.app',)}
-                app_names = macos_apps.get(type(self.app_state.game_mode), ('DELTARUNE.app', 'DELTARUNEdemo.app'))
+                app_names = game.macos_app_names
                 for app_name in app_names:
                     candidate = os.path.join(path, app_name)
                     if os.path.isdir(candidate):
@@ -384,7 +369,7 @@ class SettingsManager(QObject):
         self.feedback_service.show_message('info', 'dialogs.success', tr('status.settings_reset_success'))
 
     def disable_direct_launch(self):
-        self.app_state.local_config['direct_launch_slot_id'] = SLOT_ID_UNIVERSAL
+        self.app_state.local_config['direct_launch_slot_id'] = TAB_ALL
         self.write_local_config()
         self.settings_changed.emit()
 

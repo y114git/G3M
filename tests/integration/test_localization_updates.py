@@ -52,7 +52,7 @@ class TestWidgetRelocalizeMethods:
         ui_widgets_dir = Path('src/ui/widgets')
         if not ui_widgets_dir.exists():
             pytest.skip('src/ui/widgets directory not found')
-        widgets_to_check = ['mod_plaque_widget.py', 'installed_mod_widget.py', 'plugin_widget.py']
+        widgets_to_check = ['mod_card_widget.py', 'installed_mod_widget.py', 'plugin_widget.py']
         issues = []
         for widget_file in widgets_to_check:
             widget_path = ui_widgets_dir / widget_file
@@ -78,13 +78,13 @@ class TestLocalizationRefresh:
         from PyQt6.QtWidgets import QComboBox
         feedback_service = Mock()
         mod_service = Mock()
-        slot_service = Mock()
+        used_mods_service = Mock()
         game_launch_controller = Mock()
         update_checker = Mock()
         app_window = Mock()
         language_combo = QComboBox()
         language_combo.addItem('English', 'en')
-        refresh_controller = RefreshController(app_state, feedback_service, mod_service, slot_service, game_launch_controller, update_checker, app_window=app_window)
+        refresh_controller = RefreshController(app_state, feedback_service, mod_service, used_mods_service, game_launch_controller, update_checker, app_window=app_window)
         with patch('controllers.refresh_controller.localization_service') as mock_loc:
             mock_loc.get_current_language.return_value = 'en'
             mock_loc.get_available_languages.return_value = {'en': 'English', 'ru': 'Russian', 'es': 'Spanish'}

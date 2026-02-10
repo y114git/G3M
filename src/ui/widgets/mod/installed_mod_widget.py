@@ -18,7 +18,7 @@ class InstalledModWidget(BaseModWidget):
         self.hide()
         self.use_button = None
         self.added_date = installed_date
-        self.is_in_slot = False
+        self.is_active = False
         self.status = 'ready'
         self.frame_selector = 'installedMod'
         self.setObjectName('installedMod')
@@ -83,14 +83,14 @@ class InstalledModWidget(BaseModWidget):
         actions_layout.setSpacing(5)
         actions_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.use_button = QPushButton(tr('ui.use_button'), self.actions_widget)
-        self.use_button.setObjectName('plaqueButtonInstall')
+        self.use_button.setObjectName('cardButtonInstall')
         self.use_button.clicked.connect(lambda: self.use_requested.emit(self.mod_data))
         actions_layout.addWidget(self.use_button)
         self.remove_button = QPushButton(tr('buttons.delete'), self.actions_widget)
-        self.remove_button.setObjectName('plaqueButton')
+        self.remove_button.setObjectName('cardButton')
         config = self._resolve_theme_config()
         text_color = get_theme_color(config, 'text', 'white') if config else 'white'
-        self.remove_button.setStyleSheet(f'\n            QPushButton#plaqueButton {{\n                background-color: #F44336;\n                color: {text_color};\n            }}\n            QPushButton#plaqueButton:hover {{\n                background-color: #da190b;\n            }}\n        ')
+        self.remove_button.setStyleSheet(f'\n            QPushButton#cardButton {{\n                background-color: #F44336;\n                color: {text_color};\n            }}\n            QPushButton#cardButton:hover {{\n                background-color: #da190b;\n            }}\n        ')
         self.remove_button.clicked.connect(lambda: self.remove_requested.emit(self.mod_data))
         actions_layout.addWidget(self.remove_button)
         self.actions_widget.setVisible(False)
@@ -177,21 +177,21 @@ class InstalledModWidget(BaseModWidget):
     def _update_button_from_status(self):
         if not self.use_button:
             return
-        if self.status == 'in_slot':
+        if self.status == 'active':
             self.use_button.setText(tr('ui.remove_button'))
-            self.use_button.setStyleSheet('\n                QPushButton#plaqueButtonInstall {\n                    background-color: #FF9800;\n                    font-weight: bold;\n                }\n                QPushButton#plaqueButtonInstall:hover {\n                    background-color: #F57C00;\n                }\n            ')
+            self.use_button.setStyleSheet('\n                QPushButton#cardButtonInstall {\n                    background-color: #FF9800;\n                    font-weight: bold;\n                }\n                QPushButton#cardButtonInstall:hover {\n                    background-color: #F57C00;\n                }\n            ')
         else:
             self.use_button.setText(tr('ui.use_button'))
-            self.use_button.setStyleSheet('\n                QPushButton#plaqueButtonInstall {\n                    background-color: #4CAF50;\n                    font-weight: bold;\n                }\n                QPushButton#plaqueButtonInstall:hover {\n                    background-color: #5cb85c;\n                }\n            ')
+            self.use_button.setStyleSheet('\n                QPushButton#cardButtonInstall {\n                    background-color: #4CAF50;\n                    font-weight: bold;\n                }\n                QPushButton#cardButtonInstall:hover {\n                    background-color: #5cb85c;\n                }\n            ')
 
     def _sync_status(self):
-        self.status = 'in_slot' if self.is_in_slot else 'ready'
+        self.status = 'active' if self.is_active else 'ready'
         self._update_button_from_status()
         self._update_indicator()
         self._update_actions_visibility()
 
-    def set_in_slot(self, in_slot):
-        self.is_in_slot = in_slot
+    def set_active(self, active):
+        self.is_active = active
         self._sync_status()
 
     def _update_actions_visibility(self):
@@ -200,7 +200,7 @@ class InstalledModWidget(BaseModWidget):
         if self.is_selected:
             self.actions_widget.setVisible(True)
             self.checkmark_label.setVisible(False)
-        elif self.is_in_slot:
+        elif self.is_active:
             self.actions_widget.setVisible(False)
             self.checkmark_label.setVisible(True)
         else:

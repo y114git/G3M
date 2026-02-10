@@ -150,7 +150,7 @@ class ModOperationsController:
             self.app_state.current_install_is_gamebanana = True
             self.app_state.current_install_progress = 0
             self._last_gamebanana_progress = -1
-            self._safe_execute(lambda: self.app.search_display.update_search_plaques(), 'Failed to refresh plaques before download')
+            self._safe_execute(lambda: self.app.search_display.update_search_cards(), 'Failed to refresh cards before download')
             install_thread = InstallGameBananaModThread(self.app, mod, selected_file=selected_file)
             self._start_install_thread(install_thread, op_id)
         except Exception as e:
@@ -261,7 +261,7 @@ class ModOperationsController:
     def _notify_gamebanana_status_refresh(self):
         try:
             if hasattr(self.app, 'search_display'):
-                QTimer.singleShot(0, self.app.search_display.update_search_plaques)
+                QTimer.singleShot(0, self.app.search_display.update_search_cards)
         except Exception:
             pass
 
@@ -395,7 +395,7 @@ class ModOperationsController:
         try:
             self.mod_service.load_local_mods()
             self.mod_service.mod_list_updated.emit()
-            self._safe_execute(lambda: self.app.search_display.update_search_plaques() if hasattr(self.app, 'search_display') else None, 'Failed to update search plaques')
+            self._safe_execute(lambda: self.app.search_display.update_search_cards() if hasattr(self.app, 'search_display') else None, 'Failed to update search cards')
             if installed_mod_info and hasattr(self.app_state, 'all_mods'):
                 key = get_mod_key(installed_mod_info)
                 if key:
@@ -430,12 +430,12 @@ class ModOperationsController:
             except Exception as e:
                 logging.warning(f'ModOperationsController: Failed to check cache: {e}')
 
-        def update_plaques_with_retry():
+        def update_cards_with_retry():
             try:
                 self.mod_service.invalidate_mods_cache()
-                self.app.search_display.update_search_plaques()
+                self.app.search_display.update_search_cards()
             except Exception as e:
-                logging.warning(f'ModOperationsController: Failed to update search plaques: {e}', exc_info=True)
+                logging.warning(f'ModOperationsController: Failed to update search cards: {e}', exc_info=True)
 
         def update_library_with_retry():
             try:
@@ -452,9 +452,9 @@ class ModOperationsController:
             self.refresh_specific_mod_widget_after_update(installed_mod_info)
         self._update_debounce_short.call(check_cache_and_update)
         self._update_debounce_short.call(update_filtered_mods)
-        self._update_debounce_short.call(update_plaques_with_retry)
+        self._update_debounce_short.call(update_cards_with_retry)
         self._update_debounce_short.call(update_library_with_retry)
-        self._update_debounce_long.call(update_plaques_with_retry)
+        self._update_debounce_long.call(update_cards_with_retry)
         self._update_debounce_long.call(update_library_with_retry)
         if message:
             self.feedback_service.update_status(message, UI_COLORS['status_success'])
@@ -520,7 +520,7 @@ class ModOperationsController:
     def uninstall_mod(self, mod):
         try:
             self.mod_service.delete_mod_files(mod)
-            self.app.search_display.update_search_plaques()
+            self.app.search_display.update_search_cards()
             if hasattr(self.app, 'library_display'):
                 self.app.library_display.update_display()
             if hasattr(self.app, 'search_display'):
@@ -570,7 +570,7 @@ class ModOperationsController:
                         self.mod_service.load_local_mods(_skip_conversion=True)
                         self.mod_service.mod_list_updated.emit()
                         if hasattr(self.app, 'search_display'):
-                            self.app.search_display.update_search_plaques()
+                            self.app.search_display.update_search_cards()
                         QMessageBox.information(self.app, tr('dialogs.success'), tr('dialogs.mod_created_successfully'))
                 except Exception as e:
                     logging.error(f'Failed to open manual install dialog: {e}', exc_info=True)

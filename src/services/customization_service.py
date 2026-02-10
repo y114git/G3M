@@ -171,10 +171,10 @@ class CustomizationManager(QObject):
         if apply_theme_callback:
             apply_theme_callback()
 
-    def update_mod_plaques_styles(self, mod_list_widget=None, installed_mods_widget=None):
-        from ui.widgets.mod.mod_plaque_widget import ModPlaqueWidget
+    def update_mod_cards_styles(self, mod_list_widget=None, installed_mods_widget=None):
+        from ui.widgets.mod.mod_card_widget import ModCardWidget
         from ui.widgets.mod.installed_mod_widget import InstalledModWidget
-        for container, wtype in [(mod_list_widget, ModPlaqueWidget), (installed_mods_widget, InstalledModWidget)]:
+        for container, wtype in [(mod_list_widget, ModCardWidget), (installed_mods_widget, InstalledModWidget)]:
             self._update_layout_widget_styles(container, wtype)
 
     def _update_layout_widget_styles(self, container, widget_type) -> None:

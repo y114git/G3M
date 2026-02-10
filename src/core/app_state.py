@@ -4,7 +4,7 @@ import threading
 import logging
 from PyQt6.QtCore import QObject, QThread, pyqtSignal
 from models.mod_models import ModInfo
-from models.game_modes import GameMode, FullGameMode
+from models.game_modes import GameDefinition, DeltaruneGame
 from utils.mod_utils import get_mod_key
 
 
@@ -58,11 +58,9 @@ class AppState(QObject):
         self.update_in_progress: bool = False
         self.initialization_completed: bool = False
         self.is_shown_to_user: bool = False
-        self._game_mode: GameMode = FullGameMode()
-        self.slots: Dict[int, Any] = {}
+        self._game_mode: GameDefinition = DeltaruneGame()
         self.global_settings: Dict[str, Any] = {}
         self.plugins: List[Dict[str, Any]] = []
-        self.translations_by_chapter: Dict[int, List] = {i: [] for i in range(5)}
         self.is_full_install: bool = False
         self.game_is_running: bool = False
         self.pending_dialogs: List[Any] = []
@@ -150,11 +148,11 @@ class AppState(QObject):
         self._is_patching = value
 
     @property
-    def game_mode(self) -> GameMode:
+    def game_mode(self) -> GameDefinition:
         return self._game_mode
 
     @game_mode.setter
-    def game_mode(self, mode: GameMode) -> None:
+    def game_mode(self, mode: GameDefinition) -> None:
         self._game_mode = mode
 
     @property

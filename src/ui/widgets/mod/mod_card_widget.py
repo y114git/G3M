@@ -36,7 +36,7 @@ class CompatibilityCheckThread(QThread):
             logging.warning(f'CompatibilityCheckThread: Error checking compatibility: {e}', exc_info=True)
 
 
-class ModPlaqueWidget(BaseModWidget):
+class ModCardWidget(BaseModWidget):
     install_requested = pyqtSignal(object)
     uninstall_requested = pyqtSignal(object)
     details_requested = pyqtSignal(object)
@@ -57,8 +57,8 @@ class ModPlaqueWidget(BaseModWidget):
                 current = current.parent() if hasattr(current, 'parent') else None
         self.is_installed = False
         self._last_icon_url = getattr(mod_data, 'icon_url', None) or getattr(mod_data, 'icon_path', None)
-        self.frame_selector = 'modPlaque'
-        self.setObjectName('modPlaque')
+        self.frame_selector = 'modCard'
+        self.setObjectName('modCard')
         self.setFrameShape(QFrame.Shape.StyledPanel)
         self.setFixedHeight(120)
         self.gb_status_label = None
@@ -230,10 +230,10 @@ class ModPlaqueWidget(BaseModWidget):
         actions_layout.setSpacing(5)
         actions_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.details_button = QPushButton(tr('ui.details_button'), self.actions_widget)
-        self.details_button.setObjectName('plaqueButton')
+        self.details_button.setObjectName('cardButton')
         self.details_button.clicked.connect(lambda: self.details_requested.emit(self.mod_data))
         self.install_button = QPushButton(tr('buttons.install'), self.actions_widget)
-        self.install_button.setObjectName('plaqueButtonInstall')
+        self.install_button.setObjectName('cardButtonInstall')
         self.install_button.clicked.connect(self._on_install_button_clicked)
         actions_layout.addWidget(self.details_button)
         actions_layout.addWidget(self.install_button)
@@ -250,13 +250,13 @@ class ModPlaqueWidget(BaseModWidget):
             try:
                 self.is_installed = self.parent_app.mod_service.is_mod_installed(key)
             except Exception as e:
-                logging.error(f'ModPlaqueWidget: Error checking installation by key {key}: {e}', exc_info=True)
+                logging.error(f'ModCardWidget: Error checking installation by key {key}: {e}', exc_info=True)
                 self.is_installed = False
             if not self.is_installed and key and key.startswith('gb_'):
                 try:
                     self.is_installed = key in self.parent_app.mod_service._get_mods_cache()
                 except Exception as e:
-                    logging.warning(f'ModPlaqueWidget: Error checking cache for key {key}: {e}', exc_info=True)
+                    logging.warning(f'ModCardWidget: Error checking cache for key {key}: {e}', exc_info=True)
         else:
             self.is_installed = False
         self._update_install_button()
@@ -297,7 +297,7 @@ class ModPlaqueWidget(BaseModWidget):
             self._compatibility_thread.finished.connect(lambda: setattr(self, '_compatibility_thread', None))
             self._compatibility_thread.start()
         except Exception as e:
-            logging.warning(f'ModPlaqueWidget: Failed to start compatibility check: {e}', exc_info=True)
+            logging.warning(f'ModCardWidget: Failed to start compatibility check: {e}', exc_info=True)
 
     _COMPAT_ATTR_MAP = {
         'gamebanana_supported_files': ('supported_files', []),
@@ -318,23 +318,23 @@ class ModPlaqueWidget(BaseModWidget):
             self._apply_gamebanana_install_styles()
             self._update_gamebanana_status_label()
         except Exception as e:
-            logging.warning(f'ModPlaqueWidget: Error updating compatibility info: {e}', exc_info=True)
+            logging.warning(f'ModCardWidget: Error updating compatibility info: {e}', exc_info=True)
 
     def _apply_uninstall_button_style(self):
         if not hasattr(self, 'install_button'):
             return
         text_color = self._get_theme_text_color('white')
-        self.install_button.setStyleSheet(f'\n            QPushButton#plaqueButtonUninstall {{\n                background-color: #F44336;\n                color: {text_color};\n                font-weight: bold;\n                min-width: 110px;\n                max-width: 110px;\n                min-height: 35px;\n                max-height: 35px;\n                font-size: 15px;\n                padding: 1px;\n            }}\n            QPushButton#plaqueButtonUninstall:hover {{\n                background-color: #d32f2f;\n            }}\n        ')
+        self.install_button.setStyleSheet(f'\n            QPushButton#cardButtonUninstall {{\n                background-color: #F44336;\n                color: {text_color};\n                font-weight: bold;\n                min-width: 110px;\n                max-width: 110px;\n                min-height: 35px;\n                max-height: 35px;\n                font-size: 15px;\n                padding: 1px;\n            }}\n            QPushButton#cardButtonUninstall:hover {{\n                background-color: #d32f2f;\n            }}\n        ')
 
     def _update_install_button(self):
         if self.is_installed:
             self.install_button.setText(tr('buttons.delete'))
-            self.install_button.setObjectName('plaqueButtonUninstall')
+            self.install_button.setObjectName('cardButtonUninstall')
             self._apply_uninstall_button_style()
             self.install_button.setToolTip('')
         else:
             self.install_button.setText(tr('buttons.install'))
-            self.install_button.setObjectName('plaqueButtonInstall')
+            self.install_button.setObjectName('cardButtonInstall')
             self._apply_gamebanana_install_styles()
         self.update_install_button_state()
 
@@ -356,7 +356,7 @@ class ModPlaqueWidget(BaseModWidget):
         checked = bool(getattr(self.mod_data, 'gamebanana_compatibility_checked', False))
         if checked and (not compatible):
             text_color = self._get_theme_text_color('white')
-            style = f'\n                QPushButton#plaqueButtonInstall {{\n                    background-color: #FFC107;\n                    color: {text_color};\n                }}\n                QPushButton#plaqueButtonInstall:hover {{\n                    background-color: #FFB300;\n                }}\n            '
+            style = f'\n                QPushButton#cardButtonInstall {{\n                    background-color: #FFC107;\n                    color: {text_color};\n                }}\n                QPushButton#cardButtonInstall:hover {{\n                    background-color: #FFB300;\n                }}\n            '
             self.install_button.setStyleSheet(style)
             self.install_button.setToolTip(tr('ui.gamebanana_status_manual_tooltip'))
         else:
@@ -453,7 +453,7 @@ class ModPlaqueWidget(BaseModWidget):
             if not self.is_installed:
                 self._apply_gamebanana_install_styles()
         except Exception as e:
-            logging.warning(f'ModPlaqueWidget: Error updating mod data: {e}', exc_info=True)
+            logging.warning(f'ModCardWidget: Error updating mod data: {e}', exc_info=True)
 
     def set_selected(self, selected):
         self.is_selected = selected
@@ -462,7 +462,7 @@ class ModPlaqueWidget(BaseModWidget):
         self._update_style()
         if hasattr(self, 'install_button') and self.is_installed:
             button_obj_name = self.install_button.objectName()
-            if button_obj_name == 'plaqueButtonUninstall':
+            if button_obj_name == 'cardButtonUninstall':
                 self._apply_uninstall_button_style()
 
     def update_labels_text(self):

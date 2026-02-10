@@ -20,14 +20,14 @@ class CreateModpackThread(QThread):
     status_update = pyqtSignal(str, str)
     finished = pyqtSignal(bool)
 
-    def __init__(self, chapter_mods: Dict[int, List[Any]], modpack_name: str, modpack_dir: str, app_state, mod_service, parent=None, fast_merge: bool = False, xdelta_modpack: bool = False):
+    def __init__(self, chapter_mods: Dict[int, List[Any]], modpack_name: str, modpack_dir: str, app_state, mod_service, parent=None, fast_patch: bool = False, xdelta_modpack: bool = False):
         super().__init__(parent)
         self.chapter_mods = chapter_mods
         self.modpack_name = modpack_name
         self.modpack_dir = modpack_dir
         self.app_state = app_state
         self.mod_service = mod_service
-        self.fast_merge = fast_merge
+        self.fast_patch = fast_patch
         self.xdelta_modpack = xdelta_modpack
         self.patcher = None
         self._cancelled = False
@@ -61,7 +61,7 @@ class CreateModpackThread(QThread):
             self.patcher._cancelled = False
             if self.isInterruptionRequested() or self._cancelled:
                 return
-            success = self.patcher.process_mod_merge(self.chapter_mods, is_modpack=True, modpack_dir=self.modpack_dir, fast_merge=self.fast_merge, xdelta_modpack=self.xdelta_modpack)
+            success = self.patcher.process_mod_patch(self.chapter_mods, is_modpack=True, modpack_dir=self.modpack_dir, fast_patch=self.fast_patch, xdelta_modpack=self.xdelta_modpack)
             if self.isInterruptionRequested() or self._cancelled:
                 self.patcher._cancelled = True
                 success = False
@@ -174,24 +174,24 @@ class CreateModpackThread(QThread):
 
     def _find_original_data_file(self, chapter_id: int, game: str, data_filename: str) -> str:
         try:
-            from models.game_modes import DemoGameMode, UndertaleGameMode, UndertaleYellowGameMode, PizzaTowerGameMode, FullGameMode
+            from models.game_modes import get_game, DeltaruneGame
             from utils.path_utils import find_chapter_resource_dir
             game_mode = None
             base_game_path = None
-            if game == 'deltarune_demo' or isinstance(self.app_state.game_mode, DemoGameMode):
-                game_mode = DemoGameMode()
+            if game == 'deltarune_demo' or self.app_state.game_mode.game_id == 'deltarunedemo':
+                game_mode = get_game('deltarunedemo')
                 base_game_path = self.app_state.demo_game_path
-            elif game == 'undertale' or isinstance(self.app_state.game_mode, UndertaleGameMode):
-                game_mode = UndertaleGameMode()
+            elif game == 'undertale' or self.app_state.game_mode.game_id == 'undertale':
+                game_mode = get_game('undertale')
                 base_game_path = game_mode.get_game_path(self.app_state.local_config)
-            elif game == 'undertaleyellow' or isinstance(self.app_state.game_mode, UndertaleYellowGameMode):
-                game_mode = UndertaleYellowGameMode()
+            elif game == 'undertaleyellow' or self.app_state.game_mode.game_id == 'undertaleyellow':
+                game_mode = get_game('undertaleyellow')
                 base_game_path = game_mode.get_game_path(self.app_state.local_config)
-            elif game == 'pizzatower' or isinstance(self.app_state.game_mode, PizzaTowerGameMode):
-                game_mode = PizzaTowerGameMode()
+            elif game == 'pizzatower' or self.app_state.game_mode.game_id == 'pizzatower':
+                game_mode = get_game('pizzatower')
                 base_game_path = game_mode.get_game_path(self.app_state.local_config)
             else:
-                game_mode = FullGameMode()
+                game_mode = get_game('deltarune') or DeltaruneGame()
                 base_game_path = self.app_state.game_path
             if not base_game_path or not os.path.exists(base_game_path):
                 logging.warning(f'Base game path not found: {base_game_path}')

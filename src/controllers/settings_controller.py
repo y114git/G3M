@@ -2,17 +2,16 @@
 from PyQt6.QtCore import QTimer
 from PyQt6.QtWidgets import QWidget
 from services.localization_service import tr
-from config.constants import UI_COLORS, SLOT_ID_UNIVERSAL
-from models.game_modes import DemoGameMode, UndertaleGameMode, UndertaleYellowGameMode, FullGameMode, PizzaTowerGameMode, SugarySpireGameMode
+from config.constants import UI_COLORS, TAB_ALL
+from models.game_modes import DeltaruneGame, get_game
 
 
 class SettingsUiController:
     """Manages settings UI display and interaction."""
-    _GAME_TYPE_MODES = {'deltarunedemo': DemoGameMode, 'undertale': UndertaleGameMode, 'undertaleyellow': UndertaleYellowGameMode, 'pizzatower': PizzaTowerGameMode, 'sugaryspire': SugarySpireGameMode}
 
-    def __init__(self, app_state, feedback_service, settings_service, slot_service, customization_service, app_window):
+    def __init__(self, app_state, feedback_service, settings_service, used_mods_service, customization_service, app_window):
         self.app_state, self.feedback_service, self.settings_service = app_state, feedback_service, settings_service
-        self.slot_service, self.customization_service, self.app = slot_service, customization_service, app_window
+        self.used_mods_service, self.customization_service, self.app = used_mods_service, customization_service, app_window
 
     def _call_if_exists(self, obj, *attrs):
         for attr in attrs:
@@ -61,7 +60,7 @@ class SettingsUiController:
         for cb in ('chapter_mode_checkbox', 'beta_updates_checkbox', 'fullscreen_checkbox', 'hide_library_filters_checkbox', 'full_install_checkbox', 'disable_background_checkbox', 'disable_splash_checkbox', 'skip_patching_warnings_checkbox'):
             getattr(self.app, cb).setChecked(False)
         self.app._update_custom_executable_ui(), self.app._update_checkbox_visibility()
-        self.slot_service.used_mods.clear(), self.slot_service.save_used_mods_state(), self.slot_service.load_used_mods_state()
+        self.used_mods_service.used_mods.clear(), self.used_mods_service.save_used_mods_state(), self.used_mods_service.load_used_mods_state()
         self.update_settings_page_visibility()
         self.customization_service.load_custom_style_settings(self.app.color_widgets, self.app.theme.apply_theme)
         self.app.game_launch.update_button_state()
@@ -74,12 +73,13 @@ class SettingsUiController:
         game_type = self.app.game_type_combo.itemData(index)
         if not game_type:
             return
-        self.slot_service.save_used_mods_state()
-        self.app_state.game_mode = self._GAME_TYPE_MODES.get(game_type, FullGameMode)()
+        self.used_mods_service.save_used_mods_state()
+        game_def = get_game(game_type)
+        self.app_state.game_mode = game_def if game_def else DeltaruneGame()
         self.app_state.local_config['selected_game_type'] = game_type
         self.settings_service.write_local_config()
         self._call_if_exists(self.app, '_update_saves_button_state', '_update_checkbox_visibility')
-        self._call_if_exists(self.slot_service, '_update_steam_checkbox_state')
+        self._call_if_exists(self.used_mods_service, '_update_steam_checkbox_state')
 
     def on_chapter_mode_changed(self, state):
         if self.app.game_type_combo.currentData() != 'deltarune':
@@ -87,13 +87,13 @@ class SettingsUiController:
         self.app._previous_mode = getattr(self.app, 'current_mode', 'normal')
         is_chapter = bool(state)
         if (self.app_state.current_mode == 'chapter') != is_chapter:
-            self.slot_service.save_used_mods_state()
+            self.used_mods_service.save_used_mods_state()
         self.app_state.current_mode = 'chapter' if is_chapter else 'normal'
         if (self.app._previous_mode == 'normal') != is_chapter:
-            self.slot_service.load_used_mods_state()
+            self.used_mods_service.load_used_mods_state()
         self.app.game_type_combo.setEnabled(not is_chapter)
         if hasattr(self.app, 'library_display'):
-            self.app.library_display.update_mod_widgets_slot_status()
+            self.app.library_display.update_mod_widgets_active_status()
         self.app.game_launch.update_button_state()
         if hasattr(self.app, 'chapter_tabs_widget'):
             self.app.chapter_tabs_widget.setVisible(is_chapter)
@@ -107,7 +107,7 @@ class SettingsUiController:
         self.app._update_change_path_button_text()
         self.app_state.local_config['chapter_mode_enabled'] = is_chapter
         self.settings_service.write_local_config()
-        self._call_if_exists(self.slot_service, '_update_steam_checkbox_state')
+        self._call_if_exists(self.used_mods_service, '_update_steam_checkbox_state')
 
     def on_toggle_beta_updates(self):
         self.settings_service.on_toggle_beta_updates(self.app.beta_updates_checkbox.isChecked())
@@ -121,7 +121,7 @@ class SettingsUiController:
 
     def on_toggle_steam_launch(self, state=None):
         is_steam = self.app.launch_via_steam_checkbox.isChecked()
-        if is_steam and isinstance(self.app_state.game_mode, FullGameMode) and self.app_state.current_mode == 'chapter' and self.app_state.local_config.get('direct_launch_slot_id', SLOT_ID_UNIVERSAL) >= 0:
+        if is_steam and self.app_state.game_mode.game_id == 'deltarune' and self.app_state.current_mode == 'chapter' and self.app_state.local_config.get('direct_launch_slot_id', TAB_ALL) >= 0:
             self.feedback_service.show_message('warning', 'ui.steam_launch', tr('ui.steam_launch_direct_conflict'))
             self.app.launch_via_steam_checkbox.setChecked(False)
             return

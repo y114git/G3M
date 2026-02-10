@@ -216,7 +216,7 @@ def relocalize_ui(w):
         if hasattr(w, 'blocklist_button') and w.blocklist_button:
             w.blocklist_button.setStyleSheet(f'\n                    QPushButton {{\n                        background-color: {bg_color};\n                        color: {text_color};\n                        border: 2px solid white;\n                        padding: 0px 4px;\n                        font-size: 11px;\n                    }}\n                    QPushButton:hover {{\n                        background-color: white;\n                        color: {bg_color};\n                    }}\n                ')
         w.search_display.update_filtered_mods()
-        w.search_display.update_all_plaques_labels()
+        w.search_display.update_all_cards_labels()
         w.library_display.update_display()
         w.search_display.update_pagination()
         w.game_launch.update_button_state()

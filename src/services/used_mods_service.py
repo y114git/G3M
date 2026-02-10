@@ -1,4 +1,4 @@
-"""Used mods tracking and slot management."""
+"""Used mods tracking and management."""
 import logging
 from PyQt6.QtCore import QObject, pyqtSignal, QTimer
 from typing import Dict, Optional, Any, List, TYPE_CHECKING
@@ -8,9 +8,8 @@ from core.app_state import AppState
 from ui.common.feedback import FeedbackManager
 from services.mod_service import ModManager
 from services.settings_service import SettingsManager
-from models.game_modes import DemoGameMode, UndertaleGameMode, UndertaleYellowGameMode, PizzaTowerGameMode, SugarySpireGameMode, FullGameMode
 from services.localization_service import tr
-from config.constants import SLOT_ID_UNIVERSAL, SLOT_ID_MENU, SLOT_ID_CHAPTER_1, SLOT_ID_CHAPTER_2, SLOT_ID_CHAPTER_3, SLOT_ID_CHAPTER_4
+from config.constants import TAB_ALL, TAB_MENU, TAB_CHAPTER_1, TAB_CHAPTER_2, TAB_CHAPTER_3, TAB_CHAPTER_4
 from utils.mod_utils import get_mod_key, get_mod_name
 from services.game_detection_service import get_chapter_id_for_game_mode
 from utils.file_utils import sanitize_filename
@@ -126,18 +125,10 @@ class UsedModsManager(QObject):
             self.settings_service.write_local_config()
             logging.info(f'_cleanup_mod_from_all_config_keys: Removed mod {mod_key} from all config keys')
 
-    _GAME_MODE_CONFIG_KEYS = {
-        DemoGameMode: 'used_mods_deltarunedemo',
-        UndertaleGameMode: 'used_mods_undertale',
-        UndertaleYellowGameMode: 'used_mods_undertaleyellow',
-        PizzaTowerGameMode: 'used_mods_pizzatower',
-        SugarySpireGameMode: 'used_mods_sugaryspire',
-    }
-
     def get_used_mods_config_key(self, game_mode_instance=None, is_chapter_mode: Optional[bool] = None):
         game_mode = game_mode_instance or self.app_state.game_mode
         is_chapter = is_chapter_mode if is_chapter_mode is not None else self.app_state.current_mode == 'chapter'
-        key = self._GAME_MODE_CONFIG_KEYS.get(type(game_mode))
+        key = getattr(game_mode, 'used_mods_config_key', '')
         if key:
             return key
         return 'used_mods_deltarune_chapter' if is_chapter else 'used_mods_deltarune'
@@ -189,18 +180,18 @@ class UsedModsManager(QObject):
             return
         self.used_mods.clear()
         needs_save = False
-        valid_chapter_ids = [SLOT_ID_MENU, SLOT_ID_CHAPTER_1, SLOT_ID_CHAPTER_2, SLOT_ID_CHAPTER_3, SLOT_ID_CHAPTER_4]
+        valid_chapter_ids = [TAB_MENU, TAB_CHAPTER_1, TAB_CHAPTER_2, TAB_CHAPTER_3, TAB_CHAPTER_4]
         expected_chapter_id = get_chapter_id_for_game_mode(self.app_state.game_mode)
         for chapter_id_str, mod_data_raw in list(used_mods_data.items()):
             try:
                 chapter_id = int(chapter_id_str)
             except ValueError:
                 continue
-            if not is_chapter_mode and expected_chapter_id != SLOT_ID_UNIVERSAL and chapter_id != expected_chapter_id:
+            if not is_chapter_mode and expected_chapter_id != TAB_ALL and chapter_id != expected_chapter_id:
                 continue
             if is_chapter_mode and chapter_id not in valid_chapter_ids:
                 continue
-            if not is_chapter_mode and expected_chapter_id == SLOT_ID_UNIVERSAL and chapter_id != SLOT_ID_UNIVERSAL:
+            if not is_chapter_mode and expected_chapter_id == TAB_ALL and chapter_id != TAB_ALL:
                 continue
             mod_keys = [mod_data_raw] if isinstance(mod_data_raw, str) else (mod_data_raw if isinstance(mod_data_raw, list) else [])
             if isinstance(mod_data_raw, str):
@@ -280,7 +271,7 @@ class UsedModsManager(QObject):
         if getattr(self.app_state, 'is_installing', False):
             return []
         is_chapter_mode = self.app_state.current_mode == 'chapter'
-        active_ids = [SLOT_ID_MENU, SLOT_ID_CHAPTER_1, SLOT_ID_CHAPTER_2, SLOT_ID_CHAPTER_3, SLOT_ID_CHAPTER_4] if is_chapter_mode else [get_chapter_id_for_game_mode(self.app_state.game_mode)]
+        active_ids = [TAB_MENU, TAB_CHAPTER_1, TAB_CHAPTER_2, TAB_CHAPTER_3, TAB_CHAPTER_4] if is_chapter_mode else [get_chapter_id_for_game_mode(self.app_state.game_mode)]
         mods_to_update = []
         for cid in active_ids:
             for mod in self.used_mods.get(cid, []):
@@ -293,11 +284,11 @@ class UsedModsManager(QObject):
         if not self.used_mods:
             return empty
         gm_chapter = get_chapter_id_for_game_mode(self.app_state.game_mode)
-        if gm_chapter != SLOT_ID_UNIVERSAL:
+        if gm_chapter != TAB_ALL:
             return {-1: self.get_used_mods_list(gm_chapter)}
         if self.app_state.current_mode == 'chapter':
             return {cid: self.get_used_mods_list(cid) or [] for cid in range(5)}
-        mods_list = self.get_used_mods_list(SLOT_ID_UNIVERSAL)
+        mods_list = self.get_used_mods_list(TAB_ALL)
         if not mods_list:
             return empty
         return {cid: [m for m in mods_list if hasattr(m, 'get_chapter_data') and m.get_chapter_data(cid)] for cid in range(5)}
@@ -324,8 +315,8 @@ class UsedModsManager(QObject):
     def _update_steam_checkbox_state(self):
         if not self.parent_widget or not hasattr(self.parent_widget, 'launch_via_steam_checkbox'):
             return
-        direct_launch_slot_id = self.app_state.local_config.get('direct_launch_slot_id', SLOT_ID_UNIVERSAL)
+        direct_launch_tab_id = self.app_state.local_config.get('direct_launch_slot_id', TAB_ALL)
         is_chapter_mode = self.app_state.current_mode == 'chapter'
-        is_deltarune = isinstance(self.app_state.game_mode, FullGameMode)
-        should_block = is_deltarune and is_chapter_mode and (direct_launch_slot_id >= 0)
+        is_deltarune = self.app_state.game_mode.game_id == 'deltarune'
+        should_block = is_deltarune and is_chapter_mode and (direct_launch_tab_id >= 0)
         self.parent_widget.launch_via_steam_checkbox.setEnabled(not should_block)

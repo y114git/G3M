@@ -10,8 +10,8 @@ from PyQt6.QtCore import QTranslator, Qt, QEvent, QThread, QTimer, pyqtSignal, Q
 from PyQt6.QtGui import QColor, QIcon, QPainter, QPixmap, QDesktopServices
 from PyQt6.QtWidgets import QApplication, QCheckBox, QFrame, QLabel, QProgressBar, QPushButton, QTabWidget, QVBoxLayout, QWidget, QHBoxLayout, QSizePolicy, QColorDialog
 from services.localization_service import localization_service, tr
-from models.game_modes import FullGameMode, DemoGameMode, UndertaleGameMode, UndertaleYellowGameMode, PizzaTowerGameMode, SugarySpireGameMode
-from config.constants import UI_COLORS, SOCIAL_LINKS, ONLINE_UPDATE_INTERVAL, INITIALIZATION_TIMEOUT, SLOT_ID_UNIVERSAL, SLOT_ID_MENU, SLOT_ID_CHAPTER_1, SLOT_ID_CHAPTER_2, SLOT_ID_CHAPTER_3, SLOT_ID_CHAPTER_4, CLOUD_FUNCTIONS_BASE_URL
+from models.game_modes import DeltaruneGame, get_game
+from config.constants import UI_COLORS, SOCIAL_LINKS, ONLINE_UPDATE_INTERVAL, INITIALIZATION_TIMEOUT, TAB_ALL, TAB_MENU, TAB_CHAPTER_1, TAB_CHAPTER_2, TAB_CHAPTER_3, TAB_CHAPTER_4, CLOUD_FUNCTIONS_BASE_URL
 from ui.utils.ui_utils import DebounceTimer
 from ui.common.styling import get_theme_color
 from utils.path_utils import get_user_data_root, resource_path, get_launcher_dir, get_user_plugins_dir
@@ -136,21 +136,21 @@ class AppWindow(QWidget):
         self.plugin_service = PluginManager(self.app_state, self.settings_service, self)
         self.plugin_service.app_window = self
         self.customization_service = CustomizationManager(self.app_state, self)
-        self.slot_service = UsedModsManager(self.app_state, self.mod_service, self.feedback_service, self.settings_service, self)
-        self.slot_service.used_mods_updated.connect(self._on_slot_service_used_mods_updated)
+        self.used_mods_service = UsedModsManager(self.app_state, self.mod_service, self.feedback_service, self.settings_service, self)
+        self.used_mods_service.used_mods_updated.connect(self._on_used_mods_service_used_mods_updated)
         self._load_used_mods_debounce = DebounceTimer(delay_ms=200)
         self.mod_ops = ModOperationsController(self.app_state, self.feedback_service, self.mod_service, self)
-        self.library_display = LibraryDisplayController(self.app_state, self.feedback_service, self.mod_service, self.slot_service, self)
+        self.library_display = LibraryDisplayController(self.app_state, self.feedback_service, self.mod_service, self.used_mods_service, self)
         self.search_display = SearchDisplayController(self.app_state, self.feedback_service, self.mod_service, self.mod_ops, self)
         self.search_display.ui_button_text_update.connect(lambda w, v: self._set_widget_attr(w, 'setText', v))
         self.search_display.ui_button_tooltip_update.connect(lambda w, v: self._set_widget_attr(w, 'setToolTip', v))
         self.search_display.ui_button_enabled_update.connect(lambda w, v: self._set_widget_attr(w, 'setEnabled', v))
         self.search_display.ui_widget_updates_enabled.connect(lambda w, v: self._set_widget_attr(w, 'setUpdatesEnabled', v))
-        self.settings_ui = SettingsUiController(self.app_state, self.feedback_service, self.settings_service, self.slot_service, self.customization_service, self)
+        self.settings_ui = SettingsUiController(self.app_state, self.feedback_service, self.settings_service, self.used_mods_service, self.customization_service, self)
         self.theme = ThemeController(self.app_state, self.feedback_service, self.settings_service, self.customization_service, self)
-        self.game_launch = GameLaunchController(self.app_state, self.feedback_service, self.mod_service, self.slot_service, self.settings_service, self.game_launcher, self.customization_service, self.plugin_service, self)
+        self.game_launch = GameLaunchController(self.app_state, self.feedback_service, self.mod_service, self.used_mods_service, self.settings_service, self.game_launcher, self.customization_service, self.plugin_service, self)
         from controllers.refresh_controller import RefreshController
-        self.refresh_controller = RefreshController(self.app_state, self.feedback_service, self.mod_service, self.slot_service, self.game_launch, self.update_checker, self.settings_service, app_window=self)
+        self.refresh_controller = RefreshController(self.app_state, self.feedback_service, self.mod_service, self.used_mods_service, self.game_launch, self.update_checker, self.settings_service, app_window=self)
         self._connect_cross_service_signals()
         self.initialization_finished.connect(self.game_launch.update_button_state)
         self.initialization_finished.connect(self._try_start_background_music)
@@ -183,12 +183,12 @@ class AppWindow(QWidget):
     def _connect_cross_service_signals(self):
         """Connect signals between services, controllers, and display components."""
         self.mod_service.mod_list_updated.connect(self.library_display.update_display)
-        self.mod_service.mod_list_updated.connect(self.slot_service._retry_load_missing_mods)
-        self.mod_service.mod_list_updated.connect(lambda: self._load_used_mods_debounce.call(self.slot_service.load_used_mods_state))
-        self.slot_service.used_mod_changed.connect(lambda chapter_id: self.game_launch.update_button_state())
-        self.slot_service.used_mod_changed.connect(lambda chapter_id: self.library_display._update_priority_button_visibility(chapter_id) if hasattr(self.library_display, '_update_priority_button_visibility') else None)
-        self.slot_service.action_button_update_needed.connect(self.game_launch.update_button_state)
-        self.slot_service.mod_widgets_update_needed.connect(self.library_display.update_mod_widgets_slot_status)
+        self.mod_service.mod_list_updated.connect(self.used_mods_service._retry_load_missing_mods)
+        self.mod_service.mod_list_updated.connect(lambda: self._load_used_mods_debounce.call(self.used_mods_service.load_used_mods_state))
+        self.used_mods_service.used_mod_changed.connect(lambda chapter_id: self.game_launch.update_button_state())
+        self.used_mods_service.used_mod_changed.connect(lambda chapter_id: self.library_display._update_priority_button_visibility(chapter_id) if hasattr(self.library_display, '_update_priority_button_visibility') else None)
+        self.used_mods_service.action_button_update_needed.connect(self.game_launch.update_button_state)
+        self.used_mods_service.mod_widgets_update_needed.connect(self.library_display.update_mod_widgets_active_status)
         self.game_launch.window_hide_requested.connect(self.hide)
         self.game_launch.window_restore_requested.connect(self._on_window_restore_requested)
         self.game_launch.library_display_update_requested.connect(lambda: self.library_display.update_display())
@@ -240,7 +240,7 @@ class AppWindow(QWidget):
         if hasattr(self, 'library_display'):
             self.library_display.update_display()
         if hasattr(self, 'search_display'):
-            self.search_display.update_search_plaques()
+            self.search_display.update_search_cards()
             self.search_display.update_filtered_mods(preserve_page=True)
         if hasattr(self, 'settings_service'):
             self.settings_service.theme_changed.emit()
@@ -256,7 +256,7 @@ class AppWindow(QWidget):
         if success:
             self.library_display.update_display()
             if hasattr(self, 'search_display'):
-                self.search_display.update_search_plaques()
+                self.search_display.update_search_cards()
                 self.search_display.update_filtered_mods(preserve_page=True)
         status_color = UI_COLORS['status_success'] if success else UI_COLORS['status_error']
         self._update_status(message, status_color)
@@ -437,7 +437,7 @@ class AppWindow(QWidget):
             self.create_modpack_button.clicked.connect(self.library_display.on_create_modpack_button_click)
         if self.fast_merging_checkbox:
             self.fast_merging_checkbox.setChecked(self.app_state.local_config.get('fast_merging_enabled', False))
-            self.fast_merging_checkbox.stateChanged.connect(self._on_fast_merging_changed)
+            self.fast_merging_checkbox.stateChanged.connect(self._on_fast_patching_changed)
         if self.import_export_button:
             from controllers.mod_import_export_controller import ModImportExportController
             self.mod_import_export_controller = ModImportExportController(self.app_state, self.mod_service, self)
@@ -472,8 +472,8 @@ class AppWindow(QWidget):
         self.app_state.selected_chapter_id = None
         if saved_chapter_mode and hasattr(self, 'chapter_tabs_widget'):
             self.chapter_tabs_widget.setVisible(True)
-        _GAME_MODE_MAP = {'deltarunedemo': DemoGameMode, 'undertale': UndertaleGameMode, 'undertaleyellow': UndertaleYellowGameMode, 'pizzatower': PizzaTowerGameMode, 'sugaryspire': SugarySpireGameMode}
-        self.app_state.game_mode = _GAME_MODE_MAP.get(saved_game_type, FullGameMode)()
+        game_def = get_game(saved_game_type)
+        self.app_state.game_mode = game_def if game_def else DeltaruneGame()
         self.app_state.game_mode_changed.connect(self._on_game_mode_updated_by_state)
         self._update_checkbox_visibility()
         self._update_change_path_button_text()
@@ -496,7 +496,7 @@ class AppWindow(QWidget):
             QTimer.singleShot(500, self.library_display.update_display)
 
             QTimer.singleShot(800, self.library_display._update_priority_button_visibility)
-        QTimer.singleShot(700, self.library_display.update_mod_widgets_slot_status)
+        QTimer.singleShot(700, self.library_display.update_mod_widgets_active_status)
 
     def _setup_plugins_tab(self):
         from ui.builders.plugin_tab_builder import PluginTabBuilder
@@ -603,11 +603,11 @@ class AppWindow(QWidget):
         if getattr(self, 'is_shown_to_user', False) and self.isVisible():
             self.customization_service.maybe_start_background_music(force=True)
 
-    def _on_fast_merging_changed(self, state):
-        fast_merging_enabled = state in (Qt.CheckState.Checked, 2)
-        self.app_state.local_config['fast_merging_enabled'] = fast_merging_enabled
+    def _on_fast_patching_changed(self, state):
+        enabled = state in (Qt.CheckState.Checked, 2)
+        self.app_state.local_config['fast_merging_enabled'] = enabled
         self.settings_service.write_local_config()
-        logging.debug(f'Fast merging setting changed: {fast_merging_enabled}')
+        logging.debug(f'Fast patching setting changed: {enabled}')
 
     def _on_search_sort_changed(self):
         if not hasattr(self, 'search_display'):
@@ -661,7 +661,8 @@ class AppWindow(QWidget):
 
     def _update_checkbox_visibility(self):
         game_type = self.game_type_combo.currentData()
-        self.chapter_mode_checkbox.setVisible(game_type == 'deltarune')
+        game_def = self.app_state.game_mode
+        self.chapter_mode_checkbox.setVisible(game_def.is_multi_tab)
         self.full_install_checkbox.setVisible(game_type in ('deltarunedemo', 'undertaleyellow', 'sugaryspire'))
 
     def _on_game_mode_updated_by_state(self, mode_obj):
@@ -673,7 +674,7 @@ class AppWindow(QWidget):
                 if getattr(self.app_state, 'current_mode', 'normal') != 'normal':
                     self.app_state.current_mode = 'normal'
                 self.game_type_combo.setEnabled(True)
-            self.slot_service.load_used_mods_state()
+            self.used_mods_service.load_used_mods_state()
             self.library_display.update_display()
             self._update_change_path_button_text()
         except Exception:
@@ -686,9 +687,9 @@ class AppWindow(QWidget):
     def _full_install_tooltip(self) -> str:
         if platform.system() == 'Darwin':
             return tr('tooltips.macos_install_unavailable')
-        if isinstance(self.app_state.game_mode, SugarySpireGameMode):
+        if self.app_state.game_mode.game_id == 'sugaryspire':
             return tr('tooltips.full_spire_install_instructions')
-        elif isinstance(self.app_state.game_mode, UndertaleYellowGameMode):
+        elif self.app_state.game_mode.game_id == 'undertaleyellow':
             return tr('tooltips.full_yellow_install_instructions')
         return tr('tooltips.full_install_instructions')
 
@@ -721,7 +722,7 @@ class AppWindow(QWidget):
         if ev.type() == QEvent.Type.MouseButtonDblClick and hasattr(obj, '_chapter_id'):
             chapter_id = getattr(obj, '_chapter_id', None)
             if chapter_id is not None:
-                self.slot_service.toggle_direct_launch_for_chapter(chapter_id)
+                self.used_mods_service.toggle_direct_launch_for_chapter(chapter_id)
                 return True
         return super().eventFilter(obj, ev)
 
@@ -741,10 +742,10 @@ class AppWindow(QWidget):
         super().paintEvent(event)
 
     def _initialize_mutual_exclusions(self):
-        direct_launch_slot_id = self.app_state.local_config.get('direct_launch_slot_id', SLOT_ID_UNIVERSAL)
+        direct_launch_tab_id = self.app_state.local_config.get('direct_launch_slot_id', TAB_ALL)
         is_chapter_mode = self.app_state.current_mode == 'chapter'
-        is_deltarune = isinstance(self.app_state.game_mode, FullGameMode)
-        should_block = is_deltarune and is_chapter_mode and (direct_launch_slot_id >= 0)
+        is_deltarune = self.app_state.game_mode.game_id == 'deltarune'
+        should_block = is_deltarune and is_chapter_mode and (direct_launch_tab_id >= 0)
         if not hasattr(self, 'launch_via_steam_checkbox'):
             return
         self.launch_via_steam_checkbox.setEnabled(not should_block)
@@ -764,7 +765,7 @@ class AppWindow(QWidget):
             saved_chapter_mode = self.app_state.local_config.get('chapter_mode_enabled', False)
             self.setEnabled(False)
             QTimer.singleShot(500, lambda: (self._load_mods_and_build_list_synchronously(saved_chapter_mode), self.setEnabled(True)))
-            self._load_used_mods_debounce.call(self.slot_service.load_used_mods_state)
+            self._load_used_mods_debounce.call(self.used_mods_service.load_used_mods_state)
         except Exception as e:
             logging.error(f'AppWindow: Error in _on_mod_scan_finished: {e}', exc_info=True)
             self.feedback_service.update_status(tr('status.mod_scan_error', details=str(e)), UI_COLORS['status_error'])
@@ -909,10 +910,10 @@ class AppWindow(QWidget):
             else:
                 self.portproton_path_label.setText(tr('ui.file_not_selected') + ' (using PATH)')
 
-    def _on_slot_service_used_mods_updated(self):
+    def _on_used_mods_service_used_mods_updated(self):
         logging.debug('Used mods updated, refreshing UI')
         if hasattr(self, 'library_display'):
-            self.library_display.update_mod_widgets_slot_status()
+            self.library_display.update_mod_widgets_active_status()
             self.library_display._update_priority_button_visibility()
         if self.app_state.current_mode == 'chapter':
             selected_chapter_id = getattr(self.app_state, 'selected_chapter_id', None)
@@ -920,7 +921,7 @@ class AppWindow(QWidget):
                 self.library_display.update_for_chapter_mode(selected_chapter_id)
 
     def _setup_chapter_tabs(self):
-        chapter_ids = [SLOT_ID_MENU, SLOT_ID_CHAPTER_1, SLOT_ID_CHAPTER_2, SLOT_ID_CHAPTER_3, SLOT_ID_CHAPTER_4]
+        chapter_ids = [TAB_MENU, TAB_CHAPTER_1, TAB_CHAPTER_2, TAB_CHAPTER_3, TAB_CHAPTER_4]
         for i, chapter_id in enumerate(chapter_ids):
             if i < len(self.chapter_tab_buttons):
                 btn = self.chapter_tab_buttons[i]
@@ -931,7 +932,7 @@ class AppWindow(QWidget):
 
     def _on_chapter_tab_clicked(self, chapter_id):
         logging.debug(f'Chapter tab clicked: {chapter_id}')
-        chapter_ids = [SLOT_ID_MENU, SLOT_ID_CHAPTER_1, SLOT_ID_CHAPTER_2, SLOT_ID_CHAPTER_3, SLOT_ID_CHAPTER_4]
+        chapter_ids = [TAB_MENU, TAB_CHAPTER_1, TAB_CHAPTER_2, TAB_CHAPTER_3, TAB_CHAPTER_4]
         for i, btn in enumerate(self.chapter_tab_buttons):
             btn.setChecked(chapter_ids[i] == chapter_id if i < len(chapter_ids) else False)
         self.app_state.selected_chapter_id = chapter_id
@@ -942,7 +943,7 @@ class AppWindow(QWidget):
     def _update_chapter_tabs_style(self):
         if not hasattr(self, 'chapter_tab_buttons'):
             return
-        chapter_ids = [SLOT_ID_MENU, SLOT_ID_CHAPTER_1, SLOT_ID_CHAPTER_2, SLOT_ID_CHAPTER_3, SLOT_ID_CHAPTER_4]
+        chapter_ids = [TAB_MENU, TAB_CHAPTER_1, TAB_CHAPTER_2, TAB_CHAPTER_3, TAB_CHAPTER_4]
         direct_launch_chapter_id = self.app_state.local_config.get('direct_launch_slot_id', -1)
         border_color = get_theme_color(self.app_state.local_config, 'border', 'white')
         button_color = get_theme_color(self.app_state.local_config, 'button', 'black')
@@ -1077,7 +1078,7 @@ class AppWindow(QWidget):
 
     def _update_all_install_buttons(self):
         if hasattr(self, 'search_display'):
-            self.search_display.update_search_plaques()
+            self.search_display.update_search_cards()
 
     def _on_refresh_clicked(self, is_initial=False):
         if not is_initial and self.app_state.has_internet:

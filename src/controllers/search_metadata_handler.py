@@ -10,11 +10,11 @@ class SearchMetadataHandler:
     """Manages pending metadata updates with debounced batch application."""
 
     def __init__(self, app_state, app_window,
-                 update_filtered_mods_cb, update_plaques_cb):
+                 update_filtered_mods_cb, update_cards_cb):
         self.app_state = app_state
         self.app = app_window
         self._update_filtered_mods = update_filtered_mods_cb
-        self._update_plaques_for_mods = update_plaques_cb
+        self._update_cards_for_mods = update_cards_cb
         self._pending_metadata_updates = {}
         self._metadata_update_timer = None
 
@@ -99,7 +99,7 @@ class SearchMetadataHandler:
                 logger.debug(f"SearchMetadataHandler: Re-sorting mods after metadata update (downloads_changed={downloads_changed}, needs_refilter={needs_refilter}, sort_type={(sort_type if sort_type is not None else 'N/A')}, mods_count={len(updated_mods)})")
                 self._update_filtered_mods(preserve_page=True)
             elif updated_mods:
-                self._update_plaques_for_mods(updated_mods)
+                self._update_cards_for_mods(updated_mods)
         except Exception as e:
             logger.error(f'SearchMetadataHandler: Error in apply_pending_updates: {e}', exc_info=True)
             self._pending_metadata_updates.clear()

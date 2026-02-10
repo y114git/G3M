@@ -77,36 +77,38 @@ def get_mod_source_dir(mod_data: Any, chapter_id: int, mod_service, app_state, l
 
 def get_target_dir(chapter_id: int, app_state, logger, game: Optional[str] = None) -> Optional[str]:
     """Resolve the target directory (game install path) for a chapter."""
-    from models.game_modes import DemoGameMode, UndertaleGameMode, UndertaleYellowGameMode, PizzaTowerGameMode, SugarySpireGameMode
-    from config.constants import SLOT_ID_PIZZA_TOWER, SLOT_ID_UNDERTALE, SLOT_ID_UNDERTALE_YELLOW, SLOT_ID_DEMO, SLOT_ID_SUGARY_SPIRE
-    _GAME_CONFIGS = {
-        'deltarune_demo': (DemoGameMode, 'DELTARUNEdemo.app', lambda s: s.demo_game_path, [SLOT_ID_DEMO, -1]),
-        'undertale': (UndertaleGameMode, 'UNDERTALE.app', None, [SLOT_ID_UNDERTALE, 0]),
-        'undertaleyellow': (UndertaleYellowGameMode, 'Undertale Yellow.app', None, [SLOT_ID_UNDERTALE_YELLOW, 0]),
-        'pizzatower': (PizzaTowerGameMode, 'PizzaTower.app', None, [SLOT_ID_PIZZA_TOWER]),
-        'sugaryspire': (SugarySpireGameMode, 'SugarySpire_ExhibitionNight.app', None, [SLOT_ID_SUGARY_SPIRE, 0]),
-    }
+    from models.game_modes import get_game
+
+    def _try_macos_resolve(gm, base_path):
+        """For non-multi-tab games, resolve macOS .app path if chapter matches."""
+        if not gm or gm.is_multi_tab or not gm.macos_app_names:
+            return None
+        match_ids = {gm.default_tab_id} | {t.tab_id for t in gm.tabs}
+        if chapter_id in match_ids:
+            return mod_content.resolve_macos_path(base_path, gm.macos_app_names[0])
+        return None
+
     if game:
-        if game in _GAME_CONFIGS:
-            mode_cls, app_name, path_getter, slot_ids = _GAME_CONFIGS[game]
-            gm = mode_cls()
-            base_path = path_getter(app_state) if path_getter else gm.get_game_path(app_state.local_config)
-            if chapter_id in slot_ids:
-                if not base_path:
-                    logger.warning(f'{game} game path not found in config for chapter {chapter_id}')
-                    return None
-                return mod_content.resolve_macos_path(base_path, app_name)
+        game_id = game.replace('_', '') if '_' in game else game
+        gm = get_game(game_id)
+        if gm:
+            base_path = gm.get_game_path(app_state.local_config)
             if not base_path:
+                logger.warning(f'{game} game path not found in config for chapter {chapter_id}')
                 return None
+            resolved = _try_macos_resolve(gm, base_path)
+            if resolved:
+                return resolved
         else:
             base_path = app_state.game_path
             if not base_path:
                 return None
     else:
-        base_path = app_state.game_mode.get_game_path(app_state.local_config)
+        gm = app_state.game_mode
+        base_path = gm.get_game_path(app_state.local_config)
         if not base_path:
             return None
-        for gkey, (mode_cls, app_name, _, slot_ids) in _GAME_CONFIGS.items():
-            if isinstance(app_state.game_mode, mode_cls) and chapter_id in slot_ids:
-                return mod_content.resolve_macos_path(base_path, app_name)
+        resolved = _try_macos_resolve(gm, base_path)
+        if resolved:
+            return resolved
     return find_chapter_resource_dir(base_path, chapter_id)
