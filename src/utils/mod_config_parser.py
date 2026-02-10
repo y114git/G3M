@@ -2,7 +2,7 @@
 import os
 from typing import Optional
 
-from models.mod_models import ModChapterData, ModExtraFile
+from models.mod_models import ModExtraFile
 from utils.mod_utils import resolve_mod_icon
 
 
@@ -72,33 +72,6 @@ def resolve_data_file_version(ch_info: dict) -> str:
     if not version and isinstance(ch_info.get('versions'), dict):
         version = ch_info.get('versions', {}).get('data')
     return version or '1.0.0'
-
-
-def parse_chapter_data(ch_info: dict, chapter_folder: Optional[str] = None,
-                       mod_folder_path: Optional[str] = None) -> ModChapterData:
-    """Parse a chapter info dict into a ModChapterData object.
-
-    Args:
-        ch_info: Raw chapter data dict from config.
-        chapter_folder: Folder for resolving relative paths.
-        mod_folder_path: Base mod folder path (for data_file_url resolution).
-    """
-    extra_files = parse_extra_files_raw(
-        ch_info.get('extra_files', []),
-        ch_info,
-        chapter_folder=chapter_folder if mod_folder_path else None,
-    )
-
-    data_file_url = ch_info.get('data_file_url', '')
-    if data_file_url and mod_folder_path and chapter_folder:
-        data_file_url = os.path.join(chapter_folder, data_file_url)
-
-    return ModChapterData(
-        description=ch_info.get('description'),
-        data_file_url=data_file_url,
-        data_file_version=resolve_data_file_version(ch_info),
-        extra_files=extra_files,
-    )
 
 
 def resolve_chapter_folder(file_key: str, mod_folder_path: str, game: str = None) -> Optional[str]:

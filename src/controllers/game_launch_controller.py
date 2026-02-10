@@ -40,7 +40,7 @@ class GameLaunchController(QObject):
         return isinstance(self.app_state.game_mode, (DemoGameMode, UndertaleYellowGameMode, SugarySpireGameMode)) and self._full_install_checkbox_is_checked
 
     def update_button_state(self):
-        if self.app_state.is_installing and (not self.app_state.operation_cancelled) or self.app_state.is_merging:
+        if self.app_state.is_installing and (not self.app_state.operation_cancelled) or self.app_state.is_patching:
             self.app_state.action_button_text = tr('ui.cancel_button')
             self.app_state.action_button_enabled = True
             return
@@ -59,36 +59,36 @@ class GameLaunchController(QObject):
         except (AttributeError, RuntimeError):
             pass
 
-    def _cancel_merge_operation(self):
+    def _cancel_patching_operation(self):
         library_display = getattr(self.app, 'library_display', None)
         is_modpack_creation = library_display and hasattr(library_display, '_modpack_thread') and (library_display._modpack_thread == self.app_state.current_task)
         modpack_dir = getattr(library_display, '_modpack_dir', None) if is_modpack_creation else None
-        merge_thread = getattr(self.game_launcher, '_merge_thread', None)
-        if merge_thread:
+        patching_thread = getattr(self.game_launcher, '_patching_thread', None)
+        if patching_thread:
             try:
-                merge_thread.progress_update.disconnect()
-                merge_thread.status_update.disconnect()
-                merge_thread.finished.disconnect()
-                merge_thread.warning_confirmation_needed.disconnect()
+                patching_thread.progress_update.disconnect()
+                patching_thread.status_update.disconnect()
+                patching_thread.finished.disconnect()
+                patching_thread.warning_confirmation_needed.disconnect()
             except (TypeError, RuntimeError):
                 pass
-            merge_thread.cancel()
-            if merge_thread.isRunning():
-                merge_thread._warning_event.set()
-                merge_thread.wait(5000)
+            patching_thread.cancel()
+            if patching_thread.isRunning():
+                patching_thread._warning_event.set()
+                patching_thread.wait(5000)
             try:
-                if merge_thread.merger:
-                    if merge_thread.merger.backup_service and merge_thread.chapter_mods:
-                        for chapter_id in merge_thread.chapter_mods.keys():
-                            merge_thread.merger.backup_service.restore_backups(chapter_id)
+                if patching_thread.patcher:
+                    if patching_thread.patcher.backup_service and patching_thread.chapter_mods:
+                        for chapter_id in patching_thread.chapter_mods.keys():
+                            patching_thread.patcher.backup_service.restore_backups(chapter_id)
                             logging.info(f'[CANCEL] Restored backups for chapter {chapter_id}')
-                    merge_thread.merger.cleanup(force=True)
-                if not merge_thread.isRunning():
-                    merge_thread.deleteLater()
+                    patching_thread.patcher.cleanup(force=True)
+                if not patching_thread.isRunning():
+                    patching_thread.deleteLater()
             except Exception as e:
-                logging.error(f'Error cleaning up cancelled merge thread: {e}', exc_info=True)
+                logging.error(f'Error cleaning up cancelled patching thread: {e}', exc_info=True)
             finally:
-                self.game_launcher._merge_thread = None
+                self.game_launcher._patching_thread = None
         if is_modpack_creation and modpack_dir and os.path.exists(modpack_dir):
             try:
                 import shutil
@@ -99,7 +99,7 @@ class GameLaunchController(QObject):
             if library_display:
                 library_display._modpack_thread = None
                 library_display._modpack_dir = None
-        self.app_state.is_merging = False
+        self.app_state.is_patching = False
         self._reset_progress_bar()
         self.app_state.clear_current_task()
         self.app_state.action_button_text = None
@@ -108,8 +108,8 @@ class GameLaunchController(QObject):
         if operation_type == 'install':
             logging.info('GameLaunchController: Cancel button clicked during installation')
             self.app_state.cancel_current_operation()
-        elif operation_type == 'merge':
-            self._cancel_merge_operation()
+        elif operation_type == 'patching':
+            self._cancel_patching_operation()
         self.feedback_service.update_status(tr('status.operation_cancelled'), UI_COLORS['status_info'])
         self._reset_progress_bar()
         self.update_button_state()
@@ -118,9 +118,9 @@ class GameLaunchController(QObject):
         if self.app_state.is_installing:
             self._cancel_operation('install')
             return
-        merge_thread = getattr(self.game_launcher, '_merge_thread', None)
-        if self.app_state.is_merging or (merge_thread and merge_thread.isRunning()):
-            self._cancel_operation('merge')
+        patching_thread = getattr(self.game_launcher, '_patching_thread', None)
+        if self.app_state.is_patching or (patching_thread and patching_thread.isRunning()):
+            self._cancel_operation('patching')
             return
         if self._is_full_install_enabled():
             self.perform_full_install()
@@ -130,7 +130,7 @@ class GameLaunchController(QObject):
             return
         if self.app_state.operation_cancelled:
             return
-        if not self.app_state.is_merging:
+        if not self.app_state.is_patching:
             self.app_state.action_button_enabled = False
         self.app_state.progress_bar_visible = False
         self.launch_game()

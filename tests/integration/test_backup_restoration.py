@@ -1,6 +1,6 @@
 import os
 from services.backup_service import BackupManager
-from services.mod_merge_service import MultiModMerger
+from services.mod_patching_service import ModPatcher
 from services.patching_log_service import get_patching_logger
 
 
@@ -9,10 +9,10 @@ class TestBackupRestoration:
     def test_complete_backup_restoration_flow(self, temp_dir, app_state, feedback_service):
         from services.mod_service import ModManager
         mod_service = ModManager(app_state, feedback_service)
-        merger = MultiModMerger(app_state, mod_service)
+        patcher = ModPatcher(app_state, mod_service)
         backup_dir = os.path.join(temp_dir, 'backups')
         os.makedirs(backup_dir, exist_ok=True)
-        merger.backup_service = BackupManager(backup_dir, patching_logger=merger.patching_logger)
+        patcher.backup_service = BackupManager(backup_dir, patching_logger=patcher.patching_logger)
         chapter_id = 1
         game_dir = os.path.join(temp_dir, 'game')
         os.makedirs(game_dir, exist_ok=True)
@@ -24,13 +24,13 @@ class TestBackupRestoration:
             f.write(b'ORIGINAL_DATA_WIN')
         with open(bank_file, 'wb') as f:
             f.write(b'ORIGINAL_BANK_FILE')
-        merger.backup_service.backup_file(chapter_id, data_win)
-        merger.backup_service.backup_file(chapter_id, bank_file)
+        patcher.backup_service.backup_file(chapter_id, data_win)
+        patcher.backup_service.backup_file(chapter_id, bank_file)
         with open(data_win, 'wb') as f:
             f.write(b'MODIFIED_DATA_WIN')
         with open(bank_file, 'wb') as f:
             f.write(b'MODIFIED_BANK_FILE')
-        merger.backup_service.restore_all_backups()
+        patcher.backup_service.restore_all_backups()
         with open(data_win, 'rb') as f:
             assert f.read() == b'ORIGINAL_DATA_WIN'
         with open(bank_file, 'rb') as f:

@@ -9,7 +9,7 @@ import shutil
 import subprocess
 from typing import Dict, List, Any
 from PyQt6.QtCore import QThread, pyqtSignal
-from services.mod_merge_service import MultiModMerger
+from services.mod_patching_service import ModPatcher
 from services.localization_service import tr
 from utils.path_utils import get_xdelta_path
 from utils.file_utils import get_chapter_folder_name
@@ -29,14 +29,14 @@ class CreateModpackThread(QThread):
         self.mod_service = mod_service
         self.fast_merge = fast_merge
         self.xdelta_modpack = xdelta_modpack
-        self.merger = None
+        self.patcher = None
         self._cancelled = False
 
     def cancel(self):
         self._cancelled = True
         self.requestInterruption()
-        if self.merger:
-            self.merger._cancelled = True
+        if self.patcher:
+            self.patcher._cancelled = True
         self.status_update.emit('Operation cancelled', 'error')
 
     def _get_mod_game(self, mods_list: List[Any]):
@@ -55,15 +55,15 @@ class CreateModpackThread(QThread):
         try:
             if self.isInterruptionRequested() or self._cancelled:
                 return
-            self.merger = MultiModMerger(self.app_state, self.mod_service, None)
-            self.merger.progress_update.connect(self.progress_update.emit)
-            self.merger.status_update.connect(self.status_update.emit)
-            self.merger._cancelled = False
+            self.patcher = ModPatcher(self.app_state, self.mod_service, None)
+            self.patcher.progress_update.connect(self.progress_update.emit)
+            self.patcher.status_update.connect(self.status_update.emit)
+            self.patcher._cancelled = False
             if self.isInterruptionRequested() or self._cancelled:
                 return
-            success = self.merger.process_mod_merge(self.chapter_mods, is_modpack=True, modpack_dir=self.modpack_dir, fast_merge=self.fast_merge, xdelta_modpack=self.xdelta_modpack)
+            success = self.patcher.process_mod_merge(self.chapter_mods, is_modpack=True, modpack_dir=self.modpack_dir, fast_merge=self.fast_merge, xdelta_modpack=self.xdelta_modpack)
             if self.isInterruptionRequested() or self._cancelled:
-                self.merger._cancelled = True
+                self.patcher._cancelled = True
                 success = False
                 if os.path.exists(self.modpack_dir):
                     try:
@@ -80,18 +80,18 @@ class CreateModpackThread(QThread):
             self.status_update.emit(f'Modpack creation failed: {str(e)}', 'error')
             success = False
         finally:
-            if self.merger:
+            if self.patcher:
                 try:
-                    for sig in (self.merger.progress_update, self.merger.status_update):
+                    for sig in (self.patcher.progress_update, self.patcher.status_update):
                         try:
                             sig.disconnect()
                         except (TypeError, RuntimeError):
                             pass
-                    self.merger.cleanup(force=True)
+                    self.patcher.cleanup(force=True)
                 except Exception as cleanup_error:
-                    logging.warning(f'Error during merger cleanup: {cleanup_error}', exc_info=True)
+                    logging.warning(f'Error during patcher cleanup: {cleanup_error}', exc_info=True)
                 finally:
-                    self.merger = None
+                    self.patcher = None
             self.finished.emit(success)
 
     def _create_xdelta_patches(self):

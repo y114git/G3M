@@ -1,15 +1,15 @@
-"""File override and archive extraction logic extracted from MultiModMerger."""
+"""File override and archive extraction utilities for mod patching."""
 import os
 import shutil
 import tempfile
 from typing import Optional
-from utils import merge_mod_detection
-from config.merge_config import SKIP_FILES, ARCHIVE_EXTENSIONS
+from utils.patching import mod_content_utils as mod_content
+from config.patching_config import SKIP_FILES, ARCHIVE_EXTENSIONS
 
 
 def apply_xdelta_override(merger, file_name: str, source_path: str, target_dir: str, chapter_id: Optional[int], fallback_target: Optional[str] = None, label: str = '') -> bool:
     """Apply xdelta patch to matching target files. On failure, copies to fallback_target if provided."""
-    target_files = merge_mod_detection.find_target_files_for_xdelta(target_dir, file_name)
+    target_files = mod_content.find_target_files_for_xdelta(target_dir, file_name)
     if not target_files:
         merger.patching_logger.debug(f'No target files found for xdelta patch {file_name}{label}, skipping (expected filename: {os.path.splitext(file_name)[0]})')
         if fallback_target:
@@ -39,7 +39,7 @@ def extract_archive_to_target(merger, archive_path: str, target_dir: str, chapte
     try:
         from utils.archive_utils import extract_any_archive
         if chapter_id is None:
-            chapter_id = merge_mod_detection.extract_chapter_id_from_path(target_dir)
+            chapter_id = mod_content.extract_chapter_id_from_path(target_dir)
         with tempfile.TemporaryDirectory(prefix='mm_extract_') as temp_extract_dir:
             extract_any_archive(archive_path, temp_extract_dir)
             for root, dirs, files in os.walk(temp_extract_dir):
@@ -73,7 +73,7 @@ def apply_file_overrides(merger, mod_source_dir: str, target_dir: str, used_arch
     processed_archives = set()
     skip_files = SKIP_FILES
     if chapter_id is None:
-        chapter_id = merge_mod_detection.extract_chapter_id_from_path(target_dir)
+        chapter_id = mod_content.extract_chapter_id_from_path(target_dir)
     for root, dirs, files in os.walk(mod_source_dir):
         rel_path = os.path.relpath(root, mod_source_dir)
         for file in files:
@@ -83,7 +83,7 @@ def apply_file_overrides(merger, mod_source_dir: str, target_dir: str, used_arch
             file_lower = file.lower()
             if file_lower.endswith(('.xdelta', '.vcdiff')):
                 if not is_modpack:
-                    xdelta_chapter_id = chapter_id if chapter_id is not None else merge_mod_detection.extract_chapter_id_from_path(target_dir)
+                    xdelta_chapter_id = chapter_id if chapter_id is not None else mod_content.extract_chapter_id_from_path(target_dir)
                     apply_xdelta_override(merger, file, source_path, target_dir, xdelta_chapter_id)
                 elif merger.xdelta_modpack:
                     rel_path = os.path.relpath(source_path, mod_source_dir)

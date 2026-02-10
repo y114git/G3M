@@ -1,11 +1,26 @@
-"""Xdelta patching operations extracted from MultiModMerger."""
+"""Xdelta patching operations for applying .xdelta/.vcdiff patches."""
 import os
 import platform
 import subprocess
 from utils.file_utils import safe_move, safe_remove
-from utils.merge_utils import classify_xdelta_error
 from services.localization_service import tr
-from config.merge_config import XDELTA_ERROR_MAP, XDELTA_EXCEPTION_ERROR_KEYS
+from config.patching_config import XDELTA_ERROR_MAP, XDELTA_EXCEPTION_ERROR_KEYS
+
+
+def classify_xdelta_error(error_msg: str) -> str:
+    """Classify an xdelta error message into a category."""
+    lower = error_msg.lower()
+    if 'checksum mismatch' in lower or 'XD3_INVALID_INPUT' in error_msg:
+        return 'checksum'
+    if any(k in lower for k in ('no such file', 'cannot find', 'file not found')):
+        return 'not_found'
+    if any(k in lower for k in ('permission denied', 'access denied')):
+        return 'permission'
+    if 'XD3_INTERNAL' in error_msg or any(k in lower for k in ('corrupt', 'invalid')):
+        return 'corrupted'
+    if any(k in lower for k in ('io error', 'input/output', 'disk')):
+        return 'io'
+    return 'unknown'
 
 
 def run_xdelta_process(merger, input_file: str, patch_path: str, output_file: str) -> tuple:

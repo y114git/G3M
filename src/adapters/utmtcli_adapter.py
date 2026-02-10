@@ -3,17 +3,19 @@ import os
 import platform
 import subprocess
 import logging
+from typing import Optional, Dict
 from utils.path_utils import resource_path
 
 
 class UTMTCLIManager:
     """Manages UndertaleModTool CLI execution for patching operations."""
 
-    def __init__(self):
+    def __init__(self, patching_logger=None):
         self.platform = {'Windows': 'windows', 'Darwin': 'macos'}.get(platform.system(), 'linux')
         self.utmtcli_path = None
         self.utmtcli_exe = None
         self._active_processes_ref = None
+        self._patching_logger = patching_logger
         self._initialize_paths()
 
     def _initialize_paths(self):
@@ -132,3 +134,38 @@ class UTMTCLIManager:
 
     def get_platform(self) -> str:
         return self.platform
+
+    def _prepare_env(self, env: Optional[Dict]) -> Dict:
+        if env is None:
+            env = {}
+        else:
+            env = env.copy()
+        if 'DELTAHUB_ROOT' not in env:
+            from utils.path_utils import get_launcher_dir
+            launcher_dir = get_launcher_dir()
+            if os.path.exists(os.path.join(launcher_dir, 'output')):
+                env['DELTAHUB_ROOT'] = launcher_dir
+            else:
+                parent_dir = os.path.dirname(launcher_dir)
+                if os.path.exists(os.path.join(parent_dir, 'output')):
+                    env['DELTAHUB_ROOT'] = parent_dir
+                else:
+                    env['DELTAHUB_ROOT'] = launcher_dir
+        return env
+
+    def _run_scripts(self, data_win_path, script_names, output_path=None, cwd=None, env=None):
+        output_path = output_path or data_win_path
+        env = self._prepare_env(env)
+        label = ', '.join(script_names)
+        logger = self._patching_logger or logging.getLogger(__name__)
+        logger.info(f'[UTMT] Executing: {label}')
+        rc, stdout, stderr = self.execute_with_scripts(data_win_path, script_names, output_path=output_path, cwd=cwd, env=env)
+        if rc != 0:
+            logger.warning(f'[UTMT] {label} failed: {stderr[:300]}')
+        return (rc, stdout, stderr)
+
+    def execute_script(self, data_win_path, script_name, output_path=None, cwd=None, env=None):
+        return self._run_scripts(data_win_path, [script_name], output_path, cwd, env)
+
+
+UtmtWrapper = UTMTCLIManager

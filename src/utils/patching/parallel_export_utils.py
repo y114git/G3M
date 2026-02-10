@@ -1,12 +1,12 @@
-"""Parallel export and filtering operations extracted from MultiModMerger."""
+"""Parallel export and filtering operations for mod patching."""
 import os
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, List, Optional, Any
-from utils import merge_resource_filter
-from utils import merge_mod_detection
+from utils.patching import resource_filter_utils as resource_filter
+from utils.patching import mod_content_utils as mod_content
 from utils.progress_throttler import ProgressThrottler
-from services.mod_merge_service import MultiModMerger
+from services.mod_patching_service import ModPatcher
 
 
 def perform_parallel_export(merger, mods_to_export: List[Any], mods_to_apply: List[Any], mod_patched_files: Dict[int, str], mod_types: Dict[int, Dict], vanilla_data_win: str, merge_root: str, cache_running_dir: str, chapter_str: str, chapter_id: int, progress_base: int, export_progress: int, progress_callback) -> bool:
@@ -32,7 +32,7 @@ def perform_parallel_export(merger, mods_to_export: List[Any], mods_to_apply: Li
                     merger.patching_logger.warning(f'[Mod-{mod_number}] [{thread_id}] data.win not found, skipping export')
                 return (mod_number, False, mod_name, 'data.win not found')
             mod_dir = os.path.dirname(mod_data_win)
-            mod_asset_types = merge_mod_detection.detect_mod_asset_types(mod_dir, logger=merger.patching_logger)
+            mod_asset_types = mod_content.detect_mod_asset_types(mod_dir, logger=merger.patching_logger)
             mod_type = mod_types.get(mod_number, {})
             has_previous_mod = mod_number > 1 and mod_number - 1 in mod_patched_files
             scripts, comparison_file = merger._select_export_strategy(mod_type, mod_asset_types, mod_number, has_previous_mod)
@@ -73,7 +73,7 @@ def perform_parallel_export(merger, mods_to_export: List[Any], mods_to_apply: Li
                 results[mod_number] = (success, mod_name, error)
                 completed_count[0] += 1
                 progress = progress_base + int(completed_count[0] / total_mods * export_progress)
-                export_msg = MultiModMerger._safe_tr('status.exporting_assets', f'Exporting assets from {mod_name} ({completed_count[0]}/{total_mods})...', mod=mod_name, current=completed_count[0], total=total_mods)
+                export_msg = ModPatcher._safe_tr('status.exporting_assets', f'Exporting assets from {mod_name} ({completed_count[0]}/{total_mods})...', mod=mod_name, current=completed_count[0], total=total_mods)
                 throttler.update_progress(min(progress, 95), export_msg)
                 if not success:
                     merger.patching_logger.error(f'[PARALLEL_EXPORT] Export failed for mod {mod_number} ({mod_name}): {error}')
@@ -104,7 +104,7 @@ def perform_parallel_filtering(merger, vanilla_hashes: Dict[str, Dict[str, str]]
         try:
             with log_lock:
                 merger.patching_logger.info(f'[Mod-{mod_number}] [{thread_id}] Starting filtering for {mod_name}')
-            filtered_dir = merge_resource_filter.filter_vanilla_identical_resources(vanilla_hashes, mod_objects_dir, mod_number, mod_name, logger=merger.patching_logger)
+            filtered_dir = resource_filter.filter_vanilla_identical_resources(vanilla_hashes, mod_objects_dir, mod_number, mod_name, logger=merger.patching_logger)
             with log_lock:
                 if filtered_dir:
                     merger.patching_logger.info(f'[Mod-{mod_number}] [{thread_id}] Filtering completed, unique resources in {filtered_dir}')
@@ -127,7 +127,7 @@ def perform_parallel_filtering(merger, vanilla_hashes: Dict[str, Dict[str, str]]
                 results[mod_number] = filtered_dir
                 completed_count[0] += 1
                 progress = progress_base + int(completed_count[0] / total_mods * filter_progress)
-                filter_msg = MultiModMerger._safe_tr('status.filtering_resources', f'Filtering resources from {mod_name} ({completed_count[0]}/{total_mods})...', mod=mod_name, current=completed_count[0], total=total_mods)
+                filter_msg = ModPatcher._safe_tr('status.filtering_resources', f'Filtering resources from {mod_name} ({completed_count[0]}/{total_mods})...', mod=mod_name, current=completed_count[0], total=total_mods)
                 throttler.update_progress(min(progress, 95), filter_msg)
                 if error:
                     merger.patching_logger.warning(f'[PARALLEL_FILTER] Filtering warning for mod {mod_number} ({mod_name}): {error}')

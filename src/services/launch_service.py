@@ -1,4 +1,4 @@
-"""Game launch and mod merging management."""
+"""Game launch and mod patching management."""
 import os
 import platform
 import shutil
@@ -16,17 +16,17 @@ from models.game_modes import UndertaleGameMode, UndertaleYellowGameMode, PizzaT
 from utils.path_utils import find_chapter_resource_dir, resolve_game_executable
 from services.patching_log_service import rotate_patching_log
 from workers.game_monitor_worker import GameMonitorWorker
-from services.mod_merge_service import MultiModMerger
+from services.mod_patching_service import ModPatcher
 from config.constants import UI_COLORS, SLOT_ID_UNIVERSAL
 
 
 class GameLauncher(QObject):
-    """Manages game launching, mod merging, and game monitoring."""
+    """Manages game launching, mod patching, and game monitoring."""
     status_changed = pyqtSignal(str, str)
     progress_updated = pyqtSignal(int)
     game_launch_started = pyqtSignal()
     game_launch_finished = pyqtSignal()
-    multi_mod_merge_finished = pyqtSignal(bool)
+    mod_patching_finished = pyqtSignal(bool)
 
     def __init__(self, app_state, feedback_service, mod_service, parent=None):
         super().__init__(parent)
@@ -39,13 +39,13 @@ class GameLauncher(QObject):
         self._mod_files_to_cleanup = []
         self._mod_dirs_to_cleanup = []
         self._direct_launch_cleanup_info = None
-        self.multi_mod_merger = MultiModMerger(app_state, mod_service, parent)
-        self.multi_mod_merger.status_update.connect(self._on_merge_status)
-        self.multi_mod_merger.progress_update.connect(self._on_merge_progress)
-        self.multi_mod_merger._session_manifest_path = os.path.join(self.app_state.config_dir, 'session.lock')
-        self._merge_thread = None
+        self.mod_patcher = ModPatcher(app_state, mod_service, parent)
+        self.mod_patcher.status_update.connect(self._on_patching_status)
+        self.mod_patcher.progress_update.connect(self._on_patching_progress)
+        self.mod_patcher._session_manifest_path = os.path.join(self.app_state.config_dir, 'session.lock')
+        self._patching_thread = None
         self._pending_selections = None
-        self._merge_finished_callback = None
+        self._patching_finished_callback = None
         self.restore_window_callback = None
         self.execute_plugin_hooks = None
 
@@ -60,8 +60,8 @@ class GameLauncher(QObject):
         msg_box.setDefaultButton(cancel_btn)
         msg_box.exec()
         result = msg_box.clickedButton() == continue_btn
-        if self._merge_thread:
-            self._merge_thread.set_warning_response(result)
+        if self._patching_thread:
+            self._patching_thread.set_warning_response(result)
 
     def _stop_monitor_thread(self):
         if not self.monitor_thread:
@@ -121,21 +121,21 @@ class GameLauncher(QObject):
         needs_multi_mod = has_list_format and any((len(mods_list) > 0 for mods_list in selections.values() if isinstance(mods_list, list)))
         logging.info(f'Multi-mod check: needs_multi_mod={needs_multi_mod} (has_list_format={has_list_format})')
         if needs_multi_mod:
-            logging.info('Using multi-mod merger for game launch')
+            logging.info('Using multi-mod patcher for game launch')
             self.app_state.progress_bar_visible = True
             self.app_state.progress_bar_value = 0
-            self.app_state.is_merging = True
+            self.app_state.is_patching = True
             self.app_state.action_button_text = tr('ui.cancel_button')
             self.app_state.action_button_enabled = True
             self._pending_selections = selections
             if not self._prepare_game_files_multi_mod_async(selections):
-                logging.error('Failed to start multi-mod merge')
+                logging.error('Failed to start multi-mod patching')
                 self.app_state.progress_bar_visible = False
-                self.app_state.is_merging = False
+                self.app_state.is_patching = False
                 self._handle_launch_failure()
                 return
         else:
-            self._continue_after_merge(selections, True, needs_multi_mod)
+            self._continue_after_patching(selections, True, needs_multi_mod)
 
     def _handle_launch_failure(self):
         if self.restore_window_callback:
@@ -324,64 +324,64 @@ class GameLauncher(QObject):
         return self.app_state.game_mode.get_game_path(self.app_state.local_config) or ''
 
     def _prepare_game_files_multi_mod_async(self, selections: Dict[int, List[Any]]) -> bool:
-        from workers.mod_merge_worker import ModMergeThread
-        logging.info('Starting multi-mod merge in background thread')
+        from workers.mod_patching_worker import ModPatchingThread
+        logging.info('Starting multi-mod patching in background thread')
         chapter_mods = {chapter_id: mods_list for chapter_id, mods_list in selections.items() if isinstance(mods_list, list) and mods_list}
         if not chapter_mods:
-            self._continue_after_merge(selections, True, False)
+            self._continue_after_patching(selections, True, False)
             return True
         self.app_state.progress_bar_visible = True
         self.app_state.progress_bar_value = 0
         session_manifest_path = os.path.join(self.app_state.config_dir, 'session.lock')
         fast_merge = self.app_state.local_config.get('fast_merging_enabled', False)
-        self._merge_thread = ModMergeThread(self.app_state, self.mod_service, chapter_mods, session_manifest_path, self, fast_merge=fast_merge)
-        self._merge_thread.progress_update.connect(self._on_merge_progress)
-        self._merge_thread.status_update.connect(self._on_merge_status)
-        self._merge_thread.finished.connect(lambda success: self._on_merge_finished(selections, success))
-        self._merge_thread.warning_confirmation_needed.connect(self._on_warning_confirmation_needed)
-        self.app_state.current_task = self._merge_thread
-        self._merge_thread.start()
+        self._patching_thread = ModPatchingThread(self.app_state, self.mod_service, chapter_mods, session_manifest_path, self, fast_merge=fast_merge)
+        self._patching_thread.progress_update.connect(self._on_patching_progress)
+        self._patching_thread.status_update.connect(self._on_patching_status)
+        self._patching_thread.finished.connect(lambda success: self._on_patching_finished(selections, success))
+        self._patching_thread.warning_confirmation_needed.connect(self._on_warning_confirmation_needed)
+        self.app_state.current_task = self._patching_thread
+        self._patching_thread.start()
         return True
 
-    def _on_merge_finished(self, selections: Dict[int, Any], success: bool):
+    def _on_patching_finished(self, selections: Dict[int, Any], success: bool):
         self.app_state.progress_bar_visible = False
-        self.app_state.is_merging = False
+        self.app_state.is_patching = False
         self.app_state.clear_current_task()
         self.app_state.action_button_text = None
-        merge_thread = self._merge_thread
-        if merge_thread:
+        patching_thread = self._patching_thread
+        if patching_thread:
             try:
-                if merge_thread.isRunning():
-                    logging.debug('Merge thread still running, will clean up via finished signal')
-                if merge_thread.merger:
-                    self.multi_mod_merger = merge_thread.merger
-                if not merge_thread.isRunning():
-                    merge_thread.deleteLater()
+                if patching_thread.isRunning():
+                    logging.debug('Patching thread still running, will clean up via finished signal')
+                if patching_thread.patcher:
+                    self.mod_patcher = patching_thread.patcher
+                if not patching_thread.isRunning():
+                    patching_thread.deleteLater()
                 else:
 
-                    def cleanup_merge_thread():
-                        if merge_thread.merger:
-                            self.multi_mod_merger = merge_thread.merger
-                        merge_thread.deleteLater()
-                    merge_thread.finished.connect(cleanup_merge_thread)
+                    def cleanup_patching_thread():
+                        if patching_thread.patcher:
+                            self.mod_patcher = patching_thread.patcher
+                        patching_thread.deleteLater()
+                    patching_thread.finished.connect(cleanup_patching_thread)
             except Exception as e:
-                logging.error(f'Error cleaning up merge thread: {e}', exc_info=True)
+                logging.error(f'Error cleaning up patching thread: {e}', exc_info=True)
             finally:
-                self._merge_thread = None
+                self._patching_thread = None
         if not success:
-            if merge_thread and (merge_thread.isInterruptionRequested() or getattr(merge_thread, '_cancelled', False)):
-                logging.info('Multi-mod merge was cancelled by user')
+            if patching_thread and (patching_thread.isInterruptionRequested() or getattr(patching_thread, '_cancelled', False)):
+                logging.info('Multi-mod patching was cancelled by user')
             else:
                 self._handle_launch_failure()
             return
-        logging.info('Multi-mod merge completed successfully')
-        self._continue_after_merge(selections, True, True)
+        logging.info('Multi-mod patching completed successfully')
+        self._continue_after_patching(selections, True, True)
 
     def _try_restore_backups(self, context: str = '') -> bool:
-        if not hasattr(self, 'multi_mod_merger') or not self.multi_mod_merger:
+        if not hasattr(self, 'mod_patcher') or not self.mod_patcher:
             return False
         try:
-            restored = self.multi_mod_merger.restore_all_backups()
+            restored = self.mod_patcher.restore_all_backups()
             if restored:
                 logging.info(f'{context}: backups restored successfully')
                 self.status_changed.emit(tr('status.files_restored'), UI_COLORS['status_success'])
@@ -392,7 +392,7 @@ class GameLauncher(QObject):
             logging.error(f'{context}: Failed to restore backups: {e}', exc_info=True)
             return False
 
-    def _cancel_launch_after_merge(self):
+    def _cancel_launch_after_patching(self):
         try:
             self._try_restore_backups('cancel_launch_after_merge')
         except Exception as e:
@@ -400,7 +400,7 @@ class GameLauncher(QObject):
         finally:
             self.app_state.progress_bar_visible = False
             self.app_state.progress_bar_value = 0
-            self.app_state.is_merging = False
+            self.app_state.is_patching = False
             self.app_state.action_button_text = None
             self.app_state.action_button_enabled = True
             if self.restore_window_callback:
@@ -409,18 +409,18 @@ class GameLauncher(QObject):
                 except Exception as e:
                     logging.error(f'Failed to restore window: {e}', exc_info=True)
 
-    def _continue_after_merge(self, selections: Dict[int, Any], merge_success: bool, needs_multi_mod: bool = False):
-        if not merge_success:
+    def _continue_after_patching(self, selections: Dict[int, Any], patching_success: bool, needs_multi_mod: bool = False):
+        if not patching_success:
             return
-        if needs_multi_mod and self.multi_mod_merger:
-            conflicts_summary = self.multi_mod_merger.get_conflicts_summary()
+        if needs_multi_mod and self.mod_patcher:
+            conflicts_summary = self.mod_patcher.get_conflicts_summary()
             if conflicts_summary.get('has_conflicts', False):
                 from ui.dialogs.conflicts_dialog import ConflictsDialog
                 dialog = ConflictsDialog(conflicts_summary, self.app_state.config_dir, parent=None)
                 result = dialog.exec()
                 if result == QDialog.DialogCode.Rejected or result == 0:
                     logging.info('Game launch cancelled: conflicts dialog was closed without selecting an option')
-                    self._cancel_launch_after_merge()
+                    self._cancel_launch_after_patching()
                     return
         if needs_multi_mod:
             pass
@@ -450,11 +450,11 @@ class GameLauncher(QObject):
         if self.execute_plugin_hooks:
             self.execute_plugin_hooks('on_after_game_launch')
 
-    def _on_merge_status(self, message: str, status_type: str):
+    def _on_patching_status(self, message: str, status_type: str):
         color = UI_COLORS.get(f'status_{status_type}', UI_COLORS['status_error'])
         self.status_changed.emit(message, color)
 
-    def _on_merge_progress(self, progress: int, message: str):
+    def _on_patching_progress(self, progress: int, message: str):
         self.app_state.progress_bar_value = progress
         self.app_state.progress_bar_visible = True
         if message:

@@ -474,7 +474,7 @@ class LibraryDisplayController:
             self.app_state.current_task = thread
             self.app_state.progress_bar_visible = True
             self.app_state.progress_bar_value = 0
-            self.app_state.is_merging = True
+            self.app_state.is_patching = True
             self.app_state.action_button_text = tr('ui.cancel_button')
             self.app_state.action_button_enabled = True
             self._modpack_thread = thread
@@ -507,7 +507,7 @@ class LibraryDisplayController:
             logging.error(f'Error updating UI after modpack creation: {e}', exc_info=True)
 
     def _on_modpack_finished(self, success: bool, modpack_dir: str):
-        self.app_state.is_merging = False
+        self.app_state.is_patching = False
         self.app_state.progress_bar_visible = False
         self.app_state.action_button_text = tr('ui.launch_button')
         self.app_state.action_button_enabled = True

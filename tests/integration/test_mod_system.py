@@ -158,20 +158,20 @@ class TestModProcessing:
 class TestModMergingWithStructure:
 
     def test_multiple_mods_merging(self, app_state, feedback_service, mods_dir):
-        from services.mod_merge_service import MultiModMerger
+        from services.mod_patching_service import ModPatcher
         from unittest.mock import Mock
         mod_service = Mock()
-        merger = MultiModMerger(app_state, mod_service)
-        assert merger is not None
-        assert hasattr(merger, 'utmt_wrapper')
-        assert hasattr(merger, 'xdelta_path')
+        patcher = ModPatcher(app_state, mod_service)
+        assert patcher is not None
+        assert hasattr(patcher, 'utmt_wrapper')
+        assert hasattr(patcher, 'xdelta_path')
 
     def test_mod_priority_with_structure(self, app_state, feedback_service):
-        from services.mod_merge_service import MultiModMerger
+        from services.mod_patching_service import ModPatcher
         from unittest.mock import Mock
         mod_service = Mock()
-        merger = MultiModMerger(app_state, mod_service)
-        assert merger is not None
+        patcher = ModPatcher(app_state, mod_service)
+        assert patcher is not None
 
 
 class TestModMetadata:

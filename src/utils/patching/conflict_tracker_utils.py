@@ -2,11 +2,11 @@
 import re
 import time
 from typing import Dict, List, Any
-from config.merge_config import COMPILATION_ERROR_PATTERNS
+from config.patching_config import COMPILATION_ERROR_PATTERNS
 from services.patching_log_service import get_conflicts_logger, rotate_conflicts_log
 
 
-class MergeConflictTracker:
+class PatchingConflictTracker:
     """Tracks resource modification history and detected conflicts during merge."""
 
     def __init__(self, patching_logger):

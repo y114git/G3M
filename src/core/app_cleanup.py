@@ -32,8 +32,8 @@ def perform_close_cleanup(w):
             w._safe_set_parent_none(w.presence_thread)
             safe_stop_thread(w.presence_thread, timeout=2000, blocking=False)
         w.game_launcher._cleanup_direct_launch_files()
-        if hasattr(w.game_launcher, 'multi_mod_merger'):
-            w.game_launcher.multi_mod_merger.cleanup_processes_and_temp_files()
+        if hasattr(w.game_launcher, 'mod_patcher'):
+            w.game_launcher.mod_patcher.cleanup_processes_and_temp_files()
         try:
             import psutil
             current_process = psutil.Process(os.getpid())

@@ -4,7 +4,7 @@ import tempfile
 import pytest
 from pathlib import Path
 from unittest.mock import Mock
-from services.mod_merge_service import MultiModMerger
+from services.mod_patching_service import ModPatcher
 
 
 class TestPatching:
@@ -30,29 +30,29 @@ class TestPatching:
             shutil.copy2(data_win_path, temp_data_win)
             original_size = os.path.getsize(temp_data_win)
             mod_service = Mock()
-            merger = MultiModMerger(app_state, mod_service)
-            if merger.xdelta_path is None:
-                pytest.fail('xdelta executable not found: merger.xdelta_path is None')
-            if not os.path.exists(merger.xdelta_path):
-                pytest.fail(f'xdelta executable not found at path: {merger.xdelta_path}')
+            patcher = ModPatcher(app_state, mod_service)
+            if patcher.xdelta_path is None:
+                pytest.fail('xdelta executable not found: patcher.xdelta_path is None')
+            if not os.path.exists(patcher.xdelta_path):
+                pytest.fail(f'xdelta executable not found at path: {patcher.xdelta_path}')
             import subprocess
             try:
-                test_cmd = [merger.xdelta_path, '-h']
+                test_cmd = [patcher.xdelta_path, '-h']
                 result = subprocess.run(test_cmd, capture_output=True, text=True, timeout=5, stdin=subprocess.DEVNULL)
                 if result.returncode not in (0, 1):
                     error_output = result.stderr if result.stderr else result.stdout
                     pytest.fail(f"xdelta executable cannot be executed (return code: {result.returncode}). Command: {' '.join(test_cmd)}\nError output: {error_output[:500]}")
             except subprocess.TimeoutExpired:
-                pytest.fail(f'xdelta executable timed out when testing execution. Path: {merger.xdelta_path}')
+                pytest.fail(f'xdelta executable timed out when testing execution. Path: {patcher.xdelta_path}')
             except (FileNotFoundError, PermissionError, OSError) as e:
-                pytest.fail(f"xdelta executable cannot be executed: {type(e).__name__}: {e}\nPath: {merger.xdelta_path}\nFile exists: {os.path.exists(merger.xdelta_path)}\nIs file: {(os.path.isfile(merger.xdelta_path) if os.path.exists(merger.xdelta_path) else 'N/A')}")
+                pytest.fail(f"xdelta executable cannot be executed: {type(e).__name__}: {e}\nPath: {patcher.xdelta_path}\nFile exists: {os.path.exists(patcher.xdelta_path)}\nIs file: {(os.path.isfile(patcher.xdelta_path) if os.path.exists(patcher.xdelta_path) else 'N/A')}")
             if not os.path.exists(temp_data_win):
                 pytest.fail(f'Test data.win file does not exist: {temp_data_win}')
             if not os.path.exists(patch_file):
                 pytest.fail(f'Patch file does not exist: {patch_file}')
             test_output = temp_data_win + '.test'
             try:
-                test_cmd = [merger.xdelta_path, '-d', '-s', temp_data_win, patch_file, test_output]
+                test_cmd = [patcher.xdelta_path, '-d', '-s', temp_data_win, patch_file, test_output]
                 test_result = subprocess.run(test_cmd, capture_output=True, text=True, timeout=30, stdin=subprocess.DEVNULL)
                 direct_test_success = test_result.returncode == 0 and os.path.exists(test_output)
                 if not direct_test_success:
@@ -66,7 +66,7 @@ class TestPatching:
                 pytest.fail(f"Direct xdelta patch test timed out after 30 seconds.\nCommand: {' '.join(test_cmd)}\nThis may indicate a problem with the patch file or data.win.")
             except Exception:
                 pass
-            success = merger._apply_xdelta_patches(temp_data_win, [patch_file])
+            success = patcher._apply_xdelta_patches(temp_data_win, [patch_file])
             if not success:
                 log_info = ''
                 try:
@@ -79,7 +79,7 @@ class TestPatching:
                             log_info = f'\n\nRecent patching.log entries:\n{recent_logs}'
                 except Exception:
                     pass
-                pytest.fail(f"Patch application failed via MultiModMerger._apply_xdelta_patches.\nxdelta_path: {merger.xdelta_path}\npatch_file: {patch_file}\ndata_win_path: {temp_data_win}\ndata_win_size: {original_size} bytes\ndata_win_exists: {os.path.exists(temp_data_win)}\npatch_file_exists: {os.path.exists(patch_file)}\npatch_file_size: {(os.path.getsize(patch_file) if os.path.exists(patch_file) else 'N/A')} bytes{log_info}")
+                pytest.fail(f"Patch application failed via ModPatcher._apply_xdelta_patches.\nxdelta_path: {patcher.xdelta_path}\npatch_file: {patch_file}\ndata_win_path: {temp_data_win}\ndata_win_size: {original_size} bytes\ndata_win_exists: {os.path.exists(temp_data_win)}\npatch_file_exists: {os.path.exists(patch_file)}\npatch_file_size: {(os.path.getsize(patch_file) if os.path.exists(patch_file) else 'N/A')} bytes{log_info}")
             if not os.path.exists(temp_data_win):
                 pytest.fail(f'Patched file does not exist after patching: {temp_data_win}')
             patched_size = os.path.getsize(temp_data_win)
@@ -149,10 +149,10 @@ class TestMerging:
         if len(data_win_files) < 2:
             pytest.skip('Need at least 2 modified data.win files for merging test. Please add test files to patches/deltarune/chapter1_/')
         mod_service = Mock()
-        merger = MultiModMerger(app_state, mod_service)
-        assert merger is not None
-        assert hasattr(merger, 'utmt_wrapper')
-        assert hasattr(merger, 'xdelta_path')
+        patcher = ModPatcher(app_state, mod_service)
+        assert patcher is not None
+        assert hasattr(patcher, 'utmt_wrapper')
+        assert hasattr(patcher, 'xdelta_path')
 
     def test_progress_throttler_initialization(self, app_state, feedback_service, qapp):
         from utils.progress_throttler import ProgressThrottler
@@ -251,22 +251,22 @@ class TestRestoreOriginal:
         assert True
 
     def test_backup_manifest_tracking(self, temp_dir, app_state, feedback_service):
-        from services.mod_merge_service import MultiModMerger
+        from services.mod_patching_service import ModPatcher
         from services.mod_service import ModManager
         from services.backup_service import BackupManager
         import json
         mod_service = ModManager(app_state, feedback_service)
-        merger = MultiModMerger(app_state, mod_service)
+        patcher = ModPatcher(app_state, mod_service)
         backup_dir = os.path.join(temp_dir, 'backups')
         os.makedirs(backup_dir, exist_ok=True)
-        merger.backup_service = BackupManager(backup_dir, patching_logger=merger.patching_logger)
+        patcher.backup_service = BackupManager(backup_dir, patching_logger=patcher.patching_logger)
         chapter_id = 1
         test_file = os.path.join(temp_dir, 'test.txt')
         with open(test_file, 'w') as f:
             f.write('test')
-        merger.backup_service.backup_file(chapter_id, test_file)
+        patcher.backup_service.backup_file(chapter_id, test_file)
         manifest_path = os.path.join(temp_dir, 'manifest.json')
-        merger.backup_service.save_backups_to_manifest(manifest_path)
+        patcher.backup_service.save_backups_to_manifest(manifest_path)
         with open(manifest_path, 'r') as f:
             manifest_data = json.load(f)
         assert 'modification_order' in manifest_data

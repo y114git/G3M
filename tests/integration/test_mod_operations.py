@@ -54,7 +54,7 @@ class TestModRemoval:
 class TestModMerge:
 
     def test_merge_multiple_mods(self, app_state, feedback_service, temp_mods_dir):
-        from services.mod_merge_service import MultiModMerger
+        from services.mod_patching_service import ModPatcher
         mods = []
         for i in range(3):
             key = f'test_merge_mod_{i}'
@@ -67,8 +67,8 @@ class TestModMerge:
             mods.append(key)
         from services.mod_service import ModManager
         mod_service = ModManager(app_state, feedback_service)
-        merger = MultiModMerger(app_state, mod_service)
-        assert merger is not None
+        patcher = ModPatcher(app_state, mod_service)
+        assert patcher is not None
 
 
 class TestModImportExport:

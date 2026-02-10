@@ -1,11 +1,11 @@
-"""Path resolution helpers for mod merging — resolves mod source dirs and game target dirs."""
+"""Path resolution utilities for mod patching — resolves mod source dirs and game target dirs."""
 import os
 from typing import Any, Optional
 
 from utils.file_utils import sanitize_filename, get_chapter_folder_name, load_json
 from utils.mod_utils import get_mod_key, get_mod_name
 from utils.path_utils import find_chapter_resource_dir
-from utils import merge_mod_detection
+from utils.patching import mod_content_utils as mod_content
 
 
 def resolve_mod_game(mod_data, source_dir=None):
@@ -95,7 +95,7 @@ def get_target_dir(chapter_id: int, app_state, logger, game: Optional[str] = Non
                 if not base_path:
                     logger.warning(f'{game} game path not found in config for chapter {chapter_id}')
                     return None
-                return merge_mod_detection.resolve_macos_path(base_path, app_name)
+                return mod_content.resolve_macos_path(base_path, app_name)
             if not base_path:
                 return None
         else:
@@ -108,5 +108,5 @@ def get_target_dir(chapter_id: int, app_state, logger, game: Optional[str] = Non
             return None
         for gkey, (mode_cls, app_name, _, slot_ids) in _GAME_CONFIGS.items():
             if isinstance(app_state.game_mode, mode_cls) and chapter_id in slot_ids:
-                return merge_mod_detection.resolve_macos_path(base_path, app_name)
+                return mod_content.resolve_macos_path(base_path, app_name)
     return find_chapter_resource_dir(base_path, chapter_id)

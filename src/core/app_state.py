@@ -11,7 +11,7 @@ from utils.mod_utils import get_mod_key
 class AppState(QObject):
     """Central application state manager with reactive properties and signals."""
     is_installing_changed = pyqtSignal(bool)
-    is_merging_changed = pyqtSignal(bool)
+    is_patching_changed = pyqtSignal(bool)
     game_mode_changed = pyqtSignal(object)
     current_mode_changed = pyqtSignal(str)
     selected_chapter_changed = pyqtSignal(object)
@@ -28,7 +28,7 @@ class AppState(QObject):
     progress_bar_visible_changed = pyqtSignal(bool)
     progress_bar_value_changed = pyqtSignal(int)
     all_mods_updated = pyqtSignal(list)
-    _reactive_attrs = {'_is_installing': 'is_installing_changed', '_is_merging': 'is_merging_changed', '_game_mode': 'game_mode_changed', '_current_mode': 'current_mode_changed', '_selected_chapter_id': 'selected_chapter_changed', '_operation_cancelled': 'operation_cancelled_changed', '_filtered_mods': 'filtered_mods_changed', '_current_page': 'current_page_changed', '_search_text': 'search_text_changed', '_library_search_text': 'library_search_text_changed', '_mods_per_page': 'mods_per_page_changed', '_current_task': 'current_task_changed', '_action_button_text': 'action_button_text_changed', '_action_button_enabled': 'action_button_enabled_changed', '_progress_bar_visible': 'progress_bar_visible_changed', '_progress_bar_value': 'progress_bar_value_changed'}
+    _reactive_attrs = {'_is_installing': 'is_installing_changed', '_is_patching': 'is_patching_changed', '_game_mode': 'game_mode_changed', '_current_mode': 'current_mode_changed', '_selected_chapter_id': 'selected_chapter_changed', '_operation_cancelled': 'operation_cancelled_changed', '_filtered_mods': 'filtered_mods_changed', '_current_page': 'current_page_changed', '_search_text': 'search_text_changed', '_library_search_text': 'library_search_text_changed', '_mods_per_page': 'mods_per_page_changed', '_current_task': 'current_task_changed', '_action_button_text': 'action_button_text_changed', '_action_button_enabled': 'action_button_enabled_changed', '_progress_bar_visible': 'progress_bar_visible_changed', '_progress_bar_value': 'progress_bar_value_changed'}
 
     def __init__(self):
         super().__init__()
@@ -54,7 +54,7 @@ class AppState(QObject):
         self._current_mode: str = 'normal'
         self._selected_chapter_id: Optional[int] = None
         self._is_installing: bool = False
-        self._is_merging: bool = False
+        self._is_patching: bool = False
         self.update_in_progress: bool = False
         self.initialization_completed: bool = False
         self.is_shown_to_user: bool = False
@@ -142,12 +142,12 @@ class AppState(QObject):
         self._is_installing = value
 
     @property
-    def is_merging(self) -> bool:
-        return self._is_merging
+    def is_patching(self) -> bool:
+        return self._is_patching
 
-    @is_merging.setter
-    def is_merging(self, value: bool) -> None:
-        self._is_merging = value
+    @is_patching.setter
+    def is_patching(self, value: bool) -> None:
+        self._is_patching = value
 
     @property
     def game_mode(self) -> GameMode:
