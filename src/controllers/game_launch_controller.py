@@ -65,6 +65,13 @@ class GameLaunchController(QObject):
         modpack_dir = getattr(library_display, '_modpack_dir', None) if is_modpack_creation else None
         merge_thread = getattr(self.game_launcher, '_merge_thread', None)
         if merge_thread:
+            try:
+                merge_thread.progress_update.disconnect()
+                merge_thread.status_update.disconnect()
+                merge_thread.finished.disconnect()
+                merge_thread.warning_confirmation_needed.disconnect()
+            except (TypeError, RuntimeError):
+                pass
             merge_thread.cancel()
             if merge_thread.isRunning():
                 merge_thread._warning_event.set()
@@ -103,7 +110,7 @@ class GameLaunchController(QObject):
             self.app_state.cancel_current_operation()
         elif operation_type == 'merge':
             self._cancel_merge_operation()
-        self.feedback_service.update_status(tr('status.operation_cancelled'), UI_COLORS['status_error'])
+        self.feedback_service.update_status(tr('status.operation_cancelled'), UI_COLORS['status_info'])
         self._reset_progress_bar()
         self.update_button_state()
 
