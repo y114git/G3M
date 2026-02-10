@@ -16,6 +16,14 @@ class LoadGameBananaMetadataThread(QThread):
 
     def cancel(self): self._cancelled = True
 
+    def _resolve_external_url(self, mod_id_str):
+        if self.app_state and hasattr(self.app_state, 'all_mods'):
+            key = f'gb_{mod_id_str}'
+            for mod in self.app_state.all_mods:
+                if getattr(mod, 'key', None) == key:
+                    return getattr(mod, 'external_url', None)
+        return None
+
     def _save_metadata(self, mod_id_str, downloads, tagline, category):
         tagline_to_save, category_to_save = tagline or 'No description', category
         self.metadata_cache.set(mod_id_str, downloads, tagline_to_save, category=category_to_save)
@@ -36,7 +44,8 @@ class LoadGameBananaMetadataThread(QThread):
                     if self._cancelled or self.isInterruptionRequested():
                         break
                     try:
-                        downloads, tagline, category = self._load_mod_metadata(int(mod_id_str))
+                        external_url = self._resolve_external_url(mod_id_str)
+                        downloads, tagline, category = self._load_mod_metadata(int(mod_id_str), external_url=external_url)
                         if downloads is not None or tagline or category:
                             self._save_metadata(mod_id_str, downloads, tagline, category)
                             loaded_count += 1
@@ -57,19 +66,19 @@ class LoadGameBananaMetadataThread(QThread):
             self.metadata_cache.flush()
             self.finished.emit()
 
-    def _load_mod_metadata(self, mod_id: int):
+    def _load_mod_metadata(self, mod_id: int, external_url=None):
         try:
             try:
-                downloads = self.api.get_mod_downloads_only(mod_id)
+                downloads = self.api.get_mod_downloads_only(mod_id, external_url=external_url)
             except Exception:
                 downloads = None
             try:
-                desc = self.api.get_mod_description_only(mod_id)
+                desc = self.api.get_mod_description_only(mod_id, external_url=external_url)
                 tagline = desc[:200].strip() if desc and len(desc[:200].strip()) >= 10 else None
             except Exception:
                 tagline = None
             try:
-                category = self.api.get_mod_category_only(mod_id)
+                category = self.api.get_mod_category_only(mod_id, external_url=external_url)
             except Exception:
                 category = None
             return (downloads, tagline, category)

@@ -342,9 +342,6 @@ class ModOperationsController:
             self.app.progress_bar.setValue(value)
             if getattr(self.app_state, 'current_install_is_gamebanana', False):
                 self.app_state.current_install_progress = value
-                if value >= 100 or abs(value - self._last_gamebanana_progress) >= 2:
-                    self._last_gamebanana_progress = value
-                    self._safe_execute(lambda: self.app.search_display.update_search_plaques(), 'Failed to refresh plaques for progress')
 
     def on_install_status_token(self, message: str, color: str, op_id: int):
         current_op_id = getattr(self.app, '_install_op_id', 0)

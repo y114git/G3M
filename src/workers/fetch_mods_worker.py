@@ -1,15 +1,12 @@
 """Worker thread for fetching mod lists from remote sources."""
 import json
 import os
-import re
-from typing import Any, Dict, List, Optional, Tuple
-from utils.network_utils import get_session
+from typing import Any, List, Optional, Tuple
 import logging
 from PyQt6.QtCore import QThread, pyqtSignal
-from config.constants import CLOUD_FUNCTIONS_BASE_URL, UI_COLORS, GAMEBANANA_GAME_IDS, GAMEBANANA_PER_PAGE
+from config.constants import UI_COLORS, GAMEBANANA_GAME_IDS, GAMEBANANA_PER_PAGE
 from services.localization_service import tr
-from models.mod_models import ModChapterData, ModExtraFile, ModInfo
-from utils.path_utils import version_sort_key
+from models.mod_models import ModInfo
 from utils.mod_utils import get_mod_key
 logger = logging.getLogger(__name__)
 _GAME_MAPPING = {'deltarune': 'deltarune', 'undertale': 'undertale', 'undertaleyellow': 'undertaleyellow', 'pizzatower': 'pizzatower', 'sugaryspire': 'sugaryspire'}
@@ -30,27 +27,8 @@ class FetchModsThread(QThread):
 
     def run(self):
         try:
-            import requests
             logger.info('FetchModsThread: Starting mod fetch')
             all_mods = []
-            if CLOUD_FUNCTIONS_BASE_URL:
-                try:
-                    logger.info('FetchModsThread: Fetching mods from database')
-                    app_state = getattr(self.main_window, 'app_state', None)
-                    session = get_session(app_state)
-                    response = session.get(f'{CLOUD_FUNCTIONS_BASE_URL}/getMods', timeout=15)
-                    response.raise_for_status()
-                    mods_json = response.json() or {}
-                    all_mods = self._parse_mods(mods_json)
-                    logger.info(f'FetchModsThread: Parsed {len(all_mods)} mods from database')
-                except requests.RequestException as e:
-                    logger.warning(f'FetchModsThread: Failed to fetch from database: {e}')
-                    error_msg = tr('errors.update_list_failed').format(str(e))
-                    self.status.emit(error_msg, UI_COLORS['status_warning'])
-                except Exception as e:
-                    logger.error(f'FetchModsThread: Error parsing database mods: {e}', exc_info=True)
-            else:
-                logger.warning('FetchModsThread: CLOUD_FUNCTIONS_BASE_URL not configured')
             try:
                 logger.info('FetchModsThread: Starting GameBanana fetch')
                 metadata_cache = None
@@ -225,133 +203,6 @@ class FetchModsThread(QThread):
             self.status.emit(str(e), UI_COLORS['status_error'])
             self.result.emit(False)
 
-    def _parse_mods(self, mods_json: Dict[str, Any]) -> List[ModInfo]:
-        all_mods = []
-        logger.debug(f'_parse_mods: Parsing {len(mods_json)} mods from JSON')
-        parsed_count = 0
-        skipped_count = 0
-        for key, data in mods_json.items():
-            if not isinstance(data, dict):
-                skipped_count += 1
-                continue
-            try:
-                mod = self._parse_single_mod(key, data)
-                if mod:
-                    all_mods.append(mod)
-                    parsed_count += 1
-                else:
-                    skipped_count += 1
-                    logger.debug(f'_parse_mods: Skipped mod {key} - validation failed')
-            except Exception as e:
-                skipped_count += 1
-                logger.warning(f'_parse_mods: Error parsing mod {key}: {e}')
-        logger.info(f'_parse_mods: Parsed {parsed_count} mods, skipped {skipped_count}')
-        return all_mods
-
-    def _parse_single_mod(self, key: str, data: Dict[str, Any]) -> Optional[ModInfo]:
-        try:
-            files_data = self._extract_files_data(data)
-            composite_version = self._aggregate_versions(files_data)
-            base_version = data.get('version')
-            game = data.get('game') or data.get('modgame', 'deltarune')
-            screens_list = data.get('screenshots_url', [])
-            if isinstance(screens_list, str):
-                screens_list = [s.strip() for s in screens_list.split(',') if s.strip()]
-            elif not isinstance(screens_list, list):
-                screens_list = []
-            tags = data.get('tags', [])
-            if isinstance(tags, list):
-                tags = ['textedit' if tag == 'translation' else str(tag) for tag in tags if tag]
-            elif tags == 'translation':
-                tags = ['textedit']
-            else:
-                tags = []
-            data_dict = data.copy()
-            data_dict['key'] = key
-            data_dict['version'] = f'{base_version}|{composite_version}' if base_version else composite_version
-            data_dict['game'] = game
-            data_dict['tags'] = tags
-            data_dict['screenshots_url'] = screens_list
-            data_dict['demo_url'] = files_data.get('demo', {}).get('url') if files_data else None
-            data_dict['demo_version'] = files_data.get('demo', {}).get('version', '1.0.0') if files_data else '1.0.0'
-            if 'files' in data_dict:
-                del data_dict['files']
-            if 'chapters' in data_dict:
-                del data_dict['chapters']
-            mod = ModInfo.from_dict(data_dict)
-            if self._process_mod_chapters(mod, files_data):
-                return mod
-            return None
-        except Exception as e:
-            logger.error(f'_parse_single_mod: Error parsing mod {key}: {e}', exc_info=True)
-            return None
-
-    def _extract_files_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        files_data = {}
-        raw_data = data.get('files', data.get('chapters', {}))
-        if isinstance(raw_data, list):
-            items = [(str(i), chapter_data) for i, chapter_data in enumerate(raw_data) if chapter_data is not None]
-        elif isinstance(raw_data, dict):
-            items = list(raw_data.items())
-        else:
-            items = []
-        for chapter_key, chapter_data in items:
-            if not isinstance(chapter_data, dict):
-                continue
-            normalized_key = self._normalize_chapter_key(chapter_key)
-            if not normalized_key:
-                continue
-            entry = self._create_file_entry(chapter_data)
-            if entry:
-                files_data[normalized_key] = entry
-        return files_data
-
-    def _normalize_chapter_key(self, key: Any) -> Optional[str]:
-        if isinstance(key, str):
-            key_lower = key.strip().lower()
-            if key_lower == 'menu':
-                return '0'
-            if key_lower.isdigit():
-                return key_lower
-            if key_lower in ['demo', 'undertale']:
-                return key_lower
-            match = re.match('^(?:chapter_|chap_|c)(\\d+)$', key_lower)
-            if match:
-                return match.group(1)
-        elif isinstance(key, int):
-            if key == -1:
-                return 'demo'
-            if 0 <= key <= 4:
-                return str(key)
-        return None
-
-    def _create_file_entry(self, chapter_data: Dict[str, Any]) -> Dict[str, Any]:
-        entry = {}
-        data_url = chapter_data.get('data_file_url')
-        data_version = chapter_data.get('data_file_version') or chapter_data.get('data_win_version') or '1.0.0'
-        if data_url:
-            entry.update({'data_file_url': data_url, 'data_file_version': data_version})
-        extra_files = chapter_data.get('extra_files', chapter_data.get('extra', []))
-        if isinstance(extra_files, list):
-            extra_map = {}
-            for idx, ef in enumerate(extra_files):
-                if isinstance(ef, dict) and ef.get('url'):
-                    key = ef.get('key', str(idx))
-                    extra_map[str(key)] = {'url': ef['url'], 'version': ef.get('version', '1.0.0')}
-            if extra_map:
-                entry['extra'] = extra_map
-        elif isinstance(chapter_data.get('extra'), dict):
-            extra_map = {}
-            for k, v in chapter_data.get('extra', {}).items():
-                if isinstance(v, dict) and (url := v.get('url')):
-                    version = v.get('version') or v.get('data_file_version') or '1.0.0'
-                    extra_map[str(k)] = {'url': url, 'version': version}
-            if extra_map:
-                entry['extra'] = extra_map
-        if (desc_url := chapter_data.get('description_url')):
-            entry['description_url'] = desc_url
-        return entry
-
     def _get_local_mods(self) -> List[ModInfo]:
         local_mods = []
         app_state = getattr(self.main_window, 'app_state', None)
@@ -363,37 +214,6 @@ class FetchModsThread(QThread):
                     local_mods.append(mod)
             logger.debug(f'_get_local_mods: Found {len(local_mods)} local mods in app_state')
         return local_mods
-
-    def _aggregate_versions(self, node: Any) -> str:
-        collected = set()
-
-        def _walk(n):
-            if isinstance(n, dict):
-                if (v := n.get('version')):
-                    collected.add(v)
-                for child in n.values():
-                    _walk(child)
-            elif isinstance(n, (list, tuple)):
-                for item in n:
-                    _walk(item)
-        _walk(node)
-        return '|'.join(sorted(collected, key=version_sort_key, reverse=True)) if collected else '1.0.0'
-
-    def _process_mod_chapters(self, mod: ModInfo, files_data: Dict[str, Any]) -> bool:
-        for file_key, chapter_data in files_data.items():
-            if not isinstance(chapter_data, dict):
-                continue
-            has_df_version = not chapter_data.get('data_file_url') or bool(chapter_data.get('data_file_version'))
-            extra_files = chapter_data.get('extra', {}).items()
-            if not has_df_version:
-                return False
-            if extra_files and (not all((v.get('version') for _, v in extra_files))):
-                return False
-            extra_files_list = [ModExtraFile(key=k, **v) for k, v in extra_files]
-            mod_chapter = ModChapterData(data_file_url=chapter_data.get('data_file_url'), data_file_version=chapter_data.get('data_file_version'), extra_files=extra_files_list)
-            if mod_chapter.is_valid():
-                mod.files[file_key] = mod_chapter
-        return True
 
     def _update_remote_exists_flags(self, all_mods: List[ModInfo]):
         remote_mod_keys = {mod.key for mod in all_mods}

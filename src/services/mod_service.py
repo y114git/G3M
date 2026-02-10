@@ -351,7 +351,8 @@ class ModManager(QObject):
                             from adapters.gamebanana_adapter import GameBananaAPI
                             api = GameBananaAPI()
                             mod_id = int(mod_key_attr.replace('gb_', '', 1))
-                            downloaded_count = api.get_mod_downloads_only(mod_id)
+                            external_url = getattr(mod, 'external_url', None)
+                            downloaded_count = api.get_mod_downloads_only(mod_id, external_url=external_url)
                             if downloaded_count is not None:
                                 mod.downloads = max(downloaded_count, 0)
                         except Exception as e:

@@ -687,7 +687,6 @@ class SearchDisplayController(QObject):
                 def process_batch(batch_start: int):
                     nonlocal target_position, widgets_shown, widgets_created
                     batch_end = min(batch_start + BATCH_SIZE, len(mods_to_process))
-                    app = QApplication.instance()
                     for batch_idx in range(batch_start, batch_end):
                         idx, mod = mods_to_process[batch_idx]
                         if mod is None:
@@ -732,13 +731,9 @@ class SearchDisplayController(QObject):
                                 widgets_created += 1
                                 widgets_shown += 1
                                 target_position += 1
-                            if (batch_idx - batch_start + 1) % 5 == 0 and app:
-                                app.processEvents()
                         except Exception as e:
                             logger.error(f"Error processing plaque for mod {(mod.name if mod else 'unknown')} at index {start_index + idx}: {e}", exc_info=True)
                             continue
-                    if app:
-                        app.processEvents()
                     if batch_end < len(mods_to_process):
                         QTimer.singleShot(BATCH_DELAY_MS, lambda: process_batch(batch_end))
                     else:
@@ -872,11 +867,18 @@ class SearchDisplayController(QObject):
             widget.update_install_button_state()
 
     def update_search_plaques(self):
-        for widget in self._iter_layout_plaques():
-            try:
-                self._refresh_plaque(widget)
-            except Exception:
-                pass
+        mod_list_widget = getattr(self.app, 'mod_list_widget', None)
+        if mod_list_widget:
+            mod_list_widget.setUpdatesEnabled(False)
+        try:
+            for widget in self._iter_layout_plaques():
+                try:
+                    self._refresh_plaque(widget)
+                except Exception:
+                    pass
+        finally:
+            if mod_list_widget:
+                mod_list_widget.setUpdatesEnabled(True)
 
     def on_mod_clicked(self, mod):
         for widget in self._iter_layout_plaques():

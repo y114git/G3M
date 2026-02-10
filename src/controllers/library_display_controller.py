@@ -94,6 +94,9 @@ class LibraryDisplayController:
                 self.app._show_chapter_mode_instruction()
             return
         self.app._updating_chapter_mods = True
+        container = getattr(self.app, 'installed_mods_container', None)
+        if container:
+            container.setUpdatesEnabled(False)
         clear_layout_widgets(self.app.installed_mods_layout, keep_last_n=1)
         installed_mods = self.mod_service.get_installed_mods_list()
         filtered_mods = self._filter_and_sort_installed(installed_mods)
@@ -116,6 +119,8 @@ class LibraryDisplayController:
             chapter_name = chapter_names.get(selected_chapter_id, tr('ui.chapter_n', chapter=str(selected_chapter_id)))
             show_empty_message_in_layout(self.app.installed_mods_layout, tr('ui.no_mods_for_chapter', chapter_name=chapter_name), self.app_state.local_config, font_size=16)
         self._update_priority_button_visibility(selected_chapter_id)
+        if container:
+            container.setUpdatesEnabled(True)
         self.app._updating_chapter_mods = False
 
     def refresh_async(self):
@@ -167,12 +172,19 @@ class LibraryDisplayController:
                     return
                 self.update_for_chapter_mode(selected_id)
                 return
+            container = getattr(self.app, 'installed_mods_container', None)
+            if container:
+                container.setUpdatesEnabled(False)
             clear_layout_widgets(self.app.installed_mods_layout, keep_last_n=1)
             self.cleanup_missing_mods(installed_mods)
             existing_mods = [mod_info for mod_info in installed_mods if self.mod_service.check_mod_exists(mod_info)]
             filtered_mods = self._filter_and_sort_installed(existing_mods)
             mods = list(filtered_mods)
             batch_index = 0
+
+            def _finish_display():
+                if container:
+                    container.setUpdatesEnabled(True)
 
             def _build_next_batch(batch_size=25):
                 nonlocal batch_index, mods
@@ -197,6 +209,7 @@ class LibraryDisplayController:
                             show_empty_message_in_layout(self.app.installed_mods_layout, tr('ui.empty'), self.app_state.local_config, font_size=18)
                         self.update_mod_widgets_slot_status()
                         self.app.game_launch.update_button_state()
+                        _finish_display()
                     else:
                         QTimer.singleShot(0, _build_next_batch)
                 except Exception:
@@ -207,6 +220,7 @@ class LibraryDisplayController:
                         self.app.game_launch.update_button_state()
                     except Exception:
                         pass
+                    _finish_display()
             _build_next_batch()
         except Exception:
             pass

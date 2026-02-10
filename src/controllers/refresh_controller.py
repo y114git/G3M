@@ -67,26 +67,6 @@ class RefreshController:
                 if not is_initial:
                     QTimer.singleShot(500, lambda: self.refresh_mods_list(is_initial=is_initial, language_combo=language_combo, localization_callback=localization_callback, on_fetch_finished_kwargs=on_fetch_finished_kwargs))
                 return
-            if hasattr(self.app_state, 'cache_dir') and self.app_state.cache_dir and hasattr(self.app_state, 'all_mods') and self.app_state.all_mods:
-                try:
-                    metadata_cache = GameBananaMetadataCache(self.app_state.cache_dir)
-                    for mod in self.app_state.all_mods:
-                        key = get_mod_key(mod)
-                        if not key or not key.startswith('gb_'):
-                            continue
-                        mod_id = key.replace('gb_', '', 1)
-                        if metadata_cache.is_valid(mod_id):
-                            continue
-                        downloads = getattr(mod, 'downloads', None)
-                        tagline = getattr(mod, 'tagline', None)
-                        full_desc = getattr(mod, 'full_description', None)
-                        screenshots = getattr(mod, 'screenshots_url', None)
-                        category = getattr(mod, 'gamebanana_category', None)
-                        if downloads is not None or tagline or full_desc or screenshots or category:
-                            metadata_cache.set(mod_id, downloads=downloads, tagline=tagline, full_description=full_desc, screenshots=screenshots, category=category)
-                    metadata_cache.flush()
-                except Exception as e:
-                    logging.warning(f'RefreshController: Error saving metadata to cache: {e}', exc_info=True)
             if language_combo is not None:
                 current_lang_code = localization_service.get_current_language()
                 localization_service.rescan_languages()

@@ -7,7 +7,7 @@ import threading
 import logging
 from typing import Optional
 from PyQt6.QtCore import pyqtSignal
-from config.constants import UI_COLORS, NETWORK_TIMEOUT_HEAD, MOD_CONFIG_FILENAME, CLOUD_FUNCTIONS_BASE_URL
+from config.constants import UI_COLORS, NETWORK_TIMEOUT_HEAD, MOD_CONFIG_FILENAME
 from services.localization_service import tr
 from core.exceptions import AppError
 from utils.file_utils import has_deltamod_info_file, check_filename_is_deltamod_info
@@ -45,7 +45,7 @@ class UrlInstallThread(BaseInstallWorker):
             if self.url.startswith('deltahub://'):
                 content = self.url[len('deltahub://'):].split(',')[0].strip().rstrip('/')
                 if len(content) == 64 and all((c in '0123456789abcdef' for c in content.lower())):
-                    self._install_mod_from_hash(content)
+                    self.finished.emit(False, tr('errors.mod_not_found'))
                     return
                 if not content.startswith(('http://', 'https://')):
                     content = content.replace('https//', 'https://').replace('http//', 'http://')
@@ -404,10 +404,6 @@ class UrlInstallThread(BaseInstallWorker):
                     try:
                         with open(redirect_config_path, 'r', encoding='utf-8') as f:
                             redirect_config = json.load(f)
-                        key = redirect_config.get('key') or redirect_config.get('mod_key')
-                        if key and len(redirect_config) == 1:
-                            self._install_mod_from_key(key)
-                            return True
                         redirect_url = redirect_config.get('dm_url') or redirect_config.get('external_url') or redirect_config.get('download_url')
                         if redirect_url:
                             self.status.emit(tr('status.deltamod_redirect_found'), UI_COLORS['status_info'])
@@ -427,56 +423,6 @@ class UrlInstallThread(BaseInstallWorker):
                 os.remove(path)
         except Exception as e:
             logging.warning(f'UrlInstallThread: Failed to remove file {path}: {e}')
-
-    def _install_mod_from_hash(self, mod_hash: str):
-        try:
-            self._install_mod_from_key(mod_hash)
-        except Exception as e:
-            logging.error(f'UrlInstallThread: Error installing mod from hash: {e}', exc_info=True)
-            self.finished.emit(False, tr('errors.mod_installation_failed'))
-
-    def _install_mod_from_key(self, key: str):
-        try:
-            from workers.fetch_mods_worker import FetchModsThread
-            from workers.install.batch_install_worker import InstallModsThread
-            self.status.emit(tr('status.downloading_mod'), UI_COLORS['status_info'])
-            session = get_session()
-            resp = session.get(f'{CLOUD_FUNCTIONS_BASE_URL}/getModData?modId={key}', timeout=10)
-            if resp.status_code != 200 or not resp.json():
-                resp = session.get(f'{CLOUD_FUNCTIONS_BASE_URL}/getPendingModData?modId={key}', timeout=10)
-                if resp.status_code != 200 or not resp.json():
-                    raise AppError('errors.mod_not_found')
-            mod_data = resp.json()
-            mod_data['key'] = key
-            fetch_thread = FetchModsThread(self.main_window, force_update=False)
-            mod_info = fetch_thread._parse_single_mod(key, mod_data)
-            if not mod_info:
-                raise AppError('errors.mod_not_found')
-            install_tasks = []
-            for chapter_id in [0, 1, 2, 3, 4, -1]:
-                chapter_data = mod_info.get_chapter_data(chapter_id) if chapter_id != -1 else None
-                if chapter_id == -1 and mod_info.is_valid_for_demo():
-                    install_tasks.append((mod_info, -1))
-                elif chapter_data and chapter_data.is_valid():
-                    install_tasks.append((mod_info, chapter_id))
-            if not install_tasks:
-                raise AppError('errors.mod_has_no_files')
-            install_thread = InstallModsThread(self.main_window, install_tasks, was_installed_before=False)
-            install_thread.progress.connect(lambda p: self.progress.emit(p))
-            install_thread.status.connect(lambda msg, color: self.status.emit(msg, color))
-
-            def on_install_finished(success):
-                if success:
-                    mod_name = mod_info.name
-                    self.finished.emit(True, tr('status.install_complete_success', mod_name=mod_name))
-                else:
-                    self.finished.emit(False, tr('errors.mod_installation_failed'))
-            install_thread.finished.connect(on_install_finished)
-            install_thread.start()
-            install_thread.wait()
-        except Exception as e:
-            logging.error(f'UrlInstallThread: Error installing mod from key: {e}', exc_info=True)
-            self.finished.emit(False, tr('errors.mod_installation_failed'))
 
     def _install_mod_from_archive(self, archive_path: str, temp_dir: str):
         try:

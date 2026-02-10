@@ -5,7 +5,7 @@ import time
 import logging
 from urllib.parse import urlparse, unquote
 from PyQt6.QtCore import QThread, pyqtSignal
-from config.constants import UI_COLORS, NETWORK_TIMEOUT_HEAD, NETWORK_TIMEOUT_MEDIUM, MOD_CONFIG_FILENAME, CLOUD_FUNCTIONS_BASE_URL, DATA_FILE_EXTENSIONS
+from config.constants import UI_COLORS, NETWORK_TIMEOUT_HEAD, MOD_CONFIG_FILENAME, DATA_FILE_EXTENSIONS
 from services.localization_service import tr
 from utils.file_utils import get_unique_mod_dir
 from utils.mod_utils import get_mod_key
@@ -107,24 +107,6 @@ class InstallModsThread(QThread):
         except Exception as e:
             logging.error(f'_should_update_component: failed to compute updates: {e}', exc_info=True)
             return {}
-
-    def _increment_downloads_for_installed_mods(self, installed_mods):
-        try:
-            for key in [k for k in installed_mods if not k.startswith('local_')]:
-                self._increment_mod_downloads_on_server(key)
-        except Exception as e:
-            logging.debug(f'_increment_downloads_for_installed_mods: failed: {e}')
-
-    def _increment_mod_downloads_on_server(self, key):
-        try:
-            url = f'{CLOUD_FUNCTIONS_BASE_URL}/incrementDownloads'
-            data = {'modId': key}
-            session = get_session()
-            response = session.post(url, json=data, timeout=NETWORK_TIMEOUT_MEDIUM)
-            return response.status_code == 200
-        except Exception as e:
-            logging.debug(f'_increment_mod_downloads_on_server: failed: {e}')
-            return False
 
     def _download_component_file(self, url: str, target_dir: str, component_type: str, progress_callback, total_size: int, downloaded_ref: list[int], session=None):
         import platform
@@ -380,7 +362,6 @@ class InstallModsThread(QThread):
             for key in installed_mods.keys():
                 metadata[key] = {'added_date': time.strftime('%Y-%m-%d %H:%M:%S'), 'is_available_on_server': True}
             self.main_window.mod_service._write_metadata(metadata)
-            self._increment_downloads_for_installed_mods(installed_mods.keys())
             if self._cancelled:
                 self.status.emit(tr('status.operation_cancelled'), UI_COLORS['status_error'])
                 self.finished.emit(False)
