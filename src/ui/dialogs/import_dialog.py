@@ -69,7 +69,7 @@ class ImportDialog(QDialog):
             description = tr('file_descriptions.theme_files') if self.import_type == 'themes' else tr(f'{self.import_type}.archive_files')
             return f'{description} ({self.file_filter});;All Files (*)'
         if self.import_type == 'themes':
-            return f"{tr('file_descriptions.theme_files')} (*.dhtheme);;All Files (*)"
+            return f"{tr('file_descriptions.theme_files')} (*.zip);;All Files (*)"
         if self.import_type == 'plugins':
             return tr('plugins.archive_files') + ' (*.zip *.7z *.rar *.tar.gz *.lzma);;All Files (*)'
         return tr('mods.archive_files') + ' (*.zip *.7z *.rar *.tar.gz *.lzma);;All Files (*)'

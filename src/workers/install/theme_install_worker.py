@@ -64,12 +64,11 @@ class ThemeInstallWorker(BaseInstallWorker):
 
     def _install_theme_from_path(self, content_path: str) -> bool:
         try:
-            theme_json_path = None
-            if os.path.isfile(content_path) and content_path.endswith('.dhtheme'):
+            if os.path.isfile(content_path):
                 with tempfile.TemporaryDirectory(prefix='dh-theme-extract-') as extract_dir:
-                    from utils.archive_utils import extract_with_unrar_retry
+                    from utils.archive_utils import extract_any_archive
                     try:
-                        extract_with_unrar_retry(content_path, extract_dir, self)
+                        extract_any_archive(content_path, extract_dir)
                     except Exception as e:
                         logging.error(f'ThemeInstallWorker: Failed to extract theme archive: {e}')
                         return False
@@ -106,7 +105,7 @@ class ThemeInstallWorker(BaseInstallWorker):
             if archive_is_url:
                 url = self.archive_path
                 with tempfile.TemporaryDirectory(prefix='dh-theme-import-') as temp_dir:
-                    temp_archive_name = f'temp_theme_{os.getpid()}.dhtheme'
+                    temp_archive_name = f'temp_theme_{os.getpid()}.zip'
                     temp_archive_path = os.path.join(temp_dir, temp_archive_name)
                     try:
                         if not self._download_archive(url, temp_archive_path):

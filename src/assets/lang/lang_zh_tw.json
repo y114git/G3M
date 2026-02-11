@@ -1152,7 +1152,7 @@
   },
   "themes": {
     "import_themes": "匯入主題",
-    "import_instructions": "從檔案或URL匯入主題。支援的格式: .dhtheme",
+    "import_instructions": "從檔案或URL匯入主題。支援的格式: .zip",
     "import_from_file": "從檔案匯入",
     "import_from_url": "從URL匯入",
     "import_from_url_button": "匯入",

@@ -55,9 +55,6 @@ class UrlInstallThread(BaseInstallWorker):
             with tempfile.TemporaryDirectory(prefix='dh-url-install-') as temp_dir:
                 self.status.emit(tr('status.downloading_from_external'), UI_COLORS['status_warning'])
                 archive_path = self._download_archive(download_url, temp_dir)
-                if archive_path.lower().endswith('.dhtheme'):
-                    self._install_theme_from_file(archive_path)
-                    return
                 redirect_result = self._check_redirect(archive_path, temp_dir)
                 if redirect_result:
                     return
@@ -162,7 +159,7 @@ class UrlInstallThread(BaseInstallWorker):
             from utils.archive_utils import get_file_extension_from_url
             file_ext = get_file_extension_from_url(url)
             filename = f'archive{file_ext}'
-        supported_extensions = ['.zip', '.rar', '.7z', '.tar.gz', '.lzma', '.dhtheme']
+        supported_extensions = ['.zip', '.rar', '.7z', '.tar.gz', '.lzma']
         if not any((filename.lower().endswith(ext) for ext in supported_extensions)):
             file_ext = get_file_extension_from_url(url)
             filename = f'archive{file_ext}'
@@ -193,7 +190,7 @@ class UrlInstallThread(BaseInstallWorker):
     @staticmethod
     def _classify_filename(name: str) -> Optional[str]:
         n = name.replace('\\', '/').strip('/')
-        if n.lower().endswith('.dhtheme'):
+        if n == 'theme.json' or n.endswith('/theme.json'):
             return 'theme'
         if n == 'plugin_init.py' or n.endswith('/plugin_init.py'):
             return 'plugin'
@@ -214,8 +211,6 @@ class UrlInstallThread(BaseInstallWorker):
         import zipfile
         import tarfile
         archive_lower = archive_path.lower()
-        if archive_lower.endswith('.dhtheme'):
-            return 'theme'
         try:
             if archive_lower.endswith('.zip'):
                 with zipfile.ZipFile(archive_path, 'r') as zf:
@@ -258,7 +253,7 @@ class UrlInstallThread(BaseInstallWorker):
                 content_path = os.path.join(unpack_dir, items[0]) if len(items) == 1 and os.path.isdir(os.path.join(unpack_dir, items[0])) else unpack_dir
                 for root, _, files in os.walk(content_path):
                     for f in files:
-                        if f.lower().endswith('.dhtheme'):
+                        if f == 'theme.json':
                             return 'theme'
                         if f == 'plugin_init.py':
                             return 'plugin'
@@ -297,79 +292,65 @@ class UrlInstallThread(BaseInstallWorker):
             logging.error(f'UrlInstallThread: Error preparing for manual install: {e}', exc_info=True)
             self.finished.emit(False, tr('errors.manual_install_failed', error=str(e)))
 
-    def _install_theme_from_file(self, theme_file_path: str):
+    def _install_theme_from_dir(self, theme_dir: str):
         try:
-            import zipfile
             self.status.emit(tr('themes.installing_theme'), UI_COLORS['status_warning'])
             config_dir = self.main_window.app_state.config_dir
             app_state = self.main_window.app_state
             settings_service = self.main_window.settings_service
-            theme_settings = None
-            with zipfile.ZipFile(theme_file_path, 'r') as zipf:
-                if 'theme.json' not in zipf.namelist():
-                    raise ValueError('Missing theme.json')
-                from utils.archive_utils import extract_with_unrar_retry
-                with tempfile.TemporaryDirectory(prefix='dh-theme-extract-') as temp_dir:
-                    extract_with_unrar_retry(theme_file_path, temp_dir, self)
-                    theme_json_path = os.path.join(temp_dir, 'theme.json')
-                    with open(theme_json_path, 'r', encoding='utf-8') as f:
-                        theme_settings = json.load(f)
-                    for key, value in theme_settings.items():
-                        app_state.local_config[key] = value
-                    for old_file in ['custom_background_music.mp3', 'custom_background_music.wav', 'custom_startup_sound.mp3', 'custom_startup_sound.wav']:
-                        old_file_path = os.path.join(config_dir, old_file)
-                        if os.path.exists(old_file_path):
-                            try:
-                                os.remove(old_file_path)
-                            except Exception as e:
-                                logging.warning(f'Failed to remove old file {old_file}: {e}')
-                    app_state.local_config['custom_background_path'] = ''
-                    for filename in os.listdir(temp_dir):
-                        src_path = os.path.join(temp_dir, filename)
-                        if filename.startswith('background.'):
-                            ext = os.path.splitext(filename)[1]
-                            dest_path = os.path.join(config_dir, f'custom_background{ext}')
-                            shutil.copy2(src_path, dest_path)
-                            app_state.local_config['custom_background_path'] = dest_path
-                        elif filename.startswith('background_music.'):
-                            dest_path = os.path.join(config_dir, f'custom_background_music{os.path.splitext(filename)[1]}')
-                            shutil.copy2(src_path, dest_path)
-                        elif filename.startswith('startup_sound.'):
-                            dest_path = os.path.join(config_dir, f'custom_startup_sound{os.path.splitext(filename)[1]}')
-                            shutil.copy2(src_path, dest_path)
-            if theme_settings:
-                settings_service.write_local_config()
-                app_state.local_config['first_launch_splash_shown'] = True
-                if 'disable_splash' in theme_settings:
-                    app_state.local_config['disable_splash'] = theme_settings['disable_splash']
-                elif 'disable_splash' not in app_state.local_config:
-                    app_state.local_config['disable_splash'] = True
-                settings_service.write_local_config()
-            self._try_remove_file(theme_file_path)
+            theme_json_path = os.path.join(theme_dir, 'theme.json')
+            if not os.path.exists(theme_json_path):
+                raise ValueError('Missing theme.json')
+            with open(theme_json_path, 'r', encoding='utf-8') as f:
+                theme_settings = json.load(f)
+            for key, value in theme_settings.items():
+                app_state.local_config[key] = value
+            for old_file in ['custom_background_music.mp3', 'custom_background_music.wav', 'custom_startup_sound.mp3', 'custom_startup_sound.wav']:
+                old_file_path = os.path.join(config_dir, old_file)
+                if os.path.exists(old_file_path):
+                    try:
+                        os.remove(old_file_path)
+                    except Exception as e:
+                        logging.warning(f'Failed to remove old file {old_file}: {e}')
+            app_state.local_config['custom_background_path'] = ''
+            for filename in os.listdir(theme_dir):
+                src_path = os.path.join(theme_dir, filename)
+                if filename.startswith('background.'):
+                    ext = os.path.splitext(filename)[1]
+                    dest_path = os.path.join(config_dir, f'custom_background{ext}')
+                    shutil.copy2(src_path, dest_path)
+                    app_state.local_config['custom_background_path'] = dest_path
+                elif filename.startswith('background_music.'):
+                    dest_path = os.path.join(config_dir, f'custom_background_music{os.path.splitext(filename)[1]}')
+                    shutil.copy2(src_path, dest_path)
+                elif filename.startswith('startup_sound.'):
+                    dest_path = os.path.join(config_dir, f'custom_startup_sound{os.path.splitext(filename)[1]}')
+                    shutil.copy2(src_path, dest_path)
+            settings_service.write_local_config()
+            app_state.local_config['first_launch_splash_shown'] = True
+            if 'disable_splash' in theme_settings:
+                app_state.local_config['disable_splash'] = theme_settings['disable_splash']
+            elif 'disable_splash' not in app_state.local_config:
+                app_state.local_config['disable_splash'] = True
+            settings_service.write_local_config()
             self.status.emit(tr('themes.theme_installed'), 'success')
             self.finished.emit(True, tr('themes.theme_installed_success'))
         except Exception as e:
-            logging.error(f'UrlInstallThread: Error installing theme from file: {e}', exc_info=True)
+            logging.error(f'UrlInstallThread: Error installing theme from dir: {e}', exc_info=True)
             self.finished.emit(False, tr('themes.installation_error', error=str(e)))
 
     def _extract_and_install_theme(self, archive_path: str, temp_dir: str):
         with tempfile.TemporaryDirectory(prefix='dh-theme-extract-') as unpack_dir:
             try:
                 content_path = self._unpack_content_path(archive_path, unpack_dir)
-                theme_file_path = None
+                theme_json_path = None
                 for root, dirs, files in os.walk(content_path):
-                    for file in files:
-                        if file.lower().endswith('.dhtheme'):
-                            theme_file_path = os.path.join(root, file)
-                            break
-                    if theme_file_path:
+                    if 'theme.json' in files:
+                        theme_json_path = os.path.join(root, 'theme.json')
                         break
-                if not theme_file_path:
+                if not theme_json_path:
                     raise AppError('themes.archive_not_found')
-                with tempfile.TemporaryDirectory(prefix='dh-theme-temp-') as theme_temp_dir:
-                    temp_theme_path = os.path.join(theme_temp_dir, os.path.basename(theme_file_path))
-                    shutil.copy2(theme_file_path, temp_theme_path)
-                    self._install_theme_from_file(temp_theme_path)
+                self._install_theme_from_dir(os.path.dirname(theme_json_path))
             except Exception as e:
                 logging.error(f'UrlInstallThread: Error extracting theme: {e}', exc_info=True)
                 self.finished.emit(False, tr('themes.installation_error', error=str(e)))

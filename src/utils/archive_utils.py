@@ -135,7 +135,7 @@ def _extract_archive_raw(src_path: str, fname_lower: str, out_dir: str) -> None:
     out_dir_abs = os.path.abspath(out_dir)
     os.makedirs(out_dir_abs, exist_ok=True)
     detected_format = _detect_archive_format_by_signature(src_path)
-    if fname_lower.endswith('.zip') or fname_lower.endswith('.dhtheme') or detected_format == 'zip':
+    if fname_lower.endswith('.zip') or detected_format == 'zip':
         with zipfile.ZipFile(src_path, 'r') as zf:
             targets = _collect_safe_members(zf.namelist(), lambda member: member, 'ZIP')
             if targets:
@@ -363,7 +363,7 @@ class ArchiveExtractor:
         archive_lower = archive_path.lower()
         detected_format = _detect_archive_format_by_signature(archive_path)
         try:
-            if archive_lower.endswith('.zip') or archive_lower.endswith('.dhtheme') or detected_format == 'zip':
+            if archive_lower.endswith('.zip') or detected_format == 'zip':
                 with zipfile.ZipFile(archive_path, 'r') as zf:
                     return any((ArchiveExtractor._matches_target(n, target_filename) for n in zf.namelist()))
             elif archive_lower.endswith('.tar.gz'):
@@ -419,7 +419,7 @@ def get_file_extension_from_url(url: str, content_type: str = None) -> str:
     filename = unquote(os.path.basename(parsed.path))
     if '.' in filename:
         ext = os.path.splitext(filename)[1].lower()
-        supported_exts = ['.zip', '.rar', '.7z', '.tar.gz', '.lzma', '.dhtheme']
+        supported_exts = ['.zip', '.rar', '.7z', '.tar.gz', '.lzma']
         if ext in supported_exts:
             return ext
     if content_type:

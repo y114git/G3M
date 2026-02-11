@@ -1152,7 +1152,7 @@
   },
   "themes": {
     "import_themes": "Importar Temas",
-    "import_instructions": "Importa un tema desde un archivo o URL. Formato soportado: .dhtheme",
+    "import_instructions": "Importa un tema desde un archivo o URL. Formato soportado: .zip",
     "import_from_file": "Importar desde Archivo",
     "import_from_url": "Importar desde URL",
     "import_from_url_button": "Importar",

@@ -1153,7 +1153,7 @@
   },
   "themes": {
     "import_themes": "Импорт тем",
-    "import_instructions": "Импортируйте тему из файла или URL. Поддерживаемый формат: .dhtheme",
+    "import_instructions": "Импортируйте тему из файла или URL. Поддерживаемый формат: .zip",
     "import_from_file": "Импорт из файла",
     "import_from_url": "Импорт из URL",
     "import_from_url_button": "Импортировать",

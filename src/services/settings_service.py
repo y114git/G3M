@@ -229,7 +229,7 @@ class SettingsManager(QObject):
         self.theme_changed.emit()
 
     def export_theme(self):
-        theme_file_path, _ = QFileDialog.getSaveFileName(self.parent_widget, tr('dialogs.export_theme_title'), '', f"{tr('file_descriptions.theme_files')} (*.dhtheme)")
+        theme_file_path, _ = QFileDialog.getSaveFileName(self.parent_widget, tr('dialogs.export_theme_title'), '', f"{tr('file_descriptions.theme_files')} (*.zip)")
         if not theme_file_path:
             return
         _color_keys = ('custom_color_background', 'custom_color_button', 'custom_color_border', 'custom_color_button_hover', 'custom_color_text', 'custom_color_version_text')
@@ -252,7 +252,7 @@ class SettingsManager(QObject):
     def import_theme(self):
         from ui.dialogs.import_dialog import ImportDialog
         from PyQt6.QtWidgets import QDialog
-        dialog = ImportDialog(self.parent_widget, self.feedback_service, 'themes', '*.dhtheme')
+        dialog = ImportDialog(self.parent_widget, self.feedback_service, 'themes', '*.zip')
         if dialog.exec() == QDialog.DialogCode.Accepted:
             if dialog.import_method == 'file' and dialog.selected_file:
                 self._install_theme_from_file(dialog.selected_file)
