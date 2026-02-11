@@ -9,7 +9,7 @@ from utils.progress_throttler import ProgressThrottler
 from services.mod_patching_service import ModPatcher
 
 
-def perform_parallel_export(patcher, mods_to_export: List[Any], mods_to_apply: List[Any], mod_patched_files: Dict[int, str], mod_types: Dict[int, Dict], vanilla_data_win: str, patch_root: str, cache_running_dir: str, chapter_str: str, chapter_id: int, progress_base: int, export_progress: int, progress_callback) -> bool:
+def perform_parallel_export(patcher, mods_to_export: List[Any], mods_to_apply: List[Any], mod_patched_files: Dict[int, str], mod_types: Dict[int, Dict], vanilla_data_win: str, patch_root: str, cache_running_dir: str, chapter_str: str, chapter_id: str, progress_base: int, export_progress: int, progress_callback) -> bool:
     if not mods_to_export:
         return True
     log_lock = threading.Lock()

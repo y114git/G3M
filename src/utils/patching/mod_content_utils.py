@@ -124,12 +124,12 @@ def find_data_win(target_dir: str) -> Optional[str]:
     return None
 
 
-def extract_chapter_id_from_path(path: str) -> Optional[int]:
+def extract_chapter_id_from_path(path: str) -> Optional[str]:
     match = re.search('chapter[_-]?(\\d+)', path, re.IGNORECASE)
     if match:
-        return int(match.group(1))
+        return match.group(1)
     if 'demo' in path.lower():
-        return -1
+        return 'deltarunedemo'
     return None
 
 

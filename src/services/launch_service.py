@@ -17,7 +17,7 @@ from utils.path_utils import find_chapter_resource_dir, resolve_game_executable
 from services.patching_log_service import rotate_patching_log
 from workers.game_monitor_worker import GameMonitorWorker
 from services.mod_patching_service import ModPatcher
-from config.constants import UI_COLORS, TAB_ALL
+from config.constants import UI_COLORS
 
 
 class GameLauncher(QObject):
@@ -80,17 +80,17 @@ class GameLauncher(QObject):
         selections = self._get_used_mods_selections()
         self._launch_game_with_selections(selections, execute_plugin_hooks, restore_window_callback)
 
-    def _get_used_mods_selections(self) -> Dict[int, Any]:
+    def _get_used_mods_selections(self) -> Dict[str, Any]:
         try:
             parent_obj = self.parent()
         except (AttributeError, TypeError):
             parent_obj = None
         used_mods_service = getattr(parent_obj, 'used_mods_service', None) if parent_obj else None
         if not used_mods_service or not hasattr(used_mods_service, 'get_active_mod_selections'):
-            return {chapter_id: [] for chapter_id in range(5)}
+            return {}
         return used_mods_service.get_active_mod_selections()
 
-    def _launch_game_with_selections(self, selections: Dict[int, Any], execute_plugin_hooks=None, restore_window_callback=None):
+    def _launch_game_with_selections(self, selections: Dict[str, Any], execute_plugin_hooks=None, restore_window_callback=None):
         rotate_patching_log()
         self.execute_plugin_hooks = execute_plugin_hooks
         self.restore_window_callback = restore_window_callback
@@ -240,25 +240,25 @@ class GameLauncher(QObject):
             self.game_launch_finished.emit()
             logging.info('[LAUNCH] Cleanup completed, game launch finished')
 
-    def _determine_launch_config(self, selections: Dict[int, Any]) -> Optional[Dict[str, Any]]:
+    def _determine_launch_config(self, selections: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         use_steam = self.app_state.local_config.get('launch_via_steam', False)
-        direct_launch_tab_id = self.app_state.local_config.get('direct_launch_slot_id', TAB_ALL)
+        direct_launch_id = self.app_state.local_config.get('direct_launch_chapter', '')
         is_chapter_mode = self.app_state.current_mode == 'chapter'
-        direct_launch = direct_launch_tab_id > 0 and is_chapter_mode and self.app_state.game_mode.direct_launch_allowed and (platform.system() != 'Darwin')
-        should_block_steam = self.app_state.game_mode.block_steam_with_direct_launch and is_chapter_mode and (direct_launch_tab_id >= 0)
+        is_direct_chapter = bool(direct_launch_id) and '_' in direct_launch_id and not direct_launch_id.endswith('_0')
+        direct_launch = is_direct_chapter and is_chapter_mode and self.app_state.game_mode.direct_launch_allowed and (platform.system() != 'Darwin')
+        should_block_steam = self.app_state.game_mode.block_steam_with_direct_launch and is_chapter_mode and bool(direct_launch_id)
         if use_steam and self.app_state.game_mode.steam_app_id and (not should_block_steam):
             return {'target': f'steam://rungameid/{self.app_state.game_mode.steam_app_id}', 'cwd': None, 'type': 'webbrowser'}
         if direct_launch:
-            return self._handle_direct_launch(direct_launch_tab_id)
+            return self._handle_direct_launch(direct_launch_id)
         launch_target = self._get_executable_path()
         if not launch_target:
             self.status_changed.emit(tr('errors.executable_not_found'), UI_COLORS['status_error'])
             return None
         return {'target': launch_target, 'cwd': self._get_current_game_path(), 'type': 'subprocess'}
 
-    def _handle_direct_launch(self, selected_tab_index: int) -> Optional[Dict[str, Any]]:
-        chapter_id = self.app_state.game_mode.get_chapter_id(selected_tab_index)
-        if chapter_id == 0:
+    def _handle_direct_launch(self, chapter_id: str) -> Optional[Dict[str, Any]]:
+        if chapter_id.endswith('_0'):
             self.status_changed.emit(tr('ui.direct_launch_menu_not_allowed'), UI_COLORS['status_warning'])
             return None
         chapter_folder = find_chapter_resource_dir(self._get_current_game_path(), chapter_id)

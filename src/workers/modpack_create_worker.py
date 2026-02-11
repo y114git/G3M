@@ -163,6 +163,15 @@ class CreateModpackThread(QThread):
             logging.error(f'Failed to create xdelta patches: {e}', exc_info=True)
             self.status_update.emit(tr('errors.xdelta_patch_creation_failed_general'), 'error')
 
+    @staticmethod
+    def _chapter_id_to_file_key(chapter_id: str) -> str:
+        if chapter_id == 'deltarunedemo':
+            return 'demo'
+        if '_' in chapter_id:
+            _, suffix = chapter_id.rsplit('_', 1)
+            return suffix
+        return chapter_id
+
     def _determine_primary_game_type(self, detected_games: List[str]) -> str:
         if not detected_games:
             from services.game_detection_service import get_game_type_string
@@ -172,7 +181,7 @@ class CreateModpackThread(QThread):
             return unique_games.pop()
         return max(unique_games, key=detected_games.count)
 
-    def _find_original_data_file(self, chapter_id: int, game: str, data_filename: str) -> str:
+    def _find_original_data_file(self, chapter_id: str, game: str, data_filename: str) -> str:
         try:
             from models.game_modes import get_game, DeltaruneGame
             from utils.path_utils import find_chapter_resource_dir
@@ -215,7 +224,7 @@ class CreateModpackThread(QThread):
             files_data = {}
             detected_games = []
             for chapter_id, mods_list in self.chapter_mods.items():
-                chapter_key = 'demo' if chapter_id == -1 else str(chapter_id)
+                chapter_key = self._chapter_id_to_file_key(chapter_id)
                 game = self._get_mod_game(mods_list)
                 if game:
                     detected_games.append(game)

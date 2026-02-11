@@ -7,7 +7,6 @@ from services.localization_service import tr
 from ui.common.styling import clear_layout_widgets, show_empty_message_in_layout
 from ui.widgets.mod.installed_mod_widget import InstalledModWidget
 from ui.dialogs.mod_priority_dialog import ModPriorityDialog
-from config.constants import TAB_ALL, TAB_DEMO, TAB_UNDERTALE, TAB_UNDERTALE_YELLOW, TAB_SUGARY_SPIRE, TAB_MENU, TAB_CHAPTER_1, TAB_CHAPTER_2, TAB_CHAPTER_3, TAB_CHAPTER_4
 from services.mod_filter_service import filter_and_sort_mods
 from utils.mod_utils import get_mod_key, get_mod_name
 from services.game_detection_service import get_chapter_id_for_game_mode
@@ -52,13 +51,12 @@ class LibraryDisplayController:
                 filtered_mods.sort(key=lambda mod: mod.get('added_date') or '', reverse=reverse)
         return filtered_mods
 
-    @staticmethod
-    def _distribute_mods_across_chapters(mods_list):
+    def _distribute_mods_across_chapters(self, mods_list):
         chapter_mods = {}
-        for ch_id in range(5):
-            chapter_mods_for_chapter = [mod for mod in mods_list if hasattr(mod, 'get_chapter_data') and mod.get_chapter_data(ch_id)]
-            if chapter_mods_for_chapter:
-                chapter_mods[ch_id] = chapter_mods_for_chapter
+        for tab in self.app_state.game_mode.tabs:
+            tab_mods = [mod for mod in mods_list if hasattr(mod, 'get_chapter_data') and mod.get_chapter_data(tab.tab_id)]
+            if tab_mods:
+                chapter_mods[tab.tab_id] = tab_mods
         return chapter_mods
 
     def _build_library_filters_and_sort(self):
@@ -115,8 +113,8 @@ class LibraryDisplayController:
                 self.app.installed_mods_layout.insertWidget(self.app.installed_mods_layout.count() - 1, mod_widget)
                 mod_widget.show()
         if self.app.installed_mods_layout.count() <= 1:
-            chapter_names = {TAB_ALL: tr('ui.mod_slot'), TAB_MENU: tr('chapters.menu'), TAB_CHAPTER_1: tr('tabs.chapter_1'), TAB_CHAPTER_2: tr('tabs.chapter_2'), TAB_CHAPTER_3: tr('tabs.chapter_3'), TAB_CHAPTER_4: tr('tabs.chapter_4')}
-            chapter_name = chapter_names.get(selected_chapter_id, tr('ui.chapter_n', chapter=str(selected_chapter_id)))
+            tab = self.app_state.game_mode.get_tab(selected_chapter_id)
+            chapter_name = tr(tab.name_key) if tab else str(selected_chapter_id)
             show_empty_message_in_layout(self.app.installed_mods_layout, tr('ui.no_mods_for_chapter', chapter_name=chapter_name), self.app_state.local_config, font_size=16)
         self._update_priority_button_visibility(selected_chapter_id)
         if container:
@@ -321,9 +319,6 @@ class LibraryDisplayController:
 
     def on_mod_use(self, mod_data):
         target_chapter_id = get_chapter_id_for_game_mode(self.app_state.game_mode)
-        game_value = getattr(mod_data, 'game', None) or getattr(mod_data, 'modgame', None)
-        if target_chapter_id == TAB_ALL and game_value == 'undertale':
-            target_chapter_id = TAB_UNDERTALE
         self._handle_mod_use(mod_data, target_chapter_id)
 
     def _handle_mod_use(self, mod_data, chapter_id):
@@ -359,23 +354,19 @@ class LibraryDisplayController:
     def _get_current_chapter_id(self):
         if self.app_state.current_mode == 'chapter':
             return self.app_state.selected_chapter_id
-        chapter_id = get_chapter_id_for_game_mode(self.app_state.game_mode)
-        if chapter_id != TAB_ALL:
-            return chapter_id
+        gm = self.app_state.game_mode
+        default_id = get_chapter_id_for_game_mode(gm)
 
-        def _has_mods(tab_id, min_count=2):
-            mods_list = self.used_mods_service.get_used_mods_list(tab_id)
+        def _has_mods(tid, min_count=2):
+            mods_list = self.used_mods_service.get_used_mods_list(tid)
             return len(mods_list) >= min_count if mods_list else False
 
-        if _has_mods(TAB_ALL):
-            return TAB_ALL
-        for cid in range(5):
-            if _has_mods(cid):
-                return cid
-        for tab_id in [TAB_DEMO, TAB_UNDERTALE, TAB_UNDERTALE_YELLOW, TAB_SUGARY_SPIRE]:
-            if _has_mods(tab_id):
-                return tab_id
-        return TAB_ALL
+        if _has_mods(default_id):
+            return default_id
+        for tab in gm.tabs:
+            if _has_mods(tab.tab_id):
+                return tab.tab_id
+        return default_id
 
     def _set_priority_widgets_visible(self, visible: bool):
         self.app.priority_button.setVisible(visible)
@@ -445,12 +436,13 @@ class LibraryDisplayController:
             chapter_id = get_chapter_id_for_game_mode(self.app_state.game_mode)
             mods_list = self.used_mods_service.get_used_mods_list(chapter_id)
             if mods_list and len(mods_list) >= 2:
-                if chapter_id == TAB_ALL:
+                if self.app_state.game_mode.is_multi_tab:
                     chapter_mods = self._distribute_mods_across_chapters(mods_list)
                 else:
                     chapter_mods = {chapter_id: mods_list}
             else:
-                mods_list = self.used_mods_service.get_used_mods_list(TAB_ALL)
+                default_id = get_chapter_id_for_game_mode(self.app_state.game_mode)
+                mods_list = self.used_mods_service.get_used_mods_list(default_id)
                 if mods_list and len(mods_list) >= 2:
                     chapter_mods = self._distribute_mods_across_chapters(mods_list)
         if not chapter_mods:

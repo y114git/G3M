@@ -8,7 +8,6 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional
 from config.constants import (
     STEAM_APP_ID_FULL, STEAM_APP_ID_DEMO, STEAM_APP_ID_UNDERTALE, STEAM_APP_ID_PIZZA_TOWER,
-    TAB_ALL, TAB_DEMO, TAB_UNDERTALE, TAB_UNDERTALE_YELLOW, TAB_PIZZA_TOWER, TAB_SUGARY_SPIRE,
 )
 
 
@@ -24,7 +23,7 @@ class GameTab:
     For multi-chapter games like DELTARUNE each chapter is a separate tab.
     For single-content games the whole game is one tab.
     """
-    tab_id: int
+    tab_id: str
     files_key: str
     name_key: str
     direct_launch: bool = True
@@ -53,7 +52,7 @@ class GameDefinition:
     path_select_dialog_key: str = 'dialogs.select_deltarune_folder'
     path_not_found_dialog_key: str = 'dialogs.deltarune_not_found'
     used_mods_config_key: str = ''
-    default_tab_id: int = TAB_ALL
+    default_tab_id: str = ''
 
     def __init__(self):
         pass
@@ -83,16 +82,21 @@ class GameDefinition:
     def get_custom_exec_config_key(self) -> str:
         return self.custom_exec_config_key
 
-    def get_tab(self, tab_id: int) -> Optional[GameTab]:
+    @property
+    def default_tab(self) -> str:
+        """Return the default tab ID (game_id if not explicitly set)."""
+        return self.default_tab_id or self.game_id
+
+    def get_tab(self, tab_id: str) -> Optional[GameTab]:
         return next((t for t in self.tabs if t.tab_id == tab_id), None)
 
     def get_tab_by_index(self, ui_index: int) -> Optional[GameTab]:
         return self.tabs[ui_index] if 0 <= ui_index < len(self.tabs) else None
 
-    def get_chapter_id(self, ui_index: int) -> int:
-        """Return the tab_id for a given UI tab index (backward-compat)."""
+    def get_chapter_id(self, ui_index: int) -> str:
+        """Return the tab_id for a given UI tab index."""
         tab = self.get_tab_by_index(ui_index)
-        return tab.tab_id if tab else 0
+        return tab.tab_id if tab else self.default_tab
 
     @staticmethod
     def _is_visible_mod(mod) -> bool:
@@ -108,7 +112,7 @@ class GameDefinition:
             lambda m: m.game == self.game_id and m.files.get(tab.files_key)
         )
 
-    def filter_mods_for_ui(self, all_mods: list) -> Dict[int, list]:
+    def filter_mods_for_ui(self, all_mods: list) -> Dict[str, list]:
         """Return {tab_index: [visible_mods]} for UI display."""
         return {i: self.filter_mods_for_tab(tab, all_mods) for i, tab in enumerate(self.tabs)}
 
@@ -123,11 +127,11 @@ class DeltaruneGame(GameDefinition):
     gamebanana_id = 6755
     block_steam_with_direct_launch = True
     tabs = [
-        GameTab(tab_id=0, files_key='0', name_key='tabs.main_menu'),
-        GameTab(tab_id=1, files_key='1', name_key='tabs.chapter_1'),
-        GameTab(tab_id=2, files_key='2', name_key='tabs.chapter_2'),
-        GameTab(tab_id=3, files_key='3', name_key='tabs.chapter_3'),
-        GameTab(tab_id=4, files_key='4', name_key='tabs.chapter_4'),
+        GameTab(tab_id='deltarune_0', files_key='0', name_key='tabs.main_menu'),
+        GameTab(tab_id='deltarune_1', files_key='1', name_key='tabs.chapter_1'),
+        GameTab(tab_id='deltarune_2', files_key='2', name_key='tabs.chapter_2'),
+        GameTab(tab_id='deltarune_3', files_key='3', name_key='tabs.chapter_3'),
+        GameTab(tab_id='deltarune_4', files_key='4', name_key='tabs.chapter_4'),
     ]
 
     def filter_mods_for_tab(self, tab, all_mods):
@@ -147,11 +151,10 @@ class DeltaruneDemoGame(GameDefinition):
     path_button_key = 'buttons.change_demo_path'
     gamebanana_id = 6755
     supports_full_install = True
-    tabs = [GameTab(tab_id=-1, files_key='demo', name_key='tabs.demo', direct_launch=False)]
+    tabs = [GameTab(tab_id='deltarunedemo', files_key='demo', name_key='tabs.demo', direct_launch=False)]
     path_select_dialog_key = 'dialogs.select_demo_folder'
     path_not_found_dialog_key = 'dialogs.demo_not_found'
     used_mods_config_key = 'used_mods_deltarunedemo'
-    default_tab_id = TAB_DEMO
 
     def filter_mods_for_tab(self, tab, all_mods):
         return self._filter_visible_mods(all_mods, lambda m: m.is_valid_for_demo())
@@ -166,12 +169,11 @@ class UndertaleGame(GameDefinition):
     custom_exec_config_key = 'undertale_custom_executable_path'
     path_button_key = 'buttons.change_undertale_path'
     gamebanana_id = 5506
-    tabs = [GameTab(tab_id=0, files_key='undertale', name_key='tabs.undertale')]
+    tabs = [GameTab(tab_id='undertale', files_key='undertale', name_key='tabs.undertale')]
     macos_app_names = ('UNDERTALE.app',)
     path_select_dialog_key = 'dialogs.select_undertale_folder'
     path_not_found_dialog_key = 'dialogs.undertale_not_found'
     used_mods_config_key = 'used_mods_undertale'
-    default_tab_id = TAB_UNDERTALE
 
 
 class UndertaleYellowGame(GameDefinition):
@@ -183,12 +185,11 @@ class UndertaleYellowGame(GameDefinition):
     path_button_key = 'buttons.change_undertaleyellow_path'
     gamebanana_id = 19606
     supports_full_install = True
-    tabs = [GameTab(tab_id=0, files_key='undertale', name_key='tabs.undertaleyellow')]
+    tabs = [GameTab(tab_id='undertaleyellow', files_key='undertale', name_key='tabs.undertaleyellow')]
     macos_app_names = ('UNDERTALE.app',)
     path_select_dialog_key = 'dialogs.select_undertaleyellow_folder'
     path_not_found_dialog_key = 'dialogs.undertaleyellow_not_found'
     used_mods_config_key = 'used_mods_undertaleyellow'
-    default_tab_id = TAB_UNDERTALE_YELLOW
 
 
 class PizzaTowerGame(GameDefinition):
@@ -200,12 +201,11 @@ class PizzaTowerGame(GameDefinition):
     custom_exec_config_key = 'pizzatower_custom_executable_path'
     path_button_key = 'buttons.change_pizzatower_path'
     gamebanana_id = 7692
-    tabs = [GameTab(tab_id=0, files_key='pizzatower', name_key='tabs.pizzatower')]
+    tabs = [GameTab(tab_id='pizzatower', files_key='pizzatower', name_key='tabs.pizzatower')]
     macos_app_names = ('PizzaTower.app',)
     path_select_dialog_key = 'dialogs.select_pizzatower_folder'
     path_not_found_dialog_key = 'dialogs.pizzatower_not_found'
     used_mods_config_key = 'used_mods_pizzatower'
-    default_tab_id = TAB_PIZZA_TOWER
 
     def filter_mods_for_tab(self, tab, all_mods):
         return self._filter_visible_mods(
@@ -223,10 +223,9 @@ class SugarySpireGame(GameDefinition):
     path_button_key = 'buttons.change_sugaryspire_path'
     gamebanana_id = 18218
     supports_full_install = True
-    tabs = [GameTab(tab_id=0, files_key='undertale', name_key='tabs.sugaryspire')]
+    tabs = [GameTab(tab_id='sugaryspire', files_key='undertale', name_key='tabs.sugaryspire')]
     macos_app_names = ('SugarySpire_ExhibitionNight.app',)
     used_mods_config_key = 'used_mods_sugaryspire'
-    default_tab_id = TAB_SUGARY_SPIRE
 
 
 GAME_REGISTRY: Dict[str, GameDefinition] = {}

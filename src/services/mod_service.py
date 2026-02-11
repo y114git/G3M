@@ -14,7 +14,7 @@ import models.mod_models as mod_models
 from workers.install.url_install_worker import UrlInstallThread
 from workers.mod_scan_worker import ModScanThread
 from adapters.deltamod_adapter import DeltamodConverter
-from utils.file_utils import load_json, save_json
+from utils.file_utils import load_json, save_json, get_chapter_folder_name
 from utils.file_utils import sanitize_filename, has_deltamod_info_file
 from utils.mod_utils import get_mod_key, get_mod_name, resolve_mod_icon
 from utils.mod_config_parser import resolve_local_icon_url, parse_extra_files_raw, resolve_data_file_version, resolve_chapter_folder
@@ -135,9 +135,14 @@ class ModManager(QObject):
         }
 
     @staticmethod
-    def _chapter_id_to_file_key(chapter_id: int) -> str:
+    def _chapter_id_to_file_key(chapter_id: str) -> str:
         """Convert chapter_id to the file key used in config files data."""
-        return 'demo' if chapter_id == -1 else str(chapter_id)
+        if chapter_id == 'deltarunedemo':
+            return 'demo'
+        if '_' in chapter_id:
+            _, suffix = chapter_id.rsplit('_', 1)
+            return suffix
+        return chapter_id
 
     def _get_mods_cache(self, use_async: bool = False) -> Dict[str, ModFolderInfo]:
         with self._cache_lock:
@@ -654,8 +659,8 @@ class ModManager(QObject):
             raise
 
     @staticmethod
-    def _collect_remote_versions(mod: mod_models.ModInfo, chapter_id: int) -> dict:
-        if chapter_id == -1:
+    def _collect_remote_versions(mod: mod_models.ModInfo, chapter_id: str) -> dict:
+        if chapter_id == 'deltarunedemo':
             return {'demo': mod.demo_version} if mod.is_valid_for_demo() and mod.demo_version else {}
         ch = mod.get_chapter_data(chapter_id)
         if not ch:
@@ -667,7 +672,7 @@ class ModManager(QObject):
             d[ef.key] = ef.version
         return d
 
-    def get_mod_status(self, mod: mod_models.ModInfo, chapter_id: int) -> str:
+    def get_mod_status(self, mod: mod_models.ModInfo, chapter_id: str) -> str:
         if mod.is_gamebanana_mod():
             return 'ready'
         cache = self._get_mods_cache()
@@ -703,7 +708,11 @@ class ModManager(QObject):
 
     def mod_has_update_available(self, mod_data) -> bool:
         try:
-            for chapter_id in range(5):
+            from models.game_modes import get_game
+            game_id = getattr(mod_data, 'game', 'deltarune')
+            gm = get_game(game_id)
+            tab_ids = [t.tab_id for t in gm.tabs] if gm else [game_id]
+            for chapter_id in tab_ids:
                 if self.mod_has_files_for_chapter(mod_data, chapter_id):
                     if self.get_mod_status(mod_data, chapter_id) == 'update':
                         return True
@@ -747,12 +756,11 @@ class ModManager(QObject):
                 return False
             files_data = mod_info.config_data.get('files', {})
             if files_data:
-                if chapter_id == -1:
+                if chapter_id == 'deltarunedemo':
                     return 'demo' in files_data or 'undertale' in files_data
                 file_key = self._chapter_id_to_file_key(chapter_id)
                 return file_key in files_data
-            chapter_folders = {-1: 'universal', 0: 'menu', 1: 'chapter1', 2: 'chapter2', 3: 'chapter3', 4: 'chapter4'}
-            folder_name = chapter_folders.get(chapter_id, 'universal')
+            folder_name = get_chapter_folder_name(chapter_id) if '_' in chapter_id else 'universal'
             for name in (folder_name, 'universal'):
                 folder = os.path.join(mod_info.folder_path, name)
                 if os.path.exists(folder):

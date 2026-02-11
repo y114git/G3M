@@ -141,7 +141,7 @@ class TestPathUtils:
         else:
             chapter1_dir = os.path.join(game_dir, 'chapter1_')
         os.makedirs(chapter1_dir, exist_ok=True)
-        resource_dir = find_chapter_resource_dir(game_dir, 1)
+        resource_dir = find_chapter_resource_dir(game_dir, 'deltarune_1')
         assert resource_dir is not None
         assert 'chapter1' in resource_dir.lower()
 
@@ -154,7 +154,7 @@ class TestPathUtils:
             resources_path = os.path.join(app_path, 'Contents', 'Resources')
             os.makedirs(resources_path, exist_ok=True)
         os.makedirs(game_dir, exist_ok=True)
-        resource_dir = find_chapter_resource_dir(game_dir, 0)
+        resource_dir = find_chapter_resource_dir(game_dir, 'deltarune_0')
         assert resource_dir is not None
         if system == 'Darwin':
             assert 'Resources' in resource_dir
@@ -164,7 +164,7 @@ class TestPathUtils:
     def test_find_chapter_resource_dir_not_found(self, temp_dir):
         game_dir = os.path.join(temp_dir, 'game')
         os.makedirs(game_dir, exist_ok=True)
-        resource_dir = find_chapter_resource_dir(game_dir, 99)
+        resource_dir = find_chapter_resource_dir(game_dir, 'deltarune_99')
         assert resource_dir is None
 
     def test_path_handling_special_characters(self, temp_dir):

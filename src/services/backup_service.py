@@ -13,14 +13,14 @@ class BackupManager:
     def __init__(self, backup_dir: str, patching_logger=None):
         self.backup_dir = backup_dir
         self.patching_logger = patching_logger or get_patching_logger()
-        self.original_files: Dict[int, Dict[str, Optional[str]]] = {}
-        self.added_files: Dict[int, Dict[str, bool]] = {}
+        self.original_files: Dict[str, Dict[str, Optional[str]]] = {}
+        self.added_files: Dict[str, Dict[str, bool]] = {}
         self._session_manifest_path: Optional[str] = None
-        self._modification_order: Dict[int, list] = {}
+        self._modification_order: Dict[str, list] = {}
         if backup_dir:
             os.makedirs(backup_dir, exist_ok=True)
 
-    def backup_file(self, chapter_id: int, file_path: str) -> bool:
+    def backup_file(self, chapter_id: str, file_path: str) -> bool:
         self.original_files.setdefault(chapter_id, {})
         self._modification_order.setdefault(chapter_id, [])
         if file_path in self.original_files[chapter_id]:
@@ -47,7 +47,7 @@ class BackupManager:
             self.patching_logger.error(f'[BACKUP] Failed to backup file {file_path} (chapter {chapter_id}): {e}', exc_info=True)
             return False
 
-    def mark_file_added(self, chapter_id: int, file_path: str):
+    def mark_file_added(self, chapter_id: str, file_path: str):
         self.added_files.setdefault(chapter_id, {})[file_path] = True
 
     def save_backups_to_manifest(self, manifest_path: str):
@@ -67,7 +67,7 @@ class BackupManager:
         except Exception as e:
             self.patching_logger.warning(f'[BACKUP] Failed to save backup manifest: {e}')
 
-    def restore_backups(self, chapter_id: int) -> None:
+    def restore_backups(self, chapter_id: str) -> None:
         if chapter_id in self.original_files:
             self.patching_logger.info(f'[RESTORE] Restoring backups for chapter {chapter_id}')
             file_order = self._modification_order.get(chapter_id, list(self.original_files[chapter_id].keys()))
@@ -154,7 +154,7 @@ class BackupManager:
             self.patching_logger.error(f'[RESTORE] Critical error during restore_all_backups: {e}', exc_info=True)
             return False
 
-    def _remove_empty_parent_dirs(self, file_path: str, chapter_id: int, removed_dirs: set):
+    def _remove_empty_parent_dirs(self, file_path: str, chapter_id: str, removed_dirs: set):
         try:
             parent_dir = os.path.dirname(file_path)
             if not parent_dir or parent_dir == file_path or parent_dir in removed_dirs:

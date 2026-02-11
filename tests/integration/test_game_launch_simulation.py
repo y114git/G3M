@@ -64,7 +64,7 @@ class TestGameLaunchSimulation:
         else:
             chapter_dir = os.path.join(game_dir, 'chapter1_')
             os.makedirs(chapter_dir, exist_ok=True)
-        resource_dir = find_chapter_resource_dir(game_dir, 1)
+        resource_dir = find_chapter_resource_dir(game_dir, 'deltarune_1')
         assert resource_dir is not None
         assert os.path.exists(resource_dir)
 
@@ -198,7 +198,7 @@ class TestGameExecutableSimulation:
         assert os.path.exists(exe_path) or 'DELTARUNE' in exe_path.upper()
 
     def test_find_chapter_in_simulated_dir(self, simulated_game_dir):
-        chapter_dir = find_chapter_resource_dir(simulated_game_dir, 1)
+        chapter_dir = find_chapter_resource_dir(simulated_game_dir, 'deltarune_1')
         assert chapter_dir is not None
         assert os.path.exists(chapter_dir)
         assert 'chapter1' in chapter_dir.lower()
@@ -218,10 +218,10 @@ class TestGameExecutableSimulation:
             for chapter_id in [0, 1, 2, 3, 4]:
                 chapter_dir = os.path.join(game_dir, f'chapter{chapter_id}_')
                 os.makedirs(chapter_dir, exist_ok=True)
-        for chapter_id in [1, 2, 3, 4]:
-            resource_dir = find_chapter_resource_dir(game_dir, chapter_id)
+        for chapter_num in [1, 2, 3, 4]:
+            resource_dir = find_chapter_resource_dir(game_dir, f'deltarune_{chapter_num}')
             assert resource_dir is not None
-            assert f'chapter{chapter_id}' in resource_dir.lower()
+            assert f'chapter{chapter_num}' in resource_dir.lower()
 
     def test_pizzatower_path_validation(self, temp_dir):
         from services.game_detection_service import is_valid_game_path

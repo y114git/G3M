@@ -9,14 +9,13 @@ from ui.common.feedback import FeedbackManager
 from services.mod_service import ModManager
 from services.settings_service import SettingsManager
 from services.localization_service import tr
-from config.constants import TAB_ALL, TAB_MENU, TAB_CHAPTER_1, TAB_CHAPTER_2, TAB_CHAPTER_3, TAB_CHAPTER_4
 from utils.mod_utils import get_mod_key, get_mod_name
 from services.game_detection_service import get_chapter_id_for_game_mode
 from utils.file_utils import sanitize_filename
 
 
 class UsedModsManager(QObject):
-    used_mods_updated, used_mod_changed = pyqtSignal(), pyqtSignal(int)
+    used_mods_updated, used_mod_changed = pyqtSignal(), pyqtSignal(str)
     action_button_update_needed, mod_widgets_update_needed = pyqtSignal(), pyqtSignal()
 
     def __init__(self, app_state: AppState, mod_service: ModManager, feedback_service: FeedbackManager, settings_service: SettingsManager, parent: Optional['AppWindow'] = None):
@@ -24,12 +23,12 @@ class UsedModsManager(QObject):
         self.app_state, self.mod_service = app_state, mod_service
         self.feedback_service, self.settings_service = feedback_service, settings_service
         self.parent_widget: Optional['AppWindow'] = parent
-        self.used_mods: Dict[int, List[Any]] = {}
+        self.used_mods: Dict[str, List[Any]] = {}
 
-    def get_used_mods_list(self, chapter_id: int) -> List[Any]:
+    def get_used_mods_list(self, chapter_id: str) -> List[Any]:
         return self.used_mods.get(chapter_id, [])
 
-    def set_used_mod(self, chapter_id: int, mod_data: Optional[Any], save_state: bool = True) -> None:
+    def set_used_mod(self, chapter_id: str, mod_data: Optional[Any], save_state: bool = True) -> None:
         key = get_mod_key(mod_data) if mod_data else None
         current_mods = self.used_mods.get(chapter_id, [])
         if mod_data is None:
@@ -53,7 +52,7 @@ class UsedModsManager(QObject):
             except Exception:
                 pass
 
-    def set_mods_list(self, chapter_id: int, mods_list: List[Any], save_state: bool = True) -> None:
+    def set_mods_list(self, chapter_id: str, mods_list: List[Any], save_state: bool = True) -> None:
         if not mods_list:
             if chapter_id in self.used_mods:
                 del self.used_mods[chapter_id]
@@ -66,7 +65,7 @@ class UsedModsManager(QObject):
             except Exception:
                 pass
 
-    def is_mod_used_for_chapter(self, mod_data, chapter_id: int) -> bool:
+    def is_mod_used_for_chapter(self, mod_data, chapter_id: str) -> bool:
         if not mod_data or not (key := get_mod_key(mod_data)):
             return False
         return any(get_mod_key(m) == key for m in self.used_mods.get(chapter_id, []))
@@ -180,18 +179,16 @@ class UsedModsManager(QObject):
             return
         self.used_mods.clear()
         needs_save = False
-        valid_chapter_ids = [TAB_MENU, TAB_CHAPTER_1, TAB_CHAPTER_2, TAB_CHAPTER_3, TAB_CHAPTER_4]
-        expected_chapter_id = get_chapter_id_for_game_mode(self.app_state.game_mode)
+        gm = self.app_state.game_mode
+        valid_tab_ids = {tab.tab_id for tab in gm.tabs}
+        expected_id = get_chapter_id_for_game_mode(gm)
         for chapter_id_str, mod_data_raw in list(used_mods_data.items()):
-            try:
-                chapter_id = int(chapter_id_str)
-            except ValueError:
+            chapter_id = self._migrate_legacy_id(chapter_id_str, gm)
+            if not is_chapter_mode and expected_id != gm.game_id and chapter_id != expected_id:
                 continue
-            if not is_chapter_mode and expected_chapter_id != TAB_ALL and chapter_id != expected_chapter_id:
+            if is_chapter_mode and chapter_id not in valid_tab_ids:
                 continue
-            if is_chapter_mode and chapter_id not in valid_chapter_ids:
-                continue
-            if not is_chapter_mode and expected_chapter_id == TAB_ALL and chapter_id != TAB_ALL:
+            if not is_chapter_mode and expected_id == gm.game_id and chapter_id != expected_id:
                 continue
             mod_keys = [mod_data_raw] if isinstance(mod_data_raw, str) else (mod_data_raw if isinstance(mod_data_raw, list) else [])
             if isinstance(mod_data_raw, str):
@@ -270,8 +267,9 @@ class UsedModsManager(QObject):
     def collect_mods_needing_update(self) -> list:
         if getattr(self.app_state, 'is_installing', False):
             return []
+        gm = self.app_state.game_mode
         is_chapter_mode = self.app_state.current_mode == 'chapter'
-        active_ids = [TAB_MENU, TAB_CHAPTER_1, TAB_CHAPTER_2, TAB_CHAPTER_3, TAB_CHAPTER_4] if is_chapter_mode else [get_chapter_id_for_game_mode(self.app_state.game_mode)]
+        active_ids = [tab.tab_id for tab in gm.tabs] if is_chapter_mode else [get_chapter_id_for_game_mode(gm)]
         mods_to_update = []
         for cid in active_ids:
             for mod in self.used_mods.get(cid, []):
@@ -279,32 +277,33 @@ class UsedModsManager(QObject):
                     mods_to_update.append(mod)
         return mods_to_update
 
-    def get_active_mod_selections(self) -> Dict[int, List[Any]]:
-        empty = {cid: [] for cid in range(5)}
+    def get_active_mod_selections(self) -> Dict[str, List[Any]]:
+        gm = self.app_state.game_mode
+        empty = {tab.tab_id: [] for tab in gm.tabs}
         if not self.used_mods:
             return empty
-        gm_chapter = get_chapter_id_for_game_mode(self.app_state.game_mode)
-        if gm_chapter != TAB_ALL:
-            return {-1: self.get_used_mods_list(gm_chapter)}
+        default_id = get_chapter_id_for_game_mode(gm)
+        if not gm.is_multi_tab:
+            return {default_id: self.get_used_mods_list(default_id)}
         if self.app_state.current_mode == 'chapter':
-            return {cid: self.get_used_mods_list(cid) or [] for cid in range(5)}
-        mods_list = self.get_used_mods_list(TAB_ALL)
+            return {tab.tab_id: self.get_used_mods_list(tab.tab_id) or [] for tab in gm.tabs}
+        mods_list = self.get_used_mods_list(default_id)
         if not mods_list:
             return empty
-        return {cid: [m for m in mods_list if hasattr(m, 'get_chapter_data') and m.get_chapter_data(cid)] for cid in range(5)}
+        return {tab.tab_id: [m for m in mods_list if hasattr(m, 'get_chapter_data') and m.get_chapter_data(tab.tab_id)] for tab in gm.tabs}
 
-    def toggle_direct_launch_for_chapter(self, chapter_id: int):
-        if chapter_id == 0:
+    def toggle_direct_launch_for_chapter(self, chapter_id: str):
+        if chapter_id.endswith('_0'):
             self.feedback_service.show_message('info', 'ui.direct_launch', tr('ui.direct_launch_menu_not_allowed'))
             return
-        current_direct_launch = self.app_state.local_config.get('direct_launch_slot_id', -1)
+        current_direct_launch = self.app_state.local_config.get('direct_launch_chapter', '')
         is_currently_enabled = current_direct_launch == chapter_id
-        chapter_names = {1: tr('tabs.chapter_1'), 2: tr('tabs.chapter_2'), 3: tr('tabs.chapter_3'), 4: tr('tabs.chapter_4')}
-        chapter_name = chapter_names.get(chapter_id, tr('ui.chapter_n', chapter=str(chapter_id)))
+        tab = self.app_state.game_mode.get_tab(chapter_id)
+        chapter_name = tr(tab.name_key) if tab else chapter_id
         msg_key = 'ui.disable_direct_launch' if is_currently_enabled else 'ui.enable_direct_launch'
         if not self.feedback_service.ask_question('ui.direct_launch', 'ui.direct_launch', tr(msg_key, chapter=chapter_name), False):
             return
-        self.app_state.local_config['direct_launch_slot_id'] = -1 if is_currently_enabled else chapter_id
+        self.app_state.local_config['direct_launch_chapter'] = '' if is_currently_enabled else chapter_id
         self.settings_service.write_local_config()
         self.action_button_update_needed.emit()
         if self.parent_widget and hasattr(self.parent_widget, 'launch_via_steam_checkbox'):
@@ -315,8 +314,21 @@ class UsedModsManager(QObject):
     def _update_steam_checkbox_state(self):
         if not self.parent_widget or not hasattr(self.parent_widget, 'launch_via_steam_checkbox'):
             return
-        direct_launch_tab_id = self.app_state.local_config.get('direct_launch_slot_id', TAB_ALL)
+        direct_launch_id = self.app_state.local_config.get('direct_launch_chapter', '')
         is_chapter_mode = self.app_state.current_mode == 'chapter'
         is_deltarune = self.app_state.game_mode.game_id == 'deltarune'
-        should_block = is_deltarune and is_chapter_mode and (direct_launch_tab_id >= 0)
+        should_block = is_deltarune and is_chapter_mode and bool(direct_launch_id)
         self.parent_widget.launch_via_steam_checkbox.setEnabled(not should_block)
+
+    @staticmethod
+    def _migrate_legacy_id(chapter_id_str: str, game_mode) -> str:
+        """Convert old numeric chapter IDs to new string-based IDs."""
+        _LEGACY_MAP = {
+            '-1': 'deltarune', '0': 'deltarune_0', '1': 'deltarune_1',
+            '2': 'deltarune_2', '3': 'deltarune_3', '4': 'deltarune_4',
+            '-10': 'deltarunedemo', '-20': 'undertale', '-30': 'undertaleyellow',
+            '-40': 'pizzatower', '-50': 'sugaryspire',
+        }
+        if chapter_id_str in _LEGACY_MAP:
+            return _LEGACY_MAP[chapter_id_str]
+        return chapter_id_str

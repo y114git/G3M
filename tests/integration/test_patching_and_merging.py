@@ -260,7 +260,7 @@ class TestRestoreOriginal:
         backup_dir = os.path.join(temp_dir, 'backups')
         os.makedirs(backup_dir, exist_ok=True)
         patcher.backup_service = BackupManager(backup_dir, patching_logger=patcher.patching_logger)
-        chapter_id = 1
+        chapter_id = 'deltarune_1'
         test_file = os.path.join(temp_dir, 'test.txt')
         with open(test_file, 'w') as f:
             f.write('test')
@@ -270,5 +270,5 @@ class TestRestoreOriginal:
         with open(manifest_path, 'r') as f:
             manifest_data = json.load(f)
         assert 'modification_order' in manifest_data
-        assert str(chapter_id) in manifest_data['modification_order']
-        assert test_file in manifest_data['modification_order'][str(chapter_id)]
+        assert chapter_id in manifest_data['modification_order']
+        assert test_file in manifest_data['modification_order'][chapter_id]

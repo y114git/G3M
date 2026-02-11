@@ -2,7 +2,7 @@
 from PyQt6.QtCore import QTimer
 from PyQt6.QtWidgets import QWidget
 from services.localization_service import tr
-from config.constants import UI_COLORS, TAB_ALL
+from config.constants import UI_COLORS
 from models.game_modes import DeltaruneGame, get_game
 
 
@@ -121,7 +121,7 @@ class SettingsUiController:
 
     def on_toggle_steam_launch(self, state=None):
         is_steam = self.app.launch_via_steam_checkbox.isChecked()
-        if is_steam and self.app_state.game_mode.game_id == 'deltarune' and self.app_state.current_mode == 'chapter' and self.app_state.local_config.get('direct_launch_slot_id', TAB_ALL) >= 0:
+        if is_steam and self.app_state.game_mode.game_id == 'deltarune' and self.app_state.current_mode == 'chapter' and self.app_state.local_config.get('direct_launch_chapter', ''):
             self.feedback_service.show_message('warning', 'ui.steam_launch', tr('ui.steam_launch_direct_conflict'))
             self.app.launch_via_steam_checkbox.setChecked(False)
             return

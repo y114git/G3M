@@ -90,18 +90,18 @@ class TestModInfo:
                           '1': ModFileData(data_file_url='ch1_url'),
                           '2': ModFileData(data_file_url='ch2_url'),
                       })
-        assert mod.get_chapter_data(0).data_file_url == 'menu_url'
-        assert mod.get_chapter_data(1).data_file_url == 'ch1_url'
-        assert mod.get_chapter_data(2).data_file_url == 'ch2_url'
-        assert mod.get_chapter_data(3) is None
+        assert mod.get_chapter_data('deltarune_0').data_file_url == 'menu_url'
+        assert mod.get_chapter_data('deltarune_1').data_file_url == 'ch1_url'
+        assert mod.get_chapter_data('deltarune_2').data_file_url == 'ch2_url'
+        assert mod.get_chapter_data('deltarune_3') is None
 
     def test_get_chapter_data_undertale(self):
-        """Undertale mods use 'undertale' key, accessed via tab_id=0."""
+        """Undertale mods use 'undertale' key, accessed via tab_id='undertale'."""
         mod = ModInfo(key='k', name='N', version='1.0', author='A', tagline='T',
                       game_version='1.0', description_url='', downloads=0,
                       game='undertale', is_verified=False,
                       files={'undertale': ModFileData(data_file_url='ut_url')})
-        result = mod.get_chapter_data(0)
+        result = mod.get_chapter_data('undertale')
         assert result is not None
         assert result.data_file_url == 'ut_url'
 
@@ -110,7 +110,7 @@ class TestModInfo:
                       game_version='1.0', description_url='', downloads=0,
                       game='deltarunedemo', is_verified=False,
                       files={'demo': ModFileData(data_file_url='demo_url')})
-        result = mod.get_chapter_data(-1)
+        result = mod.get_chapter_data('deltarunedemo')
         assert result is not None
         assert result.data_file_url == 'demo_url'
 
@@ -180,19 +180,19 @@ class TestModFileData:
 class TestGameTab:
 
     def test_creation(self):
-        tab = GameTab(tab_id=1, files_key='1', name_key='tabs.chapter_1')
-        assert tab.tab_id == 1
+        tab = GameTab(tab_id='deltarune_1', files_key='1', name_key='tabs.chapter_1')
+        assert tab.tab_id == 'deltarune_1'
         assert tab.files_key == '1'
         assert tab.name_key == 'tabs.chapter_1'
         assert tab.direct_launch is True
 
     def test_frozen(self):
-        tab = GameTab(tab_id=0, files_key='0', name_key='tabs.menu')
+        tab = GameTab(tab_id='deltarune_0', files_key='0', name_key='tabs.menu')
         with pytest.raises(AttributeError):
-            tab.tab_id = 5
+            tab.tab_id = 'x'
 
     def test_no_direct_launch(self):
-        tab = GameTab(tab_id=-1, files_key='demo', name_key='tabs.demo', direct_launch=False)
+        tab = GameTab(tab_id='deltarunedemo', files_key='demo', name_key='tabs.demo', direct_launch=False)
         assert tab.direct_launch is False
 
 
@@ -212,12 +212,12 @@ class TestGameDefinition:
 
     def test_get_tab_returns_none_for_empty(self):
         gd = GameDefinition()
-        assert gd.get_tab(0) is None
+        assert gd.get_tab('deltarune_0') is None
         assert gd.get_tab_by_index(0) is None
 
-    def test_get_chapter_id_returns_0_for_empty(self):
+    def test_get_chapter_id_returns_default_for_empty(self):
         gd = GameDefinition()
-        assert gd.get_chapter_id(0) == 0
+        assert gd.get_chapter_id(0) == ''
 
 
 # =========================================================================
@@ -244,14 +244,15 @@ class TestDeltaruneGame:
 
     def test_get_tab_by_id(self):
         g = DeltaruneGame()
-        assert g.get_tab(0).files_key == '0'
-        assert g.get_tab(3).files_key == '3'
-        assert g.get_tab(99) is None
+        assert g.get_tab('deltarune_0').files_key == '0'
+        assert g.get_tab('deltarune_3').files_key == '3'
+        assert g.get_tab('nonexistent') is None
 
     def test_get_chapter_id(self):
         g = DeltaruneGame()
+        expected = ['deltarune_0', 'deltarune_1', 'deltarune_2', 'deltarune_3', 'deltarune_4']
         for i in range(5):
-            assert g.get_chapter_id(i) == i
+            assert g.get_chapter_id(i) == expected[i]
 
     def test_direct_launch_allowed(self):
         g = DeltaruneGame()
@@ -493,7 +494,6 @@ class TestGameDetectionService:
 
     def test_get_chapter_id_for_game_mode(self):
         from services.game_detection_service import get_chapter_id_for_game_mode
-        from config.constants import TAB_ALL
-        assert get_chapter_id_for_game_mode(DeltaruneGame()) == TAB_ALL
-        assert get_chapter_id_for_game_mode(DeltaruneDemoGame()) == -10
-        assert get_chapter_id_for_game_mode(UndertaleGame()) == -20
+        assert get_chapter_id_for_game_mode(DeltaruneGame()) == 'deltarune'
+        assert get_chapter_id_for_game_mode(DeltaruneDemoGame()) == 'deltarunedemo'
+        assert get_chapter_id_for_game_mode(UndertaleGame()) == 'undertale'

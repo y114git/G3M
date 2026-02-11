@@ -63,7 +63,7 @@ class ModInfo:
         """Get file data by the content section key (e.g. '1', 'undertale', 'demo')."""
         return self.files.get(files_key)
 
-    def get_chapter_data(self, chapter_id: int) -> Optional['ModFileData']:
+    def get_chapter_data(self, chapter_id: str) -> Optional['ModFileData']:
         """Get file data by tab_id. Uses game registry for correct key lookup."""
         from models.game_modes import get_game
         game_def = get_game(self.game)
@@ -71,7 +71,11 @@ class ModInfo:
             tab = game_def.get_tab(chapter_id)
             if tab:
                 return self.files.get(tab.files_key)
-        return self.files.get(str(chapter_id))
+        result = self.files.get(chapter_id)
+        if not result and '_' in chapter_id:
+            _, suffix = chapter_id.rsplit('_', 1)
+            result = self.files.get(suffix)
+        return result
 
     def is_valid_for_demo(self) -> bool:
         return self.game == 'deltarunedemo' and bool((self.files and self.files.get('demo')) or (self.demo_url and self.demo_version))

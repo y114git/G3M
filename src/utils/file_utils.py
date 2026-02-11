@@ -275,18 +275,15 @@ def remove_archive_extension(filename: str) -> str:
     return filename[:-7] if fl.endswith('.tar.gz') else (filename[:-9] if fl.endswith('.tar.lzma') else os.path.splitext(filename)[0])
 
 
-def get_chapter_folder_name(chapter_id: int, game: Optional[str] = None, modgame: Optional[str] = None) -> str:
-    from config.constants import TAB_PIZZA_TOWER, TAB_UNDERTALE, TAB_UNDERTALE_YELLOW, TAB_DEMO, TAB_SUGARY_SPIRE
-    game_value = game or modgame
-    if chapter_id == -1 or chapter_id == TAB_DEMO:
+def get_chapter_folder_name(chapter_id: str, game: Optional[str] = None, modgame: Optional[str] = None) -> str:
+    if '_' in chapter_id:
+        _, num = chapter_id.rsplit('_', 1)
+        return f'chapter_{num}'
+    if chapter_id == 'deltarunedemo':
         return 'demo'
-    if chapter_id == TAB_PIZZA_TOWER:
-        return 'pizzatower' if game_value == 'pizzatower' else f'chapter_{chapter_id}'
-    if chapter_id in (TAB_UNDERTALE, 0, TAB_UNDERTALE_YELLOW):
+    if chapter_id in ('deltarune', 'undertale', 'undertaleyellow'):
         return 'chapter_0'
-    if chapter_id == TAB_SUGARY_SPIRE:
-        return 'sugaryspire'
-    return f'chapter_{chapter_id}'
+    return chapter_id
 
 
 def get_unique_mod_dir(mods_dir, mod_name):

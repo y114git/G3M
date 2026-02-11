@@ -4,7 +4,7 @@ import platform
 import psutil
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
-from config.constants import GAME_PROCESS_NAMES, GAME_EXECUTABLES, DATA_WIN_FILENAME, TAB_ALL
+from config.constants import GAME_PROCESS_NAMES, GAME_EXECUTABLES, DATA_WIN_FILENAME
 if TYPE_CHECKING:
     from models.game_modes import GameDefinition
 
@@ -57,8 +57,8 @@ def get_game_name_string(game_mode: 'GameDefinition') -> str:
     return getattr(game_mode, 'display_name', 'DELTARUNE')
 
 
-def get_chapter_id_for_game_mode(game_mode: 'GameDefinition') -> int:
-    return getattr(game_mode, 'default_tab_id', TAB_ALL)
+def get_chapter_id_for_game_mode(game_mode: 'GameDefinition') -> str:
+    return getattr(game_mode, 'default_tab', '') or getattr(game_mode, 'game_id', 'deltarune')
 
 
 def get_executable_name_for_game(game_type: str, os_type: str = None) -> Optional[str]:

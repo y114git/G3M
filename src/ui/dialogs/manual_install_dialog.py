@@ -579,11 +579,13 @@ class ManualModInstallDialog(QDialog):
         return 'root'
 
     @staticmethod
-    def _get_chapter_key(game: str, chapter_id: int) -> str:
-        _GAME_KEY_MAP = {'deltarunedemo': 'demo', 'undertale': 'undertale', 'undertaleyellow': 'undertaleyellow', 'pizzatower': 'pizzatower', 'sugaryspire': 'sugaryspire'}
-        if game == 'deltarune':
-            return str(chapter_id) if chapter_id >= 0 else '0'
-        return _GAME_KEY_MAP.get(game, '0')
+    def _get_chapter_key(game: str, chapter_id: str) -> str:
+        if '_' in chapter_id:
+            _, suffix = chapter_id.rsplit('_', 1)
+            return suffix
+        if chapter_id == 'deltarunedemo':
+            return 'demo'
+        return chapter_id
 
     def _create_mod_from_files(self):
         if not self.app_state or not self.mod_service:

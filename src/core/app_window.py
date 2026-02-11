@@ -11,7 +11,7 @@ from PyQt6.QtGui import QColor, QIcon, QPainter, QPixmap, QDesktopServices
 from PyQt6.QtWidgets import QApplication, QCheckBox, QFrame, QLabel, QProgressBar, QPushButton, QTabWidget, QVBoxLayout, QWidget, QHBoxLayout, QSizePolicy, QColorDialog
 from services.localization_service import localization_service, tr
 from models.game_modes import DeltaruneGame, get_game
-from config.constants import UI_COLORS, SOCIAL_LINKS, ONLINE_UPDATE_INTERVAL, INITIALIZATION_TIMEOUT, TAB_ALL, TAB_MENU, TAB_CHAPTER_1, TAB_CHAPTER_2, TAB_CHAPTER_3, TAB_CHAPTER_4, CLOUD_FUNCTIONS_BASE_URL
+from config.constants import UI_COLORS, SOCIAL_LINKS, ONLINE_UPDATE_INTERVAL, INITIALIZATION_TIMEOUT, CLOUD_FUNCTIONS_BASE_URL
 from ui.utils.ui_utils import DebounceTimer
 from ui.common.styling import get_theme_color
 from utils.path_utils import get_user_data_root, resource_path, get_launcher_dir, get_user_plugins_dir
@@ -742,10 +742,10 @@ class AppWindow(QWidget):
         super().paintEvent(event)
 
     def _initialize_mutual_exclusions(self):
-        direct_launch_tab_id = self.app_state.local_config.get('direct_launch_slot_id', TAB_ALL)
+        direct_launch_id = self.app_state.local_config.get('direct_launch_chapter', '')
         is_chapter_mode = self.app_state.current_mode == 'chapter'
         is_deltarune = self.app_state.game_mode.game_id == 'deltarune'
-        should_block = is_deltarune and is_chapter_mode and (direct_launch_tab_id >= 0)
+        should_block = is_deltarune and is_chapter_mode and bool(direct_launch_id)
         if not hasattr(self, 'launch_via_steam_checkbox'):
             return
         self.launch_via_steam_checkbox.setEnabled(not should_block)
@@ -921,20 +921,20 @@ class AppWindow(QWidget):
                 self.library_display.update_for_chapter_mode(selected_chapter_id)
 
     def _setup_chapter_tabs(self):
-        chapter_ids = [TAB_MENU, TAB_CHAPTER_1, TAB_CHAPTER_2, TAB_CHAPTER_3, TAB_CHAPTER_4]
-        for i, chapter_id in enumerate(chapter_ids):
+        tabs = self.app_state.game_mode.tabs
+        for i, tab in enumerate(tabs):
             if i < len(self.chapter_tab_buttons):
                 btn = self.chapter_tab_buttons[i]
-                btn.clicked.connect(lambda checked, cid=chapter_id: self._on_chapter_tab_clicked(cid) if checked else None)
+                btn.clicked.connect(lambda checked, tid=tab.tab_id: self._on_chapter_tab_clicked(tid) if checked else None)
                 btn.installEventFilter(self)
-                setattr(btn, '_chapter_id', chapter_id)
+                setattr(btn, '_chapter_id', tab.tab_id)
         self._update_chapter_tabs_style()
 
     def _on_chapter_tab_clicked(self, chapter_id):
         logging.debug(f'Chapter tab clicked: {chapter_id}')
-        chapter_ids = [TAB_MENU, TAB_CHAPTER_1, TAB_CHAPTER_2, TAB_CHAPTER_3, TAB_CHAPTER_4]
+        tabs = self.app_state.game_mode.tabs
         for i, btn in enumerate(self.chapter_tab_buttons):
-            btn.setChecked(chapter_ids[i] == chapter_id if i < len(chapter_ids) else False)
+            btn.setChecked(tabs[i].tab_id == chapter_id if i < len(tabs) else False)
         self.app_state.selected_chapter_id = chapter_id
         self.library_display.update_display()
         if hasattr(self.library_display, '_update_priority_button_visibility'):
@@ -943,13 +943,13 @@ class AppWindow(QWidget):
     def _update_chapter_tabs_style(self):
         if not hasattr(self, 'chapter_tab_buttons'):
             return
-        chapter_ids = [TAB_MENU, TAB_CHAPTER_1, TAB_CHAPTER_2, TAB_CHAPTER_3, TAB_CHAPTER_4]
-        direct_launch_chapter_id = self.app_state.local_config.get('direct_launch_slot_id', -1)
+        tabs = self.app_state.game_mode.tabs
+        direct_launch_chapter_id = self.app_state.local_config.get('direct_launch_chapter', '')
         border_color = get_theme_color(self.app_state.local_config, 'border', 'white')
         button_color = get_theme_color(self.app_state.local_config, 'button', 'black')
         hover_color = get_theme_color(self.app_state.local_config, 'button_hover', '#333')
-        for i, (chapter_id, btn) in enumerate(zip(chapter_ids, self.chapter_tab_buttons)):
-            is_direct_launch = direct_launch_chapter_id == chapter_id
+        for i, (tab, btn) in enumerate(zip(tabs, self.chapter_tab_buttons)):
+            is_direct_launch = direct_launch_chapter_id == tab.tab_id
             border_style = 'dashed' if is_direct_launch else 'solid'
             text_color = get_theme_color(self.app_state.local_config, 'text', 'white')
             btn.setStyleSheet(f'\n                QPushButton#chapter_tab_{i} {{\n                    background-color: {button_color};\n                    border: 2px {border_style} {border_color};\n                    color: {text_color};\n                    font-weight: bold;\n                    font-size: 13px;\n                    border-radius: 0px;\n                    padding: 5px;\n                }}\n                QPushButton#chapter_tab_{i}:checked {{\n                    background-color: {hover_color};\n                    border: 3px {border_style} {border_color};\n                }}\n                QPushButton#chapter_tab_{i}:hover {{\n                    background-color: {hover_color};\n                }}\n            ')

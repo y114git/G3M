@@ -54,9 +54,18 @@ class InstallModsThread(QThread):
         except Exception as e:
             logging.warning(f'InstallModsThread.cancel: cleanup failed: {e}', exc_info=True)
 
-    def _collect_remote_versions_for_chapter(self, mod, chapter_id: int) -> dict:
+    @staticmethod
+    def _chapter_id_to_file_key(chapter_id: str) -> str:
+        if chapter_id == 'deltarunedemo':
+            return 'demo'
+        if '_' in chapter_id:
+            _, suffix = chapter_id.rsplit('_', 1)
+            return suffix
+        return chapter_id
+
+    def _collect_remote_versions_for_chapter(self, mod, chapter_id: str) -> dict:
         versions: dict[str, str] = {}
-        if chapter_id == -1:
+        if chapter_id == 'deltarunedemo':
             if mod.is_valid_for_demo() and mod.demo_version:
                 versions['demo'] = mod.demo_version
             return versions
@@ -70,7 +79,7 @@ class InstallModsThread(QThread):
                 versions[extra_file.key] = extra_file.version
         return versions
 
-    def _should_update_component(self, mod, chapter_id: int, existing_folder: str) -> dict:
+    def _should_update_component(self, mod, chapter_id: str, existing_folder: str) -> dict:
         if not existing_folder:
             return {}
         config_path = os.path.join(self.main_window.app_state.mods_dir, existing_folder, MOD_CONFIG_FILENAME)
@@ -78,11 +87,11 @@ class InstallModsThread(QThread):
             return {}
         try:
             config_data = self.main_window.settings_service.read_json(config_path)
-            local_versions = config_data.get('chapters', {}).get(str(chapter_id), {}).get('versions', {}) or {}
+            local_versions = config_data.get('chapters', {}).get(chapter_id, {}).get('versions', {}) or {}
             remote_versions = self._collect_remote_versions_for_chapter(mod, chapter_id)
             from utils.path_utils import version_sort_key
             components_to_update: dict[str, dict] = {}
-            chapter_data = mod.get_chapter_data(chapter_id) if chapter_id != -1 else None
+            chapter_data = mod.get_chapter_data(chapter_id) if chapter_id != 'deltarunedemo' else None
             if chapter_data and chapter_data.data_file_url and remote_versions.get('data'):
                 if not is_valid_url(chapter_data.data_file_url):
                     logging.warning(f'_should_update_component: Invalid URL for data file: {chapter_data.data_file_url}')
@@ -165,10 +174,10 @@ class InstallModsThread(QThread):
                         mod_folders[key] = get_unique_mod_dir(self.main_window.app_state.mods_dir, mod.name)
                 mod_key = get_mod_key(mod)
                 existing_folder = mod_folders.get(mod_key, '')
-                chapter_data = mod.get_chapter_data(chapter_id) if chapter_id != -1 else None
-                if chapter_id == -1 and mod.is_valid_for_demo():
+                chapter_data = mod.get_chapter_data(chapter_id) if chapter_id != 'deltarunedemo' else None
+                if chapter_id == 'deltarunedemo' and mod.is_valid_for_demo():
                     if is_valid_url(mod.demo_url):
-                        tasks.append({'mod': mod, 'url': mod.demo_url, 'chapter_id': -1, 'component': 'demo'})
+                        tasks.append({'mod': mod, 'url': mod.demo_url, 'chapter_id': 'deltarunedemo', 'component': 'demo'})
                     else:
                         logging.warning(f'InstallModsThread: Invalid URL for demo: {mod.demo_url}')
                 elif chapter_data:
@@ -295,7 +304,7 @@ class InstallModsThread(QThread):
                 mod_dir = os.path.join(self.main_window.app_state.mods_dir, mod_folder_name)
                 files_data = {}
                 for chapter_id in mod_data['chapters']:
-                    chapter_data = mod.get_chapter_data(chapter_id) if chapter_id != -1 else None
+                    chapter_data = mod.get_chapter_data(chapter_id) if chapter_id != 'deltarunedemo' else None
                     versions_dict = {}
                     file_info = {}
                     if chapter_data:
@@ -314,11 +323,11 @@ class InstallModsThread(QThread):
                             file_info['extra_files'] = extra_files_dict
                         if versions_dict:
                             file_info['versions'] = versions_dict
-                    elif chapter_id == -1 and mod.is_valid_for_demo():
+                    elif chapter_id == 'deltarunedemo' and mod.is_valid_for_demo():
                         file_info['data_file_version'] = mod.demo_version or '1.0.0'
                         file_info['versions'] = {'demo': mod.demo_version or '1.0.0'}
                     if file_info:
-                        file_key = 'demo' if chapter_id == -1 else str(chapter_id)
+                        file_key = self._chapter_id_to_file_key(chapter_id)
                         files_data[file_key] = file_info
                 config_data = {'key': mod.key, 'name': mod.name, 'author': mod.author, 'version': mod.version, 'game_version': mod.game_version, 'game': mod.game, 'files': files_data, 'tags': mod.tags}
                 if hasattr(mod, 'icon_url') and mod.icon_url:

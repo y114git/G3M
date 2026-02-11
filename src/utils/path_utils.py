@@ -75,11 +75,10 @@ def resolve_game_executable(base_dir, is_undertale=False, game_type=None):
         return None
 
 
-def find_chapter_resource_dir(base_dir, chapter_id):
+def find_chapter_resource_dir(base_dir, chapter_id: str):
     try:
         if not base_dir:
             return None
-        from config.constants import TAB_DEMO, TAB_UNDERTALE, TAB_UNDERTALE_YELLOW, TAB_PIZZA_TOWER, TAB_SUGARY_SPIRE
         target_base = base_dir
         if _SYS == 'Darwin':
             if not target_base.endswith('.app'):
@@ -91,10 +90,12 @@ def find_chapter_resource_dir(base_dir, chapter_id):
             target_base = os.path.join(target_base, 'Contents', 'Resources')
             if not os.path.isdir(target_base):
                 return None
-        if chapter_id in (-1, 0, TAB_DEMO, TAB_UNDERTALE, TAB_UNDERTALE_YELLOW, TAB_PIZZA_TOWER, TAB_SUGARY_SPIRE):
-            return target_base
-        prefix = f'chapter{chapter_id}_'
-        return next((os.path.join(target_base, e) for e in os.listdir(target_base) if os.path.isdir(os.path.join(target_base, e)) and e.startswith(prefix)), None)
+        if '_' in chapter_id:
+            _, suffix = chapter_id.rsplit('_', 1)
+            if suffix.isdigit() and int(suffix) > 0:
+                prefix = f'chapter{suffix}_'
+                return next((os.path.join(target_base, e) for e in os.listdir(target_base) if os.path.isdir(os.path.join(target_base, e)) and e.startswith(prefix)), None)
+        return target_base
     except Exception as e:
         logging.debug(f'find_chapter_resource_dir: failed for {base_dir}, chapter {chapter_id}: {e}')
         return None

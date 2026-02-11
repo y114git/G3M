@@ -109,7 +109,7 @@ class ModPatcher(QObject):
                 self.patching_logger.info(f'[IMPORT] {label}{script_name} completed successfully')
         return all_ok
 
-    def _cancelled_restore(self, is_modpack: bool, chapter_id: int) -> bool:
+    def _cancelled_restore(self, is_modpack: bool, chapter_id: str) -> bool:
         """Return True (and restore backups) if cancelled, False otherwise."""
         if not self._cancelled:
             return False
@@ -117,7 +117,7 @@ class ModPatcher(QObject):
             self.backup_service.restore_backups(chapter_id)
         return True
 
-    def _fail_restore(self, is_modpack: bool, chapter_id: int) -> None:
+    def _fail_restore(self, is_modpack: bool, chapter_id: str) -> None:
         """Restore backups on failure (non-modpack only)."""
         if not is_modpack and self.backup_service:
             self.backup_service.restore_backups(chapter_id)
@@ -254,7 +254,7 @@ class ModPatcher(QObject):
             for chapter_id, mods_list in sorted(chapter_mods.items()):
                 if not mods_list:
                     continue
-                if is_modpack and chapter_id == -1:
+                if is_modpack and '_' not in chapter_id:
                     continue
                 if self._cancelled:
                     if not is_modpack:
@@ -264,8 +264,7 @@ class ModPatcher(QObject):
                 chapter_index += 1
                 chapter_progress_base = (chapter_index - 1) * (100 // total_chapters) if total_chapters > 0 else 0
                 self.patching_logger.info(f'Processing chapter {chapter_id} with {len(mods_list)} mod(s)')
-                from config.constants import TAB_CHAPTER_1, TAB_CHAPTER_2, TAB_CHAPTER_3, TAB_CHAPTER_4
-                is_actual_chapter = chapter_id in (TAB_CHAPTER_1, TAB_CHAPTER_2, TAB_CHAPTER_3, TAB_CHAPTER_4)
+                is_actual_chapter = '_' in chapter_id and not chapter_id.endswith('_0')
                 if is_actual_chapter:
                     chapter_msg = self._safe_tr('status.patching_chapter', f'Patching chapter {chapter_id} ({chapter_index}/{total_chapters})...', chapter=chapter_id, current=chapter_index, total=total_chapters)
                 else:
@@ -332,7 +331,7 @@ class ModPatcher(QObject):
                         self.patching_logger.warning(f'Failed to cleanup temp patch dir in finally block: {self.temp_patch_dir}')
                     self.temp_patch_dir = None
 
-    def _patch_chapter(self, chapter_id: int, mods_list: List[Any], progress_base: int = 0, total_chapters: int = 1, fast_patch: bool = False) -> bool:
+    def _patch_chapter(self, chapter_id: str, mods_list: List[Any], progress_base: int = 0, total_chapters: int = 1, fast_patch: bool = False) -> bool:
         self.patching_logger.debug(f'_patch_chapter: chapter_id={chapter_id}, mods_count={len(mods_list)}')
         target_dir = self._get_target_dir(chapter_id)
         if not target_dir:
@@ -363,7 +362,7 @@ class ModPatcher(QObject):
             if extracted_chapter_id is not None:
                 self.backup_service.backup_file(extracted_chapter_id, output_data_win_path)
 
-    def _run_fast_path_operation(self, operation, operation_desc: str, mod_name: str, chapter_id: int, is_modpack: bool) -> bool:
+    def _run_fast_path_operation(self, operation, operation_desc: str, mod_name: str, chapter_id: str, is_modpack: bool) -> bool:
         """Run a fast-path operation with unified error handling.
 
         Args:
@@ -390,7 +389,7 @@ class ModPatcher(QObject):
                 self.backup_service.restore_backups(chapter_id)
             return False
 
-    def _perform_chapter_patch(self, chapter_id: int, mods_list: List[Any], output_data_win_path: str, target_dir: str, modpack_dir: Optional[str], progress_base: int, total_chapters: int, is_modpack: bool, fast_patch: bool = False) -> bool:
+    def _perform_chapter_patch(self, chapter_id: str, mods_list: List[Any], output_data_win_path: str, target_dir: str, modpack_dir: Optional[str], progress_base: int, total_chapters: int, is_modpack: bool, fast_patch: bool = False) -> bool:
         original_data_win = output_data_win_path
         if not mods_list:
             self.patching_logger.info(f'[OPTIMIZATION] No mods to apply for chapter {chapter_id}, skipping')
@@ -817,7 +816,7 @@ class ModPatcher(QObject):
         self.patching_logger.info('Multi-mod patching completed successfully')
         return True
 
-    def _patch_chapter_to_dir(self, chapter_id: int, mods_list: List[Any], modpack_dir: str, progress_base: int = 0, total_chapters: int = 1, fast_patch: bool = False, game: Optional[str] = None) -> bool:
+    def _patch_chapter_to_dir(self, chapter_id: str, mods_list: List[Any], modpack_dir: str, progress_base: int = 0, total_chapters: int = 1, fast_patch: bool = False, game: Optional[str] = None) -> bool:
         self.patching_logger.debug(f'_patch_chapter_to_dir: chapter_id={chapter_id}, mods_count={len(mods_list)}, modpack_dir={modpack_dir}, game={game}')
         os.makedirs(modpack_dir, exist_ok=True)
         target_dir = self._get_target_dir(chapter_id, game=game)
@@ -830,7 +829,7 @@ class ModPatcher(QObject):
             return self._apply_file_overrides_only(chapter_id, mods_list, modpack_dir, is_modpack=True)
         return self._perform_chapter_patch(chapter_id, mods_list, data_win_path, target_dir, modpack_dir, progress_base, total_chapters, is_modpack=True, fast_patch=fast_patch)
 
-    def _apply_file_overrides_only(self, chapter_id: int, mods_list: List[Any], target_dir: str, is_modpack: bool = False) -> bool:
+    def _apply_file_overrides_only(self, chapter_id: str, mods_list: List[Any], target_dir: str, is_modpack: bool = False) -> bool:
         mods_to_apply = list(reversed(mods_list))
         used_archive_names = set()
         for mod_data in mods_to_apply:
@@ -1228,7 +1227,7 @@ class ModPatcher(QObject):
             self.patching_logger.error(f'Failed to export mod assets: {e}', exc_info=True)
             return False
 
-    def _perform_parallel_export(self, mods_to_export: List[Any], mods_to_apply: List[Any], mod_patched_files: Dict[int, str], mod_types: Dict[int, Dict], vanilla_data_win: str, patch_root: str, cache_running_dir: str, chapter_str: str, chapter_id: int, progress_base: int, export_progress: int, progress_callback) -> bool:
+    def _perform_parallel_export(self, mods_to_export: List[Any], mods_to_apply: List[Any], mod_patched_files: Dict[int, str], mod_types: Dict[int, Dict], vanilla_data_win: str, patch_root: str, cache_running_dir: str, chapter_str: str, chapter_id: str, progress_base: int, export_progress: int, progress_callback) -> bool:
         from utils.patching.parallel_export_utils import perform_parallel_export
         return perform_parallel_export(self, mods_to_export, mods_to_apply, mod_patched_files, mod_types, vanilla_data_win, patch_root, cache_running_dir, chapter_str, chapter_id, progress_base, export_progress, progress_callback)
 
@@ -1236,11 +1235,11 @@ class ModPatcher(QObject):
         from utils.patching.parallel_export_utils import perform_parallel_filtering
         return perform_parallel_filtering(self, vanilla_hashes, mods_dirs_info, progress_base, filter_progress, progress_callback)
 
-    def _get_mod_source_dir(self, mod_data: Any, chapter_id: int) -> Optional[str]:
+    def _get_mod_source_dir(self, mod_data: Any, chapter_id: str) -> Optional[str]:
         from utils.patching.mod_resolve_utils import get_mod_source_dir
         return get_mod_source_dir(mod_data, chapter_id, self.mod_service, self.app_state, self.patching_logger)
 
-    def _get_target_dir(self, chapter_id: int, game: Optional[str] = None) -> Optional[str]:
+    def _get_target_dir(self, chapter_id: str, game: Optional[str] = None) -> Optional[str]:
         from utils.patching.mod_resolve_utils import get_target_dir
         return get_target_dir(chapter_id, self.app_state, self.patching_logger, game=game)
 

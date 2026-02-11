@@ -26,7 +26,7 @@ def resolve_mod_game(mod_data, source_dir=None):
     return game
 
 
-def get_mod_source_dir(mod_data: Any, chapter_id: int, mod_service, app_state, logger) -> Optional[str]:
+def get_mod_source_dir(mod_data: Any, chapter_id: str, mod_service, app_state, logger) -> Optional[str]:
     """Resolve the source directory for a mod's chapter content."""
     key = get_mod_key(mod_data)
     if not key:
@@ -61,7 +61,7 @@ def get_mod_source_dir(mod_data: Any, chapter_id: int, mod_service, app_state, l
     chapter_folder_name = get_chapter_folder_name(chapter_id, game=game)
     chapter_dir = os.path.join(source_dir, chapter_folder_name)
     if not os.path.isdir(chapter_dir):
-        if chapter_id == 0:
+        if chapter_id.endswith('_0'):
             if game == 'pizzatower':
                 pizzatower_dir = os.path.join(source_dir, 'pizzatower')
                 if os.path.isdir(pizzatower_dir):
@@ -69,13 +69,13 @@ def get_mod_source_dir(mod_data: Any, chapter_id: int, mod_service, app_state, l
             alt_menu_dir = os.path.join(source_dir, 'menu')
             if os.path.isdir(alt_menu_dir):
                 return alt_menu_dir
-        elif chapter_id == -1:
+        elif '_' not in chapter_id:
             return source_dir
         return None
     return chapter_dir
 
 
-def get_target_dir(chapter_id: int, app_state, logger, game: Optional[str] = None) -> Optional[str]:
+def get_target_dir(chapter_id: str, app_state, logger, game: Optional[str] = None) -> Optional[str]:
     """Resolve the target directory (game install path) for a chapter."""
     from models.game_modes import get_game
 
