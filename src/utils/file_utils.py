@@ -275,7 +275,8 @@ def remove_archive_extension(filename: str) -> str:
     return filename[:-7] if fl.endswith('.tar.gz') else (filename[:-9] if fl.endswith('.tar.lzma') else os.path.splitext(filename)[0])
 
 
-def get_chapter_folder_name(chapter_id: str, game: Optional[str] = None, modgame: Optional[str] = None) -> str:
+def get_chapter_folder_name(chapter_id, game: Optional[str] = None, modgame: Optional[str] = None) -> str:
+    chapter_id = str(chapter_id)
     if '_' in chapter_id:
         _, num = chapter_id.rsplit('_', 1)
         return f'chapter_{num}'

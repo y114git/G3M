@@ -158,7 +158,16 @@ class GameLauncher(QObject):
                 self.monitor_worker.finished.connect(self._on_game_process_finished)
                 self.monitor_thread.started.connect(self.monitor_worker.run)
                 self.monitor_thread.start()
-                webbrowser.open(target_path)
+                system = platform.system()
+                if system == 'Linux':
+                    try:
+                        subprocess.Popen(['steam', target_path])
+                    except FileNotFoundError:
+                        subprocess.Popen(['xdg-open', target_path])
+                elif system == 'Darwin':
+                    subprocess.Popen(['open', target_path])
+                else:
+                    webbrowser.open(target_path)
                 self.status_changed.emit(tr('status.launching_via_steam'), UI_COLORS['status_steam'])
                 return
             if not working_directory or not os.path.isdir(working_directory):

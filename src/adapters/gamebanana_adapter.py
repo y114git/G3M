@@ -13,12 +13,12 @@ logger = logging.getLogger(__name__)
 
 
 class GameBananaAPI:
+    _compatibility_cache: Dict[int, Dict[str, Any]] = {}
 
     def __init__(self):
         self.base_url = GAMEBANANA_API_BASE
         self.core_api_base = 'https://api.gamebanana.com'
         self.session = get_session()
-        self._compatibility_cache: Dict[int, Dict[str, Any]] = {}
         self._last_request_time = 0.0
         self._min_request_interval = 0.2
         self._rate_limit_wait_time = 0.0

@@ -1,3 +1,4 @@
+import threading
 from typing import Optional
 from PyQt6.QtCore import pyqtSignal, Qt, QThread
 from PyQt6.QtWidgets import QLabel, QPushButton, QHBoxLayout, QVBoxLayout, QFrame, QWidget
@@ -9,6 +10,7 @@ import logging
 
 
 class CompatibilityCheckThread(QThread):
+    _semaphore = threading.Semaphore(3)
     compatibility_checked = pyqtSignal(object, dict)
 
     def __init__(self, mod_data, parent=None):
@@ -16,6 +18,8 @@ class CompatibilityCheckThread(QThread):
         self.mod_data = mod_data
 
     def run(self):
+        if not self._semaphore.acquire(timeout=15):
+            return
         try:
             if self.isInterruptionRequested():
                 return
@@ -26,6 +30,10 @@ class CompatibilityCheckThread(QThread):
             if not mod_id:
                 return
             from adapters.gamebanana_adapter import GameBananaAPI
+            cached = GameBananaAPI._compatibility_cache.get(int(mod_id))
+            if cached:
+                self.compatibility_checked.emit(self.mod_data, cached)
+                return
             api = GameBananaAPI()
             if self.isInterruptionRequested():
                 return
@@ -34,6 +42,8 @@ class CompatibilityCheckThread(QThread):
             self.compatibility_checked.emit(self.mod_data, compat)
         except Exception as e:
             logging.warning(f'CompatibilityCheckThread: Error checking compatibility: {e}', exc_info=True)
+        finally:
+            self._semaphore.release()
 
 
 class ModCardWidget(BaseModWidget):
@@ -264,6 +274,16 @@ class ModCardWidget(BaseModWidget):
     def _start_compatibility_check(self):
         if getattr(self.mod_data, 'gamebanana_compatibility_checked', False):
             return
+        key = get_mod_key(self.mod_data)
+        if key and key.startswith('gb_'):
+            try:
+                from adapters.gamebanana_adapter import GameBananaAPI
+                cached = GameBananaAPI._compatibility_cache.get(int(key[3:]))
+                if cached:
+                    self._on_compatibility_checked(self.mod_data, cached)
+                    return
+            except (ValueError, TypeError):
+                pass
         if self._compatibility_thread:
             if self._compatibility_thread.isFinished():
                 try:
