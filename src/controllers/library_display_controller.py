@@ -2,7 +2,7 @@
 import logging
 import os
 import shutil
-from PyQt6.QtCore import QThread, QTimer
+from PyQt6.QtCore import QThread, QTimer, pyqtSignal
 from services.localization_service import tr
 from ui.common.styling import clear_layout_widgets, show_empty_message_in_layout
 from ui.widgets.mod.installed_mod_widget import InstalledModWidget
@@ -134,6 +134,7 @@ class LibraryDisplayController:
             return
 
         class _Scan(QThread):
+            result_ready = pyqtSignal(list)
 
             def __init__(self, outer):
                 super().__init__(outer)
@@ -144,7 +145,7 @@ class LibraryDisplayController:
                     mods = self.outer.mod_service.get_installed_mods_list()
                 except Exception:
                     mods = []
-                QTimer.singleShot(0, lambda: self.outer.update_display_from_list(mods))
+                self.result_ready.emit(mods)
         try:
             if hasattr(self.app, '_installed_scan_thread') and self.app._installed_scan_thread:
                 if self.app._installed_scan_thread.isRunning():
@@ -152,6 +153,7 @@ class LibraryDisplayController:
                     self.app._installed_scan_thread.wait(100)
                 self.app._installed_scan_thread.deleteLater()
             self.app._installed_scan_thread = _Scan(self)
+            self.app._installed_scan_thread.result_ready.connect(self.update_display_from_list)
             self.app._installed_scan_thread.start()
         except Exception:
             mods = self.mod_service.get_installed_mods_list()

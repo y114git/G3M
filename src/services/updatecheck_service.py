@@ -83,14 +83,14 @@ class UpdateChecker(QObject):
             raise PermissionError(error_msg)
         updater_script_path = os.path.join(tempfile.gettempdir(), f'deltahub_updater_{int(time.time())}.sh')
         current_pid = os.getpid()
-        safe_old = current_exe_path.replace('"', '\\"')
-        safe_new = new_content_path.replace('"', '\\"')
+        safe_old = current_exe_path.replace("'", "'\\''")
+        safe_new = new_content_path.replace("'", "'\\''")
         if system == 'Darwin':
-            launch_cmd = f'open "{safe_old}"'
+            launch_cmd = 'open "$OLD_PATH"'
         else:
-            launch_cmd = f'"{safe_old}" &'
-        new_content_parent = os.path.dirname(new_content_path).replace('"', '\\"')
-        script_content = f'''#!/bin/bash\n# DELTAHUB Updater Script\n# Generated at {time.strftime('%Y-%m-%d %H:%M:%S')}\n\nPID={current_pid}\nOLD_PATH="{safe_old}"\nNEW_PATH="{safe_new}"\nTEMP_DIR="{new_content_parent}"\nLOG_FILE="/tmp/deltahub_update.log"\n\n# 1. Ждем завершения основного процесса\necho "Waiting for PID $PID to close..." > "$LOG_FILE"\nwhile kill -0 "$PID" 2>/dev/null; do\n   sleep 0.5\ndone\n\necho "Process closed. Updating..." >> "$LOG_FILE"\n\n# 2. Удаляем старую версию (или перемещаем в бекап)\n# На macOS это удаление папки .app, на Linux файла\nrm -rf "$OLD_PATH" 2>> "$LOG_FILE"\n\n# 3. Перемещаем новую версию на место старой\nmv -f "$NEW_PATH" "$OLD_PATH" 2>> "$LOG_FILE"\n\n# 4. Восстанавливаем права на исполнение (критично для Linux/Mac)\nchmod -R 755 "$OLD_PATH" 2>> "$LOG_FILE"\n\n# 5. (Только macOS) Снимаем карантин, если нужно\nif [[ "$OSTYPE" == "darwin"* ]]; then\n   xattr -r -d com.apple.quarantine "$OLD_PATH" 2>> "$LOG_FILE" || true\nfi\n\n# 6. Запускаем новую версию\necho "Launching new version..." >> "$LOG_FILE"\n{launch_cmd} >> "$LOG_FILE" 2>&1\n\n# 7. Очищаем временную папку (если она пуста)\nrm -rf "$TEMP_DIR" 2>/dev/null || true\n\n# 8. Самоудаление скрипта (опционально, но чистоплотно)\nrm -f "$0" 2>/dev/null || true\n'''
+            launch_cmd = '"$OLD_PATH" &'
+        new_content_parent = os.path.dirname(new_content_path).replace("'", "'\\''")
+        script_content = f'''#!/bin/bash\n# DELTAHUB Updater Script\n# Generated at {time.strftime('%Y-%m-%d %H:%M:%S')}\n\nPID={current_pid}\nOLD_PATH='{safe_old}'\nNEW_PATH='{safe_new}'\nTEMP_DIR='{new_content_parent}'\nLOG_FILE="/tmp/deltahub_update.log"\n\n# 1. Ждем завершения основного процесса\necho "Waiting for PID $PID to close..." > "$LOG_FILE"\nwhile kill -0 "$PID" 2>/dev/null; do\n   sleep 0.5\ndone\n\necho "Process closed. Updating..." >> "$LOG_FILE"\n\n# 2. Удаляем старую версию (или перемещаем в бекап)\n# На macOS это удаление папки .app, на Linux файла\nrm -rf "$OLD_PATH" 2>> "$LOG_FILE"\n\n# 3. Перемещаем новую версию на место старой\nmv -f "$NEW_PATH" "$OLD_PATH" 2>> "$LOG_FILE"\n\n# 4. Восстанавливаем права на исполнение (критично для Linux/Mac)\nchmod -R 755 "$OLD_PATH" 2>> "$LOG_FILE"\n\n# 5. (Только macOS) Снимаем карантин, если нужно\nif [[ "$OSTYPE" == "darwin"* ]]; then\n   xattr -r -d com.apple.quarantine "$OLD_PATH" 2>> "$LOG_FILE" || true\nfi\n\n# 6. Запускаем новую версию\necho "Launching new version..." >> "$LOG_FILE"\n{launch_cmd} >> "$LOG_FILE" 2>&1\n\n# 7. Очищаем временную папку (если она пуста)\nrm -rf "$TEMP_DIR" 2>/dev/null || true\n\n# 8. Самоудаление скрипта (опционально, но чистоплотно)\nrm -f "$0" 2>/dev/null || true\n'''
         with open(updater_script_path, 'w', encoding='utf-8') as f:
             f.write(script_content)
         os.chmod(updater_script_path, 493)
@@ -114,7 +114,15 @@ class UpdateChecker(QObject):
         try:
             logging.info(f"[UPDATE] Starting update process for version {update_info['version']}")
             with tempfile.TemporaryDirectory(prefix='deltahub-update-') as tmp_dir:
-                archive_path = os.path.join(tmp_dir, 'update' + os.path.splitext(update_info['url'].split('?')[0])[1])
+                url_path = update_info['url'].split('?')[0]
+                url_lower = url_path.lower()
+                if url_lower.endswith('.tar.gz'):
+                    ext = '.tar.gz'
+                elif url_lower.endswith('.tar.lzma'):
+                    ext = '.tar.lzma'
+                else:
+                    ext = os.path.splitext(url_path)[1]
+                archive_path = os.path.join(tmp_dir, 'update' + ext)
                 logging.info(f"[UPDATE] Downloading update from {update_info['url']} to {archive_path}")
                 self.feedback_service.update_status(tr('status.downloading_version', version=update_info['version']), UI_COLORS['status_warning'])
                 session = get_session()
@@ -218,7 +226,7 @@ class UpdateChecker(QObject):
                             for file in files:
                                 file_path = os.path.join(root, file)
                                 if os.path.isfile(file_path):
-                                    if '.' not in file or file.endswith('.AppImage'):
+                                    if not os.path.splitext(file)[1] or file.endswith('.AppImage'):
                                         size = os.path.getsize(file_path)
                                         if size > largest_size:
                                             largest_size = size

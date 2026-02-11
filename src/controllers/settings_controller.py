@@ -126,6 +126,7 @@ class SettingsUiController:
             self.app.launch_via_steam_checkbox.setChecked(False)
             return
         self.settings_service.on_toggle_steam_launch(is_steam), self.app._update_custom_executable_ui()
+        self._call_if_exists(self.app, '_update_portproton_ui')
 
     def on_toggle_portproton(self):
         use = self.app.use_portproton_checkbox.isChecked() if hasattr(self.app, 'use_portproton_checkbox') and self.app.use_portproton_checkbox else False

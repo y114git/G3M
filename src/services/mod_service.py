@@ -789,13 +789,14 @@ class ModManager(QObject):
 
     def _on_url_install_finished(self, success: bool, message: str):
         self.app_state.is_installing = False
+        finished_task = self.app_state.current_task
         self.app_state.clear_current_task()
         if success:
             self.invalidate_mods_cache()
             self.load_local_mods()
             self.mod_list_updated.emit()
             self.status_changed.emit(tr('status.mod_installed'), 'status_success')
-        elif self.app_state.current_task and getattr(self.app_state.current_task, '_cancelled', False):
+        elif finished_task and getattr(finished_task, '_cancelled', False):
             self.status_changed.emit(tr('status.install_cancelled_by_user'), 'status_info')
         else:
             self.status_changed.emit(tr('status.installation_failed'), 'status_error')
@@ -876,6 +877,7 @@ class ModManager(QObject):
         mods_metadata = self._read_metadata()
         metadata_updated = False
         found_mod_keys: Set[str] = set()
+        _config_read_errors = False
 
         def _append_from_config(config_data: dict, folder_name: str) -> None:
             nonlocal metadata_updated
@@ -917,16 +919,23 @@ class ModManager(QObject):
                         continue
                     _append_from_config(config_data, folder_name)
                 except Exception as e:
+                    _config_read_errors = True
                     config_key = config_data.get('key') or config_data.get('mod_key', '') if 'config_data' in locals() else cache_key
                     logging.warning(f'Failed to build installed mod from cache for key {config_key}: {e}', exc_info=True)
         else:
             for folder_name, folder_path, config_path, config_data in self._iter_mod_configs():
-                _append_from_config(config_data, folder_name)
-        orphaned_keys = set(mods_metadata.keys()) - found_mod_keys
-        if orphaned_keys:
-            for key in list(orphaned_keys):
-                del mods_metadata[key]
-            metadata_updated = True
+                try:
+                    _append_from_config(config_data, folder_name)
+                except Exception as e:
+                    _config_read_errors = True
+                    config_key = config_data.get('key') or config_data.get('mod_key', '') if config_data else folder_name
+                    logging.warning(f'Failed to build installed mod from config for key {config_key}: {e}', exc_info=True)
+        if not _config_read_errors:
+            orphaned_keys = set(mods_metadata.keys()) - found_mod_keys
+            if orphaned_keys:
+                for key in list(orphaned_keys):
+                    del mods_metadata[key]
+                metadata_updated = True
         if metadata_updated:
             self._write_metadata(mods_metadata)
         with self._cache_lock:

@@ -409,6 +409,7 @@
     "gamebanana_linked": "Vinculado a un mod de GameBanana",
     "steam": "Habilita esta opción para ejecutar el juego a través de Steam, para que todos tus logros, overlays, etc., funcionen correctamente.",
     "portproton": "Usa PortProton en lugar de Wine para ejecutar ejecutables de Windows en Linux. PortProton es una capa de compatibilidad que envuelve Wine/Proton para facilitar la compatibilidad de juegos. Si PortProton no está en tu PATH, puedes especificar una ruta personalizada al ejecutable de PortProton.",
+    "portproton_disabled_steam": "PortProton no se usa al iniciar a través de Steam. Steam gestiona su propia capa de compatibilidad Wine/Proton.",
     "beta_updates": "Recibe actualizaciones y características experimentales antes de que se publiquen oficialmente.",
     "skip_patching_warnings": "Cuando está habilitado, el parcheo continuará automáticamente\nsin pedir confirmación cuando ocurran problemas no críticos\n(ej: error de suma de verificación xdelta).\nLas advertencias seguirán registrándose.",
     "fullscreen_tooltip": "Alternar modo de pantalla completa.",

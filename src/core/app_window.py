@@ -901,9 +901,17 @@ class AppWindow(QWidget):
     def _update_portproton_ui(self):
         if not self.portproton_frame or not self.portproton_path_label:
             return
+        is_steam_launch = self.app_state.local_config.get('launch_via_steam', False)
+        if self.use_portproton_checkbox:
+            self.use_portproton_checkbox.setEnabled(not is_steam_launch)
+            if is_steam_launch:
+                self.use_portproton_checkbox.setToolTip(tr('tooltips.portproton_disabled_steam'))
+            else:
+                self.use_portproton_checkbox.setToolTip("<html><body style='white-space: normal;'>" + tr('tooltips.portproton') + '</body></html>')
         use_portproton = self.app_state.local_config.get('use_portproton', False)
         path = self.app_state.local_config.get('portproton_path', '')
-        self.portproton_frame.setVisible(use_portproton and (self.use_portproton_checkbox.isEnabled() if self.use_portproton_checkbox else False))
+        show_frame = use_portproton and not is_steam_launch and (self.use_portproton_checkbox.isEnabled() if self.use_portproton_checkbox else False)
+        self.portproton_frame.setVisible(show_frame)
         if self.portproton_frame.isVisible():
             if path:
                 self.portproton_path_label.setText(tr('ui.currently_selected', filename=os.path.basename(path)))

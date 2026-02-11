@@ -42,6 +42,7 @@ class SearchDisplayController(QObject):
         self._last_load_attempt = {'items_needed': 0, 'current_total': 0, 'attempts': 0}
         self._load_check_done = False
         self._update_display_in_progress = False
+        self._pending_display_update = False
         self.card_widget_cache: dict[str, ModCardWidget] = {}
         self._update_display_debounce = DebounceTimer(delay_ms=200)
         self._initial_mods_display_done = False
@@ -551,7 +552,8 @@ class SearchDisplayController(QObject):
                 QTimer.singleShot(0, async_filter)
                 return
             if preserve_page and (not self.app_state.auto_sorting) and self.app_state.filtered_mods:
-                existing_filtered_keys = {key for mod in self.app_state.filtered_mods if (key := get_mod_key(mod))}
+                re_filtered_existing = filter_and_sort_mods(self.app_state.filtered_mods, filters, sort_config=None, blocklist_service=self.blocklist_service, installed_mod_keys=installed_keys)
+                existing_filtered_keys = {key for mod in re_filtered_existing if (key := get_mod_key(mod))}
                 new_mods_to_filter = []
                 for mod in self.app_state.all_mods:
                     key = get_mod_key(mod)
@@ -560,7 +562,9 @@ class SearchDisplayController(QObject):
                     new_mods_to_filter.append(mod)
                 if new_mods_to_filter:
                     new_filtered = filter_and_sort_mods(new_mods_to_filter, filters, sort_config=None, blocklist_service=self.blocklist_service, installed_mod_keys=installed_keys)
-                    self.app_state.filtered_mods = (self.app_state.filtered_mods or []) + new_filtered
+                    self.app_state.filtered_mods = re_filtered_existing + new_filtered
+                else:
+                    self.app_state.filtered_mods = re_filtered_existing
             else:
                 self.app_state.filtered_mods = filter_and_sort_mods(self.app_state.all_mods, filters, sort_config, blocklist_service=self.blocklist_service, installed_mod_keys=installed_keys)
             if not preserve_page:
@@ -575,11 +579,17 @@ class SearchDisplayController(QObject):
             if self._pending_filter_update:
                 QTimer.singleShot(100, lambda: self.update_filtered_mods(preserve_page=preserve_page))
 
+    def _flush_pending_display(self):
+        if self._pending_display_update:
+            self._pending_display_update = False
+            QTimer.singleShot(150, self.update_display)
+
     def update_display(self):
         self._update_display_debounce.call(self._do_update_display)
 
     def _do_update_display(self):
         if self._update_display_in_progress:
+            self._pending_display_update = True
             return
         self._update_display_in_progress = True
         try:
@@ -768,6 +778,7 @@ class SearchDisplayController(QObject):
                     self.ui_widget_updates_enabled.emit('mod_list_widget', True)
                     self.update_pagination()
                     self._update_display_in_progress = False
+                    self._flush_pending_display()
                     self._check_and_emit_ready_if_needed()
 
                 def self_check_and_emit_ready_if_needed():
@@ -840,11 +851,13 @@ class SearchDisplayController(QObject):
                 logger.error(f'SearchDisplayController: Error in batch processing: {e}', exc_info=True)
                 self.ui_widget_updates_enabled.emit('mod_list_widget', True)
                 self._update_display_in_progress = False
+                self._flush_pending_display()
         except Exception as e:
             logger.error(f'SearchDisplayController: Error in update_display: {e}', exc_info=True)
         finally:
             if self._update_display_in_progress:
                 self._update_display_in_progress = False
+                self._flush_pending_display()
 
     def update_pagination(self):
         if not hasattr(self.app, 'page_label') or not hasattr(self.app, 'prev_page_btn') or (not hasattr(self.app, 'next_page_btn')):

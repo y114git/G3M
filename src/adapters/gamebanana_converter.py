@@ -56,10 +56,27 @@ class GameBananaConverter:
         try:
             if not os.path.exists(self.archive_path):
                 return False
-            with zipfile.ZipFile(self.archive_path, 'r') as zf:
-                return any(check_filename_is_deltamod_info(name) for name in zf.namelist())
-        except zipfile.BadZipFile:
-            logger.debug(f'Archive is not a valid zip file: {self.archive_path}')
+            try:
+                with zipfile.ZipFile(self.archive_path, 'r') as zf:
+                    return any(check_filename_is_deltamod_info(os.path.basename(name)) for name in zf.namelist())
+            except zipfile.BadZipFile:
+                pass
+            from utils.archive_utils import _detect_archive_format_by_signature
+            detected = _detect_archive_format_by_signature(self.archive_path)
+            if detected == 'rar':
+                try:
+                    import rarfile
+                    with rarfile.RarFile(self.archive_path, 'r') as rf:
+                        return any(check_filename_is_deltamod_info(os.path.basename(n)) for n in rf.namelist())
+                except Exception:
+                    pass
+            elif detected == '7z':
+                try:
+                    import py7zr
+                    with py7zr.SevenZipFile(self.archive_path, mode='r') as zf:
+                        return any(check_filename_is_deltamod_info(os.path.basename(n)) for n in zf.getnames())
+                except Exception:
+                    pass
             return False
         except Exception as e:
             logger.error(f'Error checking archive compatibility: {e}')

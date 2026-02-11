@@ -527,6 +527,7 @@ class ModOperationsController:
                 self.app.search_display.update_filtered_mods(preserve_page=True)
         except Exception as e:
             logging.error(f'ModOperationsController: Failed to uninstall mod: {e}', exc_info=True)
+            self.feedback_service.show_message('error', tr('errors.error'), tr('errors.mod_uninstall_failed', error=str(e)))
             return
 
     def _start_manual_install_from_gamebanana(self, mod):

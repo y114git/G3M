@@ -29,6 +29,7 @@ def filter_and_sort_mods(mods_list, filters, sort_config=None, mod_accessor=None
     only_gamebanana, status_filter = filters.get('only_gamebanana', False), filters.get('status_filter', ['approved', 'pending'])
     exclude_installed = filters.get('exclude_installed', False)
     hide_local = filters.get('hide_local', False)
+    hide_mods_without_files = filters.get('hide_mods_without_files', False)
     filtered_list = []
     for item in mods_list:
         mod = mod_accessor(item) if mod_accessor else item
@@ -40,6 +41,8 @@ def filter_and_sort_mods(mods_list, filters, sort_config=None, mod_accessor=None
         if hide_local and key and isinstance(key, str) and key.startswith('local_'):
             continue
         is_gb = bool(key and isinstance(key, str) and key.startswith('gb_'))
+        if hide_mods_without_files and is_gb and not _get_mod_attr(mod, '_aFiles'):
+            continue
         if only_gamebanana and not is_gb:
             continue
         if exclude_installed and installed_mod_keys and key in installed_mod_keys:
@@ -56,7 +59,7 @@ def filter_and_sort_mods(mods_list, filters, sort_config=None, mod_accessor=None
                 continue
         if selected_game and (_get_mod_attr(mod, 'game') or _get_mod_attr(mod, 'modgame', 'deltarune')) != selected_game:
             continue
-        if search_text and (stl := search_text.lower()) not in _get_mod_attr(mod, 'name', '').lower() and stl not in _get_mod_attr(mod, 'tagline', '').lower():
+        if search_text and (stl := search_text.lower()) not in (_get_mod_attr(mod, 'name', '') or '').lower() and stl not in (_get_mod_attr(mod, 'tagline', '') or '').lower():
             continue
         filtered_list.append(item)
     if sort_config:

@@ -109,46 +109,52 @@ class ModImportExportController:
                         target_mod_dir = os.path.join(self.app_state.mods_dir, folder_name_with_counter)
                         counter += 1
                     shutil.copytree(content_path, target_mod_dir)
-                    target_config_path = os.path.join(target_mod_dir, MOD_CONFIG_FILENAME)
-                    target_old_config_path = os.path.join(target_mod_dir, LEGACY_MOD_CONFIG_FILENAME)
-                    if os.path.exists(target_old_config_path) and (not os.path.exists(target_config_path)):
-                        try:
-                            shutil.move(target_old_config_path, target_config_path)
-                        except Exception as e:
-                            logging.warning(f'Failed to migrate config during import: {e}')
-                    config_path = target_config_path
-                    config_updated = False
-                    if 'files' in config:
-                        for chapter_key, chapter_data in config['files'].items():
-                            if chapter_key == 'demo':
-                                chapter_folder = os.path.join(target_mod_dir, 'demo')
-                            elif chapter_key == 'undertale':
-                                chapter_folder = os.path.join(target_mod_dir, 'undertale')
-                            elif chapter_key in ['0', '1', '2', '3', '4']:
-                                chapter_id = int(chapter_key)
-                                from utils.file_utils import get_chapter_folder_name
-                                folder_name = get_chapter_folder_name(chapter_id, game=config.get('game') or config.get('modgame'))
-                                chapter_folder = os.path.join(target_mod_dir, folder_name)
-                            else:
-                                continue
-                            if os.path.exists(chapter_folder):
-                                if not chapter_data.get('data_file_url'):
-                                    from config.constants import DATA_FILE_EXTENSIONS
-                                    for file in os.listdir(chapter_folder):
-                                        if file.lower().endswith(DATA_FILE_EXTENSIONS):
-                                            chapter_data['data_file_url'] = file
-                                            config_updated = True
-                                            break
-                    icon_path = os.path.join(target_mod_dir, '_icon.png')
-                    if not os.path.exists(icon_path):
-                        icon_path = os.path.join(target_mod_dir, 'icon.png')
-                    if os.path.exists(icon_path) and (not config.get('icon_url')):
-                        config['icon_url'] = '_icon.png' if os.path.basename(icon_path) == '_icon.png' else 'icon.png'
-                        config_updated = True
-                    if config_updated or mod_key_generated:
-                        save_json(config_path, config, indent=2)
-                    self._refresh_mod_list()
-                    QMessageBox.information(self.app_window, tr('dialogs.success'), tr('status.mod_imported_success'))
+                    try:
+                        target_config_path = os.path.join(target_mod_dir, MOD_CONFIG_FILENAME)
+                        target_old_config_path = os.path.join(target_mod_dir, LEGACY_MOD_CONFIG_FILENAME)
+                        if os.path.exists(target_old_config_path) and (not os.path.exists(target_config_path)):
+                            try:
+                                shutil.move(target_old_config_path, target_config_path)
+                            except Exception as e:
+                                logging.warning(f'Failed to migrate config during import: {e}')
+                        config_path = target_config_path
+                        config_updated = False
+                        if 'files' in config:
+                            for chapter_key, chapter_data in config['files'].items():
+                                if chapter_key == 'demo':
+                                    chapter_folder = os.path.join(target_mod_dir, 'demo')
+                                elif chapter_key == 'undertale':
+                                    chapter_folder = os.path.join(target_mod_dir, 'undertale')
+                                elif chapter_key in ['0', '1', '2', '3', '4']:
+                                    chapter_id = int(chapter_key)
+                                    from utils.file_utils import get_chapter_folder_name
+                                    folder_name = get_chapter_folder_name(chapter_id, game=config.get('game') or config.get('modgame'))
+                                    chapter_folder = os.path.join(target_mod_dir, folder_name)
+                                else:
+                                    continue
+                                if os.path.exists(chapter_folder):
+                                    if not chapter_data.get('data_file_url'):
+                                        from config.constants import DATA_FILE_EXTENSIONS
+                                        for file in os.listdir(chapter_folder):
+                                            if file.lower().endswith(DATA_FILE_EXTENSIONS):
+                                                chapter_data['data_file_url'] = file
+                                                config_updated = True
+                                                break
+                        icon_path = os.path.join(target_mod_dir, '_icon.png')
+                        if not os.path.exists(icon_path):
+                            icon_path = os.path.join(target_mod_dir, 'icon.png')
+                        if os.path.exists(icon_path) and (not config.get('icon_url')):
+                            config['icon_url'] = '_icon.png' if os.path.basename(icon_path) == '_icon.png' else 'icon.png'
+                            config_updated = True
+                        if config_updated or mod_key_generated:
+                            save_json(config_path, config, indent=2)
+                        self._refresh_mod_list()
+                        QMessageBox.information(self.app_window, tr('dialogs.success'), tr('status.mod_imported_success'))
+                    except Exception as e:
+                        logging.error(f'[IMPORT] Post-copy import failed, cleaning up {target_mod_dir}: {e}', exc_info=True)
+                        from utils.file_utils import safe_rmtree
+                        safe_rmtree(target_mod_dir)
+                        raise
                 else:
                     self._show_import_error_with_manual_install(file_path, tr('errors.invalid_mod_format'))
         except Exception as e:

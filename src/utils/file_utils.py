@@ -409,8 +409,10 @@ def safe_rmtree(path: str, max_retries: int = 3, delay: float = 0.5) -> bool:
         return True
     if not os.path.isdir(path):
         return safe_remove(path, max_retries, delay)
+    import sys
+    rmtree_kwargs = {'onexc': _rmtree_error_handler} if sys.version_info >= (3, 12) else {'onerror': lambda func, path, exc_info: _rmtree_error_handler(func, path, exc_info[1])}
     try:
-        _retry_operation(lambda: shutil.rmtree(path, onexc=_rmtree_error_handler), max_retries, delay, 'safe_rmtree', path)
+        _retry_operation(lambda: shutil.rmtree(path, **rmtree_kwargs), max_retries, delay, 'safe_rmtree', path)
         return True
     except Exception:
         if not _IS_WIN:

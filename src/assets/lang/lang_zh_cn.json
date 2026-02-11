@@ -408,6 +408,7 @@
     "gamebanana_linked": "已链接到GameBanana模组",
     "steam": "启用此选项可通过Steam运行游戏，以便所有成就、叠加层等都能正常工作。",
     "portproton": "使用PortProton代替Wine在Linux上运行Windows可执行文件。PortProton是一个兼容层，它包装了Wine/Proton以便更容易的游戏兼容性。如果PortProton不在您的PATH中，您可以指定PortProton可执行文件的自定义路径。",
+    "portproton_disabled_steam": "通过Steam启动时不使用PortProton。Steam自行管理Wine/Proton兼容层。",
     "beta_updates": "获取实验性更新和功能，然后它们才正式发布。",
     "skip_patching_warnings": "启用后，当发生非关键问题时\n（如xdelta校验和不匹配），补丁将自动继续\n而不请求确认。警告仍会记录在日志中。",
     "fullscreen_tooltip": "切换全屏模式。",
