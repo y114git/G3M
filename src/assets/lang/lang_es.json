@@ -170,8 +170,6 @@
     "tags_label": "Etiquetas:",
     "update_button": "Actualizar",
     "update_mod_list": "Actualizando lista de mods...",
-    "fast_merging": "Fusión rápida",
-    "fast_merging_tooltip": "Habilita la exportación paralela de recursos. Acelera la fusión pero carga mucho la CPU. Desactívelo si es inestable.",
     "updated_label": "Actualizado:",
     "use_button": "Usar",
     "value_label": "Valor",
@@ -479,11 +477,9 @@
       "message": "Se detectaron conflictos entre mods durante el proceso de fusión. Algunos recursos de diferentes mods pueden no funcionar juntos correctamente.",
       "conflicting_mods": "Mods en conflicto:",
       "total_conflicts": "Total de conflictos detectados: {count}",
-      "open_logs_and_launch": "Abrir Registros y Lanzar Juego",
-      "continue_without_logs": "Continuar sin Registros",
-      "no_logs_title": "No se Encontraron Archivos de Registro",
-      "no_logs_message": "No se encontraron archivos de registro.",
-      "failed_to_open_log": "Error al abrir el archivo de registro: {file}\nError: {error}"
+      "open_report": "Abrir Reporte",
+      "open_report_and_launch": "Abrir Reporte y Lanzar Juego",
+      "continue_without_report": "Continuar sin Reporte"
     },
     "patching_warning": {
       "title": "Advertencia de Parcheo",
@@ -902,7 +898,7 @@
     "update_failed_restored": "Error en actualización. Versión anterior restaurada.",
     "update_replacement_failed": "Error al reemplazar archivos del launcher. La actualización puede estar incompleta.",
     "installer_launch_failed": "Error al iniciar el instalador. Código de error: {code}. Intente ejecutar el instalador manualmente.",
-    "utmtcli_not_available": "UTMTCLI no está disponible para la plataforma {platform}.",
+    "g3mtool_not_available": "El motor de parcheo G3MTool no está disponible. Por favor, reinstale la aplicación.",
     "xdelta_patch_error": "Error al aplicar parche xdelta: {error}",
     "mod_import_failed": "Error al importar mod: {error}",
     "mod_export_failed": "Error al exportar mod: {error}",

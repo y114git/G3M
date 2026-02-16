@@ -73,12 +73,7 @@ class LibraryTabBuilder:
         priority_layout = QHBoxLayout(priority_container)
         priority_layout.setContentsMargins(0, 0, 0, 0), priority_layout.setSpacing(10), priority_layout.addStretch()
         priority_layout.addWidget(priority_btn), priority_layout.addWidget(modpack_btn)
-        fast_lbl = QLabel(tr('ui.fast_merging'))
-        fast_lbl.setToolTip(tr('ui.fast_merging_tooltip')), fast_lbl.setStyleSheet(f'color: {colors["text"]};')
-        fast_cb = QCheckBox()
-        fast_cb.setObjectName('fast_merging_checkbox'), fast_cb.setToolTip(tr('ui.fast_merging_tooltip'))
-        fast_cb.setStyleSheet('QCheckBox { spacing: 0px; } QCheckBox::indicator { width: 16px; height: 16px; }')
-        priority_layout.addWidget(fast_lbl), priority_layout.addWidget(fast_cb), priority_layout.addStretch()
+        priority_layout.addStretch()
         priority_container.setFixedHeight(0)
         layout.addWidget(priority_container)
         mods_container = QWidget()
@@ -111,7 +106,7 @@ class LibraryTabBuilder:
             layout.setStretch(0, 0), layout.setStretch(1, 0), layout.setStretch(2, 0), layout.setStretch(3, 1)
         except BaseException:
             pass
-        self.widgets.update({'library_filters_widget': filters, 'import_export_button': import_btn, 'custom_executable_button': exe_btn, 'reset_custom_exe_button': reset_btn, 'change_path_button': path_btn, 'game_type_combo': game_combo, 'chapter_mode_checkbox': chapter_cb, 'full_install_checkbox': full_cb, 'chapter_tabs_widget': chapter_tabs, 'chapter_tabs_layout': tabs_layout, 'chapter_tab_buttons': tab_btns, 'installed_mods_container': mods_container, 'installed_mods_scroll': mods_scroll, 'installed_mods_widget': mods_widget, 'installed_mods_layout': mods_widget_layout, 'priority_button': priority_btn, 'priority_button_layout': priority_layout, 'priority_button_container': priority_container, 'create_modpack_button': modpack_btn, 'fast_merging_checkbox': fast_cb, 'fast_merging_label': fast_lbl, 'installed_mods_label': mods_lbl})
+        self.widgets.update({'library_filters_widget': filters, 'import_export_button': import_btn, 'custom_executable_button': exe_btn, 'reset_custom_exe_button': reset_btn, 'change_path_button': path_btn, 'game_type_combo': game_combo, 'chapter_mode_checkbox': chapter_cb, 'full_install_checkbox': full_cb, 'chapter_tabs_widget': chapter_tabs, 'chapter_tabs_layout': tabs_layout, 'chapter_tab_buttons': tab_btns, 'installed_mods_container': mods_container, 'installed_mods_scroll': mods_scroll, 'installed_mods_widget': mods_widget, 'installed_mods_layout': mods_widget_layout, 'priority_button': priority_btn, 'priority_button_layout': priority_layout, 'priority_button_container': priority_container, 'create_modpack_button': modpack_btn, 'installed_mods_label': mods_lbl})
         return widget
 
     def _create_library_filters_widget(self) -> QFrame:
@@ -151,8 +146,6 @@ class LibraryTabBuilder:
         for key in ('priority_button', 'create_modpack_button'):
             if key in self.widgets:
                 self._update_priority_button_style(self.widgets[key], colors['button'], colors['border'], colors['button_hover'])
-        if 'fast_merging_label' in self.widgets:
-            self.widgets['fast_merging_label'].setStyleSheet(f'color: {colors["text"]};')
         if 'library_tags_label' in self.widgets:
             self.widgets['library_tags_label'].setStyleSheet(f'color: {colors["text"]};')
 

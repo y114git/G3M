@@ -65,12 +65,10 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential libglib2.0-dev libgl1-mesa-dev patchelf upx zip
-      - name: Install .NET runtime
-        run: |
-          wget https://dot.net/v1/dotnet-install.sh -O dotnet-install.sh
-          chmod +x dotnet-install.sh
-          ./dotnet-install.sh --channel 8.0 --runtime dotnet --install-dir $HOME/.dotnet
-          echo "$HOME/.dotnet" >> $GITHUB_PATH
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -79,13 +77,13 @@ jobs:
         run: |
           python -m pip install -U pip wheel
           pip install -r builds/requirements.txt pyinstaller
-      - name: Download and extract UTMTCLI for Linux
+      - name: Clone G3MTool
+        run: git clone https://github.com/y114git/G3MTool.git G3MTool
+      - name: Build G3MTool for Linux
         run: |
-          mkdir -p src/assets/bin/utmtcli_linux
-          curl -L -o utmtcli_linux.zip "https://github.com/UnderminersTeam/UndertaleModTool/releases/download/nightly/CLI-ubuntu-latest-Debug-isBundled-true.zip"
-          unzip -q utmtcli_linux.zip -d src/assets/bin/utmtcli_linux
-          rm utmtcli_linux.zip
-          chmod +x src/assets/bin/utmtcli_linux/* 2>/dev/null || true
+          cd G3MTool
+          dotnet publish G3MToolCLI/G3MToolCLI.csproj -c Release -r linux-x64 --self-contained -p:PublishSingleFile=true -o ../src/assets/bin/g3mtool_linux
+          chmod +x ../src/assets/bin/g3mtool_linux/G3MTool
       - name: Generate secrets_embed.py
         run: |
           python - <<'PY'
@@ -109,14 +107,14 @@ jobs:
           mkdir -p archive_content
           mv dist/DELTAHUB archive_content/
           zip -r ${{ steps.set_names.outputs.archive_path }} archive_content
-      
+
       # === MERGED TEST STEP ===
       - name: Test Startup (Linux)
         run: |
           echo "=== Unpacking archive for test ==="
           mkdir -p test_env
           unzip -q ${{ steps.set_names.outputs.archive_path }} -d test_env
-          
+
           if [ -f test_env/archive_content/DELTAHUB ]; then
             chmod +x test_env/archive_content/DELTAHUB
             echo "=== Testing startup ==="
@@ -149,8 +147,10 @@ jobs:
           echo "archive_path=${archive_name}.zip" >> $GITHUB_OUTPUT
       - name: Extra tools
         run: brew install upx || true
-      - name: Check .NET runtime
-        run: dotnet --version || echo ".NET not found, but continuing..."
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
@@ -158,13 +158,13 @@ jobs:
         run: |
           python -m pip install -U pip wheel
           pip install -r builds/requirements.txt pyinstaller
-      - name: Download and extract UTMTCLI for macOS x64
+      - name: Clone G3MTool
+        run: git clone https://github.com/y114git/G3MTool.git G3MTool
+      - name: Build G3MTool for macOS x64
         run: |
-          mkdir -p src/assets/bin/utmtcli_macos
-          curl -L -o utmtcli_macos.zip "https://github.com/UnderminersTeam/UndertaleModTool/releases/download/nightly/CLI-macOS-latest-Debug-isBundled-true.zip"
-          unzip -q utmtcli_macos.zip -d src/assets/bin/utmtcli_macos
-          rm utmtcli_macos.zip
-          chmod +x src/assets/bin/utmtcli_macos/* 2>/dev/null || true
+          cd G3MTool
+          dotnet publish G3MToolCLI/G3MToolCLI.csproj -c Release -r osx-x64 --self-contained -p:PublishSingleFile=true -o ../src/assets/bin/g3mtool_macos
+          chmod +x ../src/assets/bin/g3mtool_macos/G3MTool
       - name: Generate secrets_embed.py
         run: |
           python - <<'PY'
@@ -191,7 +191,7 @@ jobs:
           echo "=== Unpacking archive for test ==="
           mkdir -p test_env
           unzip -q "${{ steps.set_names.outputs.archive_path }}" -d test_env
-          
+
           if [ -d test_env/DELTAHUB.app ]; then
             echo "=== Testing startup ==="
             OUTPUT=$(timeout 10 test_env/DELTAHUB.app/Contents/MacOS/DELTAHUB --help 2>&1 || true)
@@ -223,8 +223,10 @@ jobs:
           echo "archive_path=${archive_name}.zip" >> $GITHUB_OUTPUT
       - name: Extra tools
         run: brew install upx || true
-      - name: Check .NET runtime
-        run: dotnet --version || echo ".NET not found, but continuing..."
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
@@ -232,13 +234,13 @@ jobs:
         run: |
           python -m pip install -U pip wheel
           pip install -r builds/requirements.txt pyinstaller
-      - name: Download and extract UTMTCLI for macOS arm64
+      - name: Clone G3MTool
+        run: git clone https://github.com/y114git/G3MTool.git G3MTool
+      - name: Build G3MTool for macOS arm64
         run: |
-          mkdir -p src/assets/bin/utmtcli_macos
-          curl -L -o utmtcli_macos.zip "https://github.com/UnderminersTeam/UndertaleModTool/releases/download/nightly/CLI-macOS-latest-Debug-isBundled-true.zip"
-          unzip -q utmtcli_macos.zip -d src/assets/bin/utmtcli_macos
-          rm utmtcli_macos.zip
-          chmod +x src/assets/bin/utmtcli_macos/* 2>/dev/null || true
+          cd G3MTool
+          dotnet publish G3MToolCLI/G3MToolCLI.csproj -c Release -r osx-arm64 --self-contained -p:PublishSingleFile=true -o ../src/assets/bin/g3mtool_macos
+          chmod +x ../src/assets/bin/g3mtool_macos/G3MTool
       - name: Generate secrets_embed.py
         run: |
           python - <<'PY'
@@ -265,7 +267,7 @@ jobs:
           echo "=== Unpacking archive for test ==="
           mkdir -p test_env
           unzip -q "${{ steps.set_names.outputs.archive_path }}" -d test_env
-          
+
           if [ -d test_env/DELTAHUB.app ]; then
             echo "=== Testing startup ==="
             OUTPUT=$(timeout 10 test_env/DELTAHUB.app/Contents/MacOS/DELTAHUB --help 2>&1 || true)
@@ -301,6 +303,10 @@ jobs:
           $setupName = "${{ github.event.inputs.archive_name_windows_setup }}"
           if (-not $setupName) { $setupName = "DELTAHUB-Windows-Setup-${{ env.RELEASE_VERSION }}" }
           "setup_archive_path=$($setupName).zip" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -309,14 +315,13 @@ jobs:
         run: |
           python -m pip install -U pip wheel
           pip install -r builds/requirements.txt pyinstaller
-      - name: Download and extract UTMTCLI for Windows
+      - name: Clone G3MTool
+        run: git clone https://github.com/y114git/G3MTool.git G3MTool
+      - name: Build G3MTool for Windows
         shell: powershell
         run: |
-          New-Item -ItemType Directory -Force -Path "src\assets\bin\utmtcli_windows" | Out-Null
-          $zipPath = "utmtcli_windows.zip"
-          Invoke-WebRequest -Uri "https://github.com/UnderminersTeam/UndertaleModTool/releases/download/nightly/CLI-windows-latest-Debug-isBundled-true.zip" -OutFile $zipPath
-          Expand-Archive -Path $zipPath -DestinationPath "src\assets\bin\utmtcli_windows" -Force
-          Remove-Item $zipPath
+          cd G3MTool
+          dotnet publish G3MToolCLI/G3MToolCLI.csproj -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -o ../src/assets/bin/g3mtool_windows
       - name: Generate secrets_embed.py
         shell: powershell
         run: |
@@ -329,7 +334,7 @@ jobs:
       - name: Create archive for portable exe
         shell: powershell
         run: Compress-Archive -Path dist\DELTAHUB.exe -DestinationPath "${{ steps.set_names.outputs.archive_path }}"
-      
+
       # === MERGED TEST STEP (Testing the portable version) ===
       - name: Test Startup (Windows)
         shell: powershell
@@ -337,7 +342,7 @@ jobs:
           Write-Host "=== Unpacking archive for test ==="
           New-Item -ItemType Directory -Force -Path "test_env" | Out-Null
           Expand-Archive -Path "${{ steps.set_names.outputs.archive_path }}" -DestinationPath "test_env" -Force
-          
+
           if (Test-Path 'test_env\DELTAHUB.exe') {
             Write-Host '=== Testing startup ==='
             $output = & .\test_env\DELTAHUB.exe --help 2>&1

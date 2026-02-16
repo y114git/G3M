@@ -7,16 +7,14 @@ import webbrowser
 import logging
 from typing import Dict, Optional, Any, List
 from PyQt6.QtCore import QObject, QThread, QTimer, pyqtSignal
-from PyQt6.QtWidgets import QDialog
 from services.localization_service import tr
 from utils.file_utils import ensure_writable
 from utils.path_utils import is_path_in_steam_common
 from services.game_detection_service import is_game_running, get_game_name_string, get_game_type_string
 
 from utils.path_utils import find_chapter_resource_dir, resolve_game_executable
-from services.patching_log_service import rotate_patching_log
 from workers.game_monitor_worker import GameMonitorWorker
-from services.mod_patching_service import ModPatcher
+from services.g3mtool_patching_service import G3MToolPatchingService
 from config.constants import UI_COLORS
 
 
@@ -34,18 +32,11 @@ class GameLauncher(QObject):
         self.feedback_service = feedback_service
         self.mod_service = mod_service
         self.monitor_thread = None
-        self._backup_temp_dir = None
-        self._backup_files = {}
-        self._mod_files_to_cleanup = []
-        self._mod_dirs_to_cleanup = []
         self._direct_launch_cleanup_info = None
-        self.mod_patcher = ModPatcher(app_state, mod_service, parent)
+        self.mod_patcher = G3MToolPatchingService(app_state, mod_service, parent)
         self.mod_patcher.status_update.connect(self._on_patching_status)
         self.mod_patcher.progress_update.connect(self._on_patching_progress)
-        self.mod_patcher._session_manifest_path = os.path.join(self.app_state.config_dir, 'session.lock')
         self._patching_thread = None
-        self._pending_selections = None
-        self._patching_finished_callback = None
         self.restore_window_callback = None
         self.execute_plugin_hooks = None
 
@@ -91,7 +82,6 @@ class GameLauncher(QObject):
         return used_mods_service.get_active_mod_selections()
 
     def _launch_game_with_selections(self, selections: Dict[str, Any], execute_plugin_hooks=None, restore_window_callback=None):
-        rotate_patching_log()
         self.execute_plugin_hooks = execute_plugin_hooks
         self.restore_window_callback = restore_window_callback
         if execute_plugin_hooks:
@@ -127,7 +117,6 @@ class GameLauncher(QObject):
             self.app_state.is_patching = True
             self.app_state.action_button_text = tr('ui.cancel_button')
             self.app_state.action_button_enabled = True
-            self._pending_selections = selections
             if not self._prepare_game_files_multi_mod_async(selections):
                 logging.error('Failed to start multi-mod patching')
                 self.app_state.progress_bar_visible = False
@@ -175,6 +164,7 @@ class GameLauncher(QObject):
                 self.status_changed.emit(msg, 'red')
                 self._handle_launch_failure()
                 return
+            process = None
             system = platform.system()
             if system == 'Darwin':
                 custom_exec_key = self.app_state.game_mode.get_custom_exec_config_key()
@@ -186,8 +176,7 @@ class GameLauncher(QObject):
                     if self.restore_window_callback:
                         QTimer.singleShot(2000, self.restore_window_callback)
                     return
-                if target_path.endswith('.app'):
-                    process = subprocess.Popen(['open', '-W', target_path])
+                process = subprocess.Popen(['open', '-W', target_path])
             else:
                 command = [target_path]
                 if system == 'Linux' and target_path.lower().endswith('.exe'):
@@ -341,12 +330,10 @@ class GameLauncher(QObject):
         self.app_state.progress_bar_visible = True
         self.app_state.progress_bar_value = 0
         session_manifest_path = os.path.join(self.app_state.config_dir, 'session.lock')
-        fast_patch = self.app_state.local_config.get('fast_merging_enabled', False)
-        self._patching_thread = ModPatchingThread(self.app_state, self.mod_service, chapter_mods, session_manifest_path, self, fast_patch=fast_patch)
+        self._patching_thread = ModPatchingThread(self.app_state, self.mod_service, chapter_mods, session_manifest_path, self)
         self._patching_thread.progress_update.connect(self._on_patching_progress)
         self._patching_thread.status_update.connect(self._on_patching_status)
         self._patching_thread.finished.connect(lambda success: self._on_patching_finished(selections, success))
-        self._patching_thread.warning_confirmation_needed.connect(self._on_warning_confirmation_needed)
         self.app_state.current_task = self._patching_thread
         self._patching_thread.start()
         return True
@@ -420,16 +407,6 @@ class GameLauncher(QObject):
     def _continue_after_patching(self, selections: Dict[int, Any], patching_success: bool, needs_multi_mod: bool = False):
         if not patching_success:
             return
-        if needs_multi_mod and self.mod_patcher:
-            conflicts_summary = self.mod_patcher.get_conflicts_summary()
-            if conflicts_summary.get('has_conflicts', False):
-                from ui.dialogs.conflicts_dialog import ConflictsDialog
-                dialog = ConflictsDialog(conflicts_summary, self.app_state.config_dir, parent=None)
-                result = dialog.exec()
-                if result == QDialog.DialogCode.Rejected or result == 0:
-                    logging.info('Game launch cancelled: conflicts dialog was closed without selecting an option')
-                    self._cancel_launch_after_patching()
-                    return
         if needs_multi_mod:
             pass
         elif self.restore_window_callback:
@@ -458,6 +435,17 @@ class GameLauncher(QObject):
         if self.execute_plugin_hooks:
             self.execute_plugin_hooks('on_after_game_launch')
 
+        if needs_multi_mod and self.mod_patcher:
+            self._show_conflicts_dialog_if_needed(self.mod_patcher)
+
+    def _show_conflicts_dialog_if_needed(self, patcher) -> None:
+        """Show informational conflicts dialog if merge report has conflicts."""
+        report_path = patcher.get_report_path()
+        if report_path and patcher.report_has_conflicts():
+            from ui.dialogs.conflicts_dialog import ConflictsDialog
+            dialog = ConflictsDialog(report_path, parent=None)
+            dialog.exec()
+
     def _on_patching_status(self, message: str, status_type: str):
         color = UI_COLORS.get(f'status_{status_type}', UI_COLORS['status_error'])
         self.status_changed.emit(message, color)
@@ -473,6 +461,9 @@ class GameLauncher(QObject):
         try:
             try:
                 self._try_restore_backups('[CLEANUP]')
+
+                if hasattr(self, 'mod_patcher') and self.mod_patcher:
+                    self.mod_patcher.clear_session()
             except Exception as e:
                 restore_errors.append(str(e))
             cleanup_info = self._direct_launch_cleanup_info
@@ -498,12 +489,29 @@ class GameLauncher(QObject):
             self.status_changed.emit(tr('errors.files_restore_error', error=str(e)), UI_COLORS['status_error'])
 
     def recover_previous_session(self):
+        """Check for stale session.lock and restore game files if a previous session crashed."""
         try:
+            manifest_path = os.path.join(self.app_state.config_dir, 'session.lock')
+            if not os.path.isfile(manifest_path):
+                return
+            logging.warning(f'Found stale session manifest: {manifest_path} — previous session may have crashed')
             self.feedback_service.update_status(tr('status.recovering_previous_session'), UI_COLORS['status_warning'])
-            self._try_restore_backups('recover_previous_session')
+            from services.backup_service import BackupManager
+            try:
+                backup_mgr = BackupManager.load_from_manifest(manifest_path)
+                if not backup_mgr.original_files and not backup_mgr.added_files:
+                    logging.info('Session manifest has no tracked files, cleaning up')
+                    backup_mgr.clear_backup_dir()
+                    return
+                backup_mgr.restore_all_backups()
+                backup_mgr.clear_backup_dir()
+                logging.info('recover_previous_session: game files restored successfully')
+                self.feedback_service.update_status(tr('status.files_restored'), UI_COLORS['status_success'])
+            except Exception as e:
+                logging.error(f'recover_previous_session: Failed to restore from manifest: {e}', exc_info=True)
+                self.feedback_service.update_status(tr('errors.files_restore_error', error=str(e)), UI_COLORS['status_error'])
         except Exception as e:
             logging.error(f'recover_previous_session: Failed: {e}', exc_info=True)
-            self.feedback_service.update_status(tr('errors.files_restore_error', error=str(e)), UI_COLORS['status_error'])
 
     def _find_and_validate_game_path(self, selections: Optional[Dict[int, Any]] = None, is_initial: bool = False):
         from utils.path_utils import autodetect_path

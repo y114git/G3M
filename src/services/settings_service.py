@@ -73,7 +73,7 @@ class SettingsManager(QObject):
 
     def migrate_config_if_needed(self):
         self.app_state.local_config['cache_format_version'] = LAUNCHER_VERSION
-        defaults = {'game_path': '', 'last_selected': {}, 'use_custom_executable': False, 'demo_game_path': '', 'launch_via_steam': False, 'use_portproton': False, 'portproton_path': '', 'direct_launch_chapter': '', 'demo_mode_enabled': False, 'chapter_mode_enabled': False, 'custom_background_path': '', 'custom_executable_path': '', 'background_disabled': False, 'custom_color_background': '', 'custom_color_button': '', 'custom_color_border': '', 'custom_color_button_hover': '', 'custom_color_text': '', 'custom_color_version_text': '', 'beta_updates_enabled': False, 'fast_merging_enabled': False, 'pizzatower_game_path': '', 'pizzatower_custom_executable_path': '', 'skip_patching_warnings': False}
+        defaults = {'game_path': '', 'last_selected': {}, 'use_custom_executable': False, 'demo_game_path': '', 'launch_via_steam': False, 'use_portproton': False, 'portproton_path': '', 'direct_launch_chapter': '', 'demo_mode_enabled': False, 'chapter_mode_enabled': False, 'custom_background_path': '', 'custom_executable_path': '', 'background_disabled': False, 'custom_color_background': '', 'custom_color_button': '', 'custom_color_border': '', 'custom_color_button_hover': '', 'custom_color_text': '', 'custom_color_version_text': '', 'beta_updates_enabled': False, 'pizzatower_game_path': '', 'pizzatower_custom_executable_path': '', 'skip_patching_warnings': False}
         for key, value in defaults.items():
             self.app_state.local_config.setdefault(key, value)
         self.app_state.local_config.setdefault('disable_splash', False)

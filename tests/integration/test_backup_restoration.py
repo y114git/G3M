@@ -1,7 +1,7 @@
 import os
+import logging
 from services.backup_service import BackupManager
-from services.mod_patching_service import ModPatcher
-from services.patching_log_service import get_patching_logger
+from services.g3mtool_patching_service import G3MToolPatchingService
 
 
 class TestBackupRestoration:
@@ -9,10 +9,10 @@ class TestBackupRestoration:
     def test_complete_backup_restoration_flow(self, temp_dir, app_state, feedback_service):
         from services.mod_service import ModManager
         mod_service = ModManager(app_state, feedback_service)
-        patcher = ModPatcher(app_state, mod_service)
+        patcher = G3MToolPatchingService(app_state, mod_service)
         backup_dir = os.path.join(temp_dir, 'backups')
         os.makedirs(backup_dir, exist_ok=True)
-        patcher.backup_service = BackupManager(backup_dir, patching_logger=patcher.patching_logger)
+        patcher.backup_service = BackupManager(backup_dir, patching_logger=logging.getLogger('test'))
         chapter_id = 'deltarune_1'
         game_dir = os.path.join(temp_dir, 'game')
         os.makedirs(game_dir, exist_ok=True)
@@ -38,7 +38,7 @@ class TestBackupRestoration:
 
     def test_file_integrity_after_restoration(self, temp_dir):
         backup_dir = os.path.join(temp_dir, 'backups')
-        backup_service = BackupManager(backup_dir, patching_logger=get_patching_logger())
+        backup_service = BackupManager(backup_dir, patching_logger=logging.getLogger('test'))
         chapter_id = 'deltarune_1'
         test_file = os.path.join(temp_dir, 'test.txt')
         original_content = 'A' * 1000
@@ -58,7 +58,7 @@ class TestBackupRestoration:
 
     def test_restoration_order(self, temp_dir):
         backup_dir = os.path.join(temp_dir, 'backups')
-        backup_service = BackupManager(backup_dir, patching_logger=get_patching_logger())
+        backup_service = BackupManager(backup_dir, patching_logger=logging.getLogger('test'))
         chapter_id = 'deltarune_1'
         test_dir = os.path.join(temp_dir, 'test')
         os.makedirs(test_dir, exist_ok=True)
@@ -80,7 +80,7 @@ class TestBackupRestoration:
 
     def test_sound_file_restoration(self, temp_dir):
         backup_dir = os.path.join(temp_dir, 'backups')
-        backup_service = BackupManager(backup_dir, patching_logger=get_patching_logger())
+        backup_service = BackupManager(backup_dir, patching_logger=logging.getLogger('test'))
         chapter_id = 'deltarune_1'
         sound_dir = os.path.join(temp_dir, 'game', 'sound', 'Desktop')
         os.makedirs(sound_dir, exist_ok=True)

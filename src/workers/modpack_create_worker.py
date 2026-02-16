@@ -6,12 +6,11 @@ import uuid
 import time
 import platform
 import shutil
-import subprocess
 from typing import Dict, List, Any
 from PyQt6.QtCore import QThread, pyqtSignal
-from services.mod_patching_service import ModPatcher
+from services.g3mtool_patching_service import G3MToolPatchingService
+from adapters.g3mtool_adapter import G3MToolManager
 from services.localization_service import tr
-from utils.path_utils import get_xdelta_path
 from utils.file_utils import get_chapter_folder_name
 
 
@@ -20,14 +19,13 @@ class CreateModpackThread(QThread):
     status_update = pyqtSignal(str, str)
     finished = pyqtSignal(bool)
 
-    def __init__(self, chapter_mods: Dict[int, List[Any]], modpack_name: str, modpack_dir: str, app_state, mod_service, parent=None, fast_patch: bool = False, xdelta_modpack: bool = False):
+    def __init__(self, chapter_mods: Dict[int, List[Any]], modpack_name: str, modpack_dir: str, app_state, mod_service, parent=None, xdelta_modpack: bool = False):
         super().__init__(parent)
         self.chapter_mods = chapter_mods
         self.modpack_name = modpack_name
         self.modpack_dir = modpack_dir
         self.app_state = app_state
         self.mod_service = mod_service
-        self.fast_patch = fast_patch
         self.xdelta_modpack = xdelta_modpack
         self.patcher = None
         self._cancelled = False
@@ -55,15 +53,15 @@ class CreateModpackThread(QThread):
         try:
             if self.isInterruptionRequested() or self._cancelled:
                 return
-            self.patcher = ModPatcher(self.app_state, self.mod_service, None)
+            self.patcher = G3MToolPatchingService(self.app_state, self.mod_service, None)
+            self.patcher.xdelta_modpack = self.xdelta_modpack
             self.patcher.progress_update.connect(self.progress_update.emit)
             self.patcher.status_update.connect(self.status_update.emit)
-            self.patcher._cancelled = False
             if self.isInterruptionRequested() or self._cancelled:
                 return
-            success = self.patcher.process_mod_patch(self.chapter_mods, is_modpack=True, modpack_dir=self.modpack_dir, fast_patch=self.fast_patch, xdelta_modpack=self.xdelta_modpack)
+            success = self.patcher.process_mod_patch(self.chapter_mods, is_modpack=True, modpack_dir=self.modpack_dir)
             if self.isInterruptionRequested() or self._cancelled:
-                self.patcher._cancelled = True
+                self.patcher.cancel()
                 success = False
                 if os.path.exists(self.modpack_dir):
                     try:
@@ -82,6 +80,9 @@ class CreateModpackThread(QThread):
         finally:
             if self.patcher:
                 try:
+
+                    self._report_path = self.patcher.get_report_path()
+                    self._has_conflicts = self.patcher.report_has_conflicts()
                     for sig in (self.patcher.progress_update, self.patcher.status_update):
                         try:
                             sig.disconnect()
@@ -94,12 +95,18 @@ class CreateModpackThread(QThread):
                     self.patcher = None
             self.finished.emit(success)
 
+    def get_report_path(self) -> str:
+        return getattr(self, '_report_path', None)
+
+    def has_conflicts(self) -> bool:
+        return getattr(self, '_has_conflicts', False)
+
     def _create_xdelta_patches(self):
         try:
-            xdelta_path = get_xdelta_path()
-            if not xdelta_path or not os.path.exists(xdelta_path):
-                logging.error('xdelta executable not found, cannot create xdelta patches')
-                self.status_update.emit(tr('errors.xdelta_not_found', path=''), 'error')
+            g3mtool = G3MToolManager()
+            if not g3mtool.is_available():
+                logging.error('G3MTool not found, cannot create xdelta patches')
+                self.status_update.emit(tr('errors.g3mtool_not_available'), 'error')
                 return
             for chapter_id, mods_list in self.chapter_mods.items():
                 if self.isInterruptionRequested() or self._cancelled:
@@ -121,44 +128,19 @@ class CreateModpackThread(QThread):
                 patch_filename = f'{os.path.splitext(data_filename)[0]}.xdelta'
                 patch_path = os.path.join(chapter_modpack_dir, patch_filename)
                 self.status_update.emit(tr('status.creating_xdelta_patch', chapter=chapter_id), 'info')
-                cmd = [xdelta_path, '-e', '-s', original_data_file, modified_data_file, patch_path]
-                startupinfo = None
-                creationflags = 0
-                if platform.system() == 'Windows':
-                    import subprocess as sp
-                    startupinfo = sp.STARTUPINFO()
-                    startupinfo.dwFlags |= sp.STARTF_USESHOWWINDOW
-                    startupinfo.wShowWindow = sp.SW_HIDE
-                    creationflags = sp.CREATE_NO_WINDOW
-                try:
-                    process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, stdin=subprocess.DEVNULL, startupinfo=startupinfo, creationflags=creationflags)
-                    stdout, stderr = process.communicate(timeout=300)
-                    if process.returncode != 0:
-                        logging.error(f'Failed to create xdelta patch for chapter {chapter_id}: {stderr}')
-                        self.status_update.emit(tr('errors.xdelta_patch_creation_failed', chapter=chapter_id), 'error')
-                        continue
-                    if os.path.exists(patch_path):
-                        try:
-                            os.remove(modified_data_file)
-                            logging.info(f'Removed data file: {modified_data_file}')
-                            for file in os.listdir(chapter_modpack_dir):
-                                if file.endswith('.xdelta') and file != patch_filename:
-                                    old_patch_path = os.path.join(chapter_modpack_dir, file)
-                                    try:
-                                        os.remove(old_patch_path)
-                                        logging.info(f'Removed old xdelta patch: {old_patch_path}')
-                                    except Exception as e:
-                                        logging.warning(f'Failed to remove old xdelta patch {old_patch_path}: {e}')
-                            logging.info(f'Created xdelta patch for chapter {chapter_id}: {patch_path}')
-                        except Exception as e:
-                            logging.warning(f'Failed to remove data file after creating xdelta patch: {e}')
-                except subprocess.TimeoutExpired:
-                    logging.error(f'xdelta patch creation timed out for chapter {chapter_id}')
-                    process.kill()
-                    self.status_update.emit(tr('errors.xdelta_patch_timeout', chapter=chapter_id), 'error')
-                except Exception as e:
-                    logging.error(f'Error creating xdelta patch for chapter {chapter_id}: {e}', exc_info=True)
+                returncode, stdout, stderr = g3mtool.xpatch_create(
+                    original_data_file, modified_data_file, patch_path
+                )
+                if returncode != 0:
+                    logging.error(f'Failed to create xdelta patch for chapter {chapter_id}: {stderr}')
                     self.status_update.emit(tr('errors.xdelta_patch_creation_failed', chapter=chapter_id), 'error')
+                    continue
+                if os.path.exists(patch_path):
+                    try:
+                        os.remove(modified_data_file)
+                        logging.info(f'Created xdelta patch for chapter {chapter_id}: {patch_path}')
+                    except Exception as e:
+                        logging.warning(f'Failed to remove data file after creating xdelta patch: {e}')
         except Exception as e:
             logging.error(f'Failed to create xdelta patches: {e}', exc_info=True)
             self.status_update.emit(tr('errors.xdelta_patch_creation_failed_general'), 'error')

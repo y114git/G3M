@@ -44,8 +44,11 @@ class TestConflictsDialog:
 
     def test_conflicts_dialog_creation(self, qapp, temp_dir):
         from ui.dialogs.conflicts_dialog import ConflictsDialog
-        conflicts_summary = {'mod_pairs': [], 'total_conflicts': 0}
-        dialog = ConflictsDialog(conflicts_summary, temp_dir, None)
+        import os
+        report_path = os.path.join(temp_dir, 'test_report.md')
+        with open(report_path, 'w', encoding='utf-8') as f:
+            f.write('## Merge Report\n\nTotal conflicts: 2\nAuto-resolved: 1\n')
+        dialog = ConflictsDialog(report_path, None)
         assert dialog is not None
         assert isinstance(dialog, QDialog)
 

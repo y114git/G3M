@@ -3,7 +3,7 @@ import os
 import shutil
 import json
 from typing import Dict, Optional
-from services.patching_log_service import get_patching_logger
+import logging
 from utils.file_utils import safe_remove, safe_rmtree
 
 
@@ -12,7 +12,7 @@ class BackupManager:
 
     def __init__(self, backup_dir: str, patching_logger=None):
         self.backup_dir = backup_dir
-        self.patching_logger = patching_logger or get_patching_logger()
+        self.patching_logger = patching_logger or logging.getLogger(__name__)
         self.original_files: Dict[str, Dict[str, Optional[str]]] = {}
         self.added_files: Dict[str, Dict[str, bool]] = {}
         self._session_manifest_path: Optional[str] = None
@@ -53,7 +53,12 @@ class BackupManager:
     def save_backups_to_manifest(self, manifest_path: str):
         self._session_manifest_path = manifest_path
         try:
-            manifest_data = {'original_files': {}, 'added_files': {}, 'modification_order': {}}
+            manifest_data = {
+                'backup_dir': self.backup_dir,
+                'original_files': {},
+                'added_files': {},
+                'modification_order': {},
+            }
             for chapter_id, files_dict in self.original_files.items():
                 manifest_data['original_files'][str(chapter_id)] = files_dict
             for chapter_id, files_dict in self.added_files.items():
@@ -66,6 +71,37 @@ class BackupManager:
             self.patching_logger.info(f'[BACKUP] Saved backup manifest to {manifest_path}')
         except Exception as e:
             self.patching_logger.warning(f'[BACKUP] Failed to save backup manifest: {e}')
+
+    @classmethod
+    def load_from_manifest(cls, manifest_path: str, patching_logger=None) -> 'BackupManager':
+        """Reconstruct a BackupManager from a previously saved manifest (for crash recovery)."""
+        logger = patching_logger or logging.getLogger(__name__)
+        with open(manifest_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        backup_dir = data.get('backup_dir', '')
+        mgr = cls(backup_dir, patching_logger=logger)
+        mgr._session_manifest_path = manifest_path
+        for chapter_id, files_dict in data.get('original_files', {}).items():
+            mgr.original_files[chapter_id] = files_dict
+        for chapter_id, file_list in data.get('added_files', {}).items():
+            mgr.added_files[chapter_id] = {fp: True for fp in file_list}
+        for chapter_id, file_order in data.get('modification_order', {}).items():
+            mgr._modification_order[chapter_id] = file_order
+        logger.info(f'[BACKUP] Loaded backup manifest from {manifest_path} '
+                    f'({sum(len(v) for v in mgr.original_files.values())} files tracked)')
+        return mgr
+
+    def clear_backup_dir(self):
+        """Remove the persistent backup directory and session manifest."""
+        if self.backup_dir and os.path.isdir(self.backup_dir):
+            safe_rmtree(self.backup_dir)
+            self.patching_logger.info(f'[BACKUP] Cleared backup directory: {self.backup_dir}')
+        if self._session_manifest_path and os.path.isfile(self._session_manifest_path):
+            safe_remove(self._session_manifest_path)
+            self.patching_logger.info(f'[BACKUP] Removed session manifest: {self._session_manifest_path}')
+        self.original_files.clear()
+        self.added_files.clear()
+        self._modification_order.clear()
 
     def restore_backups(self, chapter_id: str) -> None:
         if chapter_id in self.original_files:

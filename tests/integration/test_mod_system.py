@@ -158,20 +158,22 @@ class TestModProcessing:
 class TestModMergingWithStructure:
 
     def test_multiple_mods_merging(self, app_state, feedback_service, mods_dir):
-        from services.mod_patching_service import ModPatcher
+        from services.g3mtool_patching_service import G3MToolPatchingService
         from unittest.mock import Mock
         mod_service = Mock()
-        patcher = ModPatcher(app_state, mod_service)
+        patcher = G3MToolPatchingService(app_state, mod_service)
         assert patcher is not None
-        assert hasattr(patcher, 'utmt_wrapper')
-        assert hasattr(patcher, 'xdelta_path')
+        assert hasattr(patcher, 'g3mtool')
+        assert hasattr(patcher, 'cleanup_processes_and_temp_files')
+        assert patcher.patching_logger.name == 'patching'
 
     def test_mod_priority_with_structure(self, app_state, feedback_service):
-        from services.mod_patching_service import ModPatcher
+        from services.g3mtool_patching_service import G3MToolPatchingService
         from unittest.mock import Mock
         mod_service = Mock()
-        patcher = ModPatcher(app_state, mod_service)
+        patcher = G3MToolPatchingService(app_state, mod_service)
         assert patcher is not None
+        assert hasattr(patcher, 'backup_service')
 
 
 class TestModMetadata:

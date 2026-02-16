@@ -1,19 +1,230 @@
 import os
+import json
 import shutil
 import tempfile
+import logging
+import zipfile
 import pytest
 from pathlib import Path
 from unittest.mock import Mock
-from services.mod_patching_service import ModPatcher
+from services.g3mtool_patching_service import (
+    G3MToolPatchingService, MOD_TYPE_G3MPATCH, MOD_TYPE_XDELTA,
+    MOD_TYPE_DATAWIN, MOD_TYPE_OVERRIDES_ONLY,
+)
+from adapters.g3mtool_adapter import G3MToolManager
+from services.backup_service import BackupManager
 
 
-class TestPatching:
+class TestG3MToolAdapter:
 
-    def test_xdelta_patch_application(self, game_data_dir, patches_game_dirs, deltarune_chapter_dirs, app_state, feedback_service):
+    def test_adapter_initialization(self):
+        g3mtool = G3MToolManager()
+        assert g3mtool.platform in ('windows', 'linux', 'macos')
+
+    def test_adapter_availability(self):
+        g3mtool = G3MToolManager()
+        if g3mtool.g3mtool_path:
+            assert os.path.exists(g3mtool.g3mtool_path)
+            assert g3mtool.is_available()
+        else:
+            assert not g3mtool.is_available()
+
+    def test_cancel_active_processes(self):
+        g3mtool = G3MToolManager()
+        g3mtool.cancel_active_processes()
+        assert len(g3mtool._active_processes) == 0
+
+
+class TestModClassification:
+
+    def test_classify_g3mpatch(self, tmp_path):
+        mod_dir = tmp_path / 'mod'
+        mod_dir.mkdir()
+        zip_path = mod_dir / 'patch.zip'
+        with zipfile.ZipFile(str(zip_path), 'w') as zf:
+            zf.writestr('g3mpatch.json', '{"version": 1}')
+        patcher = G3MToolPatchingService(Mock(), Mock())
+        patch_file, mod_type = patcher._classify_mod(str(mod_dir))
+        assert mod_type == MOD_TYPE_G3MPATCH
+        assert patch_file.endswith('.zip')
+
+    def test_classify_xdelta(self, tmp_path):
+        mod_dir = tmp_path / 'mod'
+        mod_dir.mkdir()
+        (mod_dir / 'data.xdelta').write_bytes(b'fake')
+        patcher = G3MToolPatchingService(Mock(), Mock())
+        patch_file, mod_type = patcher._classify_mod(str(mod_dir))
+        assert mod_type == MOD_TYPE_XDELTA
+        assert patch_file.endswith('.xdelta')
+
+    def test_classify_vcdiff(self, tmp_path):
+        mod_dir = tmp_path / 'mod'
+        mod_dir.mkdir()
+        (mod_dir / 'data.vcdiff').write_bytes(b'fake')
+        patcher = G3MToolPatchingService(Mock(), Mock())
+        patch_file, mod_type = patcher._classify_mod(str(mod_dir))
+        assert mod_type == MOD_TYPE_XDELTA
+        assert patch_file.endswith('.vcdiff')
+
+    def test_classify_datawin(self, tmp_path):
+        mod_dir = tmp_path / 'mod'
+        mod_dir.mkdir()
+        (mod_dir / 'data.win').write_bytes(b'FORM' + b'\x00' * 100)
+        patcher = G3MToolPatchingService(Mock(), Mock())
+        patch_file, mod_type = patcher._classify_mod(str(mod_dir))
+        assert mod_type == MOD_TYPE_DATAWIN
+        assert patch_file.endswith('data.win')
+
+    def test_classify_overrides_only(self, tmp_path):
+        mod_dir = tmp_path / 'mod'
+        mod_dir.mkdir()
+        (mod_dir / 'sound.ogg').write_bytes(b'fake')
+        patcher = G3MToolPatchingService(Mock(), Mock())
+        patch_file, mod_type = patcher._classify_mod(str(mod_dir))
+        assert mod_type == MOD_TYPE_OVERRIDES_ONLY
+        assert patch_file is None
+
+    def test_classify_g3mpatch_priority_over_xdelta(self, tmp_path):
+        mod_dir = tmp_path / 'mod'
+        mod_dir.mkdir()
+        zip_path = mod_dir / 'patch.zip'
+        with zipfile.ZipFile(str(zip_path), 'w') as zf:
+            zf.writestr('g3mpatch.json', '{"version": 1}')
+        (mod_dir / 'data.xdelta').write_bytes(b'fake')
+        patcher = G3MToolPatchingService(Mock(), Mock())
+        patch_file, mod_type = patcher._classify_mod(str(mod_dir))
+        assert mod_type == MOD_TYPE_G3MPATCH
+
+    def test_classify_zip_without_g3mpatch_json_is_not_g3mpatch(self, tmp_path):
+        mod_dir = tmp_path / 'mod'
+        mod_dir.mkdir()
+        zip_path = mod_dir / 'random.zip'
+        with zipfile.ZipFile(str(zip_path), 'w') as zf:
+            zf.writestr('readme.txt', 'hello')
+        patcher = G3MToolPatchingService(Mock(), Mock())
+        patch_file, mod_type = patcher._classify_mod(str(mod_dir))
+        assert mod_type == MOD_TYPE_OVERRIDES_ONLY
+
+    def test_classify_empty_dir(self, tmp_path):
+        mod_dir = tmp_path / 'empty'
+        mod_dir.mkdir()
+        patcher = G3MToolPatchingService(Mock(), Mock())
+        patch_file, mod_type = patcher._classify_mod(str(mod_dir))
+        assert mod_type == MOD_TYPE_OVERRIDES_ONLY
+
+    def test_classify_nonexistent(self, tmp_path):
+        patcher = G3MToolPatchingService(Mock(), Mock())
+        patch_file, mod_type = patcher._classify_mod(str(tmp_path / 'nope'))
+        assert mod_type == MOD_TYPE_OVERRIDES_ONLY
+
+
+class TestServiceInitialization:
+
+    def test_service_has_g3mtool(self):
+        patcher = G3MToolPatchingService(Mock(), Mock())
+        assert hasattr(patcher, 'g3mtool')
+        assert isinstance(patcher.g3mtool, G3MToolManager)
+
+    def test_service_has_patching_logger(self):
+        patcher = G3MToolPatchingService(Mock(), Mock())
+        assert patcher.patching_logger is not None
+        assert patcher.patching_logger.name == 'patching'
+
+    def test_cleanup_processes_method_exists(self):
+        patcher = G3MToolPatchingService(Mock(), Mock())
+        assert hasattr(patcher, 'cleanup_processes_and_temp_files')
+        patcher.cleanup_processes_and_temp_files()
+
+    def test_cancel(self):
+        patcher = G3MToolPatchingService(Mock(), Mock())
+        patcher.cancel()
+        assert patcher._cancelled is True
+
+
+class TestBackupFlow:
+
+    def test_backup_and_restore(self, tmp_path):
+        backup_dir = tmp_path / 'backups'
+        backup_dir.mkdir()
+        bm = BackupManager(str(backup_dir), patching_logger=logging.getLogger('test'))
+        chapter_id = 'deltarune_1'
+        test_file = tmp_path / 'data.win'
+        test_file.write_bytes(b'ORIGINAL_CONTENT')
+        bm.backup_file(chapter_id, str(test_file))
+        assert chapter_id in bm.original_files
+        assert str(test_file) in bm.original_files[chapter_id]
+        backup_path = bm.original_files[chapter_id][str(test_file)]
+        assert os.path.exists(backup_path)
+        test_file.write_bytes(b'MODIFIED_CONTENT')
+        bm.restore_backups(chapter_id)
+        assert test_file.read_bytes() == b'ORIGINAL_CONTENT'
+
+    def test_backup_manifest_tracking(self, tmp_path):
+        backup_dir = tmp_path / 'backups'
+        backup_dir.mkdir()
+        bm = BackupManager(str(backup_dir), patching_logger=logging.getLogger('test'))
+        chapter_id = 'deltarune_1'
+        test_file = tmp_path / 'test.txt'
+        test_file.write_text('test')
+        bm.backup_file(chapter_id, str(test_file))
+        manifest_path = str(tmp_path / 'manifest.json')
+        bm.save_backups_to_manifest(manifest_path)
+        with open(manifest_path, 'r') as f:
+            manifest_data = json.load(f)
+        assert 'modification_order' in manifest_data
+        assert chapter_id in manifest_data['modification_order']
+        assert str(test_file) in manifest_data['modification_order'][chapter_id]
+
+    def test_multi_chapter_backup_restore(self, tmp_path):
+        backup_dir = tmp_path / 'backups'
+        backup_dir.mkdir()
+        bm = BackupManager(str(backup_dir), patching_logger=logging.getLogger('test'))
+        files = {}
+        for ch in ['deltarune_1', 'deltarune_2']:
+            f = tmp_path / f'{ch}_data.win'
+            f.write_bytes(f'ORIGINAL_{ch}'.encode())
+            files[ch] = f
+            bm.backup_file(ch, str(f))
+        for ch, f in files.items():
+            f.write_bytes(b'MODIFIED')
+        bm.restore_all_backups()
+        for ch, f in files.items():
+            assert f.read_bytes() == f'ORIGINAL_{ch}'.encode()
+
+
+class TestReportParsing:
+
+    def test_no_report(self):
+        patcher = G3MToolPatchingService(Mock(), Mock())
+        assert patcher.get_report_path() is None
+        assert patcher.report_has_conflicts() is False
+        assert patcher.get_report_stats() == (0, 0)
+
+    def test_report_with_conflicts(self, tmp_path):
+        report = tmp_path / 'report.md'
+        report.write_text('## Merge Report\n\nTotal conflicts: 3\nAuto-resolved: 1\n')
+        patcher = G3MToolPatchingService(Mock(), Mock())
+        patcher._last_report_path = str(report)
+        assert patcher.report_has_conflicts() is True
+        total, auto = patcher.get_report_stats()
+        assert total == 3
+        assert auto == 1
+
+    def test_report_without_conflicts(self, tmp_path):
+        report = tmp_path / 'report.md'
+        report.write_text('## Merge Report\n\nAll patches applied cleanly.\n')
+        patcher = G3MToolPatchingService(Mock(), Mock())
+        patcher._last_report_path = str(report)
+        assert patcher.report_has_conflicts() is False
+
+
+class TestXdeltaPatchApplication:
+
+    def test_xdelta_patch_with_g3mtool(self, game_data_dir, patches_game_dirs, deltarune_chapter_dirs):
         chapter1_dir = deltarune_chapter_dirs['chapter1']
         data_win_path = Path(chapter1_dir) / 'data.win'
         if not data_win_path.exists():
-            pytest.skip('Test data.win not found. Please add vanilla data.win to test fixtures.')
+            pytest.skip('Test data.win not found.')
         patch_file = None
         if 'deltarune' in patches_game_dirs:
             chapter1_patches = patches_game_dirs['deltarune'].get('chapter1')
@@ -23,252 +234,17 @@ class TestPatching:
                 if xdelta_patches:
                     patch_file = str(xdelta_patches[0])
         if not patch_file:
-            pytest.skip('No xdelta patches found. Please add test patches to patches/deltarune/chapter1_/')
-        temp_dir = tempfile.mkdtemp()
-        try:
+            pytest.skip('No xdelta patches found.')
+        g3mtool = G3MToolManager()
+        if not g3mtool.is_available():
+            pytest.skip('G3MTool executable not found')
+        with tempfile.TemporaryDirectory() as temp_dir:
             temp_data_win = os.path.join(temp_dir, 'data.win')
             shutil.copy2(data_win_path, temp_data_win)
-            original_size = os.path.getsize(temp_data_win)
-            mod_service = Mock()
-            patcher = ModPatcher(app_state, mod_service)
-            if patcher.xdelta_path is None:
-                pytest.fail('xdelta executable not found: patcher.xdelta_path is None')
-            if not os.path.exists(patcher.xdelta_path):
-                pytest.fail(f'xdelta executable not found at path: {patcher.xdelta_path}')
-            import subprocess
-            try:
-                test_cmd = [patcher.xdelta_path, '-h']
-                result = subprocess.run(test_cmd, capture_output=True, text=True, timeout=5, stdin=subprocess.DEVNULL)
-                if result.returncode not in (0, 1):
-                    error_output = result.stderr if result.stderr else result.stdout
-                    pytest.fail(f"xdelta executable cannot be executed (return code: {result.returncode}). Command: {' '.join(test_cmd)}\nError output: {error_output[:500]}")
-            except subprocess.TimeoutExpired:
-                pytest.fail(f'xdelta executable timed out when testing execution. Path: {patcher.xdelta_path}')
-            except (FileNotFoundError, PermissionError, OSError) as e:
-                pytest.fail(f"xdelta executable cannot be executed: {type(e).__name__}: {e}\nPath: {patcher.xdelta_path}\nFile exists: {os.path.exists(patcher.xdelta_path)}\nIs file: {(os.path.isfile(patcher.xdelta_path) if os.path.exists(patcher.xdelta_path) else 'N/A')}")
-            if not os.path.exists(temp_data_win):
-                pytest.fail(f'Test data.win file does not exist: {temp_data_win}')
-            if not os.path.exists(patch_file):
-                pytest.fail(f'Patch file does not exist: {patch_file}')
-            test_output = temp_data_win + '.test'
-            try:
-                test_cmd = [patcher.xdelta_path, '-d', '-s', temp_data_win, patch_file, test_output]
-                test_result = subprocess.run(test_cmd, capture_output=True, text=True, timeout=30, stdin=subprocess.DEVNULL)
-                direct_test_success = test_result.returncode == 0 and os.path.exists(test_output)
-                if not direct_test_success:
-                    error_detail = test_result.stderr.strip() if test_result.stderr else test_result.stdout.strip() if test_result.stdout else 'No error output'
-                    if os.path.exists(test_output):
-                        os.remove(test_output)
-                    pytest.fail(f"Direct xdelta patch test failed.\nCommand: {' '.join(test_cmd)}\nReturn code: {test_result.returncode}\nError: {error_detail[:1000]}\nData.win size: {original_size} bytes\nPatch file: {patch_file}")
-                if os.path.exists(test_output):
-                    os.remove(test_output)
-            except subprocess.TimeoutExpired:
-                pytest.fail(f"Direct xdelta patch test timed out after 30 seconds.\nCommand: {' '.join(test_cmd)}\nThis may indicate a problem with the patch file or data.win.")
-            except Exception:
-                pass
-            success = patcher._apply_xdelta_patches(temp_data_win, [patch_file])
-            if not success:
-                log_info = ''
-                try:
-                    from utils.path_utils import get_user_data_root
-                    log_path = os.path.join(get_user_data_root(), 'patching.log')
-                    if os.path.exists(log_path):
-                        with open(log_path, 'r', encoding='utf-8', errors='ignore') as f:
-                            log_lines = f.readlines()
-                            recent_logs = '\n'.join(log_lines[-20:])
-                            log_info = f'\n\nRecent patching.log entries:\n{recent_logs}'
-                except Exception:
-                    pass
-                pytest.fail(f"Patch application failed via ModPatcher._apply_xdelta_patches.\nxdelta_path: {patcher.xdelta_path}\npatch_file: {patch_file}\ndata_win_path: {temp_data_win}\ndata_win_size: {original_size} bytes\ndata_win_exists: {os.path.exists(temp_data_win)}\npatch_file_exists: {os.path.exists(patch_file)}\npatch_file_size: {(os.path.getsize(patch_file) if os.path.exists(patch_file) else 'N/A')} bytes{log_info}")
-            if not os.path.exists(temp_data_win):
-                pytest.fail(f'Patched file does not exist after patching: {temp_data_win}')
-            patched_size = os.path.getsize(temp_data_win)
-            if patched_size == 0:
-                pytest.fail(f'Patched file is empty (size: 0 bytes). Original size: {original_size} bytes')
-            if patched_size == original_size:
-                pytest.fail(f'Patched file size unchanged ({patched_size} bytes). This may indicate the patch was not applied correctly.')
-        finally:
-            shutil.rmtree(temp_dir, ignore_errors=True)
-
-    def test_vcdiff_patch_application(self, game_data_dir, patches_game_dirs):
-        found_vcdiff = False
-        for game_name, game_patches in patches_game_dirs.items():
-            if isinstance(game_patches, dict):
-                for chapter_name, chapter_path in game_patches.items():
-                    patch_path = Path(chapter_path)
-                    if any(patch_path.glob('*.vcdiff')):
-                        found_vcdiff = True
-                        break
-            else:
-                patch_path = Path(game_patches)
-                if any(patch_path.glob('*.vcdiff')):
-                    found_vcdiff = True
-                    break
-            if found_vcdiff:
-                break
-        if not found_vcdiff:
-            pytest.skip('No vcdiff patches found.')
-        assert True
-
-    def test_patch_discovery(self, patches_game_dirs):
-        all_patches = []
-        for game_name, game_patches in patches_game_dirs.items():
-            if isinstance(game_patches, dict):
-                for chapter_name, chapter_path in game_patches.items():
-                    patch_path = Path(chapter_path)
-                    xdelta_patches = list(patch_path.glob('*.xdelta'))
-                    vcdiff_patches = list(patch_path.glob('*.vcdiff'))
-                    all_patches.extend(xdelta_patches)
-                    all_patches.extend(vcdiff_patches)
-            else:
-                patch_path = Path(game_patches)
-                xdelta_patches = list(patch_path.glob('*.xdelta'))
-                vcdiff_patches = list(patch_path.glob('*.vcdiff'))
-                all_patches.extend(xdelta_patches)
-                all_patches.extend(vcdiff_patches)
-        assert isinstance(patches_game_dirs, dict)
-        if all_patches:
-            assert len(all_patches) > 0, 'Should find at least one patch if patches exist'
-            for patch_file in all_patches:
-                assert patch_file.exists(), f'Patch file should exist: {patch_file}'
-                assert patch_file.suffix in ['.xdelta', '.vcdiff'], f'Patch should be xdelta or vcdiff: {patch_file}'
-
-
-class TestMerging:
-
-    def test_merge_multiple_mods(self, patches_game_dirs, deltarune_chapter_dirs, app_state, feedback_service):
-        chapter1_dir = deltarune_chapter_dirs['chapter1']
-        if not Path(chapter1_dir).exists():
-            pytest.skip('Chapter directory not found.')
-        data_win_files = []
-        if 'deltarune' in patches_game_dirs:
-            chapter1_patches = patches_game_dirs['deltarune'].get('chapter1')
-            if chapter1_patches:
-                patch_path = Path(chapter1_patches)
-                data_win_files = list(patch_path.glob('*.win'))
-        if len(data_win_files) < 2:
-            pytest.skip('Need at least 2 modified data.win files for merging test. Please add test files to patches/deltarune/chapter1_/')
-        mod_service = Mock()
-        patcher = ModPatcher(app_state, mod_service)
-        assert patcher is not None
-        assert hasattr(patcher, 'utmt_wrapper')
-        assert hasattr(patcher, 'xdelta_path')
-
-    def test_progress_throttler_initialization(self, app_state, feedback_service, qapp):
-        from utils.progress_throttler import ProgressThrottler
-        callback_calls = []
-
-        def test_callback(progress, message):
-            callback_calls.append((progress, message))
-        throttler = ProgressThrottler(test_callback, throttle_ms=50, parent=qapp)
-        assert throttler is not None
-        assert throttler.callback == test_callback
-        assert throttler.throttle_ms == 50
-        throttler.update_progress(10, 'Test message 1')
-        throttler.update_progress(20, 'Test message 2')
-        throttler.update_progress(30, 'Test message 3')
-        import time
-        time.sleep(0.1)
-        qapp.processEvents()
-        throttler.flush()
-        qapp.processEvents()
-        assert len(callback_calls) > 0
-        assert callback_calls[-1] == (30, 'Test message 3')
-
-    def test_merge_with_priority(self, patches_game_dirs):
-        found_data_win = False
-        for game_name, game_patches in patches_game_dirs.items():
-            if isinstance(game_patches, dict):
-                for chapter_name, chapter_path in game_patches.items():
-                    patch_path = Path(chapter_path)
-                    if any(patch_path.glob('*.win')):
-                        found_data_win = True
-                        break
-            else:
-                patch_path = Path(game_patches)
-                if any(patch_path.glob('*.win')):
-                    found_data_win = True
-                    break
-            if found_data_win:
-                break
-        if not found_data_win:
-            pytest.skip('No modified data.win files found.')
-        assert True
-
-
-class TestCombinedPatchingAndMerging:
-
-    def test_patch_then_merge(self, game_data_dir, patches_game_dirs):
-        found_patches = False
-        found_data_win = False
-        for game_name, game_patches in patches_game_dirs.items():
-            if isinstance(game_patches, dict):
-                for chapter_name, chapter_path in game_patches.items():
-                    patch_path = Path(chapter_path)
-                    if any(patch_path.glob('*.xdelta')) or any(patch_path.glob('*.vcdiff')):
-                        found_patches = True
-                    if any(patch_path.glob('*.win')):
-                        found_data_win = True
-            else:
-                patch_path = Path(game_patches)
-                if any(patch_path.glob('*.xdelta')) or any(patch_path.glob('*.vcdiff')):
-                    found_patches = True
-                if any(patch_path.glob('*.win')):
-                    found_data_win = True
-        if not found_patches or not found_data_win:
-            pytest.skip('Test files not found. Please add patches and modified files to patches/ subdirectories.')
-        assert True
-
-    def test_multiple_patches_sequential(self, game_data_dir, patches_game_dirs):
-        all_patches = []
-        for game_name, game_patches in patches_game_dirs.items():
-            if isinstance(game_patches, dict):
-                for chapter_name, chapter_path in game_patches.items():
-                    patch_path = Path(chapter_path)
-                    patches = list(patch_path.glob('*.xdelta')) + list(patch_path.glob('*.vcdiff'))
-                    all_patches.extend(patches)
-            else:
-                patch_path = Path(game_patches)
-                patches = list(patch_path.glob('*.xdelta')) + list(patch_path.glob('*.vcdiff'))
-                all_patches.extend(patches)
-        if len(all_patches) < 2:
-            pytest.skip('Need at least 2 patches for sequential patching test. Add them to patches/ subdirectories.')
-        assert True
-
-
-class TestRestoreOriginal:
-
-    def test_restore_after_patch(self, game_data_dir, deltarune_chapter_dirs):
-        chapter1_dir = deltarune_chapter_dirs['chapter1']
-        data_win_path = Path(chapter1_dir) / 'data.win'
-        if not data_win_path.exists():
-            pytest.skip('Original data.win not found.')
-        assert data_win_path.exists()
-        original_size = data_win_path.stat().st_size
-        assert original_size > 0
-
-    def test_restore_after_merge(self, game_data_dir):
-        assert True
-
-    def test_backup_manifest_tracking(self, temp_dir, app_state, feedback_service):
-        from services.mod_patching_service import ModPatcher
-        from services.mod_service import ModManager
-        from services.backup_service import BackupManager
-        import json
-        mod_service = ModManager(app_state, feedback_service)
-        patcher = ModPatcher(app_state, mod_service)
-        backup_dir = os.path.join(temp_dir, 'backups')
-        os.makedirs(backup_dir, exist_ok=True)
-        patcher.backup_service = BackupManager(backup_dir, patching_logger=patcher.patching_logger)
-        chapter_id = 'deltarune_1'
-        test_file = os.path.join(temp_dir, 'test.txt')
-        with open(test_file, 'w') as f:
-            f.write('test')
-        patcher.backup_service.backup_file(chapter_id, test_file)
-        manifest_path = os.path.join(temp_dir, 'manifest.json')
-        patcher.backup_service.save_backups_to_manifest(manifest_path)
-        with open(manifest_path, 'r') as f:
-            manifest_data = json.load(f)
-        assert 'modification_order' in manifest_data
-        assert chapter_id in manifest_data['modification_order']
-        assert test_file in manifest_data['modification_order'][chapter_id]
+            output_path = os.path.join(temp_dir, 'patched_data.win')
+            returncode, stdout, stderr = g3mtool.xpatch_apply(temp_data_win, patch_file, output_path)
+            if returncode != 0:
+                pytest.fail(f'xpatch apply failed: {stderr[:500]}')
+            assert os.path.exists(output_path)
+            patched_size = os.path.getsize(output_path)
+            assert patched_size > 0

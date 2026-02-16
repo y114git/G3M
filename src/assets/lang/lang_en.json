@@ -170,8 +170,6 @@
     "tags_label": "Tags:",
     "update_button": "Update",
     "update_mod_list": "Updating mod list...",
-    "fast_merging": "Fast merging",
-    "fast_merging_tooltip": "Enables parallel resource export. Speeds up merging but heavily loads the CPU. Disable if unstable.",
     "updated_label": "Updated:",
     "use_button": "Use",
     "value_label": "Value",
@@ -479,11 +477,9 @@
       "message": "Conflicts were detected between mods during the patching process. Some resources from different mods may not work together correctly.",
       "conflicting_mods": "Conflicting mods:",
       "total_conflicts": "Total conflicts detected: {count}",
-      "open_logs_and_launch": "Open Logs and Launch Game",
-      "continue_without_logs": "Continue without Logs",
-      "no_logs_title": "No Log Files",
-      "no_logs_message": "Log files were not found.",
-      "failed_to_open_log": "Failed to open log file: {file}\nError: {error}"
+      "open_report": "Open Report",
+      "open_report_and_launch": "Open Report and Launch Game",
+      "continue_without_report": "Continue without Report"
     },
     "patching_warning": {
       "title": "Patching Warning",
@@ -902,7 +898,7 @@
     "update_failed_restored": "Update failed. Previous version restored.",
     "update_replacement_failed": "Failed to replace launcher files. The update may have been incomplete.",
     "installer_launch_failed": "Failed to launch installer. Error code: {code}. Please try running the installer manually.",
-    "utmtcli_not_available": "UTMTCLI is not available for platform {platform}.",
+    "g3mtool_not_available": "G3MTool patching engine is not available. Please reinstall the application.",
     "xdelta_patch_error": "Failed to apply xdelta patch: {error}",
     "mod_import_failed": "Failed to import mod: {error}",
     "mod_export_failed": "Failed to export mod: {error}",

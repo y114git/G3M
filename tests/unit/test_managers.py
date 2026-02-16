@@ -157,9 +157,9 @@ class TestBackupManager:
 
     def test_backup_restoration_order(self, temp_dir):
         from services.backup_service import BackupManager
-        from services.patching_log_service import get_patching_logger
+        import logging
         backup_dir = os.path.join(temp_dir, 'backups')
-        backup_service = BackupManager(backup_dir, patching_logger=get_patching_logger())
+        backup_service = BackupManager(backup_dir, patching_logger=logging.getLogger('test'))
         chapter_id = 1
         # Create test files
         test_dir = os.path.join(temp_dir, 'test_game')
@@ -188,9 +188,9 @@ class TestBackupManager:
 
     def test_backup_restoration_validation(self, temp_dir):
         from services.backup_service import BackupManager
-        from services.patching_log_service import get_patching_logger
+        import logging
         backup_dir = os.path.join(temp_dir, 'backups')
-        backup_service = BackupManager(backup_dir, patching_logger=get_patching_logger())
+        backup_service = BackupManager(backup_dir, patching_logger=logging.getLogger('test'))
         chapter_id = 1
         # Create test file
         test_dir = os.path.join(temp_dir, 'test_game')
@@ -217,9 +217,9 @@ class TestBackupManager:
 
     def test_sound_file_backup_restoration(self, temp_dir):
         from services.backup_service import BackupManager
-        from services.patching_log_service import get_patching_logger
+        import logging
         backup_dir = os.path.join(temp_dir, 'backups')
-        backup_service = BackupManager(backup_dir, patching_logger=get_patching_logger())
+        backup_service = BackupManager(backup_dir, patching_logger=logging.getLogger('test'))
         chapter_id = 1
         # Create test sound directory structure
         sound_dir = os.path.join(temp_dir, 'test_game', 'sound', 'Desktop')

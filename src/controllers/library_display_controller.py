@@ -372,7 +372,7 @@ class LibraryDisplayController:
 
     def _set_priority_widgets_visible(self, visible: bool):
         self.app.priority_button.setVisible(visible)
-        for attr in ('create_modpack_button', 'fast_merging_checkbox', 'fast_merging_label'):
+        for attr in ('create_modpack_button',):
             if hasattr(self.app, attr):
                 getattr(self.app, attr).setVisible(visible)
         if hasattr(self.app, 'library_tab_builder'):
@@ -459,9 +459,8 @@ class LibraryDisplayController:
             xdelta_modpack = dialog.get_xdelta_modpack()
             unique_mod_folder = get_unique_mod_dir(self.app_state.mods_dir, modpack_name)
             modpack_dir = os.path.join(self.app_state.mods_dir, unique_mod_folder)
-            fast_patch = getattr(self.app, 'fast_merging_checkbox', None) and self.app.fast_merging_checkbox.isChecked()
             from workers.modpack_create_worker import CreateModpackThread
-            thread = CreateModpackThread(chapter_mods, modpack_name, modpack_dir, self.app_state, self.mod_service, self.app, fast_patch=fast_patch, xdelta_modpack=xdelta_modpack)
+            thread = CreateModpackThread(chapter_mods, modpack_name, modpack_dir, self.app_state, self.mod_service, self.app, xdelta_modpack=xdelta_modpack)
             thread.progress_update.connect(self._on_modpack_progress)
             thread.status_update.connect(self._on_modpack_status)
             thread.finished.connect(lambda success: self._on_modpack_finished(success, modpack_dir))
@@ -489,7 +488,7 @@ class LibraryDisplayController:
         color = UI_COLORS.get(f'status_{status_type}', UI_COLORS['status_error'])
         self.feedback_service.update_status(message, color)
 
-    def _safe_update_after_modpack_creation(self, modpack_dir: str):
+    def _safe_update_after_modpack_creation(self, modpack_dir: str, report_path: str = None, has_conflicts: bool = False):
         try:
             self.update_display()
             if hasattr(self.app, 'search_display'):
@@ -497,6 +496,11 @@ class LibraryDisplayController:
                 self.app.search_display.update_search_cards()
             QTimer.singleShot(300, self.refresh_async)
             self.feedback_service.show_message('success', 'dialogs.modpack_created_title', tr('dialogs.modpack_created_message', modpack_dir=modpack_dir))
+
+            if has_conflicts and report_path:
+                from ui.dialogs.conflicts_dialog import ConflictsDialog
+                dialog = ConflictsDialog(report_path, parent=self.app)
+                dialog.exec()
         except Exception as e:
             logging.error(f'Error updating UI after modpack creation: {e}', exc_info=True)
 
@@ -506,11 +510,18 @@ class LibraryDisplayController:
         self.app_state.action_button_text = tr('ui.launch_button')
         self.app_state.action_button_enabled = True
         self.app_state.clear_current_task()
+
+        report_path = None
+        has_conflicts = False
+        modpack_thread = getattr(self, '_modpack_thread', None)
+        if modpack_thread:
+            report_path = modpack_thread.get_report_path()
+            has_conflicts = modpack_thread.has_conflicts()
         if success:
             self.mod_service.invalidate_mods_cache()
             self.mod_service.load_local_mods()
             self.mod_service.mod_list_updated.emit()
-            QTimer.singleShot(100, lambda: self._safe_update_after_modpack_creation(modpack_dir))
+            QTimer.singleShot(100, lambda: self._safe_update_after_modpack_creation(modpack_dir, report_path, has_conflicts))
         else:
             if os.path.exists(modpack_dir):
                 try:

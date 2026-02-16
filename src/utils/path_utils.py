@@ -34,20 +34,6 @@ def resource_path(relative_path):
     return os.path.join(base, relative_path)
 
 
-def get_xdelta_path():
-    exe_names = ['xdelta3.exe', 'xdelta.exe'] if _SYS == 'Windows' else (['xdelta3_mac'] if _SYS == 'Darwin' else ['xdelta3'])
-    for name in exe_names:
-        p = resource_path(f'assets/bin/{name}')
-        if os.path.exists(p):
-            if _SYS != 'Windows':
-                try:
-                    os.chmod(p, 493)
-                except Exception as e:
-                    logging.warning(f'Could not set executable permission on {p}: {e}')
-            return os.path.normpath(p)
-    return None
-
-
 def resolve_game_executable(base_dir, is_undertale=False, game_type=None):
     try:
         if not base_dir or not os.path.isdir(base_dir):

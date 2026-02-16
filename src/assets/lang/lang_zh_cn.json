@@ -169,8 +169,6 @@
     "tags_label": "标签：",
     "update_button": "更新",
     "update_mod_list": "更新模组列表中...",
-    "fast_merging": "快速合并",
-    "fast_merging_tooltip": "启用并行资源导出。加速合并但会严重占用CPU。如果不稳定请禁用。",
     "updated_label": "更新时间：",
     "use_button": "使用",
     "value_label": "值",
@@ -478,11 +476,9 @@
       "message": "在合并过程中检测到模组之间的冲突。来自不同模组的某些资源可能无法正确协同工作。",
       "conflicting_mods": "冲突的模组：",
       "total_conflicts": "检测到的冲突总数：{count}",
-      "open_logs_and_launch": "打开日志并启动游戏",
-      "continue_without_logs": "不查看日志继续",
-      "no_logs_title": "未找到日志文件",
-      "no_logs_message": "未找到日志文件。",
-      "failed_to_open_log": "无法打开日志文件：{file}\n错误：{error}"
+      "open_report": "打开报告",
+      "open_report_and_launch": "打开报告并启动游戏",
+      "continue_without_report": "不查看报告继续"
     },
     "patching_warning": {
       "title": "补丁警告",
@@ -897,7 +893,7 @@
     "update_failed_restored": "更新失败。已恢复之前的版本。",
     "update_replacement_failed": "替换启动器文件失败。更新可能不完整。",
     "installer_launch_failed": "启动安装程序失败。错误代码：{code}。请尝试手动运行安装程序。",
-    "utmtcli_not_available": "UTMTCLI 不可用于平台 {platform}。",
+    "g3mtool_not_available": "G3MTool补丁引擎不可用。请重新安装应用程序。",
     "xdelta_patch_error": "无法应用xdelta补丁：{error}",
     "xdelta_patch_checksum_mismatch": "无法应用xdelta补丁 '{patch}'：校验和不匹配。该补丁是为原始data.win创建的，但文件已被之前的模组修改。请尝试更改模组顺序或联系模组作者。\n错误：{error}",
     "mod_no_files": "模组 '{mod_name}' 没有要安装的文件。",

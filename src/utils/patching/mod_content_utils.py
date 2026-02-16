@@ -2,6 +2,7 @@
 import os
 import platform
 import re
+import zipfile
 from typing import Dict, List, Optional
 
 from config.constants import DATA_WIN_FILENAME
@@ -22,6 +23,35 @@ def find_files_by_extension(directory: str, extensions: List[str],
             elif any((file_lower.endswith(ext) for ext in extensions_lower)):
                 found_files.append(os.path.join(root, file))
     return found_files
+
+
+def find_g3m_patches(mod_source_dir: str) -> List[str]:
+    """Find .zip archives that contain g3mpatch.json inside (g3mpatch format)."""
+    results = []
+    if not os.path.isdir(mod_source_dir):
+        return results
+    for root, dirs, files in os.walk(mod_source_dir):
+        for f in files:
+            if f.lower().endswith('.zip'):
+                zip_path = os.path.join(root, f)
+                try:
+                    with zipfile.ZipFile(zip_path, 'r') as zf:
+                        if 'g3mpatch.json' in zf.namelist():
+                            results.append(zip_path)
+                except (zipfile.BadZipFile, Exception):
+                    pass
+    return results
+
+
+def is_g3mpatch_zip(file_path: str) -> bool:
+    """Check if a file is a g3mpatch zip (contains g3mpatch.json)."""
+    if not os.path.isfile(file_path) or not file_path.lower().endswith('.zip'):
+        return False
+    try:
+        with zipfile.ZipFile(file_path, 'r') as zf:
+            return 'g3mpatch.json' in zf.namelist()
+    except (zipfile.BadZipFile, Exception):
+        return False
 
 
 def find_data_patches(mod_source_dir: str) -> List[str]:
@@ -68,10 +98,6 @@ def find_ready_data_win_files(mod_source_dir: str, logger=None) -> List[str]:
     return ready_files
 
 
-def find_csx_scripts(mod_source_dir: str) -> List[str]:
-    return find_files_by_extension(mod_source_dir, ['.csx'])
-
-
 def dir_has_files(dir_path: str, ext_filter: tuple = None) -> bool:
     try:
         if not os.path.exists(dir_path):
@@ -84,12 +110,13 @@ def dir_has_files(dir_path: str, ext_filter: tuple = None) -> bool:
 
 
 def detect_mod_type(mod_source_dir: str, logger=None) -> Dict[str, bool]:
-    mod_type = {'has_xdelta_patch': False, 'has_ready_data_win': False, 'has_csx_scripts': False, 'has_file_overrides': False}
+    mod_type = {'has_g3mpatch': False, 'has_xdelta_patch': False, 'has_ready_data_win': False, 'has_file_overrides': False}
     if not os.path.isdir(mod_source_dir):
         return mod_type
+    mod_type['has_g3mpatch'] = bool(find_g3m_patches(mod_source_dir))
     mod_type['has_xdelta_patch'] = bool(find_data_patches(mod_source_dir))
     mod_type['has_ready_data_win'] = bool(find_ready_data_win_files(mod_source_dir, logger=logger))
-    mod_type['has_csx_scripts'] = bool(find_csx_scripts(mod_source_dir))
+    g3mpatch_zips = set(os.path.basename(p).lower() for p in find_g3m_patches(mod_source_dir))
     has_other_files = False
     for root, dirs, files in os.walk(mod_source_dir):
         for file in files:
@@ -100,7 +127,7 @@ def detect_mod_type(mod_source_dir: str, logger=None) -> Dict[str, bool]:
                 continue
             if file_lower.endswith(('data.win', 'game.ios')):
                 continue
-            if file_lower.endswith('.csx'):
+            if file_lower.endswith('.zip') and file_lower in g3mpatch_zips:
                 continue
             has_other_files = True
             break

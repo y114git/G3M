@@ -429,15 +429,12 @@ class AppWindow(QWidget):
         ), optional=(
             'import_export_button', 'custom_executable_button', 'reset_custom_exe_button',
             'change_path_button', 'installed_mods_label', 'priority_button',
-            'create_modpack_button', 'fast_merging_checkbox', 'fast_merging_label',
+            'create_modpack_button',
         ))
         if self.priority_button:
             self.priority_button.clicked.connect(self.library_display.on_priority_button_click)
         if self.create_modpack_button:
             self.create_modpack_button.clicked.connect(self.library_display.on_create_modpack_button_click)
-        if self.fast_merging_checkbox:
-            self.fast_merging_checkbox.setChecked(self.app_state.local_config.get('fast_merging_enabled', False))
-            self.fast_merging_checkbox.stateChanged.connect(self._on_fast_patching_changed)
         if self.import_export_button:
             from controllers.mod_import_export_controller import ModImportExportController
             self.mod_import_export_controller = ModImportExportController(self.app_state, self.mod_service, self)
@@ -602,12 +599,6 @@ class AppWindow(QWidget):
     def _try_start_background_music(self):
         if getattr(self, 'is_shown_to_user', False) and self.isVisible():
             self.customization_service.maybe_start_background_music(force=True)
-
-    def _on_fast_patching_changed(self, state):
-        enabled = state in (Qt.CheckState.Checked, 2)
-        self.app_state.local_config['fast_merging_enabled'] = enabled
-        self.settings_service.write_local_config()
-        logging.debug(f'Fast patching setting changed: {enabled}')
 
     def _on_search_sort_changed(self):
         if not hasattr(self, 'search_display'):
