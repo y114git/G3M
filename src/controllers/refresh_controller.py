@@ -1,5 +1,4 @@
 import logging
-from PyQt6.QtCore import QTimer
 from services.localization_service import localization_service, tr
 from workers.fetch_mods_worker import FetchModsThread
 from config.constants import UI_COLORS
@@ -64,8 +63,6 @@ class RefreshController:
     def refresh_mods_list(self, is_initial=False, language_combo=None, localization_callback=None, on_fetch_finished_kwargs=None):
         try:
             if hasattr(self.app_state, '_scan_blocked') and self.app_state._scan_blocked:
-                if not is_initial:
-                    QTimer.singleShot(500, lambda: self.refresh_mods_list(is_initial=is_initial, language_combo=language_combo, localization_callback=localization_callback, on_fetch_finished_kwargs=on_fetch_finished_kwargs))
                 return
             if language_combo is not None:
                 current_lang_code = localization_service.get_current_language()
@@ -90,15 +87,14 @@ class RefreshController:
                 if self.fetch_thread:
                     try:
                         if self.fetch_thread.isRunning():
-                            logging.warning('RefreshController: Previous fetch thread still running, deferring new fetch')
-                            QTimer.singleShot(500, lambda: self.refresh_mods_list(is_initial=is_initial, language_combo=language_combo, localization_callback=localization_callback, on_fetch_finished_kwargs=on_fetch_finished_kwargs))
+                            logging.warning('RefreshController: Previous fetch thread still running, ignoring new fetch')
                             return
                     except (RuntimeError, AttributeError):
                         self.fetch_thread = None
             except Exception as e:
                 logging.debug(f'RefreshController: Error checking fetch thread: {e}')
                 self.fetch_thread = None
-            QTimer.singleShot(3000, self.update_checker.check_for_updates)
+            self.update_checker.check_for_updates()
 
             class FetchContext:
 
@@ -140,7 +136,7 @@ class RefreshController:
         self._fetch_finished_in_progress = True
         try:
             self.mod_service.invalidate_mods_cache()
-            QTimer.singleShot(0, self.mod_service.load_local_mods)
+            self.mod_service.load_local_mods()
             downloads_restored = False
             if hasattr(self.app_state, 'cache_dir') and self.app_state.cache_dir and hasattr(self.app_state, 'all_mods') and self.app_state.all_mods:
                 try:
@@ -264,6 +260,6 @@ class RefreshController:
                 self.app_window.search_display.update_filtered_mods(preserve_page=True)
             remaining = getattr(self.app_state, 'gamebanana_mods_needing_metadata', [])
             if remaining:
-                QTimer.singleShot(500, self._start_metadata_loading)
+                self._start_metadata_loading()
         except Exception as e:
             logging.warning(f'RefreshController: Error in _on_metadata_loading_finished: {e}', exc_info=True)

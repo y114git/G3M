@@ -184,6 +184,11 @@ class ModOperationsController:
         elif clicked_btn == open_btn and url_to_open:
             webbrowser.open(url_to_open)
 
+    def _get_gamebanana_mod_id_str(self, mod) -> Optional[str]:
+        """Extract GameBanana mod ID string from mod data."""
+        from utils.mod_utils import get_gamebanana_mod_id
+        return get_gamebanana_mod_id(mod)
+
     def _get_available_gamebanana_files(self, mod) -> List[Dict]:
         files = getattr(mod, 'gamebanana_supported_files', []) or []
         if files:

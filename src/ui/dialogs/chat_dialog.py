@@ -295,7 +295,7 @@ class ChatWindow(QDialog):
         if added_count > 0:
             scroll_bar = self.messages_area.verticalScrollBar()
             if scroll_bar:
-                QTimer.singleShot(50, lambda: scroll_bar.setValue(scroll_bar.maximum()))
+                scroll_bar.setValue(scroll_bar.maximum())
 
     def _show_select_channel_message(self):
         self._clear_messages_display()
@@ -319,7 +319,7 @@ class ChatWindow(QDialog):
             if settings_mgr and hasattr(settings_mgr, 'write_local_config'):
                 settings_mgr.write_local_config()
         if self.current_channel:
-            QTimer.singleShot(100, self._reload_messages_with_limit)
+            self._reload_messages_with_limit()
 
     def _reload_messages_with_limit(self):
         if not self.current_channel or self._loading_messages:
@@ -363,7 +363,7 @@ class ChatWindow(QDialog):
         self._updating_channel_buttons = True
         self.message_input.setEnabled(False)
         self.send_button.setEnabled(False)
-        QTimer.singleShot(0, lambda: self._send_message_async(saved_channel, message))
+        self._send_message_async(saved_channel, message)
 
     def _send_message_async(self, channel: str, message: str):
         if self.chat_request_thread.isRunning():
@@ -394,7 +394,8 @@ class ChatWindow(QDialog):
                         self._start_cooldown()
                         self.status_label.setText('')
                         self._sync_channel_buttons()
-                        QTimer.singleShot(200, lambda: self._refresh_messages_immediate(channel) if not self._closed else None)
+                        if not self._closed:
+                            self._refresh_messages_immediate(channel)
                     except (RuntimeError, AttributeError):
                         self._closed = True
             elif not self._closed:

@@ -1,6 +1,5 @@
 """Handles update prompts, announcements, and global settings reload for AppWindow."""
 import logging
-from PyQt6.QtCore import QTimer
 from services.localization_service import tr
 from config.constants import CLOUD_FUNCTIONS_BASE_URL
 from utils.network_utils import get_session
@@ -19,8 +18,8 @@ def handle_update_info(app, update_info, retry_count=0):
             logging.info('_handle_update_info: Set app_state.is_shown_to_user=True because window is visible')
         app.show_update_prompt.emit(update_info)
     elif retry_count < max_retries:
-        logging.debug(f'_handle_update_info: Conditions not met, retrying in 1 second (retry {retry_count + 1}/{max_retries})')
-        QTimer.singleShot(1000, lambda: handle_update_info(app, update_info, retry_count + 1))
+        logging.debug(f'_handle_update_info: Conditions not met, retrying immediately (retry {retry_count + 1}/{max_retries})')
+        handle_update_info(app, update_info, retry_count + 1)
     else:
         logging.warning(f'Update dialog: conditions not met after max retries (init_completed={init_completed}, is_shown={is_shown}, is_visible={is_visible}), showing dialog anyway')
         app.show_update_prompt.emit(update_info)
@@ -78,8 +77,8 @@ def check_and_show_announce(app, retry_count=0, force_check=False):
         else:
             logging.info(f'_check_and_show_announce: Announce version {announce_version} matches saved version, skipping')
     elif retry_count < max_retries:
-        logging.debug(f'_check_and_show_announce: Conditions not met, retrying in 1 second (retry {retry_count + 1}/{max_retries})')
-        QTimer.singleShot(1000, lambda: check_and_show_announce(app, retry_count + 1, force_check))
+        logging.debug(f'_check_and_show_announce: Conditions not met, retrying immediately (retry {retry_count + 1}/{max_retries})')
+        check_and_show_announce(app, retry_count + 1, force_check)
     else:
         logging.warning(f'Announce dialog: conditions not met after max retries (init_completed={init_completed}, is_shown={is_shown}, is_visible={is_visible}), skipping announce')
 
@@ -117,4 +116,4 @@ def prompt_for_update(app, update_info):
         app.app_state.update_in_progress = False
         app.feedback_service.update_status(tr('status.update_rejected'), UI_COLORS['status_info'])
         if hasattr(app.app_state, 'pending_announce_check') and app.app_state.pending_announce_check:
-            QTimer.singleShot(500, lambda: check_and_show_announce(app))
+            check_and_show_announce(app)

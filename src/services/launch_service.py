@@ -6,7 +6,7 @@ import subprocess
 import webbrowser
 import logging
 from typing import Dict, Optional, Any, List
-from PyQt6.QtCore import QObject, QThread, QTimer, pyqtSignal
+from PyQt6.QtCore import QObject, QThread, pyqtSignal
 from services.localization_service import tr
 from utils.file_utils import ensure_writable
 from utils.path_utils import is_path_in_steam_common
@@ -174,7 +174,7 @@ class GameLauncher(QObject):
                     subprocess.Popen(['open', target_path])
                     self.status_changed.emit(tr('status.macos_file_opened'), UI_COLORS['status_steam'])
                     if self.restore_window_callback:
-                        QTimer.singleShot(2000, self.restore_window_callback)
+                        self.restore_window_callback()
                     return
                 process = subprocess.Popen(['open', '-W', target_path])
             else:
@@ -224,19 +224,18 @@ class GameLauncher(QObject):
 
     def _check_game_running(self, vanilla_mode):
         if is_game_running():
-            logging.debug('[LAUNCH] Game is still running, checking again in 2 seconds')
-            QTimer.singleShot(2000, lambda: self._check_game_running(vanilla_mode))
-        else:
-            logging.info('[LAUNCH] Game is no longer running, starting cleanup')
-            self.status_changed.emit(tr('status.game_closed_restoring_files'), UI_COLORS['status_info'])
-            self._cleanup_direct_launch_files()
-            if self.monitor_thread:
-                self._stop_monitor_thread()
-                self.monitor_thread = None
-                if hasattr(self, 'monitor_worker'):
-                    self.monitor_worker = None
-            self.game_launch_finished.emit()
-            logging.info('[LAUNCH] Cleanup completed, game launch finished')
+            logging.debug('[LAUNCH] Game still running, cleanup deferred to monitor')
+            return
+        logging.info('[LAUNCH] Game is no longer running, starting cleanup')
+        self.status_changed.emit(tr('status.game_closed_restoring_files'), UI_COLORS['status_info'])
+        self._cleanup_direct_launch_files()
+        if self.monitor_thread:
+            self._stop_monitor_thread()
+            self.monitor_thread = None
+            if hasattr(self, 'monitor_worker'):
+                self.monitor_worker = None
+        self.game_launch_finished.emit()
+        logging.info('[LAUNCH] Cleanup completed, game launch finished')
 
     def _determine_launch_config(self, selections: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         use_steam = self.app_state.local_config.get('launch_via_steam', False)

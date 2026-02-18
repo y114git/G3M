@@ -3,7 +3,7 @@ import os
 import tempfile
 import logging
 from typing import Optional, Dict
-from PyQt6.QtCore import pyqtSignal, QTimer
+from PyQt6.QtCore import pyqtSignal
 from config.constants import UI_COLORS, MOD_CONFIG_FILENAME
 from services.localization_service import tr
 from core.exceptions import AppError
@@ -231,6 +231,6 @@ class InstallGameBananaModThread(BaseInstallWorker):
     def _notify_search_refresh(self):
         try:
             if hasattr(self.main_window, 'search_display'):
-                QTimer.singleShot(0, self.main_window.search_display.update_search_cards)
+                self.main_window.search_display.update_search_cards()
         except Exception as e:
             logger.debug(f'InstallGameBananaModThread: Error notifying search refresh: {e}')

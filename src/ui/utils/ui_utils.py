@@ -58,7 +58,8 @@ def refresh_ui_after_mod_install(main_window, mod_service=None):
         main_window.plugin_display.update_display()
     if mod_service:
         mod_service.invalidate_mods_cache()
-        QTimer.singleShot(0, lambda: (mod_service.load_local_mods(_skip_conversion=True), mod_service.mod_list_updated.emit()))
+        mod_service.load_local_mods(_skip_conversion=True)
+        mod_service.mod_list_updated.emit()
     if hasattr(main_window, 'library_display'):
         main_window.library_display.update_display()
     if hasattr(main_window, 'search_display'):
@@ -69,7 +70,7 @@ def refresh_ui_after_mod_install(main_window, mod_service=None):
     if hasattr(main_window, 'feedback_service'):
         main_window.feedback_service.update_status(tr('dialogs.mod_created_successfully'), UI_COLORS['status_success'])
     if hasattr(main_window, '_on_refresh_clicked'):
-        QTimer.singleShot(1000, lambda: main_window._on_refresh_clicked(is_initial=False))
+        main_window._on_refresh_clicked(is_initial=False)
 
 
 def safe_stop_thread(thread, timeout=2000, blocking=True):

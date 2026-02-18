@@ -2,7 +2,7 @@
 from services.mod_filter_service import filter_and_sort_mods
 from utils.mod_utils import get_mod_key, get_gamebanana_key, get_gamebanana_mod_id
 from PyQt6.QtWidgets import QInputDialog, QMessageBox, QApplication
-from PyQt6.QtCore import QTimer, QObject, QThread, pyqtSignal
+from PyQt6.QtCore import QTimer, QObject, QThread, pyqtSignal, QMetaObject, Qt
 from services.localization_service import tr
 from services.blocklist_service import BlocklistManager
 from ui.dialogs.mod_details_dialog import open_mod_details_dialog
@@ -69,11 +69,13 @@ class SearchDisplayController(QObject):
     @staticmethod
     def _mod_needs_metadata(mod) -> bool:
         """Check whether a GameBanana mod is missing metadata."""
+        if getattr(mod, 'has_full_metadata', False):
+            return False
         if not getattr(mod, 'tagline', '').strip():
             return True
         if not getattr(mod, 'downloads', None):
             return True
-        return hasattr(mod, 'has_full_metadata') and not mod.has_full_metadata
+        return False
 
     def _queue_mods_for_metadata(self, mod_id_list: list) -> None:
         """Add mod IDs to the metadata loading queue and trigger loading."""
@@ -86,7 +88,7 @@ class SearchDisplayController(QObject):
         self.app_state.gamebanana_mods_needing_metadata = list(existing | new_ids)
         logger.info(f'SearchDisplayController: Added {len(new_ids)} mod IDs to metadata loading queue')
         if hasattr(self.app, 'refresh_controller') and self.app.refresh_controller:
-            QTimer.singleShot(500, lambda: self.app.refresh_controller._start_metadata_loading())
+            self.app.refresh_controller._start_metadata_loading()
 
     def _show_no_results_and_clear_search(self, search_text: str):
         def _do_show():
@@ -102,7 +104,7 @@ class SearchDisplayController(QObject):
                     self.ui_button_text_update.emit('search_button', '🔍')
                     self.ui_button_tooltip_update.emit('search_button', tr('ui.search_placeholder'))
                     self.update_filtered_mods()
-        QTimer.singleShot(100, _do_show)
+        _do_show()
 
     def _clamp_current_page(self):
         total_mods = len(self.app_state.filtered_mods) if self.app_state.filtered_mods else 0
@@ -242,7 +244,7 @@ class SearchDisplayController(QObject):
             current_thread = QThread.currentThread()
             app_instance = QApplication.instance()
             if app_instance and current_thread != app_instance.thread():
-                QTimer.singleShot(0, on_all_results_received)
+                QMetaObject.invokeMethod(self, lambda: on_all_results_received(), Qt.ConnectionType.QueuedConnection)
                 return
             try:
                 self.app_state.gamebanana_loading = False
@@ -267,7 +269,7 @@ class SearchDisplayController(QObject):
                             self.update_pagination()
                         except Exception as e:
                             logger.error(f'SearchDisplayController: Error in safe_update after loading mods: {e}', exc_info=True)
-                    QTimer.singleShot(100, safe_update)
+                    safe_update()
                 else:
                     self.update_pagination()
                     return
@@ -306,12 +308,12 @@ class SearchDisplayController(QObject):
                                         self.app.refresh_controller._start_metadata_loading()
                                 except Exception as e:
                                     logger.warning(f'SearchDisplayController: Error triggering metadata loading: {e}', exc_info=True)
-                            QTimer.singleShot(500, trigger_metadata_loading)
+                            trigger_metadata_loading()
                     else:
                         self.app_state.gamebanana_loaded_pages[gid] = 100
                     results_received[0] += 1
                     if results_received[0] >= expected_results:
-                        QTimer.singleShot(0, on_all_results_received)
+                        on_all_results_received()
                 return on_result
             load_thread.result.connect(make_on_result(game_id, game_name, last_page, start_page, pages_needed))
             load_thread.finished.connect(lambda thread=load_thread: self._cleanup_load_thread(thread))
@@ -384,7 +386,7 @@ class SearchDisplayController(QObject):
             current_thread = QThread.currentThread()
             app_instance = QApplication.instance()
             if app_instance and current_thread != app_instance.thread():
-                QTimer.singleShot(0, on_all_results_received)
+                QMetaObject.invokeMethod(self, lambda: on_all_results_received(), Qt.ConnectionType.QueuedConnection)
                 return
             try:
                 if self.app_state.search_text != search_text:
@@ -430,7 +432,7 @@ class SearchDisplayController(QObject):
                     results_received[0] += 1
                     if results_received[0] >= expected_results:
                         search_timeout_timer.stop()
-                        QTimer.singleShot(0, on_all_results_received)
+                        on_all_results_received()
                 return on_result
 
             def on_priority_metadata_added(count):
@@ -441,7 +443,7 @@ class SearchDisplayController(QObject):
                             if self.app.refresh_controller.metadata_thread.isRunning():
                                 logger.info('SearchDisplayController: Cancelling current metadata batch to prioritize search results')
                                 self.app.refresh_controller.metadata_thread.cancel()
-                        QTimer.singleShot(100, lambda: self.app.refresh_controller._start_metadata_loading())
+                        self.app.refresh_controller._start_metadata_loading()
                 except Exception as e:
                     logger.error(f'SearchDisplayController: Error in on_priority_metadata_added: {e}', exc_info=True)
 
@@ -494,7 +496,7 @@ class SearchDisplayController(QObject):
                 self.app_state.current_page = 1
                 self.update_filtered_mods()
                 if self.app_state.mods_loaded:
-                    QTimer.singleShot(100, lambda: self._load_search_results_if_needed(self.app_state.mods_per_page))
+                    self._load_search_results_if_needed(self.app_state.mods_per_page)
 
     def _build_filters_and_sort(self):
         hide_mods_without_files = self.app_state.local_config.get('hide_mods_without_files', False)
@@ -548,8 +550,8 @@ class SearchDisplayController(QObject):
                     finally:
                         self._update_filtered_mods_in_progress = False
                         if self._pending_filter_update:
-                            QTimer.singleShot(100, lambda: self.update_filtered_mods(preserve_page=preserve_page))
-                QTimer.singleShot(0, async_filter)
+                            self.update_filtered_mods(preserve_page=preserve_page)
+                async_filter()
                 return
             if preserve_page and (not self.app_state.auto_sorting) and self.app_state.filtered_mods:
                 re_filtered_existing = filter_and_sort_mods(self.app_state.filtered_mods, filters, sort_config=None, blocklist_service=self.blocklist_service, installed_mod_keys=installed_keys)
@@ -577,12 +579,12 @@ class SearchDisplayController(QObject):
         finally:
             self._update_filtered_mods_in_progress = False
             if self._pending_filter_update:
-                QTimer.singleShot(100, lambda: self.update_filtered_mods(preserve_page=preserve_page))
+                self.update_filtered_mods(preserve_page=preserve_page)
 
     def _flush_pending_display(self):
         if self._pending_display_update:
             self._pending_display_update = False
-            QTimer.singleShot(150, self.update_display)
+            self.update_display()
 
     def update_display(self):
         self._update_display_debounce.call(self._do_update_display)
@@ -597,7 +599,8 @@ class SearchDisplayController(QObject):
             app_instance = QApplication.instance()
             if app_instance and current_thread != app_instance.thread():
                 logger.warning('SearchDisplayController: update_display called from non-main thread, deferring')
-                QTimer.singleShot(0, self.update_display)
+                from PyQt6.QtCore import Qt as QtCore
+                QMetaObject.invokeMethod(self, 'update_display', QtCore.ConnectionType.QueuedConnection)
                 self._update_display_in_progress = False
                 return
             if not hasattr(self.app_state, 'filtered_mods'):
@@ -618,10 +621,10 @@ class SearchDisplayController(QObject):
                             self._load_check_done = True
                             preferred_game = self._determine_preferred_game_for_page(self.app_state.current_page)
                             self._load_more_gamebanana_mods_if_needed(items_needed, preferred_game)
-                            QTimer.singleShot(500, lambda: setattr(self, '_load_check_done', False))
+                            self._load_check_done = False
                         except Exception as e:
                             logger.error(f'SearchDisplayController: Error in deferred_load_check: {e}', exc_info=True)
-                    QTimer.singleShot(100, deferred_load_check)
+                    deferred_load_check()
             start_index = (self.app_state.current_page - 1) * self.app_state.mods_per_page
             end_index = start_index + self.app_state.mods_per_page
             if start_index < 0:
@@ -689,7 +692,6 @@ class SearchDisplayController(QObject):
             widgets_shown = 0
             widgets_created = 0
             BATCH_SIZE = 15
-            BATCH_DELAY_MS = 10
             target_position = 0
             mods_to_process = [(idx, mod) for idx, mod in enumerate(current_page_mods) if mod is not None]
             try:
@@ -745,7 +747,7 @@ class SearchDisplayController(QObject):
                             logger.error(f"Error processing card for mod {(mod.name if mod else 'unknown')} at index {start_index + idx}: {e}", exc_info=True)
                             continue
                     if batch_end < len(mods_to_process):
-                        QTimer.singleShot(BATCH_DELAY_MS, lambda: process_batch(batch_end))
+                        process_batch(batch_end)
                     else:
                         finish_widget_processing()
 
@@ -835,13 +837,13 @@ class SearchDisplayController(QObject):
                                         self.app._mods_display_ready_emitted = True
                                         if app:
                                             app.processEvents()
-                                        QTimer.singleShot(100, lambda: self.app.mods_display_ready.emit())
+                                        self.app.mods_display_ready.emit()
                                 else:
                                     logger.debug('SearchDisplayController: First page not ready, will check again')
-                                    QTimer.singleShot(200, check_and_emit_ready)
+                                    check_and_emit_ready()
                             except Exception as e:
                                 logger.error(f'Error in check_and_emit_ready: {e}', exc_info=True)
-                        QTimer.singleShot(300, check_and_emit_ready)
+                        check_and_emit_ready()
                 self._check_and_emit_ready_if_needed = self_check_and_emit_ready_if_needed
                 if mods_to_process:
                     process_batch(0)

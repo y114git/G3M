@@ -86,7 +86,7 @@ class AppWindow(QWidget):
         self._online_timer = QTimer(self)
         self._online_timer.timeout.connect(self.presence_worker.run)
         self._online_timer.start(ONLINE_UPDATE_INTERVAL)
-        QTimer.singleShot(0, self.presence_worker.run)
+        self.presence_worker.run()
         self.setWindowTitle('DELTAHUB')
         self._supports_volume = platform.system() == 'Windows'
         self._initial_size = None
@@ -160,7 +160,7 @@ class AppWindow(QWidget):
 
         self._update_plugin_tabs()
         self.custom_font_family = localization_service.load_font()
-        QTimer.singleShot(0, lambda: self.ui_ready.emit())
+        self.ui_ready.emit()
         self._connect_own_signals()
         self.initialization_timer = QTimer()
         self.initialization_timer.setSingleShot(True)
@@ -236,7 +236,8 @@ class AppWindow(QWidget):
             self.plugin_display.update_display()
         if self.mod_service:
             self.mod_service.invalidate_mods_cache()
-            QTimer.singleShot(0, lambda: (self.mod_service.load_local_mods(_skip_conversion=True), self.mod_service.mod_list_updated.emit()))
+            self.mod_service.load_local_mods(_skip_conversion=True)
+            self.mod_service.mod_list_updated.emit()
         if hasattr(self, 'library_display'):
             self.library_display.update_display()
         if hasattr(self, 'search_display'):
@@ -476,7 +477,7 @@ class AppWindow(QWidget):
         self._update_change_path_button_text()
         self._setup_chapter_tabs()
         if saved_chapter_mode and hasattr(self, '_show_chapter_mode_instruction'):
-            QTimer.singleShot(600, self._show_chapter_mode_instruction)
+            self._show_chapter_mode_instruction()
 
             def update_priority_button():
                 if self.app_state.selected_chapter_id is not None:
@@ -488,12 +489,12 @@ class AppWindow(QWidget):
                             if chapter_id is not None:
                                 self.library_display._update_priority_button_visibility(chapter_id)
                                 break
-            QTimer.singleShot(800, update_priority_button)
+            update_priority_button()
         elif not saved_chapter_mode:
-            QTimer.singleShot(500, self.library_display.update_display)
-
-            QTimer.singleShot(800, self.library_display._update_priority_button_visibility)
-        QTimer.singleShot(700, self.library_display.update_mod_widgets_active_status)
+            self.library_display.update_display()
+            self.library_display._update_priority_button_visibility()
+            self.app_state.library_initialized = True
+        self.library_display.update_mod_widgets_active_status()
 
     def _setup_plugins_tab(self):
         from ui.builders.plugin_tab_builder import PluginTabBuilder
@@ -583,7 +584,7 @@ class AppWindow(QWidget):
         self.app_state.initialization_completed = True
         self.initialization_finished.emit()
         if hasattr(self.app_state, 'pending_announce_check') and self.app_state.pending_announce_check and (not self.app_state.update_in_progress):
-            QTimer.singleShot(500, self._check_and_show_announce)
+            self._check_and_show_announce()
 
     def _on_mods_loaded(self):
         if self.initialization_timer and self.initialization_timer.isActive():
@@ -752,10 +753,11 @@ class AppWindow(QWidget):
                 with self.mod_service._cache_lock:
                     self.mod_service._mods_cache = scan_cache
                     self.mod_service._mods_cache_valid = True
-            QTimer.singleShot(0, self.mod_service.load_local_mods)
+            self.mod_service.load_local_mods()
             saved_chapter_mode = self.app_state.local_config.get('chapter_mode_enabled', False)
             self.setEnabled(False)
-            QTimer.singleShot(500, lambda: (self._load_mods_and_build_list_synchronously(saved_chapter_mode), self.setEnabled(True)))
+            self._load_mods_and_build_list_synchronously(saved_chapter_mode)
+            self.setEnabled(True)
             self._load_used_mods_debounce.call(self.used_mods_service.load_used_mods_state)
         except Exception as e:
             logging.error(f'AppWindow: Error in _on_mod_scan_finished: {e}', exc_info=True)
@@ -1082,7 +1084,7 @@ class AppWindow(QWidget):
     def _on_refresh_clicked(self, is_initial=False):
         if not is_initial and self.app_state.has_internet:
             if self._reload_global_settings():
-                QTimer.singleShot(500, lambda: self._check_and_show_announce(force_check=True))
+                self._check_and_show_announce(force_check=True)
 
         self.refresh_controller.refresh_mods_list(is_initial=is_initial, language_combo=self.language_combo, localization_callback=self._relocalize_ui, on_fetch_finished_kwargs={'update_filtered_mods_callback': lambda: self.search_display.update_filtered_mods(preserve_page=False), 'update_installed_mods_callback': lambda: self._update_installed_mods_display(), 'update_action_button_callback': lambda: self.game_launch.update_button_state(), 'update_plugin_tabs_callback': self._update_plugin_tabs, 'mods_loaded_signal': self.mods_loaded_signal})
 

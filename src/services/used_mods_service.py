@@ -1,6 +1,6 @@
 """Used mods tracking and management."""
 import logging
-from PyQt6.QtCore import QObject, pyqtSignal, QTimer
+from PyQt6.QtCore import QObject, pyqtSignal
 from typing import Dict, Optional, Any, List, TYPE_CHECKING
 if TYPE_CHECKING:
     from core.app_window import AppWindow
@@ -214,9 +214,9 @@ class UsedModsManager(QObject):
                 needs_save = True
         if needs_save:
             self.save_used_mods_state()
-        QTimer.singleShot(100, self.used_mods_updated.emit)
-        QTimer.singleShot(200, self.mod_widgets_update_needed.emit)
-        QTimer.singleShot(300, self.action_button_update_needed.emit)
+        self.used_mods_updated.emit()
+        self.mod_widgets_update_needed.emit()
+        self.action_button_update_needed.emit()
 
     def _find_mod_by_key(self, key: str):
         """Find mod by key from all_mods, installed mods, or config."""

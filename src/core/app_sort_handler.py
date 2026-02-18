@@ -71,7 +71,7 @@ def handle_gamebanana_sort_changed(w, index: int):
             try:
                 w.search_display.update_filtered_mods()
                 w.app_state.current_page = 1
-                QTimer.singleShot(50, lambda: w.search_display.update_display())
+                w.search_display.update_display()
             except Exception as e:
                 logging.error(f'AppWindow: Error in async_update after sort change: {e}', exc_info=True)
             finally:

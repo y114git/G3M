@@ -1,5 +1,4 @@
 """Controller for settings UI management."""
-from PyQt6.QtCore import QTimer
 from PyQt6.QtWidgets import QWidget
 from services.localization_service import tr
 from config.constants import UI_COLORS
@@ -30,16 +29,12 @@ class SettingsUiController:
             self.app.tab_widget.setVisible(False), self.app.bottom_widget.setVisible(False), self.app.settings_widget.setVisible(True)
             self.switch_settings_page(self.app.settings_menu_page)
             self.update_settings_page_visibility()
-            QTimer.singleShot(0, lambda: self.customization_service.load_custom_style_settings(self.app.color_widgets, self.app.theme.apply_theme))
+            self.customization_service.load_custom_style_settings(self.app.color_widgets, self.app.theme.apply_theme)
             self.app._update_status(tr('status.launcher_settings'), UI_COLORS['status_info'])
         else:
             self.app.settings_button.setText(tr('ui.settings_title'))
-            self.app.setUpdatesEnabled(False)
             self.app.settings_widget.setVisible(False), self.app.main_tab_widget.setVisible(True), self.app.bottom_widget.setVisible(True)
-
-            def finalize():
-                self.app.theme.apply_theme(), self.app.setUpdatesEnabled(True), self.app.update(), self.app.repaint(), self.app.game_launch.update_button_state()
-            QTimer.singleShot(0, finalize)
+            self.app.game_launch.update_button_state()
 
     def show_report_bug_dialog(self):
         from ui.dialogs.report_bug_dialog import ReportBugDialog

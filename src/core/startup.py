@@ -15,7 +15,7 @@ from services.localization_service import localization_service, tr
 from ui.utils.audio_utils import _audio_service
 from core.splash import create_png_splash
 from utils.path_utils import resource_path, get_user_data_root, get_launcher_dir
-from config.constants import SPLASH_MIN_DURATION, LAUNCHER_FALLBACK_TIMEOUT, SPLASH_RETRY_DELAY, SPLASH_WATCHDOG_TIMEOUT
+from config.constants import SPLASH_MIN_DURATION, LAUNCHER_FALLBACK_TIMEOUT, SPLASH_WATCHDOG_TIMEOUT
 import traceback
 if platform.system() == 'Windows':
     import winreg
@@ -361,10 +361,10 @@ def run_app():
                         close_splash_and_show_launcher()
                     ex = launcher_app.get('instance')
                     if ex:
-                        QTimer.singleShot(150, ex._restore_last_active_tab)
+                        ex._restore_last_active_tab()
                 launcher_app['instance'].initialization_finished.connect(on_initialization_finished)
                 if getattr(launcher_app['instance'].app_state, 'initialization_completed', False):
-                    QTimer.singleShot(100, on_initialization_finished)
+                    on_initialization_finished()
 
                 def fallback_show_window():
                     if window_shown_flag['shown']:
@@ -378,7 +378,7 @@ def run_app():
                             close_splash_and_show_launcher()
                         ex = launcher_app.get('instance')
                         if ex:
-                            QTimer.singleShot(150, ex._restore_last_active_tab)
+                            ex._restore_last_active_tab()
                 if show_animation:
                     fallback_time = max(LAUNCHER_FALLBACK_TIMEOUT, int(SPLASH_MIN_DURATION * 1000))
                     QTimer.singleShot(fallback_time, fallback_show_window)
@@ -393,7 +393,7 @@ def run_app():
                 error_msg = tr('errors.startup_error_message', details=str(e))
                 logging.error(f'STARTUP ERROR: {error_msg}')
                 QMessageBox.critical(None, tr('errors.startup_error_title'), error_msg)
-        QTimer.singleShot(SPLASH_RETRY_DELAY, create_launcher)
+        create_launcher()
     create_launcher_and_show_splash(app, url_arg, show_animated_splash)
     try:
         sys.exit(app.exec())
