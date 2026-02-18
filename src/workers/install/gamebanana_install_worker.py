@@ -1,7 +1,6 @@
 """Worker thread for installing mods from GameBanana."""
 import os
 import tempfile
-import shutil
 import logging
 from typing import Optional, Dict
 from PyQt6.QtCore import pyqtSignal, QTimer
@@ -61,36 +60,12 @@ class InstallGameBananaModThread(BaseInstallWorker):
             if not download_url:
                 raise AppError('errors.no_download_url')
             self.status.emit(tr('status.downloading_mod'), UI_COLORS['status_warning'])
-            from utils.file_utils import download_file_with_progress
-            from config.constants import NETWORK_TIMEOUT_HEAD
             file_name = file_choice.get('name') or file_choice.get('_sFile') or file_choice.get('_sName') or f'mod_{mod_id}.zip'
             temp_dir = tempfile.mkdtemp(prefix='gb_download_')
             archive_path = os.path.join(temp_dir, file_name)
             archive_dir = temp_dir
             try:
-                session = get_session()
-                self._session = session
-                downloaded_ref = [0]
-                total_size = 0
-                try:
-                    head_response = session.head(download_url, allow_redirects=True, timeout=NETWORK_TIMEOUT_HEAD)
-                    total_size = int(head_response.headers.get('content-length', 0))
-                except Exception:
-                    pass
-
-                def progress_callback(progress):
-                    if not self._cancelled:
-                        self.progress.emit(progress)
-                        if total_size > 0:
-                            from ui.utils.ui_utils import format_size_mb
-                            downloaded_mb = format_size_mb(downloaded_ref[0])
-                            total_mb = format_size_mb(total_size)
-                            self.status.emit(f"{tr('status.downloading_mod')} ({downloaded_mb} / {total_mb})", UI_COLORS['status_warning'])
-
-                def on_response(r):
-                    self._active_response = r
-                success = download_file_with_progress(download_url, archive_path, progress_callback=progress_callback, session=session, cancel_check=lambda: self._cancelled, on_response=on_response, downloaded_ref=downloaded_ref)
-                if not success:
+                if not self._download_archive_base(download_url, archive_path, tr('status.downloading_mod')):
                     raise RuntimeError('download_failed')
             except RuntimeError as e:
                 if str(e) == 'download_cancelled' or self._cancelled:
@@ -141,7 +116,6 @@ class InstallGameBananaModThread(BaseInstallWorker):
     def _install_deltahub_mod(self, archive_path: str, mod_id: int) -> Optional[str]:
         import json
         from utils.archive_utils import extract_any_archive
-        from utils.file_utils import sanitize_filename
         with tempfile.TemporaryDirectory(prefix='gb_install_dh_') as temp_dir:
             try:
                 extract_any_archive(archive_path, temp_dir)
@@ -191,21 +165,8 @@ class InstallGameBananaModThread(BaseInstallWorker):
                         logger.error(f'Error downloading redirect mod: {e}')
                         raise ValueError(f'Failed to download redirect mod: {e}')
             mod_name = config_data.get('name', f'mod_{mod_id}')
-            folder_name = sanitize_filename(mod_name)
-            target_mod_dir = os.path.join(self.main_window.app_state.mods_dir, folder_name)
-            counter = 1
-            while os.path.exists(target_mod_dir):
-                folder_name_with_counter = f'{folder_name}_{counter}'
-                target_mod_dir = os.path.join(self.main_window.app_state.mods_dir, folder_name_with_counter)
-                counter += 1
-            os.makedirs(target_mod_dir, exist_ok=True)
-            for item in os.listdir(content_root):
-                src_path = os.path.join(content_root, item)
-                dst_path = os.path.join(target_mod_dir, item)
-                if os.path.isdir(src_path):
-                    shutil.copytree(src_path, dst_path)
-                else:
-                    shutil.copy2(src_path, dst_path)
+            target_mod_dir = self._create_unique_mod_dir(self.main_window.app_state.mods_dir, mod_name)
+            self._copy_directory_contents(content_root, target_mod_dir)
             if not config_data.get('external_url') and self.mod_info.external_url:
                 config_data['external_url'] = self.mod_info.external_url
             if self.mod_info.icon_url:
@@ -218,13 +179,7 @@ class InstallGameBananaModThread(BaseInstallWorker):
                 if category_tag:
                     tags = [category_tag]
             if tags:
-                existing_tags = config_data.get('tags', [])
-                if not isinstance(existing_tags, list):
-                    existing_tags = [existing_tags] if existing_tags else []
-                for tag in tags:
-                    if tag and tag not in existing_tags:
-                        existing_tags.append(tag)
-                config_data['tags'] = existing_tags
+                self._merge_tags(config_data, tags)
             expected_mod_key = f'gb_{mod_id}'
             config_data['key'] = expected_mod_key
             if 'mod_key' in config_data:

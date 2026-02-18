@@ -92,3 +92,75 @@ class BaseInstallWorker(QThread):
                     total_mb = format_size_mb(total_size)
                     self.status.emit(f'{status_text} ({downloaded_mb} / {total_mb})', status_color)
         return progress_callback
+
+    def _download_archive_base(self, url: str, target_path: str, status_msg: str) -> bool:
+        from utils.file_utils import download_file_with_progress
+        try:
+            self.status.emit(status_msg, UI_COLORS['status_warning'])
+            from utils.network_utils import get_session
+            session = get_session()
+            self._session = session
+            downloaded_ref = [0]
+            total_size = self._get_content_length(session, url)
+
+            def progress_callback(progress):
+                if not self._cancelled:
+                    self.progress.emit(progress)
+                    if total_size > 0:
+                        downloaded_mb = format_size_mb(downloaded_ref[0])
+                        total_mb = format_size_mb(total_size)
+                        self.status.emit(f"{status_msg} ({downloaded_mb} / {total_mb})", UI_COLORS['status_warning'])
+
+            def on_response(r):
+                self._active_response = r
+
+            success = download_file_with_progress(
+                url, target_path,
+                progress_callback=progress_callback,
+                session=session,
+                cancel_check=lambda: self._cancelled,
+                on_response=on_response,
+                downloaded_ref=downloaded_ref
+            )
+            if not success:
+                raise RuntimeError('download_failed')
+            self.progress.emit(100)
+            return True
+        except RuntimeError as e:
+            if str(e) == 'download_cancelled' or self._cancelled:
+                return False
+            raise
+        except Exception as e:
+            logger.error(f'{self.__class__.__name__}: Download failed: {e}', exc_info=True)
+            return False
+
+    def _create_unique_mod_dir(self, mods_dir: str, mod_name: str) -> str:
+        from utils.file_utils import sanitize_filename
+        folder_name = sanitize_filename(mod_name)
+        target_mod_dir = os.path.join(mods_dir, folder_name)
+        counter = 1
+        while os.path.exists(target_mod_dir):
+            target_mod_dir = os.path.join(mods_dir, f'{folder_name}_{counter}')
+            counter += 1
+        os.makedirs(target_mod_dir, exist_ok=True)
+        return target_mod_dir
+
+    def _copy_directory_contents(self, src_dir: str, dst_dir: str):
+        for item in os.listdir(src_dir):
+            src_path = os.path.join(src_dir, item)
+            dst_path = os.path.join(dst_dir, item)
+            if os.path.isdir(src_path):
+                if os.path.exists(dst_path):
+                    shutil.rmtree(dst_path)
+                shutil.copytree(src_path, dst_path)
+            else:
+                shutil.copy2(src_path, dst_path)
+
+    def _merge_tags(self, config_data: dict, tags: list):
+        existing_tags = config_data.get('tags', [])
+        if not isinstance(existing_tags, list):
+            existing_tags = [existing_tags] if existing_tags else []
+        for tag in tags:
+            if tag and tag not in existing_tags:
+                existing_tags.append(tag)
+        config_data['tags'] = existing_tags

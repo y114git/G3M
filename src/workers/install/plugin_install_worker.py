@@ -7,7 +7,6 @@ import shutil
 import logging
 import tempfile
 from services.localization_service import tr
-from utils.network_utils import get_session, download_file
 from config.constants import UI_COLORS
 from workers.base_install_worker import BaseInstallWorker
 
@@ -39,19 +38,7 @@ class PluginInstallWorker(BaseInstallWorker):
                 return False
 
     def _download_archive(self, url: str, target_path: str) -> bool:
-        try:
-            self.status.emit(tr('plugins.downloading_plugin'), UI_COLORS['status_warning'])
-            session = get_session()
-            self._session = session
-            total_size = self._get_content_length(session, url)
-            downloaded_ref = [0]
-            progress_callback = self._make_download_progress_callback(tr('plugins.downloading_plugin'), total_size, downloaded_ref)
-            download_file(session, url, target_path, progress_callback=progress_callback, total_size=total_size, downloaded_ref=downloaded_ref, cancel_check=lambda: self._cancelled)
-            self.progress.emit(100)
-            return True
-        except Exception as e:
-            logging.error(f'PluginInstallWorker: Download failed: {e}', exc_info=True)
-            return False
+        return self._download_archive_base(url, target_path, tr('plugins.downloading_plugin'))
 
     def run(self):
         try:

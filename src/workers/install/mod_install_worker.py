@@ -1,16 +1,15 @@
 """Mod installation worker."""
 import os
-import json
 import shutil
 import logging
 import tempfile
 from typing import Optional, Dict
 from PyQt6.QtCore import pyqtSignal
 from services.localization_service import tr
-from utils.network_utils import get_session
-from utils.file_utils import sanitize_filename, has_deltamod_info_file
-from config.constants import UI_COLORS, MOD_CONFIG_FILENAME, LEGACY_MOD_CONFIG_FILENAME
+from utils.file_utils import has_deltamod_info_file
+from config.constants import UI_COLORS, MOD_CONFIG_FILENAME
 from workers.base_install_worker import BaseInstallWorker
+from workers.install.helpers_install import find_mod_config, normalize_mod_key, load_mod_config, save_mod_config
 
 
 class ModInstallWorker(BaseInstallWorker):
@@ -26,62 +25,24 @@ class ModInstallWorker(BaseInstallWorker):
         self.is_pizza_tower_selected = is_pizza_tower_selected
 
     def _download_archive(self, url: str, target_path: str) -> bool:
+        temp_dir = tempfile.mkdtemp(prefix='dh-mod-import-')
+        archive_path = os.path.join(temp_dir, os.path.basename(target_path))
         try:
-            from utils.file_utils import download_file_with_progress
-            from ui.utils.ui_utils import format_size_mb
-            from config.constants import NETWORK_TIMEOUT_HEAD
-            self.status.emit(tr('mods.downloading_mod'), UI_COLORS['status_warning'])
-            temp_dir = tempfile.mkdtemp(prefix='dh-mod-import-')
-            archive_path = os.path.join(temp_dir, os.path.basename(target_path))
+            if not self._download_archive_base(url, archive_path, tr('mods.downloading_mod')):
+                self._cleanup_temp_files(archive_path, temp_dir)
+                return False
+            if archive_path and os.path.exists(archive_path):
+                target_dir = os.path.dirname(target_path)
+                os.makedirs(target_dir, exist_ok=True)
+                shutil.move(archive_path, target_path)
+                return True
+            return False
+        finally:
             try:
-                session = get_session()
-                self._session = session
-                downloaded_ref = [0]
-                total_size = 0
-                try:
-                    head_response = session.head(url, allow_redirects=True, timeout=NETWORK_TIMEOUT_HEAD)
-                    total_size = int(head_response.headers.get('content-length', 0))
-                except Exception:
-                    pass
-
-                def progress_callback(progress):
-                    if not self._cancelled:
-                        self.progress.emit(progress)
-                        if total_size > 0:
-                            downloaded_mb = format_size_mb(downloaded_ref[0])
-                            total_mb = format_size_mb(total_size)
-                            self.status.emit(f"{tr('mods.downloading_mod')} ({downloaded_mb} / {total_mb})", UI_COLORS['status_warning'])
-
-                def on_response(r):
-                    self._active_response = r
-                success = download_file_with_progress(url, archive_path, progress_callback=progress_callback, session=session, cancel_check=lambda: self._cancelled, on_response=on_response, downloaded_ref=downloaded_ref)
-                if not success:
-                    raise RuntimeError('download_failed')
-                if archive_path and os.path.exists(archive_path):
-                    target_dir = os.path.dirname(target_path)
-                    os.makedirs(target_dir, exist_ok=True)
-                    shutil.move(archive_path, target_path)
-                    return True
-                return False
-            except RuntimeError as e:
-                if str(e) == 'download_cancelled' or self._cancelled:
-                    self._cleanup_temp_files(archive_path, temp_dir)
-                    return False
-                raise
-            finally:
-                try:
-                    if os.path.exists(temp_dir):
-                        shutil.rmtree(temp_dir, ignore_errors=True)
-                except Exception:
-                    pass
-        except RuntimeError as e:
-            if str(e) == 'download_cancelled':
-                return False
-            logging.error(f'ModInstallWorker: Download failed: {e}', exc_info=True)
-            return False
-        except Exception as e:
-            logging.error(f'ModInstallWorker: Download failed: {e}', exc_info=True)
-            return False
+                if os.path.exists(temp_dir):
+                    shutil.rmtree(temp_dir, ignore_errors=True)
+            except Exception:
+                pass
 
     def _install_mod_from_path(self, content_path: str) -> bool:
         try:
@@ -94,48 +55,17 @@ class ModInstallWorker(BaseInstallWorker):
                 if not new_mod_path:
                     logging.error('ModInstallWorker: Deltamod conversion failed')
                 return bool(new_mod_path)
-            mod_config_path = None
-            for config_name in (MOD_CONFIG_FILENAME, LEGACY_MOD_CONFIG_FILENAME):
-                for root, dirs, files in os.walk(content_path):
-                    if config_name in files:
-                        mod_config_path = os.path.join(root, config_name)
-                        break
-                if mod_config_path:
-                    break
+            mod_config_path = find_mod_config(content_path)
             if not mod_config_path:
                 logging.error('ModInstallWorker: config file not found in mod archive')
                 return False
-            try:
-                with open(mod_config_path, 'r', encoding='utf-8') as f:
-                    config_data = json.load(f)
-            except Exception as e:
-                logging.error(f'ModInstallWorker: Error reading mod config: {e}')
+            config_data = load_mod_config(mod_config_path)
+            if not config_data:
                 return False
-            key = config_data.get('key') or config_data.get('mod_key')
-            if not key:
-                mod_name = config_data.get('name', 'imported_mod')
-                key = f"local_{sanitize_filename(mod_name).lower().replace(' ', '_')}"
-                config_data['key'] = key
-                if 'mod_key' in config_data:
-                    del config_data['mod_key']
+            normalize_mod_key(config_data)
             mod_name = config_data.get('name', 'imported_mod')
-            folder_name = sanitize_filename(mod_name)
-            target_mod_dir = os.path.join(self.mods_dir, folder_name)
-            counter = 1
-            while os.path.exists(target_mod_dir):
-                folder_name_with_counter = f'{folder_name}_{counter}'
-                target_mod_dir = os.path.join(self.mods_dir, folder_name_with_counter)
-                counter += 1
-            os.makedirs(target_mod_dir, exist_ok=True)
-            for item in os.listdir(content_path):
-                src_path = os.path.join(content_path, item)
-                dst_path = os.path.join(target_mod_dir, item)
-                if os.path.isdir(src_path):
-                    if os.path.exists(dst_path):
-                        shutil.rmtree(dst_path)
-                    shutil.copytree(src_path, dst_path)
-                else:
-                    shutil.copy2(src_path, dst_path)
+            target_mod_dir = self._create_unique_mod_dir(self.mods_dir, mod_name)
+            self._copy_directory_contents(content_path, target_mod_dir)
             target_config_path = os.path.join(target_mod_dir, MOD_CONFIG_FILENAME)
             config_updated = False
             if self.gamebanana_metadata:
@@ -164,13 +94,7 @@ class ModInstallWorker(BaseInstallWorker):
                     if category_tag:
                         tags = [category_tag]
                 if tags:
-                    existing_tags = config_data.get('tags', [])
-                    if not isinstance(existing_tags, list):
-                        existing_tags = [existing_tags] if existing_tags else []
-                    for tag in tags:
-                        if tag and tag not in existing_tags:
-                            existing_tags.append(tag)
-                    config_data['tags'] = existing_tags
+                    self._merge_tags(config_data, tags)
             game = config_data.get('game') or config_data.get('modgame', 'deltarune')
             if 'files' in config_data:
                 for chapter_key, chapter_data in config_data['files'].items():
@@ -201,8 +125,7 @@ class ModInstallWorker(BaseInstallWorker):
                 config_updated = True
             final_config_path = target_config_path if os.path.exists(target_config_path) else os.path.join(target_mod_dir, MOD_CONFIG_FILENAME)
             if config_updated or not os.path.exists(final_config_path):
-                from utils.file_utils import save_json
-                save_json(final_config_path, config_data, indent=2)
+                save_mod_config(final_config_path, config_data, indent=2)
             return True
         except Exception as e:
             logging.error(f'ModInstallWorker: Error installing mod from path: {e}', exc_info=True)

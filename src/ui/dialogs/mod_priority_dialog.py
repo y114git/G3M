@@ -2,6 +2,7 @@ from typing import List, Any
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QListWidget, QListWidgetItem, QAbstractItemView
 from services.localization_service import tr
+from ui.common.dialog_theme import apply_dialog_theme
 from ui.common.styling import get_theme_color
 
 
@@ -85,13 +86,8 @@ class ModPriorityDialog(QDialog):
         return self.result_list if self.result_list is not None else self.mods_list
 
     def _apply_theme(self):
-        bg_color = get_theme_color(self.app_state.local_config, 'background', '#000000')
-        border_color = get_theme_color(self.app_state.local_config, 'border', 'white')
-        button_color = get_theme_color(self.app_state.local_config, 'button', 'black')
-        hover_color = get_theme_color(self.app_state.local_config, 'button_hover', '#333')
-        text_color = get_theme_color(self.app_state.local_config, 'text', 'white')
+        apply_dialog_theme(self, self.app_state)
         secondary_text_color = get_theme_color(self.app_state.local_config, 'version_text', '#888888')
-        self.setStyleSheet(f'\n            QDialog {{\n                background-color: {bg_color};\n                color: {text_color};\n            }}\n            QListWidget {{\n                background-color: {bg_color};\n                border: 2px solid {border_color};\n                color: {text_color};\n                padding: 5px;\n            }}\n            QListWidget::item {{\n                padding: 8px;\n                border-bottom: 1px solid {border_color};\n            }}\n            QListWidget::item:selected {{\n                background-color: {hover_color};\n            }}\n            QPushButton {{\n                background-color: {button_color};\n                border: 2px solid {border_color};\n                color: {text_color};\n                padding: 8px 15px;\n                font-weight: bold;\n            }}\n            QPushButton:hover {{\n                background-color: {hover_color};\n            }}\n            QPushButton:pressed {{\n                background-color: {hover_color};\n            }}\n            QLabel {{\n                color: {text_color};\n            }}\n        ')
         instructions = None
         layout = self.layout()
         if layout is not None:

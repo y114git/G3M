@@ -8,7 +8,6 @@ import logging
 import tempfile
 import json
 from services.localization_service import tr
-from utils.network_utils import get_session, download_file
 from config.constants import UI_COLORS
 from workers.base_install_worker import BaseInstallWorker
 
@@ -48,19 +47,7 @@ class ThemeInstallWorker(BaseInstallWorker):
                 shutil.copy2(src_path, dest_path)
 
     def _download_archive(self, url: str, target_path: str) -> bool:
-        try:
-            self.status.emit(tr('themes.downloading_theme'), UI_COLORS['status_warning'])
-            session = get_session()
-            self._session = session
-            total_size = self._get_content_length(session, url)
-            downloaded_ref = [0]
-            progress_callback = self._make_download_progress_callback(tr('themes.downloading_theme'), total_size, downloaded_ref)
-            download_file(session, url, target_path, progress_callback=progress_callback, total_size=total_size, downloaded_ref=downloaded_ref, cancel_check=lambda: self._cancelled)
-            self.progress.emit(100)
-            return True
-        except Exception as e:
-            logging.error(f'ThemeInstallWorker: Download failed: {e}', exc_info=True)
-            return False
+        return self._download_archive_base(url, target_path, tr('themes.downloading_theme'))
 
     def _install_theme_from_path(self, content_path: str) -> bool:
         try:

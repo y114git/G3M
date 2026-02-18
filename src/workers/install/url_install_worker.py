@@ -7,13 +7,13 @@ import threading
 import logging
 from typing import Optional
 from PyQt6.QtCore import pyqtSignal
-from config.constants import UI_COLORS, NETWORK_TIMEOUT_HEAD, MOD_CONFIG_FILENAME
+from config.constants import UI_COLORS, MOD_CONFIG_FILENAME
 from services.localization_service import tr
 from core.exceptions import AppError
 from utils.file_utils import has_deltamod_info_file, check_filename_is_deltamod_info
 from utils.network_utils import get_session, download_file
-from ui.utils.ui_utils import format_size_mb
 from workers.base_install_worker import BaseInstallWorker
+from workers.install.helpers_install import find_mod_config, normalize_mod_key, load_mod_config, save_mod_config
 
 
 class UrlInstallThread(BaseInstallWorker):
@@ -96,58 +96,26 @@ class UrlInstallThread(BaseInstallWorker):
                     raise AppError('errors.deltamod_archive_invalid_redirect')
 
     def _install_deltahub_mod_from_path(self, content_path: str) -> Optional[str]:
-        from utils.file_utils import sanitize_filename
-        mod_config_path = None
-        for root, dirs, files in os.walk(content_path):
-            if MOD_CONFIG_FILENAME in files:
-                mod_config_path = os.path.join(root, MOD_CONFIG_FILENAME)
-                break
+        mod_config_path = find_mod_config(content_path)
         if not mod_config_path:
             logging.error('mod_config.json not found in DELTAHUB mod archive')
             return None
-        try:
-            with open(mod_config_path, 'r', encoding='utf-8') as f:
-                config_data = json.load(f)
-        except Exception as e:
-            logging.error(f'Error reading mod_config.json: {e}')
+        config_data = load_mod_config(mod_config_path)
+        if not config_data:
             return None
-        key = config_data.get('key') or config_data.get('mod_key')
-        if not key:
-            mod_name = config_data.get('name', 'imported_mod')
-            key = f"local_{sanitize_filename(mod_name).lower().replace(' ', '_')}"
-            config_data['key'] = key
-            if 'mod_key' in config_data:
-                del config_data['mod_key']
+        key = normalize_mod_key(config_data)
         mod_name = config_data.get('name', 'imported_mod')
-        folder_name = sanitize_filename(mod_name)
-        target_mod_dir = os.path.join(self.main_window.app_state.mods_dir, folder_name)
-        counter = 1
-        while os.path.exists(target_mod_dir):
-            folder_name_with_counter = f'{folder_name}_{counter}'
-            target_mod_dir = os.path.join(self.main_window.app_state.mods_dir, folder_name_with_counter)
-            counter += 1
-        os.makedirs(target_mod_dir, exist_ok=True)
-        for item in os.listdir(content_path):
-            src_path = os.path.join(content_path, item)
-            dst_path = os.path.join(target_mod_dir, item)
-            if os.path.isdir(src_path):
-                if os.path.exists(dst_path):
-                    shutil.rmtree(dst_path)
-                shutil.copytree(src_path, dst_path)
-            else:
-                shutil.copy2(src_path, dst_path)
+        target_mod_dir = self._create_unique_mod_dir(self.main_window.app_state.mods_dir, mod_name)
+        self._copy_directory_contents(content_path, target_mod_dir)
         target_config_path = os.path.join(target_mod_dir, MOD_CONFIG_FILENAME)
         try:
-            with open(target_config_path, 'w', encoding='utf-8') as f:
-                json.dump(config_data, f, indent=4, ensure_ascii=False)
+            save_mod_config(target_config_path, config_data)
             logging.info(f'Installed DELTAHUB mod from URL: {target_mod_dir}, key={key}')
-        except Exception as e:
-            logging.error(f'Error writing mod_config.json: {e}')
+        except Exception:
             return None
         return target_mod_dir
 
     def _download_archive(self, url: str, temp_dir: str) -> str:
-        import requests
         from urllib.parse import urlparse, unquote
         from utils.network_utils import get_filename_from_url
         parsed_url = urlparse(url)
@@ -167,19 +135,8 @@ class UrlInstallThread(BaseInstallWorker):
         session = get_session()
         self._session = session
         downloaded_ref = [0]
-        total_size = 0
-        try:
-            head_response = session.head(url, allow_redirects=True, timeout=NETWORK_TIMEOUT_HEAD)
-            total_size = int(head_response.headers.get('content-length', 0))
-        except (requests.RequestException, ValueError) as e:
-            logging.debug(f'UrlInstallThread: Could not get content-length from HEAD request: {e}')
-
-        def progress_callback(progress):
-            self.progress.emit(progress)
-            if total_size > 0:
-                downloaded_mb = format_size_mb(downloaded_ref[0])
-                total_mb = format_size_mb(total_size)
-                self.status.emit(f"{tr('status.downloading_mod')} ({downloaded_mb} / {total_mb})", UI_COLORS['status_warning'])
+        total_size = self._get_content_length(session, url)
+        progress_callback = self._make_download_progress_callback(tr('status.downloading_mod'), total_size, downloaded_ref)
 
         def on_response(r):
             self._active_response = r
@@ -312,26 +269,6 @@ class UrlInstallThread(BaseInstallWorker):
                         os.remove(old_file_path)
                     except Exception as e:
                         logging.warning(f'Failed to remove old file {old_file}: {e}')
-            app_state.local_config['custom_background_path'] = ''
-            for filename in os.listdir(theme_dir):
-                src_path = os.path.join(theme_dir, filename)
-                if filename.startswith('background.'):
-                    ext = os.path.splitext(filename)[1]
-                    dest_path = os.path.join(config_dir, f'custom_background{ext}')
-                    shutil.copy2(src_path, dest_path)
-                    app_state.local_config['custom_background_path'] = dest_path
-                elif filename.startswith('background_music.'):
-                    dest_path = os.path.join(config_dir, f'custom_background_music{os.path.splitext(filename)[1]}')
-                    shutil.copy2(src_path, dest_path)
-                elif filename.startswith('startup_sound.'):
-                    dest_path = os.path.join(config_dir, f'custom_startup_sound{os.path.splitext(filename)[1]}')
-                    shutil.copy2(src_path, dest_path)
-            settings_service.write_local_config()
-            app_state.local_config['first_launch_splash_shown'] = True
-            if 'disable_splash' in theme_settings:
-                app_state.local_config['disable_splash'] = theme_settings['disable_splash']
-            elif 'disable_splash' not in app_state.local_config:
-                app_state.local_config['disable_splash'] = True
             settings_service.write_local_config()
             self.status.emit(tr('themes.theme_installed'), 'success')
             self.finished.emit(True, tr('themes.theme_installed_success'))
