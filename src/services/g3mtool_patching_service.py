@@ -11,14 +11,13 @@ from typing import Dict, List, Any, Optional, Tuple
 from PyQt6.QtCore import QObject, pyqtSignal
 
 from adapters.g3mtool_adapter import G3MToolManager
+from config.constants import MAX_PATCHING_ARCHIVES, MOD_TYPE_G3MPATCH, MOD_TYPE_XDELTA, MOD_TYPE_DATAFILE, MOD_TYPE_OVERRIDES_ONLY
 from services.backup_service import BackupManager
 from services.localization_service import tr
 from utils.file_utils import ensure_writable, safe_rmtree, get_chapter_folder_name
 from utils.path_utils import get_user_data_root
 from utils.patching import mod_content_utils as mod_content
 from utils.patching.mod_resolve_utils import get_mod_source_dir, get_target_dir
-
-MAX_PATCHING_ARCHIVES = 10
 
 
 def _get_patching_logs_dir() -> str:
@@ -75,12 +74,6 @@ def _get_patching_logger() -> logging.Logger:
     logger.setLevel(logging.DEBUG)
     logger.propagate = False
     return logger
-
-
-MOD_TYPE_G3MPATCH = 'g3mpatch'
-MOD_TYPE_XDELTA = 'xdelta'
-MOD_TYPE_DATAWIN = 'datawin'
-MOD_TYPE_OVERRIDES_ONLY = 'overrides_only'
 
 
 class G3MToolPatchingService(QObject):
@@ -242,7 +235,7 @@ class G3MToolPatchingService(QObject):
                 return False
             return True
 
-        if mod_type == MOD_TYPE_DATAWIN:
+        if mod_type == MOD_TYPE_DATAFILE:
 
             self.patching_logger.info(f'Copying replacement data.win: {patch_file}')
             try:
@@ -332,7 +325,7 @@ class G3MToolPatchingService(QObject):
 
         ready_files = mod_content.find_ready_data_win_files(mod_source_dir)
         if ready_files:
-            return (ready_files[0], MOD_TYPE_DATAWIN)
+            return (ready_files[0], MOD_TYPE_DATAFILE)
 
         return (None, MOD_TYPE_OVERRIDES_ONLY)
 

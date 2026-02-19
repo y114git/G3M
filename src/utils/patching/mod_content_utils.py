@@ -74,25 +74,6 @@ def find_ready_data_win_files(mod_source_dir: str, logger=None) -> List[str]:
             ready_files.append(file_path)
             if logger:
                 logger.debug(f'Found ready .win file: {file_path}')
-    info_datawinmod_dir = None
-    if mod_source_dir:
-        mod_root = os.path.dirname(mod_source_dir) if os.path.basename(mod_source_dir).startswith('chapter_') else mod_source_dir
-        info_datawinmod_path = os.path.join(mod_root, 'INFO', 'datawinmod')
-        if os.path.isdir(info_datawinmod_path):
-            info_datawinmod_dir = info_datawinmod_path
-            if logger:
-                logger.debug(f'Found INFO/datawinmod directory: {info_datawinmod_path}')
-    if info_datawinmod_dir:
-        chapter_name = os.path.basename(mod_source_dir)
-        datawinmod_chapter_dir = os.path.join(info_datawinmod_dir, chapter_name)
-        if os.path.isdir(datawinmod_chapter_dir):
-            if logger:
-                logger.debug(f'Searching for ready files in INFO/datawinmod: {datawinmod_chapter_dir}')
-            info_files = find_files_by_extension(datawinmod_chapter_dir, ['.win', '.ios'], data_file_names)
-            ready_files.extend(info_files)
-            if logger:
-                for file_path in info_files:
-                    logger.debug(f'Found ready data file in INFO/datawinmod: {file_path}')
     if logger:
         logger.info(f'find_ready_data_win_files: found {len(ready_files)} ready data file(s) in {mod_source_dir}')
     return ready_files

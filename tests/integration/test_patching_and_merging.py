@@ -9,7 +9,7 @@ from pathlib import Path
 from unittest.mock import Mock
 from services.g3mtool_patching_service import (
     G3MToolPatchingService, MOD_TYPE_G3MPATCH, MOD_TYPE_XDELTA,
-    MOD_TYPE_DATAWIN, MOD_TYPE_OVERRIDES_ONLY,
+    MOD_TYPE_DATAFILE, MOD_TYPE_OVERRIDES_ONLY,
 )
 from adapters.g3mtool_adapter import G3MToolManager
 from services.backup_service import BackupManager
@@ -66,13 +66,13 @@ class TestModClassification:
         assert mod_type == MOD_TYPE_XDELTA
         assert patch_file.endswith('.vcdiff')
 
-    def test_classify_datawin(self, tmp_path):
+    def test_classify_datafile(self, tmp_path):
         mod_dir = tmp_path / 'mod'
         mod_dir.mkdir()
         (mod_dir / 'data.win').write_bytes(b'FORM' + b'\x00' * 100)
         patcher = G3MToolPatchingService(Mock(), Mock())
         patch_file, mod_type = patcher._classify_mod(str(mod_dir))
-        assert mod_type == MOD_TYPE_DATAWIN
+        assert mod_type == MOD_TYPE_DATAFILE
         assert patch_file.endswith('data.win')
 
     def test_classify_overrides_only(self, tmp_path):

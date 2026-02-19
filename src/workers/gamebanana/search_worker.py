@@ -10,8 +10,9 @@ from services.localization_service import tr
 from adapters.gamebanana_adapter import GameBananaAPI
 from typing import List
 from models.mod_models import ModInfo
+from config.constants import SEARCH_TIMEOUT_SECONDS
+
 logger = logging.getLogger(__name__)
-SEARCH_TIMEOUT_SECONDS = 10
 
 
 class SearchGameBananaModsThread(QThread):

@@ -15,22 +15,18 @@ from services.localization_service import localization_service, tr
 from ui.utils.audio_utils import _audio_service
 from core.splash import create_png_splash
 from utils.path_utils import resource_path, get_user_data_root, get_launcher_dir
-from config.constants import SPLASH_MIN_DURATION, LAUNCHER_FALLBACK_TIMEOUT, SPLASH_WATCHDOG_TIMEOUT
+from config.constants import SPLASH_MIN_DURATION, LAUNCHER_FALLBACK_TIMEOUT, SPLASH_WATCHDOG_TIMEOUT, SINGLE_INSTANCE_KEY, GAME_PROCESS_NAMES
 import traceback
 if platform.system() == 'Windows':
     import winreg
-
-
-SINGLE_INSTANCE_KEY = 'deltahub.y.114.single-instance-lock'
 _translator = QTranslator()
 _splash_start_time = None
 
 
 def check_game_processes():
-    game_processes = {'DELTARUNE.exe', 'UNDERTALE.exe', 'DELTARUNEdemo.exe', 'DELTARUNE', 'UNDERTALE', 'DELTARUNEdemo'}
     for proc in psutil.process_iter(['name']):
         try:
-            if proc.info['name'] in game_processes:
+            if proc.info['name'] in GAME_PROCESS_NAMES:
                 return proc.info['name']
         except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
             pass
