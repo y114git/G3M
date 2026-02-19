@@ -86,7 +86,8 @@ class AppWindow(QWidget):
         self._online_timer = QTimer(self)
         self._online_timer.timeout.connect(self.presence_worker.run)
         self._online_timer.start(ONLINE_UPDATE_INTERVAL)
-        self.presence_worker.run()
+        from PyQt6.QtCore import QMetaObject, Qt
+        QMetaObject.invokeMethod(self.presence_worker, 'run', Qt.ConnectionType.QueuedConnection)
         self.setWindowTitle('DELTAHUB')
         self._supports_volume = platform.system() == 'Windows'
         self._initial_size = None
@@ -1085,6 +1086,8 @@ class AppWindow(QWidget):
         if not is_initial and self.app_state.has_internet:
             if self._reload_global_settings():
                 self._check_and_show_announce(force_check=True)
+            from PyQt6.QtCore import QMetaObject, Qt
+            QMetaObject.invokeMethod(self.presence_worker, 'run', Qt.ConnectionType.QueuedConnection)
 
         self.refresh_controller.refresh_mods_list(is_initial=is_initial, language_combo=self.language_combo, localization_callback=self._relocalize_ui, on_fetch_finished_kwargs={'update_filtered_mods_callback': lambda: self.search_display.update_filtered_mods(preserve_page=False), 'update_installed_mods_callback': lambda: self._update_installed_mods_display(), 'update_action_button_callback': lambda: self.game_launch.update_button_state(), 'update_plugin_tabs_callback': self._update_plugin_tabs, 'mods_loaded_signal': self.mods_loaded_signal})
 
