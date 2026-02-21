@@ -1,8 +1,5 @@
 """Localization utilities for the main application window."""
-from PyQt6.QtWidgets import QWidget
-from services.localization_service import tr
-from ui.common.styling import get_theme_color
-from services.localization_service import localization_service
+from services.localization_service import tr, localization_service
 
 
 WIDGET_LOCALIZATIONS = [
@@ -31,15 +28,16 @@ WIDGET_LOCALIZATIONS = [
     ('launch_via_steam_checkbox', 'setText', 'ui.steam_launch'),
     ('hide_mods_without_files_checkbox', 'setText', 'ui.hide_mods_without_files'),
     ('open_deltahub_folder_button', 'setText', 'buttons.open_deltahub_folder'),
-    ('customization_button', 'setText', 'tags.customization'),
     ('reset_button', 'setText', 'buttons.reset_settings'),
-    ('back_button_cust', 'setText', 'ui.back_button'),
+    ('settings_custom_executable_button', 'setText', 'buttons.custom_executable'),
+    ('settings_custom_executable_button', 'setToolTip', 'tooltips.custom_executable_library'),
+    ('hide_library_filters_checkbox', 'setText', 'ui.hide_library_filters'),
+    ('hide_library_filters_checkbox', 'setToolTip', 'tooltips.hide_library_filters'),
     ('disable_background_checkbox', 'setText', 'checkboxes.disable_background'),
     ('disable_splash_checkbox', 'setText', 'checkboxes.disable_splash'),
     ('mods_per_page_label', 'setText', 'ui.mods_per_page_label'),
     ('mods_per_page_spinbox', 'setToolTip', 'ui.mods_per_page_tooltip'),
-    ('custom_executable_button', 'setText', 'buttons.custom_executable'),
-    ('custom_executable_button', 'setToolTip', 'tooltips.custom_executable_library'),
+    ('gb_sort_label', 'setText', 'ui.gamebanana_sort_label'),
     ('auto_sorting_checkbox', 'setText', 'ui.auto_sorting'),
     ('auto_sorting_checkbox', 'setToolTip', 'ui.auto_sorting_tooltip'),
     ('blocklist_button', 'setText', 'ui.blocklist'),
@@ -57,6 +55,9 @@ WIDGET_LOCALIZATIONS = [
     ('import_export_button', 'setText', 'ui.import_export_mod'),
     ('report_bug_button', 'setText', 'buttons.report_bug'),
     ('theme_button', 'setText', 'buttons.theme_management'),
+    ('hide_mods_browser_tab_checkbox', 'setText', 'ui.hide_mods_browser_tab'),
+    ('hide_library_tab_checkbox', 'setText', 'ui.hide_library_tab'),
+    ('hide_plugins_tab_checkbox', 'setText', 'ui.hide_plugins_tab'),
 ]
 
 PLUGIN_WIDGET_LOCALIZATIONS = [
@@ -75,23 +76,23 @@ def relocalize_texts(w):
     """Apply all localized texts to the window's widgets."""
     w.color_config = {'background': tr('ui.background_color'), 'button': tr('ui.elements_color'), 'border': tr('ui.border_color'), 'button_hover': tr('ui.hover_color'), 'text': tr('ui.main_text_color'), 'version_text': tr('ui.secondary_text_color')}
     w.settings_button.setText(tr('ui.back_button') if w.app_state.is_settings_view else tr('ui.settings_title'))
-    w.main_tab_widget.setTabText(0, tr('ui.search_tab'))
-    w.main_tab_widget.setTabText(1, tr('ui.library_tab'))
-    if hasattr(w, 'plugins_tab') and w.main_tab_widget.count() > 2:
-        w.main_tab_widget.setTabText(2, tr('ui.plugins_tab'))
+    tab_labels = []
+    if hasattr(w, 'search_mods_tab'):
+        tab_labels.append((w.search_mods_tab, tr('ui.search_tab')))
+    if hasattr(w, 'library_tab'):
+        tab_labels.append((w.library_tab, tr('ui.library_tab')))
+    if hasattr(w, 'plugins_tab'):
+        tab_labels.append((w.plugins_tab, tr('ui.plugins_tab')))
+    for tab_widget, label in tab_labels:
+        idx = w.main_tab_widget.indexOf(tab_widget)
+        if idx >= 0:
+            w.main_tab_widget.setTabText(idx, label)
     w._apply_widget_localizations(WIDGET_LOCALIZATIONS)
     for combo_name, keys in COMBO_LOCALIZATIONS.items():
         w._apply_combo_localizations(combo_name, keys)
-    if hasattr(w, 'gb_sort_label'):
-        w.gb_sort_label.setText(tr('ui.gamebanana_sort_label'))
-        w._apply_combo_localizations('gb_sort_combo', ['ui.gamebanana_sort_default', 'ui.gamebanana_sort_new', 'ui.gamebanana_sort_updated'])
-        w.gb_sort_combo.setToolTip(tr('ui.gamebanana_sort_tooltip'))
-    if hasattr(w, 'reset_custom_exe_button') and w.reset_custom_exe_button:
+    if hasattr(w, 'settings_reset_custom_exe_button') and w.settings_reset_custom_exe_button:
         w._update_custom_executable_ui()
-    if hasattr(w, 'blocklist_button') and w.blocklist_button:
-        w.blocklist_button.setStyleSheet('font-size: 11px; padding: 0px 4px; border: 2px solid white;')
     w.full_install_checkbox.setToolTip(w._full_install_tooltip())
-    w.settings_title_label.setText(f"<h1>{tr('ui.settings_title')}</h1>")
     w.launch_via_steam_checkbox.setToolTip("<html><body style='white-space: normal;'>" + tr('tooltips.steam') + '</body></html>')
     if w.use_portproton_checkbox:
         w.use_portproton_checkbox.setText(tr('ui.use_portproton'))
@@ -100,6 +101,23 @@ def relocalize_texts(w):
         w.select_portproton_path_button.setText(tr('buttons.select_portproton_path'))
     w.hide_mods_without_files_checkbox.setToolTip("<html><body style='white-space: normal;'>" + tr('tooltips.hide_mods_without_files') + '</body></html>')
     w._update_change_path_button_text()
+    if hasattr(w, 'settings_tab_widget'):
+        w.settings_tab_widget.setTabText(0, tr('ui.settings_tab_general'))
+        w.settings_tab_widget.setTabText(1, tr('ui.settings_tab_appearance'))
+        w.settings_tab_widget.setTabText(2, tr('ui.settings_tab_mods_browser'))
+        w.settings_tab_widget.setTabText(3, tr('ui.settings_tab_library'))
+        w.settings_tab_widget.setTabText(4, tr('ui.settings_tab_launch'))
+    if hasattr(w, '_update_settings_library_tab'):
+        w._update_settings_library_tab()
+    if hasattr(w, '_section_headers'):
+        for lbl, key in w._section_headers:
+            try:
+                lbl.setText(tr(key))
+            except (RuntimeError, AttributeError):
+                pass
+    w._apply_combo_localizations('gb_sort_combo', ['ui.gamebanana_sort_default', 'ui.gamebanana_sort_new', 'ui.gamebanana_sort_updated'])
+    if hasattr(w, 'gb_sort_combo'):
+        w.gb_sort_combo.setToolTip(tr('ui.gamebanana_sort_tooltip'))
     w.theme.update_background_button_state()
     w.theme.update_logo_button_state()
     w.background_music_button.setText(w.customization_service.get_background_music_button_text())
@@ -131,13 +149,10 @@ def relocalize_ui(w):
     w._suppress_tab_handlers = True
     try:
         current_index = w.main_tab_widget.currentIndex() if hasattr(w, 'main_tab_widget') else -1
-        current_widget = None
         current_plugin = None
         try:
-            if current_index >= 0:
-                current_widget = w.main_tab_widget.widget(current_index)
-                if isinstance(current_widget, QWidget) and current_index in getattr(w, '_plugin_tab_map', {}):
-                    current_plugin = w._plugin_tab_map.get(current_index)
+            if current_index >= 0 and current_index in getattr(w, '_plugin_tab_map', {}):
+                current_plugin = w._plugin_tab_map.get(current_index)
         except Exception:
             pass
         language_code = w.app_state.local_config.get('language', 'en')
@@ -149,71 +164,17 @@ def relocalize_ui(w):
             if hasattr(w, 'main_tab_widget') and current_index >= 0 and (current_index < w.main_tab_widget.count()):
                 w.main_tab_widget.setCurrentIndex(current_index)
                 if current_plugin:
-                    widget = w.main_tab_widget.widget(current_index)
-                    if isinstance(widget, QWidget) and widget.layout() is None:
-                        handler = current_plugin.get('page_init') if callable(current_plugin.get('page_init')) else current_plugin.get('on_tab_open')
-                        try:
-                            plugin_api = current_plugin.get('api')
-                            if plugin_api:
-                                setattr(w, 'plugin_api', plugin_api)
-                            try:
-                                new_widget = handler(w) if callable(handler) else None
-                                if isinstance(new_widget, QWidget):
-                                    w.main_tab_widget.removeTab(current_index)
-                                    w.main_tab_widget.insertTab(current_index, new_widget, tr(current_plugin['name_key']))
-                                    w.main_tab_widget.setCurrentIndex(current_index)
-                            finally:
-                                if hasattr(w, 'plugin_api'):
-                                    delattr(w, 'plugin_api')
-                        except Exception:
-                            if hasattr(w, 'plugin_api'):
-                                delattr(w, 'plugin_api')
-                            pass
+                    w._init_plugin_placeholder_tab(current_index)
         except Exception:
             pass
         w._relocalize_texts()
-        try:
-            if hasattr(w, 'hide_library_filters_checkbox'):
-                w.hide_library_filters_checkbox.setText(tr('ui.hide_library_filters'))
-                w.hide_library_filters_checkbox.setToolTip(tr('tooltips.hide_library_filters'))
-        except Exception:
-            pass
         w.theme.apply_theme()
-        if hasattr(w, '_update_chapter_tabs_style'):
-            w._update_chapter_tabs_style()
         try:
             if hasattr(w, 'online_label'):
                 w._update_online_label(getattr(w, '_last_online_count', 0))
         except Exception:
             pass
-        text_color = get_theme_color(w.app_state.local_config, 'text', 'white')
-        bg_color = get_theme_color(w.app_state.local_config, 'background', '#000000')
-        bold_label_style = f'font-weight: bold; font-size: 16px; color: {text_color};'
-        if hasattr(w, 'plugin_tab_builder'):
-            plugin_lbl = w.plugin_tab_builder.widgets.get('installed_plugins_label')
-            if plugin_lbl:
-                plugin_lbl.setStyleSheet(bold_label_style)
-        if hasattr(w, 'installed_mods_label') and w.installed_mods_label:
-            w.installed_mods_label.setStyleSheet(bold_label_style)
-        checkbox_style = f'\n            QCheckBox {{\n                color: {text_color};\n                font-size: 12px;\n                spacing: 5px;\n            }}\n            QCheckBox::indicator {{\n                width: 16px;\n                height: 16px;\n            }}\n        '
-        text_only_style = f'color: {text_color};'
-        checkbox_targets = []
-        if hasattr(w, 'library_tag_widgets'):
-            checkbox_targets.extend(w.library_tag_widgets)
-        if hasattr(w, 'tag_textedit'):
-            checkbox_targets.extend(widget for widget in [w.tag_textedit, w.tag_customization, w.tag_gameplay, w.tag_other] if widget)
-            if hasattr(w, 'auto_sorting_checkbox') and w.auto_sorting_checkbox:
-                checkbox_targets.append(w.auto_sorting_checkbox)
-        for cb in checkbox_targets:
-            cb.setStyleSheet(checkbox_style)
-        for attr_name in ('chapter_mode_checkbox', 'full_install_checkbox'):
-            widget = getattr(w, attr_name, None)
-            if widget:
-                widget.setStyleSheet(text_only_style)
-        if hasattr(w, 'blocklist_button') and w.blocklist_button:
-            w.blocklist_button.setStyleSheet(f'\n                    QPushButton {{\n                        background-color: {bg_color};\n                        color: {text_color};\n                        border: 2px solid white;\n                        padding: 0px 4px;\n                        font-size: 11px;\n                    }}\n                    QPushButton:hover {{\n                        background-color: white;\n                        color: {bg_color};\n                    }}\n                ')
         w.search_display.update_filtered_mods()
-        w.search_display.update_all_cards_labels()
         w.library_display.update_display()
         w.search_display.update_pagination()
         w.game_launch.update_button_state()

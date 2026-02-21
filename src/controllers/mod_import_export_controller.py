@@ -21,6 +21,8 @@ class ModImportExportController:
         self.app_state = app_state
         self.mod_service = mod_service
         self.app_window = app_window
+        self._import_queue: list = []
+        self._importing = False
 
     def _refresh_mod_list(self) -> None:
         self.mod_service.invalidate_mods_cache()
@@ -439,3 +441,45 @@ class ModImportExportController:
         except Exception as e:
             logging.error(f'Mod export failed: {e}', exc_info=True)
             QMessageBox.critical(self.app_window, tr('errors.error'), tr('errors.mod_export_failed', error=str(e)))
+
+    def import_files_sequentially(self, file_paths: list):
+        """Queue archive files for sequential import (drag & drop)."""
+        if not file_paths:
+            return
+        self._import_queue.extend(file_paths)
+        if not self._importing:
+            self._process_next_import()
+
+    def _process_next_import(self):
+        if not self._import_queue:
+            self._importing = False
+            return
+        self._importing = True
+        file_path = self._import_queue.pop(0)
+        try:
+            self._install_mod_from_file(file_path)
+        except Exception as e:
+            logging.error(f'[DND IMPORT] Failed to import {file_path}: {e}', exc_info=True)
+        from PyQt6.QtCore import QTimer
+        QTimer.singleShot(100, self._process_next_import)
+
+    def export_mod_to_path(self, mod_data, export_path: str) -> bool:
+        """Export a mod to a specific zip path (for drag & drop export)."""
+        try:
+            key = get_mod_key(mod_data)
+            mod_dir = self.mod_service.get_mod_folder_path(key)
+            if not mod_dir or not os.path.exists(mod_dir):
+                mod_dir = self._find_mod_dir_by_config(mod_data)
+            if not mod_dir or not os.path.exists(mod_dir):
+                logging.error(f'[DND EXPORT] Mod folder not found for: {getattr(mod_data, "name", key)}')
+                return False
+            with zipfile.ZipFile(export_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                for root, dirs, files in os.walk(mod_dir):
+                    for file in files:
+                        file_path = os.path.join(root, file)
+                        arcname = os.path.relpath(file_path, mod_dir)
+                        zipf.write(file_path, arcname)
+            return True
+        except Exception as e:
+            logging.error(f'[DND EXPORT] Mod export failed: {e}', exc_info=True)
+            return False

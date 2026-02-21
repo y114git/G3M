@@ -34,11 +34,15 @@ class ChatWindow(QDialog):
         self.chat_request_thread.messages_received.connect(self._on_messages_received)
         self.chat_request_thread.message_sent.connect(self._on_message_sent)
         self.chat_request_thread.error_occurred.connect(self._on_chat_error)
+        self._settings_service = parent.settings_service if parent and hasattr(parent, 'settings_service') else None
         self.setWindowTitle(tr('chat.window_title'))
         self.setMinimumSize(600, 500)
         self.resize(800, 600)
         self.setup_ui()
         self._apply_theme()
+        saved_channel = self.app_state.local_config.get('last_chat_channel')
+        if saved_channel and saved_channel in self.channel_buttons:
+            self._switch_channel(saved_channel)
 
     def setup_ui(self):
         layout = QVBoxLayout(self)
@@ -156,6 +160,9 @@ class ChatWindow(QDialog):
         self._last_message_ids = set()
         self._message_widgets.clear()
         self.current_channel = channel
+        self.app_state.local_config['last_chat_channel'] = channel
+        if self._settings_service:
+            self._settings_service.write_local_config()
         self.select_channel_label.hide()
         self.message_input.setEnabled(True)
         self.update_timer.start()

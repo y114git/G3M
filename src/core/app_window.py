@@ -30,7 +30,7 @@ from services.mod_service import ModManager
 from services.launch_service import GameLauncher
 from services.updatecheck_service import UpdateChecker
 from services.settings_service import SettingsManager
-from ui.builders.search_tab_builder import SearchTabBuilder
+from ui.builders.search_tab_builder import ModsBrowserTabBuilder
 from ui.builders.settings_view_builder import SettingsViewBuilder
 from services.plugin_service import PluginManager
 from services.customization_service import CustomizationManager
@@ -358,9 +358,22 @@ class AppWindow(QWidget):
         self._previous_mode = 'normal'
         self._setup_library_tab()
         self._setup_plugins_tab()
-        self.main_tab_widget.addTab(self.search_mods_tab, tr('ui.search_tab'))
-        self.main_tab_widget.addTab(self.library_tab, tr('ui.library_tab'))
-        self.main_tab_widget.addTab(self.plugins_tab, tr('ui.plugins_tab'))
+
+        hide_mods_browser = self.app_state.local_config.get('hide_mods_browser_tab', False)
+        hide_library = self.app_state.local_config.get('hide_library_tab', False)
+        hide_plugins = self.app_state.local_config.get('hide_plugins_tab', False)
+
+        self._num_main_tabs_visible = 0
+        if not hide_mods_browser:
+            self.main_tab_widget.addTab(self.search_mods_tab, tr('ui.search_tab'))
+            self._num_main_tabs_visible += 1
+        if not hide_library:
+            self.main_tab_widget.addTab(self.library_tab, tr('ui.library_tab'))
+            self._num_main_tabs_visible += 1
+        if not hide_plugins:
+            self.main_tab_widget.addTab(self.plugins_tab, tr('ui.plugins_tab'))
+            self._num_main_tabs_visible += 1
+
         self.previous_tab_index = 0
         self.main_tab_widget.currentChanged.connect(self._on_tab_changed)
         self.main_tab_widget.setStyleSheet('\n            QTabWidget::tab-bar {\n                alignment: center;\n            }\n            QTabBar::tab {\n                min-width: 120px;\n                padding: 8px 16px;\n            }\n        ')
@@ -369,31 +382,20 @@ class AppWindow(QWidget):
         self._setup_settings_tab()
         self.search_display.update_filtered_mods()
         self.main_layout.addWidget(self.settings_widget)
-        self.app_state.current_settings_page = self.settings_menu_page
         self.tab_widget = self.main_tab_widget
         self.tabs = {}
         self.setWindowIcon(QIcon(resource_path('assets/icons/icon.ico')))
 
     def _setup_search_tab(self):
-        search_builder = SearchTabBuilder(self.app_state, self)
+        search_builder = ModsBrowserTabBuilder(self.app_state, self)
         self.search_mods_tab = search_builder.build()
         search_widgets = search_builder.get_widgets()
         self._bind_widgets(search_widgets, required=(
             'search_container', 'search_mods_scroll', 'mod_list_widget', 'mod_list_layout',
             'sort_combo', 'sort_order_btn', 'modgame_combo', 'tags_label', 'tag_textedit',
             'tag_customization', 'tag_gameplay', 'tag_other', 'search_button',
-            'prev_page_btn', 'page_label', 'next_page_btn', 'mods_per_page_spinbox',
-            'mods_per_page_label', 'gb_sort_combo', 'gb_sort_label', 'auto_sorting_checkbox',
-            'blocklist_button',
+            'prev_page_btn', 'page_label', 'next_page_btn',
         ))
-        self.mods_per_page_spinbox.setValue(self.app_state.mods_per_page)
-        self.mods_per_page_spinbox.valueChanged.connect(self._on_mods_per_page_changed)
-        self.auto_sorting_checkbox.stateChanged.connect(self._on_auto_sorting_changed)
-        self.blocklist_button.clicked.connect(self.search_display.show_blocklist_dialog)
-        self.app_state.auto_sorting = self.app_state.local_config.get('auto_sorting', False)
-        self.auto_sorting_checkbox.setChecked(self.app_state.auto_sorting)
-        self.gb_sort_combo.setCurrentIndex(0)
-        self.gb_sort_combo.currentIndexChanged.connect(self._on_gamebanana_sort_changed)
         self.sort_combo.currentIndexChanged.connect(self._on_search_sort_changed)
         self.sort_order_btn.clicked.connect(self._toggle_sort_order)
         if 'selected_search_game' not in self.app_state.local_config:
@@ -429,18 +431,19 @@ class AppWindow(QWidget):
             'library_tag_customization', 'library_tag_gameplay', 'library_tag_other',
             'library_tag_gamebanana', 'library_tag_widgets', 'library_search_button',
         ), optional=(
-            'import_export_button', 'custom_executable_button', 'reset_custom_exe_button',
-            'change_path_button', 'installed_mods_label', 'priority_button',
+            'import_export_button', 'installed_mods_label', 'priority_button',
             'create_modpack_button',
         ))
         if self.priority_button:
             self.priority_button.clicked.connect(self.library_display.on_priority_button_click)
         if self.create_modpack_button:
             self.create_modpack_button.clicked.connect(self.library_display.on_create_modpack_button_click)
+        from controllers.mod_import_export_controller import ModImportExportController
+        self.mod_import_export_controller = ModImportExportController(self.app_state, self.mod_service, self)
         if self.import_export_button:
-            from controllers.mod_import_export_controller import ModImportExportController
-            self.mod_import_export_controller = ModImportExportController(self.app_state, self.mod_service, self)
             self.import_export_button.clicked.connect(self.mod_import_export_controller.show_import_export_dialog)
+        if hasattr(self.installed_mods_container, 'files_dropped'):
+            self.installed_mods_container.files_dropped.connect(self.mod_import_export_controller.import_files_sequentially)
         self.game_type_combo.currentIndexChanged.connect(self.settings_ui.on_game_type_changed)
         self.chapter_mode_checkbox.stateChanged.connect(self.settings_ui.on_chapter_mode_changed)
         self.full_install_checkbox.stateChanged.connect(self._on_toggle_full_install)
@@ -517,45 +520,35 @@ class AppWindow(QWidget):
         self.settings_widget = settings_builder.build()
         settings_widgets = settings_builder.get_widgets()
         self._bind_widgets(settings_widgets, required=(
-            'settings_pages_container', 'settings_menu_page', 'settings_customization_page',
-            'changelog_widget', 'settings_title_label', 'language_label', 'language_combo',
-            'beta_updates_checkbox', 'skip_patching_warnings_checkbox', 'fullscreen_checkbox',
-            'hide_library_filters_checkbox', 'launch_via_steam_checkbox',
-            'hide_mods_without_files_checkbox', 'open_deltahub_folder_button',
-            'customization_button', 'settings_customization_button', 'reset_button',
-            'disable_background_checkbox', 'disable_splash_checkbox', 'back_button_cust',
+            'settings_tab_widget', 'changelog_widget',
+            'language_label', 'language_combo',
+            'beta_updates_checkbox', 'open_deltahub_folder_button', 'reset_button',
+            'fullscreen_checkbox', 'disable_background_checkbox', 'disable_splash_checkbox',
             'change_background_button', 'change_logo_button', 'background_music_button',
             'startup_sound_button', 'custom_style_frame', 'color_widgets', 'color_labels',
-            'color_config', 'theme_button', 'changelog_text_edit', 'changelog_button',
-            'report_bug_button',
+            'color_config', 'theme_button',
+            'hide_mods_without_files_checkbox', 'auto_sorting_checkbox',
+            'mods_per_page_label', 'mods_per_page_spinbox',
+            'gb_sort_label', 'gb_sort_combo', 'blocklist_button',
+            'hide_library_filters_checkbox', 'settings_game_combo',
+            'settings_change_path_button', 'settings_custom_executable_button',
+            'settings_reset_custom_exe_button',
+            'skip_patching_warnings_checkbox', 'launch_via_steam_checkbox',
+            'changelog_text_edit', 'changelog_button', 'report_bug_button',
+            'hide_mods_browser_tab_checkbox', 'hide_library_tab_checkbox', 'hide_plugins_tab_checkbox',
         ), optional=(
             'use_portproton_checkbox', 'select_portproton_path_button',
             'portproton_path_label', 'portproton_frame',
         ))
+        self._section_headers = settings_widgets.get('_section_headers', [])
+        self._section_lines = settings_widgets.get('_section_lines', [])
         self.language_combo.currentTextChanged.connect(lambda: self.settings_ui.on_language_changed(self.language_combo.currentData()))
         self.beta_updates_checkbox.stateChanged.connect(self.settings_ui.on_toggle_beta_updates)
-        self.fullscreen_checkbox.stateChanged.connect(self.settings_ui.on_toggle_fullscreen)
-        self.hide_library_filters_checkbox.stateChanged.connect(self.settings_ui.on_toggle_hide_library_filters)
-        self.launch_via_steam_checkbox.stateChanged.connect(self.settings_ui.on_toggle_steam_launch)
-        if self.use_portproton_checkbox:
-            self.use_portproton_checkbox.stateChanged.connect(self.settings_ui.on_toggle_portproton)
-            self.use_portproton_checkbox.stateChanged.connect(self._update_portproton_ui)
-        if self.select_portproton_path_button:
-            self.select_portproton_path_button.clicked.connect(self._select_portproton_path)
-        self.hide_mods_without_files_checkbox.stateChanged.connect(self.settings_ui.on_toggle_hide_mods_without_files)
-        self.skip_patching_warnings_checkbox.stateChanged.connect(self.settings_ui.on_toggle_skip_patching_warnings)
-        if self.change_path_button:
-            self.change_path_button.clicked.connect(self._prompt_for_game_path)
-        if self.custom_executable_button:
-            self.custom_executable_button.clicked.connect(self._select_custom_executable_file)
-        if self.reset_custom_exe_button:
-            self.reset_custom_exe_button.clicked.connect(self._reset_custom_executable)
         self.open_deltahub_folder_button.clicked.connect(self._open_deltahub_folder)
-        self.customization_button.clicked.connect(lambda: self.settings_ui.switch_settings_page(self.settings_customization_page))
         self.reset_button.clicked.connect(self.settings_ui.reset_settings)
+        self.fullscreen_checkbox.stateChanged.connect(self.settings_ui.on_toggle_fullscreen)
         self.disable_background_checkbox.stateChanged.connect(self.settings_ui.on_toggle_disable_background)
         self.disable_splash_checkbox.stateChanged.connect(self.settings_ui.on_toggle_disable_splash)
-        self.back_button_cust.clicked.connect(self.settings_ui.go_back_to_settings_menu)
         self.change_background_button.clicked.connect(self.theme.on_background_button_click)
         self.change_logo_button.setText(self.customization_service.get_logo_button_text())
         self.change_logo_button.clicked.connect(self.theme.on_logo_button_click)
@@ -578,8 +571,38 @@ class AppWindow(QWidget):
             line_edit.editingFinished.connect(self.theme.on_custom_style_edited)
             btn.clicked.connect(lambda _, le=line_edit: pick_color_for_edit(le))
             reset_btn.clicked.connect(lambda _, le=line_edit: (le.clear(), self.theme.on_custom_style_edited()))
+        self.hide_mods_without_files_checkbox.stateChanged.connect(self.settings_ui.on_toggle_hide_mods_without_files)
+        self.auto_sorting_checkbox.stateChanged.connect(self._on_auto_sorting_changed)
+        self.mods_per_page_spinbox.setValue(self.app_state.mods_per_page)
+        self.mods_per_page_spinbox.valueChanged.connect(self._on_mods_per_page_changed)
+        self.app_state.auto_sorting = self.app_state.local_config.get('auto_sorting', False)
+        self.auto_sorting_checkbox.setChecked(self.app_state.auto_sorting)
+        self.gb_sort_combo.setCurrentIndex(0)
+        self.gb_sort_combo.currentIndexChanged.connect(self._on_gamebanana_sort_changed)
+        self.blocklist_button.clicked.connect(self.search_display.show_blocklist_dialog)
+        self.hide_library_filters_checkbox.stateChanged.connect(self.settings_ui.on_toggle_hide_library_filters)
+        self.settings_game_combo.currentIndexChanged.connect(self._on_settings_game_combo_changed)
+        self.settings_change_path_button.clicked.connect(self._prompt_for_game_path)
+        self.settings_custom_executable_button.clicked.connect(self._select_custom_executable_file)
+        self.settings_reset_custom_exe_button.clicked.connect(self._reset_custom_executable)
+        self._update_settings_library_tab()
+        self.skip_patching_warnings_checkbox.stateChanged.connect(self.settings_ui.on_toggle_skip_patching_warnings)
+        self.launch_via_steam_checkbox.stateChanged.connect(self.settings_ui.on_toggle_steam_launch)
+        if self.use_portproton_checkbox:
+            self.use_portproton_checkbox.stateChanged.connect(self.settings_ui.on_toggle_portproton)
+            self.use_portproton_checkbox.stateChanged.connect(self._update_portproton_ui)
+        if self.select_portproton_path_button:
+            self.select_portproton_path_button.clicked.connect(self._select_portproton_path)
         self.changelog_button.clicked.connect(lambda: self.settings_ui.toggle_settings_view(show_changelog=True))
         self.report_bug_button.clicked.connect(self.settings_ui.show_report_bug_dialog)
+
+        self.hide_mods_browser_tab_checkbox.stateChanged.connect(self.settings_ui.on_toggle_hide_mods_browser_tab)
+        self.hide_library_tab_checkbox.stateChanged.connect(self.settings_ui.on_toggle_hide_library_tab)
+        self.hide_plugins_tab_checkbox.stateChanged.connect(self.settings_ui.on_toggle_hide_plugins_tab)
+
+        self.hide_mods_browser_tab_checkbox.setChecked(self.app_state.local_config.get('hide_mods_browser_tab', False))
+        self.hide_library_tab_checkbox.setChecked(self.app_state.local_config.get('hide_library_tab', False))
+        self.hide_plugins_tab_checkbox.setChecked(self.app_state.local_config.get('hide_plugins_tab', False))
 
     def _finish_initialization(self):
         self.app_state.initialization_completed = True
@@ -674,8 +697,32 @@ class AppWindow(QWidget):
             pass
 
     def _update_change_path_button_text(self):
-        if self.change_path_button:
-            self.change_path_button.setText(self.app_state.game_mode.path_change_button_text)
+        if hasattr(self, 'settings_change_path_button') and self.settings_change_path_button:
+            self.settings_change_path_button.setText(self.app_state.game_mode.path_change_button_text)
+
+    def _on_settings_game_combo_changed(self, index):
+        """When the game selector in Settings > Library changes, update the path button text."""
+        game_id = self.settings_game_combo.itemData(index)
+        if not game_id:
+            return
+        game_def = get_game(game_id)
+        if game_def and hasattr(self, 'settings_change_path_button'):
+            self.settings_change_path_button.setText(game_def.path_change_button_text)
+        self._update_custom_executable_ui(game_id)
+
+    def _update_settings_library_tab(self):
+        """Sync the settings Library tab with the current game mode."""
+        current_game_id = self.app_state.game_mode.game_id
+        combo = self.settings_game_combo
+        for i in range(combo.count()):
+            if combo.itemData(i) == current_game_id:
+                combo.blockSignals(True)
+                combo.setCurrentIndex(i)
+                combo.blockSignals(False)
+                break
+        if hasattr(self, 'settings_change_path_button'):
+            self.settings_change_path_button.setText(self.app_state.game_mode.path_change_button_text)
+        self._update_custom_executable_ui(current_game_id)
 
     def _full_install_tooltip(self) -> str:
         if platform.system() == 'Darwin':
@@ -808,10 +855,7 @@ class AppWindow(QWidget):
         handle_update_info(self, update_info, retry_count)
 
     def _get_update_widgets(self):
-        widgets = [self.action_button, self.chat_button, self.open_deltahub_folder_button, self.change_background_button]
-        if self.change_path_button:
-            widgets.append(self.change_path_button)
-        return widgets
+        return [self.action_button, self.chat_button, self.open_deltahub_folder_button, self.change_background_button]
 
     def _set_update_ui_enabled(self, enabled: bool):
         for w in self._get_update_widgets():
@@ -876,14 +920,15 @@ class AppWindow(QWidget):
     def _reset_custom_executable(self):
         self._save_custom_executable('')
 
-    def _update_custom_executable_ui(self):
-        if not hasattr(self, 'custom_executable_button') or not self.custom_executable_button:
+    def _update_custom_executable_ui(self, game_id=None):
+        game_def = get_game(game_id) if game_id else self.app_state.game_mode
+        if not game_def:
             return
-        config_key = self.app_state.game_mode.get_custom_exec_config_key()
+        config_key = game_def.get_custom_exec_config_key()
         path = self.app_state.local_config.get(config_key, '')
         has_custom_exe = bool(path)
-        if self.reset_custom_exe_button:
-            self.reset_custom_exe_button.setVisible(has_custom_exe)
+        if hasattr(self, 'settings_reset_custom_exe_button') and self.settings_reset_custom_exe_button:
+            self.settings_reset_custom_exe_button.setVisible(has_custom_exe)
 
     def _select_portproton_path(self):
         if not self.select_portproton_path_button:
@@ -1091,6 +1136,64 @@ class AppWindow(QWidget):
 
         self.refresh_controller.refresh_mods_list(is_initial=is_initial, language_combo=self.language_combo, localization_callback=self._relocalize_ui, on_fetch_finished_kwargs={'update_filtered_mods_callback': lambda: self.search_display.update_filtered_mods(preserve_page=False), 'update_installed_mods_callback': lambda: self._update_installed_mods_display(), 'update_action_button_callback': lambda: self.game_launch.update_button_state(), 'update_plugin_tabs_callback': self._update_plugin_tabs, 'mods_loaded_signal': self.mods_loaded_signal})
 
+    def _create_nobody_came_tab(self):
+        """Create and add 'But nobody came.' placeholder tab when no tabs are visible."""
+        from PyQt6.QtWidgets import QVBoxLayout, QLabel
+        w = QWidget()
+        lay = QVBoxLayout(w)
+        lay.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        lbl = QLabel(tr('ui.nobody_came'))
+        lbl.setStyleSheet('font-size: 18px; color: gray;')
+        lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        lay.addWidget(lbl)
+        self.main_tab_widget.addTab(w, '')
+
+    def _remove_nobody_came_tab(self):
+        """Remove 'But nobody came.' tab if it exists as the only tab."""
+        from PyQt6.QtWidgets import QVBoxLayout, QLabel
+        if self.main_tab_widget.count() != 1:
+            return
+        widget = self.main_tab_widget.widget(0)
+        if isinstance(widget, QWidget) and widget.layout() and isinstance(widget.layout(), QVBoxLayout):
+            if widget.layout().count() > 0:
+                label = widget.layout().itemAt(0).widget()
+                if isinstance(label, QLabel) and 'nobody' in label.text().lower():
+                    self.main_tab_widget.removeTab(0)
+
+    def _init_plugin_placeholder_tab(self, tab_index):
+        """Initialize a plugin placeholder tab at the given index if needed."""
+        current_widget = self.main_tab_widget.widget(tab_index)
+        is_placeholder = type(current_widget) is QWidget and current_widget.layout() is None
+        if not is_placeholder or tab_index not in self._plugin_tab_map:
+            return
+        plugin = self._plugin_tab_map[tab_index]
+        try:
+            handler = plugin.get('page_init') if callable(plugin.get('page_init')) else plugin.get('on_tab_open')
+            if callable(handler):
+                new_widget = self._run_with_plugin_api(plugin, handler)
+                if isinstance(new_widget, QWidget):
+                    try:
+                        new_widget.setProperty('plugin_name_key', plugin.get('name_key'))
+                        setattr(new_widget, '_plugin_info', plugin)
+                    except Exception:
+                        pass
+                    self.main_tab_widget.removeTab(tab_index)
+                    self.main_tab_widget.insertTab(tab_index, new_widget, tr(plugin['name_key']))
+                    self.main_tab_widget.setCurrentIndex(tab_index)
+        except Exception as e:
+            logging.error(f"Error initializing plugin '{plugin.get('name_key', 'unknown')}': {e}")
+
+    def _update_nobody_came_state(self, num_main_tabs, plugin_count):
+        """Show or remove 'But nobody came.' based on tab/plugin counts."""
+        if num_main_tabs == 0 and plugin_count == 0:
+            if self.main_tab_widget.count() == 0:
+                self._create_nobody_came_tab()
+        elif num_main_tabs == 0 and plugin_count > 0:
+            self._remove_nobody_came_tab()
+            if self.main_tab_widget.count() > 0:
+                idx = max(self.main_tab_widget.currentIndex(), 0)
+                self._init_plugin_placeholder_tab(idx)
+
     def _update_plugin_tabs(self):
         if not hasattr(self, 'plugin_service') or not hasattr(self, 'main_tab_widget'):
             return
@@ -1098,7 +1201,9 @@ class AppWindow(QWidget):
             return
         self._handling_plugin_tab = True
         self.plugin_service.load_plugins()
-        self._plugin_tab_map = self.plugin_service.update_plugin_tabs(self.main_tab_widget, num_original_tabs=3)
+        num_main_tabs = getattr(self, '_num_main_tabs_visible', 3)
+        self._plugin_tab_map = self.plugin_service.update_plugin_tabs(self.main_tab_widget, num_original_tabs=num_main_tabs)
+        self._update_nobody_came_state(num_main_tabs, len(self._plugin_tab_map))
         if hasattr(self, 'plugin_display'):
             self.plugin_display.update_display()
         self._handling_plugin_tab = False

@@ -27,9 +27,9 @@ class TestTabBuilders:
         builder = LibraryTabBuilder(app_state, None)
         assert builder is not None
 
-    def test_search_tab_builder_creation(self, qapp, app_state, feedback_service):
-        from ui.builders.search_tab_builder import SearchTabBuilder
-        builder = SearchTabBuilder(app_state, None)
+    def test_mods_browser_tab_builder_creation(self, qapp, app_state, feedback_service):
+        from ui.builders.search_tab_builder import ModsBrowserTabBuilder
+        builder = ModsBrowserTabBuilder(app_state, None)
         assert builder is not None
 
     def test_plugin_tab_builder_creation(self, qapp, app_state, feedback_service):

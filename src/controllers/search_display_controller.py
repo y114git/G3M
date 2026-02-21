@@ -788,7 +788,11 @@ class SearchDisplayController(QObject):
                         has_mods_to_display = len(current_page_mods) > 0 if current_page_mods else False
                         expected_widget_count = len(current_page_mods) if current_page_mods else 0
 
+                        _ready_retries = 0
+                        _MAX_READY_RETRIES = 40
+
                         def check_and_emit_ready():
+                            nonlocal _ready_retries
                             try:
                                 app = QApplication.instance()
                                 if app:
@@ -839,10 +843,18 @@ class SearchDisplayController(QObject):
                                             app.processEvents()
                                         self.app.mods_display_ready.emit()
                                 else:
-                                    logger.debug('SearchDisplayController: First page not ready, will check again')
-                                    check_and_emit_ready()
+                                    _ready_retries += 1
+                                    if _ready_retries < _MAX_READY_RETRIES:
+                                        logger.debug('SearchDisplayController: First page not ready, will check again')
+                                        QTimer.singleShot(150, check_and_emit_ready)
+                                    else:
+                                        logger.debug(f'SearchDisplayController: Gave up waiting for first page after {_MAX_READY_RETRIES} retries, emitting mods_display_ready anyway')
+                                        self._initial_mods_display_done = True
+                                        if hasattr(self.app, 'mods_display_ready') and not self.app._mods_display_ready_emitted:
+                                            self.app._mods_display_ready_emitted = True
+                                            self.app.mods_display_ready.emit()
                             except Exception as e:
-                                logger.error(f'Error in check_and_emit_ready: {e}', exc_info=True)
+                                logger.error(f'Error in check_and_emit_ready: {e}')
                         check_and_emit_ready()
                 self._check_and_emit_ready_if_needed = self_check_and_emit_ready_if_needed
                 if mods_to_process:

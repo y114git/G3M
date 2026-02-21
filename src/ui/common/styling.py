@@ -60,6 +60,14 @@ def get_theme_color(config, color_key, default_color):
     return default_color
 
 
+def get_section_line_color(config) -> str:
+    raw = get_theme_color(config, 'button', '#000000')
+    if raw.startswith('#') and len(raw) >= 7:
+        r, g, b = int(raw[1:3], 16), int(raw[3:5], 16), int(raw[5:7], 16)
+        return f'rgba({r},{g},{b},0.45)'
+    return 'rgba(0,0,0,0.45)'
+
+
 def rgba_from_color(color: str, alpha: int = 128, fallback: str = 'rgba(0, 0, 0, 128)') -> str:
     if isinstance(color, str) and color.startswith('#') and (len(color) >= 7):
         try:

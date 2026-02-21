@@ -48,6 +48,9 @@ class SettingsManager(QObject):
             save_json(path, data, indent=2)
         except (PermissionError, OSError):
             self._handle_permission_error(os.path.dirname(path))
+        except (ValueError, TypeError) as e:
+            logging.error(f'[SettingsManager] JSON serialization error for {path}: {e}', exc_info=True)
+            self.feedback_service.update_status(tr('errors.file_write_error', error=str(e)), UI_COLORS['status_error'])
         except Exception as e:
             self.feedback_service.update_status(tr('errors.file_write_error', error=str(e)), UI_COLORS['status_error'])
 
@@ -103,6 +106,9 @@ class SettingsManager(QObject):
     def on_toggle_disable_background(self, enabled: bool): self._toggle_setting('background_disabled', enabled, 'theme_changed')
     def on_toggle_disable_splash(self, enabled: bool): self._toggle_setting('disable_splash', enabled, None)
     def on_toggle_skip_patching_warnings(self, enabled: bool): self._toggle_setting('skip_patching_warnings', enabled)
+    def on_toggle_hide_mods_browser_tab(self, enabled: bool): self._toggle_setting('hide_mods_browser_tab', enabled, None)
+    def on_toggle_hide_library_tab(self, enabled: bool): self._toggle_setting('hide_library_tab', enabled, None)
+    def on_toggle_hide_plugins_tab(self, enabled: bool): self._toggle_setting('hide_plugins_tab', enabled, None)
 
     def select_portproton_path(self) -> Optional[str]:
         filepath, _ = QFileDialog.getOpenFileName(self.parent_widget, tr('ui.select_portproton_path'))

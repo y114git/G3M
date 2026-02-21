@@ -26,9 +26,11 @@ class LibraryDisplayController:
     def _show_chapter_mode_instruction(self) -> None:
         if hasattr(self.app, 'installed_mods_container') and hasattr(self.app, 'installed_mods_layout'):
             self.app.installed_mods_container.setUpdatesEnabled(False)
-            clear_layout_widgets(self.app.installed_mods_layout, keep_last_n=1)
-            self.app._show_chapter_mode_instruction()
-            self.app.installed_mods_container.setUpdatesEnabled(True)
+            try:
+                clear_layout_widgets(self.app.installed_mods_layout, keep_last_n=1)
+                self.app._show_chapter_mode_instruction()
+            finally:
+                self.app.installed_mods_container.setUpdatesEnabled(True)
 
     def update_display(self):
         if not hasattr(self.app, 'installed_mods_layout'):
@@ -95,31 +97,33 @@ class LibraryDisplayController:
         container = getattr(self.app, 'installed_mods_container', None)
         if container:
             container.setUpdatesEnabled(False)
-        clear_layout_widgets(self.app.installed_mods_layout, keep_last_n=1)
-        installed_mods = self.mod_service.get_installed_mods_list()
-        filtered_mods = self._filter_and_sort_installed(installed_mods)
-        for mod_info in filtered_mods:
-            mod_data = self.mod_service.create_mod_object_from_info(mod_info, getattr(self.app_state, 'all_mods', None))
-            if not mod_data or not self.mod_service.mod_has_files_for_chapter(mod_data, selected_chapter_id):
-                continue
-            if mod_data:
-                added_date = mod_info.get('added_date')
-                mod_widget = InstalledModWidget(mod_data, parent=self.app, installed_date=added_date)
-                mod_widget.clicked.connect(self.on_mod_clicked)
-                mod_widget.remove_requested.connect(self.on_mod_remove)
-                mod_widget.use_requested.connect(lambda mod_data=mod_data: self._handle_mod_use(mod_data, selected_chapter_id))
-                is_used = self.used_mods_service.is_mod_used_for_chapter(mod_data, selected_chapter_id)
-                mod_widget.set_active(is_used)
-                self.app.installed_mods_layout.insertWidget(self.app.installed_mods_layout.count() - 1, mod_widget)
-                mod_widget.show()
-        if self.app.installed_mods_layout.count() <= 1:
-            tab = self.app_state.game_mode.get_tab(selected_chapter_id)
-            chapter_name = tr(tab.name_key) if tab else str(selected_chapter_id)
-            show_empty_message_in_layout(self.app.installed_mods_layout, tr('ui.no_mods_for_chapter', chapter_name=chapter_name), self.app_state.local_config, font_size=16)
-        self._update_priority_button_visibility(selected_chapter_id)
-        if container:
-            container.setUpdatesEnabled(True)
-        self.app._updating_chapter_mods = False
+        try:
+            clear_layout_widgets(self.app.installed_mods_layout, keep_last_n=1)
+            installed_mods = self.mod_service.get_installed_mods_list()
+            filtered_mods = self._filter_and_sort_installed(installed_mods)
+            for mod_info in filtered_mods:
+                mod_data = self.mod_service.create_mod_object_from_info(mod_info, getattr(self.app_state, 'all_mods', None))
+                if not mod_data or not self.mod_service.mod_has_files_for_chapter(mod_data, selected_chapter_id):
+                    continue
+                if mod_data:
+                    added_date = mod_info.get('added_date')
+                    mod_widget = InstalledModWidget(mod_data, parent=self.app, installed_date=added_date)
+                    mod_widget.clicked.connect(self.on_mod_clicked)
+                    mod_widget.remove_requested.connect(self.on_mod_remove)
+                    mod_widget.use_requested.connect(lambda mod_data=mod_data: self._handle_mod_use(mod_data, selected_chapter_id))
+                    is_used = self.used_mods_service.is_mod_used_for_chapter(mod_data, selected_chapter_id)
+                    mod_widget.set_active(is_used)
+                    self.app.installed_mods_layout.insertWidget(self.app.installed_mods_layout.count() - 1, mod_widget)
+                    mod_widget.show()
+            if self.app.installed_mods_layout.count() <= 1:
+                tab = self.app_state.game_mode.get_tab(selected_chapter_id)
+                chapter_name = tr(tab.name_key) if tab else str(selected_chapter_id)
+                show_empty_message_in_layout(self.app.installed_mods_layout, tr('ui.no_mods_for_chapter', chapter_name=chapter_name), self.app_state.local_config, font_size=16)
+            self._update_priority_button_visibility(selected_chapter_id)
+        finally:
+            if container:
+                container.setUpdatesEnabled(True)
+            self.app._updating_chapter_mods = False
 
     def refresh_async(self):
         if hasattr(self.app, '_installed_scan_thread') and self.app._installed_scan_thread and self.app._installed_scan_thread.isRunning():
@@ -175,16 +179,21 @@ class LibraryDisplayController:
             container = getattr(self.app, 'installed_mods_container', None)
             if container:
                 container.setUpdatesEnabled(False)
-            clear_layout_widgets(self.app.installed_mods_layout, keep_last_n=1)
-            self.cleanup_missing_mods(installed_mods)
-            existing_mods = [mod_info for mod_info in installed_mods if self.mod_service.check_mod_exists(mod_info)]
-            filtered_mods = self._filter_and_sort_installed(existing_mods)
-            mods = list(filtered_mods)
-            batch_index = 0
 
             def _finish_display():
                 if container:
                     container.setUpdatesEnabled(True)
+
+            try:
+                clear_layout_widgets(self.app.installed_mods_layout, keep_last_n=1)
+                self.cleanup_missing_mods(installed_mods)
+                existing_mods = [mod_info for mod_info in installed_mods if self.mod_service.check_mod_exists(mod_info)]
+                filtered_mods = self._filter_and_sort_installed(existing_mods)
+                mods = list(filtered_mods)
+                batch_index = 0
+            except Exception:
+                _finish_display()
+                raise
 
             def _build_next_batch(batch_size=25):
                 nonlocal batch_index, mods

@@ -98,8 +98,6 @@ class ThemeController:
             self.app.full_install_checkbox.setStyleSheet(f'color: {text_color};')
         if hasattr(self.app, 'tag_textedit'):
             search_checkboxes = [self.app.tag_textedit, self.app.tag_customization, self.app.tag_gameplay, self.app.tag_other]
-            if hasattr(self.app, 'auto_sorting_checkbox'):
-                search_checkboxes.append(self.app.auto_sorting_checkbox)
             for cb in search_checkboxes:
                 if cb:
                     cb.setStyleSheet(checkbox_style)
@@ -184,6 +182,15 @@ class ThemeController:
         self.customization_service.update_mod_cards_styles(mod_list, installed_mods)
         if hasattr(self.app, 'library_tab_builder'):
             self.app.library_tab_builder.update_priority_button_style()
+        section_lines = getattr(self.app, '_section_lines', None)
+        if isinstance(section_lines, list) and section_lines:
+            from ui.common.styling import get_section_line_color
+            line_style = f'color: {get_section_line_color(self.app_state.local_config)};'
+            for line_frame in section_lines:
+                try:
+                    line_frame.setStyleSheet(line_style)
+                except RuntimeError:
+                    pass
 
     def on_background_button_click(self):
         self.settings_service.on_background_button_click()

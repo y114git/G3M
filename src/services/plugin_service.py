@@ -272,22 +272,40 @@ class PluginManager(QObject):
                 self.plugin_error.emit(localized_name, error_msg)
         self.plugins_loaded.emit()
 
-    def update_plugin_tabs(self, main_tab_widget: QTabWidget, num_original_tabs: int = 4) -> Dict[int, Dict[str, Any]]:
+    def update_plugin_tabs(self, main_tab_widget: QTabWidget, num_original_tabs: int = 4, preserve_widgets: bool = False) -> Dict[int, Dict[str, Any]]:
         plugin_tab_map = {}
+
+        existing_plugin_widgets = {}
+        if preserve_widgets:
+            for i in range(num_original_tabs, main_tab_widget.count()):
+                widget = main_tab_widget.widget(i)
+                plugin_name_key = widget.property('plugin_name_key') if widget else None
+                if plugin_name_key:
+                    existing_plugin_widgets[plugin_name_key] = widget
+
         while main_tab_widget.count() > num_original_tabs:
             main_tab_widget.removeTab(num_original_tabs)
-        for plugin_name in list(sys.modules.keys()):
-            if plugin_name.startswith('plugins.'):
-                del sys.modules[plugin_name]
+
+        if not preserve_widgets:
+            for plugin_name in list(sys.modules.keys()):
+                if plugin_name.startswith('plugins.'):
+                    del sys.modules[plugin_name]
+
         for plugin in self.app_state.plugins:
             if not plugin.get('tab_hide', False):
-                plugin_tab = QWidget()
-                try:
-                    setattr(plugin_tab, '_plugin_info', plugin)
-                    plugin_tab.setProperty('plugin_name_key', plugin.get('name_key'))
-                except Exception:
-                    pass
-                tab_name = tr(plugin['name_key'])
+                plugin_name_key = plugin.get('name_key')
+
+                plugin_tab = existing_plugin_widgets.get(plugin_name_key) if preserve_widgets else None
+
+                if plugin_tab is None:
+                    plugin_tab = QWidget()
+                    try:
+                        setattr(plugin_tab, '_plugin_info', plugin)
+                        plugin_tab.setProperty('plugin_name_key', plugin_name_key)
+                    except Exception:
+                        pass
+
+                tab_name = tr(plugin_name_key)
                 main_tab_widget.addTab(plugin_tab, tab_name)
                 try:
                     tab_idx = main_tab_widget.indexOf(plugin_tab)

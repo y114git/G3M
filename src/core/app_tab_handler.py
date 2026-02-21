@@ -6,12 +6,13 @@ from services.localization_service import tr
 
 def handle_tab_changed(w, index):
     """Handle main tab widget tab changes. `w` is the AppWindow instance."""
-    num_original_tabs = 3
+
+    num_original_tabs = getattr(w, '_num_main_tabs_visible', 3)
     if getattr(w, '_suppress_tab_handlers', False):
         w.previous_tab_index = index
         return
 
-    if index == 2:
+    if index == 2 and num_original_tabs == 3:
         if hasattr(w, 'plugin_display'):
             w.plugin_display.update_display()
         w.previous_tab_index = index
@@ -34,6 +35,12 @@ def handle_tab_changed(w, index):
                     if callable(handler):
                         new_widget = w._run_with_plugin_api(plugin, handler)
                     if isinstance(new_widget, QWidget):
+
+                        try:
+                            new_widget.setProperty('plugin_name_key', plugin.get('name_key'))
+                            setattr(new_widget, '_plugin_info', plugin)
+                        except Exception:
+                            pass
                         w.main_tab_widget.removeTab(index)
                         w.main_tab_widget.insertTab(index, new_widget, tr(plugin['name_key']))
                         w._programmatic_tab_change = True

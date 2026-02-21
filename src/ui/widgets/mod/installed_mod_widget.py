@@ -1,6 +1,8 @@
 import os
-from PyQt6.QtCore import pyqtSignal, Qt, QUrl
-from PyQt6.QtGui import QDesktopServices, QPixmap
+import tempfile
+import logging
+from PyQt6.QtCore import pyqtSignal, Qt, QUrl, QMimeData
+from PyQt6.QtGui import QDesktopServices, QPixmap, QDrag
 from PyQt6.QtWidgets import QLabel, QPushButton, QHBoxLayout, QVBoxLayout, QFrame, QWidget
 from utils.path_utils import resource_path
 from .base_mod_widget import BaseModWidget
@@ -213,6 +215,40 @@ class InstalledModWidget(BaseModWidget):
 
     def update_status(self):
         self._sync_status()
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._drag_start_pos = event.pos()
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if not (event.buttons() & Qt.MouseButton.LeftButton):
+            return
+        if not hasattr(self, '_drag_start_pos') or self._drag_start_pos is None:
+            return
+        if (event.pos() - self._drag_start_pos).manhattanLength() < 30:
+            return
+        self._start_drag_export()
+
+    def _start_drag_export(self):
+        try:
+            controller = getattr(self.parent_app, 'mod_import_export_controller', None)
+            if not controller:
+                return
+            mod_name = getattr(self.mod_data, 'name', 'mod') or 'mod'
+            safe_name = ''.join(c if c.isalnum() or c in ' _-' else '_' for c in mod_name).strip()
+            temp_dir = tempfile.mkdtemp(prefix='deltahub_export_')
+            temp_zip = os.path.join(temp_dir, f'{safe_name}.zip')
+            success = controller.export_mod_to_path(self.mod_data, temp_zip)
+            if not success or not os.path.exists(temp_zip):
+                return
+            drag = QDrag(self)
+            mime = QMimeData()
+            mime.setUrls([QUrl.fromLocalFile(temp_zip)])
+            drag.setMimeData(mime)
+            drag.exec(Qt.DropAction.CopyAction)
+        except Exception as e:
+            logging.warning(f'InstalledModWidget: drag export failed: {e}', exc_info=True)
 
     def mouseDoubleClickEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton and self.parent_app:

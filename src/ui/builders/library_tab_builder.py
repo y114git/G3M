@@ -1,9 +1,48 @@
 from typing import Dict, Any
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QFrame, QLabel, QPushButton, QCheckBox, QComboBox, QScrollArea, QSizePolicy
 from services.localization_service import tr
 from ui.widgets.shared.custom_controls import NoScrollComboBox, _ZeroHintWidget
 from ui.common.styling import get_theme_color, rgba_from_color, build_tag_checkbox_style
+
+_ARCHIVE_EXTENSIONS = ('.zip', '.7z', '.rar', '.tar.gz', '.lzma', '.gz')
+
+
+class _DropAreaWidget(QWidget):
+    """Widget that accepts drag-and-drop of archive files for mod import."""
+    files_dropped = pyqtSignal(list)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setAcceptDrops(True)
+
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasUrls():
+            for url in event.mimeData().urls():
+                path = url.toLocalFile().lower()
+                if any(path.endswith(ext) for ext in _ARCHIVE_EXTENSIONS):
+                    event.acceptProposedAction()
+                    return
+        event.ignore()
+
+    def dragMoveEvent(self, event):
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dropEvent(self, event):
+        if event.mimeData().hasUrls():
+            paths = []
+            for url in event.mimeData().urls():
+                path = url.toLocalFile()
+                if any(path.lower().endswith(ext) for ext in _ARCHIVE_EXTENSIONS):
+                    paths.append(path)
+            if paths:
+                event.acceptProposedAction()
+                self.files_dropped.emit(paths)
+                return
+        event.ignore()
 
 
 class LibraryTabBuilder:
@@ -28,16 +67,6 @@ class LibraryTabBuilder:
         import_btn = QPushButton(tr('ui.import_export_mod'))
         import_btn.setObjectName('import_export_button')
         ctrl.addWidget(import_btn), ctrl.addSpacing(20)
-        exe_btn = QPushButton(tr('buttons.custom_executable'))
-        exe_btn.setObjectName('custom_executable_button'), exe_btn.setToolTip(tr('tooltips.custom_executable_library'))
-        ctrl.addWidget(exe_btn)
-        reset_btn = QPushButton('⭯')
-        reset_btn.setObjectName('reset_custom_exe_button'), reset_btn.setStyleSheet('min-width: 35px; max-width: 35px; padding-left: 0px; padding-right: 0px;')
-        reset_btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed), reset_btn.setVisible(False)
-        ctrl.addWidget(reset_btn), ctrl.addSpacing(10)
-        path_btn = QPushButton()
-        path_btn.setObjectName('change_path_button')
-        ctrl.addWidget(path_btn), ctrl.addSpacing(20)
         game_combo = QComboBox()
         for label, data in [('DELTARUNE', 'deltarune'), ('DELTARUNE DEMO', 'deltarunedemo'), ('UNDERTALE', 'undertale'), ('UNDERTALE Yellow', 'undertaleyellow'), ('Pizza Tower', 'pizzatower'), ('Sugary Spire', 'sugaryspire')]:
             game_combo.addItem(label, data)
@@ -76,7 +105,7 @@ class LibraryTabBuilder:
         priority_layout.addStretch()
         priority_container.setFixedHeight(0)
         layout.addWidget(priority_container)
-        mods_container = QWidget()
+        mods_container = _DropAreaWidget()
         mods_container.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
         mods_container.setObjectName('mods_background')
         mods_layout = QVBoxLayout(mods_container)
@@ -106,32 +135,34 @@ class LibraryTabBuilder:
             layout.setStretch(0, 0), layout.setStretch(1, 0), layout.setStretch(2, 0), layout.setStretch(3, 1)
         except BaseException:
             pass
-        self.widgets.update({'library_filters_widget': filters, 'import_export_button': import_btn, 'custom_executable_button': exe_btn, 'reset_custom_exe_button': reset_btn, 'change_path_button': path_btn, 'game_type_combo': game_combo, 'chapter_mode_checkbox': chapter_cb, 'full_install_checkbox': full_cb, 'chapter_tabs_widget': chapter_tabs, 'chapter_tabs_layout': tabs_layout, 'chapter_tab_buttons': tab_btns, 'installed_mods_container': mods_container, 'installed_mods_scroll': mods_scroll, 'installed_mods_widget': mods_widget, 'installed_mods_layout': mods_widget_layout, 'priority_button': priority_btn, 'priority_button_layout': priority_layout, 'priority_button_container': priority_container, 'create_modpack_button': modpack_btn, 'installed_mods_label': mods_lbl})
+        self.widgets.update({'library_filters_widget': filters, 'import_export_button': import_btn, 'game_type_combo': game_combo, 'chapter_mode_checkbox': chapter_cb, 'full_install_checkbox': full_cb, 'chapter_tabs_widget': chapter_tabs, 'chapter_tabs_layout': tabs_layout, 'chapter_tab_buttons': tab_btns, 'installed_mods_container': mods_container, 'installed_mods_scroll': mods_scroll, 'installed_mods_widget': mods_widget, 'installed_mods_layout': mods_widget_layout, 'priority_button': priority_btn, 'priority_button_layout': priority_layout, 'priority_button_container': priority_container, 'create_modpack_button': modpack_btn, 'installed_mods_label': mods_lbl})
         return widget
 
     def _create_library_filters_widget(self) -> QFrame:
         w = QFrame()
-        w.setObjectName('filters'), w.setFixedHeight(55)
+        w.setObjectName('filters')
+        w.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         layout = QHBoxLayout(w)
-        layout.setAlignment(Qt.AlignmentFlag.AlignCenter), layout.setContentsMargins(0, 0, 0, 0)
+        layout.setContentsMargins(0, 0, 0, 0)
+        _vc = Qt.AlignmentFlag.AlignVCenter
         sort_combo = NoScrollComboBox()
         sort_combo.addItems([tr('ui.sort_by_name'), tr('ui.sort_by_date')])
-        layout.addWidget(sort_combo)
+        layout.addWidget(sort_combo, 0, _vc)
         sort_btn = QPushButton('▼')
         sort_btn.setObjectName('sortOrderBtn'), sort_btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed), sort_btn.setToolTip(tr('ui.sort_direction_tooltip'))
-        layout.addWidget(sort_btn), layout.addSpacing(20)
+        layout.addWidget(sort_btn, 0, _vc), layout.addSpacing(20)
         tags_lbl = QLabel(tr('ui.tags_label'))
-        layout.addWidget(tags_lbl)
+        layout.addWidget(tags_lbl, 0, _vc)
         tags = {n: QCheckBox(tr(f'tags.{n}') if n != 'gamebanana' else tr('ui.only_gamebanana')) for n in ('textedit', 'customization', 'gameplay', 'other', 'gamebanana')}
         style = build_tag_checkbox_style(get_theme_color(self.app_state.local_config, 'text', 'white'))
         tag_widgets = list(tags.values())
         for t in tag_widgets:
-            t.setStyleSheet(style), layout.addWidget(t)
+            t.setStyleSheet(style), layout.addWidget(t, 0, _vc)
         layout.addStretch()
         search_btn = QPushButton('🔍')
         search_btn.setObjectName('searchBtn'), search_btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         search_btn.setFixedSize(35, 35), search_btn.setToolTip(tr('ui.search_placeholder'))
-        layout.addWidget(search_btn)
+        layout.addWidget(search_btn, 0, _vc)
         self.widgets.update({'library_sort_combo': sort_combo, 'library_sort_order_btn': sort_btn, 'library_tags_label': tags_lbl, 'library_search_button': search_btn, 'library_tag_widgets': tag_widgets})
         self.widgets.update({f'library_tag_{k}': v for k, v in tags.items()})
         return w

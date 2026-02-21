@@ -1,5 +1,4 @@
 """Controller for settings UI management."""
-from PyQt6.QtWidgets import QWidget
 from services.localization_service import tr
 from config.constants import UI_COLORS
 from models.game_modes import DeltaruneGame, get_game
@@ -26,14 +25,17 @@ class SettingsUiController:
                 self.app_state.is_changelog_view = False
         if self.app_state.is_settings_view:
             self.app.settings_button.setText(tr('ui.back_button'))
-            self.app.tab_widget.setVisible(False), self.app.bottom_widget.setVisible(False), self.app.settings_widget.setVisible(True)
-            self.switch_settings_page(self.app.settings_menu_page)
+            self.app.tab_widget.setVisible(False)
+            self.app.bottom_widget.setVisible(False)
+            self.app.settings_widget.setVisible(True)
             self.update_settings_page_visibility()
             self.customization_service.load_custom_style_settings(self.app.color_widgets, self.app.theme.apply_theme)
             self.app._update_status(tr('status.launcher_settings'), UI_COLORS['status_info'])
         else:
             self.app.settings_button.setText(tr('ui.settings_title'))
-            self.app.settings_widget.setVisible(False), self.app.main_tab_widget.setVisible(True), self.app.bottom_widget.setVisible(True)
+            self.app.settings_widget.setVisible(False)
+            self.app.main_tab_widget.setVisible(True)
+            self.app.bottom_widget.setVisible(True)
             self.app.game_launch.update_button_state()
 
     def show_report_bug_dialog(self):
@@ -42,7 +44,9 @@ class SettingsUiController:
 
     def update_settings_page_visibility(self):
         is_cl = self.app_state.is_changelog_view
-        self.app.settings_pages_container.setVisible(not is_cl), self.app.changelog_widget.setVisible(is_cl)
+        if hasattr(self.app, 'settings_tab_widget'):
+            self.app.settings_tab_widget.setVisible(not is_cl)
+        self.app.changelog_widget.setVisible(is_cl)
         self.app.changelog_button.setText(tr('buttons.close') if is_cl else tr('buttons.changelog'))
 
     def reset_settings(self):
@@ -52,10 +56,15 @@ class SettingsUiController:
         if hasattr(self.app, 'use_portproton_checkbox') and self.app.use_portproton_checkbox:
             self.app.use_portproton_checkbox.setChecked(False)
             self._call_if_exists(self.app, '_update_portproton_ui')
-        for cb in ('chapter_mode_checkbox', 'beta_updates_checkbox', 'fullscreen_checkbox', 'hide_library_filters_checkbox', 'full_install_checkbox', 'disable_background_checkbox', 'disable_splash_checkbox', 'skip_patching_warnings_checkbox'):
-            getattr(self.app, cb).setChecked(False)
-        self.app._update_custom_executable_ui(), self.app._update_checkbox_visibility()
-        self.used_mods_service.used_mods.clear(), self.used_mods_service.save_used_mods_state(), self.used_mods_service.load_used_mods_state()
+        for cb in ('chapter_mode_checkbox', 'beta_updates_checkbox', 'fullscreen_checkbox', 'hide_library_filters_checkbox', 'full_install_checkbox', 'disable_background_checkbox', 'disable_splash_checkbox', 'skip_patching_warnings_checkbox', 'hide_mods_without_files_checkbox', 'auto_sorting_checkbox'):
+            w = getattr(self.app, cb, None)
+            if w:
+                w.setChecked(False)
+        self.app._update_custom_executable_ui()
+        self.app._update_checkbox_visibility()
+        self.used_mods_service.used_mods.clear()
+        self.used_mods_service.save_used_mods_state()
+        self.used_mods_service.load_used_mods_state()
         self.update_settings_page_visibility()
         self.customization_service.load_custom_style_settings(self.app.color_widgets, self.app.theme.apply_theme)
         self.app.game_launch.update_button_state()
@@ -120,7 +129,8 @@ class SettingsUiController:
             self.feedback_service.show_message('warning', 'ui.steam_launch', tr('ui.steam_launch_direct_conflict'))
             self.app.launch_via_steam_checkbox.setChecked(False)
             return
-        self.settings_service.on_toggle_steam_launch(is_steam), self.app._update_custom_executable_ui()
+        self.settings_service.on_toggle_steam_launch(is_steam)
+        self.app._update_custom_executable_ui()
         self._call_if_exists(self.app, '_update_portproton_ui')
 
     def on_toggle_portproton(self):
@@ -146,19 +156,66 @@ class SettingsUiController:
     def on_toggle_disable_splash(self, state): self.settings_service.on_toggle_disable_splash(bool(state))
     def on_toggle_skip_patching_warnings(self, state): self.settings_service.on_toggle_skip_patching_warnings(bool(state))
 
-    def switch_settings_page(self, page: QWidget):
-        if self.app_state.current_settings_page and self.app_state.current_settings_page is not page:
-            self.app_state.settings_nav_stack.append(self.app_state.current_settings_page)
-            if len(self.app_state.settings_nav_stack) > 20:
-                self.app_state.settings_nav_stack.pop(0)
-            self.app_state.current_settings_page.setVisible(False)
-        page.setVisible(True)
-        self.app_state.current_settings_page = page
+    def on_toggle_hide_mods_browser_tab(self, state):
+        self.settings_service.on_toggle_hide_mods_browser_tab(bool(state))
+        self._update_tab_visibility()
 
-    def go_back_to_settings_menu(self):
-        if self.app_state.current_settings_page and self.app_state.current_settings_page is not self.app.settings_menu_page:
-            self.app_state.current_settings_page.setVisible(False)
-        self.app.settings_menu_page.setVisible(True)
-        self.app_state.current_settings_page = self.app.settings_menu_page
-        if self.app_state.settings_nav_stack and self.app_state.settings_nav_stack[-1] is self.app.settings_menu_page:
-            self.app_state.settings_nav_stack.pop()
+    def on_toggle_hide_library_tab(self, state):
+        self.settings_service.on_toggle_hide_library_tab(bool(state))
+        self._update_tab_visibility()
+
+    def on_toggle_hide_plugins_tab(self, state):
+        self.settings_service.on_toggle_hide_plugins_tab(bool(state))
+        self._update_tab_visibility()
+
+    def _update_tab_visibility(self):
+        """Dynamically update tab visibility based on settings."""
+        if not hasattr(self.app, 'main_tab_widget'):
+            return
+
+        tab_widget = self.app.main_tab_widget
+        hide_mods_browser = self.app_state.local_config.get('hide_mods_browser_tab', False)
+        hide_library = self.app_state.local_config.get('hide_library_tab', False)
+        hide_plugins = self.app_state.local_config.get('hide_plugins_tab', False)
+
+        old_suppress = getattr(self.app, '_suppress_tab_handlers', False)
+        self.app._suppress_tab_handlers = True
+
+        try:
+            current_index = tab_widget.currentIndex()
+
+            while tab_widget.count() > 0:
+                tab_widget.removeTab(0)
+
+            main_tabs_visible = 0
+            if not hide_mods_browser and hasattr(self.app, 'search_mods_tab'):
+                tab_widget.addTab(self.app.search_mods_tab, tr('ui.search_tab'))
+                main_tabs_visible += 1
+            if not hide_library and hasattr(self.app, 'library_tab'):
+                tab_widget.addTab(self.app.library_tab, tr('ui.library_tab'))
+                main_tabs_visible += 1
+            if not hide_plugins and hasattr(self.app, 'plugins_tab'):
+                tab_widget.addTab(self.app.plugins_tab, tr('ui.plugins_tab'))
+                main_tabs_visible += 1
+
+            self.app._num_main_tabs_visible = main_tabs_visible
+
+            plugin_tabs_count = 0
+            if hasattr(self.app, 'plugin_service') and hasattr(self.app.plugin_service, 'update_plugin_tabs'):
+                try:
+                    self.app._handling_plugin_tab = True
+                    self.app._plugin_tab_map = self.app.plugin_service.update_plugin_tabs(
+                        tab_widget, num_original_tabs=main_tabs_visible, preserve_widgets=True
+                    )
+                    plugin_tabs_count = len(self.app._plugin_tab_map)
+                except Exception:
+                    pass
+                finally:
+                    self.app._handling_plugin_tab = False
+
+            self.app._update_nobody_came_state(main_tabs_visible, plugin_tabs_count)
+
+            if tab_widget.count() > 0:
+                tab_widget.setCurrentIndex(min(current_index, tab_widget.count() - 1))
+        finally:
+            self.app._suppress_tab_handlers = old_suppress
