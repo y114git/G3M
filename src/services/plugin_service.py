@@ -72,21 +72,26 @@ class PluginManager(QObject):
 
     def _extract_plugin_info_from_file(self, plugin_init_py_path: str, plugin_info: dict):
         try:
+            import ast
             with open(plugin_init_py_path, 'r', encoding='utf-8') as f:
-                content = f.read()
-            import re
-            for var_name, info_key in [('PLUGIN_ID', 'plugin_id'), ('PLUGIN_NAME', 'name_key'), ('VERSION', 'version'), ('AUTHOR', 'author')]:
-                match = re.search(f'{var_name}\\s*=\\s*["\']([^"\']+)["\']', content)
-                if match:
-                    plugin_info[info_key] = match.group(1)
-            desc_patterns = ['DESCRIPTION\\s*=\\s*["\\\']([^"\\\']+)["\\\']', 'DESCRIPTION\\s*=\\s*"""([^"]*)"""', "DESCRIPTION\\s*=\\s*'''([^']*)'''"]
-            for pattern in desc_patterns:
-                desc_match = re.search(pattern, content, re.DOTALL)
-                if desc_match:
-                    description = desc_match.group(1).strip()
-                    if description:
-                        plugin_info['description'] = description
-                    break
+                tree = ast.parse(f.read())
+            data = {}
+            for node in tree.body:
+                if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
+                    try:
+                        data[node.targets[0].id] = ast.literal_eval(node.value)
+                    except Exception:
+                        pass
+            mapping = {'PLUGIN_ID': 'plugin_id', 'PLUGIN_NAME': 'name_key', 'VERSION': 'version', 'AUTHOR': 'author', 'DESCRIPTION': 'description'}
+            for var, key in mapping.items():
+                if var in data:
+                    plugin_info[key] = str(data[var]).strip() if data[var] else None
+
+            cur = localization_service.get_current_language().upper()
+            strs = data.get(f'LANG_{cur}') or (data.get('LANG_EN') if cur != 'EN' else None)
+            if isinstance(strs, dict):
+                plugin_id = plugin_info.get('plugin_id') or os.path.basename(os.path.dirname(plugin_init_py_path))
+                localization_service.merge_plugin_strings(plugin_id, strs)
         except Exception as e:
             logging.debug(f'_extract_plugin_info_from_file: Error extracting info from {plugin_init_py_path}: {e}')
 
@@ -202,6 +207,7 @@ class PluginManager(QObject):
                 continue
             if not self.is_plugin_enabled(plugin_name):
                 logging.info(f'Plugin {plugin_name} is disabled, skipping')
+                self._extract_plugin_info_from_file(plugin_init_py_path, {})
                 continue
             try:
                 spec = importlib.util.spec_from_file_location(f'plugins.{plugin_name}', plugin_init_py_path)
