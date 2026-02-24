@@ -104,21 +104,12 @@ class GameBananaAPI:
                     if mod_id:
                         mod_id_str = str(mod_id)
                         is_wip = model_name in ('Wip', 'WIP')
-                        hide_mods_without_files = app_state.local_config.get('hide_mods_without_files', False) if app_state and hasattr(app_state, 'local_config') else False
-                        if hide_mods_without_files:
-                            files_data = record.get('_aFiles')
-                            has_files = bool(files_data and ((isinstance(files_data, dict) and files_data) or (isinstance(files_data, list) and files_data)))
-                            if not has_files:
-                                try:
-                                    if is_wip:
-                                        external_url = f'https://gamebanana.com/wips/{mod_id}'
-                                    else:
-                                        external_url = f'https://gamebanana.com/mods/{mod_id}'
-                                    files = self.get_mod_files(mod_id, external_url=external_url)
-                                    has_files = bool(files and len(files) > 0)
-                                except Exception:
-                                    has_files = False
-                            if not has_files:
+                        hide_wips = getattr(app_state, 'local_config', {}).get('hide_wips_without_downloads', False) if app_state else False
+                        if hide_wips and is_wip:
+                            try:
+                                if not int(record.get('_nDownloadCount') or 0):
+                                    continue
+                            except (ValueError, TypeError):
                                 continue
                         mod_info = self._map_mod_data(record, game_name, is_wip=is_wip)
                         if mod_info:

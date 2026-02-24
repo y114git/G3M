@@ -45,6 +45,12 @@ class CustomizationManager(QObject):
     def get_custom_logo_path(self) -> str:
         return self._get_custom_file_path('custom_logo', ['.png', '.jpg', '.jpeg', '.gif', '.bmp'])
 
+    def get_custom_font_path(self) -> str:
+        return self._get_custom_file_path('custom_font', ['.ttf', '.otf'])
+
+    def get_font_button_text(self) -> str:
+        return tr('buttons.remove_font') if self.get_custom_font_path() else tr('buttons.change_font')
+
     def get_logo_button_text(self) -> str:
         return tr('buttons.remove_logo') if self.get_custom_logo_path() else tr('buttons.change_logo')
 

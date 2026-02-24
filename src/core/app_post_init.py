@@ -91,9 +91,10 @@ def _restore_ui_state_from_config(app):
         app.hide_library_filters_checkbox.setChecked(config.get('hide_library_filters', False))
     app._update_change_path_button_text()
     app.theme.update_background_button_state()
-    app.hide_mods_without_files_checkbox.setChecked(config.get('hide_mods_without_files', False))
+    app.hide_wips_without_downloads_checkbox.setChecked(config.get('hide_wips_without_downloads', False))
     app.skip_patching_warnings_checkbox.setChecked(config.get('skip_patching_warnings', False))
     app.launch_via_steam_checkbox.setChecked(config.get('launch_via_steam', False))
+    app.dont_hide_window_checkbox.setChecked(config.get('dont_hide_window_on_launch', False))
     if app.use_portproton_checkbox:
         app.use_portproton_checkbox.setChecked(config.get('use_portproton', False))
         app._update_portproton_ui()

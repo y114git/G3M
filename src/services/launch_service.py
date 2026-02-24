@@ -67,6 +67,16 @@ class GameLauncher(QObject):
         except Exception as e:
             logging.error(f'monitor thread cleanup failed: {e}', exc_info=True)
 
+    def stop_game(self):
+        worker = getattr(self, 'monitor_worker', None)
+        process = getattr(worker, 'process', None)
+        if process:
+            try:
+                process.terminate()
+                self.status_changed.emit(tr('status.game_stopped', "Game stopped"), UI_COLORS['status_info'])
+            except Exception as e:
+                logging.error(f'Failed to terminate game process: {e}', exc_info=True)
+
     def launch_game_with_all_mods(self, execute_plugin_hooks=None, restore_window_callback=None):
         selections = self._get_used_mods_selections()
         self._launch_game_with_selections(selections, execute_plugin_hooks, restore_window_callback)

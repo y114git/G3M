@@ -29,10 +29,12 @@ class ThemeController:
         background_was_disabled = getattr(self.app, '_background_was_disabled', False)
         background_changed = new_background_path != current_bg_path or background_disabled != background_was_disabled
         if background_changed:
-            if self.app.background_movie is not None:
-                self.app.background_movie.stop()
-                self.app.background_movie.deleteLater()
-                self.app.background_movie = None
+            for attr in ('background_movie', 'media_player'):
+                if obj := getattr(self.app, attr, None):
+                    obj.stop()
+                    obj.deleteLater()
+                    setattr(self.app, attr, None)
+            self.app.video_sink = None
             if background_disabled or new_background_path != current_bg_path:
                 self.app.background_pixmap = None
             if not background_disabled and new_background_path:
@@ -57,6 +59,8 @@ class ThemeController:
         from PyQt6.QtGui import QFont
         status_font = QFont(font_family_main, font_size_small)
         self.app.status_label.setFont(status_font)
+        app_font = QFont(font_family_main)
+        (QApplication.instance() or self.app).setFont(app_font)
         from PyQt6.QtGui import QColor, QPalette
         palette = self.app.palette()
         txt_col = QColor(main_text_color)
@@ -113,18 +117,43 @@ class ThemeController:
 
     def on_background_ready(self, obj):
         from PyQt6.QtGui import QMovie, QPixmap
-        from PyQt6.QtCore import Qt
+        from PyQt6.QtCore import Qt, QUrl
+        import logging
         if isinstance(obj, tuple):
-            if obj[0] == 'gif':
-                if self.app.background_movie is not None:
-                    self.app.background_movie.stop()
-                    self.app.background_movie.deleteLater()
+            for attr in ('background_movie', 'media_player'):
+                if ob := getattr(self.app, attr, None):
+                    ob.stop()
+                    ob.deleteLater()
+                    setattr(self.app, attr, None)
+            self.app.video_sink = None
+            self.app.background_pixmap = None
+
+            if obj[0] == 'video':
+                try:
+                    from PyQt6.QtMultimedia import QMediaPlayer, QVideoSink
+                    self.app.video_sink = QVideoSink(self.app)
+                    self.app.media_player = QMediaPlayer(self.app)
+                    self.app.media_player.setVideoOutput(self.app.video_sink)
+                    self.app.media_player.setSource(QUrl.fromLocalFile(obj[1]))
+                    self.app.media_player.setLoops(-1)
+
+                    def on_frame_changed(frame):
+                        if not frame.isValid():
+                            return
+                        image = frame.toImage()
+                        if not image.isNull():
+                            self.app.background_pixmap = QPixmap.fromImage(image).scaled(self.app.size(), Qt.AspectRatioMode.KeepAspectRatioByExpanding, Qt.TransformationMode.SmoothTransformation)
+                            self.app.update()
+
+                    self.app.video_sink.videoFrameChanged.connect(on_frame_changed)
+                    self.app.media_player.play()
+                except Exception as e:
+                    logging.error(f'Failed to play video background: {e}', exc_info=True)
+            elif obj[0] == 'gif':
                 self.app.background_movie = QMovie(obj[1])
                 self.app.background_movie.frameChanged.connect(self.app.update)
                 self.app.background_movie.start()
-                self.app.background_pixmap = None
             elif obj[0] == 'img':
-                self.app.background_movie = None
                 self.app.background_pixmap = QPixmap.fromImage(obj[1]).scaled(self.app.size(), Qt.AspectRatioMode.KeepAspectRatioByExpanding, Qt.TransformationMode.SmoothTransformation)
             self.app.update()
 
@@ -134,6 +163,9 @@ class ThemeController:
         dialog.exec()
 
     def on_theme_changed_by_service(self):
+        self._reload_custom_font()
+        if hasattr(self.app, 'change_font_button'):
+            self.app.change_font_button.setText(self.customization_service.get_font_button_text())
         self.customization_service.load_custom_style_settings(self.app.color_widgets, self.apply_theme)
         self.app.disable_background_checkbox.setChecked(self.app_state.local_config.get('background_disabled', False))
         self.app.disable_splash_checkbox.setChecked(self.app_state.local_config.get('disable_splash', False))
@@ -218,3 +250,16 @@ class ThemeController:
     def update_logo_button_state(self):
         if hasattr(self.app, 'change_logo_button'):
             self.app.change_logo_button.setText(self.customization_service.get_logo_button_text())
+
+    def _reload_custom_font(self):
+        """Reload custom font from disk, or fall back to language default."""
+        import os
+        from PyQt6.QtGui import QFontDatabase
+        from services.localization_service import localization_service
+        custom_f_path = self.customization_service.get_custom_font_path()
+        if custom_f_path and os.path.exists(custom_f_path):
+            f_id = QFontDatabase.addApplicationFont(custom_f_path)
+            families = QFontDatabase.applicationFontFamilies(f_id) if f_id != -1 else []
+            self.app.custom_font_family = families[0] if families else localization_service.load_font()
+        else:
+            self.app.custom_font_family = localization_service.load_font()

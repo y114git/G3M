@@ -10,6 +10,7 @@ import zipfile
 from typing import Optional
 from PyQt6.QtCore import QObject, pyqtSignal, QTimer, QByteArray
 from PyQt6.QtWidgets import QFileDialog, QWidget
+from PyQt6.QtGui import QFontDatabase
 from services.localization_service import tr, LocalizationManager
 from config.constants import LAUNCHER_VERSION, UI_COLORS
 
@@ -23,7 +24,8 @@ class SettingsManager(QObject):
     theme_changed = pyqtSignal()
     restart_required = pyqtSignal(str)
     status_changed = pyqtSignal(str, str)
-    _IMAGE_EXTENSIONS = ('.png', '.jpg', '.jpeg', '.gif', '.bmp')
+    _IMAGE_EXTENSIONS = ('.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp', '.mp4', '.webm')
+    _FONT_EXTENSIONS = ('.ttf', '.otf')
     _AUDIO_OLD_FILES = ('custom_background_music.mp3', 'custom_background_music.wav', 'custom_startup_sound.mp3', 'custom_startup_sound.wav')
 
     def __init__(self, app_state, feedback_service, localization_service: LocalizationManager, parent=None):
@@ -112,7 +114,8 @@ class SettingsManager(QObject):
     def on_toggle_hide_library_filters(self, enabled: bool): self._toggle_setting('hide_library_filters', enabled)
     def on_toggle_steam_launch(self, enabled: bool): self._toggle_setting('launch_via_steam', enabled)
     def on_toggle_portproton(self, enabled: bool): self._toggle_setting('use_portproton', enabled)
-    def on_toggle_hide_mods_without_files(self, enabled: bool): self._toggle_setting('hide_mods_without_files', enabled)
+    def on_toggle_hide_wips_without_downloads(self, enabled: bool): self._toggle_setting('hide_wips_without_downloads', enabled)
+    def on_toggle_dont_hide_window_on_launch(self, enabled: bool): self._toggle_setting('dont_hide_window_on_launch', enabled)
     def on_toggle_disable_background(self, enabled: bool): self._toggle_setting('background_disabled', enabled, 'theme_changed')
     def on_toggle_disable_splash(self, enabled: bool): self._toggle_setting('disable_splash', enabled, None)
     def on_toggle_skip_patching_warnings(self, enabled: bool): self._toggle_setting('skip_patching_warnings', enabled)
@@ -240,6 +243,53 @@ class SettingsManager(QObject):
                 except Exception:
                     self.feedback_service.show_message('warning', 'errors.error', tr('errors.copy_logo_failed'))
 
+    def _remove_font_files(self):
+        for ext in self._FONT_EXTENSIONS:
+            path = os.path.join(self.app_state.config_dir, f'custom_font{ext}')
+            if os.path.exists(path):
+                os.remove(path)
+
+    def on_font_button_click(self):
+        cs = getattr(self.parent_widget, 'customization_service', None)
+        if cs and cs.get_custom_font_path():
+            try:
+                self._remove_font_files()
+                if hasattr(self.parent_widget, 'custom_font_family'):
+                    self.parent_widget.custom_font_family = self.lang_service.load_font()
+                self._update_font_button_text()
+                self.theme_changed.emit()
+            except Exception:
+                self.feedback_service.show_message('warning', 'errors.error', tr('errors.remove_font_failed'))
+        else:
+            file_path, _ = QFileDialog.getOpenFileName(self.parent_widget, tr('dialogs.select_font_file'), '', f"{tr('file_descriptions.font_files')} (*.ttf *.otf)")
+            if not file_path:
+                return
+            ext = os.path.splitext(file_path)[1].lower()
+            if ext not in self._FONT_EXTENSIONS:
+                self.feedback_service.show_message('warning', 'errors.error', tr('errors.invalid_font_file'))
+                return
+            try:
+                os.makedirs(self.app_state.config_dir, exist_ok=True)
+                self._remove_font_files()
+                target_path = os.path.join(self.app_state.config_dir, f'custom_font{ext}')
+                shutil.copy2(file_path, target_path)
+                font_id = QFontDatabase.addApplicationFont(target_path)
+                if font_id != -1 and self.parent_widget:
+                    families = QFontDatabase.applicationFontFamilies(font_id)
+                    if families:
+                        self.parent_widget.custom_font_family = families[0]
+                self._update_font_button_text()
+                self.theme_changed.emit()
+            except Exception as e:
+                logging.error(f"Failed to copy font: {e}")
+                self.feedback_service.show_message('warning', 'errors.error', tr('errors.copy_font_failed', 'Failed to copy font'))
+
+    def _update_font_button_text(self):
+        btn = getattr(self.parent_widget, 'change_font_button', None)
+        cs = getattr(self.parent_widget, 'customization_service', None)
+        if btn and cs:
+            btn.setText(cs.get_font_button_text())
+
     def is_valid_hex_color(self, s: str) -> bool:
         return bool(re.fullmatch('#[0-9a-fA-F]{6}', s or ''))
 
@@ -262,7 +312,7 @@ class SettingsManager(QObject):
             assets = [('custom_background_path', 'background')]
             if self.parent_widget and hasattr(self.parent_widget, 'customization_service'):
                 cs = self.parent_widget.customization_service
-                assets += [(cs.get_background_music_path(), 'background_music'), (cs.get_startup_sound_path(), 'startup_sound'), (cs.get_custom_logo_path(), 'custom_logo')]
+                assets += [(cs.get_background_music_path(), 'background_music'), (cs.get_startup_sound_path(), 'startup_sound'), (cs.get_custom_logo_path(), 'custom_logo'), (cs.get_custom_font_path(), 'custom_font')]
             else:
                 assets.append((None, None))
             for src, name in assets:
@@ -303,8 +353,9 @@ class SettingsManager(QObject):
                     self.app_state.local_config[key] = value
                 self._remove_files([os.path.join(self.app_state.config_dir, f) for f in self._AUDIO_OLD_FILES])
                 self._remove_logo_files()
+                self._remove_font_files()
                 self.app_state.local_config['custom_background_path'] = ''
-                _asset_prefixes = {'background.': 'custom_background', 'background_music.': 'custom_background_music', 'startup_sound.': 'custom_startup_sound', 'custom_logo.': 'custom_logo'}
+                _asset_prefixes = {'background.': 'custom_background', 'background_music.': 'custom_background_music', 'startup_sound.': 'custom_startup_sound', 'custom_logo.': 'custom_logo', 'custom_font.': 'custom_font'}
                 for filename in os.listdir(temp_dir):
                     for prefix, dest_name in _asset_prefixes.items():
                         if filename.startswith(prefix):
@@ -378,6 +429,7 @@ class SettingsManager(QObject):
         language = self.app_state.local_config.get('language', 'en')
         self._remove_files([os.path.join(self.app_state.config_dir, f) for f in self._AUDIO_OLD_FILES])
         self._remove_logo_files()
+        self._remove_font_files()
         self.app_state.local_config.clear()
         self.app_state.local_config['language'] = language
         self.write_local_config()

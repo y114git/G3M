@@ -1,4 +1,5 @@
 """Localization utilities for the main application window."""
+import os
 from services.localization_service import tr, localization_service
 
 
@@ -26,7 +27,9 @@ WIDGET_LOCALIZATIONS = [
     ('fullscreen_checkbox', 'setText', 'ui.fullscreen'),
     ('fullscreen_checkbox', 'setToolTip', 'tooltips.fullscreen_tooltip'),
     ('launch_via_steam_checkbox', 'setText', 'ui.steam_launch'),
-    ('hide_mods_without_files_checkbox', 'setText', 'ui.hide_mods_without_files'),
+    ('dont_hide_window_checkbox', 'setText', 'ui.dont_hide_window_on_launch'),
+    ('dont_hide_window_checkbox', 'setToolTip', 'tooltips.dont_hide_window_on_launch'),
+    ('hide_wips_without_downloads_checkbox', 'setText', 'ui.hide_wips_without_downloads'),
     ('open_deltahub_folder_button', 'setText', 'buttons.open_deltahub_folder'),
     ('reset_button', 'setText', 'buttons.reset_settings'),
     ('settings_custom_executable_button', 'setText', 'buttons.custom_executable'),
@@ -105,7 +108,7 @@ def relocalize_texts(w):
         w.use_portproton_checkbox.setToolTip("<html><body style='white-space: normal;'>" + tr('tooltips.portproton') + '</body></html>')
     if w.select_portproton_path_button:
         w.select_portproton_path_button.setText(tr('buttons.select_portproton_path'))
-    w.hide_mods_without_files_checkbox.setToolTip("<html><body style='white-space: normal;'>" + tr('tooltips.hide_mods_without_files') + '</body></html>')
+    w.hide_wips_without_downloads_checkbox.setToolTip("<html><body style='white-space: normal;'>" + tr('tooltips.hide_wips_without_downloads') + '</body></html>')
     w._update_change_path_button_text()
     if hasattr(w, 'settings_tab_widget'):
         w.settings_tab_widget.setTabText(0, tr('ui.settings_tab_general'))
@@ -126,6 +129,7 @@ def relocalize_texts(w):
         w.gb_sort_combo.setToolTip(tr('ui.gamebanana_sort_tooltip'))
     w.theme.update_background_button_state()
     w.theme.update_logo_button_state()
+    w.change_font_button.setText(w.customization_service.get_font_button_text())
     w.background_music_button.setText(w.customization_service.get_background_music_button_text())
     w.startup_sound_button.setText(w.customization_service.get_startup_sound_button_text())
     if hasattr(w, 'sort_order_btn') and w.sort_order_btn:
@@ -165,6 +169,10 @@ def relocalize_ui(w):
         localization_service.load_language(language_code)
         w._update_qt_locale(language_code)
         w.custom_font_family = localization_service.load_font()
+        if (cs := getattr(w, 'customization_service', None)) and (cfp := cs.get_custom_font_path()) and os.path.exists(cfp):
+            from PyQt6.QtGui import QFontDatabase
+            if families := QFontDatabase.applicationFontFamilies(QFontDatabase.addApplicationFont(cfp)):
+                w.custom_font_family = families[0]
         w._update_plugin_tabs()
         try:
             if hasattr(w, 'main_tab_widget') and current_index >= 0 and (current_index < w.main_tab_widget.count()):

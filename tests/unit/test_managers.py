@@ -152,6 +152,30 @@ class TestCustomizationManager:
         assert manager is not None
         assert manager.app_state == app_state
 
+    def test_customization_service_get_font_path(self, app_state, temp_dir):
+        from services.customization_service import CustomizationManager
+        manager = CustomizationManager(app_state)
+        app_state.config_dir = temp_dir
+        assert manager.get_custom_font_path() == ''
+        font_path = os.path.join(temp_dir, 'custom_font.ttf')
+        with open(font_path, 'w') as f:
+            f.write('dummy')
+        assert manager.get_custom_font_path() == font_path
+
+    @patch('services.customization_service.tr')
+    def test_customization_service_get_font_button_text(self, mock_tr, app_state, temp_dir):
+        from services.customization_service import CustomizationManager
+        mock_tr.side_effect = lambda key, **kwargs: key
+        manager = CustomizationManager(app_state)
+        app_state.config_dir = temp_dir
+        # No font
+        assert manager.get_font_button_text() == 'buttons.change_font'
+        # With font
+        font_path = os.path.join(temp_dir, 'custom_font.ttf')
+        with open(font_path, 'w') as f:
+            f.write('dummy')
+        assert manager.get_font_button_text() == 'buttons.remove_font'
+
 
 class TestBackupManager:
 

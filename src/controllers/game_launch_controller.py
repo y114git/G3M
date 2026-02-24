@@ -39,6 +39,10 @@ class GameLaunchController(QObject):
         return self.app_state.game_mode.supports_full_install and self._full_install_checkbox_is_checked
 
     def update_button_state(self):
+        if getattr(self.app_state, 'game_is_running', False):
+            self.app_state.action_button_text = tr('ui.stop_game', 'Stop Game')
+            self.app_state.action_button_enabled = True
+            return
         if self.app_state.is_installing and (not self.app_state.operation_cancelled) or self.app_state.is_patching:
             self.app_state.action_button_text = tr('ui.cancel_button')
             self.app_state.action_button_enabled = True
@@ -114,6 +118,10 @@ class GameLaunchController(QObject):
         self.update_button_state()
 
     def on_action_button_click(self):
+        if getattr(self.app_state, 'game_is_running', False):
+            if hasattr(self.game_launcher, 'stop_game'):
+                self.game_launcher.stop_game()
+            return
         if self.app_state.is_installing:
             self._cancel_operation('install')
             return
@@ -137,6 +145,10 @@ class GameLaunchController(QObject):
     def launch_game(self):
         self.game_launcher.launch_game_with_all_mods(execute_plugin_hooks=lambda hook_name: self.plugin_service.execute_hooks(hook_name, self.app), restore_window_callback=self.app.restore_window_signal.emit)
 
+    @property
+    def _dont_hide(self):
+        return self.app_state.local_config.get('dont_hide_window_on_launch', False)
+
     def hide_window(self):
         try:
             self.customization_service.stop_background_music()
@@ -144,11 +156,16 @@ class GameLaunchController(QObject):
             pass
         self.settings_service.save_window_geometry(self.app)
         self.app_state.game_is_running = True
-        self.window_hide_requested.emit()
+        if self._dont_hide:
+            self.update_button_state()
+            self.feedback_service.update_status(tr('status.game_launched_waiting_for_exit'), UI_COLORS['status_steam'])
+        else:
+            self.window_hide_requested.emit()
 
     def restore_window(self):
         self.app_state.game_is_running = False
-        self.window_restore_requested.emit()
+        if not self._dont_hide:
+            self.window_restore_requested.emit()
         self.app_state.progress_bar_visible = False
         self.update_button_state()
         self.update_geometry_requested.emit()

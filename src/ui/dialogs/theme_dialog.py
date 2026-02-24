@@ -58,6 +58,10 @@ class ThemeManagementDialog(QDialog):
             parts.append("• " + tr('themes.custom_logo'))
             has_custom = True
 
+        if cs.get_custom_font_path():
+            parts.append("• " + tr('themes.custom_font'))
+            has_custom = True
+
         color_map = {
             'custom_color_background': 'ui.background_color',
             'custom_color_button': 'ui.elements_color',

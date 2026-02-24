@@ -29,7 +29,7 @@ def filter_and_sort_mods(mods_list, filters, sort_config=None, mod_accessor=None
     only_gamebanana, status_filter = filters.get('only_gamebanana', False), filters.get('status_filter', ['approved', 'pending'])
     exclude_installed = filters.get('exclude_installed', False)
     hide_local = filters.get('hide_local', False)
-    hide_mods_without_files = filters.get('hide_mods_without_files', False)
+    hide_wips_without_downloads = filters.get('hide_wips_without_downloads', False)
     filtered_list = []
     for item in mods_list:
         mod = mod_accessor(item) if mod_accessor else item
@@ -41,8 +41,12 @@ def filter_and_sort_mods(mods_list, filters, sort_config=None, mod_accessor=None
         if hide_local and key and isinstance(key, str) and key.startswith('local_'):
             continue
         is_gb = bool(key and isinstance(key, str) and key.startswith('gb_'))
-        if hide_mods_without_files and is_gb and not _get_mod_attr(mod, '_aFiles'):
-            continue
+        if hide_wips_without_downloads and is_gb and (_get_mod_bool_attr(mod, 'is_wip') or _get_mod_attr(mod, 'gamebanana_category') == 'Work In Progress'):
+            try:
+                if not int(_get_mod_attr(mod, 'downloads') or 0):
+                    continue
+            except (ValueError, TypeError):
+                continue
         if only_gamebanana and not is_gb:
             continue
         if exclude_installed and installed_mod_keys and key in installed_mod_keys:

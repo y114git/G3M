@@ -55,10 +55,10 @@ class SettingsUiController:
         checkboxes = (
             'chapter_mode_checkbox', 'beta_updates_checkbox', 'fullscreen_checkbox',
             'hide_library_filters_checkbox', 'full_install_checkbox', 'disable_background_checkbox',
-            'disable_splash_checkbox', 'skip_patching_warnings_checkbox', 'hide_mods_without_files_checkbox',
+            'disable_splash_checkbox', 'skip_patching_warnings_checkbox', 'hide_wips_without_downloads_checkbox',
             'auto_sorting_checkbox', 'merge_properties_checkbox', 'merge_code_checkbox',
             'hide_mods_browser_tab_checkbox', 'hide_library_tab_checkbox', 'hide_plugins_tab_checkbox',
-            'launch_via_steam_checkbox', 'use_portproton_checkbox'
+            'launch_via_steam_checkbox', 'dont_hide_window_checkbox', 'use_portproton_checkbox'
         )
         for cb in checkboxes:
             if (w := getattr(self.app, cb, None)):
@@ -142,10 +142,13 @@ class SettingsUiController:
         self.settings_service.on_toggle_portproton(use)
         self._call_if_exists(self.app, '_update_portproton_ui')
 
-    def on_toggle_hide_mods_without_files(self):
-        self.settings_service.on_toggle_hide_mods_without_files(self.app.hide_mods_without_files_checkbox.isChecked())
+    def on_toggle_hide_wips_without_downloads(self):
+        self.settings_service.on_toggle_hide_wips_without_downloads(self.app.hide_wips_without_downloads_checkbox.isChecked())
         if hasattr(self.app, 'search_display'):
             self.app.search_display.update_filtered_mods()
+
+    def on_toggle_dont_hide_window_on_launch(self, state):
+        self.settings_service.on_toggle_dont_hide_window_on_launch(bool(state))
 
     def on_toggle_hide_library_filters(self, state):
         self.settings_service.on_toggle_hide_library_filters(bool(state))

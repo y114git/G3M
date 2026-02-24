@@ -161,6 +161,10 @@ class AppWindow(QWidget):
 
         self._update_plugin_tabs()
         self.custom_font_family = localization_service.load_font()
+        if (cfp := self.customization_service.get_custom_font_path()) and os.path.exists(cfp):
+            from PyQt6.QtGui import QFontDatabase
+            if families := QFontDatabase.applicationFontFamilies(QFontDatabase.addApplicationFont(cfp)):
+                self.custom_font_family = families[0]
         self.ui_ready.emit()
         self._connect_own_signals()
         self.initialization_timer = QTimer()
@@ -524,16 +528,16 @@ class AppWindow(QWidget):
             'language_label', 'language_combo',
             'beta_updates_checkbox', 'open_deltahub_folder_button', 'reset_button',
             'fullscreen_checkbox', 'disable_background_checkbox', 'disable_splash_checkbox',
-            'change_background_button', 'change_logo_button', 'background_music_button',
+            'change_background_button', 'change_logo_button', 'change_font_button', 'background_music_button',
             'startup_sound_button', 'custom_style_frame', 'color_widgets', 'color_labels',
             'color_config', 'theme_button',
-            'hide_mods_without_files_checkbox', 'auto_sorting_checkbox',
+            'hide_wips_without_downloads_checkbox', 'auto_sorting_checkbox',
             'mods_per_page_label', 'mods_per_page_spinbox',
             'gb_sort_label', 'gb_sort_combo', 'blocklist_button',
             'hide_library_filters_checkbox', 'settings_game_combo',
             'settings_change_path_button', 'settings_custom_executable_button',
             'settings_reset_custom_exe_button',
-            'skip_patching_warnings_checkbox', 'launch_via_steam_checkbox',
+            'skip_patching_warnings_checkbox', 'launch_via_steam_checkbox', 'dont_hide_window_checkbox',
             'changelog_text_edit', 'changelog_button', 'report_bug_button',
             'hide_mods_browser_tab_checkbox', 'hide_library_tab_checkbox', 'hide_plugins_tab_checkbox',
             'merge_properties_checkbox', 'merge_code_checkbox', 'clear_cache_button',
@@ -553,6 +557,8 @@ class AppWindow(QWidget):
         self.change_background_button.clicked.connect(self.theme.on_background_button_click)
         self.change_logo_button.setText(self.customization_service.get_logo_button_text())
         self.change_logo_button.clicked.connect(self.theme.on_logo_button_click)
+        self.change_font_button.setText(self.customization_service.get_font_button_text())
+        self.change_font_button.clicked.connect(self.settings_service.on_font_button_click)
         self.background_music_button.setText(self.customization_service.get_background_music_button_text())
         self.background_music_button.clicked.connect(self.theme.on_background_music_button_click)
         self.startup_sound_button.setText(self.customization_service.get_startup_sound_button_text())
@@ -572,7 +578,7 @@ class AppWindow(QWidget):
             line_edit.editingFinished.connect(self.theme.on_custom_style_edited)
             btn.clicked.connect(lambda _, le=line_edit: pick_color_for_edit(le))
             reset_btn.clicked.connect(lambda _, le=line_edit: (le.clear(), self.theme.on_custom_style_edited()))
-        self.hide_mods_without_files_checkbox.stateChanged.connect(self.settings_ui.on_toggle_hide_mods_without_files)
+        self.hide_wips_without_downloads_checkbox.stateChanged.connect(self.settings_ui.on_toggle_hide_wips_without_downloads)
         self.auto_sorting_checkbox.stateChanged.connect(self._on_auto_sorting_changed)
         self.mods_per_page_spinbox.setValue(self.app_state.mods_per_page)
         self.mods_per_page_spinbox.valueChanged.connect(self._on_mods_per_page_changed)
@@ -589,6 +595,7 @@ class AppWindow(QWidget):
         self._update_settings_library_tab()
         self.skip_patching_warnings_checkbox.stateChanged.connect(self.settings_ui.on_toggle_skip_patching_warnings)
         self.launch_via_steam_checkbox.stateChanged.connect(self.settings_ui.on_toggle_steam_launch)
+        self.dont_hide_window_checkbox.stateChanged.connect(self.settings_ui.on_toggle_dont_hide_window_on_launch)
         if self.use_portproton_checkbox:
             self.use_portproton_checkbox.stateChanged.connect(self.settings_ui.on_toggle_portproton)
             self.use_portproton_checkbox.stateChanged.connect(self._update_portproton_ui)

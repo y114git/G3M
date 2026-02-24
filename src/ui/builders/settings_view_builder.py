@@ -226,12 +226,15 @@ class SettingsViewBuilder:
         background_buttons_layout = QHBoxLayout()
         background_buttons_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         background_buttons_layout.setSpacing(10)
-        change_background_button = self._styled_button('', 275)
+        change_background_button = self._styled_button('', 200)
         change_background_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         background_buttons_layout.addWidget(change_background_button)
-        change_logo_button = self._styled_button('', 275)
+        change_logo_button = self._styled_button('', 200)
         change_logo_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         background_buttons_layout.addWidget(change_logo_button)
+        change_font_button = self._styled_button('', 200)
+        change_font_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        background_buttons_layout.addWidget(change_font_button)
         cl.addLayout(background_buttons_layout)
         sound_buttons_layout = QHBoxLayout()
         sound_buttons_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -303,6 +306,7 @@ class SettingsViewBuilder:
         self.widgets['disable_splash_checkbox'] = disable_splash_checkbox
         self.widgets['change_background_button'] = change_background_button
         self.widgets['change_logo_button'] = change_logo_button
+        self.widgets['change_font_button'] = change_font_button
         self.widgets['background_music_button'] = background_music_button
         self.widgets['startup_sound_button'] = startup_sound_button
         self.widgets['custom_style_frame'] = custom_style_frame
@@ -338,11 +342,11 @@ class SettingsViewBuilder:
         blocklist_button = self._styled_button(tr('ui.blocklist'), 200, tr('ui.blocklist_tooltip'))
         mpp_layout.addWidget(blocklist_button)
         cl.addWidget(mpp_container, alignment=Qt.AlignmentFlag.AlignHCenter)
-        hide_mods_without_files_checkbox = self._styled_checkbox(
-            tr('ui.hide_mods_without_files'),
-            "<html><body style='white-space: normal;'>" + tr('tooltips.hide_mods_without_files') + '</body></html>'
+        hide_wips_without_downloads_checkbox = self._styled_checkbox(
+            tr('ui.hide_wips_without_downloads'),
+            "<html><body style='white-space: normal;'>" + tr('tooltips.hide_wips_without_downloads') + '</body></html>'
         )
-        cl.addWidget(hide_mods_without_files_checkbox, alignment=Qt.AlignmentFlag.AlignHCenter)
+        cl.addWidget(hide_wips_without_downloads_checkbox, alignment=Qt.AlignmentFlag.AlignHCenter)
         auto_sorting_checkbox = self._styled_checkbox(tr('ui.auto_sorting'), tr('ui.auto_sorting_tooltip'))
         auto_sorting_checkbox.setChecked(self.app_state.local_config.get('auto_sorting', False))
         cl.addWidget(auto_sorting_checkbox, alignment=Qt.AlignmentFlag.AlignHCenter)
@@ -378,7 +382,7 @@ class SettingsViewBuilder:
         layout.addStretch()
 
         self.widgets['hide_mods_browser_tab_checkbox'] = hide_mods_browser_tab_checkbox
-        self.widgets['hide_mods_without_files_checkbox'] = hide_mods_without_files_checkbox
+        self.widgets['hide_wips_without_downloads_checkbox'] = hide_wips_without_downloads_checkbox
         self.widgets['auto_sorting_checkbox'] = auto_sorting_checkbox
         self.widgets['mods_per_page_label'] = mods_per_page_label
         self.widgets['mods_per_page_spinbox'] = mods_per_page_spinbox
@@ -473,6 +477,11 @@ class SettingsViewBuilder:
             "<html><body style='white-space: normal;'>" + tr('tooltips.steam') + '</body></html>'
         )
         cl.addWidget(launch_via_steam_checkbox, alignment=Qt.AlignmentFlag.AlignHCenter)
+        dont_hide_window_checkbox = self._styled_checkbox(
+            tr('ui.dont_hide_window_on_launch'),
+            "<html><body style='white-space: normal;'>" + tr('tooltips.dont_hide_window_on_launch') + '</body></html>'
+        )
+        cl.addWidget(dont_hide_window_checkbox, alignment=Qt.AlignmentFlag.AlignHCenter)
         is_linux = platform.system() == 'Linux'
         use_portproton_checkbox = self._styled_checkbox(
             tr('ui.use_portproton'),
@@ -517,6 +526,7 @@ class SettingsViewBuilder:
         self.widgets['settings_game_combo'] = settings_game_combo
         self.widgets['settings_game_selector_label'] = game_selector_label
         self.widgets['settings_change_path_button'] = change_path_button
+        self.widgets['dont_hide_window_checkbox'] = dont_hide_window_checkbox
         self.widgets['skip_patching_warnings_checkbox'] = skip_patching_warnings_checkbox
         self.widgets['launch_via_steam_checkbox'] = launch_via_steam_checkbox
         self.widgets['use_portproton_checkbox'] = use_portproton_checkbox

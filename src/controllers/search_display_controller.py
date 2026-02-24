@@ -499,14 +499,14 @@ class SearchDisplayController(QObject):
                     self._load_search_results_if_needed(self.app_state.mods_per_page)
 
     def _build_filters_and_sort(self):
-        hide_mods_without_files = self.app_state.local_config.get('hide_mods_without_files', False)
+        hide_wips_without_downloads = self.app_state.local_config.get('hide_wips_without_downloads', False)
         selected_tags = []
         tag_checkboxes = {'tag_textedit': 'textedit', 'tag_customization': 'customization', 'tag_gameplay': 'gameplay', 'tag_other': 'other'}
         for attr_name, tag_value in tag_checkboxes.items():
             if hasattr(self.app, attr_name) and getattr(self.app, attr_name).isChecked():
                 selected_tags.append(tag_value)
         selected_game = self._get_selected_game()
-        filters = {'tags': selected_tags, 'game': selected_game, 'search_text': self.app_state.search_text, 'hide_banned': True, 'hide_local': True, 'hide_mods_without_files': hide_mods_without_files, 'status_filter': ['approved', 'pending'], 'exclude_installed': False}
+        filters = {'tags': selected_tags, 'game': selected_game, 'search_text': self.app_state.search_text, 'hide_banned': True, 'hide_local': True, 'hide_wips_without_downloads': hide_wips_without_downloads, 'status_filter': ['approved', 'pending'], 'exclude_installed': False}
         sort_config = None
         if hasattr(self.app, 'sort_combo'):
             sort_type = self.app.sort_combo.currentIndex()
