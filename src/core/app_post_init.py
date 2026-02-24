@@ -97,6 +97,9 @@ def _restore_ui_state_from_config(app):
     if app.use_portproton_checkbox:
         app.use_portproton_checkbox.setChecked(config.get('use_portproton', False))
         app._update_portproton_ui()
+    for key in ('merge_properties', 'merge_code'):
+        if (w := getattr(app, f'{key}_checkbox', None)):
+            w.setChecked(config.get(key, False))
     app._initialize_mutual_exclusions()
     app.settings_ui.on_toggle_steam_launch()
     app.theme.apply_theme()

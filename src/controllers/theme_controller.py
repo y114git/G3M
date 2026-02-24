@@ -1,5 +1,5 @@
 """Controller for theme management and UI customization."""
-from PyQt6.QtWidgets import QApplication, QMessageBox
+from PyQt6.QtWidgets import QApplication
 from services.localization_service import tr
 from config.constants import THEMES, UI_COLORS
 from utils.path_utils import resource_path
@@ -129,11 +129,9 @@ class ThemeController:
             self.app.update()
 
     def on_theme_button_click(self):
-        result = self.feedback_service.ask_custom_question(QMessageBox.Icon.Information, 'buttons.theme_management', 'dialogs.theme_choice', [('buttons.import', QMessageBox.ButtonRole.AcceptRole, 'import'), ('buttons.export', QMessageBox.ButtonRole.AcceptRole, 'export')])
-        if result == 'import':
-            self.settings_service.import_theme()
-        elif result == 'export':
-            self.settings_service.export_theme()
+        from ui.dialogs.theme_dialog import ThemeManagementDialog
+        dialog = ThemeManagementDialog(self.app, self)
+        dialog.exec()
 
     def on_theme_changed_by_service(self):
         self.customization_service.load_custom_style_settings(self.app.color_widgets, self.apply_theme)

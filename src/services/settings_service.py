@@ -76,7 +76,17 @@ class SettingsManager(QObject):
 
     def migrate_config_if_needed(self):
         self.app_state.local_config['cache_format_version'] = LAUNCHER_VERSION
-        defaults = {'game_path': '', 'last_selected': {}, 'use_custom_executable': False, 'demo_game_path': '', 'launch_via_steam': False, 'use_portproton': False, 'portproton_path': '', 'direct_launch_chapter': '', 'demo_mode_enabled': False, 'chapter_mode_enabled': False, 'custom_background_path': '', 'custom_executable_path': '', 'background_disabled': False, 'custom_color_background': '', 'custom_color_button': '', 'custom_color_border': '', 'custom_color_button_hover': '', 'custom_color_text': '', 'custom_color_version_text': '', 'beta_updates_enabled': False, 'pizzatower_game_path': '', 'pizzatower_custom_executable_path': '', 'skip_patching_warnings': False}
+        defaults = {
+            'game_path': '', 'last_selected': {}, 'use_custom_executable': False, 'demo_game_path': '',
+            'launch_via_steam': False, 'use_portproton': False, 'portproton_path': '', 'direct_launch_chapter': '',
+            'demo_mode_enabled': False, 'chapter_mode_enabled': False, 'custom_background_path': '',
+            'custom_executable_path': '', 'background_disabled': False, 'custom_color_background': '',
+            'custom_color_button': '', 'custom_color_border': '', 'custom_color_button_hover': '',
+            'custom_color_text': '', 'custom_color_version_text': '', 'beta_updates_enabled': False,
+            'pizzatower_game_path': '', 'pizzatower_custom_executable_path': '', 'skip_patching_warnings': False,
+            'merge_properties': False, 'merge_code': False, 'hide_mods_browser_tab': False,
+            'hide_library_tab': False, 'hide_plugins_tab': False, 'hide_library_filters': False
+        }
         for key, value in defaults.items():
             self.app_state.local_config.setdefault(key, value)
         self.app_state.local_config.setdefault('disable_splash', False)
@@ -109,6 +119,12 @@ class SettingsManager(QObject):
     def on_toggle_hide_mods_browser_tab(self, enabled: bool): self._toggle_setting('hide_mods_browser_tab', enabled, None)
     def on_toggle_hide_library_tab(self, enabled: bool): self._toggle_setting('hide_library_tab', enabled, None)
     def on_toggle_hide_plugins_tab(self, enabled: bool): self._toggle_setting('hide_plugins_tab', enabled, None)
+
+    def on_toggle_merge_properties(self, enabled: bool):
+        self._toggle_setting('merge_properties', enabled, None)
+
+    def on_toggle_merge_code(self, enabled: bool):
+        self._toggle_setting('merge_code', enabled, None)
 
     def select_portproton_path(self) -> Optional[str]:
         filepath, _ = QFileDialog.getOpenFileName(self.parent_widget, tr('ui.select_portproton_path'))
@@ -361,12 +377,9 @@ class SettingsManager(QObject):
             return
         language = self.app_state.local_config.get('language', 'en')
         self._remove_files([os.path.join(self.app_state.config_dir, f) for f in self._AUDIO_OLD_FILES])
+        self._remove_logo_files()
         self.app_state.local_config.clear()
         self.app_state.local_config['language'] = language
-        config_keys_to_clear = ['saved_slots_deltarune', 'saved_slots_deltarune_chapter', 'saved_slots_deltarunedemo', 'saved_slots_undertale']
-        for key in config_keys_to_clear:
-            if key in self.app_state.local_config:
-                del self.app_state.local_config[key]
         self.write_local_config()
         if 'migrate_config' in callbacks:
             callbacks['migrate_config']()

@@ -58,6 +58,12 @@ WIDGET_LOCALIZATIONS = [
     ('hide_mods_browser_tab_checkbox', 'setText', 'ui.hide_mods_browser_tab'),
     ('hide_library_tab_checkbox', 'setText', 'ui.hide_library_tab'),
     ('hide_plugins_tab_checkbox', 'setText', 'ui.hide_plugins_tab'),
+    ('merge_properties_checkbox', 'setText', 'checkboxes.merge_properties'),
+    ('merge_code_checkbox', 'setText', 'checkboxes.merge_code'),
+    ('merge_properties_checkbox', 'setToolTip', 'tooltips.merge_properties'),
+    ('merge_code_checkbox', 'setToolTip', 'tooltips.merge_code'),
+    ('clear_cache_button', 'setText', 'ui.clear_cache_button'),
+    ('clear_cache_button', 'setToolTip', 'tooltips.clear_cache_button'),
 ]
 
 PLUGIN_WIDGET_LOCALIZATIONS = [

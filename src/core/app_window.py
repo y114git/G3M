@@ -536,6 +536,7 @@ class AppWindow(QWidget):
             'skip_patching_warnings_checkbox', 'launch_via_steam_checkbox',
             'changelog_text_edit', 'changelog_button', 'report_bug_button',
             'hide_mods_browser_tab_checkbox', 'hide_library_tab_checkbox', 'hide_plugins_tab_checkbox',
+            'merge_properties_checkbox', 'merge_code_checkbox', 'clear_cache_button',
         ), optional=(
             'use_portproton_checkbox', 'select_portproton_path_button',
             'portproton_path_label', 'portproton_frame',
@@ -599,6 +600,9 @@ class AppWindow(QWidget):
         self.hide_mods_browser_tab_checkbox.stateChanged.connect(self.settings_ui.on_toggle_hide_mods_browser_tab)
         self.hide_library_tab_checkbox.stateChanged.connect(self.settings_ui.on_toggle_hide_library_tab)
         self.hide_plugins_tab_checkbox.stateChanged.connect(self.settings_ui.on_toggle_hide_plugins_tab)
+        self.merge_properties_checkbox.stateChanged.connect(self.settings_ui.on_toggle_merge_properties)
+        self.merge_code_checkbox.stateChanged.connect(self.settings_ui.on_toggle_merge_code)
+        self.clear_cache_button.clicked.connect(self.settings_ui.on_clear_cache_clicked)
 
         self.hide_mods_browser_tab_checkbox.setChecked(self.app_state.local_config.get('hide_mods_browser_tab', False))
         self.hide_library_tab_checkbox.setChecked(self.app_state.local_config.get('hide_library_tab', False))

@@ -196,6 +196,8 @@ class SettingsViewBuilder:
         cl.addWidget(language_container, alignment=Qt.AlignmentFlag.AlignHCenter)
         beta_updates_checkbox = self._styled_checkbox(tr('ui.beta_updates'), tr('tooltips.beta_updates'))
         cl.addWidget(beta_updates_checkbox, alignment=Qt.AlignmentFlag.AlignHCenter)
+        fullscreen_checkbox = self._styled_checkbox(tr('ui.fullscreen'), tr('tooltips.fullscreen_tooltip'))
+        cl.addWidget(fullscreen_checkbox, alignment=Qt.AlignmentFlag.AlignHCenter)
         layout.addWidget(sec)
 
         sec, cl = self._collapsible_section(tr('ui.settings_section_advanced'), 'general_advanced', 'ui.settings_section_advanced')
@@ -210,6 +212,7 @@ class SettingsViewBuilder:
         self.widgets['language_label'] = language_label
         self.widgets['language_combo'] = language_combo
         self.widgets['beta_updates_checkbox'] = beta_updates_checkbox
+        self.widgets['fullscreen_checkbox'] = fullscreen_checkbox
         self.widgets['open_deltahub_folder_button'] = open_deltahub_folder_button
         self.widgets['reset_button'] = reset_button
         return self._wrap_in_scroll(page)
@@ -218,8 +221,6 @@ class SettingsViewBuilder:
         page, layout = self._build_simple_tab_page()
 
         sec, cl = self._collapsible_section(tr('ui.settings_section_general'), 'appearance_general', 'ui.settings_section_general')
-        fullscreen_checkbox = self._styled_checkbox(tr('ui.fullscreen'), tr('tooltips.fullscreen_tooltip'))
-        cl.addWidget(fullscreen_checkbox, alignment=Qt.AlignmentFlag.AlignHCenter)
         disable_background_checkbox = self._styled_checkbox(tr('checkboxes.disable_background'))
         disable_splash_checkbox = self._styled_checkbox(tr('checkboxes.disable_splash'))
         background_buttons_layout = QHBoxLayout()
@@ -298,7 +299,6 @@ class SettingsViewBuilder:
 
         layout.addStretch()
 
-        self.widgets['fullscreen_checkbox'] = fullscreen_checkbox
         self.widgets['disable_background_checkbox'] = disable_background_checkbox
         self.widgets['disable_splash_checkbox'] = disable_splash_checkbox
         self.widgets['change_background_button'] = change_background_button
@@ -369,6 +369,12 @@ class SettingsViewBuilder:
         cl.addWidget(gb_container, alignment=Qt.AlignmentFlag.AlignHCenter)
         layout.addWidget(sec)
 
+        sec, cl = self._collapsible_section(tr('ui.settings_section_advanced'), 'mods_advanced', 'ui.settings_section_advanced')
+        clear_cache_button = self._styled_button(tr('ui.clear_cache_button'), 250, tr('tooltips.clear_cache_button'))
+        clear_cache_button.setObjectName('clear_cache_button')
+        cl.addWidget(clear_cache_button, alignment=Qt.AlignmentFlag.AlignHCenter)
+        layout.addWidget(sec)
+
         layout.addStretch()
 
         self.widgets['hide_mods_browser_tab_checkbox'] = hide_mods_browser_tab_checkbox
@@ -379,6 +385,7 @@ class SettingsViewBuilder:
         self.widgets['gb_sort_label'] = gb_sort_label
         self.widgets['gb_sort_combo'] = gb_sort_combo
         self.widgets['blocklist_button'] = blocklist_button
+        self.widgets['clear_cache_button'] = clear_cache_button
         return self._wrap_in_scroll(page)
 
     def _build_library_tab(self) -> QWidget:
@@ -491,6 +498,18 @@ class SettingsViewBuilder:
             tr('ui.skip_patching_warnings'), tr('tooltips.skip_patching_warnings')
         )
         cl.addWidget(skip_patching_warnings_checkbox, alignment=Qt.AlignmentFlag.AlignHCenter)
+        layout.addWidget(sec)
+
+        sec, cl = self._collapsible_section(tr('ui.settings_section_merging'), 'launch_merging', 'ui.settings_section_merging')
+        cont = QWidget()
+        mo_layout = QHBoxLayout(cont)
+        mo_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        mo_layout.setSpacing(20)
+        for key in ('merge_properties', 'merge_code'):
+            cb = self._styled_checkbox(tr(f'checkboxes.{key}'), tr(f'tooltips.{key}'))
+            mo_layout.addWidget(cb)
+            self.widgets[f'{key}_checkbox'] = cb
+        cl.addWidget(cont, alignment=Qt.AlignmentFlag.AlignHCenter)
         layout.addWidget(sec)
 
         layout.addStretch()

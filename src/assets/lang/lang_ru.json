@@ -318,7 +318,9 @@
     "update_file_label": "{'Ссылка на скачивание' if is_public else 'Путь к'} {'.xdelta' if is_patch else 'DATA'} файла:",
     "version": "Версия",
     "version_label": "Версия {file_type}:",
-    "version_label_colon": "Версия {patch_type}:"
+    "version_label_colon": "Версия {patch_type}:",
+    "settings_section_merging": "Слияние модов",
+    "clear_cache_button": "Очистить кэш модов"
   },
   "chapters": {
     "menu": "Меню"
@@ -339,7 +341,9 @@
   "checkboxes": {
     "disable_background": "Отключить задний фон",
     "disable_splash": "Отключить заставку",
-    "xdelta_modpack": "XDELTA вместо data.win/.ios"
+    "xdelta_modpack": "XDELTA вместо data.win/.ios",
+    "merge_properties": "Слияние свойств",
+    "merge_code": "Слияние кода"
   },
   "tags": {
     "gameplay": "Геймплей",
@@ -418,7 +422,10 @@
     "hide_library_filters": "Скрыть параметры фильтрации в библиотеке для экономии места.",
     "change_mods_dir": "Вы сможете выбрать место, где будет находится папка с файлами модов.",
     "local_mod": "Локальный мод",
-    "search": "Поиск по названию и описанию"
+    "search": "Поиск по названию и описанию",
+    "clear_cache_button": "Удалить кэш метаданных с GameBanana, чтобы принудительно обновить информацию",
+    "merge_properties": "Объединяет настройки (например JSON), сохраняя изменения от обоих модов, чтобы избежать сброса конфигураций.",
+    "merge_code": "Интеллектуально объединяет игровой код, позволяя разным модам изменять один и тот же файл без удаления чужих изменений."
   },
   "dropdowns": {
     "all_mods": "Все моды",
@@ -667,6 +674,9 @@
     "main_slots": "Главные слоты",
     "select_mod": "Выберите мод",
     "success": "Успешно",
+    "clear_cache_success": "Кэш метаданных с GameBanana был успешно очищен.",
+    "clear_cache_confirm_title": "Очистка кеша",
+    "clear_cache_confirm_text": "Это удалит все метаданные GameBanana из памяти и с диска. DELTAHUB начнет подгрузку данных модов заново. Продолжить?",
     "delete_confirmation": "Подтвердите удаление",
     "delete_mod_confirmation": "Мод будет полностью удалён. Это действие нельзя отменить.",
     "create_modpack_title": "Создать модпак",
@@ -724,7 +734,8 @@
     "path_not_found": "Путь не найден",
     "update_confirmation_title": "Мод уже установлен",
     "request_pending": "Заявка на изменения еще не рассмотрена.",
-    "mod_key_error": "Не удалось определить ключ мода."
+    "mod_key_error": "Не удалось определить ключ мода.",
+    "cancel": "Отмена"
   },
   "errors": {
     "access_permission_error": "Ошибка доступа. Проверьте права на редактирование мода.",
@@ -1142,7 +1153,7 @@
   },
   "themes": {
     "import_themes": "Импорт тем",
-    "import_instructions": "Импортируйте тему из файла или URL. Поддерживаемый формат: .zip",
+    "import_instructions": "Выберите .zip архив с темой или укажите прямую ссылку для скачивания (поддерживается GameBanana). Обратите внимание: импорт темы заменит ваши текущие настройки цветов, прозрачности и фоновых изображений.",
     "import_from_file": "Импорт из файла",
     "import_from_url": "Импорт из URL",
     "import_from_url_button": "Импортировать",
@@ -1157,7 +1168,22 @@
     "download_error": "Ошибка загрузки: {error}",
     "archive_not_found": "Архив не найден",
     "installation_failed": "Не удалось установить тему",
-    "installation_error": "Ошибка установки: {error}"
+    "installation_error": "Ошибка установки: {error}",
+    "export_confirm_text": "Вы уверены, что хотите экспортировать текущую тему?",
+    "export_confirm_details": "Экспортированная тема будет включать в себя все текущие настройки прозрачности, цвета, а также фоновые изображения и звуки.",
+    "current_settings": "Ваши текущие настройки кастомизации",
+    "no_customizations": "Оригинальная тема",
+    "custom_colors": "Кастомные цвета",
+    "background_music": "Музыка на фоне",
+    "startup_sound": "Звук запуска",
+    "custom_logo": "Кастомное лого",
+    "custom_background": "Кастомный фон",
+    "color_bg": "Цвет фона",
+    "color_btn": "Цвет элементов",
+    "color_border": "Цвет рамок",
+    "color_hover": "Цвет при наведении",
+    "color_text": "Цвет текста",
+    "color_version": "Цвет версии"
   },
   "chat": {
     "window_title": "Чат",

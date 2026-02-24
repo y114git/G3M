@@ -266,9 +266,14 @@ class G3MToolPatchingService(QObject):
         report_path = os.path.join(self._temp_dir, f'merge_report_{chapter_id}.md') if self._temp_dir else None
 
         self.patching_logger.info(f'Merging {len(patch_files)} mods for chapter {chapter_id}')
+
+        merge_code = self.app_state.local_config.get('merge_code', False)
+        merge_properties = self.app_state.local_config.get('merge_properties', False)
+
         returncode, stdout, stderr = self.g3mtool.merge_patches(
             data_win_path, patch_files, output_path,
             report_path=report_path, log_path=log_path,
+            merge_code=merge_code, merge_properties=merge_properties,
         )
 
         if returncode != 0:

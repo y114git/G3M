@@ -300,7 +300,9 @@
     "online_status": "🟢 Online: {count}",
     "loading_placeholder": "Loading...",
     "no_search_results": "Nothing found...",
-    "nobody_came": "But nobody came."
+    "nobody_came": "But nobody came.",
+    "settings_section_merging": "Merging",
+    "clear_cache_button": "Clear cache"
   },
   "files": {
     "archive_link": "Archive link",
@@ -338,7 +340,9 @@
   "checkboxes": {
     "disable_background": "Disable background",
     "disable_splash": "Disable splash",
-    "xdelta_modpack": "XDELTA instead of data.win/.ios"
+    "xdelta_modpack": "XDELTA instead of data.win/.ios",
+    "merge_properties": "Properties merge",
+    "merge_code": "Code merge"
   },
   "tags": {
     "gameplay": "Gameplay",
@@ -417,7 +421,10 @@
     "hide_library_filters": "Hide filtering options in the library tab to save space.",
     "change_mods_dir": "You can choose where the folder with mod files will be located.",
     "local_mod": "Local mod",
-    "search": "Search by name and description"
+    "search": "Search by name and description",
+    "clear_cache_button": "Delete the GameBanana metadata cache to force refresh information",
+    "merge_properties": "Combines settings (like JSON files) so that changes from different mods are preserved, preventing lost configurations.",
+    "merge_code": "Logically merges game logic code, enabling multiple mods to change the same behaviors without overwriting each other."
   },
   "dropdowns": {
     "all_mods": "All mods",
@@ -664,6 +671,9 @@
     "main_slots": "Main slots",
     "select_mod": "Select mod",
     "success": "Success",
+    "clear_cache_success": "GameBanana metadata cache has been successfully cleared.",
+    "clear_cache_confirm_title": "Clear Cache",
+    "clear_cache_confirm_text": "This will clear all GameBanana metadata. DELTAHUB will start loading mod data again. Continue?",
     "delete_confirmation": "Delete confirmation",
     "delete_mod_confirmation": "This will permanently delete the mod. Continue?",
     "create_modpack_title": "Create Modpack",
@@ -723,7 +733,8 @@
     "update_confirmation_title": "Mod Already Installed",
     "request_pending": "Change request is pending review.",
     "mod_key_error": "Could not determine mod key.",
-    "select_save_collection_title": "Select Save Collection"
+    "select_save_collection_title": "Select Save Collection",
+    "cancel": "Cancel"
   },
   "errors": {
     "access_permission_error": "Access error. Check mod edit permissions.",
@@ -1152,7 +1163,7 @@
   },
   "themes": {
     "import_themes": "Import Themes",
-    "import_instructions": "Import a theme from a file or URL. Supported format: .zip",
+    "import_instructions": "Select a .zip archive containing the theme or provide a direct link to download (GameBanana is supported). Please note: importing a theme will replace your current settings for colors, opacities, and background images.",
     "import_from_file": "Import from File",
     "import_from_url": "Import from URL",
     "import_from_url_button": "Import",
@@ -1167,7 +1178,22 @@
     "download_error": "Download error: {error}",
     "archive_not_found": "Archive not found",
     "installation_failed": "Failed to install theme",
-    "installation_error": "Installation error: {error}"
+    "installation_error": "Installation error: {error}",
+    "export_confirm_text": "Are you sure you want to export the current theme?",
+    "export_confirm_details": "The exported theme will include your current color, opacity, background image, and sound settings.",
+    "current_settings": "Your current customization settings",
+    "no_customizations": "Original theme",
+    "custom_colors": "Custom colors",
+    "background_music": "Background music",
+    "startup_sound": "Startup sound",
+    "custom_logo": "Custom logo",
+    "custom_background": "Custom background",
+    "color_bg": "Background color",
+    "color_btn": "Elements color",
+    "color_border": "Border color",
+    "color_hover": "Hover color",
+    "color_text": "Main text color",
+    "color_version": "Secondary text color"
   },
   "chat": {
     "window_title": "Chat",

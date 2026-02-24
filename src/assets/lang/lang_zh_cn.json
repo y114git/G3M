@@ -317,7 +317,9 @@
     "online_status": "🟢 在线：{count}",
     "loading_placeholder": "加载中...",
     "no_search_results": "未找到任何结果...",
-    "nobody_came": "但是没有人来。"
+    "nobody_came": "但是没有人来。",
+    "settings_section_merging": "Merging",
+    "clear_cache_button": "Clear cache"
   },
   "files": {
     "archive_link": "压缩文件链接",
@@ -355,7 +357,9 @@
   "checkboxes": {
     "disable_background": "禁用背景",
     "disable_splash": "禁用启动画面",
-    "xdelta_modpack": "使用XDELTA代替data.win/.ios"
+    "xdelta_modpack": "使用XDELTA代替data.win/.ios",
+    "merge_properties": "属性合并",
+    "merge_code": "代码合并"
   },
   "tags": {
     "gameplay": "游戏玩法",
@@ -434,7 +438,10 @@
     "hide_library_filters": "隐藏库中的过滤选项以节省空间。",
     "change_mods_dir": "您可以选择模组文件文件夹的位置。",
     "local_mod": "本地模组",
-    "search": "按名称和描述搜索"
+    "search": "按名称和描述搜索",
+    "clear_cache_button": "删除 GameBanana 元数据缓存以强制刷新信息",
+    "merge_properties": "合并配置更改（如 JSON），确保保留各 Mod 的设置，避免功能丢失",
+    "merge_code": "智能合并游戏逻辑，使不同 Mod 能够无缝修改同个功能而不冲突"
   },
   "dropdowns": {
     "all_mods": "所有模组",
@@ -681,6 +688,9 @@
     "main_slots": "主槽位",
     "select_mod": "选择模组",
     "success": "成功",
+    "clear_cache_success": "GameBanana 元数据缓存已成功清除。",
+    "clear_cache_confirm_title": "清除缓存",
+    "clear_cache_confirm_text": "这将清除所有 GameBanana 元数据。DELTAHUB 将重新开始从零加载模组数据。是否继续？",
     "delete_confirmation": "确认删除",
     "delete_mod_confirmation": "该模组将被永久删除。是否继续？",
     "create_modpack_title": "创建模组包",
@@ -740,7 +750,8 @@
     "update_confirmation_title": "模组已安装",
     "request_pending": "更改请求正在等待审核。",
     "mod_key_error": "无法确定模组密钥。",
-    "select_save_collection_title": "选择存档集合"
+    "select_save_collection_title": "选择存档集合",
+    "cancel": "取消"
   },
   "errors": {
     "access_permission_error": "访问错误。检查模组编辑权限。",
@@ -1167,7 +1178,7 @@
   },
   "themes": {
     "import_themes": "导入主题",
-    "import_instructions": "从文件或URL导入主题。支持的格式: .zip",
+    "import_instructions": "选择包含主题的 .zip 压缩包或提供直接下载链接（支持 GameBanana）。请注意：导入主题将替换您当前的颜色、透明度和背景图像设置。",
     "import_from_file": "从文件导入",
     "import_from_url": "从URL导入",
     "import_from_url_button": "导入",
@@ -1182,7 +1193,22 @@
     "download_error": "下载错误: {error}",
     "archive_not_found": "未找到归档",
     "installation_failed": "安装主题失败",
-    "installation_error": "安装错误: {error}"
+    "installation_error": "安装错误: {error}",
+    "export_confirm_text": "您确定要导出当前主题吗？",
+    "export_confirm_details": "导出的主题将包含您当前的颜色、透明度、背景图像和声音设置。",
+    "current_settings": "您当前的自定义设置",
+    "no_customizations": "原始主题",
+    "custom_colors": "自定义颜色",
+    "background_music": "背景音乐",
+    "startup_sound": "启动音效",
+    "custom_logo": "自定义 Logo",
+    "custom_background": "自定义背景",
+    "color_bg": "背景颜色",
+    "color_btn": "元素颜色",
+    "color_border": "边框颜色",
+    "color_hover": "悬停颜色",
+    "color_text": "主文本颜色",
+    "color_version": "次要文本颜色"
   },
   "chat": {
     "window_title": "聊天",

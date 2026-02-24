@@ -41,10 +41,15 @@ class G3MToolManager:
         output_path: str,
         report_path: Optional[str] = None,
         log_path: Optional[str] = None,
+        merge_code: bool = False,
+        merge_properties: bool = False,
     ) -> Tuple[int, str, str]:
         """Call g3mtool patch merge <original> <patch1> <patch2> ... --apply <output> [--report <path>] [--log <path>]"""
         cmd = [self.g3mtool_path, 'patch', 'merge', original_data_win] + mod_patches
         cmd.extend(['--apply', output_path])
+        for flag, enabled in [('--code', merge_code), ('--properties', merge_properties)]:
+            if enabled:
+                cmd.append(flag)
         if report_path:
             cmd.extend(['--report', report_path])
         if log_path:

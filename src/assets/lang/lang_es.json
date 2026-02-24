@@ -318,7 +318,9 @@
     "online_status": "🟢 En línea: {count}",
     "loading_placeholder": "Cargando...",
     "no_search_results": "No se encontró nada...",
-    "nobody_came": "Pero nadie vino."
+    "nobody_came": "Pero nadie vino.",
+    "settings_section_merging": "Fusión de mods",
+    "clear_cache_button": "Limpiar caché de mods"
   },
   "files": {
     "archive_link": "Enlace de archivo",
@@ -356,7 +358,9 @@
   "checkboxes": {
     "disable_background": "Desactivar fondo",
     "disable_splash": "Desactivar pantalla de inicio",
-    "xdelta_modpack": "XDELTA en lugar de data.win/.ios"
+    "xdelta_modpack": "XDELTA en lugar de data.win/.ios",
+    "merge_properties": "Fusión de propiedades",
+    "merge_code": "Fusión de código"
   },
   "tags": {
     "gameplay": "Jugabilidad",
@@ -435,7 +439,10 @@
     "hide_library_filters": "Ocultar opciones de filtrado en la pestaña de biblioteca para ahorrar espacio.",
     "change_mods_dir": "Puedes elegir dónde se ubicará la carpeta con archivos de mods.",
     "local_mod": "Mod local",
-    "search": "Buscar por nombre y descripción"
+    "search": "Buscar por nombre y descripción",
+    "clear_cache_button": "Eliminar el caché de metadatos de GameBanana para forzar la actualización de información",
+    "merge_properties": "Combina configuraciones (como JSON) conservando los cambios de los mods para no perder ajustes funcionales.",
+    "merge_code": "Combina inteligentemente el código del juego, permitiendo que varios mods funcionen juntos sin sobrescribir la lógica."
   },
   "dropdowns": {
     "all_mods": "Todos los mods",
@@ -682,6 +689,9 @@
     "main_slots": "Ranuras principales",
     "select_mod": "Seleccionar mod",
     "success": "Éxito",
+    "clear_cache_success": "La caché de metadatos de GameBanana se ha limpiado correctamente.",
+    "clear_cache_confirm_title": "Limpiar caché",
+    "clear_cache_confirm_text": "Esto borrará todos los metadatos de GameBanana. DELTAHUB comenzará a cargar los datos de los mods desde cero. ¿Continuar?",
     "delete_confirmation": "Confirmar eliminación",
     "delete_mod_confirmation": "Esto eliminará permanentemente el mod. ¿Continuar?",
     "create_modpack_title": "Crear Modpack",
@@ -741,7 +751,8 @@
     "update_confirmation_title": "Mod Ya Instalado",
     "request_pending": "La solicitud de cambio está pendiente de revisión.",
     "mod_key_error": "No se pudo determinar la clave del mod.",
-    "select_save_collection_title": "Seleccionar Colección de Guardados"
+    "select_save_collection_title": "Seleccionar Colección de Guardados",
+    "cancel": "Cancelar"
   },
   "errors": {
     "access_permission_error": "Error de acceso. Verifica los permisos de edición del mod.",
@@ -1169,7 +1180,7 @@
   },
   "themes": {
     "import_themes": "Importar Temas",
-    "import_instructions": "Importa un tema desde un archivo o URL. Formato soportado: .zip",
+    "import_instructions": "Seleccione un archivo .zip con el tema o proporcione un enlace directo para descargar (compatible con GameBanana). Tenga en cuenta: la importación de un tema reemplazará su configuración actual de colores, opacidad e imágenes de fondo.",
     "import_from_file": "Importar desde Archivo",
     "import_from_url": "Importar desde URL",
     "import_from_url_button": "Importar",
@@ -1184,7 +1195,22 @@
     "download_error": "Error de descarga: {error}",
     "archive_not_found": "Archivo no encontrado",
     "installation_failed": "Error al instalar tema",
-    "installation_error": "Error de instalación: {error}"
+    "installation_error": "Error de instalación: {error}",
+    "export_confirm_text": "¿Estás seguro de que quieres exportar el tema actual?",
+    "export_confirm_details": "El tema exportado incluirá su configuración actual de color, opacidad, imágenes de fondo y sonidos.",
+    "current_settings": "Su configuración actual de personalización",
+    "no_customizations": "Tema original",
+    "custom_colors": "Colores personalizados",
+    "background_music": "Música de fondo",
+    "startup_sound": "Sonido de inicio",
+    "custom_logo": "Logotipo personalizado",
+    "custom_background": "Fondo personalizado",
+    "color_bg": "Color de fondo",
+    "color_btn": "Color de elementos",
+    "color_border": "Color de bordes",
+    "color_hover": "Color de resaltado",
+    "color_text": "Color de texto",
+    "color_version": "Color de versión"
   },
   "chat": {
     "window_title": "Chat",
