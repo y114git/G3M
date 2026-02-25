@@ -69,7 +69,7 @@ def get_mod_source_dir(mod_data: Any, chapter_id: str, mod_service, app_state, l
             alt_menu_dir = os.path.join(source_dir, 'menu')
             if os.path.isdir(alt_menu_dir):
                 return alt_menu_dir
-        elif '_' not in chapter_id:
+        elif '_' not in str(chapter_id):
             return source_dir
         return None
     return chapter_dir

@@ -27,6 +27,7 @@ def get_user_data_root():
 def get_user_mods_dir(): return os.path.join(get_user_data_root(), 'mods')
 def get_user_lang_dir(): return os.path.join(get_user_data_root(), 'lang')
 def get_user_plugins_dir(): return os.path.join(get_user_data_root(), 'plugins')
+def get_user_themes_dir(): return os.path.join(get_user_data_root(), 'themes')
 
 
 def resource_path(relative_path):
@@ -76,7 +77,7 @@ def find_chapter_resource_dir(base_dir, chapter_id: str):
             target_base = os.path.join(target_base, 'Contents', 'Resources')
             if not os.path.isdir(target_base):
                 return None
-        if '_' in chapter_id:
+        if '_' in str(chapter_id):
             _, suffix = chapter_id.rsplit('_', 1)
             if suffix.isdigit() and int(suffix) > 0:
                 prefix = f'chapter{suffix}_'

@@ -319,7 +319,12 @@
     "no_search_results": "未找到任何結果...",
     "nobody_came": "但是沒有人來。",
     "settings_section_merging": "Merging",
-    "clear_cache_button": "Clear cache"
+    "clear_cache_button": "Clear cache",
+    "settings_section_themes": "主題",
+    "settings_section_media": "外觀和聲音",
+    "do_not_save_theme_after_import": "導入後不要將主題保存在列表中",
+    "dont_hide_window_on_launch": "啟動時不隱藏視窗",
+    "hide_wips_without_downloads": "隱藏無下載的WIP"
   },
   "files": {
     "archive_link": "壓縮檔案連結",
@@ -417,7 +422,8 @@
     "main_slots": "主槽位",
     "changelog_close": "關閉",
     "withdraw_request": "撤回請求",
-    "shortcut": "捷徑"
+    "shortcut": "捷徑",
+    "import_export_themes": "導入/出主題"
   },
   "tooltips": {
     "custom_exe": "您可以選擇自己的可執行檔案而不是預設檔案（例如DELTARUNE.exe）。如果檔案位於不同位置或您想執行自訂啟動檔案，這將很有用。",
@@ -443,7 +449,9 @@
     "search": "按名稱和描述搜尋",
     "clear_cache_button": "Delete the GameBanana metadata cache to force refresh information",
     "merge_properties": "合併配置更改（如 JSON），確保保留各 Mod 的設定，避免功能遺失",
-    "merge_code": "智能合併遊戲邏辑，使不同 Mod 能夠無縫修改同個功能而不衝突"
+    "merge_code": "智能合併遊戲邏辑，使不同 Mod 能夠無縫修改同個功能而不衝突",
+    "dont_hide_window_on_launch": "遊戲運行時保持啟動器視窗可見。",
+    "hide_wips_without_downloads": "隱藏標記為開發中且沒有可用下載的模組。"
   },
   "dropdowns": {
     "all_mods": "所有模組",
@@ -755,7 +763,12 @@
     "request_pending": "更改請求正在等待審核。",
     "mod_key_error": "無法確定模組密鑰。",
     "select_save_collection_title": "選擇存檔集合",
-    "cancel": "取消"
+    "cancel": "取消",
+    "theme_save_title": "保存主題",
+    "theme_save_prompt": "輸入主題名稱:",
+    "theme_delete_title": "刪除主題",
+    "theme_delete_prompt": "您確定要刪除此主題嗎：{theme}？",
+    "theme_invalid_archive": "無效的主題壓縮包。可能缺少必需的文件。"
   },
   "errors": {
     "access_permission_error": "訪問錯誤。檢查模組編輯權限。",
@@ -1028,7 +1041,7 @@
     "no_description_status": "無描述可用。",
     "no_files_to_copy": "未找到要拷貝的檔案。",
     "no_game_path": "遊戲路徑自動檢測失敗。請手動設置。",
-    "game_path_required_for_mods": "選擇模組時需要遊戲資料夾路徑。請在庫中設置遊戲路徑。",
+    "game_path_required_for_mods": "選擇模組時需要遊戲資料夾路徑。請在設定 > 啟動/修補中設定遊戲路徑。",
     "no_mod": "無模組",
     "normal_launch": "原版啟動",
     "online_count": "在線：{count}",

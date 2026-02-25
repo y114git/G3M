@@ -72,7 +72,7 @@ class ModInfo:
             if tab:
                 return self.files.get(tab.files_key)
         result = self.files.get(chapter_id)
-        if not result and '_' in chapter_id:
+        if not result and '_' in str(chapter_id):
             _, suffix = chapter_id.rsplit('_', 1)
             result = self.files.get(suffix)
         return result

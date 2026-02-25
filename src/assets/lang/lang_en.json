@@ -303,7 +303,12 @@
     "no_search_results": "Nothing found...",
     "nobody_came": "But nobody came.",
     "settings_section_merging": "Merging",
-    "clear_cache_button": "Clear cache"
+    "clear_cache_button": "Clear cache",
+    "settings_section_themes": "Themes",
+    "settings_section_media": "Media & Audio",
+    "do_not_save_theme_after_import": "Do not save theme in list after import",
+    "dont_hide_window_on_launch": "Don't hide window on launch",
+    "hide_wips_without_downloads": "Hide WIPs without downloads"
   },
   "files": {
     "archive_link": "Archive link",
@@ -401,7 +406,8 @@
     "main_slots": "Main slots",
     "changelog_close": "Close",
     "withdraw_request": "Withdraw request",
-    "shortcut": "Shortcut"
+    "shortcut": "Shortcut",
+    "import_export_themes": "Im/Export Theme"
   },
   "tooltips": {
     "custom_exe": "You can select your own executable file instead of the default (e.g., DELTARUNE.exe). Useful if it's in a different location or you want to run a custom launch file.",
@@ -427,7 +433,9 @@
     "search": "Search by name and description",
     "clear_cache_button": "Delete the GameBanana metadata cache to force refresh information",
     "merge_properties": "Combines settings (like JSON files) so that changes from different mods are preserved, preventing lost configurations.",
-    "merge_code": "Logically merges game logic code, enabling multiple mods to change the same behaviors without overwriting each other."
+    "merge_code": "Logically merges game logic code, enabling multiple mods to change the same behaviors without overwriting each other.",
+    "dont_hide_window_on_launch": "Keep the launcher window visible when the game is running.",
+    "hide_wips_without_downloads": "Hide mods marked as Work in Progress that have no downloads available."
   },
   "dropdowns": {
     "all_mods": "All mods",
@@ -690,7 +698,7 @@
     "delete_save_confirmation": "The save will be permanently deleted. Continue?",
     "legacy_cleanup_title": "Old files",
     "copy_confirmation": "Confirm copy",
-    "reset_settings_confirm_text": "Are you sure you want to reset all settings to their default values?\\n\\nThis action will affect:\\n- Game paths\\n- Customization settings (background, colors, music, startup sound)\\n- Library mod selections (selected mods will be deselected)\\n\\nUnaffected:\\n- Selected language\\n- Installed mods",
+    "reset_settings_confirm_text": "Are you sure you want to reset all settings to their default values?\\n\\nThis action will affect:\\n- Game paths (Settings > Launch / Patching)\\n- Customization settings (background, colors, music, startup sound)\\n- Library mod selections (selected mods will be deselected)\\n\\nUnaffected:\\n- Selected language\\n- Installed mods",
     "file_replacement_warning_title": "Installation Warning",
     "mod_installed_title": "Mod Installed",
     "no_collections": "No collections",
@@ -733,13 +741,18 @@
     "error": "Error",
     "delete_collection": "Delete collection?",
     "access_denied_detailed": "<b>Access denied to file or folder:</b><br><code>{path}</code><br><br>Launcher failed to modify files. This is a common issue, here are possible solutions:<br>1. <b>Antivirus:</b> Disable it or add game/launcher folder to exceptions.<br>2. <b>Admin Rights:</b> Run launcher as admin.<br>3. <b>Read-only:</b> Ensure the game folder isn't read-only.",
-    "direct_launch_steam_incompatible": "Direct launch is not compatible with Launch via Steam. Disable it in Settings.",
+    "direct_launch_steam_incompatible": "Direct launch is not compatible with Launch via Steam. Disable it in Settings > Launch / Patching.",
     "path_not_found": "Path not found",
     "update_confirmation_title": "Mod Already Installed",
     "request_pending": "Change request is pending review.",
     "mod_key_error": "Could not determine mod key.",
     "select_save_collection_title": "Select Save Collection",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "theme_save_title": "Save Theme",
+    "theme_save_prompt": "Enter theme name:",
+    "theme_delete_title": "Delete Theme",
+    "theme_delete_prompt": "Are you sure you want to delete this theme: {theme}?",
+    "theme_invalid_archive": "Invalid theme archive. Required files might be missing."
   },
   "errors": {
     "access_permission_error": "Access error. Check mod edit permissions.",
@@ -1014,7 +1027,7 @@
     "no_description_status": "No description available.",
     "no_files_to_copy": "No files found to copy.",
     "no_game_path": "Game paths autodetection failed. Please set them manually.",
-    "game_path_required_for_mods": "Game folder path is required when mods are selected. Please set the game path in the Library.",
+    "game_path_required_for_mods": "Game folder path is required when mods are selected. Please set the game path in Settings > Launch / Patching.",
     "no_mod": "No mod",
     "normal_launch": "Vanilla launch",
     "online_count": "Online: {count}",

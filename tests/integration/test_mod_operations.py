@@ -115,3 +115,18 @@ class TestManualInstall:
         controller = ModOperationsController(app_state=app_state, feedback_service=feedback_service, mod_service=mod_service, app_window=mock_app_window)
         assert hasattr(controller, '_start_manual_install_from_gamebanana')
         assert hasattr(controller, '_start_prepare_worker')
+
+    def test_chapter_display_name(self):
+        from ui.dialogs.manual_install_dialog import ManualModInstallDialog
+        assert ManualModInstallDialog._chapter_display_name('deltarune_0') == '0'
+        assert ManualModInstallDialog._chapter_display_name('deltarune_2') == '2'
+        assert ManualModInstallDialog._chapter_display_name('undertale') == 'undertale'
+        assert ManualModInstallDialog._chapter_display_name('deltarunedemo') == 'deltarunedemo'
+
+    def test_chapter_folder_name(self):
+        from utils.file_utils import get_chapter_folder_name
+        assert get_chapter_folder_name('deltarune_0') == 'chapter_0'
+        assert get_chapter_folder_name('deltarune_1') == 'chapter_1'
+        assert get_chapter_folder_name('deltarunedemo') == 'demo'
+        assert get_chapter_folder_name('undertale') == 'chapter_0'
+        assert get_chapter_folder_name('pizzatower') == 'pizzatower'

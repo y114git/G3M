@@ -34,20 +34,23 @@ class LocalizationManager:
                     try:
                         shutil.copy2(internal_path, external_path)
                     except Exception as e:
-                        logging.error(f"Could not copy internal file '{filename}' to external directory: {e}")
+                        logging.error(f"Could not copy {filename}: {e}")
                 else:
                     try:
                         self._merge_lang_files(internal_path, external_path)
                     except Exception as e:
-                        logging.error(f"Could not merge file '{filename}': {e}")
-            elif not os.path.exists(external_path):
-                try:
-                    if os.path.isdir(internal_path):
-                        shutil.copytree(internal_path, external_path)
-                    else:
-                        shutil.copy2(internal_path, external_path)
-                except Exception as e:
-                    logging.error(f"Could not copy internal file '{filename}' to external directory: {e}")
+                        logging.error(f"Could not merge {filename}: {e}")
+            else:
+                if not os.path.exists(external_path) or (os.path.isfile(internal_path) and os.path.isfile(external_path) and os.path.getsize(internal_path) != os.path.getsize(external_path)):
+                    try:
+                        if os.path.isdir(internal_path):
+                            if os.path.exists(external_path):
+                                shutil.rmtree(external_path)
+                            shutil.copytree(internal_path, external_path)
+                        else:
+                            shutil.copy2(internal_path, external_path)
+                    except Exception as e:
+                        logging.error(f"Could not copy {filename}: {e}")
 
     def _merge_lang_files(self, internal_path: str, external_path: str):
         with open(internal_path, 'r', encoding='utf-8') as f:
@@ -280,18 +283,13 @@ def _fallback_tr(key: str, **kwargs) -> str:
         if not os.path.exists(en_path):
             en_path = os.path.join(localization_service.internal_lang_dir, 'lang_en.json')
         with open(en_path, 'r', encoding='utf-8') as f:
-            en_strings = json.load(f)
-        keys = key.split('.')
-        value = en_strings
-        for k in keys:
-            if k in value:
-                value = value[k]
-            elif f'_{k}' in value:
-                value = value[f'_{k}']
-            else:
-                raise KeyError(k)
-        if isinstance(value, str):
-            return value.format(**kwargs) if kwargs else value
+            val = json.load(f)
+        for k in key.split('.'):
+            val = val.get(k, val.get(f'_{k}'))
+            if val is None:
+                raise KeyError
+        if isinstance(val, str):
+            return val.format(**kwargs) if kwargs else val
     except Exception:
         pass
     return f'[{key}]'

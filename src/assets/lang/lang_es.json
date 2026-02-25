@@ -320,7 +320,12 @@
     "no_search_results": "No se encontró nada...",
     "nobody_came": "Pero nadie vino.",
     "settings_section_merging": "Fusión de mods",
-    "clear_cache_button": "Limpiar caché de mods"
+    "clear_cache_button": "Limpiar caché de mods",
+    "settings_section_themes": "Temas",
+    "settings_section_media": "Apariencia y Sonido",
+    "do_not_save_theme_after_import": "No guardar tema en la lista después de importar",
+    "dont_hide_window_on_launch": "No ocultar ventana al iniciar",
+    "hide_wips_without_downloads": "Ocultar WIPs sin descargas"
   },
   "files": {
     "archive_link": "Enlace de archivo",
@@ -418,7 +423,8 @@
     "main_slots": "Ranuras principales",
     "changelog_close": "Cerrar",
     "withdraw_request": "Retirar solicitud",
-    "shortcut": "Acceso directo"
+    "shortcut": "Acceso directo",
+    "import_export_themes": "Im/Exportar Tema"
   },
   "tooltips": {
     "custom_exe": "Puedes seleccionar tu propio archivo ejecutable en lugar del predeterminado (por ejemplo, DELTARUNE.exe). Útil si está en una ubicación diferente o quieres ejecutar un archivo de inicio personalizado.",
@@ -444,7 +450,9 @@
     "search": "Buscar por nombre y descripción",
     "clear_cache_button": "Eliminar el caché de metadatos de GameBanana para forzar la actualización de información",
     "merge_properties": "Combina configuraciones (como JSON) conservando los cambios de los mods para no perder ajustes funcionales.",
-    "merge_code": "Combina inteligentemente el código del juego, permitiendo que varios mods funcionen juntos sin sobrescribir la lógica."
+    "merge_code": "Combina inteligentemente el código del juego, permitiendo que varios mods funcionen juntos sin sobrescribir la lógica.",
+    "dont_hide_window_on_launch": "Mantener la ventana del lanzador visible mientras el juego está abierto.",
+    "hide_wips_without_downloads": "Ocultar los mods marcados como Trabajo en Progreso que no tienen descargas disponibles."
   },
   "dropdowns": {
     "all_mods": "Todos los mods",
@@ -756,7 +764,12 @@
     "request_pending": "La solicitud de cambio está pendiente de revisión.",
     "mod_key_error": "No se pudo determinar la clave del mod.",
     "select_save_collection_title": "Seleccionar Colección de Guardados",
-    "cancel": "Cancelar"
+    "cancel": "Cancelar",
+    "theme_save_title": "Guardar Tema",
+    "theme_save_prompt": "Ingrese el nombre del tema:",
+    "theme_delete_title": "Eliminar Tema",
+    "theme_delete_prompt": "¿Estás seguro de que quieres eliminar este tema: {theme}?",
+    "theme_invalid_archive": "Archivo de tema no válido. Es posible que falten archivos requeridos."
   },
   "errors": {
     "access_permission_error": "Error de acceso. Verifica los permisos de edición del mod.",
@@ -1028,7 +1041,7 @@
     "no_description_status": "No hay descripción disponible.",
     "no_files_to_copy": "No se encontraron archivos para copiar.",
     "no_game_path": "La detección automática de rutas del juego falló. Por favor, establécelas manualmente.",
-    "game_path_required_for_mods": "La ruta de la carpeta del juego es obligatoria cuando se seleccionan mods. Por favor, establece la ruta del juego en la biblioteca.",
+    "game_path_required_for_mods": "La ruta de la carpeta del juego es necesaria cuando se seleccionan mods. Establezca la ruta del juego en Ajustes > Lanzamiento / Parcheo.",
     "no_mod": "Sin mod",
     "normal_launch": "Inicio vanilla",
     "online_count": "En línea: {count}",

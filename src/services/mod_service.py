@@ -139,7 +139,7 @@ class ModManager(QObject):
         """Convert chapter_id to the file key used in config files data."""
         if chapter_id == 'deltarunedemo':
             return 'demo'
-        if '_' in chapter_id:
+        if '_' in str(chapter_id):
             _, suffix = chapter_id.rsplit('_', 1)
             return suffix
         return chapter_id
@@ -760,7 +760,7 @@ class ModManager(QObject):
                     return 'demo' in files_data or 'undertale' in files_data
                 file_key = self._chapter_id_to_file_key(chapter_id)
                 return file_key in files_data
-            folder_name = get_chapter_folder_name(chapter_id) if '_' in chapter_id else 'universal'
+            folder_name = get_chapter_folder_name(chapter_id) if '_' in str(chapter_id) else 'universal'
             for name in (folder_name, 'universal'):
                 folder = os.path.join(mod_info.folder_path, name)
                 if os.path.exists(folder):

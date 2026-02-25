@@ -32,19 +32,23 @@ class ThemeInstallWorker(BaseInstallWorker):
                 except Exception as e:
                     logging.warning(f'Failed to remove old file {old_file}: {e}')
         self.app_state.local_config['custom_background_path'] = ''
+        _asset_prefixes = {
+            'background.': 'custom_background',
+            'background_music.': 'custom_background_music',
+            'startup_sound.': 'custom_startup_sound',
+            'custom_logo.': 'custom_logo',
+            'custom_font.': 'custom_font'
+        }
         for filename in os.listdir(source_dir):
             src_path = os.path.join(source_dir, filename)
-            if filename.startswith('background.'):
-                ext = os.path.splitext(filename)[1]
-                dest_path = os.path.join(self.config_dir, f'custom_background{ext}')
-                shutil.copy2(src_path, dest_path)
-                self.app_state.local_config['custom_background_path'] = dest_path
-            elif filename.startswith('background_music.'):
-                dest_path = os.path.join(self.config_dir, f'custom_background_music{os.path.splitext(filename)[1]}')
-                shutil.copy2(src_path, dest_path)
-            elif filename.startswith('startup_sound.'):
-                dest_path = os.path.join(self.config_dir, f'custom_startup_sound{os.path.splitext(filename)[1]}')
-                shutil.copy2(src_path, dest_path)
+            for prefix, dest_name in _asset_prefixes.items():
+                if filename.startswith(prefix):
+                    ext = os.path.splitext(filename)[1]
+                    dest_path = os.path.join(self.config_dir, f'{dest_name}{ext}')
+                    shutil.copy2(src_path, dest_path)
+                    if prefix == 'background.':
+                        self.app_state.local_config['custom_background_path'] = dest_path
+                    break
 
     def _download_archive(self, url: str, target_path: str) -> bool:
         return self._download_archive_base(url, target_path, tr('themes.downloading_theme'))

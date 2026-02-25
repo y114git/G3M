@@ -24,7 +24,7 @@ class SettingsManager(QObject):
     theme_changed = pyqtSignal()
     restart_required = pyqtSignal(str)
     status_changed = pyqtSignal(str, str)
-    _IMAGE_EXTENSIONS = ('.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp', '.mp4', '.webm')
+    _IMAGE_EXTENSIONS = ('.png', '.jpg', '.jpeg', '.gif', '.bmp', '.ico', '.webp', '.mp4', '.webm')
     _FONT_EXTENSIONS = ('.ttf', '.otf')
     _AUDIO_OLD_FILES = ('custom_background_music.mp3', 'custom_background_music.wav', 'custom_startup_sound.mp3', 'custom_startup_sound.wav')
 
@@ -335,7 +335,25 @@ class SettingsManager(QObject):
         try:
             with zipfile.ZipFile(theme_file_path, 'r') as zipf:
                 if 'theme.json' not in zipf.namelist():
-                    raise ValueError('Missing theme.json')
+                    raise ValueError
+        except Exception:
+            self.feedback_service.show_message('error', 'dialogs.error', tr('dialogs.theme_invalid_archive'))
+            return
+
+        from utils.path_utils import resource_path, get_user_themes_dir
+        import shutil
+        theme_dir_abs = os.path.normcase(os.path.normpath(os.path.dirname(os.path.abspath(theme_file_path))))
+
+        if theme_dir_abs not in (os.path.normcase(os.path.normpath(os.path.abspath(d))) for d in (resource_path('assets/themes'), get_user_themes_dir())):
+            cb = getattr(self.parent_widget, 'do_not_save_theme_checkbox', None)
+            if not (cb and cb.isChecked()):
+                dest = os.path.join(get_user_themes_dir(), os.path.basename(theme_file_path))
+                os.makedirs(os.path.dirname(dest), exist_ok=True)
+                shutil.copy2(theme_file_path, dest)
+                if hasattr(self.parent_widget, 'theme'):
+                    self.parent_widget.theme.init_theme_list()
+
+        try:
             from utils.archive_utils import extract_any_archive
             with tempfile.TemporaryDirectory() as temp_dir:
                 extract_any_archive(theme_file_path, temp_dir)
@@ -351,11 +369,21 @@ class SettingsManager(QObject):
                     theme_settings = json.load(f)
                 for key, value in theme_settings.items():
                     self.app_state.local_config[key] = value
-                self._remove_files([os.path.join(self.app_state.config_dir, f) for f in self._AUDIO_OLD_FILES])
+
+                audio_files = [os.path.join(self.app_state.config_dir, f) for f in self._AUDIO_OLD_FILES]
+                self._remove_files(audio_files)
                 self._remove_logo_files()
                 self._remove_font_files()
                 self.app_state.local_config['custom_background_path'] = ''
-                _asset_prefixes = {'background.': 'custom_background', 'background_music.': 'custom_background_music', 'startup_sound.': 'custom_startup_sound', 'custom_logo.': 'custom_logo', 'custom_font.': 'custom_font'}
+
+                _asset_prefixes = {
+                    'background.': 'custom_background',
+                    'background_music.': 'custom_background_music',
+                    'startup_sound.': 'custom_startup_sound',
+                    'custom_logo.': 'custom_logo',
+                    'custom_font.': 'custom_font'
+                }
+
                 for filename in os.listdir(temp_dir):
                     for prefix, dest_name in _asset_prefixes.items():
                         if filename.startswith(prefix):
@@ -365,12 +393,15 @@ class SettingsManager(QObject):
                             if prefix == 'background.':
                                 self.app_state.local_config['custom_background_path'] = dest_path
                             break
+
             self.write_local_config()
             self.app_state.local_config['first_launch_splash_shown'] = True
+
             if 'disable_splash' in theme_settings:
                 self.app_state.local_config['disable_splash'] = theme_settings['disable_splash']
             elif 'disable_splash' not in self.app_state.local_config:
                 self.app_state.local_config['disable_splash'] = True
+
             self.write_local_config()
             self.theme_changed.emit()
             self.settings_changed.emit()

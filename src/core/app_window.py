@@ -530,7 +530,8 @@ class AppWindow(QWidget):
             'fullscreen_checkbox', 'disable_background_checkbox', 'disable_splash_checkbox',
             'change_background_button', 'change_logo_button', 'change_font_button', 'background_music_button',
             'startup_sound_button', 'custom_style_frame', 'color_widgets', 'color_labels',
-            'color_config', 'theme_button',
+            'color_config', 'theme_button', 'themes_list_widget', 'theme_apply_btn',
+            'theme_save_btn', 'theme_delete_btn', 'do_not_save_theme_checkbox',
             'hide_wips_without_downloads_checkbox', 'auto_sorting_checkbox',
             'mods_per_page_label', 'mods_per_page_spinbox',
             'gb_sort_label', 'gb_sort_combo', 'blocklist_button',
@@ -564,6 +565,11 @@ class AppWindow(QWidget):
         self.startup_sound_button.setText(self.customization_service.get_startup_sound_button_text())
         self.startup_sound_button.clicked.connect(self.theme.on_startup_sound_button_click)
         self.theme_button.clicked.connect(self.theme.on_theme_button_click)
+        self.theme_apply_btn.clicked.connect(self.theme.on_theme_apply_clicked)
+        self.theme_save_btn.clicked.connect(self.theme.on_theme_save_clicked)
+        self.theme_delete_btn.clicked.connect(self.theme.on_theme_delete_clicked)
+
+        self.theme.init_theme_list()
 
         def pick_color_for_edit(target_edit):
             if (color := QColorDialog.getColor()).isValid():
@@ -1139,6 +1145,8 @@ class AppWindow(QWidget):
             self.search_display.update_search_cards()
 
     def _on_refresh_clicked(self, is_initial=False):
+        if hasattr(self, 'theme') and self.theme:
+            self.theme.init_theme_list()
         if not is_initial and self.app_state.has_internet:
             if self._reload_global_settings():
                 self._check_and_show_announce(force_check=True)

@@ -220,7 +220,37 @@ class SettingsViewBuilder:
     def _build_appearance_tab(self) -> QWidget:
         page, layout = self._build_simple_tab_page()
 
-        sec, cl = self._collapsible_section(tr('ui.settings_section_general'), 'appearance_general', 'ui.settings_section_general')
+        sec, cl = self._collapsible_section(tr('ui.settings_section_themes'), 'appearance_themes', 'ui.settings_section_themes')
+
+        theme_button = self._styled_button(tr('buttons.import_export_themes'), 400)
+        theme_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        cl.addWidget(theme_button, alignment=Qt.AlignmentFlag.AlignHCenter)
+
+        themes_row = QHBoxLayout()
+        themes_row.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        themes_list_widget = QComboBox()
+        themes_list_widget.setMinimumWidth(200)
+        themes_row.addWidget(themes_list_widget)
+        _btn_style = 'min-width: 35px; max-width: 35px; padding-left: 0px; padding-right: 0px;'
+        theme_apply_btn = QPushButton("✔")
+        theme_apply_btn.setStyleSheet(_btn_style)
+        theme_apply_btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        theme_save_btn = QPushButton("🖫")
+        theme_save_btn.setStyleSheet(_btn_style)
+        theme_save_btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        theme_delete_btn = QPushButton("🗑")
+        theme_delete_btn.setStyleSheet(_btn_style)
+        theme_delete_btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        themes_row.addWidget(theme_apply_btn)
+        themes_row.addWidget(theme_save_btn)
+        themes_row.addWidget(theme_delete_btn)
+        cl.addLayout(themes_row)
+
+        do_not_save_theme_checkbox = self._styled_checkbox(tr('ui.do_not_save_theme_after_import'))
+        cl.addWidget(do_not_save_theme_checkbox, alignment=Qt.AlignmentFlag.AlignHCenter)
+        layout.addWidget(sec)
+
+        sec, cl = self._collapsible_section(tr('ui.settings_section_media'), 'appearance_general', 'ui.settings_section_media')
         disable_background_checkbox = self._styled_checkbox(tr('checkboxes.disable_background'))
         disable_splash_checkbox = self._styled_checkbox(tr('checkboxes.disable_splash'))
         background_buttons_layout = QHBoxLayout()
@@ -295,9 +325,6 @@ class SettingsViewBuilder:
             self.widgets[f'color_reset_{key}'] = reset_btn
             custom_style_layout.addLayout(row_layout)
         cl.addWidget(custom_style_frame)
-        theme_button = self._styled_button(tr('buttons.theme_management'), 400)
-        theme_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        cl.addWidget(theme_button, alignment=Qt.AlignmentFlag.AlignHCenter)
         layout.addWidget(sec)
 
         layout.addStretch()
@@ -314,6 +341,11 @@ class SettingsViewBuilder:
         self.widgets['color_labels'] = color_labels
         self.widgets['color_config'] = color_config
         self.widgets['theme_button'] = theme_button
+        self.widgets['themes_list_widget'] = themes_list_widget
+        self.widgets['theme_apply_btn'] = theme_apply_btn
+        self.widgets['theme_save_btn'] = theme_save_btn
+        self.widgets['theme_delete_btn'] = theme_delete_btn
+        self.widgets['do_not_save_theme_checkbox'] = do_not_save_theme_checkbox
         return self._wrap_in_scroll(page)
 
     def _build_mods_browser_tab(self) -> QWidget:

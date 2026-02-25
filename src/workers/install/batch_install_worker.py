@@ -58,7 +58,7 @@ class InstallModsThread(QThread):
     def _chapter_id_to_file_key(chapter_id: str) -> str:
         if chapter_id == 'deltarunedemo':
             return 'demo'
-        if '_' in chapter_id:
+        if '_' in str(chapter_id):
             _, suffix = chapter_id.rsplit('_', 1)
             return suffix
         return chapter_id

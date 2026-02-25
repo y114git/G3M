@@ -319,7 +319,12 @@
     "no_search_results": "未找到任何结果...",
     "nobody_came": "但是没有人来。",
     "settings_section_merging": "Merging",
-    "clear_cache_button": "Clear cache"
+    "clear_cache_button": "Clear cache",
+    "settings_section_themes": "主题",
+    "settings_section_media": "外观和声音",
+    "do_not_save_theme_after_import": "导入后不要将主题保存在列表中",
+    "dont_hide_window_on_launch": "启动时不隐藏窗口",
+    "hide_wips_without_downloads": "隐藏无下载的WIP"
   },
   "files": {
     "archive_link": "压缩文件链接",
@@ -417,7 +422,8 @@
     "main_slots": "主槽位",
     "changelog_close": "关闭",
     "withdraw_request": "撤回请求",
-    "shortcut": "快捷方式"
+    "shortcut": "快捷方式",
+    "import_export_themes": "导入/出主题"
   },
   "tooltips": {
     "custom_exe": "您可以选择自己的可执行文件而不是默认文件（例如DELTARUNE.exe）。如果文件位于不同位置或您想运行自定义启动文件，这将很有用。",
@@ -443,7 +449,9 @@
     "search": "按名称和描述搜索",
     "clear_cache_button": "删除 GameBanana 元数据缓存以强制刷新信息",
     "merge_properties": "合并配置更改（如 JSON），确保保留各 Mod 的设置，避免功能丢失",
-    "merge_code": "智能合并游戏逻辑，使不同 Mod 能够无缝修改同个功能而不冲突"
+    "merge_code": "智能合并游戏逻辑，使不同 Mod 能够无缝修改同个功能而不冲突",
+    "dont_hide_window_on_launch": "游戏运行时保持启动器窗口可见。",
+    "hide_wips_without_downloads": "隐藏标记为开发中且没有可用下载的模组。"
   },
   "dropdowns": {
     "all_mods": "所有模组",
@@ -755,7 +763,12 @@
     "request_pending": "更改请求正在等待审核。",
     "mod_key_error": "无法确定模组密钥。",
     "select_save_collection_title": "选择存档集合",
-    "cancel": "取消"
+    "cancel": "取消",
+    "theme_save_title": "保存主题",
+    "theme_save_prompt": "输入主题名称:",
+    "theme_delete_title": "删除主题",
+    "theme_delete_prompt": "您确定要删除此主题吗：{theme}？",
+    "theme_invalid_archive": "无效的主题压缩包。可能缺少必需的文件。"
   },
   "errors": {
     "access_permission_error": "访问错误。检查模组编辑权限。",
@@ -1024,7 +1037,7 @@
     "no_description_status": "无描述可用。",
     "no_files_to_copy": "未找到要复制的文件。",
     "no_game_path": "游戏路径自动检测失败。请手动设置。",
-    "game_path_required_for_mods": "选择模组时需要游戏文件夹路径。请在库中设置游戏路径。",
+    "game_path_required_for_mods": "选择模组时需要游戏文件夹路径。请在设置 > 启动/修补中设置游戏路径。",
     "no_mod": "无模组",
     "normal_launch": "原版启动",
     "online_count": "在线：{count}",

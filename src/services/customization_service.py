@@ -43,7 +43,7 @@ class CustomizationManager(QObject):
         return tr('buttons.remove_startup_sound') if self.get_startup_sound_path() else tr('buttons.select_startup_sound')
 
     def get_custom_logo_path(self) -> str:
-        return self._get_custom_file_path('custom_logo', ['.png', '.jpg', '.jpeg', '.gif', '.bmp'])
+        return self._get_custom_file_path('custom_logo', ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.ico'])
 
     def get_custom_font_path(self) -> str:
         return self._get_custom_file_path('custom_font', ['.ttf', '.otf'])

@@ -162,6 +162,93 @@ class ThemeController:
         dialog = ThemeManagementDialog(self.app, self)
         dialog.exec()
 
+    def init_theme_list(self):
+        from utils.path_utils import resource_path, get_user_themes_dir
+        import os
+
+        user_dir = get_user_themes_dir()
+        os.makedirs(user_dir, exist_ok=True)
+        self.app.themes_list_widget.clear()
+
+        themes = {f[:-4] for d in (resource_path('assets/themes'), user_dir) if os.path.exists(d) for f in os.listdir(d) if f.lower().endswith('.zip')}
+        self.app.themes_list_widget.addItems(sorted(themes))
+
+        try:
+            self.app.themes_list_widget.currentTextChanged.connect(self._update_theme_delete_button_state)
+        except TypeError:
+            pass
+        self._update_theme_delete_button_state(self.app.themes_list_widget.currentText())
+
+    def _update_theme_delete_button_state(self, theme_name: str):
+        if hasattr(self.app, 'theme_delete_btn') and theme_name:
+            from utils.path_utils import resource_path
+            import os
+            self.app.theme_delete_btn.setEnabled(not os.path.exists(resource_path(f'assets/themes/{theme_name}.zip')))
+
+    def on_theme_apply_clicked(self):
+        theme_name = self.app.themes_list_widget.currentText()
+        if not theme_name:
+            return
+        import os
+        from utils.path_utils import resource_path, get_user_themes_dir
+
+        for p in (os.path.join(get_user_themes_dir(), f'{theme_name}.zip'), resource_path(f'assets/themes/{theme_name}.zip')):
+            if os.path.exists(p):
+                return self.settings_service._install_theme_from_file(p)
+
+    def on_theme_save_clicked(self):
+        from PyQt6.QtWidgets import QInputDialog
+        from utils.path_utils import get_user_themes_dir
+        import os
+        import json
+        import zipfile
+        name, ok = QInputDialog.getText(self.app, tr('dialogs.theme_save_title'), tr('dialogs.theme_save_prompt'))
+        name = "".join(x for x in (name if ok else "") if x.isalnum() or x in " _-")
+        if not name:
+            return
+
+        themes_dir = get_user_themes_dir()
+        os.makedirs(themes_dir, exist_ok=True)
+
+        settings = {k: self.app_state.local_config.get(k, '') for k in ('custom_color_background', 'custom_color_button', 'custom_color_border', 'custom_color_button_hover', 'custom_color_text', 'custom_color_version_text')}
+        settings.update({k: self.app_state.local_config.get(k, False) for k in ('background_disabled', 'disable_splash')})
+
+        try:
+            with zipfile.ZipFile(os.path.join(themes_dir, f'{name}.zip'), 'w') as zipf:
+                zipf.writestr('theme.json', json.dumps(settings, indent=2))
+                assets = [('custom_background_path', 'background')]
+                if hasattr(self.app, 'customization_service'):
+                    cs = self.app.customization_service
+                    assets += [(cs.get_background_music_path(), 'background_music'), (cs.get_startup_sound_path(), 'startup_sound'), (cs.get_custom_logo_path(), 'custom_logo'), (cs.get_custom_font_path(), 'custom_font')]
+                for src, dest_name in assets:
+                    path = self.app_state.local_config.get(src) if isinstance(src, str) else src
+                    if path and os.path.isfile(path):
+                        zipf.write(path, f'{dest_name}{os.path.splitext(path)[1]}')
+            self.init_theme_list()
+            self.feedback_service.show_message('info', 'dialogs.success', tr('dialogs.theme_exported_success'))
+        except Exception as e:
+            import logging
+            logging.error(f"Failed to export theme: {e}")
+
+    def on_theme_delete_clicked(self):
+        theme_name = self.app.themes_list_widget.currentText()
+        if not theme_name:
+            return
+        import os
+        from utils.path_utils import resource_path, get_user_themes_dir
+
+        if os.path.exists(resource_path(f'assets/themes/{theme_name}.zip')):
+            return self.feedback_service.show_message('warning', 'dialogs.error', tr('errors.cannot_delete_builtin_theme', 'Cannot delete a built-in theme.'))
+
+        theme_path = os.path.join(get_user_themes_dir(), f'{theme_name}.zip')
+        if os.path.exists(theme_path) and self.feedback_service.ask_question('dialogs.theme_delete_title', tr('dialogs.theme_delete_prompt', theme=theme_name)):
+            try:
+                os.remove(theme_path)
+                self.init_theme_list()
+            except Exception as e:
+                import logging
+                logging.error(f"Failed to delete theme: {e}")
+
     def on_theme_changed_by_service(self):
         self._reload_custom_font()
         if hasattr(self.app, 'change_font_button'):
@@ -171,6 +258,7 @@ class ThemeController:
         self.app.disable_splash_checkbox.setChecked(self.app_state.local_config.get('disable_splash', False))
         self.app.background_music_button.setText(self.customization_service.get_background_music_button_text())
         self.app.startup_sound_button.setText(self.customization_service.get_startup_sound_button_text())
+        self.update_background_button_state()
         self.update_logo_button_state()
         if hasattr(self.app, 'launcher_icon_label'):
             self.customization_service.load_launcher_icon(self.app.launcher_icon_label)
