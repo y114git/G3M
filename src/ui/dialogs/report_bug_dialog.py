@@ -80,12 +80,12 @@ class ReportBugDialog(QDialog):
             self.char_count_label.setText(f'{self.max_text_length} / {self.max_text_length}')
 
     def _add_file(self):
-        file_filter = 'Images (*.png *.jpg *.jpeg);;Videos (*.mp4);;All Files (*)'
+        file_filter = 'Images (*.png *.jpg *.jpeg *.webp *.gif *.bmp *.ico);;Videos (*.mp4 *.webm *.avi *.mkv *.mov *.m4v);;All Files (*)'
         file_path, _ = QFileDialog.getOpenFileName(self, tr('dialogs.report_bug_add_file'), '', file_filter)
         if not file_path:
             return
         ext = os.path.splitext(file_path)[1].lower()
-        if ext not in ['.png', '.jpg', '.jpeg', '.mp4']:
+        if ext not in ['.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp', '.ico', '.mp4', '.webm', '.avi', '.mkv', '.mov', '.m4v']:
             QMessageBox.warning(self, tr('dialogs.report_bug_title'), tr('dialogs.report_bug_invalid_file'))
             return
         if file_path in self.attached_files:

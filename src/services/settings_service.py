@@ -24,9 +24,9 @@ class SettingsManager(QObject):
     theme_changed = pyqtSignal()
     restart_required = pyqtSignal(str)
     status_changed = pyqtSignal(str, str)
-    _IMAGE_EXTENSIONS = ('.png', '.jpg', '.jpeg', '.gif', '.bmp', '.ico', '.webp', '.mp4', '.webm')
+    _IMAGE_EXTENSIONS = ('.png', '.jpg', '.jpeg', '.gif', '.bmp', '.ico', '.webp', '.mp4', '.webm', '.avi', '.mkv', '.mov', '.m4v', '.3gp', '.mpg', '.mpeg', '.flv', '.wmv')
     _FONT_EXTENSIONS = ('.ttf', '.otf')
-    _AUDIO_OLD_FILES = ('custom_background_music.mp3', 'custom_background_music.wav', 'custom_startup_sound.mp3', 'custom_startup_sound.wav')
+    _AUDIO_EXTENSIONS = ('.mp3', '.wav', '.ogg', '.flac', '.m4a', '.aac')
 
     def __init__(self, app_state, feedback_service, localization_service: LocalizationManager, parent=None):
         super().__init__(parent)
@@ -62,8 +62,8 @@ class SettingsManager(QObject):
         else:
             self.feedback_service.show_message('error', 'errors.no_write_permission_for', path=directory)
 
-    def _get_audio_paths(self, base_name: str) -> tuple[str, str]:
-        return (os.path.join(self.app_state.config_dir, f'custom_{base_name}.mp3'), os.path.join(self.app_state.config_dir, f'custom_{base_name}.wav'))
+    def _get_audio_paths(self, base_name: str) -> list[str]:
+        return [os.path.join(self.app_state.config_dir, f'custom_{base_name}{ext}') for ext in self._AUDIO_EXTENSIONS]
 
     def _remove_files(self, paths) -> None:
         for file_path in paths:
@@ -175,29 +175,31 @@ class SettingsManager(QObject):
         self.theme_changed.emit()
 
     def _handle_audio_file_click(self, base_name: str, select_dialog_key: str, removed_msg_key: str, remove_fail_key: str, copy_fail_key: str, custom_path_getter: str = ''):
-        mp3, wav = self._get_audio_paths(base_name)
+        paths = self._get_audio_paths(base_name)
         existing = ''
         if custom_path_getter and self.parent_widget and hasattr(self.parent_widget, 'customization_service'):
             existing = getattr(self.parent_widget.customization_service, custom_path_getter, lambda: '')() or ''
         if not existing:
-            existing = mp3 if os.path.exists(mp3) else (wav if os.path.exists(wav) else '')
+            existing = next((p for p in paths if os.path.exists(p)), '')
         if existing:
             try:
-                self._remove_files((mp3, wav))
+                self._remove_files(paths)
                 self.feedback_service.show_message('info', 'dialogs.success', tr(removed_msg_key))
                 self.theme_changed.emit()
             except Exception:
                 self.feedback_service.show_message('warning', 'errors.error', tr(remove_fail_key))
         else:
-            file_path, _ = QFileDialog.getOpenFileName(self.parent_widget, tr(select_dialog_key), '', 'Audio Files (*.mp3 *.wav)')
+            audio_filter = 'Audio Files (*.mp3 *.wav *.ogg *.flac *.m4a *.aac);;All Files (*)'
+            file_path, _ = QFileDialog.getOpenFileName(self.parent_widget, tr(select_dialog_key), '', audio_filter)
             if file_path:
                 lower = file_path.lower()
-                if not (lower.endswith('.mp3') or lower.endswith('.wav')):
-                    self.feedback_service.show_message('warning', 'errors.error', tr('errors.can_select_only_mp3_wav'))
+                valid_exts = ('.mp3', '.wav', '.ogg', '.flac', '.m4a', '.aac')
+                if not lower.endswith(valid_exts):
+                    self.feedback_service.show_message('warning', 'errors.error', tr('errors.invalid_audio_format', 'Unsupported audio format.'))
                     return
                 try:
                     os.makedirs(self.app_state.config_dir, exist_ok=True)
-                    ext = '.mp3' if lower.endswith('.mp3') else '.wav'
+                    ext = os.path.splitext(lower)[1]
                     dest = os.path.join(self.app_state.config_dir, f'custom_{base_name}{ext}')
                     shutil.copy2(file_path, dest)
                     self.theme_changed.emit()
@@ -370,8 +372,8 @@ class SettingsManager(QObject):
                 for key, value in theme_settings.items():
                     self.app_state.local_config[key] = value
 
-                audio_files = [os.path.join(self.app_state.config_dir, f) for f in self._AUDIO_OLD_FILES]
-                self._remove_files(audio_files)
+                for base in ('background_music', 'startup_sound'):
+                    self._remove_files(self._get_audio_paths(base))
                 self._remove_logo_files()
                 self._remove_font_files()
                 self.app_state.local_config['custom_background_path'] = ''
@@ -458,7 +460,8 @@ class SettingsManager(QObject):
         if not self.feedback_service.ask_question('dialogs.reset_settings_confirm_title', 'dialogs.reset_settings_confirm_text', '', False):
             return
         language = self.app_state.local_config.get('language', 'en')
-        self._remove_files([os.path.join(self.app_state.config_dir, f) for f in self._AUDIO_OLD_FILES])
+        for base in ('background_music', 'startup_sound'):
+            self._remove_files(self._get_audio_paths(base))
         self._remove_logo_files()
         self._remove_font_files()
         self.app_state.local_config.clear()

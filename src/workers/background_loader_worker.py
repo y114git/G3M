@@ -12,4 +12,4 @@ class BgLoader(QThread):
 
     def run(self):
         ext = self._path.lower().split('.')[-1] if '.' in self._path else ''
-        self.loaded.emit(('video', self._path) if ext in ('mp4', 'webm', 'avi', 'mkv') else (('gif', self._path) if ext == 'gif' else ('img', QImage(self._path))))
+        self.loaded.emit(('video', self._path) if ext in ('mp4', 'webm', 'avi', 'mkv', 'mov', 'm4v', '3gp', 'mpg', 'mpeg', 'flv', 'wmv') else (('gif', self._path) if ext == 'gif' else ('img', QImage(self._path))))

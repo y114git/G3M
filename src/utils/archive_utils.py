@@ -144,14 +144,14 @@ def _extract_archive_raw(src_path: str, fname_lower: str, out_dir: str) -> None:
                 except (ValueError, OSError) as e:
                     logging.warning(f'_extract_archive_raw: Failed to extract ZIP archive: {e}')
         return
-    if fname_lower.endswith('.tar.gz'):
-        with tarfile.open(src_path, 'r:gz') as tf:
-            targets = _collect_safe_members(tf.getmembers(), lambda member: member.name, 'TAR')
-            if targets:
-                try:
+    if fname_lower.endswith(('.tar.gz', '.tar.bz2', '.tar.xz', '.tar', '.tgz', '.tbz2', '.txz')):
+        try:
+            with tarfile.open(src_path, 'r:*') as tf:
+                targets = _collect_safe_members(tf.getmembers(), lambda member: member.name, 'TAR')
+                if targets:
                     tf.extractall(path=out_dir_abs, members=targets)
-                except (ValueError, OSError, tarfile.TarError) as e:
-                    logging.warning(f'_extract_archive_raw: Failed to extract TAR archive: {e}')
+        except (ValueError, OSError, tarfile.TarError) as e:
+            logging.warning(f'_extract_archive_raw: Failed to extract TAR archive: {e}')
         return
     if fname_lower.endswith('.rar') or detected_format == 'rar':
         try:
@@ -366,8 +366,8 @@ class ArchiveExtractor:
             if archive_lower.endswith('.zip') or detected_format == 'zip':
                 with zipfile.ZipFile(archive_path, 'r') as zf:
                     return any((ArchiveExtractor._matches_target(n, target_filename) for n in zf.namelist()))
-            elif archive_lower.endswith('.tar.gz'):
-                with tarfile.open(archive_path, 'r:gz') as tf:
+            elif archive_lower.endswith(('.tar.gz', '.tar.bz2', '.tar.xz', '.tar', '.tgz', '.tbz2', '.txz')):
+                with tarfile.open(archive_path, 'r:*') as tf:
                     return any((ArchiveExtractor._matches_target(m.name, target_filename) for m in tf.getmembers()))
             elif archive_lower.endswith('.rar') or detected_format == 'rar':
                 _ensure_unrar_available()
@@ -419,12 +419,24 @@ def get_file_extension_from_url(url: str, content_type: str = None) -> str:
     filename = unquote(os.path.basename(parsed.path))
     if '.' in filename:
         ext = os.path.splitext(filename)[1].lower()
-        supported_exts = ['.zip', '.rar', '.7z', '.tar.gz', '.lzma']
+        supported_exts = ('.zip', '.rar', '.7z', '.tar.gz', '.lzma', '.tar', '.bz2', '.xz')
         if ext in supported_exts:
             return ext
     if content_type:
         content_type = content_type.lower()
-        content_type_map = {'application/zip': '.zip', 'application/x-rar-compressed': '.rar', 'application/x-rar': '.rar', 'application/x-7z-compressed': '.7z', 'application/x-7z': '.7z', 'application/x-tar': '.tar.gz', 'application/gzip': '.tar.gz', 'application/x-gzip': '.tar.gz', 'application/x-lzma': '.lzma', 'application/x-xz': '.lzma'}
+        content_type_map = {
+            'application/zip': '.zip',
+            'application/x-rar-compressed': '.rar',
+            'application/x-rar': '.rar',
+            'application/x-7z-compressed': '.7z',
+            'application/x-7z': '.7z',
+            'application/x-tar': '.tar.gz',
+            'application/gzip': '.tar.gz',
+            'application/x-gzip': '.tar.gz',
+            'application/x-bzip2': '.bz2',
+            'application/x-xz': '.xz',
+            'application/x-lzma': '.lzma'
+        }
         if content_type in content_type_map:
             return content_type_map[content_type]
     return '.zip'

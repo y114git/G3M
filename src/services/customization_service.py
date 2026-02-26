@@ -31,10 +31,10 @@ class CustomizationManager(QObject):
         return ''
 
     def get_background_music_path(self) -> str:
-        return self._get_custom_file_path('custom_background_music', ['.mp3', '.wav'])
+        return self._get_custom_file_path('custom_background_music', ['.mp3', '.wav', '.ogg', '.flac', '.m4a', '.aac'])
 
     def get_startup_sound_path(self) -> str:
-        return self._get_custom_file_path('custom_startup_sound', ['.mp3', '.wav'])
+        return self._get_custom_file_path('custom_startup_sound', ['.mp3', '.wav', '.ogg', '.flac', '.m4a', '.aac'])
 
     def get_background_music_button_text(self) -> str:
         return tr('buttons.remove_background_music') if self.get_background_music_path() else tr('buttons.select_background_music')
@@ -43,7 +43,7 @@ class CustomizationManager(QObject):
         return tr('buttons.remove_startup_sound') if self.get_startup_sound_path() else tr('buttons.select_startup_sound')
 
     def get_custom_logo_path(self) -> str:
-        return self._get_custom_file_path('custom_logo', ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.ico'])
+        return self._get_custom_file_path('custom_logo', ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.ico', '.webp'])
 
     def get_custom_font_path(self) -> str:
         return self._get_custom_file_path('custom_font', ['.ttf', '.otf'])

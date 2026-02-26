@@ -265,3 +265,35 @@ class TestBackupManager:
         with open(bank_file, 'rb') as f:
             restored_content = f.read()
             assert restored_content == original_content
+
+class TestExpandedFormats:
+    def test_customization_service_audio_formats(self, app_state, temp_dir):
+        from services.customization_service import CustomizationManager
+        manager = CustomizationManager(app_state)
+        app_state.config_dir = temp_dir
+        
+        for ext in ['.ogg', '.flac', '.m4a', '.aac']:
+            path = os.path.join(temp_dir, f'custom_background_music{ext}')
+            with open(path, 'w') as f:
+                f.write('dummy')
+            assert manager.get_background_music_path() == path
+            os.remove(path)
+
+    def test_customization_service_webp_logo(self, app_state, temp_dir):
+        from services.customization_service import CustomizationManager
+        manager = CustomizationManager(app_state)
+        app_state.config_dir = temp_dir
+        
+        path = os.path.join(temp_dir, 'custom_logo.webp')
+        with open(path, 'w') as f:
+            f.write('dummy')
+        assert manager.get_custom_logo_path() == path
+
+    def test_settings_manager_audio_paths(self, app_state, feedback_service, qapp):
+        from services.settings_service import SettingsManager
+        from services.localization_service import localization_service
+        manager = SettingsManager(app_state, feedback_service, localization_service, parent=qapp)
+        
+        paths = manager._get_audio_paths('background_music')
+        assert any(p.endswith('.ogg') for p in paths)
+        assert any(p.endswith('.flac') for p in paths)

@@ -311,7 +311,13 @@ def ensure_writable(path: str) -> bool:
 
 
 def get_file_filter(filter_type: str) -> str:
-    FILTER_EXTENSIONS = {'image_files': '*.jpg *.png *.bmp *.gif', 'background_images': '*.jpg *.png *.bmp *.gif', 'xdelta_files': '*.xdelta', 'data_files': '*.win *.ios *.xdelta *.vcdiff *.csx', 'archive_files': '*.zip *.rar *.7z *.tar.gz *.lzma', 'extended_archives': '*.zip *.rar *.7z *.tar.gz *.lzma', 'game_files': '*.exe', 'text_files': '*.txt', 'all_files': '*'}
+    FILTER_EXTENSIONS = {
+        'image_files': '*.jpg *.png *.bmp *.gif *.webp *.ico *.jpeg',
+        'background_images': '*.jpg *.png *.bmp *.gif *.webp *.ico *.jpeg *.mp4 *.webm *.avi *.mkv *.mov *.m4v *.3gp *.mpg *.mpeg *.flv *.wmv',
+        'xdelta_files': '*.xdelta *.vcdiff', 'data_files': '*.win *.unx *.ios *.droid *.xdelta *.vcdiff *.csx',
+        'archive_files': '*.zip *.rar *.7z *.tar.gz *.tar.bz2 *.tar.xz *.tar *.tgz *.tbz2 *.txz *.lzma', 'all_files': '*',
+        'extended_archives': '*.zip *.rar *.7z *.tar.gz *.tar.bz2 *.tar.xz *.tar *.tgz *.tbz2 *.txz *.lzma', 'game_files': '*.exe', 'text_files': '*.txt'
+    }
 
     def tr(key):
         return key.replace('file_descriptions.', '').replace('_', ' ').title()

@@ -115,8 +115,8 @@ class PluginManager(QObject):
             if item_name_lower.endswith('.zip'):
                 with zipfile.ZipFile(item_path, 'r') as zf:
                     return _has_init(zf.namelist())
-            elif item_name_lower.endswith('.tar.gz'):
-                with tarfile.open(item_path, 'r:gz') as tf:
+            elif item_name_lower.endswith(('.tar.gz', '.tar.bz2', '.tar.xz', '.tar', '.tgz', '.tbz2', '.txz')):
+                with tarfile.open(item_path, 'r:*') as tf:
                     return _has_init(m.name for m in tf.getmembers())
             elif item_name_lower.endswith('.rar'):
                 import rarfile
@@ -152,7 +152,7 @@ class PluginManager(QObject):
         try:
             for item_name in os.listdir(self.app_state.plugins_dir):
                 item_path = os.path.join(self.app_state.plugins_dir, item_name)
-                if not (os.path.isfile(item_path) and item_name.lower().endswith(('.zip', '.7z', '.rar', '.tar.gz', '.lzma'))):
+                if not (os.path.isfile(item_path) and item_name.lower().endswith(('.zip', '.7z', '.rar', '.tar.gz', '.tar.bz2', '.tar.xz', '.tar', '.tgz', '.tbz2', '.txz', '.lzma'))):
                     continue
                 try:
                     if not self._archive_has_plugin_init(item_path, item_name.lower()):
@@ -327,7 +327,7 @@ class PluginManager(QObject):
             return all_plugins
         for item_name in os.listdir(self.app_state.plugins_dir):
             item_path = os.path.join(self.app_state.plugins_dir, item_name)
-            if os.path.isfile(item_path) and item_name.lower().endswith(('.zip', '.7z', '.rar', '.tar.gz', '.lzma')):
+            if os.path.isfile(item_path) and item_name.lower().endswith(('.zip', '.7z', '.rar', '.tar.gz', '.tar.bz2', '.tar.xz', '.tar', '.tgz', '.tbz2', '.txz', '.lzma')):
                 continue
             if not os.path.isdir(item_path):
                 continue
