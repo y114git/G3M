@@ -2,8 +2,12 @@ import os
 from PyQt6.QtCore import QFile, QIODevice
 from utils.path_utils import resource_path
 
+_qss_cache: dict[str, str] = {}
+
 
 def _load_qss_template(filename: str) -> str:
+    if filename in _qss_cache:
+        return _qss_cache[filename]
     qss_path = resource_path(f'assets/styles/{filename}')
     if not os.path.exists(qss_path):
         raise FileNotFoundError(f'QSS template not found: {qss_path}')
@@ -12,6 +16,7 @@ def _load_qss_template(filename: str) -> str:
         raise IOError(f'Failed to open QSS file: {qss_path}')
     content = file.readAll().data().decode('utf-8')
     file.close()
+    _qss_cache[filename] = content
     return content
 
 

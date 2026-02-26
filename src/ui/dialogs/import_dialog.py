@@ -53,7 +53,9 @@ class ImportDialog(QDialog):
 
     def _import_from_file(self):
         file_filter_text = self._get_file_filter_text()
-        file_path, _ = QFileDialog.getOpenFileName(self, tr(self.select_archive_key), '', file_filter_text)
+        import os
+        start_dir = self.parent()._last_open_dir if hasattr(self.parent(), '_last_open_dir') else os.path.expanduser('~')
+        file_path, _ = QFileDialog.getOpenFileName(self, tr(self.select_archive_key), start_dir, file_filter_text)
         if file_path:
             self.selected_file = file_path
             self.import_method = 'file'

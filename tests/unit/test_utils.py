@@ -1,11 +1,17 @@
 import os
 import pytest
 from unittest.mock import Mock, patch
-from utils.mod_utils import get_mod_key, get_mod_name
+from utils.mod_utils import get_mod_key, get_mod_name, get_unique_mod_key
 from utils.file_utils import sanitize_filename, has_deltamod_info_file
 
 
 class TestModUtils:
+
+    def test_get_unique_mod_key(self):
+        existing = {'mod1', 'mod2', 'mod2_1'}
+        assert get_unique_mod_key('mod3', existing) == 'mod3'
+        assert get_unique_mod_key('mod1', existing) == 'mod1_1'
+        assert get_unique_mod_key('mod2', existing) == 'mod2_2'
 
     def test_get_mod_key_from_dict(self):
         mod_data = {'key': 'test_key_001'}

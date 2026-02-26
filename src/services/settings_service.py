@@ -142,11 +142,11 @@ class SettingsManager(QObject):
         if is_initial:
             self.feedback_service.show_message('info', 'dialogs.path_not_found', tr('dialogs.game_path_instruction', message=message))
         if platform.system() == 'Darwin':
-            path, _ = QFileDialog.getOpenFileName(self.parent_widget, title, '', 'Application bundle (*.app);;All files (*)')
+            path, _ = QFileDialog.getOpenFileName(self.parent_widget, title, os.path.expanduser('~'), 'Application bundle (*.app);;All files (*)')
             if not path:
-                path = QFileDialog.getExistingDirectory(self.parent_widget, title)
+                path = QFileDialog.getExistingDirectory(self.parent_widget, title, os.path.expanduser('~'))
         else:
-            path = QFileDialog.getExistingDirectory(self.parent_widget, title)
+            path = QFileDialog.getExistingDirectory(self.parent_widget, title, os.path.expanduser('~'))
         if path:
             corrected_path = path
             if platform.system() == 'Darwin' and not path.endswith('.app'):

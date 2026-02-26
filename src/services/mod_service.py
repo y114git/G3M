@@ -287,6 +287,15 @@ class ModManager(QObject):
                         return mod
                 return None
 
+            def _sync_mod_icon(existing_mod, config_data, key):
+                mod_folder_path = self.get_mod_folder_path(key)
+                local_icon = resolve_local_icon_url(config_data, mod_folder_path)
+                if local_icon and local_icon != (getattr(existing_mod, 'icon_url', None) or getattr(existing_mod, 'icon_path', None)):
+                    existing_mod.icon_url = local_icon
+                    existing_mod.icon_path = local_icon
+                    if hasattr(existing_mod, 'update_metadata'):
+                        existing_mod.update_metadata({'icon_url': local_icon})
+
             def _try_update_mod_files(existing_mod, config_data, key, replace_in_list=False):
                 if (not hasattr(existing_mod, 'files') or not existing_mod.files) and config_data.get('files'):
                     try:
@@ -304,6 +313,7 @@ class ModManager(QObject):
                             logging.debug(f'load_local_mods: Skipping mod {key} with empty/invalid files data')
                     except Exception as e:
                         logging.warning(f'load_local_mods: Failed to load files for mod {key}: {e}', exc_info=True)
+                _sync_mod_icon(existing_mod, config_data, key)
 
             existing_keys = {k for mod in self.app_state.all_mods if (k := get_mod_key(mod))}
             for key, config_data in list(installed_mods.items()):
@@ -334,7 +344,13 @@ class ModManager(QObject):
                 if not (key and isinstance(key, str) and key.startswith('local_')):
                     continue
                 if key in existing_keys:
-                    logging.debug(f'load_local_mods: Skipping local mod {key} - already in all_mods')
+                    existing_mod = _find_mod_by_key(key)
+                    if existing_mod:
+                        for field in ('name', 'author', 'tagline', 'version', 'game', 'game_version'):
+                            setattr(existing_mod, field, config_data.get(field, getattr(existing_mod, field)))
+                        _sync_mod_icon(existing_mod, config_data, key)
+                        if hasattr(existing_mod, 'update_metadata'):
+                            existing_mod.update_metadata(config_data)
                     continue
                 try:
                     mod_info_from_cache = cache.get(key)

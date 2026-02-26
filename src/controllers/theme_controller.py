@@ -17,14 +17,38 @@ class ThemeController:
         self.settings_service = settings_service
         self.customization_service = customization_service
         self.app = app_window
-        self._debounce_timer = DebounceTimer(delay_ms=400)
+        self._debounce_timer = DebounceTimer(delay_ms=150)
+        self._last_theme_params = {}
 
-    def apply_theme(self):
+    def apply_theme(self, force=False):
         theme = THEMES['default']
         background_disabled = self.app_state.local_config.get('background_disabled', False)
         new_background_path = None
         if not background_disabled:
             new_background_path = self.app_state.local_config.get('custom_background_path') or resource_path(f"assets/{theme.get('background', '')}")
+
+        user_bg_hex = self.app_state.local_config.get('custom_color_background')
+        if user_bg_hex and self.settings_service.is_valid_hex_color(user_bg_hex):
+            frame_bg_color = f"#C0{user_bg_hex.lstrip('#')}"
+        else:
+            frame_bg_color = 'rgba(0, 0, 0, 150)'
+
+        button_color = self.app_state.local_config.get('custom_color_button') or theme['colors']['button']
+        border_color = self.app_state.local_config.get('custom_color_border') or theme['colors']['border']
+        button_hover_color = self.app_state.local_config.get('custom_color_button_hover') or theme['colors']['button_hover']
+        main_text_color = self.app_state.local_config.get('custom_color_text') or theme['colors']['text']
+        base_family = self.app.custom_font_family or theme['font_family']
+        font_family_main = base_family
+
+        params = {
+            'bg': frame_bg_color, 'btn': button_color, 'border': border_color,
+            'hover': button_hover_color, 'text': main_text_color, 'font': font_family_main,
+            'bg_path': new_background_path, 'bg_disabled': background_disabled
+        }
+        if not force and params == self._last_theme_params:
+            return
+        self._last_theme_params = params
+
         current_bg_path = getattr(self.app, '_current_background_path', None)
         background_was_disabled = getattr(self.app, '_background_was_disabled', False)
         background_changed = new_background_path != current_bg_path or background_disabled != background_was_disabled
@@ -43,17 +67,7 @@ class ThemeController:
                 self.app._bg_loader.start()
             self.app._current_background_path = new_background_path
             self.app._background_was_disabled = background_disabled
-        user_bg_hex = self.app_state.local_config.get('custom_color_background')
-        if user_bg_hex and self.settings_service.is_valid_hex_color(user_bg_hex):
-            frame_bg_color = f"#C0{user_bg_hex.lstrip('#')}"
-        else:
-            frame_bg_color = 'rgba(0, 0, 0, 150)'
-        button_color = self.app_state.local_config.get('custom_color_button') or theme['colors']['button']
-        border_color = self.app_state.local_config.get('custom_color_border') or theme['colors']['border']
-        button_hover_color = self.app_state.local_config.get('custom_color_button_hover') or theme['colors']['button_hover']
-        main_text_color = self.app_state.local_config.get('custom_color_text') or theme['colors']['text']
-        base_family = self.app.custom_font_family or theme['font_family']
-        font_family_main = base_family
+
         font_size_main = theme['font_size_main']
         font_size_small = theme['font_size_small']
         from PyQt6.QtGui import QFont

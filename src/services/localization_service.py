@@ -18,10 +18,24 @@ class LocalizationManager:
         self.external_lang_dir = get_user_lang_dir()
         os.makedirs(self.external_lang_dir, exist_ok=True)
         self._sync_internal_languages()
-        self.current_language = 'en'
         self.strings = {}
+        self.fallback_strings = {}
         self.available_languages = {}
+        self.current_language = 'en'
         self._load_available_languages()
+        self._load_fallback_strings()
+
+    def _load_fallback_strings(self):
+        """Preload English strings as fallback to avoid disk reads."""
+        en_path = os.path.join(self.external_lang_dir, 'lang_en.json')
+        if not os.path.exists(en_path):
+            en_path = os.path.join(self.internal_lang_dir, 'lang_en.json')
+        if os.path.exists(en_path):
+            try:
+                with open(en_path, 'r', encoding='utf-8') as f:
+                    self.fallback_strings = json.load(f)
+            except Exception as e:
+                logging.debug(f"Could not load fallback strings: {e}")
 
     def _sync_internal_languages(self):
         if not os.path.exists(self.internal_lang_dir):
@@ -198,27 +212,30 @@ class LocalizationManager:
             return result
         return plugin_tr
 
-    def get_text(self, key: str, **kwargs) -> str:
-        keys = key.split('.')
-        value = self.strings
+    def _resolve_key(self, source: dict, key: str, **kwargs) -> str | None:
+        """Traverse nested dict by dotted key, process and format. Returns None on miss."""
+        value = source
         try:
-            for k in keys:
-                if k in value:
-                    value = value[k]
-                elif f'_{k}' in value:
-                    value = value[f'_{k}']
-                else:
-                    raise KeyError(k)
+            for k in key.split('.'):
+                value = value[k] if k in value else value[f'_{k}']
             if not isinstance(value, str):
-                return f'[{key}]'
+                return None
             value = self._process_escape_sequences(value)
-            if kwargs:
-                return value.format(**kwargs)
-            return value
+            return value.format(**kwargs) if kwargs else value
         except (KeyError, TypeError, AttributeError):
-            if self.current_language != 'en':
-                return _fallback_tr(key, **kwargs)
-            return f'[{key}]'
+            return None
+
+    def get_text(self, key: str, **kwargs) -> str:
+        result = self._resolve_key(self.strings, key, **kwargs)
+        if result is not None:
+            return result
+        if self.current_language != 'en':
+            return self._get_fallback_text(key, **kwargs)
+        return f'[{key}]'
+
+    def _get_fallback_text(self, key: str, **kwargs) -> str:
+        """Get text from preloaded fallback strings."""
+        return self._resolve_key(self.fallback_strings, key, **kwargs) or f'[{key}]'
 
     def _process_escape_sequences(self, text: str) -> str:
         if not text:
@@ -278,21 +295,7 @@ localization_service = LocalizationManager()
 
 
 def _fallback_tr(key: str, **kwargs) -> str:
-    try:
-        en_path = os.path.join(localization_service.external_lang_dir, 'lang_en.json')
-        if not os.path.exists(en_path):
-            en_path = os.path.join(localization_service.internal_lang_dir, 'lang_en.json')
-        with open(en_path, 'r', encoding='utf-8') as f:
-            val = json.load(f)
-        for k in key.split('.'):
-            val = val.get(k, val.get(f'_{k}'))
-            if val is None:
-                raise KeyError
-        if isinstance(val, str):
-            return val.format(**kwargs) if kwargs else val
-    except Exception:
-        pass
-    return f'[{key}]'
+    return localization_service._get_fallback_text(key, **kwargs)
 
 
 def tr(key: str, **kwargs) -> str:

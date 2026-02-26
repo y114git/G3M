@@ -88,9 +88,10 @@ def scan_mods_directory(mods_dir: str, old_cache: Optional[Dict[str, ModFolderIn
                     continue
                 folder_name = entry.name
                 folder_path = entry.path
-                from utils.file_utils import migrate_mod_config
-                migrate_mod_config(folder_path)
                 config_path = os.path.join(folder_path, MOD_CONFIG_FILENAME)
+                if not os.path.exists(config_path):
+                    from utils.file_utils import migrate_mod_config
+                    migrate_mod_config(folder_path)
                 if not os.path.exists(config_path):
                     found_nested = False
                     try:

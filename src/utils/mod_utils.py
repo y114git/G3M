@@ -37,3 +37,12 @@ def resolve_mod_icon(config_data: dict, mod_folder_path: str):
         if os.path.isfile(icon_path_abs):
             return icon_path_abs
     return next((p for ext in ['.png', '.jpg', '.jpeg', '.gif', '.ico', '.bmp'] if os.path.isfile(p := os.path.join(mod_folder_path, f'_icon{ext}'))), None)
+
+
+def get_unique_mod_key(base_key: str, existing_keys: set) -> str:
+    if base_key not in existing_keys:
+        return base_key
+    counter = 1
+    while f"{base_key}_{counter}" in existing_keys:
+        counter += 1
+    return f"{base_key}_{counter}"

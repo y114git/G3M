@@ -94,14 +94,17 @@ class ModImportExportController:
                         config = json.load(f)
                     key = config.get('key') or config.get('mod_key')
                     mod_name = config.get('name', 'Unknown')
-                    mod_key_generated = False
+
+                    from utils.mod_utils import get_unique_mod_key
+                    existing_keys = {get_mod_key(m) for m in self.app_state.all_mods if get_mod_key(m)}
+                    original_key = key
                     if not key:
                         key = f"local_{sanitize_filename(mod_name).lower().replace(' ', '_')}"
+                    key = get_unique_mod_key(key, existing_keys)
+                    if key != original_key:
                         config['key'] = key
-                        if 'mod_key' in config:
-                            del config['mod_key']
+                        config.pop('mod_key', None)
                         save_json(config_path_to_read, config, indent=2)
-                        mod_key_generated = True
                     archive_name = remove_archive_extension(os.path.basename(file_path))
                     folder_name = sanitize_filename(archive_name)
                     target_mod_dir = os.path.join(self.app_state.mods_dir, folder_name)
@@ -148,7 +151,7 @@ class ModImportExportController:
                         if os.path.exists(icon_path) and (not config.get('icon_url')):
                             config['icon_url'] = '_icon.png' if os.path.basename(icon_path) == '_icon.png' else 'icon.png'
                             config_updated = True
-                        if config_updated or mod_key_generated:
+                        if config_updated or key != original_key:
                             save_json(config_path, config, indent=2)
                         self._refresh_mod_list()
                         QMessageBox.information(self.app_window, tr('dialogs.success'), tr('status.mod_imported_success'))
