@@ -28,35 +28,30 @@ def get_session(app_state=None):
 
 def _build_session():
     from config.constants import LAUNCHER_VERSION, BROWSER_HEADERS
-    logging.getLogger('urllib3.connectionpool').setLevel(logging.ERROR)
-    logging.getLogger('requests').setLevel(logging.WARNING)
-    session = requests.Session()
-    headers = dict(BROWSER_HEADERS or {})
-    headers.setdefault('User-Agent', f'DELTAHUB/{LAUNCHER_VERSION}')
-    session.headers.update(headers)
-    retry = Retry(total=3, connect=3, read=3, backoff_factor=0.3, status_forcelist=(429, 500, 502, 503, 504), allowed_methods=('HEAD', 'GET', 'PUT', 'DELETE', 'OPTIONS', 'TRACE', 'POST'), raise_on_status=False)
-    adapter = HTTPAdapter(max_retries=retry, pool_connections=8, pool_maxsize=32)
-    session.mount('http://', adapter)
-    session.mount('https://', adapter)
-    return session
+    for n in ('urllib3.connectionpool', 'requests'):
+        logging.getLogger(n).setLevel(logging.ERROR)
+    s = requests.Session()
+    h = dict(BROWSER_HEADERS or {})
+    h.setdefault('User-Agent', f'DELTAHUB/{LAUNCHER_VERSION}')
+    s.headers.update(h)
+    r = Retry(total=3, connect=3, read=3, backoff_factor=0.3, status_forcelist=(429, 500, 502, 503, 504), allowed_methods=('HEAD', 'GET', 'PUT', 'DELETE', 'OPTIONS', 'TRACE', 'POST'))
+    a = HTTPAdapter(max_retries=r, pool_connections=8, pool_maxsize=32)
+    s.mount('http://', a)
+    s.mount('https://', a)
+    return s
 
 
-def get_filename_from_url(session, url):
+def get_filename_from_url(s, url):
     try:
         from urllib.parse import urlparse, unquote
-        response = session.head(url, timeout=NETWORK_TIMEOUT_MEDIUM, allow_redirects=True)
-        if (content_disp := response.headers.get('Content-Disposition')):
-            if (fn_match := re.search('filename\\*?=(.+)', content_disp, re.IGNORECASE)):
-                fn_data = fn_match.group(1).strip()
-                if fn_data.lower().startswith("utf-8''"):
-                    return unquote(fn_data[7:], 'utf-8')
-                return fn_data.strip('"\'')
-        path = urlparse(response.url).path
-        if path and path != '/' and (not path.endswith('/')):
-            potential_name = os.path.basename(unquote(path))
-            if '.' in potential_name:
-                return potential_name
-    except (requests.RequestException, ValueError, AttributeError):
+        h = s.head(url, timeout=NETWORK_TIMEOUT_MEDIUM, allow_redirects=True).headers
+        if (cd := h.get('Content-Disposition')) and (m := re.search(r'filename\*?=(.+)', cd, re.I)):
+            f = m.group(1).strip()
+            return unquote(f[7:], 'utf-8') if f.lower().startswith("utf-8''") else f.strip('"\'')
+        p = urlparse(url).path
+        if p and p != '/' and '.' in (bn := os.path.basename(unquote(p))):
+            return bn
+    except Exception:
         pass
     return Path(url.split('?', 1)[0]).name or 'file.tmp'
 
@@ -143,5 +138,5 @@ def safe_request(method, url, session=None, timeout=None, **kwargs):
 
 def increment_launch_counter():
     from config.constants import CLOUD_FUNCTIONS_BASE_URL
-    os_key = {'Windows': 'windows', 'Linux': 'linux', 'Darwin': 'macos'}.get(platform.system(), 'other')
-    safe_request('post', f'{CLOUD_FUNCTIONS_BASE_URL}/incrementLaunches', json={'os': os_key}, timeout=NETWORK_TIMEOUT_SHORT)
+    os_k = {'Windows': 'windows', 'Linux': 'linux', 'Darwin': 'macos'}.get(platform.system(), 'other')
+    safe_request('post', f'{CLOUD_FUNCTIONS_BASE_URL}/incrementLaunches', json={'os': os_k}, timeout=NETWORK_TIMEOUT_SHORT)

@@ -324,7 +324,9 @@
     "settings_section_media": "外觀和聲音",
     "do_not_save_theme_after_import": "導入後不要將主題保存在列表中",
     "dont_hide_window_on_launch": "啟動時不隱藏視窗",
-    "hide_wips_without_downloads": "隱藏無下載的WIP"
+    "hide_wips_without_downloads": "隱藏無下載的WIP",
+    "settings_section_graphics": "圖形",
+    "settings_section_audio": "音訊"
   },
   "files": {
     "archive_link": "壓縮檔案連結",

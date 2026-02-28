@@ -27,9 +27,8 @@ QPushButton {
     background-color: %button_color%;
     border: 2px solid %border_color%;
     color: %main_text_color%;
-    padding: 5px;
+    padding: 6px 16px;
     min-height: 30px;
-    min-width: 100px;
 }
 QPushButton:hover {
     background-color: %button_hover_color%;
@@ -48,7 +47,7 @@ QComboBox {
     background-color: %button_color%;
     color: %main_text_color%;
     border: 2px solid %border_color%;
-    padding: 4px;
+    padding: 5px 10px;
     min-height: 30px;
 }
 QComboBox QAbstractItemView {
@@ -61,7 +60,8 @@ QLineEdit {
     background-color: %frame_bg_color%;
     color: %main_text_color%;
     border: 2px solid %border_color%;
-    padding: 4px;
+    padding: 5px 10px;
+    qproperty-alignment: 'AlignCenter';
 }
 QListWidget {
     background-color: %frame_bg_color%;
@@ -78,7 +78,8 @@ QSpinBox {
     background-color: %frame_bg_color%;
     color: %main_text_color%;
     border: 2px solid %border_color%;
-    padding: 4px;
+    padding: 5px 10px;
+    qproperty-alignment: 'AlignCenter';
 }
 QTextEdit, QTextBrowser {
     background-color: %frame_bg_color%;
@@ -109,6 +110,24 @@ QPushButton#searchBtn {
     font-weight: bold;
     font-size: 16px;
 }
+QPushButton#actionIconBtn {
+    min-width: 35px;
+    max-width: 35px;
+    min-height: 30px;
+    max-height: 30px;
+    padding-left: 0px;
+    padding-right: 0px;
+    font-weight: bold;
+}
+QPushButton#topRefreshBtn {
+    min-width: 40px;
+    max-width: 40px;
+    min-height: 40px;
+    max-height: 40px;
+    padding: 0px;
+    margin: 0px;
+    font-size: 18px;
+}
 QPushButton#blocklistBtn {
     font-size: 12px;
     padding: 3px 8px;
@@ -122,9 +141,8 @@ QTabBar::tab {
     background-color: %button_color%;
     color: %main_text_color%;
     border: 2px solid %border_color%;
-    padding: 5px;
+    padding: 5px 15px;
     min-height: 25px;
-    min-width: 80px;
 }
 QTabBar::tab:selected, QTabBar::tab:hover {
     background-color: %button_hover_color%;
@@ -158,10 +176,44 @@ QPushButton:checked {
     background-color: %button_hover_color%;
     border: 2px solid %main_text_color%;
 }
-QToolTip {
-    background-color: #000000;
-    border: 2px solid #FFFFFF;
-    color: %main_text_color%;
-    padding: 4px;
+#animated_tooltip {
+    background-color: %tooltip_bg_color% !important;
+    border: 2px solid %border_color%;
+    color: %main_text_color% !important;
+    font-family: "%font_family_main%", sans-serif;
+    font-size: %font_size_small%pt;
+    outline: none;
+    border-radius: 4px;
+    padding: 2px;
 }
 
+QToolTip {
+    background-color: %tooltip_bg_color% !important;
+    border: 2px solid %border_color%;
+    color: %main_text_color% !important;
+    padding: 10px;
+}
+
+/* Ensure no elision in customization hex fields */
+QLineEdit#color_display {
+    padding: 6px 12px;
+    min-width: 65px;
+    max-width: 100px;
+    background-color: %frame_bg_color% !important;
+    color: %main_text_color% !important;
+    qproperty-alignment: 'AlignCenter';
+    /* Prevent text disappearance on focus/selection */
+    selection-background-color: %button_hover_color% !important;
+    selection-color: %main_text_color% !important;
+    border: 2px solid %border_color%;
+}
+
+QLineEdit#color_display:focus, QLineEdit#color_display:hover {
+    border-color: %main_text_color% !important;
+    color: %main_text_color% !important;
+    background-color: %frame_bg_color% !important;
+}
+
+QLineEdit#color_display:read-only {
+    color: %main_text_color% !important;
+}

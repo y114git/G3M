@@ -185,6 +185,8 @@
     "gamebanana_install_manual_tooltip": "Автоустановка недоступна. Будет открыта страница мода.",
     "gamebanana_install_unknown_tooltip": "Совместимость ещё проверяется, но вы можете попробовать установить.",
     "gamebanana_install_progress": "Скачивание... {progress}%",
+    "gamebanana_rate_limit_title": "Лимит API",
+    "gamebanana_rate_limit_body": "Достигнут лимит запросов GameBanana API (250 в час). Пожалуйста, подождите и попробуйте снова.",
     "gamebanana_format_deltahub": "DELTAHUB",
     "gamebanana_format_deltamod": "Deltamod",
     "open_instructions": "Открыть инструкцию",
@@ -202,6 +204,7 @@
     "external_url_optional": "Внешняя ссылка (Необязательно)",
     "view_on_external_site": "Посмотреть на сайте",
     "fullscreen": "Полноэкранный режим",
+    "scale_label": "Масштаб интерфейса",
     "hide_library_filters": "Скрыть фильтры в библиотеке",
     "sort_by_name": "По имени",
     "sort_by_date": "По дате",
@@ -306,12 +309,14 @@
     "search_mods_placeholder": "Поиск по названию и описанию",
     "no_mods_to_insert": "Нет доступных модов.",
     "launcher_customization": "Кастомизация",
+    "apply_theme": "Применить тему",
     "install_button": "Установить",
     "unknown_author": "Неизвестен",
     "settings_section_merging": "Слияние модов",
     "clear_cache_button": "Очистить кэш модов",
     "settings_section_themes": "Темы",
-    "settings_section_media": "Оформление и Звук",
+    "settings_section_media": "Графика",
+    "settings_section_audio": "Аудио",
     "do_not_save_theme_after_import": "Не сохранять тему в списке после импорта",
     "dont_hide_window_on_launch": "Не скрывать окно при запуске",
     "hide_wips_without_downloads": "Скрыть WIP без загрузок"
@@ -354,7 +359,8 @@
     "disable_splash": "Отключить заставку",
     "xdelta_modpack": "XDELTA вместо data.win/.ios",
     "merge_properties": "Слияние свойств",
-    "merge_code": "Слияние кода"
+    "merge_code": "Слияние кода",
+    "disable_animations": "Отключить анимации"
   },
   "tags": {
     "gameplay": "Геймплей",

@@ -100,10 +100,9 @@ class LoadModDetailsThread(QThread):
                 if metadata_cache and (full_description or screenshots):
                     try:
                         if not self.isInterruptionRequested():
-                            metadata_cache.set(mod_id_str, full_description=full_description, screenshots=screenshots if screenshots else None)
-                            logging.debug(f'LoadModDetailsThread: Saved details to cache for mod {mod_id_str}')
+                            metadata_cache.set(mod_id_str, full_description=full_description, screenshots=screenshots or None)
                     except Exception as e:
-                        logging.warning(f'LoadModDetailsThread: Error saving to cache: {e}', exc_info=True)
+                        logging.warning(f'LoadModDetailsThread: Cache save error: {e}')
                 if not self.isInterruptionRequested():
                     self.details_loaded.emit(result)
         except Exception as e:
@@ -280,11 +279,8 @@ def open_mod_details_dialog(parent, mod_data):
     def _is_alive(*widgets):
         try:
             return all(not _sip.isdeleted(w) for w in widgets)
-        except (ImportError, AttributeError, RuntimeError):
-            try:
-                return dialog.isVisible()
-            except (RuntimeError, AttributeError):
-                return False
+        except (RuntimeError, AttributeError):
+            return False
 
     def update_ui_with_details(details_dict):
         nonlocal dialog_closed
@@ -364,8 +360,10 @@ def open_mod_details_dialog(parent, mod_data):
             if thread_to_cleanup.isRunning():
                 thread_to_cleanup.requestInterruption()
                 thread_to_cleanup.quit()
-                if not thread_to_cleanup.wait(2000):
-                    logging.warning('LoadModDetailsThread: Thread did not stop within 2s timeout')
+                if not thread_to_cleanup.wait(5000):
+                    logging.debug('LoadModDetailsThread: Thread did not stop within 5s timeout, terminating')
+                    thread_to_cleanup.terminate()
+                    thread_to_cleanup.wait(50)
             if thread_to_cleanup.isFinished():
                 thread_to_cleanup.deleteLater()
             else:

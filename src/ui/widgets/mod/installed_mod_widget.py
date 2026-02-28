@@ -9,14 +9,17 @@ from .base_mod_widget import BaseModWidget
 from services.localization_service import tr
 from ui.common.styling import get_theme_color
 from utils.mod_utils import get_mod_key
+from ui.utils.ui_utils import UIAnimator
 
 
 class InstalledModWidget(BaseModWidget):
     remove_requested = pyqtSignal(object)
     use_requested = pyqtSignal(object)
 
-    def __init__(self, mod_data, parent=None, installed_date=None):
+    def __init__(self, mod_data, parent=None, installed_date=None, parent_app=None):
         super().__init__(mod_data, parent)
+        if parent_app:
+            self.parent_app = parent_app
         self.hide()
         self.use_button = None
         self.added_date = installed_date
@@ -28,6 +31,8 @@ class InstalledModWidget(BaseModWidget):
         self.setFixedHeight(120)
         self._init_ui()
         self._update_button_from_status()
+
+        UIAnimator.fade_in(self, 200, getattr(self.parent_app, 'app_state', None) if self.parent_app else None)
 
     def _init_ui(self):
         super()._init_ui()

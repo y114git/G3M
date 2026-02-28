@@ -170,7 +170,7 @@ class RefreshController:
                     logging.error(f'RefreshController: Error in update_filtered_mods_callback: {e}', exc_info=True)
             elif downloads_restored:
                 try:
-                    if self.app_window and hasattr(self.app_window, 'search_display'):
+                    if self.app_window and hasattr(self.app_window, 'search_display') and self.app_window.search_display:
                         self.app_window.search_display.update_filtered_mods(preserve_page=False)
                 except Exception as e:
                     logging.error(f'RefreshController: Error re-sorting after cache restore: {e}', exc_info=True)

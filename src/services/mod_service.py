@@ -75,7 +75,19 @@ class ModManager(QObject):
                 self.app_state.local_config[settings_key] = new_list
                 changes_made = True
         if changes_made:
-            self.app_state.save_config()
+            if self.settings_service:
+                self.settings_service.write_local_config()
+            else:
+                self._write_local_config_fallback()
+
+    def _write_local_config_fallback(self):
+        """Fallback method to write local config when settings_service is None."""
+        try:
+            from utils.file_utils import save_json
+            save_json(self.app_state.config_path, self.app_state.local_config, indent=2)
+            logging.warning("Used fallback persistence for settings cleanup (settings_service was None)")
+        except Exception as e:
+            logging.error(f"Failed to write local config fallback: {e}", exc_info=True)
 
     def invalidate_mods_cache(self) -> None:
         with self._cache_lock:

@@ -72,12 +72,14 @@ class GameLaunchController(QObject):
                 patching_thread.progress_update.disconnect()
                 patching_thread.status_update.disconnect()
                 patching_thread.finished.disconnect()
-                patching_thread.warning_confirmation_needed.disconnect()
+                if hasattr(patching_thread, 'warning_confirmation_needed'):
+                    patching_thread.warning_confirmation_needed.disconnect()
             except (TypeError, RuntimeError):
                 pass
             patching_thread.cancel()
             if patching_thread.isRunning():
-                patching_thread._warning_event.set()
+                if hasattr(patching_thread, '_warning_event'):
+                    patching_thread._warning_event.set()
                 patching_thread.wait(5000)
             try:
                 if patching_thread.patcher:

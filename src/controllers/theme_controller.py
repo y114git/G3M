@@ -23,28 +23,24 @@ class ThemeController:
     def apply_theme(self, force=False):
         theme = THEMES['default']
         background_disabled = self.app_state.local_config.get('background_disabled', False)
-        new_background_path = None
-        if not background_disabled:
-            new_background_path = self.app_state.local_config.get('custom_background_path') or resource_path(f"assets/{theme.get('background', '')}")
+        new_background_path = None if background_disabled else (self.app_state.local_config.get('custom_background_path') or resource_path(f"assets/{theme.get('background', '')}"))
 
         user_bg_hex = self.app_state.local_config.get('custom_color_background')
         if user_bg_hex and self.settings_service.is_valid_hex_color(user_bg_hex):
-            frame_bg_color = f"#C0{user_bg_hex.lstrip('#')}"
+            h = user_bg_hex.lstrip('#')
+            r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+            frame_bg_color, tooltip_bg_color = f"rgba({r}, {g}, {b}, 150)", f"rgba({r}, {g}, {b}, 230)"
         else:
-            frame_bg_color = 'rgba(0, 0, 0, 150)'
+            frame_bg_color, tooltip_bg_color = 'rgba(0, 0, 0, 150)', 'rgba(0, 0, 0, 230)'
 
         button_color = self.app_state.local_config.get('custom_color_button') or theme['colors']['button']
         border_color = self.app_state.local_config.get('custom_color_border') or theme['colors']['border']
         button_hover_color = self.app_state.local_config.get('custom_color_button_hover') or theme['colors']['button_hover']
         main_text_color = self.app_state.local_config.get('custom_color_text') or theme['colors']['text']
-        base_family = self.app.custom_font_family or theme['font_family']
-        font_family_main = base_family
+        font_family_main = self.app.custom_font_family or theme['font_family']
+        zoom_factor = self.app_state.local_config.get('ui_scale', 1.0)
 
-        params = {
-            'bg': frame_bg_color, 'btn': button_color, 'border': border_color,
-            'hover': button_hover_color, 'text': main_text_color, 'font': font_family_main,
-            'bg_path': new_background_path, 'bg_disabled': background_disabled
-        }
+        params = {'bg': frame_bg_color, 'btn': button_color, 'border': border_color, 'hover': button_hover_color, 'text': main_text_color, 'font': font_family_main, 'bg_path': new_background_path, 'bg_disabled': background_disabled, 'ui_scale': zoom_factor}
         if not force and params == self._last_theme_params:
             return
         self._last_theme_params = params
@@ -68,28 +64,24 @@ class ThemeController:
             self.app._current_background_path = new_background_path
             self.app._background_was_disabled = background_disabled
 
-        font_size_main = theme['font_size_main']
-        font_size_small = theme['font_size_small']
-        from PyQt6.QtGui import QFont
+        self._current_zoom = zoom_factor
+        font_size_main, font_size_small = max(1, int(theme['font_size_main'] * zoom_factor)), max(1, int(theme['font_size_small'] * zoom_factor))
+        from PyQt6.QtGui import QFont, QColor, QPalette
         status_font = QFont(font_family_main, font_size_small)
         self.app.status_label.setFont(status_font)
         app_font = QFont(font_family_main)
         (QApplication.instance() or self.app).setFont(app_font)
-        from PyQt6.QtGui import QColor, QPalette
         palette = self.app.palette()
         txt_col = QColor(main_text_color)
-        palette.setColor(QPalette.ColorRole.WindowText, txt_col)
-        palette.setColor(QPalette.ColorRole.Text, txt_col)
-        palette.setColor(QPalette.ColorRole.ButtonText, txt_col)
+        for role in (QPalette.ColorRole.WindowText, QPalette.ColorRole.Text, QPalette.ColorRole.ButtonText):
+            palette.setColor(role, txt_col)
         (QApplication.instance() or self.app).setPalette(palette)
-        explicit_color_widgets = [getattr(self.app, 'telegram_button', None), getattr(self.app, 'discord_button', None)]
-        explicit_colors = [UI_COLORS['link'], UI_COLORS['social_discord']]
-        for widget, color in zip(explicit_color_widgets, explicit_colors):
-            if widget is not None:
+        for widget, color in [(getattr(self.app, 'telegram_button', None), UI_COLORS['link']), (getattr(self.app, 'discord_button', None), UI_COLORS['social_discord'])]:
+            if widget:
                 widget.setStyleSheet(f'color: {color};')
         scroll_handle_color = self.app_state.local_config.get('custom_color_button') or 'white'
         checkbox_checked_color = '#ffffff' if not self.app.color_widgets['button_hover'].text() else button_hover_color
-        style_sheet = build_stylesheet(frame_bg_color=frame_bg_color, button_color=button_color, border_color=border_color, button_hover_color=button_hover_color, main_text_color=main_text_color, font_family_main=font_family_main, font_size_main=font_size_main, font_size_small=font_size_small, checkbox_checked_color=checkbox_checked_color, scroll_handle_color=scroll_handle_color)
+        style_sheet = build_stylesheet(frame_bg_color=frame_bg_color, button_color=button_color, border_color=border_color, button_hover_color=button_hover_color, main_text_color=main_text_color, font_family_main=font_family_main, font_size_main=font_size_main, font_size_small=font_size_small, checkbox_checked_color=checkbox_checked_color, scroll_handle_color=scroll_handle_color, tooltip_bg_color=tooltip_bg_color, zoom_factor=zoom_factor)
         app_inst = QApplication.instance()
         (app_inst if isinstance(app_inst, QApplication) else self.app).setStyleSheet(style_sheet)
         if hasattr(self.app, 'search_display') and hasattr(self.app.search_display, 'update_all_cards_labels'):
@@ -103,10 +95,10 @@ class ThemeController:
         if hasattr(self.app, 'plugin_tab_builder') and self.app.plugin_tab_builder is not None:
             plugin_lbl = self.app.plugin_tab_builder.widgets.get('installed_plugins_label')
             if plugin_lbl:
-                plugin_lbl.setStyleSheet(f'font-weight: bold; font-size: 16px; color: {text_color};')
+                plugin_lbl.setStyleSheet(f'font-weight: bold; font-size: {max(1, int(16 * zoom_factor))}px; color: {text_color};')
         if hasattr(self.app, 'installed_mods_label') and self.app.installed_mods_label:
-            self.app.installed_mods_label.setStyleSheet(f'font-weight: bold; font-size: 16px; color: {text_color};')
-        checkbox_style = f'\n            QCheckBox {{\n                color: {text_color};\n                font-size: 12px;\n                spacing: 5px;\n            }}\n            QCheckBox::indicator {{\n                width: 16px;\n                height: 16px;\n            }}\n        '
+            self.app.installed_mods_label.setStyleSheet(f'font-weight: bold; font-size: {max(1, int(16 * zoom_factor))}px; color: {text_color};')
+        checkbox_style = f'\n            QCheckBox {{\n                color: {text_color};\n                font-size: {max(1, int(12 * zoom_factor))}px;\n                spacing: {max(1, int(5 * zoom_factor))}px;\n            }}\n            QCheckBox::indicator {{\n                width: {max(1, int(16 * zoom_factor))}px;\n                height: {max(1, int(16 * zoom_factor))}px;\n            }}\n        '
         if hasattr(self.app, 'library_tag_widgets'):
             for cb in self.app.library_tag_widgets:
                 cb.setStyleSheet(checkbox_style)
@@ -126,6 +118,35 @@ class ThemeController:
             self.app._update_chapter_tabs_style()
         if hasattr(self.app, 'library_tab_builder'):
             self.app.library_tab_builder.update_priority_button_style()
+        if hasattr(self.app, 'top_panel_widget') and self.app.top_panel_widget:
+
+            self.app.top_panel_widget.setMinimumHeight(int(65 * zoom_factor))
+
+        if hasattr(self.app, 'logo_placeholder') and self.app.logo_placeholder:
+            self.app.logo_placeholder.setFixedSize(int(250 * zoom_factor), int(60 * zoom_factor))
+
+        if hasattr(self.app, 'launcher_icon_label'):
+            self.app.launcher_icon_label.setFixedSize(int(250 * zoom_factor), int(60 * zoom_factor))
+            self.app.launcher_icon_label.setStyleSheet('background: transparent; padding: 0px;')
+            self.customization_service.load_launcher_icon(self.app.launcher_icon_label)
+
+            def _recenter_logo():
+                if hasattr(self.app, 'top_panel_widget') and hasattr(self.app, 'launcher_icon_label'):
+                    app = self.app
+                    ph = app.top_panel_widget.height()
+                    lh = app.launcher_icon_label.height()
+                    pw = app.top_panel_widget.width()
+                    lw = app.launcher_icon_label.width()
+
+                    if not all(isinstance(x, (int, float)) for x in (ph, lh, pw, lw)):
+                        return
+
+                    y = max(0, (ph - lh) // 2)
+                    app.launcher_icon_label.move((pw - lw) // 2, y)
+
+            from PyQt6.QtCore import QTimer
+            QTimer.singleShot(0, _recenter_logo)
+
         self.update_dynamic_elements()
         self.app.update()
 
@@ -225,7 +246,7 @@ class ThemeController:
         os.makedirs(themes_dir, exist_ok=True)
 
         settings = {k: self.app_state.local_config.get(k, '') for k in ('custom_color_background', 'custom_color_button', 'custom_color_border', 'custom_color_button_hover', 'custom_color_text', 'custom_color_version_text')}
-        settings.update({k: self.app_state.local_config.get(k, False) for k in ('background_disabled', 'disable_splash')})
+        settings.update({k: self.app_state.local_config.get(k, False) for k in ('background_disabled', 'disable_splash', 'disable_animations')})
 
         try:
             with zipfile.ZipFile(os.path.join(themes_dir, f'{name}.zip'), 'w') as zipf:
@@ -270,6 +291,8 @@ class ThemeController:
         self.customization_service.load_custom_style_settings(self.app.color_widgets, self.apply_theme)
         self.app.disable_background_checkbox.setChecked(self.app_state.local_config.get('background_disabled', False))
         self.app.disable_splash_checkbox.setChecked(self.app_state.local_config.get('disable_splash', False))
+        if hasattr(self.app, 'disable_animations_checkbox'):
+            self.app.disable_animations_checkbox.setChecked(self.app_state.local_config.get('disable_animations', False))
         self.app.background_music_button.setText(self.customization_service.get_background_music_button_text())
         self.app.startup_sound_button.setText(self.customization_service.get_startup_sound_button_text())
         self.update_background_button_state()
@@ -308,7 +331,8 @@ class ThemeController:
                     if filters and filters.objectName() == 'filters':
                         filter_bg_color = self.app_state.local_config.get('custom_color_background') or 'rgba(0, 0, 0, 150)'
                         filter_border_color = self.app_state.local_config.get('custom_color_border') or 'white'
-                        filters.setStyleSheet(f'QFrame#filters {{ background-color: {filter_bg_color}; border: 2px solid {filter_border_color}; padding: 8px; }}')
+                        zoom_factor = self.app_state.local_config.get('ui_scale', 1.0)
+                        filters.setStyleSheet(f'QFrame#filters {{ background-color: {filter_bg_color}; border: {max(1, int(2 * zoom_factor))}px solid {filter_border_color}; padding: {int(8 * zoom_factor)}px; }}')
         mod_list = getattr(self.app, 'mod_list_widget', None)
         installed_mods = getattr(self.app, 'installed_mods_widget', None)
         self.customization_service.update_mod_cards_styles(mod_list, installed_mods)
@@ -346,8 +370,6 @@ class ThemeController:
     def on_logo_button_click(self):
         self.settings_service.on_logo_button_click()
         self.update_logo_button_state()
-        if hasattr(self.app, 'launcher_icon_label'):
-            self.customization_service.load_launcher_icon(self.app.launcher_icon_label)
 
     def update_logo_button_state(self):
         if hasattr(self.app, 'change_logo_button'):

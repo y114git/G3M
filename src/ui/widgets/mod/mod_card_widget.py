@@ -7,6 +7,7 @@ from services.localization_service import tr
 from ui.common.styling import get_theme_color
 from utils.mod_utils import get_mod_key
 import logging
+from ui.utils.ui_utils import UIAnimator
 
 
 class CompatibilityCheckThread(QThread):
@@ -86,6 +87,7 @@ class ModCardWidget(BaseModWidget):
             self.destroyed.connect(self._cleanup_compatibility_thread)
         except Exception:
             pass
+        UIAnimator.fade_in(self, 200, getattr(self.parent_app, 'app_state', None) if getattr(self, 'parent_app', None) else None)
 
     def _cleanup_compatibility_thread(self):
         try:

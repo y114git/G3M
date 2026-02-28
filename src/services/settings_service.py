@@ -116,6 +116,7 @@ class SettingsManager(QObject):
     def on_toggle_portproton(self, enabled: bool): self._toggle_setting('use_portproton', enabled)
     def on_toggle_hide_wips_without_downloads(self, enabled: bool): self._toggle_setting('hide_wips_without_downloads', enabled)
     def on_toggle_dont_hide_window_on_launch(self, enabled: bool): self._toggle_setting('dont_hide_window_on_launch', enabled)
+    def on_toggle_disable_animations(self, enabled: bool): self._toggle_setting('disable_animations', enabled, None)
     def on_toggle_disable_background(self, enabled: bool): self._toggle_setting('background_disabled', enabled, 'theme_changed')
     def on_toggle_disable_splash(self, enabled: bool): self._toggle_setting('disable_splash', enabled, None)
     def on_toggle_skip_patching_warnings(self, enabled: bool): self._toggle_setting('skip_patching_warnings', enabled)
@@ -308,7 +309,7 @@ class SettingsManager(QObject):
             return
         _color_keys = ('custom_color_background', 'custom_color_button', 'custom_color_border', 'custom_color_button_hover', 'custom_color_text', 'custom_color_version_text')
         theme_settings = {k: self.app_state.local_config.get(k, '') for k in _color_keys}
-        theme_settings.update({'background_disabled': self.app_state.local_config.get('background_disabled', False), 'disable_splash': self.app_state.local_config.get('disable_splash', False)})
+        theme_settings.update({'background_disabled': self.app_state.local_config.get('background_disabled', False), 'disable_splash': self.app_state.local_config.get('disable_splash', False), 'disable_animations': self.app_state.local_config.get('disable_animations', False)})
         with zipfile.ZipFile(theme_file_path, 'w') as zipf:
             zipf.writestr('theme.json', json.dumps(theme_settings, indent=2))
             assets = [('custom_background_path', 'background')]

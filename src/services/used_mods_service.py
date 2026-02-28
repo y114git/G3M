@@ -169,49 +169,53 @@ class UsedModsManager(QObject):
 
     def load_used_mods_state(self, mode=None):
         is_chapter_mode = self.app_state.current_mode == 'chapter'
-        config_key = self.get_used_mods_config_key(self.app_state.game_mode, is_chapter_mode)
-        used_mods_data = self.app_state.local_config.get(config_key, {})
-        if not used_mods_data:
-            self.used_mods.clear()
-            self.used_mods_updated.emit()
-            return
-        if not (hasattr(self.app_state, 'all_mods') and self.app_state.all_mods):
-            return
-        self.used_mods.clear()
+
+        modes_to_load = [is_chapter_mode]
+        if len(self.used_mods) == 0:
+            modes_to_load = [True, False]
+
         needs_save = False
-        gm = self.app_state.game_mode
-        valid_tab_ids = {tab.tab_id for tab in gm.tabs}
-        expected_id = get_chapter_id_for_game_mode(gm)
-        for chapter_id_str, mod_data_raw in list(used_mods_data.items()):
-            chapter_id = self._migrate_legacy_id(chapter_id_str, gm)
-            if not is_chapter_mode and expected_id != gm.game_id and chapter_id != expected_id:
+        for chapter_mode in modes_to_load:
+            config_key = self.get_used_mods_config_key(self.app_state.game_mode, chapter_mode)
+            used_mods_data = self.app_state.local_config.get(config_key, {})
+            if not used_mods_data:
                 continue
-            if is_chapter_mode and chapter_id not in valid_tab_ids:
+            if not (hasattr(self.app_state, 'all_mods') and self.app_state.all_mods):
                 continue
-            if not is_chapter_mode and expected_id == gm.game_id and chapter_id != expected_id:
-                continue
-            mod_keys = [mod_data_raw] if isinstance(mod_data_raw, str) else (mod_data_raw if isinstance(mod_data_raw, list) else [])
-            if isinstance(mod_data_raw, str):
-                needs_save = True
-            if not mod_keys:
-                continue
-            mods_list, missing_keys = [], []
-            for key in mod_keys:
-                if not key:
+
+            gm = self.app_state.game_mode
+            valid_tab_ids = {tab.tab_id for tab in gm.tabs}
+            expected_id = get_chapter_id_for_game_mode(gm)
+            for chapter_id_str, mod_data_raw in list(used_mods_data.items()):
+                chapter_id = self._migrate_legacy_id(chapter_id_str, gm)
+                if not chapter_mode and expected_id != gm.game_id and chapter_id != expected_id:
                     continue
-                if mod_data := self._find_mod_by_key(key):
-                    mods_list.append(mod_data)
-                else:
-                    missing_keys.append(key)
-            if mods_list:
-                self.used_mods[chapter_id] = mods_list
-            if missing_keys:
-                if not hasattr(self, '_pending_mod_keys'):
-                    self._pending_mod_keys = {}
-                self._pending_mod_keys[chapter_id] = missing_keys
-            elif chapter_id_str in used_mods_data and not mods_list and not (hasattr(self, '_pending_mod_keys') and chapter_id in self._pending_mod_keys):
-                del used_mods_data[chapter_id_str]
-                needs_save = True
+                if chapter_mode and chapter_id not in valid_tab_ids:
+                    continue
+                if not chapter_mode and expected_id == gm.game_id and chapter_id != expected_id:
+                    continue
+                mod_keys = [mod_data_raw] if isinstance(mod_data_raw, str) else (mod_data_raw if isinstance(mod_data_raw, list) else [])
+                if isinstance(mod_data_raw, str):
+                    needs_save = True
+                if not mod_keys:
+                    continue
+                mods_list, missing_keys = [], []
+                for key in mod_keys:
+                    if not key:
+                        continue
+                    if mod_data := self._find_mod_by_key(key):
+                        mods_list.append(mod_data)
+                    else:
+                        missing_keys.append(key)
+                if mods_list:
+                    self.used_mods[chapter_id] = mods_list
+                if missing_keys:
+                    if not hasattr(self, '_pending_mod_keys'):
+                        self._pending_mod_keys = {}
+                    self._pending_mod_keys[chapter_id] = missing_keys
+                elif chapter_id_str in used_mods_data and not mods_list and not (hasattr(self, '_pending_mod_keys') and chapter_id in self._pending_mod_keys):
+                    del used_mods_data[chapter_id_str]
+                    needs_save = True
         if needs_save:
             self.save_used_mods_state()
         self.used_mods_updated.emit()

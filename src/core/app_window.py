@@ -6,13 +6,14 @@ import webbrowser
 import argparse
 from typing import Optional
 import logging
-from PyQt6.QtCore import QTranslator, Qt, QEvent, QThread, QTimer, pyqtSignal, QUrl
+from PyQt6.QtCore import QTranslator, Qt, QEvent, QThread, QTimer, pyqtSignal, QUrl, QPoint
 from PyQt6.QtGui import QColor, QIcon, QPainter, QPixmap, QDesktopServices
 from PyQt6.QtWidgets import QApplication, QCheckBox, QFrame, QLabel, QProgressBar, QPushButton, QTabWidget, QVBoxLayout, QWidget, QHBoxLayout, QSizePolicy, QColorDialog
 from services.localization_service import localization_service, tr
 from models.game_modes import DeltaruneGame, get_game
 from config.constants import UI_COLORS, SOCIAL_LINKS, ONLINE_UPDATE_INTERVAL, INITIALIZATION_TIMEOUT, CLOUD_FUNCTIONS_BASE_URL
-from ui.utils.ui_utils import DebounceTimer
+from ui.utils.ui_utils import DebounceTimer, UIAnimator
+from ui.widgets.shared.custom_controls import AnimatedToolTip
 from ui.common.styling import get_theme_color
 from utils.path_utils import get_user_data_root, resource_path, get_launcher_dir, get_user_plugins_dir
 from utils.network_utils import get_session
@@ -26,6 +27,7 @@ from controllers.game_launch_controller import GameLaunchController
 from ui.common.feedback import FeedbackManager
 from core.startup import SingleInstanceServer
 from core.app_state import AppState
+from adapters.gamebanana_adapter import GameBananaAPI
 from services.mod_service import ModManager
 from services.launch_service import GameLauncher
 from services.updatecheck_service import UpdateChecker
@@ -56,6 +58,7 @@ class AppWindow(QWidget):
     def __init__(self, args: Optional[argparse.Namespace] = None, parent_for_dialogs: Optional[QWidget] = None, initial_url: str | None = None):
         super().__init__()
         self.app_state = AppState()
+        GameBananaAPI.set_app_state(self.app_state)
         from utils.network_utils import _build_session
         self.app_state.network_session = _build_session()
         self.server: SingleInstanceServer | None = None
@@ -172,6 +175,13 @@ class AppWindow(QWidget):
         self.initialization_timer.timeout.connect(self._force_finish_initialization)
         self.initialization_timer.start(INITIALIZATION_TIMEOUT)
         self.settings_service.load_window_geometry(self)
+        QApplication.instance().installEventFilter(self)
+        self._tooltip_widget = None
+        self._tooltip_timer = QTimer()
+        self._tooltip_timer.setSingleShot(True)
+        self._tooltip_timer.timeout.connect(self._show_custom_tooltip)
+        self._last_tooltip_text = ""
+        self._last_tooltip_target = None
 
     def _handle_first_launch_settings(self):
         try:
@@ -201,7 +211,6 @@ class AppWindow(QWidget):
         self.game_launch.update_geometry_requested.connect(self.updateGeometry)
         self.game_launch.show_pending_dialogs_requested.connect(self._show_pending_dialogs)
         self.game_launch.pending_updates_changed.connect(lambda updates: setattr(self, 'pending_updates', updates))
-        self.settings_service.theme_changed.connect(self.theme.apply_theme)
         self.settings_service.theme_changed.connect(self.theme.on_theme_changed_by_service)
 
     def _connect_own_signals(self):
@@ -216,6 +225,13 @@ class AppWindow(QWidget):
         self.install_from_gb_signal.connect(lambda mod: self.mod_ops.install_mod(mod, force=True))
         self.initialization_finished.connect(self._handle_pending_install)
         self.app_state.all_mods_updated.connect(lambda mods: setattr(self.app_state, 'all_mods', mods))
+        self.app_state.gb_rate_limit_error.connect(self._on_gb_rate_limit_error)
+
+    def _on_gb_rate_limit_error(self):
+        if not self.app_state.local_config.get('gb_rate_limit_notified_this_session', False):
+            self.app_state.local_config['gb_rate_limit_notified_this_session'] = True
+            self.settings_service.write_local_config()
+            self.feedback_service.show_message('warning', 'ui.gamebanana_rate_limit_title', 'ui.gamebanana_rate_limit_body')
 
     def _handle_pending_install(self):
         if self._pending_install_url:
@@ -282,9 +298,11 @@ class AppWindow(QWidget):
         self.full_install_checkbox.stateChanged.connect(self._on_toggle_full_install)
         self.full_install_checkbox.hide()
         self.main_layout = QVBoxLayout(self)
-        self.main_layout.setContentsMargins(10, 10, 10, 10)
+        self.main_layout.setContentsMargins(10, 5, 10, 5)
         self.top_panel_widget = QFrame()
         self.top_frame = QHBoxLayout(self.top_panel_widget)
+        self.top_frame.setContentsMargins(5, 0, 5, 0)
+        self.top_frame.setSpacing(5)
         self.settings_button = QPushButton(tr('ui.settings_title'))
         self.settings_button.clicked.connect(self.settings_ui.toggle_settings_view)
         self.online_label = QLabel(tr('status.online_count', count='?'))
@@ -294,16 +312,13 @@ class AppWindow(QWidget):
         self.top_refresh_button = QPushButton('🔄️')
         self.top_refresh_button.setObjectName('topRefreshBtn')
         self.top_refresh_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        self.top_refresh_button.setMinimumSize(40, 40)
-        self.top_refresh_button.setMaximumSize(40, 40)
-        self.top_refresh_button.setStyleSheet('min-width:40px; max-width:40px; min-height:40px; max-height:40px; padding:0; margin:0;')
         self.top_refresh_button.clicked.connect(self._on_refresh_clicked)
         self.top_frame.addWidget(self.top_refresh_button)
         self.top_frame.addWidget(self.online_label)
         self.top_frame.addStretch()
-        logo_placeholder = QWidget()
-        logo_placeholder.setFixedWidth(225)
-        self.top_frame.addWidget(logo_placeholder)
+        self.logo_placeholder = QWidget()
+        self.logo_placeholder.setFixedWidth(225)
+        self.top_frame.addWidget(self.logo_placeholder)
         self.top_frame.addStretch()
         self.telegram_button = QPushButton(tr('buttons.telegram'))
         self.telegram_button.clicked.connect(lambda: webbrowser.open(self.app_state.global_settings.get('telegram_url', SOCIAL_LINKS['telegram'])))
@@ -346,7 +361,7 @@ class AppWindow(QWidget):
         self.bottom_frame.addWidget(self.status_label)
         self.bottom_frame.addWidget(self.progress_bar)
         self.bottom_frame.addLayout(self.action_frame)
-        self.main_layout.addSpacing(20)
+        self.main_layout.addSpacing(5)
         self.main_tab_widget = QTabWidget()
         self.main_tab_widget.setTabPosition(QTabWidget.TabPosition.North)
         self.app_state.current_page = 1
@@ -527,7 +542,7 @@ class AppWindow(QWidget):
             'settings_tab_widget', 'changelog_widget',
             'language_label', 'language_combo',
             'beta_updates_checkbox', 'open_deltahub_folder_button', 'reset_button',
-            'fullscreen_checkbox', 'disable_background_checkbox', 'disable_splash_checkbox',
+            'fullscreen_checkbox', 'disable_animations_checkbox', 'disable_background_checkbox', 'disable_splash_checkbox',
             'change_background_button', 'change_logo_button', 'change_font_button', 'background_music_button',
             'startup_sound_button', 'custom_style_frame', 'color_widgets', 'color_labels',
             'color_config', 'theme_button', 'themes_list_widget', 'theme_apply_btn',
@@ -542,6 +557,7 @@ class AppWindow(QWidget):
             'changelog_text_edit', 'changelog_button', 'report_bug_button',
             'hide_mods_browser_tab_checkbox', 'hide_library_tab_checkbox', 'hide_plugins_tab_checkbox',
             'merge_properties_checkbox', 'merge_code_checkbox', 'clear_cache_button',
+            'ui_scale_label', 'ui_scale_spinbox',
         ), optional=(
             'use_portproton_checkbox', 'select_portproton_path_button',
             'portproton_path_label', 'portproton_frame',
@@ -549,13 +565,30 @@ class AppWindow(QWidget):
         self._section_headers = settings_widgets.get('_section_headers', [])
         self._section_lines = settings_widgets.get('_section_lines', [])
         self.language_combo.currentTextChanged.connect(lambda: self.settings_ui.on_language_changed(self.language_combo.currentData()))
+
+        from PyQt6.QtCore import QTimer
+        if not hasattr(self, '_ui_scale_timer'):
+            self._ui_scale_timer = QTimer(self)
+            self._ui_scale_timer.setSingleShot(True)
+            self._ui_scale_timer.setInterval(300)
+            self._ui_scale_timer.timeout.connect(lambda: self.theme.apply_theme())
+
+        def _on_ui_scale_changed_from_ui(val):
+            self.app_state.local_config['ui_scale'] = val / 100.0
+            self.settings_service.write_local_config()
+            self._ui_scale_timer.start()
+
+        self.ui_scale_spinbox.valueChanged.connect(_on_ui_scale_changed_from_ui)
+
         self.beta_updates_checkbox.stateChanged.connect(self.settings_ui.on_toggle_beta_updates)
         self.open_deltahub_folder_button.clicked.connect(self._open_deltahub_folder)
         self.reset_button.clicked.connect(self.settings_ui.reset_settings)
         self.fullscreen_checkbox.stateChanged.connect(self.settings_ui.on_toggle_fullscreen)
+        self.disable_animations_checkbox.stateChanged.connect(self.settings_ui.on_toggle_disable_animations)
         self.disable_background_checkbox.stateChanged.connect(self.settings_ui.on_toggle_disable_background)
         self.disable_splash_checkbox.stateChanged.connect(self.settings_ui.on_toggle_disable_splash)
         self.change_background_button.clicked.connect(self.theme.on_background_button_click)
+        self.theme.update_background_button_state()
         self.change_logo_button.setText(self.customization_service.get_logo_button_text())
         self.change_logo_button.clicked.connect(self.theme.on_logo_button_click)
         self.change_font_button.setText(self.customization_service.get_font_button_text())
@@ -781,7 +814,82 @@ class AppWindow(QWidget):
             if chapter_id is not None:
                 self.used_mods_service.toggle_direct_launch_for_chapter(chapter_id)
                 return True
+        elif ev.type() == QEvent.Type.Wheel:
+            if ev.modifiers() == Qt.KeyboardModifier.ControlModifier:
+                delta = ev.angleDelta().y()
+                if delta > 0:
+                    self._zoom_ui(1)
+                elif delta < 0:
+                    self._zoom_ui(-1)
+                return True
+        elif ev.type() == QEvent.Type.KeyPress:
+            if ev.modifiers() & Qt.KeyboardModifier.ControlModifier:
+                if ev.key() in (Qt.Key.Key_Equal, Qt.Key.Key_Plus):
+                    self._zoom_ui(1)
+                    return True
+                elif ev.key() == Qt.Key.Key_Minus:
+                    self._zoom_ui(-1)
+                    return True
+        elif ev.type() == QEvent.Type.ToolTip:
+            if hasattr(obj, 'toolTip'):
+                text = obj.toolTip()
+                if text:
+                    if hasattr(self, '_last_tooltip_target') and hasattr(self, '_tooltip_widget') and self._last_tooltip_target == obj and self._tooltip_widget and self._tooltip_widget.isVisible():
+                        return True
+                    if hasattr(self, '_last_tooltip_text'):
+                        self._last_tooltip_text = text
+                    if hasattr(self, '_last_tooltip_target'):
+                        self._last_tooltip_target = obj
+                    if hasattr(self, '_tooltip_timer'):
+                        self._tooltip_timer.start(250)
+                    return True
+            self._hide_custom_tooltip()
+            return super().eventFilter(obj, ev)
+        elif ev.type() in (QEvent.Type.Leave, QEvent.Type.MouseButtonPress, QEvent.Type.KeyPress, QEvent.Type.Hide):
+            if hasattr(self, '_tooltip_timer'):
+                self._tooltip_timer.stop()
+            self._hide_custom_tooltip()
+
         return super().eventFilter(obj, ev)
+
+    def _show_custom_tooltip(self):
+        if not hasattr(self, '_last_tooltip_target') or not hasattr(self, '_last_tooltip_text') or not self._last_tooltip_target or not self._last_tooltip_text:
+            return
+
+        from PyQt6.QtGui import QCursor
+
+        if hasattr(self, '_tooltip_widget') and self._tooltip_widget:
+            self._tooltip_widget.close()
+            self._tooltip_widget.deleteLater()
+
+        self._tooltip_widget = AnimatedToolTip(self._last_tooltip_text, None)
+        self._tooltip_widget.adjustSize()
+        QTimer.singleShot(0, self._tooltip_widget.adjustSize)
+
+        pos = QCursor.pos()
+        pos += QPoint(10, 10)
+
+        screen = QApplication.primaryScreen().availableGeometry()
+        if pos.x() + self._tooltip_widget.width() > screen.right():
+            pos.setX(screen.right() - self._tooltip_widget.width() - 5)
+        if pos.y() + self._tooltip_widget.height() > screen.bottom():
+            pos.setY(pos.y() - self._tooltip_widget.height() - 20)
+
+        self._tooltip_widget.move(pos)
+        UIAnimator.fade_in(self._tooltip_widget, 150, self.app_state)
+
+    def _hide_custom_tooltip(self):
+        if hasattr(self, '_tooltip_widget') and self._tooltip_widget and self._tooltip_widget.isVisible():
+            if not getattr(self._tooltip_widget, '_is_fading_out', False):
+                self._tooltip_widget._is_fading_out = True
+                anim = UIAnimator.fade_out(self._tooltip_widget, 150, self.app_state)
+                if anim:
+                    anim.finished.connect(lambda: setattr(self, '_tooltip_widget', None))
+                else:
+                    self._tooltip_widget.hide()
+                    self._tooltip_widget = None
+        if hasattr(self, '_last_tooltip_target'):
+            self._last_tooltip_target = None
 
     def paintEvent(self, event):
         painter = QPainter(self)
@@ -820,9 +928,7 @@ class AppWindow(QWidget):
                     self.mod_service._mods_cache_valid = True
             self.mod_service.load_local_mods()
             saved_chapter_mode = self.app_state.local_config.get('chapter_mode_enabled', False)
-            self.setEnabled(False)
-            self._load_mods_and_build_list_synchronously(saved_chapter_mode)
-            self.setEnabled(True)
+            self._trigger_initial_mods_refresh(saved_chapter_mode)
             self._load_used_mods_debounce.call(self.used_mods_service.load_used_mods_state)
         except Exception as e:
             logging.error(f'AppWindow: Error in _on_mod_scan_finished: {e}', exc_info=True)
@@ -840,7 +946,7 @@ class AppWindow(QWidget):
             if set_library_initialized:
                 self.app_state.library_initialized = True
 
-    def _load_mods_and_build_list_synchronously(self, saved_chapter_mode=False):
+    def _trigger_initial_mods_refresh(self, saved_chapter_mode=False):
         try:
             logging.info('AppWindow: Starting mods loading in background before window show')
 
@@ -1153,7 +1259,20 @@ class AppWindow(QWidget):
             from PyQt6.QtCore import QMetaObject, Qt
             QMetaObject.invokeMethod(self.presence_worker, 'run', Qt.ConnectionType.QueuedConnection)
 
-        self.refresh_controller.refresh_mods_list(is_initial=is_initial, language_combo=self.language_combo, localization_callback=self._relocalize_ui, on_fetch_finished_kwargs={'update_filtered_mods_callback': lambda: self.search_display.update_filtered_mods(preserve_page=False), 'update_installed_mods_callback': lambda: self._update_installed_mods_display(), 'update_action_button_callback': lambda: self.game_launch.update_button_state(), 'update_plugin_tabs_callback': self._update_plugin_tabs, 'mods_loaded_signal': self.mods_loaded_signal})
+        def update_filtered_callback(): return self.search_display.update_filtered_mods(preserve_page=False) if hasattr(self, 'search_display') and self.search_display else None
+        def update_installed_callback(): return self._update_installed_mods_display()
+        def update_action_callback(): return self.game_launch.update_button_state()
+        update_plugin_callback = self._update_plugin_tabs
+
+        callbacks = {
+            'update_filtered_mods_callback': update_filtered_callback,
+            'update_installed_mods_callback': update_installed_callback,
+            'update_action_button_callback': update_action_callback,
+            'update_plugin_tabs_callback': update_plugin_callback,
+            'mods_loaded_signal': self.mods_loaded_signal
+        }
+
+        self.refresh_controller.refresh_mods_list(is_initial=is_initial, language_combo=self.language_combo, localization_callback=self._relocalize_ui, on_fetch_finished_kwargs=callbacks)
 
     def _create_nobody_came_tab(self):
         """Create and add 'But nobody came.' placeholder tab when no tabs are visible."""
@@ -1312,3 +1431,16 @@ class AppWindow(QWidget):
         for dialog_type, dialog_data in pending:
             if dialog_type == 'update':
                 self._prompt_for_update(dialog_data)
+
+    def _zoom_ui(self, direction):
+        current_zoom = self.app_state.local_config.get('ui_scale', 1.0)
+        new_zoom = max(0.5, min(2.0, round(current_zoom + (0.1 * direction), 1)))
+        if new_zoom != current_zoom:
+            self.app_state.local_config['ui_scale'] = new_zoom
+            if hasattr(self, 'ui_scale_spinbox'):
+                self.ui_scale_spinbox.blockSignals(True)
+                self.ui_scale_spinbox.setValue(int(new_zoom * 100))
+                self.ui_scale_spinbox.blockSignals(False)
+            self.settings_service.write_local_config()
+            if hasattr(self, '_ui_scale_timer'):
+                self._ui_scale_timer.start()

@@ -1,95 +1,82 @@
 from typing import Dict, Any
-from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QFrame, QLabel, QPushButton, QCheckBox, QComboBox, QScrollArea, QSizePolicy
+from PyQt6.QtCore import Qt, QObject, QEvent
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QFrame, QScrollArea, QSizePolicy, QLabel
 from services.localization_service import tr
-from ui.widgets.shared.custom_controls import NoScrollComboBox
-from ui.common.styling import get_theme_color, rgba_from_color, build_tag_checkbox_style
+from ui.common.styling import get_theme_color, rgba_from_color
+from ui.builders.shared_filters_builder import (
+    create_sort_controls, create_tag_checkboxes, create_search_button,
+    create_filters_frame, create_modgame_combo, create_pagination_controls
+)
 
 
-class ModsBrowserTabBuilder:
-    """Builds the mods browser tab UI for browsing and searching mods."""
-
+class ModsBrowserTabBuilder(QObject):
     def __init__(self, app_state, parent=None):
+        super().__init__(parent)
         self.app_state, self.parent, self.widgets = app_state, parent, {}
 
     def build(self) -> QWidget:
         widget = QWidget()
         layout = QVBoxLayout(widget)
-        layout.addWidget(self._create_filters_widget())
-        search_container = QWidget()
-        search_container.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
-        search_container.setObjectName('search_mods_background')
-        sc_layout = QVBoxLayout(search_container)
-        sc_layout.setContentsMargins(10, 10, 10, 10), sc_layout.setSpacing(10)
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True), scroll.setFrameShape(QFrame.Shape.NoFrame)
+        f_scroll = QScrollArea(widget)
+        f_scroll.setWidgetResizable(True)
+        f_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        f_scroll.setStyleSheet('QScrollArea { background-color: transparent; }')
+        f_scroll.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        f_widget = self._create_filters_widget()
+        f_scroll.setWidget(f_widget)
+        f_widget.installEventFilter(self)
+        layout.addWidget(f_scroll)
+        self.widgets['filters_scroll'] = f_scroll
+        container = QWidget(widget)
+        container.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
+        container.setObjectName('search_mods_background')
+        sc_layout = QVBoxLayout(container)
+        sc_layout.setContentsMargins(10, 10, 10, 10)
+        sc_layout.setSpacing(10)
+        scroll = QScrollArea(container)
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
         scroll.setStyleSheet('QScrollArea { background-color: transparent; }')
-        mod_list_widget = QWidget()
-        mod_list_layout = QVBoxLayout(mod_list_widget)
-        mod_list_layout.setSpacing(15), mod_list_layout.addStretch()
-        scroll.setWidget(mod_list_widget)
-        sc_layout.addWidget(scroll), sc_layout.addWidget(self._create_pagination_widget())
+        mod_list = QWidget(scroll)
+        mod_list_layout = QVBoxLayout(mod_list)
+        mod_list_layout.setSpacing(15)
+        mod_list_layout.addStretch()
+        scroll.setWidget(mod_list)
+        pag_widget, prev_btn, page_lbl, next_btn = create_pagination_controls()
+        sc_layout.addWidget(scroll)
+        sc_layout.addWidget(pag_widget)
         bg = get_theme_color(self.app_state.local_config, 'background', '#000000')
-        search_container.setStyleSheet(f'QWidget#search_mods_background {{ background-color: {rgba_from_color(bg)}; border-radius: 10px; margin: 5px; }}')
-        layout.addWidget(search_container)
-        self.widgets.update({'search_container': search_container, 'search_mods_scroll': scroll, 'mod_list_widget': mod_list_widget, 'mod_list_layout': mod_list_layout})
+        container.setStyleSheet(f'QWidget#search_mods_background {{ background-color: {rgba_from_color(bg)}; border-radius: 10px; margin: 5px; }}')
+        layout.addWidget(container)
+        self.widgets.update({'search_container': container, 'search_mods_scroll': scroll, 'mod_list_widget': mod_list, 'mod_list_layout': mod_list_layout, 'prev_page_btn': prev_btn, 'page_label': page_lbl, 'next_page_btn': next_btn})
         return widget
 
+    def eventFilter(self, obj, event):
+        if 'filters_scroll' in self.widgets and obj == self.widgets['filters_scroll'].widget() and event.type() == QEvent.Type.Resize:
+            self.widgets['filters_scroll'].setFixedHeight(obj.sizeHint().height() + (15 if self.widgets['filters_scroll'].horizontalScrollBar().isVisible() else 0))
+        return super().eventFilter(obj, event)
+
     def _create_filters_widget(self) -> QFrame:
-        w = QFrame()
-        w.setObjectName('filters')
+        w, layout = create_filters_frame()
         w.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
-        layout = QHBoxLayout(w)
-        layout.setContentsMargins(0, 0, 0, 0)
         _vc = Qt.AlignmentFlag.AlignVCenter
-        sort_combo = NoScrollComboBox()
-        sort_combo.addItems([tr('ui.sort_by_downloads'), tr('ui.sort_by_update_date'), tr('ui.sort_by_creation_date')])
-        idx = self.app_state.local_config.get('search_sort_index', 1)
-        sort_combo.setCurrentIndex(idx if 0 <= idx < sort_combo.count() else 1)
+        sort_combo, sort_btn = create_sort_controls(self.app_state, [tr('ui.sort_by_downloads'), tr('ui.sort_by_update_date'), tr('ui.sort_by_creation_date')], 'search_sort_index')
         layout.addWidget(sort_combo, 0, _vc)
-        sort_btn = QPushButton('▼')
-        sort_btn.setObjectName('sortOrderBtn'), sort_btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed), sort_btn.setToolTip(tr('ui.sort_direction_tooltip'))
-        layout.addWidget(sort_btn, 0, _vc), layout.addSpacing(20)
-        modgame_combo = QComboBox()
-        for name, data in [('deltarune', 'deltarune'), ('undertale', 'undertale'), ('undertaleyellow', 'undertaleyellow'), ('pizzatower', 'pizzatower'), ('sugaryspire', 'sugaryspire')]:
-            modgame_combo.addItem(tr(f'ui.{name}'), data)
-        game_idx = modgame_combo.findData(self.app_state.local_config.get('selected_search_game', 'deltarune'))
-        modgame_combo.setCurrentIndex(max(game_idx, 0))
-        layout.addWidget(modgame_combo, 0, _vc), layout.addSpacing(20)
+        layout.addWidget(sort_btn, 0, _vc)
+        layout.addSpacing(20)
+        modgame_combo = create_modgame_combo(self.app_state, [('deltarune', 'deltarune'), ('undertale', 'undertale'), ('undertaleyellow', 'undertaleyellow'), ('pizzatower', 'pizzatower'), ('sugaryspire', 'sugaryspire')], 'selected_search_game')
+        layout.addWidget(modgame_combo, 0, _vc)
+        layout.addSpacing(20)
         tags_label = QLabel(tr('ui.tags_label'))
         layout.addWidget(tags_label, 0, _vc)
-        tags = {n: QCheckBox(tr(f'tags.{n}')) for n in ('textedit', 'customization', 'gameplay', 'other')}
-        style = build_tag_checkbox_style(get_theme_color(self.app_state.local_config, 'text', 'white'))
+        tags = create_tag_checkboxes(self.app_state, ('textedit', 'customization', 'gameplay', 'other'))
         for t in tags.values():
-            t.setStyleSheet(style), layout.addWidget(t, 0, _vc)
+            layout.addWidget(t, 0, _vc)
         layout.addStretch()
-        search_btn = QPushButton('🔍')
-        search_btn.setObjectName('searchBtn'), search_btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        search_btn.setFixedSize(35, 35), search_btn.setToolTip(tr('ui.search_placeholder'))
+        search_btn = create_search_button()
         layout.addWidget(search_btn, 0, _vc)
         self.widgets.update({'sort_combo': sort_combo, 'sort_order_btn': sort_btn, 'modgame_combo': modgame_combo, 'tags_label': tags_label, 'search_button': search_btn})
         self.widgets.update({f'tag_{k}': v for k, v in tags.items()})
         return w
 
-    def _create_pagination_widget(self) -> QWidget:
-        w = QWidget()
-        w.setMinimumHeight(50)
-        layout = QVBoxLayout(w)
-        layout.setContentsMargins(0, 5, 0, 8), layout.setSpacing(5)
-        btn_layout = QHBoxLayout()
-        btn_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        prev_btn = QPushButton(tr('ui.prev_page'))
-        prev_btn.setEnabled(False), prev_btn.setStyleSheet('padding: 3px 8px;')
-        btn_layout.addWidget(prev_btn, 0, Qt.AlignmentFlag.AlignVCenter)
-        page_lbl = QLabel(tr('ui.page_label', current=1, total=1))
-        page_lbl.setStyleSheet('padding: 0px 10px;'), page_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        btn_layout.addWidget(page_lbl, 0, Qt.AlignmentFlag.AlignVCenter)
-        next_btn = QPushButton(tr('ui.next_page'))
-        next_btn.setEnabled(False), next_btn.setStyleSheet('padding: 3px 8px;')
-        btn_layout.addWidget(next_btn, 0, Qt.AlignmentFlag.AlignVCenter)
-        layout.addLayout(btn_layout)
-        self.widgets.update({'prev_page_btn': prev_btn, 'page_label': page_lbl, 'next_page_btn': next_btn})
-        return w
-
-    def get_widgets(self) -> Dict[str, Any]:
-        return self.widgets
+    def get_widgets(self) -> Dict[str, Any]: return self.widgets

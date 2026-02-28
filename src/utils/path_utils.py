@@ -11,8 +11,15 @@ from config.constants import GAME_EXECUTABLES
 _SYS = platform.system()
 
 
-def get_launcher_dir():
-    return os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else os.path.abspath(os.path.dirname(__file__))
+def get_launcher_dir(): return os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else os.path.abspath(os.path.dirname(__file__))
+
+
+def _safe_join(base: str, *paths: str) -> str:
+    ba = os.path.abspath(base)
+    fn = os.path.abspath(os.path.join(ba, *paths))
+    if os.path.commonpath([fn, ba]) != ba:
+        raise ValueError('path_traversal')
+    return fn
 
 
 def get_user_data_root():
@@ -221,22 +228,17 @@ def cleanup_old_updater_files():
         logging.debug(f'cleanup_old_updater_files: failed: {e}')
 
 
-def version_sort_key(version_string: str):
+def version_sort_key(v: str):
     try:
-        s = (version_string or '').strip()
-        m = re.match(r'^(?P<major>\d+)(?:\.(?P<minor>\d+))?(?:\.(?P<patch>\d+))?(?P<suffix>[A-Za-z0-9][A-Za-z0-9._-]*)?$', s)
+        s = (v or '').strip().lower()
+        m = re.match(r'^(\d+)(?:\.(\d+))?(?:\.(\d+))?([a-z0-9._-]*)?$', s)
         if m:
-            p = m.groupdict()
-            suffix = (p.get('suffix') or '').lower()
-            return (int(p.get('major') or 0), int(p.get('minor') or 0), int(p.get('patch') or 0), 1 if suffix else 0, suffix)
-        parts, nums, suffix_part = re.split('[.-]', s), [], ''
-        for part in parts:
-            if part.isdigit():
-                nums.append(int(part))
-            else:
-                suffix_part = ''.join(parts[parts.index(part):]).lower()
-                break
-        nums.extend([0] * (3 - len(nums)))
-        return (nums[0], nums[1], nums[2], 1 if suffix_part else 0, suffix_part)
+            g = m.groups()
+            return (int(g[0] or 0), int(g[1] or 0), int(g[2] or 0), 1 if g[3] else 0, g[3] or '')
+        p = [int(x) if x.isdigit() else x for x in re.split('[.-]', s)]
+        nums = [x for x in p if isinstance(x, int)][:3]
+        nums += [0] * (3 - len(nums))
+        suff = next((str(x) for x in p if isinstance(x, str)), '')
+        return (*nums, 1 if suff else 0, suff)
     except Exception:
         return (0, 0, 0, 0, '')

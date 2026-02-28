@@ -3,6 +3,7 @@ import logging
 import os
 import shutil
 from PyQt6.QtCore import QThread, QTimer, pyqtSignal
+from PyQt6.QtWidgets import QApplication
 from services.localization_service import tr
 from ui.common.styling import clear_layout_widgets, show_empty_message_in_layout
 from ui.widgets.mod.installed_mod_widget import InstalledModWidget
@@ -47,10 +48,7 @@ class LibraryDisplayController:
         if hasattr(self.app, 'library_sort_combo'):
             sort_type = self.app.library_sort_combo.currentIndex()
             reverse = not self.app.library_sort_ascending
-            if sort_type == 0:
-                filtered_mods.sort(key=lambda mod: mod.get('name', '').lower(), reverse=reverse)
-            else:
-                filtered_mods.sort(key=lambda mod: mod.get('added_date') or '', reverse=reverse)
+            filtered_mods.sort(key=lambda mod: mod.get('name', '').lower() if sort_type == 0 else mod.get('added_date') or '', reverse=reverse)
         return filtered_mods
 
     def _distribute_mods_across_chapters(self, mods_list):
@@ -66,31 +64,19 @@ class LibraryDisplayController:
         only_gamebanana = False
         if hasattr(self.app, 'library_tag_widgets'):
             tag_map = {self.app.library_tag_textedit: 'textedit', self.app.library_tag_customization: 'customization', self.app.library_tag_gameplay: 'gameplay', self.app.library_tag_other: 'other'}
-            for checkbox, tag in tag_map.items():
-                if checkbox.isChecked():
-                    selected_tags.append(tag)
-            if hasattr(self.app, 'library_tag_gamebanana') and self.app.library_tag_gamebanana.isChecked():
-                only_gamebanana = True
+            selected_tags = [tag for checkbox, tag in tag_map.items() if checkbox.isChecked()]
+            only_gamebanana = hasattr(self.app, 'library_tag_gamebanana') and self.app.library_tag_gamebanana.isChecked()
         search_text = getattr(self.app, 'library_search_text', '').lower()
-        current_game_type = 'deltarune'
-        if hasattr(self.app, 'game_type_combo'):
-            current_game_type = self.app.game_type_combo.currentData() or 'deltarune'
+        current_game_type = getattr(self.app, 'game_type_combo', type('', (), {'currentData': lambda: 'deltarune'})).currentData() or 'deltarune'
         filters = {'tags': selected_tags, 'game': current_game_type, 'search_text': search_text, 'hide_banned': False, 'only_gamebanana': only_gamebanana, 'status_filter': ['approved', 'pending', 'unknown']}
         sort_config = None
-        if hasattr(self.app, 'library_sort_combo'):
-            sort_type = self.app.library_sort_combo.currentIndex()
-            reverse = not self.app.library_sort_ascending
-            if sort_type == 1:
-                sort_config = {'sort_type': 1, 'reverse': reverse}
+        if hasattr(self.app, 'library_sort_combo') and self.app.library_sort_combo.currentIndex() == 1:
+            sort_config = {'sort_type': 1, 'reverse': not self.app.library_sort_ascending}
         return (filters, sort_config)
 
     def update_for_chapter_mode(self, selected_chapter_id):
-        if not hasattr(self.app, 'installed_mods_layout'):
-            return
-        if hasattr(self.app, '_updating_chapter_mods') and self.app._updating_chapter_mods:
-            return
-        if selected_chapter_id is None:
-            if hasattr(self.app, '_show_chapter_mode_instruction'):
+        if not hasattr(self.app, 'installed_mods_layout') or (hasattr(self.app, '_updating_chapter_mods') and self.app._updating_chapter_mods) or selected_chapter_id is None:
+            if selected_chapter_id is None and hasattr(self.app, '_show_chapter_mode_instruction'):
                 self.app._show_chapter_mode_instruction()
             return
         self.app._updating_chapter_mods = True
@@ -103,16 +89,13 @@ class LibraryDisplayController:
             filtered_mods = self._filter_and_sort_installed(installed_mods)
             for mod_info in filtered_mods:
                 mod_data = self.mod_service.create_mod_object_from_info(mod_info, getattr(self.app_state, 'all_mods', None))
-                if not mod_data or not self.mod_service.mod_has_files_for_chapter(mod_data, selected_chapter_id):
-                    continue
-                if mod_data:
+                if mod_data and self.mod_service.mod_has_files_for_chapter(mod_data, selected_chapter_id):
                     added_date = mod_info.get('added_date')
-                    mod_widget = InstalledModWidget(mod_data, parent=self.app, installed_date=added_date)
+                    mod_widget = InstalledModWidget(mod_data, parent=self.app, installed_date=added_date, parent_app=self.app)
                     mod_widget.clicked.connect(self.on_mod_clicked)
                     mod_widget.remove_requested.connect(self.on_mod_remove)
-                    mod_widget.use_requested.connect(lambda mod_data=mod_data: self._handle_mod_use(mod_data, selected_chapter_id))
-                    is_used = self.used_mods_service.is_mod_used_for_chapter(mod_data, selected_chapter_id)
-                    mod_widget.set_active(is_used)
+                    mod_widget.use_requested.connect(lambda md=mod_data: self._handle_mod_use(md, selected_chapter_id))
+                    mod_widget.set_active(self.used_mods_service.is_mod_used_for_chapter(mod_data, selected_chapter_id))
                     self.app.installed_mods_layout.insertWidget(self.app.installed_mods_layout.count() - 1, mod_widget)
                     mod_widget.show()
             if self.app.installed_mods_layout.count() <= 1:
@@ -146,10 +129,9 @@ class LibraryDisplayController:
 
             def run(self):
                 try:
-                    mods = self.outer.mod_service.get_installed_mods_list()
+                    self.result_ready.emit(self.outer.mod_service.get_installed_mods_list())
                 except Exception:
-                    mods = []
-                self.result_ready.emit(mods)
+                    self.result_ready.emit([])
         try:
             if hasattr(self.app, '_installed_scan_thread') and self.app._installed_scan_thread:
                 if self.app._installed_scan_thread.isRunning():
@@ -160,8 +142,7 @@ class LibraryDisplayController:
             self.app._installed_scan_thread.result_ready.connect(self.update_display_from_list)
             self.app._installed_scan_thread.start()
         except Exception:
-            mods = self.mod_service.get_installed_mods_list()
-            self.update_display_from_list(mods)
+            self.update_display_from_list(self.mod_service.get_installed_mods_list())
 
     def update_display_from_list(self, installed_mods):
         if self._updating_display:
@@ -173,8 +154,8 @@ class LibraryDisplayController:
                 selected_id = self.app_state.selected_chapter_id
                 if selected_id is None:
                     self._show_chapter_mode_instruction()
-                    return
-                self.update_for_chapter_mode(selected_id)
+                else:
+                    self.update_for_chapter_mode(selected_id)
                 return
             container = getattr(self.app, 'installed_mods_container', None)
             if container:
@@ -203,15 +184,14 @@ class LibraryDisplayController:
                     for idx in range(start, end):
                         mod_info = mods[idx]
                         mod_data = self.mod_service.create_mod_object_from_info(mod_info, getattr(self.app_state, 'all_mods', None))
-                        if not mod_data:
-                            continue
-                        added_date = mod_info.get('added_date')
-                        mod_widget = InstalledModWidget(mod_data, parent=self.app, installed_date=added_date)
-                        mod_widget.clicked.connect(self.on_mod_clicked)
-                        mod_widget.remove_requested.connect(self.on_mod_remove)
-                        mod_widget.use_requested.connect(self.on_mod_use)
-                        self.app.installed_mods_layout.insertWidget(self.app.installed_mods_layout.count() - 1, mod_widget)
-                        mod_widget.show()
+                        if mod_data:
+                            added_date = mod_info.get('added_date')
+                            mod_widget = InstalledModWidget(mod_data, parent=self.app, installed_date=added_date, parent_app=self.app)
+                            mod_widget.clicked.connect(self.on_mod_clicked)
+                            mod_widget.remove_requested.connect(self.on_mod_remove)
+                            mod_widget.use_requested.connect(self.on_mod_use)
+                            self.app.installed_mods_layout.insertWidget(self.app.installed_mods_layout.count() - 1, mod_widget)
+                            mod_widget.show()
                     batch_index = end
                     if end >= len(mods):
                         if self.app.installed_mods_layout.count() <= 1:
@@ -239,19 +219,14 @@ class LibraryDisplayController:
     def cleanup_missing_mods(self, installed_mods):
         installed_mod_keys = {mod.get('key') or mod.get('mod_key') for mod in installed_mods if mod.get('key') or mod.get('mod_key')}
         mods_metadata = self.mod_service._read_metadata()
-        metadata_updated = False
         orphaned_keys = set(mods_metadata.keys()) - installed_mod_keys
         if orphaned_keys:
             for key in orphaned_keys:
                 del mods_metadata[key]
-            metadata_updated = True
-        if metadata_updated:
+                dummy_mod_data = self.mod_service.create_mod_object_from_info({'key': key, 'name': 'Orphaned Mod'}, getattr(self.app_state, 'all_mods', None))
+                if dummy_mod_data:
+                    self.used_mods_service.remove_mod_from_all_chapters(dummy_mod_data)
             self.mod_service._write_metadata(mods_metadata)
-        for orphaned_key in orphaned_keys:
-            dummy_mod_data = self.mod_service.create_mod_object_from_info({'key': orphaned_key, 'name': 'Orphaned Mod'}, getattr(self.app_state, 'all_mods', None))
-            if not dummy_mod_data:
-                continue
-            self.used_mods_service.remove_mod_from_all_chapters(dummy_mod_data)
 
     def update_mod_widgets_active_status(self):
         if not hasattr(self.app, 'installed_mods_layout') or self.app.installed_mods_layout is None:
@@ -319,14 +294,105 @@ class LibraryDisplayController:
             logging.error(f'Unexpected error during mod removal: {e}', exc_info=True)
             self.feedback_service.show_message('error', 'errors.mod_removal_failed', error=str(e))
 
+    def _refresh_mod_list_targeted(self):
+        """Refresh the mod list by only adding/removing changed widgets for smooth animation"""
+        if self._updating_display:
+            return
+
+        try:
+
+            current_mods = []
+            layout = self.app.installed_mods_layout
+
+            for i in range(layout.count() - 1):
+                item = layout.itemAt(i)
+                if item and item.widget():
+                    widget = item.widget()
+                    if hasattr(widget, 'mod_data'):
+                        current_mods.append(widget.mod_data)
+
+            installed_mods = self.mod_service.get_installed_mods_list()
+            existing_mods = [mod_info for mod_info in installed_mods if self.mod_service.check_mod_exists(mod_info)]
+            filtered_mods = self._filter_and_sort_installed(existing_mods)
+            expected_mods = []
+
+            for mod_info in filtered_mods:
+                mod_data = self.mod_service.create_mod_object_from_info(mod_info, getattr(self.app_state, 'all_mods', None))
+                if mod_data:
+                    expected_mods.append(mod_data)
+
+            current_keys = {get_mod_key(mod) for mod in current_mods if get_mod_key(mod)}
+            expected_keys = {get_mod_key(mod) for mod in expected_mods if get_mod_key(mod)}
+
+            keys_to_add = expected_keys - current_keys
+            keys_to_remove = current_keys - expected_keys
+
+            widgets_to_remove = []
+            for i in range(layout.count()):
+                item = layout.itemAt(i)
+                if item and item.widget():
+                    widget = item.widget()
+                    if hasattr(widget, 'mod_data'):
+                        mod_key = get_mod_key(widget.mod_data)
+                        if mod_key in keys_to_remove:
+                            widgets_to_remove.append(widget)
+
+            for widget in widgets_to_remove:
+                widget.hide()
+                widget.deleteLater()
+
+            for mod_data in expected_mods:
+                mod_key = get_mod_key(mod_data)
+                if mod_key in keys_to_add:
+                    added_date = None
+                    for mod_info in installed_mods:
+                        if get_mod_key(mod_info) == mod_key:
+                            added_date = mod_info.get('added_date')
+                            break
+
+                    mod_widget = InstalledModWidget(mod_data, parent=self.app, installed_date=added_date, parent_app=self.app)
+                    mod_widget.clicked.connect(self.on_mod_clicked)
+                    mod_widget.remove_requested.connect(self.on_mod_remove)
+                    mod_widget.use_requested.connect(self.on_mod_use)
+
+                    insert_index = 0
+                    for i, expected_mod in enumerate(expected_mods):
+                        if get_mod_key(expected_mod) == mod_key:
+                            insert_index = i
+                            break
+
+                    QApplication.processEvents()
+                    actual_count = layout.count()
+                    insert_index = min(insert_index, actual_count)
+
+                    layout.insertWidget(insert_index, mod_widget)
+                    mod_widget.show()
+
+            self.update_mod_widgets_active_status()
+            self.app.game_launch.update_button_state()
+
+        except Exception as e:
+            logging.error(f'Error in targeted refresh: {e}', exc_info=True)
+
+            self.update_display()
+
     def _safe_update_after_mod_deletion(self):
         try:
-            self.update_display()
+
+            self._refresh_mod_list_targeted()
             if hasattr(self.app, 'search_display'):
                 self.app.search_display.update_search_cards()
                 self.app.search_display.update_filtered_mods(preserve_page=True)
         except Exception as e:
-            logging.error(f'Error updating UI after mod deletion: {e}', exc_info=True)
+            logging.error(f'Error updating display after mod deletion: {e}', exc_info=True)
+
+            try:
+                self.update_display()
+                if hasattr(self.app, 'search_display'):
+                    self.app.search_display.update_search_cards()
+                    self.app.search_display.update_filtered_mods(preserve_page=True)
+            except Exception as e2:
+                logging.error(f'Fallback refresh also failed: {e2}', exc_info=True)
 
     def on_mod_use(self, mod_data):
         target_chapter_id = get_chapter_id_for_game_mode(self.app_state.game_mode)
@@ -351,8 +417,6 @@ class LibraryDisplayController:
         self._update_priority_button_visibility(chapter_id)
         if mod_widget:
             mod_widget.set_selected(False)
-        if hasattr(self.app, 'chapter_mode_checkbox') and self.app.chapter_mode_checkbox.isChecked():
-            self.update_for_chapter_mode(chapter_id)
 
     def clear_all_selections(self):
         for i in range(self.app.installed_mods_layout.count() - 1):
@@ -499,11 +563,11 @@ class LibraryDisplayController:
 
     def _safe_update_after_modpack_creation(self, modpack_dir: str, report_path: str = None, has_conflicts: bool = False):
         try:
-            self.update_display()
+
+            self._refresh_mod_list_targeted()
             if hasattr(self.app, 'search_display'):
                 self.app.search_display.update_filtered_mods(preserve_page=True)
                 self.app.search_display.update_search_cards()
-            QTimer.singleShot(300, self.refresh_async)
             self.feedback_service.show_message('success', 'dialogs.modpack_created_title', tr('dialogs.modpack_created_message', modpack_dir=modpack_dir))
 
             if has_conflicts and report_path:
@@ -512,6 +576,14 @@ class LibraryDisplayController:
                 dialog.exec()
         except Exception as e:
             logging.error(f'Error updating UI after modpack creation: {e}', exc_info=True)
+
+            try:
+                self.update_display()
+                if hasattr(self.app, 'search_display'):
+                    self.app.search_display.update_filtered_mods(preserve_page=True)
+                    self.app.search_display.update_search_cards()
+            except Exception as e2:
+                logging.error(f'Fallback refresh also failed: {e2}', exc_info=True)
 
     def _on_modpack_finished(self, success: bool, modpack_dir: str):
         self.app_state.is_patching = False

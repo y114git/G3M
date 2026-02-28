@@ -130,3 +130,10 @@ class TestManualInstall:
         assert get_chapter_folder_name('deltarunedemo') == 'demo'
         assert get_chapter_folder_name('undertale') == 'chapter_0'
         assert get_chapter_folder_name('pizzatower') == 'pizzatower'
+
+        # Test new game parameter functionality
+        assert get_chapter_folder_name('deltarune_0', game='deltarune') == 'chapter_0'
+        assert get_chapter_folder_name('pizzatower', game='pizzatower') == 'pizzatower'
+        assert get_chapter_folder_name('chapter_1', game='deltarune') == 'chapter_1'
+        # Test backward compatibility - game parameter is optional
+        assert get_chapter_folder_name('deltarune_1') == 'chapter_1'

@@ -121,10 +121,11 @@ class CustomizationManager(QObject):
                 if thr.isRunning():
                     thr.requestInterruption()
                     thr.quit()
-                    if not thr.wait(2000):
-                        logging.warning('[CustomizationManager] Thread did not finish in time, terminating')
+
+                    if not thr.wait(100):
+                        logging.debug('[CustomizationManager] Thread did not finish in time, terminating')
                         thr.terminate()
-                        thr.wait(500)
+                        thr.wait(50)
                 thr.deleteLater()
             self._bg_music_thread = None
         except Exception as e:
@@ -199,7 +200,23 @@ class CustomizationManager(QObject):
             path = custom if custom and os.path.exists(custom) else resource_path('assets/images/splash.png')
             if os.path.exists(path) and not (pixmap := QPixmap(path)).isNull():
                 icon_label.setScaledContents(False)
-                icon_label.setPixmap(pixmap.scaled(icon_label.size(), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+
+                l_width = icon_label.width()
+                l_height = icon_label.height()
+
+                if l_width > 0 and l_height > 0:
+                    icon_label.setContentsMargins(0, 0, 0, 0)
+                    dpr = icon_label.devicePixelRatioF()
+
+                    scaled_pixmap = pixmap.scaled(
+                        int(l_width * dpr),
+                        int(l_height * dpr),
+                        Qt.AspectRatioMode.KeepAspectRatio,
+                        Qt.TransformationMode.SmoothTransformation
+                    )
+                    scaled_pixmap.setDevicePixelRatio(dpr)
+                    icon_label.setPixmap(scaled_pixmap)
+                    icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
                 return
         except Exception:
             pass

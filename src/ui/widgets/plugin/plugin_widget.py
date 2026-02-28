@@ -4,6 +4,7 @@ from PyQt6.QtWidgets import QLabel, QPushButton, QHBoxLayout, QVBoxLayout, QFram
 from PyQt6.QtGui import QPixmap, QColor
 from services.localization_service import tr
 from ui.common.styling import get_theme_color
+from ui.utils.ui_utils import UIAnimator
 
 
 class PluginWidget(QFrame):
@@ -21,8 +22,10 @@ class PluginWidget(QFrame):
         self.setObjectName('pluginWidget')
         self.setFrameShape(QFrame.Shape.StyledPanel)
         self.setFixedHeight(120)
+        self.hide()
         self._init_ui()
         self._update_style()
+        UIAnimator.fade_in(self, 200, getattr(self.parent_app, 'app_state', None) if getattr(self, 'parent_app', None) else None)
 
     def _resolve_plugin_name(self, plugin_info: dict | None = None) -> str:
         info = plugin_info or self.plugin_info
@@ -155,7 +158,8 @@ class PluginWidget(QFrame):
         actions_layout.addWidget(self.toggle_button)
         self.delete_button = QPushButton(tr('buttons.delete'), self.actions_widget)
         self.delete_button.setObjectName('cardButton')
-        text_color = get_theme_color(self.parent_app.app_state.local_config, 'text', 'white') if self.parent_app and hasattr(self.parent_app, 'app_state') else 'white'
+        app_state = getattr(self.parent_app, 'app_state', None)
+        text_color = get_theme_color(app_state.local_config, 'text', 'white') if app_state and hasattr(app_state, 'local_config') else 'white'
         self.delete_button.setStyleSheet(f'\n            QPushButton#cardButton {{\n                background-color: #F44336;\n                color: {text_color};\n            }}\n            QPushButton#cardButton:hover {{\n                background-color: #da190b;\n            }}\n        ')
         self.delete_button.clicked.connect(lambda: self.delete_requested.emit(self.plugin_name))
         actions_layout.addWidget(self.delete_button)

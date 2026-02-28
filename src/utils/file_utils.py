@@ -73,9 +73,8 @@ def download_and_extract_archive(url: str, target_dir: str, progress_callback=No
     with tempfile.TemporaryDirectory(prefix='deltahub-dl-') as tmp:
         tmp_path = os.path.join(tmp, fname)
         download_file(session, url, tmp_path, progress_callback, total_size, downloaded_ref, cancel_check=cancel_check, on_response=on_response)
-        if cancel_check and cancel_check():
-            return
-        extract_archive(tmp_path, target_dir, fname=fname, is_game_installation=is_game_installation)
+        if not (cancel_check and cancel_check()):
+            extract_archive(tmp_path, target_dir, fname=fname, is_game_installation=is_game_installation)
 
 
 def _is_symlink(path: str) -> bool:
@@ -162,111 +161,88 @@ def save_json(path: str, data: Dict, indent: int = 2, max_retries: int = 5, dela
     dir_path = os.path.dirname(path)
     if dir_path:
         os.makedirs(dir_path, exist_ok=True)
-    data_to_save = data.copy() if isinstance(data, dict) else data
-    if isinstance(data_to_save, dict) and (path.endswith('mod_config.json') or (path.endswith('config.json') and ('mod_key' in data_to_save or 'key' in data_to_save))):
-        if 'mod_key' in data_to_save:
-            if 'key' not in data_to_save:
-                data_to_save['key'] = data_to_save['mod_key']
-            del data_to_save['mod_key']
-        if 'modgame' in data_to_save and 'game' in data_to_save:
-            del data_to_save['modgame']
-    tmp = os.path.join(dir_path, f'{os.path.basename(path)}.{os.getpid()}.{threading.get_ident()}.tmp') if dir_path else f'{path}.{os.getpid()}.{threading.get_ident()}.tmp'
-    last_error = None
+    to_save = data.copy() if isinstance(data, dict) else data
+    if isinstance(to_save, dict) and (path.endswith('mod_config.json') or (path.endswith('config.json') and ('mod_key' in to_save or 'key' in to_save))):
+        if 'mod_key' in to_save:
+            if 'key' not in to_save:
+                to_save['key'] = to_save['mod_key']
+            del to_save['mod_key']
+        if 'modgame' in to_save and 'game' in to_save:
+            del to_save['modgame']
+    tmp = os.path.join(dir_path or '.', f'{os.path.basename(path)}.{os.getpid()}.{threading.get_ident()}.tmp')
     for attempt in range(max_retries):
         try:
             with open(tmp, 'w', encoding='utf-8') as f:
-                json.dump(data_to_save, f, indent=indent, ensure_ascii=False)
+                json.dump(to_save, f, indent=indent, ensure_ascii=False)
                 f.flush()
                 os.fsync(f.fileno())
-            try:
-                _fix_windows_permissions(path) if os.path.exists(path) else None
-                os.replace(tmp, path)
-                return
-            except (PermissionError, OSError) as e:
-                last_error = e
-                if attempt < max_retries - 1:
-                    logging.debug(f'save_json: Attempt {attempt + 1}/{max_retries} failed for {path}: {e}, retrying...')
-                    time.sleep(delay * (attempt + 1))
-                _cleanup_tmp(tmp)
-                if attempt >= max_retries - 1:
-                    raise
+            if os.path.exists(path):
+                _fix_windows_permissions(path)
+            os.replace(tmp, path)
+            return
         except (PermissionError, OSError) as e:
-            last_error = e
             if attempt < max_retries - 1:
                 logging.debug(f'save_json: Attempt {attempt + 1}/{max_retries} failed for {path}: {e}, retrying...')
                 time.sleep(delay * (attempt + 1))
-            _cleanup_tmp(tmp)
-            if attempt >= max_retries - 1:
+                _cleanup_tmp(tmp)
+            else:
+                _cleanup_tmp(tmp)
                 raise
         except (TypeError, ValueError) as e:
             _cleanup_tmp(tmp)
             raise ValueError(f'Data is not JSON-serializable: {e}') from e
-    if last_error:
-        raise last_error
 
 
 def load_json(path: str, migrate_config: bool = True) -> Dict:
     """Load JSON file with optional config migration."""
     try:
-        if path.endswith('mod_config.json') and not os.path.exists(path) and migrate_config:
-            legacy_path = path.replace('mod_config.json', 'config.json')
-            if os.path.exists(legacy_path):
-                path = legacy_path
+        if migrate_config and path.endswith('mod_config.json') and not os.path.exists(path):
+            l_path = path.replace('mod_config.json', 'config.json')
+            if os.path.exists(l_path):
+                path = l_path
         if not os.path.exists(path):
             return {}
         with open(path, 'r', encoding='utf-8') as f:
             data = json.load(f)
         if migrate_config and isinstance(data, dict):
-            needs_migration = False
-            if path.endswith('mod_config.json') or (path.endswith('config.json') and ('mod_key' in data or 'key' in data)):
-                if 'mod_key' in data:
-                    if 'key' not in data:
-                        data['key'] = data.pop('mod_key')
-                        needs_migration = True
-                    else:
-                        del data['mod_key']
-                        needs_migration = True
-                if 'modgame' in data:
-                    if 'game' not in data:
-                        data['game'] = data.pop('modgame')
-                        needs_migration = True
-                    else:
-                        del data['modgame']
-                        needs_migration = True
-                if 'chapters' in data and 'files' not in data:
-                    data['files'] = data['chapters']
-                    del data['chapters']
-                    needs_migration = True
+            m = False
+            is_cfg = path.endswith('mod_config.json') or (path.endswith('config.json') and ('mod_key' in data or 'key' in data))
+            if is_cfg:
+                for k, nk in [('mod_key', 'key'), ('modgame', 'game'), ('chapters', 'files')]:
+                    if k in data:
+                        if nk not in data:
+                            data[nk] = data.pop(k)
+                        else:
+                            del data[k]
+                        m = True
                 if 'is_demo_mod' in data and 'game' not in data:
-                    data['game'] = 'deltarunedemo' if data.get('is_demo_mod', False) else 'deltarune'
+                    data['game'] = 'deltarunedemo' if data.get('is_demo_mod') else 'deltarune'
+                    m = True
                     del data['is_demo_mod']
-                    needs_migration = True
                 if 'tags' in data:
-                    tags = data['tags']
-                    if isinstance(tags, list) and 'translation' in tags:
-                        data['tags'] = ['textedit' if tag == 'translation' else tag for tag in tags]
-                        needs_migration = True
-                    elif tags == 'translation':
+                    t = data['tags']
+                    if isinstance(t, list) and 'translation' in t:
+                        data['tags'] = [('textedit' if x == 'translation' else x) for x in t]
+                        m = True
+                    elif t == 'translation':
                         data['tags'] = 'textedit'
-                        needs_migration = True
-            if needs_migration:
-                save_json(path, data, indent=2)
+                        m = True
+            if m:
+                save_json(path, data)
         return data
-    except FileNotFoundError:
-        return {}
-    except json.JSONDecodeError:
-        backup_path = f'{path}.invalid.bak'
-        try:
-            os.replace(path, backup_path)
-        except OSError:
-            pass
-        logging.warning(f'Corrupted JSON file detected, backed up to {backup_path}')
-        return {}
-    except (PermissionError, OSError) as e:
-        logging.warning(f'Error loading JSON from {path}: {e}')
+    except (FileNotFoundError, json.JSONDecodeError, PermissionError, OSError) as e:
+        if isinstance(e, json.JSONDecodeError):
+            bak = f'{path}.invalid.bak'
+            try:
+                os.replace(path, bak)
+            except OSError:
+                pass
+            logging.warning(f'Corrupted JSON, backed up to {bak}')
+        elif not isinstance(e, FileNotFoundError):
+            logging.warning(f'Error loading JSON {path}: {e}')
         return {}
     except Exception as e:
-        logging.error(f'Error loading JSON from {path}: {e}', exc_info=True)
+        logging.error(f'Error loading JSON {path}: {e}', exc_info=True)
         return {}
 
 
@@ -275,16 +251,13 @@ def remove_archive_extension(filename: str) -> str:
     return filename[:-7] if fl.endswith('.tar.gz') else (filename[:-9] if fl.endswith('.tar.lzma') else os.path.splitext(filename)[0])
 
 
-def get_chapter_folder_name(chapter_id, game: Optional[str] = None, modgame: Optional[str] = None) -> str:
-    chapter_id = str(chapter_id)
-    if '_' in chapter_id:
-        _, num = chapter_id.rsplit('_', 1)
-        return f'chapter_{num}'
-    if chapter_id == 'deltarunedemo':
-        return 'demo'
-    if chapter_id in ('deltarune', 'undertale', 'undertaleyellow'):
-        return 'chapter_0'
-    return chapter_id
+def get_chapter_folder_name(chapter_id, game=None) -> str:
+    cid = str(chapter_id)
+    if '_' in cid:
+        return f'chapter_{cid.rsplit("_", 1)[1]}'
+    if game == 'pizzatower':
+        return 'pizzatower'
+    return 'demo' if cid == 'deltarunedemo' else ('chapter_0' if cid in ('deltarune', 'undertale', 'undertaleyellow') else cid)
 
 
 def get_unique_mod_dir(mods_dir, mod_name):
@@ -299,12 +272,18 @@ def get_unique_mod_dir(mods_dir, mod_name):
 
 def ensure_writable(path: str) -> bool:
     try:
-        mode = os.stat(path).st_mode
-        os.chmod(path, mode | stat.S_IWUSR | stat.S_IWGRP | stat.S_IWRITE)
+        if os.path.exists(path):
+            st = os.stat(path)
+            os.chmod(path, st.st_mode | stat.S_IWUSR | stat.S_IWGRP | stat.S_IWRITE)
         if os.path.isdir(path):
             for root, dirs, files in os.walk(path):
                 for name in dirs + files:
-                    os.chmod(os.path.join(root, name), mode | stat.S_IWUSR | stat.S_IWGRP | stat.S_IWRITE)
+                    p = os.path.join(root, name)
+                    try:
+                        st = os.stat(p)
+                        os.chmod(p, st.st_mode | stat.S_IWUSR | stat.S_IWGRP | stat.S_IWRITE)
+                    except (OSError, PermissionError):
+                        continue
         return True
     except (OSError, PermissionError):
         return False
@@ -314,14 +293,29 @@ def get_file_filter(filter_type: str) -> str:
     FILTER_EXTENSIONS = {
         'image_files': '*.jpg *.png *.bmp *.gif *.webp *.ico *.jpeg',
         'background_images': '*.jpg *.png *.bmp *.gif *.webp *.ico *.jpeg *.mp4 *.webm *.avi *.mkv *.mov *.m4v *.3gp *.mpg *.mpeg *.flv *.wmv',
-        'xdelta_files': '*.xdelta *.vcdiff', 'data_files': '*.win *.unx *.ios *.droid *.xdelta *.vcdiff *.csx',
-        'archive_files': '*.zip *.rar *.7z *.tar.gz *.tar.bz2 *.tar.xz *.tar *.tgz *.tbz2 *.txz *.lzma', 'all_files': '*',
-        'extended_archives': '*.zip *.rar *.7z *.tar.gz *.tar.bz2 *.tar.xz *.tar *.tgz *.tbz2 *.txz *.lzma', 'game_files': '*.exe', 'text_files': '*.txt'
+        'xdelta_files': '*.xdelta *.vcdiff',
+        'data_files': '*.win *.unx *.ios *.droid *.xdelta *.vcdiff *.csx',
+        'archive_files': '*.zip *.rar *.7z *.tar.gz *.tar.bz2 *.tar.xz *.tar *.tgz *.tbz2 *.txz *.lzma',
+        'all_files': '*',
+        'extended_archives': '*.zip *.rar *.7z *.tar.gz *.tar.bz2 *.tar.xz *.tar *.tgz *.tbz2 *.txz *.lzma',
+        'game_files': '*.exe',
+        'text_files': '*.txt'
     }
 
     def tr(key):
         return key.replace('file_descriptions.', '').replace('_', ' ').title()
-    FILTER_DESCRIPTIONS = {'image_files': tr('file_descriptions.image_files'), 'background_images': tr('file_descriptions.background_images'), 'xdelta_files': tr('file_descriptions.xdelta_files'), 'data_files': tr('file_descriptions.data_files'), 'archive_files': tr('file_descriptions.archives'), 'extended_archives': tr('file_descriptions.archives'), 'game_files': tr('file_descriptions.game_files'), 'text_files': tr('file_descriptions.text_files'), 'all_files': tr('file_descriptions.all_files')}
+
+    FILTER_DESCRIPTIONS = {
+        'image_files': tr('file_descriptions.image_files'),
+        'background_images': tr('file_descriptions.background_images'),
+        'xdelta_files': tr('file_descriptions.xdelta_files'),
+        'data_files': tr('file_descriptions.data_files'),
+        'archive_files': tr('file_descriptions.archives'),
+        'extended_archives': tr('file_descriptions.archives'),
+        'game_files': tr('file_descriptions.game_files'),
+        'text_files': tr('file_descriptions.text_files'),
+        'all_files': tr('file_descriptions.all_files')
+    }
     extensions = FILTER_EXTENSIONS.get(filter_type, '*')
     description = FILTER_DESCRIPTIONS.get(filter_type, filter_type)
     all_files_desc = FILTER_DESCRIPTIONS.get('all_files', 'All files')
@@ -402,8 +396,8 @@ def safe_move(src: str, dst: str, max_retries: int = 5, delay: float = 0.1) -> b
         return False
 
 
-def _rmtree_error_handler(func, path, exc_info):
-    if platform.system() == 'Windows':
+def _rmtree_error_handler(func, path, _):
+    if _IS_WIN:
         try:
             os.chmod(path, stat.S_IWRITE | stat.S_IREAD | stat.S_IEXEC)
             func(path)
@@ -438,6 +432,10 @@ def migrate_mod_config(mod_dir: str) -> bool:
     old_config_path = os.path.join(mod_dir, LEGACY_MOD_CONFIG_FILENAME)
     config_path = os.path.join(mod_dir, MOD_CONFIG_FILENAME)
     if os.path.exists(old_config_path) and (not os.path.exists(config_path)):
-        safe_move(old_config_path, config_path)
-        logging.info(f'Migrated mod config.json to mod_config.json in {os.path.basename(mod_dir)}')
+        success = safe_move(old_config_path, config_path)
+        if success:
+            logging.info(f'Successfully migrated mod config.json to mod_config.json in {os.path.basename(mod_dir)}')
+        else:
+            logging.error(f'Failed to migrate mod config.json to mod_config.json in {os.path.basename(mod_dir)}')
+        return success
     return True

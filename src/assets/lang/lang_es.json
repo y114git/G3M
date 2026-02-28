@@ -189,6 +189,8 @@
     "gamebanana_install_manual_tooltip": "La instalación automática no está disponible. Se abrirá la página del mod.",
     "gamebanana_install_unknown_tooltip": "La compatibilidad aún se está comprobando. Puedes intentar instalar igualmente.",
     "gamebanana_install_progress": "Descargando... {progress}%",
+    "gamebanana_rate_limit_title": "Límite de la API",
+    "gamebanana_rate_limit_body": "Se alcanzó el límite de la API de GameBanana (250/hora). Por favor, espere y vuelva a intentarlo.",
     "gamebanana_format_deltahub": "DELTAHUB",
     "gamebanana_format_deltamod": "Deltamod",
     "open_instructions": "Abrir instrucciones",
@@ -206,6 +208,7 @@
     "beta_updates": "Actualizaciones beta",
     "skip_patching_warnings": "Omitir advertencias de parcheo",
     "fullscreen": "Pantalla completa",
+    "scale_label": "Escala de la interfaz",
     "sort_by_name": "Por nombre",
     "sort_by_date": "Por fecha",
     "hide_library_filters": "Ocultar filtros en la biblioteca",
@@ -322,7 +325,8 @@
     "settings_section_merging": "Fusión de mods",
     "clear_cache_button": "Limpiar caché de mods",
     "settings_section_themes": "Temas",
-    "settings_section_media": "Apariencia y Sonido",
+    "settings_section_media": "Gráficos",
+    "settings_section_audio": "Audio",
     "do_not_save_theme_after_import": "No guardar tema en la lista después de importar",
     "dont_hide_window_on_launch": "No ocultar ventana al iniciar",
     "hide_wips_without_downloads": "Ocultar WIPs sin descargas"
@@ -365,7 +369,8 @@
     "disable_splash": "Desactivar pantalla de inicio",
     "xdelta_modpack": "XDELTA en lugar de data.win/.ios",
     "merge_properties": "Fusión de propiedades",
-    "merge_code": "Fusión de código"
+    "merge_code": "Fusión de código",
+    "disable_animations": "Desactivar animaciones"
   },
   "tags": {
     "gameplay": "Jugabilidad",

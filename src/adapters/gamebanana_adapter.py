@@ -14,6 +14,11 @@ logger = logging.getLogger(__name__)
 
 class GameBananaAPI:
     _compatibility_cache: Dict[int, Dict[str, Any]] = {}
+    _app_state = None
+
+    @classmethod
+    def set_app_state(cls, app_state):
+        cls._app_state = app_state
 
     def __init__(self):
         self.base_url = GAMEBANANA_API_BASE
@@ -22,6 +27,11 @@ class GameBananaAPI:
         self._last_request_time = 0.0
         self._min_request_interval = 0.2
         self._rate_limit_wait_time = 0.0
+
+    def _reset_rate_limit_state(self):
+        if self._app_state and self._app_state.local_config.get('gb_rate_limit_start', 0):
+            self._app_state.local_config['gb_rate_limit_start'] = 0
+            self._app_state.local_config['gb_rate_limit_notified_this_session'] = False
 
     def _wait_for_rate_limit(self):
         elapsed = time.time() - self._last_request_time
@@ -52,6 +62,9 @@ class GameBananaAPI:
         elif status_code == 429:
             self._rate_limit_wait_time = max(self._rate_limit_wait_time, 5.0)
             logger.warning(f'{operation}{ctx}: Rate limit (429)')
+            if self._app_state and not self._app_state.local_config.get('gb_rate_limit_start', 0):
+                self._app_state.local_config['gb_rate_limit_start'] = time.time()
+                self._app_state.gb_rate_limit_error.emit()
         elif status_code and status_code >= 500:
             logger.error(f'{operation}{ctx}: Server error {status_code}: {e}')
         else:
@@ -63,6 +76,8 @@ class GameBananaAPI:
                 self._wait_for_rate_limit()
                 response = self.session.get(url, params=params, timeout=timeout or NETWORK_TIMEOUT_MEDIUM)
                 response.raise_for_status()
+                self._reset_rate_limit_state()
+
                 if not response.text or not response.text.strip():
                     logger.warning(f'{operation} for mod {mod_id}: Empty response')
                     return None
@@ -92,6 +107,7 @@ class GameBananaAPI:
                 self._wait_for_rate_limit()
                 response = self.session.get(url, params=params, timeout=NETWORK_TIMEOUT_MEDIUM)
                 response.raise_for_status()
+                self._reset_rate_limit_state()
                 data = response.json()
                 records = data.get('_aRecords', [])
                 game_name = next((n for n, v in GAMEBANANA_GAME_IDS.items() if v == game_id), 'deltarune')
@@ -167,6 +183,7 @@ class GameBananaAPI:
                 self._wait_for_rate_limit()
                 response = self.session.get(f'{self.core_api_base}/Core/Item/Data', params=params, timeout=NETWORK_TIMEOUT_MEDIUM)
                 response.raise_for_status()
+                self._reset_rate_limit_state()
                 if not response.text or not response.text.strip():
                     return None
                 data = response.json()
@@ -200,7 +217,7 @@ class GameBananaAPI:
     @staticmethod
     def _extract_int(value):
         try:
-            return int(value) if isinstance(value, (int, float)) else (int(float(value)) if isinstance(value, str) and value.strip() else None)
+            return int(value) if isinstance(value, (int, float)) else int(float(value)) if isinstance(value, str) and value.strip() else None
         except (ValueError, TypeError):
             return None
 
@@ -232,28 +249,25 @@ class GameBananaAPI:
                 self._wait_for_rate_limit()
                 response = self.session.get(f'{self.core_api_base}/Core/Item/Data', params=params, timeout=timeout or NETWORK_TIMEOUT_MEDIUM)
                 response.raise_for_status()
+                self._reset_rate_limit_state()
                 if not response.text or not response.text.strip():
                     return None
                 data = response.json()
                 if not data:
                     return None
-                if isinstance(data, list) and len(data) >= len(fields):
-                    return self._map_fields_from_list(data, fields)
-                if isinstance(data, list) and data:
-                    return data[0] if isinstance(data[0], dict) else self._map_fields_from_list(data, fields)
+                if isinstance(data, list):
+                    return self._map_fields_from_list(data, fields) if len(data) >= len(fields) else (data[0] if isinstance(data[0], dict) else self._map_fields_from_list(data, fields))
                 if isinstance(data, dict):
                     return self._map_fields_from_dict(data, fields) or {f: data.get(f) for f in fields}
                 return None
-            except json.JSONDecodeError:
-                return None
-            except requests.RequestException as e:
-                sc = getattr(getattr(e, 'response', None), 'status_code', None)
-                if self._handle_rate_limit_retry(sc, attempt, max_retries):
-                    continue
-                self._handle_request_exception(e, mod_id, f'_fetch_fields({",".join(fields)})')
-                return None
-            except Exception as e:
-                logger.error(f'_fetch_fields for mod {mod_id}: {e}', exc_info=True)
+            except (json.JSONDecodeError, requests.RequestException, Exception) as e:
+                if isinstance(e, requests.RequestException):
+                    sc = getattr(getattr(e, 'response', None), 'status_code', None)
+                    if self._handle_rate_limit_retry(sc, attempt, max_retries):
+                        continue
+                    self._handle_request_exception(e, mod_id, f'_fetch_fields({",".join(fields)})')
+                elif isinstance(e, Exception):
+                    logger.error(f'_fetch_fields for mod {mod_id}: {e}', exc_info=True)
                 return None
         return None
 
@@ -283,42 +297,22 @@ class GameBananaAPI:
         itemtype = self._get_item_type_from_url(external_url)
         params = {'itemtype': itemtype, 'itemid': mod_id, 'fields': 'Files().aFiles()'}
         data = self._api_request(f'{self.core_api_base}/Core/Item/Data', params, max_retries=max_retries, operation='get_mod_files', mod_id=mod_id)
-        if isinstance(data, list) and data and isinstance(data[0], dict):
-            return [v for v in data[0].values() if isinstance(v, dict)] or None
-        return None
+        return [v for v in data[0].values() if isinstance(v, dict)] or None if isinstance(data, list) and data and isinstance(data[0], dict) else None
 
     def _get_mod_file_compatibility(self, mod_id, external_url=None):
         cached = self._compatibility_cache.get(mod_id)
         if cached:
             return cached
-        compatibility: Dict[str, Any] = {'supported_files': [], 'has_supported_files': False, 'preferred_format': None, 'tool_ids': set(), 'has_deltahub_file': False, 'has_deltamod_file': False, 'compatibility_checked': False}
+        compatibility = {'supported_files': [], 'has_supported_files': False, 'preferred_format': None, 'tool_ids': set(), 'has_deltahub_file': False, 'has_deltamod_file': False, 'compatibility_checked': False}
         try:
             profile_data = self.get_mod_profile_page(mod_id, external_url=external_url) or {}
-            profile_files = profile_data.get('_aFiles') or []
-            if isinstance(profile_files, dict):
-                profile_files = list(profile_files.values())
-            if isinstance(profile_files, list):
-                compatibility['compatibility_checked'] = True
-            else:
-                profile_files = []
+            profile_files = list(profile_data.get('_aFiles', {}).values()) if isinstance(profile_data.get('_aFiles'), dict) else profile_data.get('_aFiles', [])
+            compatibility['compatibility_checked'] = isinstance(profile_files, list)
             for file_entry in profile_files:
-                if not isinstance(file_entry, dict):
+                if not isinstance(file_entry, dict) or not (file_id := self._safe_int(file_entry.get('_idRow'))):
                     continue
-                file_id = self._safe_int(file_entry.get('_idRow'))
-                if file_id is None:
-                    continue
-                integrations = file_entry.get('_aModManagerIntegrations') or []
-                file_tool_ids: List[int] = []
-                file_tool_names: List[str] = []
-                for integration in integrations:
-                    if not isinstance(integration, dict):
-                        continue
-                    tool_id = self._safe_int(integration.get('_idToolRow'))
-                    if tool_id is None:
-                        continue
-                    file_tool_ids.append(tool_id)
-                    name = integration.get('_sName') or str(tool_id)
-                    file_tool_names.append(name)
+                file_tool_ids = [self._safe_int(integration.get('_idToolRow')) for integration in file_entry.get('_aModManagerIntegrations', []) if isinstance(integration, dict) and self._safe_int(integration.get('_idToolRow'))]
+                file_tool_names = [integration.get('_sName', str(tool_id)) for integration in file_entry.get('_aModManagerIntegrations', []) if isinstance(integration, dict) and (tool_id := self._safe_int(integration.get('_idToolRow')))]
                 compatibility_label = None
                 if GAMEBANANA_TOOL_ID_DELTAHUB in file_tool_ids:
                     compatibility_label = 'deltahub'
@@ -326,18 +320,13 @@ class GameBananaAPI:
                 elif GAMEBANANA_TOOL_ID_DELTAMOD in file_tool_ids:
                     compatibility_label = 'deltamod'
                     compatibility['has_deltamod_file'] = True
-                if not compatibility_label:
-                    continue
-                details_entry = None
-                file_payload = self._build_file_metadata(file_id=file_id, profile_entry=file_entry, details_entry=details_entry, tool_ids=file_tool_ids, tool_names=file_tool_names, compatibility_label=compatibility_label)
-                compatibility['supported_files'].append(file_payload)
-                compatibility['tool_ids'].update(file_tool_ids)
+                if compatibility_label:
+                    file_payload = self._build_file_metadata(file_id=file_id, profile_entry=file_entry, details_entry=None, tool_ids=file_tool_ids, tool_names=file_tool_names, compatibility_label=compatibility_label)
+                    compatibility['supported_files'].append(file_payload)
+                    compatibility['tool_ids'].update(file_tool_ids)
             if compatibility['supported_files']:
                 compatibility['has_supported_files'] = True
-                if compatibility['has_deltahub_file']:
-                    compatibility['preferred_format'] = 'deltahub'
-                elif compatibility['has_deltamod_file']:
-                    compatibility['preferred_format'] = 'deltamod'
+                compatibility['preferred_format'] = 'deltahub' if compatibility['has_deltahub_file'] else ('deltamod' if compatibility['has_deltamod_file'] else None)
             compatibility['tool_ids'] = sorted(list(compatibility['tool_ids']))
         except Exception as e:
             logger.warning(f'_get_mod_file_compatibility: Failed to collect compatibility for mod {mod_id}: {e}', exc_info=True)
@@ -386,8 +375,7 @@ class GameBananaAPI:
             return None
         ft = data[0] if isinstance(data, list) and data else data
         if isinstance(ft, dict):
-            fl = [v for k, v in ft.items() if isinstance(v, str) and k not in ('screenshots', 'folders')]
-            return fl or None
+            return [v for k, v in ft.items() if isinstance(v, str) and k not in ('screenshots', 'folders')] or None
         if isinstance(ft, list):
             return ft if (not ft or isinstance(ft[0], str)) else (ft[0] if isinstance(ft[0], list) else None)
         return None
@@ -405,6 +393,7 @@ class GameBananaAPI:
                     self._wait_for_rate_limit()
                     response = self.session.get(url, params=params, timeout=NETWORK_TIMEOUT_MEDIUM)
                     response.raise_for_status()
+                    self._reset_rate_limit_state()
                     data = response.json()
                     all_records.extend(data.get('_aRecords', []))
                     if not all_data:
@@ -444,24 +433,18 @@ class GameBananaAPI:
 
     @staticmethod
     def extract_screenshots_from_api(screenshots_data: Optional[str], external_url: Optional[str] = None) -> List[str]:
-        screenshots = []
         if not screenshots_data or not isinstance(screenshots_data, str):
-            return screenshots
+            return []
         try:
             screenshots_list = json.loads(screenshots_data)
             if not isinstance(screenshots_list, list):
-                return screenshots
+                return []
             is_wip = external_url and '/wips/' in external_url
             base_url = 'https://images.gamebanana.com/img/ss/wips' if is_wip else 'https://images.gamebanana.com/img/ss/mods'
-            for screenshot_obj in screenshots_list:
-                if isinstance(screenshot_obj, dict):
-                    file_name = screenshot_obj.get('_sFile') or screenshot_obj.get('_sFile800') or screenshot_obj.get('_sFile530') or screenshot_obj.get('_sFile220')
-                    if file_name:
-                        screenshot_url = f'{base_url}/{file_name}'
-                        screenshots.append(screenshot_url)
+            return [f'{base_url}/{screenshot_obj.get("_sFile") or screenshot_obj.get("_sFile800") or screenshot_obj.get("_sFile530") or screenshot_obj.get("_sFile220")}' for screenshot_obj in screenshots_list if isinstance(screenshot_obj, dict) and (screenshot_obj.get('_sFile') or screenshot_obj.get('_sFile800') or screenshot_obj.get('_sFile530') or screenshot_obj.get('_sFile220'))]
         except (json.JSONDecodeError, TypeError, AttributeError) as e:
             logger.debug(f'Error parsing screenshots data: {e}')
-        return screenshots
+            return []
 
     @staticmethod
     def extract_icon_url(preview_media):

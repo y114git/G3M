@@ -224,7 +224,7 @@ def run_app():
         logging.warning(f'Failed to initialize logging: {e}')
     parser = argparse.ArgumentParser(description='DELTAHUB')
     parser.add_argument('--force-start', action='store_true', help='Force start even if another instance is detected')
-    args, unknown_args = parser.parse_known_args()
+    args, _ = parser.parse_known_args()
     url_arg = next((arg for arg in sys.argv[1:] if arg.startswith('deltahub://')), None)
     if platform.system() == 'Linux':
         os.environ.setdefault('NO_AT_BRIDGE', '1')

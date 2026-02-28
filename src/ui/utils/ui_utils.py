@@ -1,6 +1,7 @@
 """UI utility functions."""
 import logging
-from PyQt6.QtCore import QTimer, QThread
+from PyQt6.QtCore import QTimer, QThread, QPropertyAnimation, QEasingCurve, QAbstractAnimation
+from PyQt6.QtWidgets import QWidget, QGraphicsOpacityEffect
 from typing import Callable, Optional
 
 
@@ -101,3 +102,111 @@ def safe_stop_thread(thread, timeout=2000, blocking=True):
             pass
         except Exception as e:
             logging.error(f'safe_stop_thread: error stopping thread {type(thread).__name__}: {e}', exc_info=True)
+
+
+class UIAnimator:
+    """Helper class for applying UI animations."""
+
+    @staticmethod
+    def _animations_enabled(app_state) -> bool:
+        if not app_state:
+            return True
+        return not app_state.local_config.get('disable_animations', False)
+
+    @staticmethod
+    def fade_in(widget: QWidget, duration: int = 200, app_state=None) -> QPropertyAnimation:
+        """Fade in a widget by animating opacity."""
+
+        should_show = widget.parent() is not None or type(widget).__name__ == "AnimatedToolTip"
+
+        if not UIAnimator._animations_enabled(app_state):
+            widget.setWindowOpacity(1.0)
+            if hasattr(widget, 'setGraphicsEffect'):
+                eff = widget.graphicsEffect()
+                if isinstance(eff, QGraphicsOpacityEffect):
+                    eff.setOpacity(1.0)
+            if should_show:
+                widget.show()
+            return None
+
+        if should_show:
+            widget.show()
+        effect = QGraphicsOpacityEffect(widget)
+        widget.setGraphicsEffect(effect)
+
+        anim = QPropertyAnimation(effect, b"opacity", widget)
+        anim.setDuration(duration)
+        anim.setStartValue(0.0)
+        anim.setEndValue(1.0)
+        anim.setEasingCurve(QEasingCurve.Type.InOutSine)
+
+        def cleanup():
+            if hasattr(widget, 'setGraphicsEffect'):
+                widget.setGraphicsEffect(None)
+
+        anim.finished.connect(cleanup)
+        anim.start(QAbstractAnimation.DeletionPolicy.KeepWhenStopped)
+
+        widget._fade_effect = effect
+        widget._fade_anim = anim
+        return anim
+
+    @staticmethod
+    def fade_out(widget: QWidget, duration: int = 200, app_state=None) -> QPropertyAnimation:
+        """Fade out a widget by animating opacity."""
+        if not UIAnimator._animations_enabled(app_state):
+            widget.hide()
+            return None
+
+        effect = QGraphicsOpacityEffect(widget)
+        widget.setGraphicsEffect(effect)
+
+        anim = QPropertyAnimation(effect, b"opacity", widget)
+        anim.setDuration(duration)
+        anim.setStartValue(1.0)
+        anim.setEndValue(0.0)
+        anim.setEasingCurve(QEasingCurve.Type.InOutSine)
+
+        def cleanup():
+            widget.hide()
+            if hasattr(widget, 'setGraphicsEffect'):
+                widget.setGraphicsEffect(None)
+
+        anim.finished.connect(cleanup)
+        anim.start(QAbstractAnimation.DeletionPolicy.KeepWhenStopped)
+
+        widget._fade_effect = effect
+        widget._fade_anim = anim
+        return anim
+
+    @staticmethod
+    def collapse_expand(widget: QWidget, expand: bool, duration: int = 250, app_state=None):
+        """Animates max height to simulate expand/collapse."""
+        if not UIAnimator._animations_enabled(app_state):
+            widget.setVisible(expand)
+            widget.setMaximumHeight(16777215)
+            return None
+
+        if expand:
+            widget.setVisible(True)
+            target_height = widget.sizeHint().height()
+            start_height = 0
+        else:
+            start_height = widget.height()
+            target_height = 0
+
+        anim = QPropertyAnimation(widget, b"maximumHeight")
+        anim.setDuration(duration)
+        anim.setStartValue(start_height)
+        anim.setEndValue(target_height)
+        anim.setEasingCurve(QEasingCurve.Type.InOutQuad)
+
+        if not expand:
+            anim.finished.connect(lambda: widget.setVisible(False))
+        else:
+            anim.finished.connect(lambda: widget.setMaximumHeight(16777215))
+
+        anim.start(QAbstractAnimation.DeletionPolicy.KeepWhenStopped)
+
+        widget._collapse_anim = anim
+        return anim

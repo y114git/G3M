@@ -190,6 +190,8 @@
     "gamebanana_install_manual_tooltip": "Automatic install unavailable. Opens the mod page with instructions.",
     "gamebanana_install_unknown_tooltip": "Compatibility check pending. You can still attempt installation.",
     "gamebanana_install_progress": "Downloading... {progress}%",
+    "gamebanana_rate_limit_title": "API Rate Limit",
+    "gamebanana_rate_limit_body": "GameBanana API rate limit reached (250 requests/hour). Please wait and try again.",
     "gamebanana_format_deltahub": "DELTAHUB",
     "gamebanana_format_deltamod": "Deltamod",
     "open_instructions": "Open instructions",
@@ -207,6 +209,7 @@
     "beta_updates": "Beta Updates",
     "skip_patching_warnings": "Skip Patching Warnings",
     "fullscreen": "Fullscreen",
+    "scale_label": "UI Scale",
     "sort_by_name": "By name",
     "sort_by_date": "By date",
     "hide_library_filters": "Hide filters in library",
@@ -305,7 +308,9 @@
     "settings_section_merging": "Merging",
     "clear_cache_button": "Clear cache",
     "settings_section_themes": "Themes",
-    "settings_section_media": "Media & Audio",
+    "settings_section_media": "Graphics",
+    "settings_section_audio": "Audio",
+    "apply_theme": "Apply Theme",
     "do_not_save_theme_after_import": "Do not save theme in list after import",
     "dont_hide_window_on_launch": "Don't hide window on launch",
     "hide_wips_without_downloads": "Hide WIPs without downloads"
@@ -348,7 +353,8 @@
     "disable_splash": "Disable splash",
     "xdelta_modpack": "XDELTA instead of data.win/.ios",
     "merge_properties": "Properties merge",
-    "merge_code": "Code merge"
+    "merge_code": "Code merge",
+    "disable_animations": "Disable animations"
   },
   "tags": {
     "gameplay": "Gameplay",
@@ -407,7 +413,9 @@
     "changelog_close": "Close",
     "withdraw_request": "Withdraw request",
     "shortcut": "Shortcut",
-    "import_export_themes": "Im/Export Theme"
+    "import_export_themes": "Im/Export Theme",
+    "save_theme": "Save Theme",
+    "delete_theme": "Delete Theme"
   },
   "tooltips": {
     "custom_exe": "You can select your own executable file instead of the default (e.g., DELTARUNE.exe). Useful if it's in a different location or you want to run a custom launch file.",

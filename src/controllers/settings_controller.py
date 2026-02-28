@@ -54,7 +54,7 @@ class SettingsUiController:
         self.settings_service.on_reset_settings_click({'migrate_config': lambda: (self.app._load_local_data(), self.settings_service.migrate_config_if_needed())})
         checkboxes = (
             'chapter_mode_checkbox', 'beta_updates_checkbox', 'fullscreen_checkbox',
-            'hide_library_filters_checkbox', 'full_install_checkbox', 'disable_background_checkbox',
+            'hide_library_filters_checkbox', 'full_install_checkbox', 'disable_animations_checkbox', 'disable_background_checkbox',
             'disable_splash_checkbox', 'skip_patching_warnings_checkbox', 'hide_wips_without_downloads_checkbox',
             'auto_sorting_checkbox', 'merge_properties_checkbox', 'merge_code_checkbox',
             'hide_mods_browser_tab_checkbox', 'hide_library_tab_checkbox', 'hide_plugins_tab_checkbox',
@@ -154,6 +154,9 @@ class SettingsUiController:
         self.settings_service.on_toggle_hide_library_filters(bool(state))
         if hasattr(self.app, 'library_filters_widget'):
             self.app.library_filters_widget.setVisible(not state)
+
+    def on_toggle_disable_animations(self, state):
+        self.settings_service.on_toggle_disable_animations(bool(state))
 
     def on_toggle_disable_background(self, state):
         self.settings_service.on_toggle_disable_background(bool(state))

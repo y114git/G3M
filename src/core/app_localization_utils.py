@@ -26,6 +26,7 @@ WIDGET_LOCALIZATIONS = [
     ('skip_patching_warnings_checkbox', 'setToolTip', 'tooltips.skip_patching_warnings'),
     ('fullscreen_checkbox', 'setText', 'ui.fullscreen'),
     ('fullscreen_checkbox', 'setToolTip', 'tooltips.fullscreen_tooltip'),
+    ('ui_scale_label', 'setText', 'ui.scale_label'),
     ('launch_via_steam_checkbox', 'setText', 'ui.steam_launch'),
     ('dont_hide_window_checkbox', 'setText', 'ui.dont_hide_window_on_launch'),
     ('dont_hide_window_checkbox', 'setToolTip', 'tooltips.dont_hide_window_on_launch'),
@@ -34,8 +35,14 @@ WIDGET_LOCALIZATIONS = [
     ('reset_button', 'setText', 'buttons.reset_settings'),
     ('settings_custom_executable_button', 'setText', 'buttons.custom_executable'),
     ('settings_custom_executable_button', 'setToolTip', 'tooltips.custom_executable_library'),
+    ('settings_reset_custom_exe_button', 'setToolTip', 'buttons.reset_settings'),
+    ('settings_game_selector_label', 'setText', 'ui.mod_type_label'),
+    ('theme_apply_btn', 'setToolTip', 'ui.apply_theme'),
+    ('theme_save_btn', 'setToolTip', 'buttons.save_theme'),
+    ('theme_delete_btn', 'setToolTip', 'buttons.delete_theme'),
     ('hide_library_filters_checkbox', 'setText', 'ui.hide_library_filters'),
     ('hide_library_filters_checkbox', 'setToolTip', 'tooltips.hide_library_filters'),
+    ('disable_animations_checkbox', 'setText', 'checkboxes.disable_animations'),
     ('disable_background_checkbox', 'setText', 'checkboxes.disable_background'),
     ('disable_splash_checkbox', 'setText', 'checkboxes.disable_splash'),
     ('mods_per_page_label', 'setText', 'ui.mods_per_page_label'),
@@ -77,8 +84,10 @@ PLUGIN_WIDGET_LOCALIZATIONS = [
 
 COMBO_LOCALIZATIONS = {
     'sort_combo': ['ui.sort_by_downloads', 'ui.sort_by_update_date', 'ui.sort_by_creation_date'],
-    'modgame_combo': ['dropdowns.all_mods', 'ui.deltarune', 'ui.deltarunedemo', 'ui.undertale'],
+    'modgame_combo': ['ui.deltarune', 'ui.undertale', 'ui.undertaleyellow', 'ui.pizzatower', 'ui.sugaryspire'],
     'library_sort_combo': ['ui.sort_by_name', 'ui.sort_by_date'],
+    'game_type_combo': ['ui.deltarune', 'ui.deltarunedemo', 'ui.undertale', 'ui.undertaleyellow', 'ui.pizzatower', 'ui.sugaryspire'],
+    'settings_game_combo': ['ui.deltarune', 'ui.deltarunedemo', 'ui.undertale', 'ui.undertaleyellow', 'ui.pizzatower', 'ui.sugaryspire'],
 }
 
 
@@ -117,6 +126,7 @@ def relocalize_texts(w):
         w.settings_tab_widget.setTabText(2, tr('ui.settings_tab_mods_browser'))
         w.settings_tab_widget.setTabText(3, tr('ui.settings_tab_library'))
         w.settings_tab_widget.setTabText(4, tr('ui.settings_tab_launch'))
+        w.settings_tab_widget.setTabText(5, tr('ui.settings_tab_plugins'))
     if hasattr(w, '_update_settings_library_tab'):
         w._update_settings_library_tab()
     if hasattr(w, '_section_headers'):
@@ -150,6 +160,10 @@ def relocalize_texts(w):
         color_btn = getattr(w, '_color_btns', {}).get(key)
         if color_btn:
             color_btn.setText(tr('ui.select_color'))
+        if hasattr(w, 'settings_builder'):
+            reset_btn = w.settings_builder.get_widgets().get(f'color_reset_{key}')
+            if reset_btn:
+                reset_btn.setToolTip(tr('buttons.reset_settings'))
     w.changelog_button.setText(tr('buttons.close') if w.app_state.is_changelog_view else tr('buttons.changelog'))
     if hasattr(w, '_update_portproton_ui') and w.portproton_frame:
         w._update_portproton_ui()
