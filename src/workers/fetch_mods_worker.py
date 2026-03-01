@@ -85,12 +85,13 @@ class FetchModsThread(QThread):
                                 return (mods, mods_needing_metadata)
 
                             try:
+                                import asyncio
                                 from utils.async_metadata_loader import AsyncGameModsLoader
                                 pages_to_load = list(range(start_page, start_page + num_pages))
-                                async_loader = AsyncGameModsLoader(max_workers=3)
-                                mods, mods_needing_metadata = async_loader.load_game_mods_async(
+                                async_loader = AsyncGameModsLoader(max_concurrent=3)
+                                mods, mods_needing_metadata = asyncio.run(async_loader.load_game_mods_async(
                                     game_name, game_id, pages_to_load, GAMEBANANA_PER_PAGE, sort, self.metadata_cache, self.app_state
-                                )
+                                ))
                                 logger.debug(f'AsyncGameModsLoader: Loaded {len(mods)} mods for {game_name}')
                             except Exception as async_error:
                                 logger.warning(f'Async loading failed for {game_name}, falling back to sequential: {async_error}')

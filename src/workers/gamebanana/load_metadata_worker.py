@@ -38,9 +38,10 @@ class LoadGameBananaMetadataThread(QThread):
                 return
 
             try:
+                import asyncio
                 from utils.async_metadata_loader import AsyncMetadataLoader
-                async_loader = AsyncMetadataLoader(max_workers=4, batch_size=8)
-                async_results = async_loader.load_mods_metadata_async(self.mod_ids, self.metadata_cache, self.app_state)
+                async_loader = AsyncMetadataLoader(max_concurrent=4, batch_size=8)
+                async_results = asyncio.run(async_loader.load_mods_metadata_async(self.mod_ids, self.metadata_cache, self.app_state))
 
                 loaded_count = 0
                 for mod_id_str, metadata in async_results:

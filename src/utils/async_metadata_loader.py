@@ -1,7 +1,8 @@
 """Asynchronous metadata loading utilities for improved performance."""
 import logging
+import asyncio
+import threading
 from typing import List, Dict, Optional, Any, Tuple
-from concurrent.futures import ThreadPoolExecutor, as_completed
 import time
 from adapters.gamebanana_adapter import GameBananaAPI
 from models.mod_models import ModInfo
@@ -10,30 +11,31 @@ from adapters.gamebanana_cache import GameBananaMetadataCache
 logger = logging.getLogger(__name__)
 
 
+_rate_limit_lock = threading.Lock()
+_last_request_time = 0.0
+_MIN_REQUEST_INTERVAL = 0.2
+
+
+def _wait_for_global_rate_limit():
+    """Thread-safe rate limiting for GameBanana API."""
+    global _last_request_time
+    with _rate_limit_lock:
+        elapsed = time.time() - _last_request_time
+        if elapsed < _MIN_REQUEST_INTERVAL:
+            time.sleep(_MIN_REQUEST_INTERVAL - elapsed)
+        _last_request_time = time.time()
+
+
 class AsyncMetadataLoader:
-    """Handles asynchronous loading of mod metadata with minimal changes to existing code."""
+    """Asynchronous mod metadata loading with native asyncio."""
 
-    def __init__(self, max_workers: int = 4, batch_size: int = 8):
-        self.max_workers = max_workers
+    def __init__(self, max_concurrent: int = 4, batch_size: int = 8):
+        self.max_concurrent = max_concurrent
         self.batch_size = batch_size
-        self.executor = ThreadPoolExecutor(max_workers=max_workers)
+        self._semaphore = asyncio.Semaphore(max_concurrent)
 
-    def __del__(self):
-        if hasattr(self, 'executor'):
-            self.executor.shutdown(wait=False)
-
-    def load_mods_metadata_async(self, mod_ids: List[str], metadata_cache: Optional[GameBananaMetadataCache] = None, app_state=None) -> List[Tuple[str, Any]]:
-        """
-        Load metadata for multiple mods asynchronously.
-
-        Args:
-            mod_ids: List of mod IDs to load metadata for
-            metadata_cache: Cache instance for storing/retrieving metadata
-            app_state: Application state for additional context
-
-        Returns:
-            List of tuples (mod_id, metadata_dict) for successfully loaded metadata
-        """
+    async def load_mods_metadata_async(self, mod_ids: List[str], metadata_cache: Optional[GameBananaMetadataCache] = None, app_state=None) -> List[Tuple[str, Any]]:
+        """Load metadata for multiple mods asynchronously."""
         if not mod_ids:
             return []
 
@@ -43,62 +45,65 @@ class AsyncMetadataLoader:
         uncached_mods = []
         if metadata_cache:
             for mod_id in mod_ids:
-                if not metadata_cache.is_valid(mod_id):
-                    uncached_mods.append(mod_id)
-                else:
-
-                    cached_data = {
+                if metadata_cache.is_valid(mod_id):
+                    results.append((mod_id, {
                         'downloads': metadata_cache.get_field(mod_id, 'downloads'),
                         'tagline': metadata_cache.get_field(mod_id, 'tagline'),
                         'category': metadata_cache.get_field(mod_id, 'category')
-                    }
-                    results.append((mod_id, cached_data))
+                    }))
+                else:
+                    uncached_mods.append(mod_id)
         else:
             uncached_mods = mod_ids.copy()
 
         if not uncached_mods:
-            logger.debug(f'AsyncMetadataLoader: All {len(mod_ids)} mods had cached metadata')
+            logger.debug(f'AsyncMetadataLoader: All {len(mod_ids)} mods cached')
             return results
 
-        logger.info(f'AsyncMetadataLoader: Loading metadata for {len(uncached_mods)} uncached mods (max_workers={self.max_workers})')
+        logger.info(f'AsyncMetadataLoader: Loading {len(uncached_mods)} uncached mods (max_concurrent={self.max_concurrent})')
 
         for i in range(0, len(uncached_mods), self.batch_size):
             batch = uncached_mods[i:i + self.batch_size]
-            batch_results = self._process_metadata_batch(batch, metadata_cache, app_state)
+            batch_results = await self._process_metadata_batch(batch, metadata_cache, app_state)
             results.extend(batch_results)
 
             if i + self.batch_size < len(uncached_mods):
-                time.sleep(0.1)
+                await asyncio.sleep(0.1)
 
         elapsed = time.time() - start_time
-        logger.info(f'AsyncMetadataLoader: Loaded metadata for {len(results)} mods in {elapsed:.2f}s')
+        logger.info(f'AsyncMetadataLoader: Loaded {len(results)} mods in {elapsed:.2f}s')
         return results
 
-    def _process_metadata_batch(self, mod_ids: List[str], metadata_cache: Optional[GameBananaMetadataCache], app_state) -> List[Tuple[str, Any]]:
+    async def _process_metadata_batch(self, mod_ids: List[str], metadata_cache: Optional[GameBananaMetadataCache], app_state) -> List[Tuple[str, Any]]:
         """Process a batch of mod IDs concurrently."""
+        tasks = [asyncio.create_task(self._load_with_semaphore(mod_id, app_state)) for mod_id in mod_ids]
+
+        results_list = await asyncio.gather(*tasks, return_exceptions=True)
+
         results = []
-        futures = {}
-
-        for mod_id_str in mod_ids:
-            future = self.executor.submit(self._load_single_mod_metadata, mod_id_str, app_state)
-            futures[future] = mod_id_str
-
-        for future in as_completed(futures):
-            mod_id_str = futures[future]
-            try:
-                metadata = future.result(timeout=10)
-                if metadata:
-                    results.append((mod_id_str, metadata))
-
-                    if metadata_cache:
-                        self._cache_metadata(metadata_cache, mod_id_str, metadata)
-            except Exception as e:
-                logger.warning(f'AsyncMetadataLoader: Failed to load metadata for mod {mod_id_str}: {e}')
+        for mod_id, result in zip(mod_ids, results_list):
+            if isinstance(result, Exception):
+                logger.warning(f'AsyncMetadataLoader: Failed to load metadata for mod {mod_id}: {result}')
+            elif result:
+                results.append((mod_id, result))
+                if metadata_cache:
+                    self._cache_metadata(metadata_cache, mod_id, result)
 
         return results
 
-    def _load_single_mod_metadata(self, mod_id_str: str, app_state) -> Optional[Dict[str, Any]]:
-        """Load metadata for a single mod (runs in thread pool)."""
+    async def _load_with_semaphore(self, mod_id: str, app_state) -> Optional[Dict[str, Any]]:
+        """Load metadata with semaphore control."""
+        async with self._semaphore:
+            return await asyncio.wait_for(self._load_single_mod_metadata(mod_id, app_state), timeout=10)
+
+    async def _load_single_mod_metadata(self, mod_id_str: str, app_state) -> Optional[Dict[str, Any]]:
+        """Load metadata for a single mod."""
+        return await asyncio.to_thread(self._load_single_mod_metadata_sync, mod_id_str, app_state)
+
+    def _load_single_mod_metadata_sync(self, mod_id_str: str, app_state) -> Optional[Dict[str, Any]]:
+        """Synchronous metadata loading with rate limiting."""
+        _wait_for_global_rate_limit()
+
         try:
             mod_id = int(mod_id_str)
             api = GameBananaAPI()
@@ -111,9 +116,7 @@ class AsyncMetadataLoader:
                         external_url = getattr(mod, 'external_url', None)
                         break
 
-            downloads = None
-            tagline = None
-            category = None
+            downloads = tagline = category = None
 
             try:
                 downloads = api.get_mod_downloads_only(mod_id, external_url=external_url)
@@ -160,52 +163,31 @@ class AsyncMetadataLoader:
 
 
 class AsyncGameModsLoader:
-    """Handles asynchronous loading of game mods with minimal changes."""
+    """Asynchronous game mods loading with native asyncio."""
 
-    def __init__(self, max_workers: int = 3):
-        self.max_workers = max_workers
-        self.executor = ThreadPoolExecutor(max_workers=max_workers)
+    def __init__(self, max_concurrent: int = 3):
+        self.max_concurrent = max_concurrent
+        self._semaphore = asyncio.Semaphore(max_concurrent)
 
-    def __del__(self):
-        if hasattr(self, 'executor'):
-            self.executor.shutdown(wait=False)
-
-    def load_game_mods_async(self, game_name: str, game_id: int, pages: List[int], per_page: int = 20,
-                             sort: str = 'default', metadata_cache: Optional[GameBananaMetadataCache] = None,
-                             app_state=None) -> Tuple[List[ModInfo], List[str]]:
-        """
-        Load mods for multiple pages asynchronously.
-
-        Args:
-            game_name: Game name for logging
-            game_id: GameBanana game ID
-            pages: List of page numbers to load
-            per_page: Number of mods per page
-            sort: Sort order
-            metadata_cache: Cache instance
-            app_state: Application state
-
-        Returns:
-            Tuple of (all_mods, mods_needing_metadata)
-        """
+    async def load_game_mods_async(self, game_name: str, game_id: int, pages: List[int], per_page: int = 20,
+                                   sort: str = 'default', metadata_cache: Optional[GameBananaMetadataCache] = None,
+                                   app_state=None) -> Tuple[List[ModInfo], List[str]]:
+        """Load mods for multiple pages asynchronously."""
         if not pages:
             return [], []
 
         start_time = time.time()
-        logger.info(f'AsyncGameModsLoader: Loading {len(pages)} pages for {game_name} (max_workers={self.max_workers})')
+        logger.info(f'AsyncGameModsLoader: Loading {len(pages)} pages for {game_name} (max_concurrent={self.max_concurrent})')
 
-        futures = {}
+        tasks = [(page, asyncio.create_task(self._load_single_page(game_id, page, per_page, sort, metadata_cache, app_state)))
+                 for page in pages]
+
         all_mods = []
         mods_needing_metadata = []
 
-        for page in pages:
-            future = self.executor.submit(self._load_single_page, game_id, page, per_page, sort, metadata_cache, app_state)
-            futures[future] = page
-
-        for future in as_completed(futures):
-            page = futures[future]
+        for page, task in tasks:
             try:
-                page_mods, page_needing_metadata = future.result(timeout=30)
+                page_mods, page_needing_metadata = await asyncio.wait_for(task, timeout=30)
                 if page_mods:
                     all_mods.extend(page_mods)
                     mods_needing_metadata.extend(page_needing_metadata)
@@ -219,9 +201,16 @@ class AsyncGameModsLoader:
         logger.info(f'AsyncGameModsLoader: Loaded {len(all_mods)} mods for {game_name} in {elapsed:.2f}s')
         return all_mods, mods_needing_metadata
 
-    def _load_single_page(self, game_id: int, page: int, per_page: int, sort: str,
-                          metadata_cache: Optional[GameBananaMetadataCache], app_state) -> Tuple[List[ModInfo], List[str]]:
-        """Load a single page of mods (runs in thread pool)."""
+    async def _load_single_page(self, game_id: int, page: int, per_page: int, sort: str,
+                                metadata_cache: Optional[GameBananaMetadataCache], app_state) -> Tuple[List[ModInfo], List[str]]:
+        """Load a single page of mods."""
+        return await asyncio.to_thread(self._load_single_page_sync, game_id, page, per_page, sort, metadata_cache, app_state)
+
+    def _load_single_page_sync(self, game_id: int, page: int, per_page: int, sort: str,
+                               metadata_cache: Optional[GameBananaMetadataCache], app_state) -> Tuple[List[ModInfo], List[str]]:
+        """Synchronous page loading with rate limiting."""
+        _wait_for_global_rate_limit()
+
         try:
             api = GameBananaAPI()
             mods_data, mods_needing_metadata = api.get_game_mods(

@@ -39,12 +39,13 @@ class LoadMoreGameBananaModsThread(QThread):
                 return
 
             try:
+                import asyncio
                 from utils.async_metadata_loader import AsyncGameModsLoader
                 pages_to_load = list(range(self.start_page, self.start_page + self.num_pages))
-                async_loader = AsyncGameModsLoader(max_workers=2)
-                mods_data, mods_needing = async_loader.load_game_mods_async(
+                async_loader = AsyncGameModsLoader(max_concurrent=2)
+                mods_data, mods_needing = asyncio.run(async_loader.load_game_mods_async(
                     game_name, self.game_id, pages_to_load, GAMEBANANA_PER_PAGE, self.sort, self.metadata_cache, self._get_app_state()
-                )
+                ))
                 if mods_data:
                     self._mods_needing_metadata.extend(mods_needing)
                     new_mods.extend(m for m in mods_data if m and not (self._cancelled or self.isInterruptionRequested()))
