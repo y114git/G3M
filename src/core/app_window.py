@@ -350,6 +350,7 @@ class AppWindow(QWidget):
         self.pending_updates = []
         self.chat_button = QPushButton(tr('ui.chat_button'))
         self.chat_button.clicked.connect(self._open_chat)
+        self.shortcut_button.clicked.connect(self._on_shortcut_button_click)
         self.action_frame.addWidget(self.shortcut_button)
         self.action_frame.addWidget(self.action_button)
         self.action_frame.addWidget(self.chat_button)
@@ -1408,6 +1409,10 @@ class AppWindow(QWidget):
         from ui.dialogs.chat_dialog import ChatWindow
         chat_window = ChatWindow(self.app_state, self)
         chat_window.exec()
+
+    def _on_shortcut_button_click(self):
+        from controllers.shortcut_controller import on_shortcut_button_click
+        on_shortcut_button_click(self.app_state, self.feedback_service, self.used_mods_service, self)
 
     def _migrate_settings_config_file(self):
         old_config_path = os.path.join(self.app_state.config_dir, 'config.json')

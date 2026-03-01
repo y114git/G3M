@@ -1255,5 +1255,23 @@
     "select_channel_first": "请先选择频道",
     "loading_messages": "正在加载消息...",
     "message_limit_label": "最大消息数:"
+  },
+  "shortcut": {
+    "dialog_title": "创建快捷方式",
+    "dialog_header": "将使用以下设置创建快捷方式：",
+    "dialog_game": "游戏",
+    "dialog_mod": "模组",
+    "dialog_chapter": "章节",
+    "dialog_launch": "启动方式",
+    "dialog_direct_launch": "直接启动",
+    "vanilla": "原版（无模组）",
+    "direct": "直接",
+    "select_folder": "选择保存快捷方式的文件夹",
+    "created": "快捷方式已创建：\n{path}",
+    "creation_failed": "创建快捷方式失败：{error}",
+    "too_many_mods": "快捷方式仅支持一个模组。请选择一个模组或不选（原版）。",
+    "error_no_game_path": "{game} 的游戏路径未设置。请先在设置中配置游戏路径。",
+    "error_mod_not_found": "所选模组未在磁盘上找到。它可能已被删除或移动。",
+    "error_g3mtool_unavailable": "G3MTool 不可用。模组补丁需要 G3MTool。"
   }
 }

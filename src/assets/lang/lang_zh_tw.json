@@ -1258,5 +1258,23 @@
     "select_channel_first": "請先選擇頻道",
     "loading_messages": "正在載入訊息...",
     "message_limit_label": "最大訊息數:"
+  },
+  "shortcut": {
+    "dialog_title": "建立捷徑",
+    "dialog_header": "將使用以下設定建立捷徑：",
+    "dialog_game": "遊戲",
+    "dialog_mod": "模組",
+    "dialog_chapter": "章節",
+    "dialog_launch": "啟動方式",
+    "dialog_direct_launch": "直接啟動",
+    "vanilla": "原版（無模組）",
+    "direct": "直接",
+    "select_folder": "選擇儲存捷徑的資料夾",
+    "created": "捷徑已建立：\n{path}",
+    "creation_failed": "建立捷徑失敗：{error}",
+    "too_many_mods": "捷徑僅支援一個模組。請選擇一個模組或不選（原版）。",
+    "error_no_game_path": "{game} 的遊戲路徑未設定。請先在設定中配置遊戲路徑。",
+    "error_mod_not_found": "所選模組未在磁碟上找到。它可能已被刪除或移動。",
+    "error_g3mtool_unavailable": "G3MTool 不可用。模組補丁需要 G3MTool。"
   }
 }

@@ -1247,5 +1247,23 @@
     "select_channel_first": "Please select a channel first",
     "loading_messages": "Loading messages...",
     "message_limit_label": "Max messages:"
+  },
+  "shortcut": {
+    "dialog_title": "Create Shortcut",
+    "dialog_header": "A shortcut will be created with the following settings:",
+    "dialog_game": "Game",
+    "dialog_mod": "Mod",
+    "dialog_chapter": "Chapter",
+    "dialog_launch": "Launch method",
+    "dialog_direct_launch": "Direct launch",
+    "vanilla": "Vanilla (no mods)",
+    "direct": "Direct",
+    "select_folder": "Select folder to save shortcut",
+    "created": "Shortcut created:\n{path}",
+    "creation_failed": "Failed to create shortcut: {error}",
+    "too_many_mods": "Shortcuts support only one mod at a time. Please select a single mod or none (vanilla).",
+    "error_no_game_path": "Game path for {game} is not set. Please configure the game path in settings first.",
+    "error_mod_not_found": "The selected mod was not found on disk. It may have been deleted or moved.",
+    "error_g3mtool_unavailable": "G3MTool is not available. Mod patching requires G3MTool to be present."
   }
 }

@@ -11,7 +11,16 @@ else:
 if path_to_src not in sys.path:
     sys.path.insert(0, path_to_src)
 if __name__ == '__main__':
+    if '--shortcut' in sys.argv:
+        idx = sys.argv.index('--shortcut')
+        if idx + 1 >= len(sys.argv):
+            print('Error: --shortcut requires a config argument', file=sys.stderr)
+            sys.exit(2)
+        from core.shortcut_runner import run_shortcut
+        run_shortcut(sys.argv[idx + 1])
+        sys.exit(0)
+
     from core.startup import run_app
     from utils.path_utils import cleanup_old_updater_files
     cleanup_old_updater_files()
-    run_app()
+    sys.exit(run_app())

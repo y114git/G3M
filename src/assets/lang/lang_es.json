@@ -1260,5 +1260,23 @@
     "select_channel_first": "Por favor, selecciona un canal primero",
     "loading_messages": "Cargando mensajes...",
     "message_limit_label": "Máx. mensajes:"
+  },
+  "shortcut": {
+    "dialog_title": "Crear acceso directo",
+    "dialog_header": "Se creará un acceso directo con la siguiente configuración:",
+    "dialog_game": "Juego",
+    "dialog_mod": "Mod",
+    "dialog_chapter": "Capítulo",
+    "dialog_launch": "Método de inicio",
+    "dialog_direct_launch": "Inicio directo",
+    "vanilla": "Vanilla (sin mods)",
+    "direct": "Directo",
+    "select_folder": "Seleccionar carpeta para guardar el acceso directo",
+    "created": "Acceso directo creado:\n{path}",
+    "creation_failed": "Error al crear acceso directo: {error}",
+    "too_many_mods": "Los accesos directos solo admiten un mod a la vez. Seleccione un solo mod o ninguno (vanilla).",
+    "error_no_game_path": "La ruta del juego {game} no está configurada. Por favor, configure la ruta del juego en los ajustes.",
+    "error_mod_not_found": "El mod seleccionado no se encontró en el disco. Puede haber sido eliminado o movido.",
+    "error_g3mtool_unavailable": "G3MTool no está disponible. El parcheo de mods requiere G3MTool."
   }
 }
