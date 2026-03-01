@@ -37,7 +37,6 @@ from ui.builders.settings_view_builder import SettingsViewBuilder
 from services.plugin_service import PluginManager
 from services.customization_service import CustomizationManager
 from services.used_mods_service import UsedModsManager
-from utils.network_utils import check_internet_connection
 _translator = QTranslator()
 _lock_file = None
 
@@ -1254,8 +1253,7 @@ class AppWindow(QWidget):
         if hasattr(self, 'theme') and self.theme:
             self.theme.init_theme_list()
         if not is_initial and self.app_state.has_internet:
-            if self._reload_global_settings():
-                self._check_and_show_announce(force_check=True)
+            self._reload_global_settings(callback=lambda success: self._check_and_show_announce(force_check=True) if success else None)
             from PyQt6.QtCore import QMetaObject, Qt
             QMetaObject.invokeMethod(self.presence_worker, 'run', Qt.ConnectionType.QueuedConnection)
 
@@ -1387,9 +1385,9 @@ class AppWindow(QWidget):
         from core.app_tab_handler import handle_tab_changed
         handle_tab_changed(self, index)
 
-    def _reload_global_settings(self):
+    def _reload_global_settings(self, callback=None):
         from core.app_update_handler import reload_global_settings
-        return reload_global_settings(self)
+        reload_global_settings(self, callback=callback)
 
     def _check_and_show_announce(self, retry_count=0, force_check=False):
         from core.app_update_handler import check_and_show_announce
@@ -1404,7 +1402,7 @@ class AppWindow(QWidget):
         prompt_for_update(self, update_info)
 
     def _open_chat(self):
-        if not check_internet_connection():
+        if not self.app_state.has_internet:
             self.feedback_service.show_message('warning', 'chat.no_internet', tr('chat.no_internet'))
             return
         from ui.dialogs.chat_dialog import ChatWindow

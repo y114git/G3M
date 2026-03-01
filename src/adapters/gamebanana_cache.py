@@ -64,7 +64,14 @@ class GameBananaMetadataCache:
             if len(self._cache) > CACHE_MAX_ENTRIES:
                 lru = min(self._cache, key=lambda k: self._cache[k].get('last_accessed', 0))
                 self._cache.pop(lru)
-            self.flush()
+            self._dirty = True
+
+    def flush_if_dirty(self):
+        """Flush only if there are pending writes."""
+        with self.lock:
+            if getattr(self, '_dirty', False):
+                self._dirty = False
+                self.flush()
 
     def clear(self):
         """Simply truncate the cache file to empty object."""

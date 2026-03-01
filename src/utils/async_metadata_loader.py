@@ -70,6 +70,9 @@ class AsyncMetadataLoader:
             if i + self.batch_size < len(uncached_mods):
                 await asyncio.sleep(0.1)
 
+        if metadata_cache and hasattr(metadata_cache, 'flush_if_dirty'):
+            metadata_cache.flush_if_dirty()
+
         elapsed = time.time() - start_time
         logger.info(f'AsyncMetadataLoader: Loaded {len(results)} mods in {elapsed:.2f}s')
         return results

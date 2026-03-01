@@ -109,37 +109,10 @@ class ModCardWidget(BaseModWidget):
             pass
         self._compatibility_thread = None
 
-    _GAME_TAG_STYLES = {
-        'deltarune': ('DELTARUNE', 'black', '1px solid white'),
-        'deltarunedemo': ('DELTARUNE DEMO', 'black', '1px solid lightgreen'),
-        'undertale': ('UNDERTALE', 'red', '1px solid red'),
-        'undertaleyellow': ('UNDERTALE Yellow', '#FFD700', 'none'),
-        'pizzatower': ('PIZZA TOWER', '#D65A18', '1px solid #8B0000'),
-    }
-
-    def _get_game_tag_style(self, text_color: str):
-        game = getattr(self.mod_data, 'game', None) or getattr(self.mod_data, 'modgame', 'deltarune')
-        entry = self._GAME_TAG_STYLES.get(game)
-        if not entry:
-            return None, None
-        label_text, bg, border = entry
-        base = f'background-color: {bg}; color: {text_color}; border: {border};'
-        return label_text, f'font-weight: bold; padding: 2px 5px; border-radius: 3px; {base}'
-
     def _create_tags_layout_if_needed(self, info_layout):
         tags_layout = QHBoxLayout()
         tags_layout.setContentsMargins(0, 5, 0, 0)
         tags_layout.setSpacing(10)
-        text_color = self._get_theme_text_color()
-        modgame_text, modgame_stylesheet = self._get_game_tag_style(text_color)
-        if modgame_text:
-            self.modgame_tag_label = QLabel(modgame_text, self)
-            self.modgame_tag_label.setStyleSheet(modgame_stylesheet)
-            tags_layout.addWidget(self.modgame_tag_label)
-        if self.mod_data.is_verified:
-            verified_label = QLabel(tr('ui.verified_label'), self)
-            verified_label.setStyleSheet('color: #4CAF50; font-size: 14px;')
-            tags_layout.addWidget(verified_label)
         key = get_mod_key(self.mod_data)
         if key and key.startswith('gb_'):
             self.gb_status_label = QLabel(self)
@@ -151,15 +124,10 @@ class ModCardWidget(BaseModWidget):
 
     def _update_style(self):
         super()._update_style()
-        text_color = self._get_theme_text_color()
-        if getattr(self, 'modgame_tag_label', None):
-            _, stylesheet = self._get_game_tag_style(text_color)
-            if stylesheet:
-                self.modgame_tag_label.setStyleSheet(stylesheet)
         for attr in ('created_label_title', 'updated_label_title'):
             label = getattr(self, attr, None)
             if label:
-                label.setStyleSheet(f'color: {text_color};')
+                label.setStyleSheet(f'color: {self._get_theme_text_color()};')
 
     def _get_theme_text_color(self, fallback='white'):
         config = self._resolve_theme_config()

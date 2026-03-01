@@ -5,7 +5,6 @@ from PyQt6.QtCore import Qt, QTimer
 from services.localization_service import tr
 from services.chat_service import ChatManager
 from ui.common.styling import get_theme_color
-from utils.network_utils import check_internet_connection
 
 
 class ChatWindow(QDialog):
@@ -139,7 +138,7 @@ class ChatWindow(QDialog):
             self._updating_channel_buttons = False
 
     def _switch_channel(self, channel: str):
-        if not check_internet_connection():
+        if not getattr(self.app_state, 'has_internet', False):
             self.status_label.setText(tr('chat.no_internet'))
             return
         if self.current_channel == channel:
@@ -226,7 +225,7 @@ class ChatWindow(QDialog):
         self._request_refresh_messages()
 
     def _request_refresh_messages(self):
-        if not check_internet_connection():
+        if not getattr(self.app_state, 'has_internet', False):
             return
         self._refreshing_messages = True
         if self.chat_request_thread.isRunning():
@@ -344,7 +343,7 @@ class ChatWindow(QDialog):
         return time_since_last_send >= self.send_cooldown
 
     def _send_message(self):
-        if not check_internet_connection():
+        if not getattr(self.app_state, 'has_internet', False):
             self.status_label.setText(tr('chat.no_internet'))
             return
         if not self.current_channel:

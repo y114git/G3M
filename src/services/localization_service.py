@@ -237,14 +237,14 @@ class LocalizationManager:
         """Get text from preloaded fallback strings."""
         return self._resolve_key(self.fallback_strings, key, **kwargs) or f'[{key}]'
 
+    _ESCAPE_MAP = {'\\n': '\n', '\\t': '\t', '\\r': '\r', '\\"': '"', "\\'": "'", '\\\\': '\\'}
+
     def _process_escape_sequences(self, text: str) -> str:
-        if not text:
+        if not text or '\\' not in text:
             return text
-        escape_sequences = {'\\n': '\n', '\\t': '\t', '\\r': '\r', '\\"': '"', "\\'": "'", '\\\\': '\\'}
-        result = text
-        for escape_seq, replacement in escape_sequences.items():
-            result = result.replace(escape_seq, replacement)
-        return result
+        for esc, rep in self._ESCAPE_MAP.items():
+            text = text.replace(esc, rep)
+        return text
 
     def get_current_language(self) -> str:
         return self.current_language

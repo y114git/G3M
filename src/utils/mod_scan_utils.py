@@ -74,13 +74,12 @@ def scan_mods_directory(mods_dir: str, old_cache: Optional[Dict[str, ModFolderIn
     if old_cache is None:
         old_cache = {}
 
-    def record_mod_name(mod_name: str, key_value: str) -> None:
-        if mod_name:
-            mods_by_name[mod_name.lower()] = key_value
-
     old_cache = normalize_mod_cache(old_cache)
+
+    _path_to_key: Dict[str, str] = {info.folder_path: key for key, info in old_cache.items()}
     if not os.path.exists(mods_dir):
         return cache, mods_by_name
+    from utils.file_utils import migrate_mod_config
     try:
         with os.scandir(mods_dir) as entries:
             for entry in entries:
@@ -90,7 +89,6 @@ def scan_mods_directory(mods_dir: str, old_cache: Optional[Dict[str, ModFolderIn
                 folder_path = entry.path
                 config_path = os.path.join(folder_path, MOD_CONFIG_FILENAME)
                 if not os.path.exists(config_path):
-                    from utils.file_utils import migrate_mod_config
                     migrate_mod_config(folder_path)
                 if not os.path.exists(config_path):
                     found_nested = False
@@ -109,42 +107,39 @@ def scan_mods_directory(mods_dir: str, old_cache: Optional[Dict[str, ModFolderIn
                     if not found_nested:
                         continue
                 try:
-                    config_size = os.path.getsize(config_path)
-                    if config_size == 0:
+                    st = os.stat(config_path)
+                    if st.st_size == 0:
                         logging.warning(f'scan_mods_directory: Corrupted config detected (0 bytes) in {config_path}, skipping mod', extra={'mod_folder': folder_name, 'config_path': config_path})
                         continue
-                    config_mtime = os.path.getmtime(config_path)
-                    key = None
-                    for old_key, old_info in old_cache.items():
-                        if old_info.folder_path == folder_path:
-                            key = old_key
-                            if config_mtime <= old_info.config_mtime:
-                                cache[key] = old_info
-                                mod_name = old_info.config_data.get('name', '')
-                                record_mod_name(mod_name, key)
-                            break
-                    if key is None or key not in cache:
-                        from utils.file_utils import load_json
-                        try:
-                            config_data = load_json(config_path, migrate_config=True)
-                            if not config_data:
-                                logging.warning(f'scan_mods_directory: Empty config data in {config_path}, skipping mod', extra={'mod_folder': folder_name, 'config_path': config_path})
-                                continue
-                            if not validate_mod_config(config_data, config_path, folder_name):
-                                logging.warning(f'scan_mods_directory: Config validation failed for {folder_name}, marking as corrupted', extra={'mod_folder': folder_name, 'config_path': config_path})
-                                continue
-                        except (TypeError, ValueError, AttributeError) as e:
-                            logging.warning(f'scan_mods_directory: Config structure error in {config_path}: {e}, skipping mod', exc_info=True, extra={'mod_folder': folder_name, 'config_path': config_path, 'error_type': type(e).__name__})
+                    config_mtime = st.st_mtime
+                    key = _path_to_key.get(folder_path)
+                    if key is not None:
+                        old_info = old_cache[key]
+                        if config_mtime <= old_info.config_mtime:
+                            cache[key] = old_info
+                            mod_name = old_info.config_data.get('name', '')
+                            if mod_name:
+                                mods_by_name[mod_name.lower()] = key
                             continue
-                        key = config_data.get('key') or config_data.get('mod_key') or ''
-                        if not key:
-                            cache_key = f'__no_key_{folder_path}'
-                        else:
-                            cache_key = key
-                        mod_info = ModFolderInfo(key=key, folder_path=folder_path, folder_name=folder_name, config_data=config_data, config_mtime=config_mtime)
-                        cache[cache_key] = mod_info
-                        mod_name = config_data.get('name', '')
-                        record_mod_name(mod_name, key)
+
+                    try:
+                        with open(config_path, 'r', encoding='utf-8') as f:
+                            config_data = json.load(f)
+                        if not config_data or not isinstance(config_data, dict):
+                            logging.warning(f'scan_mods_directory: Empty config data in {config_path}, skipping mod', extra={'mod_folder': folder_name, 'config_path': config_path})
+                            continue
+                        if not validate_mod_config(config_data, config_path, folder_name):
+                            continue
+                    except (json.JSONDecodeError, TypeError, ValueError, AttributeError) as e:
+                        logging.warning(f'scan_mods_directory: Config error in {config_path}: {e}', extra={'mod_folder': folder_name, 'config_path': config_path})
+                        continue
+                    key = config_data.get('key') or config_data.get('mod_key') or ''
+                    cache_key = key if key else f'__no_key_{folder_path}'
+                    mod_info = ModFolderInfo(key=key, folder_path=folder_path, folder_name=folder_name, config_data=config_data, config_mtime=config_mtime)
+                    cache[cache_key] = mod_info
+                    mod_name = config_data.get('name', '')
+                    if mod_name:
+                        mods_by_name[mod_name.lower()] = cache_key
                 except (OSError, PermissionError) as e:
                     logging.warning(f'scan_mods_directory: Corrupted config detected (failed to access) in {config_path}: {e}', exc_info=True, extra={'mod_folder': folder_name, 'config_path': config_path})
                     continue

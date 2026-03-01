@@ -174,8 +174,6 @@ def save_json(path: str, data: Dict, indent: int = 2, max_retries: int = 5, dela
         try:
             with open(tmp, 'w', encoding='utf-8') as f:
                 json.dump(to_save, f, indent=indent, ensure_ascii=False)
-                f.flush()
-                os.fsync(f.fileno())
             if os.path.exists(path):
                 _fix_windows_permissions(path)
             os.replace(tmp, path)

@@ -1,9 +1,31 @@
 """Handles update prompts, announcements, and global settings reload for AppWindow."""
 import logging
-from PyQt6.QtCore import QTimer
+from PyQt6.QtCore import QTimer, QThread, pyqtSignal
 from services.localization_service import tr
 from config.constants import CLOUD_FUNCTIONS_BASE_URL
 from utils.network_utils import get_session
+
+
+class _GlobalSettingsWorker(QThread):
+    """Background worker for reloading global settings without blocking UI."""
+    finished = pyqtSignal(bool, dict)
+
+    def __init__(self, app_state, parent=None):
+        super().__init__(parent)
+        self._app_state = app_state
+
+    def run(self):
+        try:
+            response = get_session(self._app_state).get(
+                f'{CLOUD_FUNCTIONS_BASE_URL}/getGlobalSettings', timeout=5
+            )
+            if response.status_code == 200:
+                data = response.json() or {}
+                self.finished.emit(True, data)
+                return
+        except Exception as e:
+            logging.warning(f'_reload_global_settings: Failed to reload global settings: {e}')
+        self.finished.emit(False, {})
 
 
 def handle_update_info(app, update_info, retry_count=0):
@@ -26,19 +48,32 @@ def handle_update_info(app, update_info, retry_count=0):
         app.show_update_prompt.emit(update_info)
 
 
-def reload_global_settings(app):
+def reload_global_settings(app, callback=None):
+    """Reload global settings in a background thread (non-blocking).
+
+    Args:
+        app: The AppWindow instance.
+        callback: Optional callable(success: bool) invoked on the main thread when done.
+    """
     if not app.app_state.has_internet:
+        if callback:
+            callback(False)
         return
-    try:
-        import requests
-        response = get_session(app.app_state).get(f'{CLOUD_FUNCTIONS_BASE_URL}/getGlobalSettings', timeout=5)
-        if response.status_code == 200:
-            app.app_state.global_settings = response.json() or {}
-            logging.info('_reload_global_settings: Global settings reloaded successfully')
-            return True
-    except requests.RequestException as e:
-        logging.warning(f'_reload_global_settings: Failed to reload global settings: {e}')
-    return False
+
+    worker = _GlobalSettingsWorker(app.app_state, parent=app)
+
+    def _on_finished(success, data):
+        try:
+            if success:
+                app.app_state.global_settings = data
+                logging.info('_reload_global_settings: Global settings reloaded successfully')
+            if callback:
+                callback(success)
+        finally:
+            worker.deleteLater()
+
+    worker.finished.connect(_on_finished)
+    worker.start()
 
 
 def check_and_show_announce(app, retry_count=0, force_check=False):

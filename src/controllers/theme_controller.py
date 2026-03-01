@@ -84,12 +84,7 @@ class ThemeController:
         style_sheet = build_stylesheet(frame_bg_color=frame_bg_color, button_color=button_color, border_color=border_color, button_hover_color=button_hover_color, main_text_color=main_text_color, font_family_main=font_family_main, font_size_main=font_size_main, font_size_small=font_size_small, checkbox_checked_color=checkbox_checked_color, scroll_handle_color=scroll_handle_color, tooltip_bg_color=tooltip_bg_color, zoom_factor=zoom_factor)
         app_inst = QApplication.instance()
         (app_inst if isinstance(app_inst, QApplication) else self.app).setStyleSheet(style_sheet)
-        if hasattr(self.app, 'search_display') and hasattr(self.app.search_display, 'update_all_cards_labels'):
-            self.app.search_display.update_all_cards_labels()
-        if hasattr(self.app, 'plugin_display') and hasattr(self.app.plugin_display, '_plugin_widgets'):
-            for widget in self.app.plugin_display._plugin_widgets.values():
-                if hasattr(widget, '_update_style'):
-                    widget._update_style()
+
         from ui.common.styling import get_theme_color
         text_color = get_theme_color(self.app_state.local_config, 'text', 'white')
         if hasattr(self.app, 'plugin_tab_builder') and self.app.plugin_tab_builder is not None:
@@ -98,28 +93,8 @@ class ThemeController:
                 plugin_lbl.setStyleSheet(f'font-weight: bold; font-size: {max(1, int(16 * zoom_factor))}px; color: {text_color};')
         if hasattr(self.app, 'installed_mods_label') and self.app.installed_mods_label:
             self.app.installed_mods_label.setStyleSheet(f'font-weight: bold; font-size: {max(1, int(16 * zoom_factor))}px; color: {text_color};')
-        checkbox_style = f'\n            QCheckBox {{\n                color: {text_color};\n                font-size: {max(1, int(12 * zoom_factor))}px;\n                spacing: {max(1, int(5 * zoom_factor))}px;\n            }}\n            QCheckBox::indicator {{\n                width: {max(1, int(16 * zoom_factor))}px;\n                height: {max(1, int(16 * zoom_factor))}px;\n            }}\n        '
-        if hasattr(self.app, 'library_tag_widgets'):
-            for cb in self.app.library_tag_widgets:
-                cb.setStyleSheet(checkbox_style)
-        if hasattr(self.app, 'chapter_mode_checkbox'):
-            self.app.chapter_mode_checkbox.setStyleSheet(f'color: {text_color};')
-        if hasattr(self.app, 'full_install_checkbox'):
-            self.app.full_install_checkbox.setStyleSheet(f'color: {text_color};')
-        if hasattr(self.app, 'tag_textedit'):
-            search_checkboxes = [self.app.tag_textedit, self.app.tag_customization, self.app.tag_gameplay, self.app.tag_other]
-            for cb in search_checkboxes:
-                if cb:
-                    cb.setStyleSheet(checkbox_style)
-        search_container = getattr(self.app, 'search_container', None)
-        library_container = getattr(self.app, 'installed_mods_container', None)
-        self.customization_service.update_translucent_backgrounds(search_container, library_container)
-        if hasattr(self.app, '_update_chapter_tabs_style'):
-            self.app._update_chapter_tabs_style()
-        if hasattr(self.app, 'library_tab_builder'):
-            self.app.library_tab_builder.update_priority_button_style()
-        if hasattr(self.app, 'top_panel_widget') and self.app.top_panel_widget:
 
+        if hasattr(self.app, 'top_panel_widget') and self.app.top_panel_widget:
             self.app.top_panel_widget.setMinimumHeight(int(65 * zoom_factor))
 
         if hasattr(self.app, 'logo_placeholder') and self.app.logo_placeholder:
@@ -147,7 +122,40 @@ class ThemeController:
             from PyQt6.QtCore import QTimer
             QTimer.singleShot(0, _recenter_logo)
 
-        self.update_dynamic_elements()
+        search_container = getattr(self.app, 'search_container', None)
+        library_container = getattr(self.app, 'installed_mods_container', None)
+        self.customization_service.update_translucent_backgrounds(search_container, library_container)
+
+        _zf = zoom_factor
+        _tc = text_color
+
+        def _deferred_style_updates():
+            if hasattr(self.app, 'search_display') and hasattr(self.app.search_display, 'update_all_cards_labels'):
+                self.app.search_display.update_all_cards_labels()
+            if hasattr(self.app, 'plugin_display') and hasattr(self.app.plugin_display, '_plugin_widgets'):
+                for widget in self.app.plugin_display._plugin_widgets.values():
+                    if hasattr(widget, '_update_style'):
+                        widget._update_style()
+            checkbox_style = f'\n            QCheckBox {{\n                color: {_tc};\n                font-size: {max(1, int(12 * _zf))}px;\n                spacing: {max(1, int(5 * _zf))}px;\n            }}\n            QCheckBox::indicator {{\n                width: {max(1, int(16 * _zf))}px;\n                height: {max(1, int(16 * _zf))}px;\n            }}\n        '
+            if hasattr(self.app, 'library_tag_widgets'):
+                for cb in self.app.library_tag_widgets:
+                    cb.setStyleSheet(checkbox_style)
+            if hasattr(self.app, 'chapter_mode_checkbox'):
+                self.app.chapter_mode_checkbox.setStyleSheet(f'color: {_tc};')
+            if hasattr(self.app, 'full_install_checkbox'):
+                self.app.full_install_checkbox.setStyleSheet(f'color: {_tc};')
+            if hasattr(self.app, 'tag_textedit'):
+                search_checkboxes = [self.app.tag_textedit, self.app.tag_customization, self.app.tag_gameplay, self.app.tag_other]
+                for cb in search_checkboxes:
+                    if cb:
+                        cb.setStyleSheet(checkbox_style)
+            if hasattr(self.app, '_update_chapter_tabs_style'):
+                self.app._update_chapter_tabs_style()
+            if hasattr(self.app, 'library_tab_builder'):
+                self.app.library_tab_builder.update_priority_button_style()
+            self.update_dynamic_elements()
+
+        QTimer.singleShot(0, _deferred_style_updates)
         self.app.update()
 
     def on_background_ready(self, obj):
@@ -299,18 +307,27 @@ class ThemeController:
         self.update_logo_button_state()
         if hasattr(self.app, 'launcher_icon_label'):
             self.customization_service.load_launcher_icon(self.app.launcher_icon_label)
-        current_music_path = self.customization_service.get_background_music_path()
-        if not current_music_path:
-            self.customization_service.stop_background_music()
-        else:
-            should_restart = True
-            if hasattr(self.customization_service, '_current_music_path'):
-                if self.customization_service._current_music_path == current_music_path:
-                    if hasattr(self.customization_service, '_bg_music_thread') and self.customization_service._bg_music_thread is not None and self.customization_service._bg_music_thread.isRunning():
-                        should_restart = False
-            if should_restart:
+
+        from PyQt6.QtCore import QTimer
+        QTimer.singleShot(0, self._handle_music_after_theme_change)
+
+    def _handle_music_after_theme_change(self):
+        try:
+            current_music_path = self.customization_service.get_background_music_path()
+            if not current_music_path:
                 self.customization_service.stop_background_music()
-                self.customization_service.maybe_start_background_music(force=True)
+            else:
+                should_restart = True
+                if hasattr(self.customization_service, '_current_music_path'):
+                    if self.customization_service._current_music_path == current_music_path:
+                        if hasattr(self.customization_service, '_bg_music_thread') and self.customization_service._bg_music_thread is not None and self.customization_service._bg_music_thread.isRunning():
+                            should_restart = False
+                if should_restart:
+                    self.customization_service.stop_background_music()
+                    self.customization_service.maybe_start_background_music(force=True)
+        except Exception as e:
+            import logging
+            logging.error(f'ThemeController: Error handling music after theme change: {e}', exc_info=True)
 
     def on_custom_style_edited(self):
         self.settings_service.on_custom_style_edited(self.app.color_widgets)

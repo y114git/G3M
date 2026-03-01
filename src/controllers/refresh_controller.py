@@ -1,4 +1,5 @@
 import logging
+from PyQt6.QtCore import QThread, pyqtSignal
 from services.localization_service import localization_service, tr
 from workers.fetch_mods_worker import FetchModsThread
 from config.constants import UI_COLORS
@@ -6,6 +7,47 @@ from services.game_detection_service import is_game_running
 from ui.utils.ui_utils import safe_stop_thread
 from adapters.gamebanana_cache import GameBananaMetadataCache
 from utils.mod_utils import get_mod_key
+
+
+class _PostFetchWorker(QThread):
+    """Background worker for heavy post-fetch operations (scan + cache restore)."""
+    done = pyqtSignal(bool)
+
+    def __init__(self, mod_service, app_state, parent=None):
+        super().__init__(parent)
+        self._mod_service = mod_service
+        self._app_state = app_state
+        self.downloads_restored = False
+
+    def run(self):
+        try:
+            self._mod_service.invalidate_mods_cache()
+            self._mod_service.load_local_mods()
+            if hasattr(self._app_state, 'cache_dir') and self._app_state.cache_dir and hasattr(self._app_state, 'all_mods') and self._app_state.all_mods:
+                try:
+                    metadata_cache = GameBananaMetadataCache(self._app_state.cache_dir)
+                    for mod in self._app_state.all_mods:
+                        key = get_mod_key(mod)
+                        if not key or not key.startswith('gb_'):
+                            continue
+                        mod_id = key.replace('gb_', '', 1)
+                        if not metadata_cache.is_valid(mod_id):
+                            continue
+                        downloads = metadata_cache.get_field(mod_id, 'downloads')
+                        if downloads is not None and downloads != (getattr(mod, 'downloads', 0) or 0):
+                            mod.downloads = downloads
+                            self.downloads_restored = True
+                        for attr, field in [('tagline', 'tagline'), ('full_description', 'full_description'), ('screenshots_url', 'screenshots'), ('gamebanana_category', 'category')]:
+                            val = metadata_cache.get_field(mod_id, field)
+                            if val:
+                                setattr(mod, attr, val)
+                        mod.has_full_metadata = True
+                except Exception as e:
+                    logging.warning(f'_PostFetchWorker: Error restoring metadata from cache: {e}', exc_info=True)
+            self.done.emit(True)
+        except Exception as e:
+            logging.error(f'_PostFetchWorker: Error: {e}', exc_info=True)
+            self.done.emit(False)
 
 
 class RefreshController:
@@ -53,7 +95,7 @@ class RefreshController:
                 pass
             try:
                 if not check_running or thread.isRunning():
-                    safe_stop_thread(thread, timeout=2000, blocking=True)
+                    safe_stop_thread(thread, timeout=200, blocking=False)
             except (RuntimeError, AttributeError):
                 pass
             self._cleanup_thread_later(thread)
@@ -134,70 +176,56 @@ class RefreshController:
             logging.debug('RefreshController: _on_fetch_finished already in progress, skipping')
             return
         self._fetch_finished_in_progress = True
-        try:
-            self.mod_service.invalidate_mods_cache()
-            self.mod_service.load_local_mods()
-            downloads_restored = False
-            if hasattr(self.app_state, 'cache_dir') and self.app_state.cache_dir and hasattr(self.app_state, 'all_mods') and self.app_state.all_mods:
-                try:
-                    metadata_cache = GameBananaMetadataCache(self.app_state.cache_dir)
-                    for mod in self.app_state.all_mods:
-                        key = get_mod_key(mod)
-                        if not key or not key.startswith('gb_'):
-                            continue
-                        mod_id = key.replace('gb_', '', 1)
-                        if not metadata_cache.is_valid(mod_id):
-                            continue
-                        downloads = metadata_cache.get_field(mod_id, 'downloads')
-                        if downloads is not None and downloads != (getattr(mod, 'downloads', 0) or 0):
-                            mod.downloads = downloads
-                            downloads_restored = True
-                        for attr, field in [('tagline', 'tagline'), ('full_description', 'full_description'), ('screenshots_url', 'screenshots'), ('gamebanana_category', 'category')]:
-                            val = metadata_cache.get_field(mod_id, field)
-                            if val:
-                                setattr(mod, attr, val)
-                        mod.has_full_metadata = True
-                except Exception as e:
-                    logging.warning(f'RefreshController: Error restoring metadata from cache: {e}', exc_info=True)
-            if not self.app_state.mods_loaded:
-                self.app_state.mods_loaded = True
-                if mods_loaded_signal:
-                    mods_loaded_signal.emit()
-            if update_filtered_mods_callback:
-                try:
-                    update_filtered_mods_callback()
-                except Exception as e:
-                    logging.error(f'RefreshController: Error in update_filtered_mods_callback: {e}', exc_info=True)
-            elif downloads_restored:
-                try:
-                    if self.app_window and hasattr(self.app_window, 'search_display') and self.app_window.search_display:
-                        self.app_window.search_display.update_filtered_mods(preserve_page=False)
-                except Exception as e:
-                    logging.error(f'RefreshController: Error re-sorting after cache restore: {e}', exc_info=True)
-            if update_installed_mods_callback:
-                update_installed_mods_callback()
-            self.game_launch_controller.refresh_mods_in_use()
-            if update_action_button_callback:
-                update_action_button_callback()
-            if success:
-                self.feedback_service.update_status(tr('status.mod_list_updated'), UI_COLORS['status_success'])
-            else:
-                fallback_msg = tr('ui.network_fallback_message') if self.app_state.all_mods else tr('ui.network_update_failed')
-                self.feedback_service.update_status(fallback_msg, UI_COLORS['status_error'])
-            self.used_mods_service.load_used_mods_state()
-        except Exception as e:
-            error_msg = f'Error processing mod list: {e}'
-            logging.error(f'RefreshController._on_fetch_finished: {error_msg}', exc_info=True)
-            self.feedback_service.update_status(tr('errors.mod_list_processing_error', error=str(e)), UI_COLORS['status_error'])
-        finally:
-            self._fetch_finished_in_progress = False
-            fetch_thread_to_cleanup = fetch_thread if fetch_thread else self.fetch_thread
-            if fetch_thread_to_cleanup:
-                self._cleanup_thread_later(fetch_thread_to_cleanup)
-            if update_plugin_tabs_callback:
-                update_plugin_tabs_callback()
-            self._start_metadata_loading()
-            self._validate_metadata_cache()
+
+        self._post_fetch_worker = _PostFetchWorker(self.mod_service, self.app_state, parent=self.app_window)
+
+        def _on_post_fetch_done(worker_success):
+            try:
+                downloads_restored = self._post_fetch_worker.downloads_restored if worker_success else False
+                if not self.app_state.mods_loaded:
+                    self.app_state.mods_loaded = True
+                    if mods_loaded_signal:
+                        mods_loaded_signal.emit()
+                if update_filtered_mods_callback:
+                    try:
+                        update_filtered_mods_callback()
+                    except Exception as e:
+                        logging.error(f'RefreshController: Error in update_filtered_mods_callback: {e}', exc_info=True)
+                elif downloads_restored:
+                    try:
+                        if self.app_window and hasattr(self.app_window, 'search_display') and self.app_window.search_display:
+                            self.app_window.search_display.update_filtered_mods(preserve_page=False)
+                    except Exception as e:
+                        logging.error(f'RefreshController: Error re-sorting after cache restore: {e}', exc_info=True)
+                if update_installed_mods_callback:
+                    update_installed_mods_callback()
+                self.game_launch_controller.refresh_mods_in_use()
+                if update_action_button_callback:
+                    update_action_button_callback()
+                if success:
+                    self.feedback_service.update_status(tr('status.mod_list_updated'), UI_COLORS['status_success'])
+                else:
+                    fallback_msg = tr('ui.network_fallback_message') if self.app_state.all_mods else tr('ui.network_update_failed')
+                    self.feedback_service.update_status(fallback_msg, UI_COLORS['status_error'])
+                self.used_mods_service.load_used_mods_state()
+            except Exception as e:
+                error_msg = f'Error processing mod list: {e}'
+                logging.error(f'RefreshController._on_fetch_finished: {error_msg}', exc_info=True)
+                self.feedback_service.update_status(tr('errors.mod_list_processing_error', error=str(e)), UI_COLORS['status_error'])
+            finally:
+                self._fetch_finished_in_progress = False
+                fetch_thread_to_cleanup = fetch_thread if fetch_thread else self.fetch_thread
+                if fetch_thread_to_cleanup:
+                    self._cleanup_thread_later(fetch_thread_to_cleanup)
+                if update_plugin_tabs_callback:
+                    update_plugin_tabs_callback()
+                self._start_metadata_loading()
+                self._validate_metadata_cache()
+                self._cleanup_thread_later(self._post_fetch_worker)
+                self._post_fetch_worker = None
+
+        self._post_fetch_worker.done.connect(_on_post_fetch_done)
+        self._post_fetch_worker.start()
 
     def _validate_metadata_cache(self):
         try:

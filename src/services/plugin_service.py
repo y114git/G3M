@@ -28,13 +28,17 @@ class PluginManager(QObject):
         self.app_window: Optional[Any] = None
         self._plugin_errors: Dict[str, str] = {}
         self._plugin_apis: Dict[str, PluginAPI] = {}
+        self._metadata_cache: Optional[Dict[str, Any]] = None
 
     def _read_plugins_metadata(self) -> Dict[str, Any]:
+        if self._metadata_cache is not None:
+            return self._metadata_cache
         if not os.path.exists(self.app_state.plugins_metadata_path):
             return {}
         try:
             from utils.file_utils import load_json
-            return load_json(self.app_state.plugins_metadata_path, migrate_config=False) or {}
+            self._metadata_cache = load_json(self.app_state.plugins_metadata_path, migrate_config=False) or {}
+            return self._metadata_cache
         except Exception as e:
             logging.warning(f'_read_plugins_metadata: failed: {e}', exc_info=True)
             return {}
@@ -43,8 +47,10 @@ class PluginManager(QObject):
         try:
             from utils.file_utils import save_json
             save_json(self.app_state.plugins_metadata_path, data, indent=2)
+            self._metadata_cache = data
         except Exception as e:
             logging.error(f'_write_plugins_metadata: failed: {e}', exc_info=True)
+            self._metadata_cache = None
 
     def _default_plugin_metadata(self) -> Dict[str, Any]:
         return {'enabled': True, 'installed_date': None}

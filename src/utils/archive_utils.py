@@ -9,6 +9,7 @@ import re
 import logging
 import platform
 from typing import List, Callable
+from urllib.parse import urlparse, unquote
 from utils.file_utils import safe_move, safe_remove, safe_rmtree, _safe_join, _is_symlink
 
 
@@ -414,7 +415,6 @@ def prompt_for_unrar_install(parent_widget=None, signal_callback=None) -> bool:
 
 
 def get_file_extension_from_url(url: str, content_type: str = None) -> str:
-    from urllib.parse import urlparse, unquote
     parsed = urlparse(url)
     filename = unquote(os.path.basename(parsed.path))
     if '.' in filename:

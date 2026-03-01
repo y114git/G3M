@@ -11,6 +11,9 @@ class ChatManager:
     MAX_MESSAGES, MESSAGE_MAX_LENGTH = 100, 100
     _URL_PATTERNS = [r'https?://', r'\bwww\.', r'\b(?:bit\.ly|t\.co|goo\.gl|tinyurl|short\.link)\b']
     _TLDS = r'(?:com|ru|org|net|io|co|uk|de|fr|es|it|cn|jp|info|biz|tv|me|xyz|site|online|tech|space|website|store|shop|blog|news|email|mail|domain|click|link|url)'
+    _COMPILED_URL_PATTERNS = [re.compile(p, re.IGNORECASE) for p in _URL_PATTERNS]
+    _COMPILED_DOMAIN = re.compile(rf'[a-z0-9](?:[a-z0-9-]{{0,61}}[a-z0-9])?\.{_TLDS}(?:/|\?|#)', re.IGNORECASE)
+    _COMPILED_DOMAIN_EXT = re.compile(rf'(?:https?://|www\.|ftp://|mailto:|\b@).*?[a-z0-9](?:[a-z0-9-]{{0,61}}[a-z0-9])?\.{_TLDS}', re.IGNORECASE)
 
     def __init__(self):
         self.base_url = CLOUD_FUNCTIONS_BASE_URL.rstrip('/')
@@ -37,10 +40,9 @@ class ChatManager:
         return []
 
     def _contains_url(self, text: str) -> bool:
-        if any(re.search(p, text, re.IGNORECASE) for p in self._URL_PATTERNS):
+        if any(p.search(text) for p in self._COMPILED_URL_PATTERNS):
             return True
-        domain = rf'[a-z0-9](?:[a-z0-9-]{{0,61}}[a-z0-9])?\.{self._TLDS}'
-        return bool(re.search(rf'{domain}(?:/|\?|#)', text, re.IGNORECASE) or re.search(rf'(?:https?://|www\.|ftp://|mailto:|\b@).*?{domain}', text, re.IGNORECASE))
+        return bool(self._COMPILED_DOMAIN.search(text) or self._COMPILED_DOMAIN_EXT.search(text))
 
     def send_message(self, channel: str, message: str):
         if (err := self._check_ready('send message')):
