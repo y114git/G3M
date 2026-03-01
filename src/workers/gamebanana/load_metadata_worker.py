@@ -36,29 +36,57 @@ class LoadGameBananaMetadataThread(QThread):
                 logger.debug('LoadGameBananaMetadataThread: No mods to load metadata for')
                 self.finished.emit()
                 return
-            loaded_count = 0
-            for i in range(0, total, self._batch_size):
-                if self._cancelled or self.isInterruptionRequested():
-                    break
-                for mod_id_str in self.mod_ids[i:i + self._batch_size]:
+
+            try:
+                from utils.async_metadata_loader import AsyncMetadataLoader
+                async_loader = AsyncMetadataLoader(max_workers=4, batch_size=8)
+                async_results = async_loader.load_mods_metadata_async(self.mod_ids, self.metadata_cache, self.app_state)
+
+                loaded_count = 0
+                for mod_id_str, metadata in async_results:
                     if self._cancelled or self.isInterruptionRequested():
                         break
-                    try:
-                        external_url = self._resolve_external_url(mod_id_str)
-                        downloads, tagline, category = self._load_mod_metadata(int(mod_id_str), external_url=external_url)
-                        if downloads is not None or tagline or category:
-                            self._save_metadata(mod_id_str, downloads, tagline, category)
-                            loaded_count += 1
-                        else:
-                            logger.debug(f'LoadGameBananaMetadataThread: Failed to load metadata for mod {mod_id_str}')
-                    except (ValueError, TypeError) as e:
-                        logger.warning(f'LoadGameBananaMetadataThread: Invalid mod_id {mod_id_str}: {e}')
-                    except Exception as e:
-                        logger.error(f'LoadGameBananaMetadataThread: Error loading metadata for mod {mod_id_str}: {e}', exc_info=True)
+
+                    downloads = metadata.get('downloads')
+                    tagline = metadata.get('tagline')
+                    category = metadata.get('category')
+
+                    if downloads is not None or tagline or category:
+                        self._save_metadata(mod_id_str, downloads, tagline, category)
+                        loaded_count += 1
+
                     self.progress.emit(loaded_count, total)
-                    self.msleep(300)
-                if i + self._batch_size < total and not self._cancelled and not self.isInterruptionRequested():
-                    self.msleep(500)
+                    self.msleep(50)
+
+                logger.info(f'LoadGameBananaMetadataThread: Async loaded metadata for {loaded_count}/{total} mods')
+
+            except Exception as async_error:
+                logger.warning(f'Async metadata loading failed, falling back to sequential: {async_error}')
+
+                loaded_count = 0
+                for i in range(0, total, self._batch_size):
+                    if self._cancelled or self.isInterruptionRequested():
+                        break
+                    for mod_id_str in self.mod_ids[i:i + self._batch_size]:
+                        if self._cancelled or self.isInterruptionRequested():
+                            break
+                        try:
+                            external_url = self._resolve_external_url(mod_id_str)
+                            downloads, tagline, category = self._load_mod_metadata(int(mod_id_str), external_url=external_url)
+                            if downloads is not None or tagline or category:
+                                self._save_metadata(mod_id_str, downloads, tagline, category)
+                                loaded_count += 1
+                            else:
+                                logger.debug(f'LoadGameBananaMetadataThread: Failed to load metadata for mod {mod_id_str}')
+                        except (ValueError, TypeError) as e:
+                            logger.warning(f'LoadGameBananaMetadataThread: Invalid mod_id {mod_id_str}: {e}')
+                        except Exception as e:
+                            logger.error(f'LoadGameBananaMetadataThread: Error loading metadata for mod {mod_id_str}: {e}', exc_info=True)
+                        self.progress.emit(loaded_count, total)
+                        self.msleep(300)
+                    if i + self._batch_size < total and not self._cancelled and not self.isInterruptionRequested():
+                        self.msleep(500)
+
             self.metadata_cache.flush()
             self.finished.emit()
         except Exception as e:

@@ -83,18 +83,30 @@ class FetchModsThread(QThread):
                         try:
                             if not self.api:
                                 return (mods, mods_needing_metadata)
-                            for page in range(start_page, start_page + num_pages):
-                                mods_data, page_mods_needing_metadata = self.api.get_game_mods(game_id, page=page, per_page=GAMEBANANA_PER_PAGE, sort=sort, metadata_cache=self.metadata_cache, app_state=self.app_state)
-                                if not mods_data:
-                                    logger.debug(f'No mods data for {game_name} page {page}')
-                                    break
-                                mods_needing_metadata.extend(page_mods_needing_metadata)
-                                for mod_info in mods_data:
-                                    if mod_info:
-                                        mods.append(mod_info)
-                                if len(mods_data) < GAMEBANANA_PER_PAGE:
-                                    break
-                                logger.debug(f'Fetched page {page} for {game_name}: {len(mods_data)} mods, {len(page_mods_needing_metadata)} need metadata')
+
+                            try:
+                                from utils.async_metadata_loader import AsyncGameModsLoader
+                                pages_to_load = list(range(start_page, start_page + num_pages))
+                                async_loader = AsyncGameModsLoader(max_workers=3)
+                                mods, mods_needing_metadata = async_loader.load_game_mods_async(
+                                    game_name, game_id, pages_to_load, GAMEBANANA_PER_PAGE, sort, self.metadata_cache, self.app_state
+                                )
+                                logger.debug(f'AsyncGameModsLoader: Loaded {len(mods)} mods for {game_name}')
+                            except Exception as async_error:
+                                logger.warning(f'Async loading failed for {game_name}, falling back to sequential: {async_error}')
+
+                                for page in range(start_page, start_page + num_pages):
+                                    mods_data, page_mods_needing_metadata = self.api.get_game_mods(game_id, page=page, per_page=GAMEBANANA_PER_PAGE, sort=sort, metadata_cache=self.metadata_cache, app_state=self.app_state)
+                                    if not mods_data:
+                                        logger.debug(f'No mods data for {game_name} page {page}')
+                                        break
+                                    mods_needing_metadata.extend(page_mods_needing_metadata)
+                                    for mod_info in mods_data:
+                                        if mod_info:
+                                            mods.append(mod_info)
+                                    if len(mods_data) < GAMEBANANA_PER_PAGE:
+                                        break
+                                    logger.debug(f'Fetched page {page} for {game_name}: {len(mods_data)} mods, {len(page_mods_needing_metadata)} need metadata')
                         except Exception as e:
                             logger.error(f'Error fetching mods for {game_name}: {e}', exc_info=True)
                         return (mods, mods_needing_metadata)
