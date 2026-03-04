@@ -1202,10 +1202,21 @@ class AppWindow(QWidget):
             self.app_state.has_internet = False
 
     def _show_library_search_dialog(self):
-        self.app_state.library_search_text = ''
-        self.library_search_button.setText('🔍')
-        self.library_search_button.setToolTip(tr('ui.search_placeholder'))
-        self.library_display.update_display()
+        from PyQt6.QtWidgets import QInputDialog
+        if getattr(self, 'library_search_text', ''):
+            self.library_search_text = ''
+            self.app_state.library_search_text = ''
+            self.library_search_button.setText('🔍')
+            self.library_search_button.setToolTip(tr('ui.search_placeholder'))
+            self.library_display.update_display()
+        else:
+            text, ok = QInputDialog.getText(self, tr('ui.search_tab'), tr('ui.search_in_name_description'))
+            if ok and text.strip():
+                self.library_search_text = text.strip()
+                self.app_state.library_search_text = text.strip()
+                self.library_search_button.setText('↻')
+                self.library_search_button.setToolTip(tr('ui.clear_search_tooltip', text=text.strip()))
+                self.library_display.update_display()
 
     def _prompt_for_game_path(self, is_initial=False):
         result = self.settings_service.prompt_for_game_path(is_initial)

@@ -11,10 +11,11 @@ class FeedbackManager(QObject):
     """Manages user feedback through dialogs and status messages."""
     status_updated = pyqtSignal(str, str)
 
-    def __init__(self, parent_widget=None):
+    def __init__(self, parent_widget=None, tr_func=None):
         super().__init__()
         self.parent_widget = parent_widget
         self.app_state: Optional['AppState'] = None
+        self._tr = tr_func or tr
 
     def _should_show_dialog(self):
         if self.app_state and hasattr(self.app_state, 'game_is_running'):
@@ -28,14 +29,15 @@ class FeedbackManager(QObject):
     def show_message(self, message_type: str, message_key: str, details: str = '', **kwargs):
         if not self._should_show_dialog():
             return
+        _t = self._tr
         type_map = {
-            'error': (QMessageBox.Icon.Critical, tr('errors.error')),
-            'warning': (QMessageBox.Icon.Warning, tr('dialogs.warning')),
-            'info': (QMessageBox.Icon.Information, tr('dialogs.info')),
-            'success': (QMessageBox.Icon.Information, tr('dialogs.success')),
+            'error': (QMessageBox.Icon.Critical, _t('errors.error')),
+            'warning': (QMessageBox.Icon.Warning, _t('dialogs.warning')),
+            'info': (QMessageBox.Icon.Information, _t('dialogs.info')),
+            'success': (QMessageBox.Icon.Information, _t('dialogs.success')),
         }
-        icon, title = type_map.get(message_type, (QMessageBox.Icon.Information, tr('dialogs.success')))
-        message = tr(message_key, **kwargs)
+        icon, title = type_map.get(message_type, (QMessageBox.Icon.Information, _t('dialogs.success')))
+        message = _t(message_key, **kwargs)
         msg_box = QMessageBox(None)
         msg_box.setIcon(icon)
         msg_box.setWindowTitle(title)
@@ -50,8 +52,9 @@ class FeedbackManager(QObject):
     def ask_question(self, title_key: str, message_key: str, details: str = '', default_yes: bool = False, **kwargs) -> bool:
         if not self._should_show_dialog():
             return False
-        title = tr(title_key, **kwargs)
-        message = tr(message_key, **kwargs)
+        _t = self._tr
+        title = _t(title_key, **kwargs)
+        message = _t(message_key, **kwargs)
         msg_box = QMessageBox(None)
         msg_box.setIcon(QMessageBox.Icon.Question)
         msg_box.setWindowTitle(title)
@@ -73,8 +76,9 @@ class FeedbackManager(QObject):
     def ask_custom_question(self, icon: QMessageBox.Icon, title_key: str, message_key: str, buttons: list[tuple[str, QMessageBox.ButtonRole, str]], default_button_key: str | None = None, **kwargs) -> str | None:
         if not self._should_show_dialog():
             return None
-        title = tr(title_key, **kwargs)
-        message = tr(message_key, **kwargs)
+        _t = self._tr
+        title = _t(title_key, **kwargs)
+        message = _t(message_key, **kwargs)
         msg_box = QMessageBox(None)
         msg_box.setIcon(icon)
         msg_box.setWindowTitle(title)
@@ -82,7 +86,7 @@ class FeedbackManager(QObject):
         button_map = {}
         default_button = None
         for text_key, role, return_key in buttons:
-            button = msg_box.addButton(tr(text_key), role)
+            button = msg_box.addButton(_t(text_key), role)
             button_map[button] = return_key
             if return_key == default_button_key:
                 default_button = button
