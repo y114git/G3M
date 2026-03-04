@@ -3,7 +3,7 @@ from PyQt6.QtCore import pyqtSignal, Qt
 from PyQt6.QtWidgets import QLabel, QPushButton, QHBoxLayout, QVBoxLayout, QFrame, QWidget
 from PyQt6.QtGui import QPixmap, QColor
 from services.localization_service import tr
-from ui.common.styling import get_theme_color
+from ui.common.styling import get_theme_color, build_button_style
 from ui.utils.ui_utils import UIAnimator
 
 
@@ -159,8 +159,10 @@ class PluginWidget(QFrame):
         self.delete_button = QPushButton(tr('buttons.delete'), self.actions_widget)
         self.delete_button.setObjectName('cardButton')
         app_state = getattr(self.parent_app, 'app_state', None)
-        text_color = get_theme_color(app_state.local_config, 'text', 'white') if app_state and hasattr(app_state, 'local_config') else 'white'
-        self.delete_button.setStyleSheet(f'\n            QPushButton#cardButton {{\n                background-color: #F44336;\n                color: {text_color};\n            }}\n            QPushButton#cardButton:hover {{\n                background-color: #da190b;\n            }}\n        ')
+        config = app_state.local_config if app_state and hasattr(app_state, 'local_config') else None
+        text_color = get_theme_color(config, 'text', 'white')
+        border = get_theme_color(config, 'border', '#fff')
+        self.delete_button.setStyleSheet(build_button_style('cardButton', '#F44336', '#da190b', text_color, border))
         self.delete_button.clicked.connect(lambda: self.delete_requested.emit(self.plugin_name))
         actions_layout.addWidget(self.delete_button)
         self.actions_widget.setVisible(False)
@@ -178,12 +180,15 @@ class PluginWidget(QFrame):
 
     def _update_toggle_button(self):
         status = self.plugin_info.get('status', 'enabled')
+        app_state = getattr(self.parent_app, 'app_state', None)
+        config = app_state.local_config if app_state and hasattr(app_state, 'local_config') else None
+        border = get_theme_color(config, 'border', '#fff')
         if status == 'enabled':
             self.toggle_button.setText(tr('plugins.disable'))
-            self.toggle_button.setStyleSheet('\n                QPushButton#cardButtonInstall {\n                    background-color: #FF9800;\n                    font-weight: bold;\n                }\n                QPushButton#cardButtonInstall:hover {\n                    background-color: #F57C00;\n                }\n            ')
+            self.toggle_button.setStyleSheet(build_button_style('cardButtonInstall', '#FF9800', '#F57C00', 'white', border))
         else:
             self.toggle_button.setText(tr('plugins.enable'))
-            self.toggle_button.setStyleSheet('\n                QPushButton#cardButtonInstall {\n                    background-color: #4CAF50;\n                    font-weight: bold;\n                }\n                QPushButton#cardButtonInstall:hover {\n                    background-color: #5cb85c;\n                }\n            ')
+            self.toggle_button.setStyleSheet(build_button_style('cardButtonInstall', '#4CAF50', '#5cb85c', 'white', border))
 
     def _update_style(self):
         from ui.common.styling import update_mod_widget_style

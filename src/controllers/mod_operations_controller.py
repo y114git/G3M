@@ -95,7 +95,7 @@ class ModOperationsController:
                             previous_task.deleteLater()
                     except Exception as e:
                         logging.debug(f'ModOperationsController: Error deleting previous task: {e}')
-                    self._start_gamebanana_install(mod, force, is_update)
+                    self._start_gamebanana_install(mod, force, is_update, selected_file)
                 if hasattr(previous_task, 'finished'):
                     previous_task.finished.connect(on_previous_task_finished)
                 elif not previous_task.isRunning():
@@ -515,6 +515,10 @@ class ModOperationsController:
                         if widget_key == key_to_find:
                             widget.update_status()
                             break
+        if hasattr(self.app, 'search_display'):
+            for card in self.app.search_display.card_widget_cache.values():
+                if get_mod_key(card.mod_data) == key_to_find:
+                    card.update_installation_status()
 
     def on_mod_uninstall_requested(self, mod):
         if self.app_state.is_installing:

@@ -5,7 +5,7 @@ from PyQt6.QtWidgets import QInputDialog, QMessageBox, QApplication
 from PyQt6.QtCore import QTimer, QObject, QThread, pyqtSignal, QMetaObject, Qt
 from services.localization_service import tr
 from services.blocklist_service import BlocklistManager
-from ui.dialogs.mod_details_dialog import open_mod_details_dialog
+from ui.widgets.mod_details_overlay import show_mod_details_overlay
 from ui.dialogs.blocklist_dialog import BlocklistDialog
 from ui.widgets.mod.mod_card_widget import ModCardWidget
 from workers.gamebanana.load_more_worker import LoadMoreGameBananaModsThread
@@ -915,7 +915,12 @@ class SearchDisplayController(QObject):
                 break
 
     def show_details(self, mod_data):
-        open_mod_details_dialog(self.app, mod_data)
+        source_card = None
+        for widget in self._iter_layout_cards():
+            if widget.mod_data == mod_data:
+                source_card = widget
+                break
+        show_mod_details_overlay(self.app, mod_data, source_card=source_card)
 
     def clear_all_selections(self):
         for widget in self._iter_layout_cards():

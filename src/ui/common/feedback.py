@@ -28,10 +28,15 @@ class FeedbackManager(QObject):
     def show_message(self, message_type: str, message_key: str, details: str = '', **kwargs):
         if not self._should_show_dialog():
             return
-        type_map = {'error': (QMessageBox.Icon.Critical, tr('errors.error')), 'warning': (QMessageBox.Icon.Warning, 'Warning'), 'info': (QMessageBox.Icon.Information, tr('dialogs.success')), 'success': (QMessageBox.Icon.Information, tr('dialogs.success'))}
+        type_map = {
+            'error': (QMessageBox.Icon.Critical, tr('errors.error')),
+            'warning': (QMessageBox.Icon.Warning, tr('dialogs.warning')),
+            'info': (QMessageBox.Icon.Information, tr('dialogs.info')),
+            'success': (QMessageBox.Icon.Information, tr('dialogs.success')),
+        }
         icon, title = type_map.get(message_type, (QMessageBox.Icon.Information, tr('dialogs.success')))
         message = tr(message_key, **kwargs)
-        msg_box = QMessageBox(self.parent_widget)
+        msg_box = QMessageBox(None)
         msg_box.setIcon(icon)
         msg_box.setWindowTitle(title)
         if details:
@@ -47,7 +52,7 @@ class FeedbackManager(QObject):
             return False
         title = tr(title_key, **kwargs)
         message = tr(message_key, **kwargs)
-        msg_box = QMessageBox(self.parent_widget)
+        msg_box = QMessageBox(None)
         msg_box.setIcon(QMessageBox.Icon.Question)
         msg_box.setWindowTitle(title)
         if details:
@@ -68,9 +73,9 @@ class FeedbackManager(QObject):
     def ask_custom_question(self, icon: QMessageBox.Icon, title_key: str, message_key: str, buttons: list[tuple[str, QMessageBox.ButtonRole, str]], default_button_key: str | None = None, **kwargs) -> str | None:
         if not self._should_show_dialog():
             return None
-        title = tr(title_key)
+        title = tr(title_key, **kwargs)
         message = tr(message_key, **kwargs)
-        msg_box = QMessageBox(self.parent_widget)
+        msg_box = QMessageBox(None)
         msg_box.setIcon(icon)
         msg_box.setWindowTitle(title)
         msg_box.setText(message)

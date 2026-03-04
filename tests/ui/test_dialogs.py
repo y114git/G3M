@@ -1,18 +1,6 @@
 from PyQt6.QtWidgets import QDialog
 
 
-class TestModDetailsDialog:
-
-    def test_mod_details_dialog_creation(self, qapp):
-        from PyQt6.QtWidgets import QDialog
-        dialog = QDialog(None)
-        dialog.setWindowTitle('Test Mod Details')
-        dialog.setMinimumSize(700, 700)
-        assert dialog is not None
-        assert isinstance(dialog, QDialog)
-        dialog.close()
-
-
 class TestImportDialog:
 
     def test_import_dialog_creation(self, qapp, feedback_service):
@@ -96,7 +84,7 @@ class TestThemeManagementDialog:
         dialog = ThemeManagementDialog(None, theme_controller)
         assert dialog is not None
         assert isinstance(dialog, QDialog)
-        
+
         # Test that _build_settings_text generates some text without exceptions
         settings_text = dialog._build_settings_text()
         assert isinstance(settings_text, str)

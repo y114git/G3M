@@ -89,23 +89,57 @@ class TestCommonWidgets:
             qapp.processEvents()
             time.sleep(0.05)
 
-    def test_outlined_label_creation(self, qapp):
-        from ui.widgets.shared.outlined_label import OutlinedTextLabel
-        label = OutlinedTextLabel('Test', None)
-        assert label is not None
-        assert isinstance(label, QWidget)
-        label.deleteLater()
+    def test_mod_details_overlay_creation(self, qapp):
+        from ui.widgets.mod_details_overlay import ModDetailsOverlay
+        from models.mod_models import ModInfo
+        mod_data = ModInfo(key='test_mod', name='Test Mod', version='1.0.0', author='Test Author', tagline='Test tagline', game_version='', description_url='', downloads=0, game='deltarune', is_verified=False)
+        overlay = ModDetailsOverlay(None, mod_data)
+        assert overlay is not None
+        assert isinstance(overlay, QWidget)
+        assert hasattr(overlay, '_img_label')
+        assert hasattr(overlay, '_prev_btn')
+        assert hasattr(overlay, '_next_btn')
+        assert hasattr(overlay, 'desc_text')
+        overlay.deleteLater()
         for _ in range(3):
             qapp.processEvents()
             time.sleep(0.05)
 
-    def test_screenshots_carousel_creation(self, qapp):
-        from ui.widgets.shared.screenshots_carousel import ScreenshotsCarousel
-        urls = []
-        carousel = ScreenshotsCarousel(urls, parent=None)
-        assert carousel is not None
-        assert isinstance(carousel, QWidget)
-        carousel.deleteLater()
+    def test_mod_details_overlay_update_screenshots(self, qapp):
+        from ui.widgets.mod_details_overlay import ModDetailsOverlay
+        from models.mod_models import ModInfo
+        mod_data = ModInfo(key='test_mod', name='Test Mod', version='1.0.0', author='Test Author', tagline='', game_version='', description_url='', downloads=0, game='deltarune', is_verified=False)
+        overlay = ModDetailsOverlay(None, mod_data)
+        assert len(overlay._ss_urls) == 0
+        overlay.update_screenshots(['https://example.com/1.png', 'https://example.com/2.png'])
+        assert len(overlay._ss_urls) == 2
+        assert overlay._ss_index == 0
+        assert not overlay._prev_btn.isVisible() or len(overlay._ss_urls) > 1
+        overlay.update_screenshots([])
+        assert len(overlay._ss_urls) == 0
+        overlay.deleteLater()
+        for _ in range(3):
+            qapp.processEvents()
+            time.sleep(0.05)
+
+    def test_mod_details_overlay_nav(self, qapp):
+        from ui.widgets.mod_details_overlay import ModDetailsOverlay
+        from models.mod_models import ModInfo
+        mod_data = ModInfo(key='test_mod', name='Test Mod', version='1.0.0', author='Test Author', tagline='', game_version='', description_url='', downloads=0, game='deltarune', is_verified=False)
+        overlay = ModDetailsOverlay(None, mod_data)
+        overlay._ss_urls = ['https://a.com/1.png', 'https://a.com/2.png', 'https://a.com/3.png']
+        overlay._ss_images = [None, None, None]
+        overlay._ss_loading = [False, False, False]
+        overlay._ss_index = 0
+        overlay._ss_next()
+        assert overlay._ss_index == 1
+        overlay._ss_next()
+        assert overlay._ss_index == 2
+        overlay._ss_next()
+        assert overlay._ss_index == 0
+        overlay._ss_prev()
+        assert overlay._ss_index == 2
+        overlay.deleteLater()
         for _ in range(3):
             qapp.processEvents()
             time.sleep(0.05)

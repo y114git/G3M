@@ -22,7 +22,11 @@ class AnnounceDialog(QDialog):
         document = text_browser.document()
         if document is not None:
             document.setDefaultStyleSheet('p { margin: 0.5em 0; }')
-        text_browser.setHtml(message)
+        try:
+            from ui.common.rich_html import set_rich_html
+            set_rich_html(text_browser, message)
+        except Exception:
+            text_browser.setHtml(message)
         text_browser.setReadOnly(True)
         layout.addWidget(text_browser, 1)
         if link:

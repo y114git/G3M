@@ -133,6 +133,10 @@ class ModCardWidget(BaseModWidget):
         config = self._resolve_theme_config()
         return get_theme_color(config, 'text', fallback) if config else fallback
 
+    def _get_theme_border_color(self, fallback='#fff'):
+        config = self._resolve_theme_config()
+        return get_theme_color(config, 'border', fallback) if config else fallback
+
     def _get_app_state(self):
         if self.parent_app and hasattr(self.parent_app, 'app_state'):
             return self.parent_app.app_state
@@ -314,7 +318,9 @@ class ModCardWidget(BaseModWidget):
         if not hasattr(self, 'install_button'):
             return
         text_color = self._get_theme_text_color('white')
-        self.install_button.setStyleSheet(f'\n            QPushButton#cardButtonUninstall {{\n                background-color: #F44336;\n                color: {text_color};\n                font-weight: bold;\n                min-width: 110px;\n                max-width: 110px;\n                min-height: 35px;\n                max-height: 35px;\n                font-size: 15px;\n                padding: 1px;\n            }}\n            QPushButton#cardButtonUninstall:hover {{\n                background-color: #d32f2f;\n            }}\n        ')
+        border = self._get_theme_border_color('#fff')
+        from ui.common.styling import build_button_style
+        self.install_button.setStyleSheet(build_button_style('cardButtonUninstall', '#F44336', '#d32f2f', text_color, border))
 
     def _update_install_button(self):
         if self.is_installed:
@@ -346,8 +352,9 @@ class ModCardWidget(BaseModWidget):
         checked = bool(getattr(self.mod_data, 'gamebanana_compatibility_checked', False))
         if checked and (not compatible):
             text_color = self._get_theme_text_color('white')
-            style = f'\n                QPushButton#cardButtonInstall {{\n                    background-color: #FFC107;\n                    color: {text_color};\n                }}\n                QPushButton#cardButtonInstall:hover {{\n                    background-color: #FFB300;\n                }}\n            '
-            self.install_button.setStyleSheet(style)
+            border = self._get_theme_border_color('#fff')
+            from ui.common.styling import build_button_style
+            self.install_button.setStyleSheet(build_button_style('cardButtonInstall', '#FFC107', '#FFB300', text_color, border))
             self.install_button.setToolTip(tr('ui.gamebanana_status_manual_tooltip'))
         else:
             self.install_button.setStyleSheet('')
@@ -406,12 +413,13 @@ class ModCardWidget(BaseModWidget):
     def update_installation_status(self):
         was_installed = self.is_installed
         self._check_installation_status()
-        if was_installed and (not self.is_installed):
+        if was_installed != self.is_installed:
             key = get_mod_key(self.mod_data)
             if key and key.startswith('gb_'):
-                for attr, val in [('gamebanana_compatibility_checked', False), ('gamebanana_is_tool_compatible', False), ('gamebanana_supported_files', [])]:
-                    setattr(self.mod_data, attr, val)
-                self._start_compatibility_check()
+                if not self.is_installed:
+                    for attr, val in [('gamebanana_compatibility_checked', False), ('gamebanana_is_tool_compatible', False), ('gamebanana_supported_files', [])]:
+                        setattr(self.mod_data, attr, val)
+                    self._start_compatibility_check()
                 self._update_gamebanana_status_label()
                 self._apply_gamebanana_install_styles()
 

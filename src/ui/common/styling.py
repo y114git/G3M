@@ -84,6 +84,34 @@ def build_tag_checkbox_style(text_color: str, font_size: int = 12, indicator_siz
     return f'\n            QCheckBox {{\n                color: {text_color};\n                font-size: {font_size}px;\n                spacing: {spacing}px;\n            }}\n            QCheckBox::indicator {{\n                width: {indicator_size}px;\n                height: {indicator_size}px;\n            }}\n        '
 
 
+def build_button_style(obj_name: str, bg_color: str, hover_color: str, text_color: str = 'white',
+                       border: str = '#fff', width: int = 110, height: int = 35,
+                       font_size: int = 15, bold: bool = True) -> str:
+    """Build common button stylesheet pattern."""
+    weight = 'bold' if bold else 'normal'
+    return f"""
+        QPushButton#{obj_name} {{
+            background-color: {bg_color};
+            color: {text_color};
+            border: 2px solid {border};
+            font-weight: {weight};
+            min-width: {width}px;
+            max-width: {width}px;
+            min-height: {height}px;
+            max-height: {height}px;
+            font-size: {font_size}px;
+            padding: 1px;
+        }}
+        QPushButton#{obj_name}:hover {{
+            background-color: {hover_color};
+        }}
+        QPushButton#{obj_name}:disabled {{
+            color: #808080;
+            border-color: #808080;
+        }}
+    """
+
+
 def clear_layout_widgets(layout, keep_last_n=1, hide_instead_of_delete=False):
     if not layout:
         return

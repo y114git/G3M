@@ -7,7 +7,7 @@ from PyQt6.QtWidgets import QLabel, QPushButton, QHBoxLayout, QVBoxLayout, QFram
 from utils.path_utils import resource_path
 from .base_mod_widget import BaseModWidget
 from services.localization_service import tr
-from ui.common.styling import get_theme_color
+from ui.common.styling import get_theme_color, build_button_style
 from utils.mod_utils import get_mod_key
 from ui.utils.ui_utils import UIAnimator
 
@@ -97,7 +97,8 @@ class InstalledModWidget(BaseModWidget):
         self.remove_button.setObjectName('cardButton')
         config = self._resolve_theme_config()
         text_color = get_theme_color(config, 'text', 'white') if config else 'white'
-        self.remove_button.setStyleSheet(f'\n            QPushButton#cardButton {{\n                background-color: #F44336;\n                color: {text_color};\n            }}\n            QPushButton#cardButton:hover {{\n                background-color: #da190b;\n            }}\n        ')
+        border = get_theme_color(config, 'border', '#fff') if config else '#fff'
+        self.remove_button.setStyleSheet(build_button_style('cardButton', '#F44336', '#da190b', text_color, border))
         self.remove_button.clicked.connect(lambda: self.remove_requested.emit(self.mod_data))
         actions_layout.addWidget(self.remove_button)
         self.actions_widget.setVisible(False)
@@ -184,12 +185,14 @@ class InstalledModWidget(BaseModWidget):
     def _update_button_from_status(self):
         if not self.use_button:
             return
+        config = self._resolve_theme_config()
+        border = get_theme_color(config, 'border', '#fff') if config else '#fff'
         if self.status == 'active':
             self.use_button.setText(tr('ui.remove_button'))
-            self.use_button.setStyleSheet('\n                QPushButton#cardButtonInstall {\n                    background-color: #FF9800;\n                    font-weight: bold;\n                }\n                QPushButton#cardButtonInstall:hover {\n                    background-color: #F57C00;\n                }\n            ')
+            self.use_button.setStyleSheet(build_button_style('cardButtonInstall', '#FF9800', '#F57C00', 'white', border))
         else:
             self.use_button.setText(tr('ui.use_button'))
-            self.use_button.setStyleSheet('\n                QPushButton#cardButtonInstall {\n                    background-color: #4CAF50;\n                    font-weight: bold;\n                }\n                QPushButton#cardButtonInstall:hover {\n                    background-color: #5cb85c;\n                }\n            ')
+            self.use_button.setStyleSheet(build_button_style('cardButtonInstall', '#4CAF50', '#5cb85c', 'white', border))
 
     def _sync_status(self):
         self.status = 'active' if self.is_active else 'ready'
