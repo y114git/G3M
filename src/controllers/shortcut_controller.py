@@ -12,6 +12,7 @@ from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QVBoxLayout, QFil
 from services.localization_service import tr
 from services.game_detection_service import get_chapter_id_for_game_mode
 from utils.mod_utils import get_mod_key, get_mod_name
+from ui.common.styling import get_border_radius
 
 
 def _get_platform_extension() -> str:
@@ -115,7 +116,9 @@ class ShortcutDialog(QDialog):
 
         summary = QLabel(self._build_summary(game_mode, chapter_mod_objects, shortcut_config))
         summary.setWordWrap(True)
-        summary.setStyleSheet('padding: 8px; background: rgba(0,0,0,0.1); border-radius: 4px;')
+        _cfg = getattr(getattr(parent, 'app_state', None), 'local_config', None) if parent else None
+        br = get_border_radius(_cfg)
+        summary.setStyleSheet(f'padding: 8px; background: rgba(0,0,0,0.1); border-radius: {br}px;')
         layout.addWidget(summary)
 
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)

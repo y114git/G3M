@@ -309,20 +309,32 @@
     "install_button": "Instalar",
     "unknown_author": "Desconocido",
     "delete_button": "Eliminar",
-    "success": "Éxito",
     "close_button": "Cerrar",
     "online_status": "🟢 En línea: {count}",
     "loading_placeholder": "Cargando...",
     "no_search_results": "No se encontró nada...",
-    "nobody_came": "Pero nadie vino.",
+    "nobody_came": "Pero nadie vino...",
     "settings_section_merging": "Fusión de mods",
     "clear_cache_button": "Limpiar caché de mods",
     "settings_section_themes": "Temas",
     "settings_section_media": "Gráficos",
     "settings_section_audio": "Audio",
+    "settings_section_styling": "Estilo",
+    "border_radius_label": "Radio de borde",
     "do_not_save_theme_after_import": "No guardar tema en la lista después de importar",
     "dont_hide_window_on_launch": "No ocultar ventana al iniciar",
-    "hide_wips_without_downloads": "Ocultar WIPs sin descargas"
+    "hide_wips_without_downloads": "Ocultar WIPs sin descargas",
+    "apply_theme": "Aplicar Tema",
+    "stop_game": "Detener",
+    "patch_create_failed_details": "Error al crear parche, error:\\n{error}",
+    "select_save_collection_title": "Seleccionar colección de guardados",
+    "downloading_unrar": "Descargando utilidad UnRAR...",
+    "backup_failed": "Error al hacer copia de seguridad de archivos del juego: {path}\\nOperación de parche abortada para proteger sus archivos del juego.",
+    "select_save_collection_body": "Seleccionar colección de guardados para usar:",
+    "unpacking_mod": "Descomprimiendo mod: {mod_name}...",
+    "xdelta_unavailable": "Ejecutable xdelta no encontrado. No se puede parchear.",
+    "patch_apply_failed_details": "Error al aplicar parche, error:\\n{error}",
+    "settings_section_graphics": "Gráficos"
   },
   "files": {
     "archive_link": "Enlace de archivo",
@@ -414,7 +426,9 @@
     "changelog_close": "Cerrar",
     "withdraw_request": "Retirar solicitud",
     "shortcut": "Acceso directo",
-    "import_export_themes": "Im/Exportar Tema"
+    "import_export_themes": "Im/Exportar Tema",
+    "delete_theme": "Eliminar Tema",
+    "save_theme": "Guardar Tema"
   },
   "tooltips": {
     "custom_exe": "Puedes seleccionar tu propio archivo ejecutable en lugar del predeterminado (por ejemplo, DELTARUNE.exe). Útil si está en una ubicación diferente o quieres ejecutar un archivo de inicio personalizado.",
@@ -664,7 +678,6 @@
     "export_theme_title": "Exportar Tema",
     "import_theme_title": "Importar Tema",
     "select_mod": "Seleccionar mod",
-    "success": "Éxito",
     "clear_cache_success": "La caché de metadatos de GameBanana se ha limpiado correctamente.",
     "clear_cache_confirm_title": "Limpiar caché",
     "clear_cache_confirm_text": "Esto borrará todos los metadatos de GameBanana. DELTAHUB comenzará a cargar los datos de los mods desde cero. ¿Continuar?",
@@ -941,7 +954,13 @@
     "copy_failed": "No se pudo copiar:\n{error}",
     "no_save": "Sin guardado",
     "target_slot_not_found": "No se pudo encontrar la ranura objetivo.",
-    "no_gamebanana_files_for_manual_install": "No hay archivos disponibles para instalación manual desde GameBanana."
+    "no_gamebanana_files_for_manual_install": "No hay archivos disponibles para instalación manual desde GameBanana.",
+    "backup_failed": "Error al hacer copia de seguridad de archivos del juego: {path}\\nOperación de parche abortada para proteger sus archivos del juego.",
+    "patch_apply_failed_details": "Error al aplicar parche, error:\\n{error}",
+    "patch_create_failed_details": "Error al crear parche, error:\\n{error}",
+    "select_save_collection_body": "Seleccionar colección de guardados para usar:",
+    "select_save_collection_title": "Seleccionar colección de guardados",
+    "xdelta_unavailable": "Ejecutable xdelta no encontrado. No se puede parchear."
   },
   "status": {
     "vanilla": "Vanilla",
@@ -1061,7 +1080,10 @@
     "steam_launch": "Iniciar vía Steam",
     "updating_mod": "Actualizando mod {mod_name}...",
     "update_cancelled": "Actualización cancelada por el usuario.",
-    "local": "Local"
+    "local": "Local",
+    "deltamod_archive_detected_url": "Archivo DELTAMOD detectado desde URL.",
+    "deltamod_archive_detected": "Archivo DELTAMOD detectado.",
+    "unpacking_mod": "Descomprimiendo mod: {mod_name}..."
   },
   "startup": {
     "steam_deck_setup_error": "Error al configurar compatibilidad de Steam Deck: {error}",

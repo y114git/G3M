@@ -87,7 +87,7 @@ class ModPriorityDialog(QDialog):
 
     def _apply_theme(self):
         apply_dialog_theme(self, self.app_state)
-        secondary_text_color = get_theme_color(self.app_state.local_config, 'version_text', '#888888')
+        secondary_text_color = get_theme_color(self.app_state.local_config, 'secondary_text', '#888888')
         instructions = None
         layout = self.layout()
         if layout is not None:

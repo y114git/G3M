@@ -1,6 +1,7 @@
 
 QFrame#bottom_widget, QFrame#settings_widget {
     background-color: %frame_bg_color%;
+    border-radius: %custom_border_radius%;
 }
 QWidget {
     font-family: "%font_family_main%", sans-serif;
@@ -15,6 +16,7 @@ QDialog, QMessageBox {
     color: %main_text_color%;
     background-color: %frame_bg_color%;
     border: 3px solid %border_color%;
+    border-radius: %custom_border_radius%;
 }
 QDialog > QLabel, QMessageBox > QLabel {
     background: transparent;
@@ -29,6 +31,7 @@ QPushButton {
     color: %main_text_color%;
     padding: 6px 16px;
     min-height: 30px;
+    border-radius: %custom_border_radius%;
 }
 QPushButton:hover {
     background-color: %button_hover_color%;
@@ -49,12 +52,27 @@ QComboBox {
     border: 2px solid %border_color%;
     padding: 5px 10px;
     min-height: 30px;
+    border-radius: %custom_border_radius%;
+}
+QComboBox::drop-down {
+    subcontrol-origin: border;
+    subcontrol-position: center right;
+    background: transparent;
+    border: none;
+    width: 30px;
+    margin-right: 4px;
+}
+QComboBox::down-arrow {
+    image: url(%arrow_down_path%);
+    width: 16px;
+    height: 10px;
 }
 QComboBox QAbstractItemView {
     background-color: %button_color%;
     border: 2px solid %border_color%;
     color: %main_text_color%;
     selection-background-color: %button_hover_color%;
+    border-radius: %custom_border_radius%;
 }
 QLineEdit {
     background-color: %frame_bg_color%;
@@ -62,11 +80,13 @@ QLineEdit {
     border: 2px solid %border_color%;
     padding: 5px 10px;
     qproperty-alignment: 'AlignCenter';
+    border-radius: %custom_border_radius%;
 }
 QListWidget {
     background-color: %frame_bg_color%;
     color: %main_text_color%;
     border: 2px solid %border_color%;
+    border-radius: %custom_border_radius%;
 }
 QListWidget::item {
     color: %main_text_color%;
@@ -80,17 +100,48 @@ QSpinBox {
     border: 2px solid %border_color%;
     padding: 5px 10px;
     qproperty-alignment: 'AlignCenter';
+    border-radius: %custom_border_radius%;
+}
+QSpinBox::up-button {
+    subcontrol-origin: border;
+    subcontrol-position: top right;
+    background: transparent;
+    border: none;
+    border-left: none;
+    width: 24px;
+    margin-right: 2px;
+}
+QSpinBox::down-button {
+    subcontrol-origin: border;
+    subcontrol-position: bottom right;
+    background: transparent;
+    border: none;
+    border-left: none;
+    width: 24px;
+    margin-right: 2px;
+}
+QSpinBox::up-arrow {
+    image: url(%arrow_up_path%);
+    width: 12px;
+    height: 8px;
+}
+QSpinBox::down-arrow {
+    image: url(%arrow_down_path%);
+    width: 12px;
+    height: 8px;
 }
 QTextEdit, QTextBrowser {
     background-color: %frame_bg_color%;
     color: %main_text_color%;
     border: 2px solid %border_color%;
     min-height: 100px;
+    border-radius: %custom_border_radius%;
 }
 QFrame#filters {
     background-color: %frame_bg_color%;
     border: 2px solid %border_color%;
     padding: 4px 8px;
+    border-radius: %custom_border_radius%;
 }
 QPushButton#sortOrderBtn {
     min-width: 35px;
@@ -143,6 +194,8 @@ QTabBar::tab {
     border: 2px solid %border_color%;
     padding: 5px 15px;
     min-height: 25px;
+    border-radius: %custom_border_radius%;
+    margin-right: 4px;
 }
 QTabBar::tab:selected, QTabBar::tab:hover {
     background-color: %button_hover_color%;
@@ -164,6 +217,7 @@ QCheckBox::indicator {
     height: 15px;
     background-color: %button_color%;
     border: 2px solid %border_color%;
+    border-radius: %custom_border_radius%;
 }
 QCheckBox::indicator:checked {
     background-color: %checkbox_checked_color%;
@@ -183,7 +237,7 @@ QPushButton:checked {
     font-family: "%font_family_main%", sans-serif;
     font-size: %font_size_small%pt;
     outline: none;
-    border-radius: 4px;
+    border-radius: %custom_border_radius%;
     padding: 2px;
 }
 
@@ -192,6 +246,7 @@ QToolTip {
     border: 2px solid %border_color%;
     color: %main_text_color% !important;
     padding: 10px;
+    border-radius: %custom_border_radius%;
 }
 
 /* Ensure no elision in customization hex fields */
@@ -206,6 +261,7 @@ QLineEdit#color_display {
     selection-background-color: %button_hover_color% !important;
     selection-color: %main_text_color% !important;
     border: 2px solid %border_color%;
+    border-radius: %custom_border_radius%;
 }
 
 QLineEdit#color_display:focus, QLineEdit#color_display:hover {

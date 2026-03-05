@@ -4,7 +4,7 @@ from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont
 from services.localization_service import tr
 from services.blocklist_service import BlocklistManager
-from ui.common.styling import get_theme_color
+from ui.common.styling import get_theme_color, get_border_radius
 
 
 class BlocklistDialog(QDialog):
@@ -28,9 +28,9 @@ class BlocklistDialog(QDialog):
         main_layout.setContentsMargins(15, 15, 15, 15)
         game_selector_layout = QHBoxLayout()
         game_selector_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        game_label = QLabel(tr('blocklist.select_game'))
-        game_label.setFont(QFont('', 10, QFont.Weight.Bold))
-        game_selector_layout.addWidget(game_label)
+        self.game_label = QLabel(tr('blocklist.select_game'))
+        self.game_label.setFont(QFont('', 10, QFont.Weight.Bold))
+        game_selector_layout.addWidget(self.game_label)
         self.game_combo = QComboBox()
         self.game_combo.setMinimumWidth(150)
         self.game_combo.currentIndexChanged.connect(self.on_game_changed)
@@ -40,20 +40,20 @@ class BlocklistDialog(QDialog):
         left_widget = QWidget()
         left_layout = QVBoxLayout(left_widget)
         left_layout.setContentsMargins(5, 5, 5, 5)
-        add_group = QGroupBox(tr('blocklist.add_entry'))
-        add_layout = QVBoxLayout(add_group)
+        self.add_group = QGroupBox(tr('blocklist.add_entry'))
+        add_layout = QVBoxLayout(self.add_group)
         prefix_layout = QVBoxLayout()
         prefix_layout.setSpacing(4)
-        prefix_label = QLabel(tr('blocklist.prefix'))
-        prefix_layout.addWidget(prefix_label)
+        self.prefix_label = QLabel(tr('blocklist.prefix'))
+        prefix_layout.addWidget(self.prefix_label)
         self.prefix_combo = QComboBox()
         self._populate_prefix_combo()
         prefix_layout.addWidget(self.prefix_combo)
         add_layout.addLayout(prefix_layout)
         value_layout = QVBoxLayout()
         value_layout.setSpacing(4)
-        value_label = QLabel(tr('blocklist.value'))
-        value_layout.addWidget(value_label)
+        self.value_label = QLabel(tr('blocklist.value'))
+        value_layout.addWidget(self.value_label)
         self.value_edit = QLineEdit()
         self.value_edit.setPlaceholderText(tr('blocklist.value_placeholder'))
         self.value_edit.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
@@ -67,13 +67,13 @@ class BlocklistDialog(QDialog):
         button_layout.addWidget(self.add_button)
         button_layout.addStretch()
         add_layout.addLayout(button_layout)
-        left_layout.addWidget(add_group)
+        left_layout.addWidget(self.add_group)
         left_layout.addStretch()
         right_widget = QWidget()
         right_layout = QVBoxLayout(right_widget)
         right_layout.setContentsMargins(5, 5, 5, 5)
-        list_group = QGroupBox(tr('blocklist.current_entries'))
-        list_layout = QVBoxLayout(list_group)
+        self.list_group = QGroupBox(tr('blocklist.current_entries'))
+        list_layout = QVBoxLayout(self.list_group)
         self.blocklist_list = QListWidget()
         self.blocklist_list.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
         list_layout.addWidget(self.blocklist_list)
@@ -84,7 +84,7 @@ class BlocklistDialog(QDialog):
         list_buttons_layout.addWidget(self.remove_button)
         list_buttons_layout.addStretch()
         list_layout.addLayout(list_buttons_layout)
-        right_layout.addWidget(list_group)
+        right_layout.addWidget(self.list_group)
         splitter.addWidget(left_widget)
         splitter.addWidget(right_widget)
         splitter.setSizes([250, 350])
@@ -101,10 +101,11 @@ class BlocklistDialog(QDialog):
     def apply_theme(self):
         if hasattr(self.parent(), 'app_state') and self.parent().app_state:
             app_state = self.parent().app_state
-            bg_color = get_theme_color(app_state.local_config, 'background', '#000000')
-            text_color = get_theme_color(app_state.local_config, 'text', '#ffffff')
-            hover_color = get_theme_color(app_state.local_config, 'button_hover', '#333333')
-            self.setStyleSheet(f'\n                QDialog {{\n                    background-color: {bg_color};\n                    color: {text_color};\n                }}\n                QGroupBox {{\n                    color: {text_color};\n                    border: 2px solid {text_color};\n                    margin-top: 10px;\n                    padding-top: 10px;\n                    background-color: {bg_color};\n                }}\n                QGroupBox::title {{\n                    subcontrol-origin: margin;\n                    left: 10px;\n                    padding: 0 5px 0 5px;\n                    color: {text_color};\n                }}\n                QPushButton {{\n                    background-color: {bg_color};\n                    color: {text_color};\n                    border: 2px solid {text_color};\n                    padding: 5px 15px;\n                    font-size: 12px;\n                }}\n                QPushButton:hover {{\n                    background-color: {hover_color};\n                    color: {text_color};\n                }}\n                QPushButton:disabled {{\n                    background-color: {bg_color};\n                    color: {text_color};\n                    opacity: 0.5;\n                }}\n                QLineEdit, QComboBox, QListWidget {{\n                    background-color: {bg_color};\n                    color: {text_color};\n                    border: 2px solid {text_color};\n                    padding: 3px;\n                }}\n                QListWidget::item:selected {{\n                    background-color: {text_color};\n                    color: {bg_color};\n                }}\n                QLabel {{\n                    color: {text_color};\n                }}\n            ')
+            bg_color = get_theme_color(app_state.local_config, 'background', '#282828')
+            text_color = get_theme_color(app_state.local_config, 'text', '#e8e9eb')
+            hover_color = get_theme_color(app_state.local_config, 'button_hover', '#616b78')
+            br = get_border_radius(app_state.local_config)
+            self.setStyleSheet(f'\n                QDialog {{\n                    background-color: {bg_color};\n                    color: {text_color};\n                    border-radius: {br}px;\n                }}\n                QGroupBox {{\n                    color: {text_color};\n                    border: 2px solid {text_color};\n                    border-radius: {br}px;\n                    margin-top: 10px;\n                    padding-top: 10px;\n                    background-color: {bg_color};\n                }}\n                QGroupBox::title {{\n                    subcontrol-origin: margin;\n                    left: 10px;\n                    padding: 0 5px 0 5px;\n                    color: {text_color};\n                }}\n                QPushButton {{\n                    background-color: {bg_color};\n                    color: {text_color};\n                    border: 2px solid {text_color};\n                    border-radius: {br}px;\n                    padding: 5px 15px;\n                    font-size: 12px;\n                }}\n                QPushButton:hover {{\n                    background-color: {hover_color};\n                    color: {text_color};\n                }}\n                QPushButton:disabled {{\n                    background-color: {bg_color};\n                    color: {text_color};\n                    opacity: 0.5;\n                }}\n                QLineEdit, QComboBox, QListWidget {{\n                    background-color: {bg_color};\n                    color: {text_color};\n                    border: 2px solid {text_color};\n                    border-radius: {br}px;\n                    padding: 3px;\n                }}\n                QListWidget::item:selected {{\n                    background-color: {text_color};\n                    color: {bg_color};\n                }}\n                QLabel {{\n                    color: {text_color};\n                }}\n            ')
 
     def load_blocklist(self):
         self.game_combo.clear()

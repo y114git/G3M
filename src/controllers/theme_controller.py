@@ -1,10 +1,11 @@
 """Controller for theme management and UI customization."""
-from PyQt6.QtWidgets import QApplication
+from PyQt6.QtWidgets import QApplication, QWIDGETSIZE_MAX
 from services.localization_service import tr
 from config.constants import THEMES, UI_COLORS
 from utils.path_utils import resource_path
 from workers.background_loader_worker import BgLoader
 from ui.styles import build_stylesheet
+from ui.common.styling import get_border_radius
 from ui.utils.ui_utils import DebounceTimer
 
 
@@ -21,6 +22,10 @@ class ThemeController:
         self._last_theme_params = {}
 
     def apply_theme(self, force=False):
+        from ui.common.styling import invalidate_theme_color_cache
+        from ui.styles import invalidate_stylesheet_cache
+        invalidate_theme_color_cache()
+        invalidate_stylesheet_cache()
         theme = THEMES['default']
         background_disabled = self.app_state.local_config.get('background_disabled', False)
         new_background_path = None if background_disabled else (self.app_state.local_config.get('custom_background_path') or resource_path(f"assets/{theme.get('background', '')}"))
@@ -31,7 +36,7 @@ class ThemeController:
             r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
             frame_bg_color, tooltip_bg_color = f"rgba({r}, {g}, {b}, 150)", f"rgba({r}, {g}, {b}, 230)"
         else:
-            frame_bg_color, tooltip_bg_color = 'rgba(0, 0, 0, 150)', 'rgba(0, 0, 0, 230)'
+            frame_bg_color, tooltip_bg_color = 'rgba(40, 40, 40, 150)', 'rgba(40, 40, 40, 230)'
 
         button_color = self.app_state.local_config.get('custom_color_button') or theme['colors']['button']
         border_color = self.app_state.local_config.get('custom_color_border') or theme['colors']['border']
@@ -40,7 +45,10 @@ class ThemeController:
         font_family_main = self.app.custom_font_family or theme['font_family']
         zoom_factor = self.app_state.local_config.get('ui_scale', 1.0)
 
-        params = {'bg': frame_bg_color, 'btn': button_color, 'border': border_color, 'hover': button_hover_color, 'text': main_text_color, 'font': font_family_main, 'bg_path': new_background_path, 'bg_disabled': background_disabled, 'ui_scale': zoom_factor}
+        secondary_text_color = self.app_state.local_config.get('custom_color_secondary_text')
+        border_radius_value = get_border_radius(self.app_state.local_config)
+        custom_border_radius = f'{border_radius_value}px'
+        params = {'bg': frame_bg_color, 'btn': button_color, 'border': border_color, 'hover': button_hover_color, 'text': main_text_color, 'sec_text': secondary_text_color, 'font': font_family_main, 'bg_path': new_background_path, 'bg_disabled': background_disabled, 'ui_scale': zoom_factor, 'border_radius': border_radius_value}
         if not force and params == self._last_theme_params:
             return
         self._last_theme_params = params
@@ -49,12 +57,7 @@ class ThemeController:
         background_was_disabled = getattr(self.app, '_background_was_disabled', False)
         background_changed = new_background_path != current_bg_path or background_disabled != background_was_disabled
         if background_changed:
-            for attr in ('background_movie', 'media_player'):
-                if obj := getattr(self.app, attr, None):
-                    obj.stop()
-                    obj.deleteLater()
-                    setattr(self.app, attr, None)
-            self.app.video_sink = None
+            self._cleanup_background_media()
             if background_disabled or new_background_path != current_bg_path:
                 self.app.background_pixmap = None
             if not background_disabled and new_background_path:
@@ -65,7 +68,8 @@ class ThemeController:
             self.app._background_was_disabled = background_disabled
 
         self._current_zoom = zoom_factor
-        font_size_main, font_size_small = max(1, int(theme['font_size_main'] * zoom_factor)), max(1, int(theme['font_size_small'] * zoom_factor))
+        def scale(x): return max(1, int(x * zoom_factor))
+        font_size_main, font_size_small = scale(theme['font_size_main']), scale(theme['font_size_small'])
         from PyQt6.QtGui import QFont, QColor, QPalette
         status_font = QFont(font_family_main, font_size_small)
         self.app.status_label.setFont(status_font)
@@ -79,29 +83,30 @@ class ThemeController:
         for widget, color in [(getattr(self.app, 'telegram_button', None), UI_COLORS['link']), (getattr(self.app, 'discord_button', None), UI_COLORS['social_discord'])]:
             if widget:
                 widget.setStyleSheet(f'color: {color};')
-        scroll_handle_color = self.app_state.local_config.get('custom_color_button') or 'white'
+        scroll_handle_color = self.app_state.local_config.get('custom_color_button') or '#e8e9eb'
         checkbox_checked_color = '#ffffff' if not self.app.color_widgets['button_hover'].text() else button_hover_color
-        style_sheet = build_stylesheet(frame_bg_color=frame_bg_color, button_color=button_color, border_color=border_color, button_hover_color=button_hover_color, main_text_color=main_text_color, font_family_main=font_family_main, font_size_main=font_size_main, font_size_small=font_size_small, checkbox_checked_color=checkbox_checked_color, scroll_handle_color=scroll_handle_color, tooltip_bg_color=tooltip_bg_color, zoom_factor=zoom_factor)
+        style_sheet = build_stylesheet(frame_bg_color=frame_bg_color, button_color=button_color, border_color=border_color, button_hover_color=button_hover_color, main_text_color=main_text_color, font_family_main=font_family_main, font_size_main=font_size_main, font_size_small=font_size_small, checkbox_checked_color=checkbox_checked_color, scroll_handle_color=scroll_handle_color, tooltip_bg_color=tooltip_bg_color, zoom_factor=zoom_factor, custom_border_radius=custom_border_radius)
+        for fs in self._iter_filter_scrolls():
+            fs.setMaximumHeight(QWIDGETSIZE_MAX)
         app_inst = QApplication.instance()
         (app_inst if isinstance(app_inst, QApplication) else self.app).setStyleSheet(style_sheet)
 
         from ui.common.styling import get_theme_color
-        text_color = get_theme_color(self.app_state.local_config, 'text', 'white')
+        text_color = get_theme_color(self.app_state.local_config, 'text', '#e8e9eb')
+        bold_label_style = f'font-weight: bold; font-size: {scale(16)}px; color: {text_color};'
         if hasattr(self.app, 'plugin_tab_builder') and self.app.plugin_tab_builder is not None:
             plugin_lbl = self.app.plugin_tab_builder.widgets.get('installed_plugins_label')
             if plugin_lbl:
-                plugin_lbl.setStyleSheet(f'font-weight: bold; font-size: {max(1, int(16 * zoom_factor))}px; color: {text_color};')
-        if hasattr(self.app, 'installed_mods_label') and self.app.installed_mods_label:
-            self.app.installed_mods_label.setStyleSheet(f'font-weight: bold; font-size: {max(1, int(16 * zoom_factor))}px; color: {text_color};')
+                plugin_lbl.setStyleSheet(bold_label_style)
+        if self.app.installed_mods_label:
+            self.app.installed_mods_label.setStyleSheet(bold_label_style)
 
-        if hasattr(self.app, 'top_panel_widget') and self.app.top_panel_widget:
-            self.app.top_panel_widget.setMinimumHeight(int(65 * zoom_factor))
+        self.app.top_panel_widget.setMinimumHeight(scale(65))
+        self.app.logo_placeholder.setFixedSize(scale(250), scale(60))
 
-        if hasattr(self.app, 'logo_placeholder') and self.app.logo_placeholder:
-            self.app.logo_placeholder.setFixedSize(int(250 * zoom_factor), int(60 * zoom_factor))
-
+        from PyQt6.QtCore import QTimer
         if hasattr(self.app, 'launcher_icon_label'):
-            self.app.launcher_icon_label.setFixedSize(int(250 * zoom_factor), int(60 * zoom_factor))
+            self.app.launcher_icon_label.setFixedSize(scale(250), scale(60))
             self.app.launcher_icon_label.setStyleSheet('background: transparent; padding: 0px;')
             self.customization_service.load_launcher_icon(self.app.launcher_icon_label)
 
@@ -119,15 +124,18 @@ class ThemeController:
                     y = max(0, (ph - lh) // 2)
                     app.launcher_icon_label.move((pw - lw) // 2, y)
 
-            from PyQt6.QtCore import QTimer
             QTimer.singleShot(0, _recenter_logo)
 
         search_container = getattr(self.app, 'search_container', None)
         library_container = getattr(self.app, 'installed_mods_container', None)
-        self.customization_service.update_translucent_backgrounds(search_container, library_container)
+        plugins_container = None
+        if hasattr(self.app, 'plugin_tab_builder') and self.app.plugin_tab_builder:
+            plugins_container = self.app.plugin_tab_builder.widgets.get('plugins_container')
+        self.customization_service.update_translucent_backgrounds(search_container, library_container, plugins_container)
 
-        _zf = zoom_factor
-        _tc = text_color
+        from ui.common.styling import build_tag_checkbox_style
+        checkbox_style = build_tag_checkbox_style(text_color, font_size=scale(14), indicator_size=scale(16), spacing=scale(5))
+        color_only_style = f'color: {text_color};'
 
         def _deferred_style_updates():
             if hasattr(self.app, 'search_display') and hasattr(self.app.search_display, 'update_all_cards_labels'):
@@ -136,39 +144,57 @@ class ThemeController:
                 for widget in self.app.plugin_display._plugin_widgets.values():
                     if hasattr(widget, '_update_style'):
                         widget._update_style()
-            checkbox_style = f'\n            QCheckBox {{\n                color: {_tc};\n                font-size: {max(1, int(12 * _zf))}px;\n                spacing: {max(1, int(5 * _zf))}px;\n            }}\n            QCheckBox::indicator {{\n                width: {max(1, int(16 * _zf))}px;\n                height: {max(1, int(16 * _zf))}px;\n            }}\n        '
-            if hasattr(self.app, 'library_tag_widgets'):
-                for cb in self.app.library_tag_widgets:
-                    cb.setStyleSheet(checkbox_style)
-            if hasattr(self.app, 'chapter_mode_checkbox'):
-                self.app.chapter_mode_checkbox.setStyleSheet(f'color: {_tc};')
-            if hasattr(self.app, 'full_install_checkbox'):
-                self.app.full_install_checkbox.setStyleSheet(f'color: {_tc};')
-            if hasattr(self.app, 'tag_textedit'):
-                search_checkboxes = [self.app.tag_textedit, self.app.tag_customization, self.app.tag_gameplay, self.app.tag_other]
-                for cb in search_checkboxes:
-                    if cb:
-                        cb.setStyleSheet(checkbox_style)
+            for cb in getattr(self.app, 'library_tag_widgets', ()):
+                cb.setStyleSheet(checkbox_style)
+            for attr in ('chapter_mode_checkbox', 'full_install_checkbox'):
+                w = getattr(self.app, attr, None)
+                if w:
+                    w.setStyleSheet(color_only_style)
+            for attr in ('tag_textedit', 'tag_customization', 'tag_gameplay', 'tag_other'):
+                w = getattr(self.app, attr, None)
+                if w:
+                    w.setStyleSheet(checkbox_style)
             if hasattr(self.app, '_update_chapter_tabs_style'):
                 self.app._update_chapter_tabs_style()
             if hasattr(self.app, 'library_tab_builder'):
                 self.app.library_tab_builder.update_priority_button_style()
             self.update_dynamic_elements()
+            self._resync_filter_scroll_heights()
 
         QTimer.singleShot(0, _deferred_style_updates)
         self.app.update()
+
+    def _iter_filter_scrolls(self):
+        for attr in ('library_tab_builder', 'search_tab_builder'):
+            builder = getattr(self.app, attr, None)
+            if builder:
+                widgets = getattr(builder, 'widgets', None)
+                if not widgets:
+                    continue
+                fs = widgets.get('filters_scroll')
+                if fs:
+                    yield fs
+
+    def _cleanup_background_media(self):
+        for attr in ('background_movie', 'media_player'):
+            if obj := getattr(self.app, attr, None):
+                obj.stop()
+                obj.deleteLater()
+                setattr(self.app, attr, None)
+        self.app.video_sink = None
+
+    def _resync_filter_scroll_heights(self):
+        for fs in self._iter_filter_scrolls():
+            w = fs.widget()
+            if w:
+                w.adjustSize()
 
     def on_background_ready(self, obj):
         from PyQt6.QtGui import QMovie, QPixmap
         from PyQt6.QtCore import Qt, QUrl
         import logging
         if isinstance(obj, tuple):
-            for attr in ('background_movie', 'media_player'):
-                if ob := getattr(self.app, attr, None):
-                    ob.stop()
-                    ob.deleteLater()
-                    setattr(self.app, attr, None)
-            self.app.video_sink = None
+            self._cleanup_background_media()
             self.app.background_pixmap = None
 
             if obj[0] == 'video':
@@ -253,8 +279,9 @@ class ThemeController:
         themes_dir = get_user_themes_dir()
         os.makedirs(themes_dir, exist_ok=True)
 
-        settings = {k: self.app_state.local_config.get(k, '') for k in ('custom_color_background', 'custom_color_button', 'custom_color_border', 'custom_color_button_hover', 'custom_color_text', 'custom_color_version_text')}
+        settings = {k: self.app_state.local_config.get(k, '') for k in ('custom_color_background', 'custom_color_button', 'custom_color_border', 'custom_color_button_hover', 'custom_color_text', 'custom_color_secondary_text')}
         settings.update({k: self.app_state.local_config.get(k, False) for k in ('background_disabled', 'disable_splash', 'disable_animations')})
+        settings['custom_border_radius'] = get_border_radius(self.app_state.local_config)
 
         try:
             with zipfile.ZipFile(os.path.join(themes_dir, f'{name}.zip'), 'w') as zipf:
@@ -264,7 +291,7 @@ class ThemeController:
                     cs = self.app.customization_service
                     assets += [(cs.get_background_music_path(), 'background_music'), (cs.get_startup_sound_path(), 'startup_sound'), (cs.get_custom_logo_path(), 'custom_logo'), (cs.get_custom_font_path(), 'custom_font')]
                 for src, dest_name in assets:
-                    path = self.app_state.local_config.get(src) if isinstance(src, str) else src
+                    path = self.app_state.local_config.get(src) if isinstance(src, str) and os.path.sep not in src and '/' not in src else src
                     if path and os.path.isfile(path):
                         zipf.write(path, f'{dest_name}{os.path.splitext(path)[1]}')
             self.init_theme_list()
@@ -301,6 +328,10 @@ class ThemeController:
         self.app.disable_splash_checkbox.setChecked(self.app_state.local_config.get('disable_splash', False))
         if hasattr(self.app, 'disable_animations_checkbox'):
             self.app.disable_animations_checkbox.setChecked(self.app_state.local_config.get('disable_animations', False))
+        if hasattr(self.app, 'border_radius_spinbox'):
+            self.app.border_radius_spinbox.blockSignals(True)
+            self.app.border_radius_spinbox.setValue(int(get_border_radius(self.app_state.local_config)))
+            self.app.border_radius_spinbox.blockSignals(False)
         self.app.background_music_button.setText(self.customization_service.get_background_music_button_text())
         self.app.startup_sound_button.setText(self.customization_service.get_startup_sound_button_text())
         self.update_background_button_state()
@@ -308,8 +339,7 @@ class ThemeController:
         if hasattr(self.app, 'launcher_icon_label'):
             self.customization_service.load_launcher_icon(self.app.launcher_icon_label)
 
-        from PyQt6.QtCore import QTimer
-        QTimer.singleShot(0, self._handle_music_after_theme_change)
+        self._handle_music_after_theme_change()
 
     def _handle_music_after_theme_change(self):
         try:
@@ -346,10 +376,11 @@ class ThemeController:
                     item0 = layout.itemAt(0)
                     filters = item0.widget() if item0 is not None else None
                     if filters and filters.objectName() == 'filters':
-                        filter_bg_color = self.app_state.local_config.get('custom_color_background') or 'rgba(0, 0, 0, 150)'
-                        filter_border_color = self.app_state.local_config.get('custom_color_border') or 'white'
+                        filter_bg_color = self.app_state.local_config.get('custom_color_background') or 'rgba(40, 40, 40, 150)'
+                        filter_border_color = self.app_state.local_config.get('custom_color_border') or '#039d5b'
                         zoom_factor = self.app_state.local_config.get('ui_scale', 1.0)
-                        filters.setStyleSheet(f'QFrame#filters {{ background-color: {filter_bg_color}; border: {max(1, int(2 * zoom_factor))}px solid {filter_border_color}; padding: {int(8 * zoom_factor)}px; }}')
+                        def scale(x): return max(1, int(x * zoom_factor))
+                        filters.setStyleSheet(f'QFrame#filters {{ background-color: {filter_bg_color}; border: {scale(2)}px solid {filter_border_color}; padding: {scale(8)}px; }}')
         mod_list = getattr(self.app, 'mod_list_widget', None)
         installed_mods = getattr(self.app, 'installed_mods_widget', None)
         self.customization_service.update_mod_cards_styles(mod_list, installed_mods)
@@ -395,12 +426,27 @@ class ThemeController:
     def _reload_custom_font(self):
         """Reload custom font from disk, or fall back to language default."""
         import os
+        import logging
         from PyQt6.QtGui import QFontDatabase
         from services.localization_service import localization_service
         custom_f_path = self.customization_service.get_custom_font_path()
         if custom_f_path and os.path.exists(custom_f_path):
+            old_id = getattr(self.app, '_custom_font_id', None)
+            if old_id is not None and old_id != -1:
+                QFontDatabase.removeApplicationFont(old_id)
             f_id = QFontDatabase.addApplicationFont(custom_f_path)
-            families = QFontDatabase.applicationFontFamilies(f_id) if f_id != -1 else []
-            self.app.custom_font_family = families[0] if families else localization_service.load_font()
+            if f_id != -1:
+                self.app._custom_font_id = f_id
+                families = QFontDatabase.applicationFontFamilies(f_id)
+                if families:
+                    self.app.custom_font_family = families[0]
+                    logging.info(f"Custom font loaded: {families[0]} from {custom_f_path}")
+                else:
+                    logging.warning(f"No font families found in {custom_f_path}, using default")
+                    self.app.custom_font_family = localization_service.load_font()
+            else:
+                self.app._custom_font_id = -1
+                logging.error(f"Failed to load font from {custom_f_path}, using default")
+                self.app.custom_font_family = localization_service.load_font()
         else:
             self.app.custom_font_family = localization_service.load_font()

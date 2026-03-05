@@ -3,7 +3,7 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QFrame, QLabel, QPushButton, QScrollArea, QSizePolicy, QAbstractScrollArea
 from services.localization_service import tr
 from ui.widgets.shared.custom_controls import _ZeroHintWidget
-from ui.common.styling import get_theme_color, rgba_from_color
+from ui.common.styling import get_theme_color, rgba_from_color, get_border_radius
 
 
 class PluginTabBuilder:
@@ -35,7 +35,7 @@ class PluginTabBuilder:
         plugins_container_layout = QVBoxLayout(plugins_container)
         plugins_container_layout.setContentsMargins(15, 15, 15, 15)
         plugins_container_layout.setSpacing(10)
-        text_color = get_theme_color(self.app_state.local_config, 'text', 'white')
+        text_color = get_theme_color(self.app_state.local_config, 'text', '#e8e9eb')
         installed_plugins_label = QLabel(tr('plugins.installed_plugins'))
         installed_plugins_label.setStyleSheet(f'font-weight: bold; font-size: 16px; color: {text_color};')
         installed_plugins_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -58,8 +58,9 @@ class PluginTabBuilder:
             plugins_container_layout.setStretch(1, 1)
         except Exception:
             pass
-        plugins_bg_rgba = rgba_from_color(get_theme_color(self.app_state.local_config, 'background', '#000000'))
-        plugins_container.setStyleSheet(f'QWidget#plugins_background {{ background-color: {plugins_bg_rgba}; border-radius: 10px; margin: 5px; }}')
+        plugins_bg_rgba = rgba_from_color(get_theme_color(self.app_state.local_config, 'background', '#282828'))
+        br = get_border_radius(self.app_state.local_config)
+        plugins_container.setStyleSheet(f'QWidget#plugins_background {{ background-color: {plugins_bg_rgba}; border-radius: {br}px; margin: 5px; }}')
         layout.addWidget(plugins_container)
         try:
             layout.setStretch(0, 0)

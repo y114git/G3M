@@ -1,6 +1,6 @@
 from PyQt6.QtCore import pyqtSignal, Qt
 from PyQt6.QtWidgets import QFrame, QHBoxLayout, QVBoxLayout, QLabel, QWidget
-from ui.common.styling import load_mod_icon_universal, update_mod_widget_style, get_theme_color
+from ui.common.styling import load_mod_icon_universal, update_mod_widget_style, get_theme_color, get_border_radius
 from services.localization_service import tr
 from utils.mod_utils import get_mod_key
 
@@ -115,7 +115,12 @@ class BaseModWidget(QFrame):
             return None
 
     def _load_icon(self):
-        load_mod_icon_universal(self.icon_label, self.mod_data, 80, local_fallback=self._resolve_local_icon_fallback())
+        config = self._resolve_theme_config()
+        br = get_border_radius(config)
+        bc = get_theme_color(config, 'border', '#039d5b') if config else None
+        bw = 2 if bc else 0
+        self.icon_label.setStyleSheet('border: none; background: transparent;')
+        load_mod_icon_universal(self.icon_label, self.mod_data, 80, local_fallback=self._resolve_local_icon_fallback(), border_radius=br, border_width=bw, border_color=bc)
 
     def _resolve_theme_config(self):
         if self.parent_app:
@@ -128,9 +133,11 @@ class BaseModWidget(QFrame):
     def _update_style(self):
         if self.frame_selector:
             update_mod_widget_style(self, self.frame_selector, self.parent_app)
+        if hasattr(self, 'icon_label'):
+            self._load_icon()
         config = self._resolve_theme_config()
         if config:
-            text_color = get_theme_color(config, 'text', 'white')
+            text_color = get_theme_color(config, 'text', '#e8e9eb')
             if hasattr(self, 'name_label') and self.name_label:
                 try:
                     self.name_label.setStyleSheet(f'font-size: 16px; font-weight: bold; color: {text_color};')

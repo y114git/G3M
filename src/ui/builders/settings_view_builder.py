@@ -9,6 +9,7 @@ from PyQt6.QtWidgets import (
 from services.localization_service import localization_service, tr
 from ui.widgets.shared.custom_controls import NoScrollComboBox
 from ui.utils.ui_utils import UIAnimator
+from ui.common.styling import get_border_radius
 
 
 class SettingsViewBuilder:
@@ -18,7 +19,7 @@ class SettingsViewBuilder:
         'border': 'ui.border_color',
         'button_hover': 'ui.hover_color',
         'text': 'ui.main_text_color',
-        'version_text': 'ui.secondary_text_color',
+        'secondary_text': 'ui.secondary_text_color',
     }
 
     def __init__(self, app_state, parent=None):
@@ -71,10 +72,6 @@ class SettingsViewBuilder:
         scroll.setWidget(content_widget)
         return scroll
 
-    def _get_section_line_color(self) -> str:
-        from ui.common.styling import get_section_line_color
-        return get_section_line_color(self.app_state.local_config)
-
     def _build_simple_tab_page(self) -> tuple:
         """Create a simple settings tab page with standard layout. Returns (page, layout)."""
         page = QWidget()
@@ -100,7 +97,8 @@ class SettingsViewBuilder:
         header_layout.setContentsMargins(0, 0, 0, 0)
         header_layout.setSpacing(4)
 
-        line_color = self._get_section_line_color()
+        from ui.common.styling import get_section_line_color
+        line_color = get_section_line_color(self.app_state.local_config)
         line_style = f'color: {line_color};'
 
         line_left = QFrame()
@@ -208,11 +206,7 @@ class SettingsViewBuilder:
         return row, disp, btn, reset, label
 
     def _build_general_tab(self, parent: QWidget = None) -> QWidget:
-        page = QWidget()
-        layout = QVBoxLayout(page)
-        layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-        layout.setSpacing(4)
-        layout.setContentsMargins(20, 12, 20, 20)
+        page, layout = self._build_simple_tab_page()
 
         sec, cl = self._collapsible_section(tr('ui.settings_section_app'), 'general_app', 'ui.settings_section_app', parent=page)
         language_container = QWidget(page)
@@ -246,10 +240,9 @@ class SettingsViewBuilder:
         ui_scale_spinbox.setMinimum(50)
         ui_scale_spinbox.setMaximum(200)
         ui_scale_spinbox.setSingleStep(10)
-        ui_scale_spinbox.setButtonSymbols(QSpinBox.ButtonSymbols.NoButtons)
         ui_scale_spinbox.setSuffix("%")
         ui_scale_spinbox.setValue(int(self.app_state.local_config.get('ui_scale', 1.0) * 100))
-        ui_scale_spinbox.setMinimumWidth(100)
+        ui_scale_spinbox.setMinimumWidth(140)
         ui_scale_layout.addWidget(ui_scale_spinbox)
         cl.addWidget(ui_scale_container, alignment=Qt.AlignmentFlag.AlignCenter)
 
@@ -322,6 +315,24 @@ class SettingsViewBuilder:
         cl_audio.addLayout(sound_buttons_layout)
         layout.addWidget(sec_audio)
 
+        sec_styling, cl_styling = self._collapsible_section(tr('ui.settings_section_styling'), 'appearance_styling', 'ui.settings_section_styling', parent=page)
+        border_radius_container = QWidget(page)
+        border_radius_layout = QHBoxLayout(border_radius_container)
+        border_radius_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        border_radius_layout.setSpacing(10)
+        border_radius_label = self._styled_label(tr('ui.border_radius_label'), bold=True)
+        border_radius_layout.addWidget(border_radius_label)
+        border_radius_spinbox = QSpinBox()
+        border_radius_spinbox.setMinimum(0)
+        border_radius_spinbox.setMaximum(50)
+        border_radius_spinbox.setSingleStep(1)
+        border_radius_spinbox.setSuffix("px")
+        border_radius_spinbox.setValue(int(get_border_radius(self.app_state.local_config)))
+        border_radius_spinbox.setMinimumWidth(100)
+        border_radius_layout.addWidget(border_radius_spinbox)
+        cl_styling.addWidget(border_radius_container, alignment=Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(sec_styling)
+
         sec, cl = self._collapsible_section(tr('ui.settings_section_colors'), 'appearance_colors', 'ui.settings_section_colors', parent=page)
         custom_style_frame = QFrame(page)
         custom_style_layout = QVBoxLayout(custom_style_frame)
@@ -366,6 +377,8 @@ class SettingsViewBuilder:
         self.widgets['theme_save_btn'] = theme_save_btn
         self.widgets['theme_delete_btn'] = theme_delete_btn
         self.widgets['do_not_save_theme_checkbox'] = do_not_save_theme_checkbox
+        self.widgets['border_radius_label'] = border_radius_label
+        self.widgets['border_radius_spinbox'] = border_radius_spinbox
         return self._wrap_in_scroll(page, parent)
 
     def _build_mods_browser_tab(self, parent: QWidget = None) -> QWidget:
@@ -388,7 +401,6 @@ class SettingsViewBuilder:
         mods_per_page_spinbox.setMaximum(1000)
         mods_per_page_spinbox.setValue(getattr(self.app_state, 'mods_per_page', 20))
         mods_per_page_spinbox.setToolTip(tr('ui.mods_per_page_tooltip'))
-        mods_per_page_spinbox.setButtonSymbols(QSpinBox.ButtonSymbols.NoButtons)
         mpp_layout.addWidget(mods_per_page_spinbox)
         blocklist_button = self._styled_button(tr('ui.blocklist'), 100, tr('ui.blocklist_tooltip'))
         mpp_layout.addWidget(blocklist_button)
@@ -477,11 +489,7 @@ class SettingsViewBuilder:
         return self._wrap_in_scroll(page, parent)
 
     def _build_launch_tab(self, parent: QWidget = None) -> QWidget:
-        page = QWidget()
-        layout = QVBoxLayout(page)
-        layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-        layout.setSpacing(4)
-        layout.setContentsMargins(20, 12, 20, 20)
+        page, layout = self._build_simple_tab_page()
 
         sec, cl = self._collapsible_section(tr('ui.settings_section_paths'), 'launch_paths', 'ui.settings_section_paths', parent=page)
         game_selector_container = QWidget(page)

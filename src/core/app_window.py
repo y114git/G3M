@@ -14,7 +14,7 @@ from models.game_modes import DeltaruneGame, get_game
 from config.constants import UI_COLORS, SOCIAL_LINKS, ONLINE_UPDATE_INTERVAL, INITIALIZATION_TIMEOUT, CLOUD_FUNCTIONS_BASE_URL
 from ui.utils.ui_utils import DebounceTimer, UIAnimator
 from ui.widgets.shared.custom_controls import AnimatedToolTip
-from ui.common.styling import get_theme_color
+from ui.common.styling import get_theme_color, get_border_radius
 from utils.path_utils import get_user_data_root, resource_path, get_launcher_dir, get_user_plugins_dir
 from utils.network_utils import get_session
 from workers.presence_worker import PresenceWorker
@@ -407,6 +407,7 @@ class AppWindow(QWidget):
 
     def _setup_search_tab(self):
         search_builder = ModsBrowserTabBuilder(self.app_state, self)
+        self.search_tab_builder = search_builder
         self.search_mods_tab = search_builder.build()
         search_widgets = search_builder.get_widgets()
         self._bind_widgets(search_widgets, required=(
@@ -558,6 +559,7 @@ class AppWindow(QWidget):
             'hide_mods_browser_tab_checkbox', 'hide_library_tab_checkbox', 'hide_plugins_tab_checkbox',
             'merge_properties_checkbox', 'merge_code_checkbox', 'clear_cache_button',
             'ui_scale_label', 'ui_scale_spinbox',
+            'border_radius_label', 'border_radius_spinbox',
         ), optional=(
             'use_portproton_checkbox', 'select_portproton_path_button',
             'portproton_path_label', 'portproton_frame',
@@ -579,6 +581,19 @@ class AppWindow(QWidget):
             self._ui_scale_timer.start()
 
         self.ui_scale_spinbox.valueChanged.connect(_on_ui_scale_changed_from_ui)
+
+        if not hasattr(self, '_border_radius_timer'):
+            self._border_radius_timer = QTimer(self)
+            self._border_radius_timer.setSingleShot(True)
+            self._border_radius_timer.setInterval(300)
+            self._border_radius_timer.timeout.connect(lambda: self.theme.apply_theme())
+
+        def _on_border_radius_changed(val):
+            self.app_state.local_config['custom_border_radius'] = val
+            self.settings_service.write_local_config()
+            self._border_radius_timer.start()
+
+        self.border_radius_spinbox.valueChanged.connect(_on_border_radius_changed)
 
         self.beta_updates_checkbox.stateChanged.connect(self.settings_ui.on_toggle_beta_updates)
         self.open_deltahub_folder_button.clicked.connect(self._open_deltahub_folder)
@@ -743,6 +758,7 @@ class AppWindow(QWidget):
             self.used_mods_service.load_used_mods_state()
             self.library_display.update_display()
             self._update_change_path_button_text()
+            self._update_settings_library_tab()
         except Exception:
             pass
 
@@ -755,6 +771,13 @@ class AppWindow(QWidget):
         game_id = self.settings_game_combo.itemData(index)
         if not game_id:
             return
+
+        for i in range(self.game_type_combo.count()):
+            if self.game_type_combo.itemData(i) == game_id:
+                if self.game_type_combo.currentIndex() != i:
+                    self.game_type_combo.setCurrentIndex(i)
+                break
+
         game_def = get_game(game_id)
         if game_def and hasattr(self, 'settings_change_path_button'):
             self.settings_change_path_button.setText(game_def.path_change_button_text)
@@ -809,12 +832,13 @@ class AppWindow(QWidget):
             checkbox.blockSignals(False)
 
     def eventFilter(self, obj, ev):
-        if ev.type() == QEvent.Type.MouseButtonDblClick and hasattr(obj, '_chapter_id'):
+        ev_type = ev.type()
+        if ev_type == QEvent.Type.MouseButtonDblClick:
             chapter_id = getattr(obj, '_chapter_id', None)
             if chapter_id is not None:
                 self.used_mods_service.toggle_direct_launch_for_chapter(chapter_id)
                 return True
-        elif ev.type() == QEvent.Type.Wheel:
+        elif ev_type == QEvent.Type.Wheel:
             if ev.modifiers() == Qt.KeyboardModifier.ControlModifier:
                 delta = ev.angleDelta().y()
                 if delta > 0:
@@ -822,7 +846,7 @@ class AppWindow(QWidget):
                 elif delta < 0:
                     self._zoom_ui(-1)
                 return True
-        elif ev.type() == QEvent.Type.KeyPress:
+        elif ev_type == QEvent.Type.KeyPress:
             if ev.modifiers() & Qt.KeyboardModifier.ControlModifier:
                 if ev.key() in (Qt.Key.Key_Equal, Qt.Key.Key_Plus):
                     self._zoom_ui(1)
@@ -830,41 +854,35 @@ class AppWindow(QWidget):
                 elif ev.key() == Qt.Key.Key_Minus:
                     self._zoom_ui(-1)
                     return True
-        elif ev.type() == QEvent.Type.ToolTip:
-            if hasattr(obj, 'toolTip'):
-                text = obj.toolTip()
-                if text:
-                    if hasattr(self, '_last_tooltip_target') and hasattr(self, '_tooltip_widget') and self._last_tooltip_target == obj and self._tooltip_widget and self._tooltip_widget.isVisible():
-                        return True
-                    if hasattr(self, '_last_tooltip_text'):
-                        self._last_tooltip_text = text
-                    if hasattr(self, '_last_tooltip_target'):
-                        self._last_tooltip_target = obj
-                    if hasattr(self, '_tooltip_timer'):
-                        self._tooltip_timer.start(250)
+        elif ev_type == QEvent.Type.ToolTip:
+            text = obj.toolTip() if hasattr(obj, 'toolTip') else ''
+            if text:
+                if self._last_tooltip_target == obj and self._tooltip_widget and self._tooltip_widget.isVisible():
                     return True
+                self._last_tooltip_text = text
+                self._last_tooltip_target = obj
+                self._tooltip_timer.start(250)
+                return True
             self._hide_custom_tooltip()
             return super().eventFilter(obj, ev)
-        elif ev.type() in (QEvent.Type.Leave, QEvent.Type.MouseButtonPress, QEvent.Type.KeyPress, QEvent.Type.Hide):
-            if hasattr(self, '_tooltip_timer'):
-                self._tooltip_timer.stop()
+        elif ev_type in (QEvent.Type.Leave, QEvent.Type.MouseButtonPress, QEvent.Type.KeyPress, QEvent.Type.Hide):
+            self._tooltip_timer.stop()
             self._hide_custom_tooltip()
 
         return super().eventFilter(obj, ev)
 
     def _show_custom_tooltip(self):
-        if not hasattr(self, '_last_tooltip_target') or not hasattr(self, '_last_tooltip_text') or not self._last_tooltip_target or not self._last_tooltip_text:
+        if not self._last_tooltip_target or not self._last_tooltip_text:
             return
 
         from PyQt6.QtGui import QCursor
 
-        if hasattr(self, '_tooltip_widget') and self._tooltip_widget:
+        if self._tooltip_widget:
             self._tooltip_widget.close()
             self._tooltip_widget.deleteLater()
 
         self._tooltip_widget = AnimatedToolTip(self._last_tooltip_text, None)
         self._tooltip_widget.adjustSize()
-        QTimer.singleShot(0, self._tooltip_widget.adjustSize)
 
         pos = QCursor.pos()
         pos += QPoint(10, 10)
@@ -879,7 +897,7 @@ class AppWindow(QWidget):
         UIAnimator.fade_in(self._tooltip_widget, 150, self.app_state)
 
     def _hide_custom_tooltip(self):
-        if hasattr(self, '_tooltip_widget') and self._tooltip_widget and self._tooltip_widget.isVisible():
+        if self._tooltip_widget and self._tooltip_widget.isVisible():
             if not getattr(self._tooltip_widget, '_is_fading_out', False):
                 self._tooltip_widget._is_fading_out = True
                 anim = UIAnimator.fade_out(self._tooltip_widget, 150, self.app_state)
@@ -888,8 +906,7 @@ class AppWindow(QWidget):
                 else:
                     self._tooltip_widget.hide()
                     self._tooltip_widget = None
-        if hasattr(self, '_last_tooltip_target'):
-            self._last_tooltip_target = None
+        self._last_tooltip_target = None
 
     def paintEvent(self, event):
         painter = QPainter(self)
@@ -1115,14 +1132,15 @@ class AppWindow(QWidget):
             return
         tabs = self.app_state.game_mode.tabs
         direct_launch_chapter_id = self.app_state.local_config.get('direct_launch_chapter', '')
-        border_color = get_theme_color(self.app_state.local_config, 'border', 'white')
-        button_color = get_theme_color(self.app_state.local_config, 'button', 'black')
-        hover_color = get_theme_color(self.app_state.local_config, 'button_hover', '#333')
-        for i, (tab, btn) in enumerate(zip(tabs, self.chapter_tab_buttons)):
-            is_direct_launch = direct_launch_chapter_id == tab.tab_id
-            border_style = 'dashed' if is_direct_launch else 'solid'
-            text_color = get_theme_color(self.app_state.local_config, 'text', 'white')
-            btn.setStyleSheet(f'\n                QPushButton#chapter_tab_{i} {{\n                    background-color: {button_color};\n                    border: 2px {border_style} {border_color};\n                    color: {text_color};\n                    font-weight: bold;\n                    font-size: 13px;\n                    border-radius: 0px;\n                    padding: 5px;\n                }}\n                QPushButton#chapter_tab_{i}:checked {{\n                    background-color: {hover_color};\n                    border: 3px {border_style} {border_color};\n                }}\n                QPushButton#chapter_tab_{i}:hover {{\n                    background-color: {hover_color};\n                }}\n            ')
+        border_color = get_theme_color(self.app_state.local_config, 'border', '#039d5b')
+        button_color = get_theme_color(self.app_state.local_config, 'button', '#222222')
+        hover_color = get_theme_color(self.app_state.local_config, 'button_hover', '#616b78')
+        text_color = get_theme_color(self.app_state.local_config, 'text', '#e8e9eb')
+        fs = max(1, int(14 * self.app_state.local_config.get('ui_scale', 1.0)))
+        for i, (tab, btn) in enumerate(zip(tabs, self.chapter_tab_buttons, strict=True)):
+            border_style = 'dashed' if direct_launch_chapter_id == tab.tab_id else 'solid'
+            br = get_border_radius(self.app_state.local_config)
+            btn.setStyleSheet(f'\n                QPushButton#chapter_tab_{i} {{\n                    background-color: {button_color};\n                    border: 2px {border_style} {border_color};\n                    color: {text_color};\n                    font-weight: bold;\n                    font-size: {fs}px;\n                    border-radius: {br}px;\n                    padding: 5px;\n                }}\n                QPushButton#chapter_tab_{i}:checked {{\n                    background-color: {hover_color};\n                    border: 3px {border_style} {border_color};\n                }}\n                QPushButton#chapter_tab_{i}:hover {{\n                    background-color: {hover_color};\n                }}\n            ')
 
     def _apply_widget_localizations(self, localizations):
         """Apply a list of (widget_name, method, tr_key) localizations.
@@ -1240,7 +1258,7 @@ class AppWindow(QWidget):
         clear_layout_widgets(self.installed_mods_layout, keep_last_n=1)
         instruction_widget = QLabel(tr('ui.chapter_mode_instruction'))
         instruction_widget.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        secondary_text_color = get_theme_color(self.app_state.local_config, 'version_text', '#CCCCCC')
+        secondary_text_color = get_theme_color(self.app_state.local_config, 'secondary_text', '#CCCCCC')
         border_color = get_theme_color(self.app_state.local_config, 'border', '#666666')
         instruction_widget.setStyleSheet(f'\n            QLabel {{\n                color: {secondary_text_color};\n                font-size: 14px;\n                font-style: italic;\n                padding: 20px;\n                border: 2px dashed {border_color};\n                background-color: rgba(255, 255, 255, 0.1);\n            }}\n        ')
         instruction_widget.setWordWrap(True)

@@ -35,7 +35,7 @@ class CustomSplashScreen(QSplashScreen):
                 target_width = min(550, screen_geom.width() // 2)
             else:
                 target_width = 550
-            ratio = gif_size.height() / gif_size.width()
+            ratio = gif_size.height() / max(gif_size.width(), 1)
             target_height = int(target_width * ratio)
             if gif_size.width() != target_width or gif_size.height() != target_height:
                 size = QPixmap(target_width, target_height).size()
@@ -101,7 +101,7 @@ def create_png_splash(config_dir: str = None):
                 splash_path = logo_path
                 break
     if not splash_path:
-        splash_path = resource_path('assets/images/splash.png')
+        splash_path = resource_path('assets/images/logo.png')
     if not pixmap.load(splash_path):
         pixmap = QPixmap(600, 600)
         pixmap.fill(Qt.GlobalColor.transparent)

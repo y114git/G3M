@@ -3,7 +3,7 @@ from PyQt6.QtCore import pyqtSignal, Qt
 from PyQt6.QtWidgets import QLabel, QPushButton, QHBoxLayout, QVBoxLayout, QFrame, QWidget
 from PyQt6.QtGui import QPixmap, QColor
 from services.localization_service import tr
-from ui.common.styling import get_theme_color, build_button_style
+from ui.common.styling import get_theme_color, build_button_style, round_pixmap, get_border_radius
 from ui.utils.ui_utils import UIAnimator
 
 
@@ -68,7 +68,7 @@ class PluginWidget(QFrame):
         self.icon_label.setObjectName('pluginIcon')
         self.icon_label.setFixedSize(80, 80)
         self.icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.icon_label.setStyleSheet('border: 2px solid #fff; background-color: #333;')
+        self.icon_label.setStyleSheet('border: none; background: transparent;')
         self._load_icon()
         main_layout.addWidget(self.icon_label)
         info_layout = QVBoxLayout()
@@ -160,9 +160,10 @@ class PluginWidget(QFrame):
         self.delete_button.setObjectName('cardButton')
         app_state = getattr(self.parent_app, 'app_state', None)
         config = app_state.local_config if app_state and hasattr(app_state, 'local_config') else None
-        text_color = get_theme_color(config, 'text', 'white')
-        border = get_theme_color(config, 'border', '#fff')
-        self.delete_button.setStyleSheet(build_button_style('cardButton', '#F44336', '#da190b', text_color, border))
+        text_color = get_theme_color(config, 'text', '#e8e9eb')
+        border = get_theme_color(config, 'border', '#039d5b')
+        br = get_border_radius(config)
+        self.delete_button.setStyleSheet(build_button_style('cardButton', '#F44336', '#da190b', text_color, border, border_radius=br))
         self.delete_button.clicked.connect(lambda: self.delete_requested.emit(self.plugin_name))
         actions_layout.addWidget(self.delete_button)
         self.actions_widget.setVisible(False)
@@ -182,17 +183,21 @@ class PluginWidget(QFrame):
         status = self.plugin_info.get('status', 'enabled')
         app_state = getattr(self.parent_app, 'app_state', None)
         config = app_state.local_config if app_state and hasattr(app_state, 'local_config') else None
-        border = get_theme_color(config, 'border', '#fff')
+        border = get_theme_color(config, 'border', '#039d5b')
+        br = get_border_radius(config)
         if status == 'enabled':
             self.toggle_button.setText(tr('plugins.disable'))
-            self.toggle_button.setStyleSheet(build_button_style('cardButtonInstall', '#FF9800', '#F57C00', 'white', border))
+            self.toggle_button.setStyleSheet(build_button_style('cardButtonInstall', '#FF9800', '#F57C00', '#e8e9eb', border, border_radius=br))
         else:
             self.toggle_button.setText(tr('plugins.enable'))
-            self.toggle_button.setStyleSheet(build_button_style('cardButtonInstall', '#4CAF50', '#5cb85c', 'white', border))
+            self.toggle_button.setStyleSheet(build_button_style('cardButtonInstall', '#4CAF50', '#5cb85c', '#e8e9eb', border, border_radius=br))
 
     def _update_style(self):
         from ui.common.styling import update_mod_widget_style
         update_mod_widget_style(self, self.frame_selector, self.parent_app)
+        if hasattr(self, 'icon_label'):
+            self.icon_label.setStyleSheet('border: none; background: transparent;')
+            self._load_icon()
 
     def set_selected(self, selected: bool):
         self.is_selected = selected
@@ -298,6 +303,12 @@ class PluginWidget(QFrame):
                         break
                 if icon_path:
                     break
+        app_state = getattr(self.parent_app, 'app_state', None)
+        config = app_state.local_config if app_state and hasattr(app_state, 'local_config') else None
+        border_color = get_theme_color(config, 'border', '#039d5b')
+        bg_color = get_theme_color(config, 'background', '#333')
+        br = get_border_radius(config)
+        bw = 2 if border_color else 0
         if icon_path and os.path.exists(icon_path):
             try:
                 pixmap = QPixmap()
@@ -309,7 +320,7 @@ class PluginWidget(QFrame):
                             scaled_pixmap = cropped.scaled(80, 80, Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation)
                         else:
                             scaled_pixmap = pixmap.scaled(80, 80, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
-                        self.icon_label.setPixmap(scaled_pixmap)
+                        self.icon_label.setPixmap(round_pixmap(scaled_pixmap, br, bw, border_color) if (br > 0 or bw > 0) else scaled_pixmap)
                         self.icon_label.setText('')
                         return
             except Exception as e:
@@ -317,13 +328,13 @@ class PluginWidget(QFrame):
                 logging.debug(f'PluginWidget: Error loading icon from {icon_path}: {e}')
         try:
             default_pixmap = QPixmap(80, 80)
-            default_pixmap.fill(QColor('#333'))
-            self.icon_label.setPixmap(default_pixmap)
+            default_pixmap.fill(QColor(bg_color))
+            self.icon_label.setPixmap(round_pixmap(default_pixmap, br, bw, border_color) if (br > 0 or bw > 0) else default_pixmap)
             self.icon_label.setText('🔌')
-            self.icon_label.setStyleSheet('font-size: 48px; border: 2px solid #fff; background-color: #333;')
+            self.icon_label.setStyleSheet('font-size: 48px; border: none; background: transparent;')
         except Exception:
             self.icon_label.setText('🔌')
-            self.icon_label.setStyleSheet('font-size: 48px; border: 2px solid #fff; background-color: #333;')
+            self.icon_label.setStyleSheet('font-size: 48px; border: none; background: transparent;')
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:

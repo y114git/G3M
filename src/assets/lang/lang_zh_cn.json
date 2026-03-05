@@ -2,7 +2,7 @@
   "metadata": {
     "language": "chinese_simplified",
     "language_name": "简体中文",
-    "font": "Dtm_x_FZBitmap Regular.otf",
+    "font": "main.ttf",
     "qt_translation": "qtbase_zh_cn",
     "version": "1.0.1"
   },
@@ -310,16 +310,18 @@
     "online_status": "🟢 在线：{count}",
     "loading_placeholder": "加载中...",
     "no_search_results": "未找到任何结果...",
-    "nobody_came": "但是没有人来。",
-    "settings_section_merging": "Merging",
-    "clear_cache_button": "Clear cache",
+    "nobody_came": "但是没有人来。。。",
+    "settings_section_merging": "合并",
+    "clear_cache_button": "清除缓存",
     "settings_section_themes": "主题",
     "settings_section_media": "外观和声音",
     "do_not_save_theme_after_import": "导入后不要将主题保存在列表中",
     "dont_hide_window_on_launch": "启动时不隐藏窗口",
     "hide_wips_without_downloads": "隐藏无下载的WIP",
     "settings_section_graphics": "图形",
-    "settings_section_audio": "音频"
+    "settings_section_audio": "音频",
+    "settings_section_styling": "样式",
+    "border_radius_label": "圆角半径"
   },
   "files": {
     "archive_link": "压缩文件链接",
@@ -410,7 +412,7 @@
     "changelog_close": "关闭",
     "withdraw_request": "撤回请求",
     "shortcut": "快捷方式",
-    "import_export_themes": "导入/出主题"
+    "import_export_themes": "导入/导出主题"
   },
   "tooltips": {
     "custom_exe": "您可以选择自己的可执行文件而不是默认文件（例如DELTARUNE.exe）。如果文件位于不同位置或您想运行自定义启动文件，这将很有用。",

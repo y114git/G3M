@@ -7,7 +7,7 @@ from urllib.parse import urlparse, unquote
 from PyQt6.QtCore import QThread, pyqtSignal
 from config.constants import UI_COLORS, NETWORK_TIMEOUT_HEAD, MOD_CONFIG_FILENAME, DATA_FILE_EXTENSIONS
 from services.localization_service import tr
-from utils.file_utils import get_unique_mod_dir
+from utils.file_utils import get_unique_mod_dir, chapter_id_to_file_key
 from utils.mod_utils import get_mod_key
 from utils.network_utils import get_session, download_file
 from ui.utils.ui_utils import format_size_mb
@@ -53,15 +53,6 @@ class InstallModsThread(QThread):
                     logging.warning(f'InstallModsThread.cancel: response close error: {e}', exc_info=True)
         except Exception as e:
             logging.warning(f'InstallModsThread.cancel: cleanup failed: {e}', exc_info=True)
-
-    @staticmethod
-    def _chapter_id_to_file_key(chapter_id: str) -> str:
-        if chapter_id == 'deltarunedemo':
-            return 'demo'
-        if '_' in str(chapter_id):
-            _, suffix = chapter_id.rsplit('_', 1)
-            return suffix
-        return chapter_id
 
     def _collect_remote_versions_for_chapter(self, mod, chapter_id: str) -> dict:
         versions: dict[str, str] = {}
@@ -327,7 +318,7 @@ class InstallModsThread(QThread):
                         file_info['data_file_version'] = mod.demo_version or '1.0.0'
                         file_info['versions'] = {'demo': mod.demo_version or '1.0.0'}
                     if file_info:
-                        file_key = self._chapter_id_to_file_key(chapter_id)
+                        file_key = chapter_id_to_file_key(chapter_id)
                         files_data[file_key] = file_info
                 config_data = {'key': mod.key, 'name': mod.name, 'author': mod.author, 'version': mod.version, 'game_version': mod.game_version, 'game': mod.game, 'files': files_data, 'tags': mod.tags}
                 if hasattr(mod, 'icon_url') and mod.icon_url:
@@ -361,7 +352,7 @@ class InstallModsThread(QThread):
                 self.status.emit(tr('status.operation_cancelled'), UI_COLORS['status_error'])
                 self.finished.emit(False)
                 return
-            for key, info in mod_configs.items():
+            for _key, info in mod_configs.items():
                 folder_name = info['folder_name']
                 config_data = info['config']
                 mod_dir = os.path.join(self.main_window.app_state.mods_dir, folder_name)

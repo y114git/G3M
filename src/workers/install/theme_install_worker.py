@@ -61,7 +61,7 @@ class ThemeInstallWorker(BaseInstallWorker):
                     try:
                         extract_any_archive(content_path, extract_dir)
                     except Exception as e:
-                        logging.error(f'ThemeInstallWorker: Failed to extract theme archive: {e}')
+                        logging.exception(f'ThemeInstallWorker: Failed to extract theme archive: {e}')
                         return False
                     theme_json_path = os.path.join(extract_dir, 'theme.json')
                     if not os.path.exists(theme_json_path):
@@ -78,14 +78,16 @@ class ThemeInstallWorker(BaseInstallWorker):
                 with open(theme_json_path, 'r', encoding='utf-8') as f:
                     theme_settings = json.load(f)
                 self._apply_theme_settings(theme_settings, content_path)
-            self.settings_service.write_local_config()
             self.app_state.local_config['first_launch_splash_shown'] = True
             if 'disable_splash' in theme_settings:
                 self.app_state.local_config['disable_splash'] = theme_settings['disable_splash']
-            elif 'disable_splash' not in self.app_state.local_config:
-                self.app_state.local_config['disable_splash'] = True
-            self.settings_service.write_local_config()
-            return True
+                self.settings_service.write_local_config()
+                return True
+            else:
+                if 'disable_splash' not in self.app_state.local_config:
+                    self.app_state.local_config['disable_splash'] = True
+                self.settings_service.write_local_config()
+                return True
         except Exception as e:
             logging.error(f'ThemeInstallWorker: Error installing theme from path: {e}', exc_info=True)
             return False

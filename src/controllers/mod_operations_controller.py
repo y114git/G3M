@@ -11,7 +11,7 @@ from ui.widgets.mod.installed_mod_widget import InstalledModWidget
 from workers.install.batch_install_worker import InstallModsThread
 from workers.install.gamebanana_install_worker import InstallGameBananaModThread
 from workers.gamebanana.prepare_gamebanana_manual_install_worker import PrepareGameBananaManualInstallWorker
-from utils.mod_utils import get_mod_key, get_mod_name
+from utils.mod_utils import get_mod_key, get_mod_name, get_gamebanana_mod_id
 from adapters.gamebanana_adapter import GameBananaAPI
 from ui.dialogs.file_picker_dialog import GameBananaFilePickerDialog
 
@@ -25,6 +25,9 @@ class ModOperationsController:
         self.mod_service = mod_service
         self.app = app_window
         self._last_gamebanana_progress = -1
+        from ui.utils.ui_utils import DebounceTimer
+        self._update_debounce_short = DebounceTimer(delay_ms=200)
+        self._update_debounce_long = DebounceTimer(delay_ms=1000)
 
     def _safe_execute(self, func, error_msg_prefix='', default_return=None):
         try:
@@ -95,7 +98,7 @@ class ModOperationsController:
                             previous_task.deleteLater()
                     except Exception as e:
                         logging.debug(f'ModOperationsController: Error deleting previous task: {e}')
-                    self._start_gamebanana_install(mod, force, is_update, selected_file)
+                    self._start_gamebanana_install(mod, selected_file=selected_file)
                 if hasattr(previous_task, 'finished'):
                     previous_task.finished.connect(on_previous_task_finished)
                 elif not previous_task.isRunning():
@@ -112,7 +115,7 @@ class ModOperationsController:
                 except Exception:
                     pass
                 self.app_state.clear_current_task()
-            self._start_gamebanana_install(mod, force, is_update, selected_file)
+            self._start_gamebanana_install(mod, selected_file=selected_file)
         except Exception as e:
             logging.error(f'Error starting GameBanana mod installation: {e}', exc_info=True)
             self._handle_install_start_error(e)
@@ -141,7 +144,7 @@ class ModOperationsController:
             logging.error(f'Error starting install thread: {e}', exc_info=True)
             self._handle_install_start_error(e)
 
-    def _start_gamebanana_install(self, mod, force=False, is_update=False, selected_file=None):
+    def _start_gamebanana_install(self, mod, selected_file=None):
         try:
             self.app._install_op_id += 1
             op_id = self.app._install_op_id
@@ -184,29 +187,24 @@ class ModOperationsController:
         elif clicked_btn == open_btn and url_to_open:
             webbrowser.open(url_to_open)
 
-    def _get_gamebanana_mod_id_str(self, mod) -> Optional[str]:
-        """Extract GameBanana mod ID string from mod data."""
-        from utils.mod_utils import get_gamebanana_mod_id
-        return get_gamebanana_mod_id(mod)
-
     def _get_available_gamebanana_files(self, mod) -> List[Dict]:
         files = getattr(mod, 'gamebanana_supported_files', []) or []
         if files:
             self._notify_gamebanana_status_refresh()
             return files
-        mod_id_str = self._get_gamebanana_mod_id_str(mod)
+        mod_id_str = get_gamebanana_mod_id(mod)
         if not mod_id_str:
             return []
         mod_id = int(mod_id_str)
         try:
             api = GameBananaAPI()
             external_url = getattr(mod, 'external_url', None)
-            compat = api.get_supported_files_for_mod(int(mod_id), external_url=external_url)
+            compat = api.get_supported_files_for_mod(mod_id, external_url=external_url)
             files = compat.get('supported_files') or []
             if files:
-                setattr(mod, 'gamebanana_supported_files', files)
-                setattr(mod, 'gamebanana_is_tool_compatible', compat.get('has_supported_files', False))
-                setattr(mod, 'gamebanana_compatibility_checked', compat.get('compatibility_checked', False))
+                mod.gamebanana_supported_files = files
+                mod.gamebanana_is_tool_compatible = compat.get('has_supported_files', False)
+                mod.gamebanana_compatibility_checked = compat.get('compatibility_checked', False)
                 self._notify_gamebanana_status_refresh()
             return files
         except Exception as e:
@@ -214,7 +212,7 @@ class ModOperationsController:
             return []
 
     def _get_all_gamebanana_files(self, mod) -> List[Dict]:
-        mod_id_str = self._get_gamebanana_mod_id_str(mod)
+        mod_id_str = get_gamebanana_mod_id(mod)
         if not mod_id_str:
             return []
         mod_id = int(mod_id_str)
@@ -252,7 +250,7 @@ class ModOperationsController:
 
     def _get_mod_identifier(self, mod) -> Optional[str]:
         try:
-            key = self._get_mod_key_value(mod)
+            key = get_mod_key(mod)
             if key:
                 if key.startswith('gb_'):
                     mod_id = key.replace('gb_', '', 1)
@@ -266,9 +264,9 @@ class ModOperationsController:
     def _notify_gamebanana_status_refresh(self):
         try:
             if hasattr(self.app, 'search_display'):
-                QTimer.singleShot(0, self.app.search_display.update_search_cards)
-        except Exception:
-            pass
+                self.app.search_display.update_search_cards()
+        except Exception as e:
+            logging.debug('_notify_gamebanana_status_refresh failed', exc_info=e)
 
     def _on_gamebanana_install_finished(self, success: bool, message: str, op_id: int):
         current_op_id = getattr(self.app, '_install_op_id', 0)
@@ -304,7 +302,7 @@ class ModOperationsController:
                 selected_file = self._pick_gamebanana_file(available_files, mod.name, getattr(mod, 'external_url', None))
                 if selected_file is None:
                     return
-                self._install_gamebanana_mod(mod, force, is_update, selected_file)
+                self._install_gamebanana_mod(mod, force, is_update, selected_file=selected_file)
                 return
             available_chapters = []
             if mod.game == 'undertale':
@@ -448,19 +446,13 @@ class ModOperationsController:
                     self.app.library_display.update_display()
             except Exception as e:
                 logging.warning(f'ModOperationsController: Failed to update library display: {e}', exc_info=True)
-        from ui.utils.ui_utils import DebounceTimer
-        if not hasattr(self, '_update_debounce_short'):
-            self._update_debounce_short = DebounceTimer(delay_ms=200)
-        if not hasattr(self, '_update_debounce_long'):
-            self._update_debounce_long = DebounceTimer(delay_ms=1000)
         if current_task and installed_mod_info:
             self.refresh_specific_mod_widget_after_update(installed_mod_info)
         self._update_debounce_short.call(check_cache_and_update)
         self._update_debounce_short.call(update_filtered_mods)
         self._update_debounce_short.call(update_cards_with_retry)
         self._update_debounce_short.call(update_library_with_retry)
-        self._update_debounce_long.call(update_cards_with_retry)
-        self._update_debounce_long.call(update_library_with_retry)
+        self._update_debounce_long.call(check_cache_and_update)
         if message:
             self.feedback_service.update_status(message, UI_COLORS['status_success'])
         else:
@@ -524,7 +516,7 @@ class ModOperationsController:
         if self.app_state.is_installing:
             return
         if self.feedback_service.ask_question('dialogs.delete_confirmation', 'dialogs.delete_mod_confirmation', '', False, mod_name=mod.name):
-            QTimer.singleShot(10, lambda m=mod: self.uninstall_mod(m))
+            self.uninstall_mod(mod)
 
     def uninstall_mod(self, mod):
         try:

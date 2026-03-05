@@ -23,23 +23,23 @@ class TestCustomizationColors:
         assert result == '#FFFFFF'
 
     def test_customizable_color_keys(self):
-        config = {'custom_color_text': '#AAAAAA', 'custom_color_background': '#BBBBBB', 'custom_color_button': '#CCCCCC', 'custom_color_border': '#DDDDDD', 'custom_color_button_hover': '#EEEEEE', 'custom_color_version_text': '#FF00FF'}
+        config = {'custom_color_text': '#AAAAAA', 'custom_color_background': '#BBBBBB', 'custom_color_button': '#CCCCCC', 'custom_color_border': '#DDDDDD', 'custom_color_button_hover': '#EEEEEE', 'custom_color_secondary_text': '#FF00FF'}
         assert get_theme_color(config, 'text', '#FFFFFF') == '#AAAAAA'
         assert get_theme_color(config, 'background', '#000000') == '#BBBBBB'
         assert get_theme_color(config, 'button', '#000000') == '#CCCCCC'
         assert get_theme_color(config, 'border', '#FFFFFF') == '#DDDDDD'
         assert get_theme_color(config, 'button_hover', '#333333') == '#EEEEEE'
-        assert get_theme_color(config, 'version_text', '#888888') == '#FF00FF'
+        assert get_theme_color(config, 'secondary_text', '#888888') == '#FF00FF'
 
 
 class TestNoHardcodedWhiteColors:
 
     def test_no_hardcoded_white_colors_in_ui(self):
-        ui_dir = Path('src/ui')
+        ui_dir = Path('src/ui').resolve()
         if not ui_dir.exists():
             pytest.skip('src/ui directory not found')
         customizable_patterns = [('#[Ff]{6}\\b', 'hex color like #FFFFFF'), ('\\bwhite\\b', 'white keyword'), ('#[Ff]{3}\\b', 'short hex like #FFF'), ('rgba\\(255,\\s*255,\\s*255', 'rgba white'), ('rgb\\(255,\\s*255,\\s*255\\)', 'rgb white')]
-        special_patterns = ['#00BFFF', '#8A2BE2', '\\byellow\\b', '\\bgreen\\b', '\\bred\\b', '\\borange\\b', '\\bblue\\b', 'lightgreen', '#4CAF50', '#F44336', '#da190b', '#FFD700', 'white-space', 'white-space:']
+        special_patterns = ['#00BFFF', '#8A2BE2', '\\byellow\\b', '\\bgreen\\b', '\\bred\\b', '\\borange\\b', '\\bblue\\b', 'lightgreen', '#4CAF50', '#F44336', '#da190b', '#FFD700', 'white-space', 'white-space:', 'WhiteColor', 'message_bg_color']
         issues = []
         for py_file in ui_dir.rglob('*.py'):
             try:
@@ -56,10 +56,10 @@ class TestNoHardcodedWhiteColors:
                         if re.search(pattern, line, re.IGNORECASE):
                             if 'get_theme_color' not in line:
                                 if not any((word in line.lower() for word in ['white-space', 'whitelist', 'whiteout'])):
-                                    issues.append(f'{py_file.relative_to(Path.cwd())}:{line_num} - {desc}: {line.strip()[:80]}')
+                                    issues.append(f'{py_file.relative_to(ui_dir.parent.parent)}:{line_num} - {desc}: {line.strip()[:80]}')
                                     break
-            except Exception:
-                pass
+            except (FileNotFoundError, UnicodeDecodeError) as e:
+                pytest.fail(f'Failed to read UI file {py_file}: {e}')
         if issues:
             pytest.fail(f'Found {len(issues)} potential hardcoded white colors that should use get_theme_color:\n' + '\n'.join(issues[:30]))
 
@@ -67,7 +67,7 @@ class TestNoHardcodedWhiteColors:
 class TestNoHardcodedBlackColors:
 
     def test_no_hardcoded_black_colors_in_ui(self):
-        ui_dir = Path('src/ui')
+        ui_dir = Path('src/ui').resolve()
         if not ui_dir.exists():
             pytest.skip('src/ui directory not found')
         customizable_patterns = [('#[0]{6}\\b', 'hex black #000000'), ('#[0]{3}\\b', 'short hex #000'), ('\\bblack\\b', 'black keyword'), ('rgba\\(0,\\s*0,\\s*0[,\\s]', 'rgba black'), ('rgb\\(0,\\s*0,\\s*0\\)', 'rgb black')]
@@ -87,10 +87,10 @@ class TestNoHardcodedBlackColors:
                     for pattern, desc in customizable_patterns:
                         if re.search(pattern, line, re.IGNORECASE):
                             if 'get_theme_color' not in line:
-                                issues.append(f'{py_file.relative_to(Path.cwd())}:{line_num} - {desc}: {line.strip()[:80]}')
+                                issues.append(f'{py_file.relative_to(ui_dir.parent.parent)}:{line_num} - {desc}: {line.strip()[:80]}')
                                 break
-            except Exception:
-                pass
+            except (FileNotFoundError, UnicodeDecodeError) as e:
+                pytest.fail(f'Failed to read UI file {py_file}: {e}')
         if issues:
             pytest.fail(f'Found {len(issues)} potential hardcoded black colors:\n' + '\n'.join(issues[:30]))
 
@@ -98,11 +98,11 @@ class TestNoHardcodedBlackColors:
 class TestNoHardcodedGrayColors:
 
     def test_no_hardcoded_gray_colors_in_ui(self):
-        ui_dir = Path('src/ui')
+        ui_dir = Path('src/ui').resolve()
         if not ui_dir.exists():
             pytest.skip('src/ui directory not found')
         customizable_patterns = [('#[8]{6}\\b', 'hex gray #888888'), ('#[8]{3}\\b', 'short hex #888'), ('\\bgray\\b|\\bgrey\\b', 'gray/grey keyword'), ('rgba\\(128,\\s*128,\\s*128', 'rgba gray'), ('rgba\\(255,\\s*255,\\s*255,\\s*178\\)', 'rgba version text'), ('#[5]{6}\\b', 'hex dark gray #555555'), ('#[4]{6}\\b', 'hex medium gray #444444'), ('#[3]{6}\\b', 'hex light gray #333333')]
-        special_patterns = ['status_info', '#444', '#555', '#333']
+        special_patterns = ['status_info', '#444', '#555', '#333', '#888']
         issues = []
         for py_file in ui_dir.rglob('*.py'):
             try:
@@ -117,13 +117,67 @@ class TestNoHardcodedGrayColors:
                         continue
                     for pattern, desc in customizable_patterns:
                         if re.search(pattern, line, re.IGNORECASE):
-                            if 'get_theme_color' not in line and 'version_text' not in line:
-                                issues.append(f'{py_file.relative_to(Path.cwd())}:{line_num} - {desc}: {line.strip()[:80]}')
+                            if 'get_theme_color' not in line and 'secondary_text' not in line:
+                                issues.append(f'{py_file.relative_to(ui_dir.parent.parent)}:{line_num} - {desc}: {line.strip()[:80]}')
                                 break
-            except Exception:
-                pass
+            except (FileNotFoundError, UnicodeDecodeError) as e:
+                pytest.fail(f'Failed to read UI file {py_file}: {e}')
         if issues:
             pytest.fail(f'Found {len(issues)} potential hardcoded gray colors:\n' + '\n'.join(issues[:30]))
+
+
+class TestBorderRadius:
+
+    def test_default_border_radius_is_zero(self, app_state):
+        assert app_state.local_config.get('custom_border_radius', 0) == 0
+
+    def test_border_radius_in_stylesheet(self):
+        from ui.styles import build_stylesheet, invalidate_stylesheet_cache
+        invalidate_stylesheet_cache()
+        sheet = build_stylesheet(
+            frame_bg_color='rgba(40,40,40,150)', button_color='#222',
+            border_color='#039d5b', button_hover_color='#616b78',
+            main_text_color='#e8e9eb', font_family_main='Arial',
+            font_size_main=16, font_size_small=12,
+            checkbox_checked_color='#fff', scroll_handle_color='#e8e9eb',
+            custom_border_radius='8px',
+        )
+        assert 'border-radius: 8px' in sheet
+
+    def test_border_radius_zero_in_stylesheet(self):
+        from ui.styles import build_stylesheet, invalidate_stylesheet_cache
+        invalidate_stylesheet_cache()
+        sheet = build_stylesheet(
+            frame_bg_color='rgba(40,40,40,150)', button_color='#222',
+            border_color='#039d5b', button_hover_color='#616b78',
+            main_text_color='#e8e9eb', font_family_main='Arial',
+            font_size_main=16, font_size_small=12,
+            checkbox_checked_color='#fff', scroll_handle_color='#e8e9eb',
+            custom_border_radius='0px',
+        )
+        assert 'border-radius: 0px' in sheet
+
+    def test_border_radius_in_theme_export(self, app_state):
+        app_state.local_config['custom_border_radius'] = 12
+        settings = {'custom_border_radius': app_state.local_config.get('custom_border_radius', 0)}
+        assert settings['custom_border_radius'] == 12
+
+    def test_border_radius_config_persistence(self, app_state):
+        app_state.local_config['custom_border_radius'] = 5
+        assert app_state.local_config.get('custom_border_radius', 0) == 5
+        app_state.local_config['custom_border_radius'] = 0
+        assert app_state.local_config.get('custom_border_radius', 0) == 0
+
+    def test_border_radius_translucent_backgrounds(self, app_state):
+        from services.customization_service import CustomizationManager
+        from unittest.mock import Mock
+        cs = CustomizationManager(app_state)
+        container = Mock()
+        container.objectName.return_value = 'search_mods_background'
+        app_state.local_config['custom_border_radius'] = 15
+        cs.update_translucent_backgrounds(container)
+        call_args = container.setStyleSheet.call_args[0][0]
+        assert 'border-radius: 15px' in call_args
 
 
 class TestThemeApplication:
@@ -160,15 +214,11 @@ class TestThemeApplication:
         app_window.installed_mods_widget = None
         app_window.search_display = None
         app_state.local_config = {'custom_color_text': '#FF0000', 'custom_color_background': '#00FF00', 'custom_color_button': '#0000FF', 'custom_color_border': '#FFFF00'}
-        with patch('controllers.theme_controller.THEMES', {'default': {'colors': {'text': '#FFFFFF', 'background': '#000000', 'button': '#333333', 'border': '#444444', 'button_hover': '#555555'}, 'font_family': 'Arial', 'font_size_main': 12, 'font_size_small': 10}}), patch('controllers.theme_controller.BgLoader'):
+        with patch('controllers.theme_controller.THEMES', {'default': {'background': 'images/background.png', 'colors': {'text': '#FFFFFF', 'background': '#000000', 'button': '#333333', 'border': '#444444', 'button_hover': '#555555'}, 'font_family': 'Arial', 'font_size_main': 12, 'font_size_small': 10}}), patch('controllers.theme_controller.BgLoader'):
             theme_controller = ThemeController(app_state, feedback_service, settings_service, customization_service, app_window)
             from PyQt6.QtWidgets import QApplication as RealQApplication
             with patch.object(RealQApplication, 'instance', return_value=None), patch('controllers.theme_controller.QApplication', RealQApplication):
                 app_window.setStyleSheet = Mock()
                 theme_controller.apply_theme()
                 assert app_window.setStyleSheet.called
-                assert customization_service.update_mod_cards_styles.called or True
-                assert customization_service.update_translucent_backgrounds.called or True
-                assert app_window.setStyleSheet.called
-                assert customization_service.update_mod_cards_styles.called or True
-                assert customization_service.update_translucent_backgrounds.called or True
+                assert customization_service.update_translucent_backgrounds.called

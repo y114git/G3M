@@ -2,7 +2,8 @@
 import logging
 import os
 import shutil
-from PyQt6.QtCore import QThread, QTimer, pyqtSignal
+from typing import Optional
+from PyQt6.QtCore import QEventLoop, QThread, QTimer, pyqtSignal
 from PyQt6.QtWidgets import QApplication
 from services.localization_service import tr
 from ui.common.styling import clear_layout_widgets, show_empty_message_in_layout
@@ -177,7 +178,7 @@ class LibraryDisplayController:
                 raise
 
             def _build_next_batch(batch_size=25):
-                nonlocal batch_index, mods
+                nonlocal batch_index
                 try:
                     start = batch_index
                     end = min(start + batch_size, len(mods))
@@ -201,18 +202,19 @@ class LibraryDisplayController:
                         _finish_display()
                     else:
                         QTimer.singleShot(0, _build_next_batch)
-                except Exception:
+                except Exception as e:
+                    logging.debug('_build_next_batch failed', exc_info=e)
                     try:
                         if self.app.installed_mods_layout.count() <= 1:
                             show_empty_message_in_layout(self.app.installed_mods_layout, tr('ui.empty'), self.app_state.local_config, font_size=18)
                         self.update_mod_widgets_active_status()
                         self.app.game_launch.update_button_state()
-                    except Exception:
-                        pass
+                    except Exception as e2:
+                        logging.debug('Cleanup after _build_next_batch failure failed', exc_info=e2)
                     _finish_display()
             _build_next_batch()
-        except Exception:
-            pass
+        except Exception as e:
+            logging.debug('update_display failed', exc_info=e)
         finally:
             self._updating_display = False
 
@@ -299,6 +301,7 @@ class LibraryDisplayController:
         if self._updating_display:
             return
 
+        self._updating_display = True
         try:
 
             current_mods = []
@@ -361,13 +364,13 @@ class LibraryDisplayController:
                             insert_index = i
                             break
 
-                    QApplication.processEvents()
                     actual_count = layout.count()
                     insert_index = min(insert_index, actual_count)
 
                     layout.insertWidget(insert_index, mod_widget)
                     mod_widget.show()
 
+            QApplication.processEvents(QEventLoop.ProcessEventsFlag.ExcludeUserInputEvents)
             self.update_mod_widgets_active_status()
             self.app.game_launch.update_button_state()
 
@@ -375,6 +378,8 @@ class LibraryDisplayController:
             logging.error(f'Error in targeted refresh: {e}', exc_info=True)
 
             self.update_display()
+        finally:
+            self._updating_display = False
 
     def _safe_update_after_mod_deletion(self):
         try:
@@ -561,7 +566,7 @@ class LibraryDisplayController:
         color = UI_COLORS.get(f'status_{status_type}', UI_COLORS['status_error'])
         self.feedback_service.update_status(message, color)
 
-    def _safe_update_after_modpack_creation(self, modpack_dir: str, report_path: str = None, has_conflicts: bool = False):
+    def _safe_update_after_modpack_creation(self, modpack_dir: str, report_path: Optional[str] = None, has_conflicts: bool = False):
         try:
 
             self._refresh_mod_list_targeted()

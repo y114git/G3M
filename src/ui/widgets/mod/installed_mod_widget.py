@@ -7,7 +7,7 @@ from PyQt6.QtWidgets import QLabel, QPushButton, QHBoxLayout, QVBoxLayout, QFram
 from utils.path_utils import resource_path
 from .base_mod_widget import BaseModWidget
 from services.localization_service import tr
-from ui.common.styling import get_theme_color, build_button_style
+from ui.common.styling import get_theme_color, build_button_style, get_border_radius
 from utils.mod_utils import get_mod_key
 from ui.utils.ui_utils import UIAnimator
 
@@ -96,9 +96,10 @@ class InstalledModWidget(BaseModWidget):
         self.remove_button = QPushButton(tr('buttons.delete'), self.actions_widget)
         self.remove_button.setObjectName('cardButton')
         config = self._resolve_theme_config()
-        text_color = get_theme_color(config, 'text', 'white') if config else 'white'
-        border = get_theme_color(config, 'border', '#fff') if config else '#fff'
-        self.remove_button.setStyleSheet(build_button_style('cardButton', '#F44336', '#da190b', text_color, border))
+        text_color = get_theme_color(config, 'text', '#e8e9eb') if config else '#e8e9eb'
+        border = get_theme_color(config, 'border', '#039d5b') if config else '#039d5b'
+        br = get_border_radius(config)
+        self.remove_button.setStyleSheet(build_button_style('cardButton', '#F44336', '#da190b', text_color, border, border_radius=br))
         self.remove_button.clicked.connect(lambda: self.remove_requested.emit(self.mod_data))
         actions_layout.addWidget(self.remove_button)
         self.actions_widget.setVisible(False)
@@ -109,7 +110,7 @@ class InstalledModWidget(BaseModWidget):
         super()._update_style()
         config = self._resolve_theme_config()
         if config:
-            text_color = get_theme_color(config, 'text', 'white')
+            text_color = get_theme_color(config, 'text', '#e8e9eb')
             for attr in ('added_label_title', 'game_version_label_title'):
                 label = getattr(self, attr, None)
                 if label:
@@ -186,13 +187,14 @@ class InstalledModWidget(BaseModWidget):
         if not self.use_button:
             return
         config = self._resolve_theme_config()
-        border = get_theme_color(config, 'border', '#fff') if config else '#fff'
+        border = get_theme_color(config, 'border', '#039d5b') if config else '#039d5b'
+        br = get_border_radius(config)
         if self.status == 'active':
             self.use_button.setText(tr('ui.remove_button'))
-            self.use_button.setStyleSheet(build_button_style('cardButtonInstall', '#FF9800', '#F57C00', 'white', border))
+            self.use_button.setStyleSheet(build_button_style('cardButtonInstall', '#FF9800', '#F57C00', '#e8e9eb', border, border_radius=br))
         else:
             self.use_button.setText(tr('ui.use_button'))
-            self.use_button.setStyleSheet(build_button_style('cardButtonInstall', '#4CAF50', '#5cb85c', 'white', border))
+            self.use_button.setStyleSheet(build_button_style('cardButtonInstall', '#4CAF50', '#5cb85c', '#e8e9eb', border, border_radius=br))
 
     def _sync_status(self):
         self.status = 'active' if self.is_active else 'ready'

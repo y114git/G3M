@@ -4,7 +4,7 @@ from PyQt6.QtCore import pyqtSignal, Qt, QThread
 from PyQt6.QtWidgets import QLabel, QPushButton, QHBoxLayout, QVBoxLayout, QFrame, QWidget
 from .base_mod_widget import BaseModWidget
 from services.localization_service import tr
-from ui.common.styling import get_theme_color
+from ui.common.styling import get_theme_color, get_border_radius
 from utils.mod_utils import get_mod_key
 import logging
 from ui.utils.ui_utils import UIAnimator
@@ -129,11 +129,11 @@ class ModCardWidget(BaseModWidget):
             if label:
                 label.setStyleSheet(f'color: {self._get_theme_text_color()};')
 
-    def _get_theme_text_color(self, fallback='white'):
+    def _get_theme_text_color(self, fallback='#e8e9eb'):
         config = self._resolve_theme_config()
         return get_theme_color(config, 'text', fallback) if config else fallback
 
-    def _get_theme_border_color(self, fallback='#fff'):
+    def _get_theme_border_color(self, fallback='#039d5b'):
         config = self._resolve_theme_config()
         return get_theme_color(config, 'border', fallback) if config else fallback
 
@@ -317,10 +317,12 @@ class ModCardWidget(BaseModWidget):
     def _apply_uninstall_button_style(self):
         if not hasattr(self, 'install_button'):
             return
-        text_color = self._get_theme_text_color('white')
-        border = self._get_theme_border_color('#fff')
+        text_color = self._get_theme_text_color('#e8e9eb')
+        border = self._get_theme_border_color('#039d5b')
+        config = self._resolve_theme_config()
+        br = get_border_radius(config)
         from ui.common.styling import build_button_style
-        self.install_button.setStyleSheet(build_button_style('cardButtonUninstall', '#F44336', '#d32f2f', text_color, border))
+        self.install_button.setStyleSheet(build_button_style('cardButtonUninstall', '#F44336', '#d32f2f', text_color, border, border_radius=br))
 
     def _update_install_button(self):
         if self.is_installed:
@@ -351,10 +353,12 @@ class ModCardWidget(BaseModWidget):
         compatible = bool(getattr(self.mod_data, 'gamebanana_is_tool_compatible', False))
         checked = bool(getattr(self.mod_data, 'gamebanana_compatibility_checked', False))
         if checked and (not compatible):
-            text_color = self._get_theme_text_color('white')
-            border = self._get_theme_border_color('#fff')
+            text_color = self._get_theme_text_color('#e8e9eb')
+            border = self._get_theme_border_color('#039d5b')
+            config = self._resolve_theme_config()
+            br = get_border_radius(config)
             from ui.common.styling import build_button_style
-            self.install_button.setStyleSheet(build_button_style('cardButtonInstall', '#FFC107', '#FFB300', text_color, border))
+            self.install_button.setStyleSheet(build_button_style('cardButtonInstall', '#FFC107', '#FFB300', text_color, border, border_radius=br))
             self.install_button.setToolTip(tr('ui.gamebanana_status_manual_tooltip'))
         else:
             self.install_button.setStyleSheet('')
@@ -429,8 +433,12 @@ class ModCardWidget(BaseModWidget):
                 new_icon = getattr(self.mod_data, 'icon_url', None) or getattr(self.mod_data, 'icon_path', None)
                 if new_icon != getattr(self, '_last_icon_url', None):
                     self._last_icon_url = new_icon
-                    from ui.common.styling import load_mod_icon_universal
-                    load_mod_icon_universal(self.icon_label, self.mod_data, size=80, local_fallback=self._resolve_local_icon_fallback())
+                    from ui.common.styling import load_mod_icon_universal, get_theme_color
+                    config = self._resolve_theme_config()
+                    br = get_border_radius(config)
+                    bc = get_theme_color(config, 'border', '#039d5b') if config else None
+                    bw = 2 if bc else 0
+                    load_mod_icon_universal(self.icon_label, self.mod_data, size=80, local_fallback=self._resolve_local_icon_fallback(), border_radius=br, border_width=bw, border_color=bc)
             if hasattr(self, 'downloads_label'):
                 self.downloads_label.setText(self._get_downloads_text())
             if hasattr(self, 'tagline_label'):

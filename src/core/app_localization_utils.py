@@ -27,6 +27,7 @@ WIDGET_LOCALIZATIONS = [
     ('fullscreen_checkbox', 'setText', 'ui.fullscreen'),
     ('fullscreen_checkbox', 'setToolTip', 'tooltips.fullscreen_tooltip'),
     ('ui_scale_label', 'setText', 'ui.scale_label'),
+    ('border_radius_label', 'setText', 'ui.border_radius_label'),
     ('launch_via_steam_checkbox', 'setText', 'ui.steam_launch'),
     ('dont_hide_window_checkbox', 'setText', 'ui.dont_hide_window_on_launch'),
     ('dont_hide_window_checkbox', 'setToolTip', 'tooltips.dont_hide_window_on_launch'),
@@ -93,7 +94,7 @@ COMBO_LOCALIZATIONS = {
 
 def relocalize_texts(w):
     """Apply all localized texts to the window's widgets."""
-    w.color_config = {'background': tr('ui.background_color'), 'button': tr('ui.elements_color'), 'border': tr('ui.border_color'), 'button_hover': tr('ui.hover_color'), 'text': tr('ui.main_text_color'), 'version_text': tr('ui.secondary_text_color')}
+    w.color_config = {'background': tr('ui.background_color'), 'button': tr('ui.elements_color'), 'border': tr('ui.border_color'), 'button_hover': tr('ui.hover_color'), 'text': tr('ui.main_text_color'), 'secondary_text': tr('ui.secondary_text_color')}
     w.settings_button.setText(tr('ui.back_button') if w.app_state.is_settings_view else tr('ui.settings_title'))
     tab_labels = []
     if hasattr(w, 'search_mods_tab'):
@@ -204,6 +205,8 @@ def relocalize_ui(w):
         except Exception:
             pass
         w.search_display.update_filtered_mods()
+        if hasattr(w, 'search_display') and hasattr(w.search_display, 'update_all_cards_labels'):
+            w.search_display.update_all_cards_labels()
         w.library_display.update_display()
         w.search_display.update_pagination()
         w.game_launch.update_button_state()

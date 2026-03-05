@@ -203,7 +203,7 @@ def load_remote_images(browser: QTextBrowser, html: str):
         pool.start(runnable)
 
 
-def set_rich_html(browser: QTextBrowser, html: str, default_color: str = 'white'):
+def set_rich_html(browser: QTextBrowser, html: str, default_color: str = '#e8e9eb'):
     """One-call convenience: preprocess HTML, set it on the browser, load remote images.
 
     Args:

@@ -2,7 +2,7 @@ from typing import Dict, Any
 from PyQt6.QtCore import Qt, QObject, QEvent
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QFrame, QScrollArea, QSizePolicy, QLabel
 from services.localization_service import tr
-from ui.common.styling import get_theme_color, rgba_from_color
+from ui.common.styling import get_theme_color, rgba_from_color, get_border_radius
 from ui.builders.shared_filters_builder import (
     create_sort_controls, create_tag_checkboxes, create_search_button,
     create_filters_frame, create_modgame_combo, create_pagination_controls
@@ -22,6 +22,7 @@ class ModsBrowserTabBuilder(QObject):
         f_scroll.setFrameShape(QFrame.Shape.NoFrame)
         f_scroll.setStyleSheet('QScrollArea { background-color: transparent; }')
         f_scroll.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        f_scroll.setMinimumWidth(200)
         f_widget = self._create_filters_widget()
         f_scroll.setWidget(f_widget)
         f_widget.installEventFilter(self)
@@ -45,15 +46,16 @@ class ModsBrowserTabBuilder(QObject):
         pag_widget, prev_btn, page_lbl, next_btn = create_pagination_controls()
         sc_layout.addWidget(scroll)
         sc_layout.addWidget(pag_widget)
-        bg = get_theme_color(self.app_state.local_config, 'background', '#000000')
-        container.setStyleSheet(f'QWidget#search_mods_background {{ background-color: {rgba_from_color(bg)}; border-radius: 10px; margin: 5px; }}')
+        bg = get_theme_color(self.app_state.local_config, 'background', '#282828')
+        br = get_border_radius(self.app_state.local_config)
+        container.setStyleSheet(f'QWidget#search_mods_background {{ background-color: {rgba_from_color(bg)}; border-radius: {br}px; margin: 5px; }}')
         layout.addWidget(container)
         self.widgets.update({'search_container': container, 'search_mods_scroll': scroll, 'mod_list_widget': mod_list, 'mod_list_layout': mod_list_layout, 'prev_page_btn': prev_btn, 'page_label': page_lbl, 'next_page_btn': next_btn})
         return widget
 
     def eventFilter(self, obj, event):
         if 'filters_scroll' in self.widgets and obj == self.widgets['filters_scroll'].widget() and event.type() == QEvent.Type.Resize:
-            self.widgets['filters_scroll'].setFixedHeight(obj.sizeHint().height() + (15 if self.widgets['filters_scroll'].horizontalScrollBar().isVisible() else 0))
+            self.widgets['filters_scroll'].setMaximumHeight(obj.sizeHint().height())
         return super().eventFilter(obj, event)
 
     def _create_filters_widget(self) -> QFrame:

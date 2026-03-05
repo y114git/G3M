@@ -2,7 +2,7 @@
   "metadata": {
     "language": "chinese_traditional",
     "language_name": "繁體中文",
-    "font": "Dtm_x_FZBitmap Regular.otf",
+    "font": "main.ttf",
     "qt_translation": "qtbase_zh_tw",
     "version": "1.0.1"
   },
@@ -305,21 +305,36 @@
     "install_button": "安裝",
     "unknown_author": "未知",
     "delete_button": "刪除",
-    "success": "成功",
     "close_button": "關閉",
     "online_status": "🟢 在線：{count}",
     "loading_placeholder": "載入中...",
     "no_search_results": "未找到任何結果...",
-    "nobody_came": "但是沒有人來。",
-    "settings_section_merging": "Merging",
-    "clear_cache_button": "Clear cache",
+    "nobody_came": "但是沒有人來。。。",
+    "settings_section_merging": "合併",
+    "clear_cache_button": "清除快取",
     "settings_section_themes": "主題",
     "settings_section_media": "外觀和聲音",
     "do_not_save_theme_after_import": "導入後不要將主題保存在列表中",
     "dont_hide_window_on_launch": "啟動時不隱藏視窗",
     "hide_wips_without_downloads": "隱藏無下載的WIP",
     "settings_section_graphics": "圖形",
-    "settings_section_audio": "音訊"
+    "settings_section_audio": "音訊",
+    "settings_section_styling": "樣式",
+    "border_radius_label": "圓角半徑",
+    "scale_label": "介面縮放",
+    "gamebanana_rate_limit_title": "API限制",
+    "apply_theme": "應用主題",
+    "gamebanana_rate_limit_body": "達到GameBanana API限制（250次/小時）。請稍後重試。",
+    "plugins_tab": "外掛程式",
+    "stop_game": "停止",
+    "patch_create_failed_details": "補丁創建失敗，錯誤：\\n{error}",
+    "select_save_collection_title": "選擇存檔集合",
+    "downloading_unrar": "正在下載 UnRAR 工具...",
+    "backup_failed": "備份遊戲檔案失敗：{path}\\n補丁操作已中止以保護您的遊戲檔案。",
+    "select_save_collection_body": "選擇要使用的存檔集合：",
+    "unpacking_mod": "正在解壓模組：{mod_name}...",
+    "xdelta_unavailable": "未找到 xdelta 可執行檔。無法打補丁。",
+    "patch_apply_failed_details": "補丁應用失敗，錯誤：\\n{error}"
   },
   "files": {
     "archive_link": "壓縮檔案連結",
@@ -359,7 +374,8 @@
     "disable_splash": "禁用啟動畫面",
     "xdelta_modpack": "使用XDELTA代替data.win/.ios",
     "merge_properties": "屬性合併",
-    "merge_code": "程式碼合併"
+    "merge_code": "程式碼合併",
+    "disable_animations": "停用動畫"
   },
   "tags": {
     "gameplay": "遊戲玩法",
@@ -410,7 +426,9 @@
     "changelog_close": "關閉",
     "withdraw_request": "撤回請求",
     "shortcut": "捷徑",
-    "import_export_themes": "導入/出主題"
+    "import_export_themes": "導入/出主題",
+    "delete_theme": "刪除主題",
+    "save_theme": "儲存主題"
   },
   "tooltips": {
     "custom_exe": "您可以選擇自己的可執行檔案而不是預設檔案（例如DELTARUNE.exe）。如果檔案位於不同位置或您想執行自訂啟動檔案，這將很有用。",
@@ -434,7 +452,7 @@
     "change_mods_dir": "您可以選擇模組檔案資料夾的位置。",
     "local_mod": "本地模組",
     "search": "按名稱和描述搜尋",
-    "clear_cache_button": "Delete the GameBanana metadata cache to force refresh information",
+    "clear_cache_button": "刪除 GameBanana 元數據快取以強制刷新資訊",
     "merge_properties": "合併配置更改（如 JSON），確保保留各 Mod 的設定，避免功能遺失",
     "merge_code": "智能合併遊戲邏辑，使不同 Mod 能夠無縫修改同個功能而不衝突",
     "dont_hide_window_on_launch": "遊戲運行時保持啟動器視窗可見。",
@@ -449,7 +467,11 @@
     "filter_deltarune": "DELTARUNE"
   },
   "dialogs": {
-    "gamebanana_picker_title": "為「{mod_name}」選擇檔案",
+    "info": "資訊",
+    "warning": "警告",
+    "success": "成功",
+    "restart_required": "需要重新啟動",
+    "gamebanana_picker_title": "為'{mod_name}'選擇檔案",
     "gamebanana_picker_hint": "請選擇要從 GameBanana 下載的相容壓縮檔。不同檔案可能對應不同的版本或平台。",
     "gamebanana_picker_open_page": "開啟模組頁面",
     "gamebanana_picker_details": "版本：{version}\n大小：{size}\n更新時間：{updated}\n下載次數：{downloads}\n格式：{format}\n安全性：{security}\nMD5：{md5}\n\n說明：\n{description}",
@@ -660,7 +682,6 @@
     "export_theme_title": "導出主題",
     "import_theme_title": "導入主題",
     "select_mod": "選擇模組",
-    "success": "成功",
     "clear_cache_success": "GameBanana 元數據快取已成功清除。",
     "clear_cache_confirm_title": "清除快取",
     "clear_cache_confirm_text": "這將清除所有 GameBanana 元數據。DELTAHUB 將重新開始從零載入模組數據。是否繼續？",
@@ -762,7 +783,7 @@
     "file_operation_failed": "檔案操作失敗：{error}",
     "files_not_found": "找不到檔案。",
     "files_restore_error": "恢復檔案時出錯：{error}",
-    "backup_failed": "無法備份遊戲檔案：{path}\n補丁操作已中止以保護您的遊戲檔案。",
+    "backup_failed": "備份遊戲檔案失敗：{path}\\n補丁操作已中止以保護您的遊戲檔案。",
     "folder_creation_failed": "無法創建資料夾：\\n{error}",
     "full_installation_error": "完整安裝錯誤：{0}",
     "game_files_launch_not_found": "啟動錯誤：未找到遊戲檔案",
@@ -849,9 +870,9 @@
     "mod_installation_failed": "模組安裝失敗",
     "xdelta_apply_error": "套用xdelta補丁時出錯：{file}",
     "xdelta_patch_critical_error": "套用xdelta補丁時發生嚴重錯誤：\\n{error}",
-    "xdelta_unavailable": "未找到xdelta可執行檔案。無法打補丁。",
+    "xdelta_unavailable": "未找到 xdelta 可執行檔。無法打補丁。",
     "patch_create_failed_details": "補丁創建失敗，錯誤：\\n{error}",
-    "patch_apply_failed_details": "補丁套用失敗，錯誤：\\n{error}",
+    "patch_apply_failed_details": "補丁應用失敗，錯誤：\\n{error}",
     "copy_background_music_failed": "拷貝背景音樂檔案失敗",
     "remove_background_music_failed": "移除背景音樂檔案失敗",
     "can_select_only_mp3_wav": "不支持的音訊格式。請選擇支持的音訊檔案。",
@@ -938,7 +959,12 @@
     "copy_failed": "無法拷貝：\\n{error}",
     "no_save": "無存檔",
     "target_slot_not_found": "未找到目標槽位。",
-    "no_gamebanana_files_for_manual_install": "GameBanana沒有可用於手動安裝的檔案。"
+    "no_gamebanana_files_for_manual_install": "GameBanana沒有可用於手動安裝的檔案。",
+    "unrar_manual_install_mac": "自動下載失敗。\n\n請從以下位置下載macOS版UnRAR：\n{url}\n\n解壓縮並將'unrar'可執行檔放在：\n{path}",
+    "unrar_manual_install_linux": "Linux不支援自動下載。\n\n請從以下位置下載Linux版RAR：\n{url}\n\n安裝或將'unrar'可執行檔放在：\n{path}",
+    "unrar_manual_install_windows": "自動下載失敗。\n\n請從以下位置下載Windows版UnRAR（命令列）：\n{url}\n\n安裝/解壓縮並將'UnRAR.exe'放在：\n{path}",
+    "select_save_collection_body": "選擇要使用的存檔集合：",
+    "select_save_collection_title": "選擇存檔集合"
   },
   "status": {
     "vanilla": "原版",
@@ -1016,7 +1042,7 @@
     "unknown_size": "未知大小",
     "downloading_from_external": "正在從外部源下載檔案...",
     "install_cancelled_by_user": "安裝已被用戶取消。",
-    "unpacking_mod": "正在提取模組壓縮檔案：{mod_name}...",
+    "unpacking_mod": "正在解壓模組：{mod_name}...",
     "install_complete_success": "成功安裝 '{mod_name}'！",
     "beta_updates_enabled": "測試版更新已啟用",
     "ready": "就緒",
@@ -1059,7 +1085,9 @@
     "steam_launch": "透過Steam啟動",
     "updating_mod": "正在更新模組 {mod_name}...",
     "update_cancelled": "更新已被用戶取消。",
-    "local": "本地"
+    "local": "本地",
+    "deltamod_archive_detected_url": "從URL檢測到DELTAMOD壓縮包。",
+    "deltamod_archive_detected": "檢測到DELTAMOD壓縮包。"
   },
   "startup": {
     "steam_deck_setup_error": "設置Steam Deck相容性時出錯：{error}",

@@ -6,10 +6,10 @@ import logging
 from typing import Optional, Callable
 from PyQt6.QtCore import QObject, QThread, pyqtSignal, Qt
 from PyQt6.QtGui import QPixmap, QColor
-from PyQt6.QtWidgets import QWidget, QLabel
+from PyQt6.QtWidgets import QLabel
 from config.constants import THEMES
 from utils.path_utils import resource_path
-from ui.common.styling import get_theme_color
+from ui.common.styling import get_theme_color, get_border_radius
 from services.localization_service import tr
 
 
@@ -54,12 +54,15 @@ class CustomizationManager(QObject):
     def get_logo_button_text(self) -> str:
         return tr('buttons.remove_logo') if self.get_custom_logo_path() else tr('buttons.change_logo')
 
-    def update_translucent_backgrounds(self, search_container: Optional[QWidget] = None, library_container: Optional[QWidget] = None):
-        bg = get_theme_color(self.app_state.local_config, 'background', '#000000')
+    def update_translucent_backgrounds(self, *containers):
+        bg = get_theme_color(self.app_state.local_config, 'background', '#282828')
         rgba = f'rgba({int(bg[1:3], 16)}, {int(bg[3:5], 16)}, {int(bg[5:7], 16)}, 128)' if bg.startswith('#') else 'rgba(0,0,0,128)'
-        for container, name in [(search_container, 'search'), (library_container, 'library')]:
+        br = get_border_radius(self.app_state.local_config)
+        for container in containers:
             if container:
-                container.setStyleSheet(f'QWidget#{name}_mods_background {{background-color: {rgba}; border-radius: 10px; margin: 5px;}}')
+                name = container.objectName()
+                if name:
+                    container.setStyleSheet(f'QWidget#{name} {{background-color: {rgba}; border-radius: {br}px; margin: 5px;}}')
 
     def start_background_music(self):
         if self._music_starting or (self._bg_music_thread and self._bg_music_thread.isRunning()):
@@ -197,7 +200,7 @@ class CustomizationManager(QObject):
     def load_launcher_icon(self, icon_label: QLabel):
         try:
             custom = self.get_custom_logo_path()
-            path = custom if custom and os.path.exists(custom) else resource_path('assets/images/splash.png')
+            path = custom if custom and os.path.exists(custom) else resource_path('assets/images/logo.png')
             if os.path.exists(path) and not (pixmap := QPixmap(path)).isNull():
                 icon_label.setScaledContents(False)
 

@@ -14,7 +14,7 @@ import models.mod_models as mod_models
 from workers.install.url_install_worker import UrlInstallThread
 from workers.mod_scan_worker import ModScanThread
 from adapters.deltamod_adapter import DeltamodConverter
-from utils.file_utils import load_json, save_json, get_chapter_folder_name
+from utils.file_utils import load_json, save_json, get_chapter_folder_name, chapter_id_to_file_key
 from utils.file_utils import sanitize_filename, has_deltamod_info_file
 from utils.mod_utils import get_mod_key, get_mod_name, resolve_mod_icon
 from utils.mod_config_parser import resolve_local_icon_url, parse_extra_files_raw, resolve_data_file_version, resolve_chapter_folder
@@ -145,16 +145,6 @@ class ModManager(QObject):
             'last_updated': config_data.get('created_date', 'N/A'),
             'external_url': config_data.get('external_url'),
         }
-
-    @staticmethod
-    def _chapter_id_to_file_key(chapter_id: str) -> str:
-        """Convert chapter_id to the file key used in config files data."""
-        if chapter_id == 'deltarunedemo':
-            return 'demo'
-        if '_' in str(chapter_id):
-            _, suffix = chapter_id.rsplit('_', 1)
-            return suffix
-        return chapter_id
 
     def _get_mods_cache(self, use_async: bool = False) -> Dict[str, ModFolderInfo]:
         with self._cache_lock:
@@ -600,7 +590,7 @@ class ModManager(QObject):
                 self.feedback_service.show_message('error', 'errors.uninstall_failed', tr('errors.permission_denied'))
             elif reason not in ('missing_data',):
                 self.feedback_service.show_message('error', 'errors.uninstall_failed', str(e))
-            raise error
+            raise error from e
 
     def update_mod(self, mod_data):
         if self.app_state.is_installing:
@@ -712,7 +702,7 @@ class ModManager(QObject):
         if not remote_versions:
             return 'n/a'
         config_data = mod_info.config_data
-        file_key = self._chapter_id_to_file_key(chapter_id)
+        file_key = chapter_id_to_file_key(chapter_id)
         local_versions = {}
         files_data = config_data.get('files', {})
         if file_key in files_data:
@@ -786,7 +776,7 @@ class ModManager(QObject):
             if files_data:
                 if chapter_id == 'deltarunedemo':
                     return 'demo' in files_data or 'undertale' in files_data
-                file_key = self._chapter_id_to_file_key(chapter_id)
+                file_key = chapter_id_to_file_key(chapter_id)
                 return file_key in files_data
             folder_name = get_chapter_folder_name(chapter_id) if '_' in str(chapter_id) else 'universal'
             for name in (folder_name, 'universal'):
@@ -872,7 +862,7 @@ class ModManager(QObject):
     def migrate_metadata_from_local_configs(self) -> bool:
         mods_metadata = self._read_metadata()
         updated = False
-        for folder_name, folder_path, config_path, config_data in self._iter_mod_configs():
+        for folder_name, _folder_path, config_path, config_data in self._iter_mod_configs():
             try:
                 key = config_data.get('key') or config_data.get('mod_key')
                 if not key:

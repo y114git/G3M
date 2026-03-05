@@ -4,7 +4,7 @@ from PyQt6.QtGui import QPixmap, QColor, QPainter
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                              QPushButton, QTextBrowser, QSizePolicy, QScrollArea)
 from services.localization_service import tr
-from ui.common.styling import get_theme_color
+from ui.common.styling import get_theme_color, get_border_radius
 from ui.utils.ui_utils import UIAnimator
 from ui.utils.image_loader import ImageLoaderRunnable
 from utils.mod_utils import get_mod_key
@@ -177,13 +177,14 @@ class ModDetailsOverlay(QWidget):
         local_cfg = getattr(self._app_state, 'local_config', None) if self._app_state else None
 
         self._colors = {
-            'text': get_theme_color(local_cfg, 'text', 'white'),
-            'secondary': get_theme_color(local_cfg, 'version_text', 'rgba(255,255,255,178)'),
-            'border': get_theme_color(local_cfg, 'border', '#fff'),
-            'bg': get_theme_color(local_cfg, 'background', '#000'),
-            'btn_bg': get_theme_color(local_cfg, 'button', '#000000'),
-            'btn_hover': get_theme_color(local_cfg, 'hover', '#333333')
+            'text': get_theme_color(local_cfg, 'text', '#e8e9eb'),
+            'secondary': get_theme_color(local_cfg, 'secondary_text', '#6de985'),
+            'border': get_theme_color(local_cfg, 'border', '#039d5b'),
+            'bg': get_theme_color(local_cfg, 'background', '#282828'),
+            'btn_bg': get_theme_color(local_cfg, 'button', '#222222'),
+            'btn_hover': get_theme_color(local_cfg, 'button_hover', '#616b78')
         }
+        self._border_radius = get_border_radius(local_cfg)
         text_color, secondary_text, border, bg = self._colors['text'], self._colors['secondary'], self._colors['border'], self._colors['bg']
         btn_bg, btn_hover = self._colors['btn_bg'], self._colors['btn_hover']
 
@@ -195,8 +196,9 @@ class ModDetailsOverlay(QWidget):
 
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
+        br = self._border_radius
         scroll.setStyleSheet(f"""
-            QScrollArea {{ background-color: {bg}; border: 2px solid {border}; }}
+            QScrollArea {{ background-color: {bg}; border: 2px solid {border}; border-radius: {br}px; }}
             QScrollArea > QWidget > QWidget {{ background-color: {bg}; }}
         """)
 
@@ -215,11 +217,11 @@ class ModDetailsOverlay(QWidget):
 
         if hasattr(self.mod_data, 'external_url') and self.mod_data.external_url:
             from ui.common.styling import build_button_style
-            eb = QPushButton(tr('ui.view_on_external_source'))
+            eb = QPushButton(tr('ui.view_on_external_site'))
             eb.setObjectName('cardButtonExternal')
             eb.clicked.connect(lambda: webbrowser.open(self.mod_data.external_url))
             eb.setFixedWidth(400)
-            eb.setStyleSheet(build_button_style('cardButtonExternal', btn_bg, btn_hover, '#FFD700', border, 400, 35, 15))
+            eb.setStyleSheet(build_button_style('cardButtonExternal', btn_bg, btn_hover, '#FFD700', border, 400, 35, 15, border_radius=self._border_radius))
             left.addWidget(eb, 0, Qt.AlignmentFlag.AlignCenter)
 
         title = QLabel(f'<h2 style="color:{text_color};margin:8px 0;font-size:18px;">{self.mod_data.name}</h2>')
@@ -237,12 +239,12 @@ class ModDetailsOverlay(QWidget):
         car.setSpacing(8)
         img_container = QWidget()
         img_container.setFixedSize(self.IMG_W, self.IMG_H)
-        img_container.setStyleSheet(f'background-color:transparent; border:2px solid {border};')
+        img_container.setStyleSheet(f'background-color:transparent; border:2px solid {border}; border-radius: {self._border_radius}px;')
 
         self._img_label = QLabel(img_container)
         self._img_label.setFixedSize(self.IMG_W, self.IMG_H)
         self._img_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._img_label.setStyleSheet('border: none; background-color: transparent;')
+        self._img_label.setStyleSheet(f'border: none; background-color: transparent; border-radius: {self._border_radius}px;')
 
         car.addWidget(img_container, 0, Qt.AlignmentFlag.AlignHCenter)
 
@@ -250,7 +252,7 @@ class ModDetailsOverlay(QWidget):
         nav.setContentsMargins(0, 0, 0, 0)
         nav.setSpacing(4)
         nav_style = f"""QPushButton {{ font-size:16px; color:{text_color}; background-color:{btn_bg};
-                   border:2px solid {border}; padding:0; }}
+                   border:2px solid {border}; border-radius: {self._border_radius}px; padding:0; }}
                    QPushButton:hover {{ background-color:{btn_hover}; }}"""
         self._prev_btn = QPushButton('<')
         self._prev_btn.setFixedSize(35, 25)
@@ -339,6 +341,7 @@ class ModDetailsOverlay(QWidget):
                 background-color: {bg};
                 color: {text_color};
                 border: 2px solid {border};
+                border-radius: {self._border_radius}px;
                 padding: 15px;
                 font-size: 16px;
             }}
@@ -361,8 +364,8 @@ class ModDetailsOverlay(QWidget):
                 self._sync_timer = QTimer()
                 self._sync_timer.timeout.connect(self._sync_button_from_card)
                 self._sync_timer.start(100)
-            except Exception:
-                pass
+            except Exception as e:
+                logging.debug(f'QTimer setup failed for _sync_timer: {e}', exc_info=True)
         else:
             self.install_button.setText(tr('buttons.install'))
             self.install_button.setObjectName('cardButtonInstall')
@@ -375,7 +378,7 @@ class ModDetailsOverlay(QWidget):
         cb = QPushButton(tr('buttons.close'))
         cb.clicked.connect(self.close_overlay)
         cb.setObjectName('cardButtonClose')
-        cb.setStyleSheet(build_button_style('cardButtonClose', btn_bg, btn_hover, text_color, border))
+        cb.setStyleSheet(build_button_style('cardButtonClose', btn_bg, btn_hover, text_color, border, border_radius=self._border_radius))
         btns.addWidget(cb)
         right.addLayout(btns)
 
@@ -401,7 +404,7 @@ class ModDetailsOverlay(QWidget):
     def _set_install_button_style(self, border, obj_name='cardButtonInstall', bg='#4CAF50', hover='#5cb85c'):
         """Set install button stylesheet."""
         from ui.common.styling import build_button_style
-        self.install_button.setStyleSheet(build_button_style(obj_name, bg, hover, 'white', border))
+        self.install_button.setStyleSheet(build_button_style(obj_name, bg, hover, '#e8e9eb', border, border_radius=self._border_radius))
 
     def _sync_button_from_card(self):
         """Synchronizes the Install button with the button from the mod card."""
@@ -409,7 +412,7 @@ class ModDetailsOverlay(QWidget):
             return
 
         src_btn = self.source_card.install_button
-        border = self._colors.get('border', '#fff')
+        border = self._colors.get('border', '#039d5b')
         obj_name = src_btn.objectName()
 
         self.install_button.setText(src_btn.text())
@@ -510,7 +513,8 @@ class ModDetailsOverlay(QWidget):
         p = QPainter(canvas)
         p.drawPixmap((lw - scaled.width()) // 2, (lh - scaled.height()) // 2, scaled)
         p.end()
-        self._img_label.setPixmap(canvas)
+        from ui.common.styling import round_pixmap
+        self._img_label.setPixmap(round_pixmap(canvas, self._border_radius) if self._border_radius > 0 else canvas)
 
     def _ss_on_loaded(self, idx, qimg):
         if idx < len(self._ss_images):
@@ -726,8 +730,8 @@ class ModDetailsOverlay(QWidget):
             try:
                 self._sync_timer.stop()
                 self._sync_timer.deleteLater()
-            except Exception:
-                pass
+            except Exception as e:
+                logging.debug(f'cleanup_thread: failed to stop/delete _sync_timer: {e}', exc_info=True)
         if self.load_thread:
             t = self.load_thread
             self.load_thread = None

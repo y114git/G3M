@@ -1,4 +1,5 @@
 import time
+from types import SimpleNamespace
 from PyQt6.QtWidgets import QWidget
 
 
@@ -105,6 +106,20 @@ class TestCommonWidgets:
             qapp.processEvents()
             time.sleep(0.05)
 
+    def test_mod_details_overlay_uses_custom_button_hover_color(self, qapp):
+        from ui.widgets.mod_details_overlay import ModDetailsOverlay
+        from models.mod_models import ModInfo
+        parent = QWidget()
+        parent.app_state = SimpleNamespace(local_config={'custom_color_button_hover': '#123456'})
+        mod_data = ModInfo(key='test_mod', name='Test Mod', version='1.0.0', author='Test Author', tagline='', game_version='', description_url='', downloads=0, game='deltarune', is_verified=False)
+        overlay = ModDetailsOverlay(parent, mod_data)
+        assert overlay._colors['btn_hover'] == '#123456'
+        overlay.deleteLater()
+        parent.deleteLater()
+        for _ in range(3):
+            qapp.processEvents()
+            time.sleep(0.05)
+
     def test_mod_details_overlay_update_screenshots(self, qapp):
         from ui.widgets.mod_details_overlay import ModDetailsOverlay
         from models.mod_models import ModInfo
@@ -114,7 +129,7 @@ class TestCommonWidgets:
         overlay.update_screenshots(['https://example.com/1.png', 'https://example.com/2.png'])
         assert len(overlay._ss_urls) == 2
         assert overlay._ss_index == 0
-        assert not overlay._prev_btn.isVisible() or len(overlay._ss_urls) > 1
+        assert overlay._prev_btn.isVisible() == (len(overlay._ss_urls) > 1)
         overlay.update_screenshots([])
         assert len(overlay._ss_urls) == 0
         overlay.deleteLater()

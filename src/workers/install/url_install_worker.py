@@ -123,8 +123,8 @@ class UrlInstallThread(BaseInstallWorker):
         if not filename or '.' not in filename:
             session = get_session()
             filename = get_filename_from_url(session, url)
+        from utils.archive_utils import get_file_extension_from_url
         if not filename:
-            from utils.archive_utils import get_file_extension_from_url
             file_ext = get_file_extension_from_url(url)
             filename = f'archive{file_ext}'
         supported_extensions = ['.zip', '.rar', '.7z', '.tar.gz', '.lzma']
@@ -242,8 +242,8 @@ class UrlInstallThread(BaseInstallWorker):
             except Exception:
                 try:
                     shutil.rmtree(persistent_temp_dir, ignore_errors=True)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logging.debug(f'UrlInstallThread: Failed to clean up {persistent_temp_dir}: {e}', exc_info=True)
                 raise
         except Exception as e:
             logging.error(f'UrlInstallThread: Error preparing for manual install: {e}', exc_info=True)

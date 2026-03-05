@@ -24,7 +24,7 @@ def create_sort_controls(app_state, items=None, config_key=None):
 def create_tag_checkboxes(app_state, tag_names):
     """Create tag checkboxes with styling."""
     tags = {n: QCheckBox(tr(f'tags.{n}') if (n != 'gamebanana' and n != 'only_gamebanana') else tr('ui.only_gamebanana')) for n in tag_names}
-    style = build_tag_checkbox_style(get_theme_color(app_state.local_config, 'text', 'white'))
+    style = build_tag_checkbox_style(get_theme_color(app_state.local_config, 'text', '#e8e9eb'))
     for t in tags.values():
         t.setStyleSheet(style)
     return tags
@@ -81,8 +81,9 @@ def create_filters_frame():
     """Create base filters frame."""
     w = QFrame()
     w.setObjectName('filters')
-    w.setFixedHeight(55)
+    w.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
     layout = QHBoxLayout(w)
+    layout.setSizeConstraint(QHBoxLayout.SizeConstraint.SetMinimumSize)
     layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
     layout.setContentsMargins(0, 0, 0, 0)
     return w, layout

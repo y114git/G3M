@@ -3,7 +3,7 @@ from PyQt6.QtCore import Qt, pyqtSignal, QObject, QEvent
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QFrame, QLabel, QPushButton, QCheckBox, QComboBox, QScrollArea, QSizePolicy
 from services.localization_service import tr
 from ui.widgets.shared.custom_controls import _ZeroHintWidget
-from ui.common.styling import get_theme_color, rgba_from_color
+from ui.common.styling import get_theme_color, rgba_from_color, get_border_radius
 from ui.builders.shared_filters_builder import (
     create_sort_controls, create_tag_checkboxes, create_search_button,
     create_filters_frame
@@ -44,12 +44,12 @@ class LibraryTabBuilder(QObject):
 
     def _get_colors(self):
         cfg = self.app_state.local_config
-        bg = get_theme_color(cfg, 'background', '#000000')
+        bg = get_theme_color(cfg, 'background', '#282828')
         return {
-            'border': get_theme_color(cfg, 'border', 'white'),
-            'button': get_theme_color(cfg, 'button', 'black'),
-            'button_hover': get_theme_color(cfg, 'button_hover', '#333'),
-            'text': get_theme_color(cfg, 'text', 'white'),
+            'border': get_theme_color(cfg, 'border', '#039d5b'),
+            'button': get_theme_color(cfg, 'button', '#222222'),
+            'button_hover': get_theme_color(cfg, 'button_hover', '#616b78'),
+            'text': get_theme_color(cfg, 'text', '#e8e9eb'),
             'background': bg
         }
 
@@ -61,6 +61,7 @@ class LibraryTabBuilder(QObject):
         f_scroll.setFrameShape(QFrame.Shape.NoFrame)
         f_scroll.setStyleSheet('QScrollArea { background-color: transparent; }')
         f_scroll.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        f_scroll.setMinimumWidth(200)
         filters = self._create_library_filters_widget()
         f_scroll.setWidget(filters)
         filters.installEventFilter(self)
@@ -93,12 +94,14 @@ class LibraryTabBuilder(QObject):
         t_layout.setContentsMargins(20, 10, 20, 10)
         t_layout.setSpacing(10)
         t_layout.addStretch()
+        fs = max(1, int(14 * self.app_state.local_config.get('ui_scale', 1.0)))
         tab_btns = []
         for i, name in enumerate([tr('chapters.menu'), tr('tabs.chapter_1'), tr('tabs.chapter_2'), tr('tabs.chapter_3'), tr('tabs.chapter_4')]):
             btn = QPushButton(name)
             btn.setCheckable(True)
             btn.setObjectName(f'chapter_tab_{i}')
-            btn.setStyleSheet(f'QPushButton#chapter_tab_{i} {{ background-color: {colors["button"]}; border: 2px solid {colors["border"]}; color: {colors["text"]}; font-weight: bold; font-size: 13px; border-radius: 0px; padding: 5px; }} QPushButton#chapter_tab_{i}:checked {{ background-color: {colors["button_hover"]}; border: 3px solid {colors["border"]}; }} QPushButton#chapter_tab_{i}:hover {{ background-color: {colors["button_hover"]}; }}')
+            br = get_border_radius(self.app_state.local_config)
+            btn.setStyleSheet(f'QPushButton#chapter_tab_{i} {{ background-color: {colors["button"]}; border: 2px solid {colors["border"]}; color: {colors["text"]}; font-weight: bold; font-size: {fs}px; border-radius: {br}px; padding: 5px; }} QPushButton#chapter_tab_{i}:checked {{ background-color: {colors["button_hover"]}; border: 3px solid {colors["border"]}; }} QPushButton#chapter_tab_{i}:hover {{ background-color: {colors["button_hover"]}; }}')
             t_layout.addWidget(btn)
             tab_btns.append(btn)
         t_layout.addStretch()
@@ -143,7 +146,8 @@ class LibraryTabBuilder(QObject):
         mw_layout.setContentsMargins(0, 0, 0, 0)
         scroll.setWidget(mods_w)
         m_layout.addWidget(scroll)
-        mods_cont.setStyleSheet(f'QWidget#mods_background {{ background-color: {rgba_from_color(colors["background"])}; border-radius: 10px; margin: 5px; }}')
+        br = get_border_radius(self.app_state.local_config)
+        mods_cont.setStyleSheet(f'QWidget#mods_background {{ background-color: {rgba_from_color(colors["background"])}; border-radius: {br}px; margin: 5px; }}')
         layout.addWidget(mods_cont)
         self.widgets.update({
             'library_filters_widget': filters,
@@ -170,7 +174,7 @@ class LibraryTabBuilder(QObject):
         if 'filters_scroll' in self.widgets:
             fs = self.widgets['filters_scroll']
             if obj == fs.widget() and event.type() == QEvent.Type.Resize:
-                fs.setFixedHeight(obj.sizeHint().height() + (15 if fs.horizontalScrollBar().isVisible() else 0))
+                fs.setMaximumHeight(obj.sizeHint().height())
         return False
 
     def _create_library_filters_widget(self) -> QFrame:
@@ -195,8 +199,10 @@ class LibraryTabBuilder(QObject):
 
     def _update_priority_button_style(self, btn, btn_clr, brd_clr, hvr_clr):
         n = btn.objectName()
-        t = get_theme_color(self.app_state.local_config, 'text', 'white')
-        btn.setStyleSheet(f'QPushButton#{n} {{ background-color: {btn_clr}; border: 2px solid {brd_clr}; color: {t}; font-weight: bold; font-size: 13px; border-radius: 0px; padding: 5px; }} QPushButton#{n}:hover {{ background-color: {hvr_clr}; }}')
+        t = get_theme_color(self.app_state.local_config, 'text', '#e8e9eb')
+        fs = max(1, int(14 * self.app_state.local_config.get('ui_scale', 1.0)))
+        br = get_border_radius(self.app_state.local_config)
+        btn.setStyleSheet(f'QPushButton#{n} {{ background-color: {btn_clr}; border: 2px solid {brd_clr}; color: {t}; font-weight: bold; font-size: {fs}px; border-radius: {br}px; padding: 5px; }} QPushButton#{n}:hover {{ background-color: {hvr_clr}; }}')
 
     def update_priority_button_style(self):
         colors = self._get_colors()

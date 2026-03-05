@@ -11,7 +11,7 @@ from PyQt6.QtCore import QThread, pyqtSignal
 from services.g3mtool_patching_service import G3MToolPatchingService
 from adapters.g3mtool_adapter import G3MToolManager
 from services.localization_service import tr
-from utils.file_utils import get_chapter_folder_name
+from utils.file_utils import get_chapter_folder_name, chapter_id_to_file_key
 
 
 class CreateModpackThread(QThread):
@@ -41,9 +41,11 @@ class CreateModpackThread(QThread):
         game = None
         if mods_list:
             first_mod = mods_list[0]
-            game = getattr(first_mod, 'game', None) or getattr(first_mod, 'modgame', None)
+            game = first_mod.game if hasattr(first_mod, 'game') else None
+            if not game:
+                game = first_mod.modgame if hasattr(first_mod, 'modgame') else None
             if not game and hasattr(first_mod, 'config_data'):
-                config = getattr(first_mod, 'config_data')
+                config = first_mod.config_data
                 if isinstance(config, dict):
                     game = config.get('game') or config.get('modgame')
         return game
@@ -128,7 +130,7 @@ class CreateModpackThread(QThread):
                 patch_filename = f'{os.path.splitext(data_filename)[0]}.xdelta'
                 patch_path = os.path.join(chapter_modpack_dir, patch_filename)
                 self.status_update.emit(tr('status.creating_xdelta_patch', chapter=chapter_id), 'info')
-                returncode, stdout, stderr = g3mtool.xpatch_create(
+                returncode, _stdout, stderr = g3mtool.xpatch_create(
                     original_data_file, modified_data_file, patch_path
                 )
                 if returncode != 0:
@@ -144,15 +146,6 @@ class CreateModpackThread(QThread):
         except Exception as e:
             logging.error(f'Failed to create xdelta patches: {e}', exc_info=True)
             self.status_update.emit(tr('errors.xdelta_patch_creation_failed_general'), 'error')
-
-    @staticmethod
-    def _chapter_id_to_file_key(chapter_id: str) -> str:
-        if chapter_id == 'deltarunedemo':
-            return 'demo'
-        if '_' in str(chapter_id):
-            _, suffix = chapter_id.rsplit('_', 1)
-            return suffix
-        return chapter_id
 
     def _determine_primary_game_type(self, detected_games: List[str]) -> str:
         if not detected_games:
@@ -206,7 +199,7 @@ class CreateModpackThread(QThread):
             files_data = {}
             detected_games = []
             for chapter_id, mods_list in self.chapter_mods.items():
-                chapter_key = self._chapter_id_to_file_key(chapter_id)
+                chapter_key = chapter_id_to_file_key(chapter_id)
                 game = self._get_mod_game(mods_list)
                 if game:
                     detected_games.append(game)

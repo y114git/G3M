@@ -11,15 +11,11 @@ from config.constants import GAME_EXECUTABLES
 _SYS = platform.system()
 
 
-def get_launcher_dir(): return os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else os.path.abspath(os.path.dirname(__file__))
-
-
-def _safe_join(base: str, *paths: str) -> str:
-    ba = os.path.abspath(base)
-    fn = os.path.abspath(os.path.join(ba, *paths))
-    if os.path.commonpath([fn, ba]) != ba:
-        raise ValueError('path_traversal')
-    return fn
+def get_launcher_dir():
+    is_frozen = getattr(sys, 'frozen', False)
+    if is_frozen:
+        return os.path.dirname(sys.executable)
+    return os.path.abspath(os.path.dirname(__file__))
 
 
 def get_user_data_root():
@@ -38,7 +34,12 @@ def get_user_themes_dir(): return os.path.join(get_user_data_root(), 'themes')
 
 
 def resource_path(relative_path):
-    base = os.path.join(getattr(sys, '_MEIPASS'), 'src') if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS') else os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+    is_frozen = getattr(sys, 'frozen', False)
+    meipass = getattr(sys, '_MEIPASS', None)
+    if is_frozen and meipass:
+        base = os.path.join(meipass, 'src')
+    else:
+        base = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
     return os.path.join(base, relative_path)
 
 
@@ -114,8 +115,9 @@ def is_path_in_steam_common(game_path: str, game_name: str) -> bool:
     except (OSError, ValueError):
         return False
     path_parts = game_path_normalized.replace('\\', '/').split('/')
-    if any(path_parts[i] == 'steamapps' and i + 2 < len(path_parts) and path_parts[i + 1] == 'common' for i in range(len(path_parts))):
-        return True
+    for i, part in enumerate(path_parts):
+        if part == 'steamapps' and i + 2 < len(path_parts) and path_parts[i + 1] == 'common':
+            return True
     home = os.path.expanduser('~')
     if _SYS == 'Windows':
         for pf in filter(None, [os.getenv('ProgramFiles(x86)'), os.getenv('ProgramFiles')]):
@@ -182,10 +184,12 @@ def autodetect_path(game_name: str) -> str | None:
                     if os.path.exists(fp):
                         paths.append(fp)
         else:
+            candidates = set(names) | {game_name}
             for bp in all_bases:
-                for n in names:
-                    paths.extend(filter(os.path.isdir, [f'{bp}/{n}.app']))
-            paths.extend(filter(os.path.isdir, [f'{bp}/{game_name}.app' for bp in all_bases]))
+                for n in candidates:
+                    app_path = f'{bp}/{n}.app'
+                    if os.path.isdir(app_path):
+                        paths.append(app_path)
     return next((p for p in paths if os.path.exists(p)), None)
 
 

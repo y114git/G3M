@@ -92,7 +92,7 @@ def _safe_join(base: str, *paths: str) -> str:
     return final
 
 
-def normalize_mod_package(mod_root: str, *, rename_legacy: bool = True, check_executables: bool = True, require_mod_config: bool = False, require_manifest: bool = False) -> Dict[str, Optional[str]]:
+def normalize_mod_package(mod_root: str, *, check_executables: bool = True, require_mod_config: bool = False, require_manifest: bool = False) -> Dict[str, Optional[str]]:
     if not os.path.isdir(mod_root):
         raise ValueError('mod_root_not_directory')
     _flatten_single_child_directories(mod_root)
@@ -256,6 +256,17 @@ def get_chapter_folder_name(chapter_id, game=None) -> str:
     if game == 'pizzatower':
         return 'pizzatower'
     return 'demo' if cid == 'deltarunedemo' else ('chapter_0' if cid in ('deltarune', 'undertale', 'undertaleyellow') else cid)
+
+
+def chapter_id_to_file_key(chapter_id) -> str:
+    """Convert chapter_id to the file key used in mod config 'files' dict."""
+    cid = str(chapter_id)
+    if cid == 'deltarunedemo':
+        return 'demo'
+    if '_' in cid:
+        _, suffix = cid.rsplit('_', 1)
+        return suffix
+    return cid
 
 
 def get_unique_mod_dir(mods_dir, mod_name):

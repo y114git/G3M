@@ -15,6 +15,7 @@ from services.localization_service import tr, LocalizationManager
 from config.constants import LAUNCHER_VERSION, UI_COLORS
 
 from utils.file_utils import get_file_filter
+from ui.common.styling import get_border_radius
 
 
 class SettingsManager(QObject):
@@ -84,13 +85,17 @@ class SettingsManager(QObject):
             'demo_mode_enabled': False, 'chapter_mode_enabled': False, 'custom_background_path': '',
             'custom_executable_path': '', 'background_disabled': False, 'custom_color_background': '',
             'custom_color_button': '', 'custom_color_border': '', 'custom_color_button_hover': '',
-            'custom_color_text': '', 'custom_color_version_text': '', 'beta_updates_enabled': False,
+            'custom_color_text': '', 'custom_color_secondary_text': '', 'beta_updates_enabled': False,
             'pizzatower_game_path': '', 'pizzatower_custom_executable_path': '', 'skip_patching_warnings': False,
             'merge_properties': False, 'merge_code': False, 'hide_mods_browser_tab': False,
             'hide_library_tab': False, 'hide_plugins_tab': False, 'hide_library_filters': False
         }
         for key, value in defaults.items():
             self.app_state.local_config.setdefault(key, value)
+        if 'custom_color_version_text' in self.app_state.local_config:
+            old_val = self.app_state.local_config.pop('custom_color_version_text')
+            if old_val and not self.app_state.local_config.get('custom_color_secondary_text'):
+                self.app_state.local_config['custom_color_secondary_text'] = old_val
         self.app_state.local_config.setdefault('disable_splash', False)
         self.app_state.local_config.setdefault('first_launch_splash_shown', False)
         self.write_local_config()
@@ -215,10 +220,7 @@ class SettingsManager(QObject):
         self._handle_audio_file_click('startup_sound', 'dialogs.select_startup_sound', 'dialogs.startup_sound_removed', 'errors.remove_startup_sound_failed', 'errors.copy_startup_sound_failed', 'get_startup_sound_path')
 
     def _remove_logo_files(self):
-        for ext in self._IMAGE_EXTENSIONS:
-            path = os.path.join(self.app_state.config_dir, f'custom_logo{ext}')
-            if os.path.exists(path):
-                os.remove(path)
+        self._remove_files(os.path.join(self.app_state.config_dir, f'custom_logo{ext}') for ext in self._IMAGE_EXTENSIONS)
 
     def on_logo_button_click(self):
         existing_logo = ''
@@ -247,10 +249,7 @@ class SettingsManager(QObject):
                     self.feedback_service.show_message('warning', 'errors.error', tr('errors.copy_logo_failed'))
 
     def _remove_font_files(self):
-        for ext in self._FONT_EXTENSIONS:
-            path = os.path.join(self.app_state.config_dir, f'custom_font{ext}')
-            if os.path.exists(path):
-                os.remove(path)
+        self._remove_files(os.path.join(self.app_state.config_dir, f'custom_font{ext}') for ext in self._FONT_EXTENSIONS)
 
     def on_font_button_click(self):
         cs = getattr(self.parent_widget, 'customization_service', None)
@@ -276,15 +275,34 @@ class SettingsManager(QObject):
                 self._remove_font_files()
                 target_path = os.path.join(self.app_state.config_dir, f'custom_font{ext}')
                 shutil.copy2(file_path, target_path)
+
+                old_id = getattr(self.parent_widget, '_custom_font_id', None) if self.parent_widget else None
+                if old_id is not None and old_id != -1:
+                    QFontDatabase.removeApplicationFont(old_id)
+
                 font_id = QFontDatabase.addApplicationFont(target_path)
-                if font_id != -1 and self.parent_widget:
+                if font_id == -1:
+                    logging.error(f"Failed to load font from {target_path}")
+                    self.feedback_service.show_message('warning', 'errors.error', tr('errors.invalid_font_file'))
+                    try:
+                        os.remove(target_path)
+                    except Exception:
+                        pass
+                    return
+
+                if self.parent_widget:
+                    self.parent_widget._custom_font_id = font_id
                     families = QFontDatabase.applicationFontFamilies(font_id)
                     if families:
                         self.parent_widget.custom_font_family = families[0]
+                        logging.info(f"Font loaded successfully: {families[0]} from {target_path}")
+                    else:
+                        logging.warning(f"No font families found in {target_path}")
+
                 self._update_font_button_text()
                 self.theme_changed.emit()
             except Exception as e:
-                logging.error(f"Failed to copy font: {e}")
+                logging.error(f"Failed to copy font: {e}", exc_info=True)
                 self.feedback_service.show_message('warning', 'errors.error', tr('errors.copy_font_failed', 'Failed to copy font'))
 
     def _update_font_button_text(self):
@@ -307,9 +325,9 @@ class SettingsManager(QObject):
         theme_file_path, _ = QFileDialog.getSaveFileName(self.parent_widget, tr('dialogs.export_theme_title'), '', f"{tr('file_descriptions.theme_files')} (*.zip)")
         if not theme_file_path:
             return
-        _color_keys = ('custom_color_background', 'custom_color_button', 'custom_color_border', 'custom_color_button_hover', 'custom_color_text', 'custom_color_version_text')
+        _color_keys = ('custom_color_background', 'custom_color_button', 'custom_color_border', 'custom_color_button_hover', 'custom_color_text', 'custom_color_secondary_text')
         theme_settings = {k: self.app_state.local_config.get(k, '') for k in _color_keys}
-        theme_settings.update({'background_disabled': self.app_state.local_config.get('background_disabled', False), 'disable_splash': self.app_state.local_config.get('disable_splash', False), 'disable_animations': self.app_state.local_config.get('disable_animations', False)})
+        theme_settings.update({'background_disabled': self.app_state.local_config.get('background_disabled', False), 'disable_splash': self.app_state.local_config.get('disable_splash', False), 'disable_animations': self.app_state.local_config.get('disable_animations', False), 'custom_border_radius': get_border_radius(self.app_state.local_config)})
         with zipfile.ZipFile(theme_file_path, 'w') as zipf:
             zipf.writestr('theme.json', json.dumps(theme_settings, indent=2))
             assets = [('custom_background_path', 'background')]
@@ -362,7 +380,7 @@ class SettingsManager(QObject):
                 extract_any_archive(theme_file_path, temp_dir)
                 theme_json_path = os.path.join(temp_dir, 'theme.json')
                 if not os.path.exists(theme_json_path):
-                    for root, dirs, files in os.walk(temp_dir):
+                    for root, _, files in os.walk(temp_dir):
                         if 'theme.json' in files:
                             theme_json_path = os.path.join(root, 'theme.json')
                             break
@@ -370,6 +388,8 @@ class SettingsManager(QObject):
                         raise FileNotFoundError('theme.json not found in extracted archive')
                 with open(theme_json_path, 'r', encoding='utf-8') as f:
                     theme_settings = json.load(f)
+                if 'custom_color_version_text' in theme_settings:
+                    theme_settings['custom_color_secondary_text'] = theme_settings.pop('custom_color_version_text')
                 for key, value in theme_settings.items():
                     self.app_state.local_config[key] = value
 
@@ -397,7 +417,6 @@ class SettingsManager(QObject):
                                 self.app_state.local_config['custom_background_path'] = dest_path
                             break
 
-            self.write_local_config()
             self.app_state.local_config['first_launch_splash_shown'] = True
 
             if 'disable_splash' in theme_settings:
